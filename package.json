@@ -1,0 +1,29 @@
+{
+  "name": "strom",
+  "version": "1.0.0",
+  "description": "Family tree application",
+  "main": "dist/bundle.js",
+  "scripts": {
+    "build": "node scripts/bundle.js",
+    "build:dev": "esbuild src/main.ts --bundle --sourcemap --outfile=dist/bundle.js",
+    "watch": "esbuild src/main.ts --bundle --sourcemap --outfile=dist/bundle.js --watch",
+    "dev": "npm run build:dev && npx http-server -p 8080 -c-1",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:real": "npx tsx scripts/test-real-data.ts"
+  },
+  "keywords": [
+    "family-tree",
+    "genealogy"
+  ],
+  "author": "Milan Víšek",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^25.0.10",
+    "esbuild": "^0.27.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.17"
+  }
+}

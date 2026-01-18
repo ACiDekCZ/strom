@@ -1,0 +1,724 @@
+{
+  "persons": {
+    "ggp_h_h": {
+      "id": "ggp_h_h",
+      "firstName": "GGrandfather",
+      "lastName": "H-Side",
+      "gender": "male",
+      "birthDate": "1890-01-01",
+      "isPlaceholder": false,
+      "partnerships": ["part_ggp_h"],
+      "parentIds": ["gggp_h_h", "gggp_h_w"],
+      "childIds": ["gp_h_h"]
+    },
+    "ggp_h_w": {
+      "id": "ggp_h_w",
+      "firstName": "GGrandmother",
+      "lastName": "H-Side",
+      "gender": "female",
+      "birthDate": "1892-03-15",
+      "isPlaceholder": false,
+      "partnerships": ["part_ggp_h"],
+      "parentIds": [],
+      "childIds": ["gp_h_h"]
+    },
+    "ggp_w_h": {
+      "id": "ggp_w_h",
+      "firstName": "GGrandfather",
+      "lastName": "W-Side",
+      "gender": "male",
+      "birthDate": "1891-05-20",
+      "isPlaceholder": false,
+      "partnerships": ["part_ggp_w"],
+      "parentIds": [],
+      "childIds": ["gp_w_h"]
+    },
+    "ggp_w_w": {
+      "id": "ggp_w_w",
+      "firstName": "GGrandmother",
+      "lastName": "W-Side",
+      "gender": "female",
+      "birthDate": "1893-08-10",
+      "isPlaceholder": false,
+      "partnerships": ["part_ggp_w"],
+      "parentIds": [],
+      "childIds": ["gp_w_h"]
+    },
+
+    "gp_h_h": {
+      "id": "gp_h_h",
+      "firstName": "Grandfather",
+      "lastName": "H-Side",
+      "gender": "male",
+      "birthDate": "1920-02-14",
+      "isPlaceholder": false,
+      "partnerships": ["part_gp_h"],
+      "parentIds": ["ggp_h_h", "ggp_h_w"],
+      "childIds": ["uncle_h_1", "father", "aunt_h_1"]
+    },
+    "gp_h_w": {
+      "id": "gp_h_w",
+      "firstName": "Grandmother",
+      "lastName": "H-Side",
+      "gender": "female",
+      "birthDate": "1922-06-30",
+      "isPlaceholder": false,
+      "partnerships": ["part_gp_h"],
+      "parentIds": [],
+      "childIds": ["uncle_h_1", "father", "aunt_h_1"]
+    },
+    "gp_w_h": {
+      "id": "gp_w_h",
+      "firstName": "Grandfather",
+      "lastName": "W-Side",
+      "gender": "male",
+      "birthDate": "1921-04-22",
+      "isPlaceholder": false,
+      "partnerships": ["part_gp_w"],
+      "parentIds": ["ggp_w_h", "ggp_w_w"],
+      "childIds": ["uncle_w_1", "mother", "aunt_w_1"]
+    },
+    "gp_w_w": {
+      "id": "gp_w_w",
+      "firstName": "Grandmother",
+      "lastName": "W-Side",
+      "gender": "female",
+      "birthDate": "1923-09-08",
+      "isPlaceholder": false,
+      "partnerships": ["part_gp_w"],
+      "parentIds": [],
+      "childIds": ["uncle_w_1", "mother", "aunt_w_1"]
+    },
+
+    "uncle_h_1": {
+      "id": "uncle_h_1",
+      "firstName": "Uncle",
+      "lastName": "H1",
+      "gender": "male",
+      "birthDate": "1945-03-10",
+      "isPlaceholder": false,
+      "partnerships": ["part_uncle_h_1"],
+      "parentIds": ["gp_h_h", "gp_h_w"],
+      "childIds": ["cousin_h_1", "cousin_h_2", "cousin_h_3"]
+    },
+    "aunt_h_1_spouse": {
+      "id": "aunt_h_1_spouse",
+      "firstName": "Aunt",
+      "lastName": "H1-Spouse",
+      "gender": "female",
+      "birthDate": "1947-07-20",
+      "isPlaceholder": false,
+      "partnerships": ["part_uncle_h_1"],
+      "parentIds": ["placeholder_h_1"],
+      "childIds": ["cousin_h_1", "cousin_h_2", "cousin_h_3"]
+    },
+    "placeholder_h_1": {
+      "id": "placeholder_h_1",
+      "firstName": "Unknown",
+      "lastName": "Parent",
+      "gender": "male",
+      "isPlaceholder": true,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": ["aunt_h_1_spouse"]
+    },
+
+    "father": {
+      "id": "father",
+      "firstName": "Father",
+      "lastName": "Focus",
+      "gender": "male",
+      "birthDate": "1950-05-15",
+      "isPlaceholder": false,
+      "partnerships": ["part_parents", "part_father_2nd"],
+      "parentIds": ["gp_h_h", "gp_h_w"],
+      "childIds": ["sibling_1", "focus", "sibling_2", "halfsibling_1"]
+    },
+    "mother": {
+      "id": "mother",
+      "firstName": "Mother",
+      "lastName": "Focus",
+      "gender": "female",
+      "birthDate": "1952-08-20",
+      "isPlaceholder": false,
+      "partnerships": ["part_parents"],
+      "parentIds": ["gp_w_h", "gp_w_w"],
+      "childIds": ["sibling_1", "focus", "sibling_2"]
+    },
+    "stepmother": {
+      "id": "stepmother",
+      "firstName": "Stepmother",
+      "lastName": "Focus",
+      "gender": "female",
+      "birthDate": "1955-03-10",
+      "isPlaceholder": false,
+      "partnerships": ["part_father_2nd"],
+      "parentIds": [],
+      "childIds": ["halfsibling_1"]
+    },
+
+    "aunt_h_1": {
+      "id": "aunt_h_1",
+      "firstName": "Aunt",
+      "lastName": "H1",
+      "gender": "female",
+      "birthDate": "1955-11-30",
+      "isPlaceholder": false,
+      "partnerships": ["part_aunt_h_1"],
+      "parentIds": ["gp_h_h", "gp_h_w"],
+      "childIds": ["cousin_h_4"]
+    },
+    "uncle_h_1_husband": {
+      "id": "uncle_h_1_husband",
+      "firstName": "Uncle",
+      "lastName": "H1-Husband",
+      "gender": "male",
+      "birthDate": "1953-04-15",
+      "isPlaceholder": false,
+      "partnerships": ["part_aunt_h_1"],
+      "parentIds": [],
+      "childIds": ["cousin_h_4"]
+    },
+
+    "uncle_w_1": {
+      "id": "uncle_w_1",
+      "firstName": "Uncle",
+      "lastName": "W1",
+      "gender": "male",
+      "birthDate": "1948-06-25",
+      "isPlaceholder": false,
+      "partnerships": ["part_uncle_w_1"],
+      "parentIds": ["gp_w_h", "gp_w_w"],
+      "childIds": ["cousin_w_1", "cousin_w_2"]
+    },
+    "aunt_w_1_spouse": {
+      "id": "aunt_w_1_spouse",
+      "firstName": "Aunt",
+      "lastName": "W1-Spouse",
+      "gender": "female",
+      "birthDate": "1950-09-12",
+      "isPlaceholder": false,
+      "partnerships": ["part_uncle_w_1"],
+      "parentIds": [],
+      "childIds": ["cousin_w_1", "cousin_w_2"]
+    },
+    "aunt_w_1": {
+      "id": "aunt_w_1",
+      "firstName": "Aunt",
+      "lastName": "W1",
+      "gender": "female",
+      "birthDate": "1956-12-05",
+      "isPlaceholder": false,
+      "partnerships": ["part_aunt_w_1"],
+      "parentIds": ["gp_w_h", "gp_w_w"],
+      "childIds": ["cousin_w_3"]
+    },
+    "uncle_w_1_husband": {
+      "id": "uncle_w_1_husband",
+      "firstName": "Uncle",
+      "lastName": "W1-Husband",
+      "gender": "male",
+      "birthDate": "1954-02-28",
+      "isPlaceholder": false,
+      "partnerships": ["part_aunt_w_1"],
+      "parentIds": [],
+      "childIds": ["cousin_w_3"]
+    },
+
+    "cousin_h_1": {
+      "id": "cousin_h_1",
+      "firstName": "Cousin",
+      "lastName": "H1",
+      "gender": "male",
+      "birthDate": "1970-01-15",
+      "isPlaceholder": false,
+      "partnerships": ["part_cousin_h_1"],
+      "parentIds": ["uncle_h_1", "aunt_h_1_spouse"],
+      "childIds": ["cousin_h_1_child_1", "cousin_h_1_child_2"]
+    },
+    "cousin_h_1_spouse": {
+      "id": "cousin_h_1_spouse",
+      "firstName": "Spouse",
+      "lastName": "Cousin-H1",
+      "gender": "female",
+      "birthDate": "1972-04-20",
+      "isPlaceholder": false,
+      "partnerships": ["part_cousin_h_1"],
+      "parentIds": [],
+      "childIds": ["cousin_h_1_child_1", "cousin_h_1_child_2"]
+    },
+    "cousin_h_2": {
+      "id": "cousin_h_2",
+      "firstName": "Cousin",
+      "lastName": "H2",
+      "gender": "female",
+      "birthDate": "1972-05-22",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["uncle_h_1", "aunt_h_1_spouse"],
+      "childIds": []
+    },
+    "cousin_h_3": {
+      "id": "cousin_h_3",
+      "firstName": "Cousin",
+      "lastName": "H3",
+      "gender": "male",
+      "birthDate": "1975-09-30",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["uncle_h_1", "aunt_h_1_spouse"],
+      "childIds": []
+    },
+    "cousin_h_4": {
+      "id": "cousin_h_4",
+      "firstName": "Cousin",
+      "lastName": "H4",
+      "gender": "male",
+      "birthDate": "1978-11-05",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["uncle_h_1_husband", "aunt_h_1"],
+      "childIds": []
+    },
+    "cousin_h_1_child_1": {
+      "id": "cousin_h_1_child_1",
+      "firstName": "SecondCousin",
+      "lastName": "H1A",
+      "gender": "male",
+      "birthDate": "1995-03-10",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["cousin_h_1", "cousin_h_1_spouse"],
+      "childIds": []
+    },
+    "cousin_h_1_child_2": {
+      "id": "cousin_h_1_child_2",
+      "firstName": "SecondCousin",
+      "lastName": "H1B",
+      "gender": "female",
+      "birthDate": "1998-07-25",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["cousin_h_1", "cousin_h_1_spouse"],
+      "childIds": []
+    },
+
+    "cousin_w_1": {
+      "id": "cousin_w_1",
+      "firstName": "Cousin",
+      "lastName": "W1",
+      "gender": "male",
+      "birthDate": "1973-02-28",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["uncle_w_1", "aunt_w_1_spouse"],
+      "childIds": []
+    },
+    "cousin_w_2": {
+      "id": "cousin_w_2",
+      "firstName": "Cousin",
+      "lastName": "W2",
+      "gender": "female",
+      "birthDate": "1976-06-14",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["uncle_w_1", "aunt_w_1_spouse"],
+      "childIds": []
+    },
+    "cousin_w_3": {
+      "id": "cousin_w_3",
+      "firstName": "Cousin",
+      "lastName": "W3",
+      "gender": "female",
+      "birthDate": "1980-10-20",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["uncle_w_1_husband", "aunt_w_1"],
+      "childIds": []
+    },
+
+    "sibling_1": {
+      "id": "sibling_1",
+      "firstName": "Sibling",
+      "lastName": "One",
+      "gender": "male",
+      "birthDate": "1975-03-12",
+      "isPlaceholder": false,
+      "partnerships": ["part_sibling_1"],
+      "parentIds": ["father", "mother"],
+      "childIds": ["nephew_1_1", "nephew_1_2", "nephew_1_3"]
+    },
+    "sibling_1_spouse": {
+      "id": "sibling_1_spouse",
+      "firstName": "Spouse",
+      "lastName": "Sibling1",
+      "gender": "female",
+      "birthDate": "1977-06-28",
+      "isPlaceholder": false,
+      "partnerships": ["part_sibling_1"],
+      "parentIds": [],
+      "childIds": ["nephew_1_1", "nephew_1_2", "nephew_1_3"]
+    },
+
+    "focus": {
+      "id": "focus",
+      "firstName": "Focus",
+      "lastName": "Person",
+      "gender": "male",
+      "birthDate": "1978-09-01",
+      "isPlaceholder": false,
+      "partnerships": ["part_focus"],
+      "parentIds": ["father", "mother"],
+      "childIds": ["child_1", "child_2", "child_3", "child_4", "child_5"]
+    },
+    "focus_spouse": {
+      "id": "focus_spouse",
+      "firstName": "Spouse",
+      "lastName": "Focus",
+      "gender": "female",
+      "birthDate": "1980-12-20",
+      "isPlaceholder": false,
+      "partnerships": ["part_focus"],
+      "parentIds": [],
+      "childIds": ["child_1", "child_2", "child_3", "child_4", "child_5"]
+    },
+
+    "sibling_2": {
+      "id": "sibling_2",
+      "firstName": "Sibling",
+      "lastName": "Two",
+      "gender": "female",
+      "birthDate": "1982-04-15",
+      "isPlaceholder": false,
+      "partnerships": ["part_sibling_2"],
+      "parentIds": ["father", "mother"],
+      "childIds": ["nephew_2_1", "nephew_2_2"]
+    },
+    "sibling_2_spouse": {
+      "id": "sibling_2_spouse",
+      "firstName": "Spouse",
+      "lastName": "Sibling2",
+      "gender": "male",
+      "birthDate": "1980-01-10",
+      "isPlaceholder": false,
+      "partnerships": ["part_sibling_2"],
+      "parentIds": [],
+      "childIds": ["nephew_2_1", "nephew_2_2"]
+    },
+
+    "halfsibling_1": {
+      "id": "halfsibling_1",
+      "firstName": "HalfSibling",
+      "lastName": "One",
+      "gender": "male",
+      "birthDate": "1985-07-22",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["father", "stepmother"],
+      "childIds": []
+    },
+
+    "nephew_1_1": {
+      "id": "nephew_1_1",
+      "firstName": "Nephew",
+      "lastName": "1A",
+      "gender": "male",
+      "birthDate": "2000-02-14",
+      "isPlaceholder": false,
+      "partnerships": ["part_nephew_1_1"],
+      "parentIds": ["sibling_1", "sibling_1_spouse"],
+      "childIds": ["grandnephew_1_1_1"]
+    },
+    "nephew_1_1_spouse": {
+      "id": "nephew_1_1_spouse",
+      "firstName": "Spouse",
+      "lastName": "Nephew1A",
+      "gender": "female",
+      "birthDate": "2001-05-20",
+      "isPlaceholder": false,
+      "partnerships": ["part_nephew_1_1"],
+      "parentIds": [],
+      "childIds": ["grandnephew_1_1_1"]
+    },
+    "nephew_1_2": {
+      "id": "nephew_1_2",
+      "firstName": "Nephew",
+      "lastName": "1B",
+      "gender": "female",
+      "birthDate": "2002-08-30",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["sibling_1", "sibling_1_spouse"],
+      "childIds": []
+    },
+    "nephew_1_3": {
+      "id": "nephew_1_3",
+      "firstName": "Nephew",
+      "lastName": "1C",
+      "gender": "male",
+      "birthDate": "2005-11-15",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["sibling_1", "sibling_1_spouse"],
+      "childIds": []
+    },
+
+    "grandnephew_1_1_1": {
+      "id": "grandnephew_1_1_1",
+      "firstName": "GrandNephew",
+      "lastName": "1A1",
+      "gender": "male",
+      "birthDate": "2022-04-10",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["nephew_1_1", "nephew_1_1_spouse"],
+      "childIds": []
+    },
+
+    "nephew_2_1": {
+      "id": "nephew_2_1",
+      "firstName": "Nephew",
+      "lastName": "2A",
+      "gender": "male",
+      "birthDate": "2005-03-20",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["sibling_2_spouse", "sibling_2"],
+      "childIds": []
+    },
+    "nephew_2_2": {
+      "id": "nephew_2_2",
+      "firstName": "Nephew",
+      "lastName": "2B",
+      "gender": "female",
+      "birthDate": "2008-06-15",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["sibling_2_spouse", "sibling_2"],
+      "childIds": []
+    },
+
+    "child_1": {
+      "id": "child_1",
+      "firstName": "Child",
+      "lastName": "One",
+      "gender": "male",
+      "birthDate": "2005-01-10",
+      "isPlaceholder": false,
+      "partnerships": ["part_child_1"],
+      "parentIds": ["focus", "focus_spouse"],
+      "childIds": ["grandchild_1"]
+    },
+    "child_1_spouse": {
+      "id": "child_1_spouse",
+      "firstName": "Spouse",
+      "lastName": "Child1",
+      "gender": "female",
+      "birthDate": "2006-04-15",
+      "isPlaceholder": false,
+      "partnerships": ["part_child_1"],
+      "parentIds": [],
+      "childIds": ["grandchild_1"]
+    },
+    "child_2": {
+      "id": "child_2",
+      "firstName": "Child",
+      "lastName": "Two",
+      "gender": "female",
+      "birthDate": "2007-04-22",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["focus", "focus_spouse"],
+      "childIds": []
+    },
+    "child_3": {
+      "id": "child_3",
+      "firstName": "Child",
+      "lastName": "Three",
+      "gender": "male",
+      "birthDate": "2009-07-15",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["focus", "focus_spouse"],
+      "childIds": []
+    },
+    "child_4": {
+      "id": "child_4",
+      "firstName": "Child",
+      "lastName": "Four",
+      "gender": "female",
+      "birthDate": "2012-10-30",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["focus", "focus_spouse"],
+      "childIds": []
+    },
+    "child_5": {
+      "id": "child_5",
+      "firstName": "Child",
+      "lastName": "Five",
+      "gender": "male",
+      "birthDate": "2015-02-28",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["focus", "focus_spouse"],
+      "childIds": []
+    },
+
+    "grandchild_1": {
+      "id": "grandchild_1",
+      "firstName": "Grandchild",
+      "lastName": "One",
+      "gender": "male",
+      "birthDate": "2028-06-15",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["child_1", "child_1_spouse"],
+      "childIds": []
+    },
+
+    "gggp_h_h": {
+      "id": "gggp_h_h",
+      "firstName": "GGGrandfather",
+      "lastName": "H-Side",
+      "gender": "male",
+      "birthDate": "1860-03-20",
+      "isPlaceholder": false,
+      "partnerships": ["part_gggp_h"],
+      "parentIds": [],
+      "childIds": ["ggp_h_h"]
+    },
+    "gggp_h_w": {
+      "id": "gggp_h_w",
+      "firstName": "GGGrandmother",
+      "lastName": "H-Side",
+      "gender": "female",
+      "birthDate": "1862-07-10",
+      "isPlaceholder": false,
+      "partnerships": ["part_gggp_h"],
+      "parentIds": [],
+      "childIds": ["ggp_h_h"]
+    }
+  },
+  "partnerships": {
+    "part_gggp_h": {
+      "id": "part_gggp_h",
+      "person1Id": "gggp_h_h",
+      "person2Id": "gggp_h_w",
+      "childIds": ["ggp_h_h"],
+      "status": "married"
+    },
+    "part_ggp_h": {
+      "id": "part_ggp_h",
+      "person1Id": "ggp_h_h",
+      "person2Id": "ggp_h_w",
+      "childIds": ["gp_h_h"],
+      "status": "married"
+    },
+    "part_ggp_w": {
+      "id": "part_ggp_w",
+      "person1Id": "ggp_w_h",
+      "person2Id": "ggp_w_w",
+      "childIds": ["gp_w_h"],
+      "status": "married"
+    },
+    "part_gp_h": {
+      "id": "part_gp_h",
+      "person1Id": "gp_h_h",
+      "person2Id": "gp_h_w",
+      "childIds": ["uncle_h_1", "father", "aunt_h_1"],
+      "status": "married"
+    },
+    "part_gp_w": {
+      "id": "part_gp_w",
+      "person1Id": "gp_w_h",
+      "person2Id": "gp_w_w",
+      "childIds": ["uncle_w_1", "mother", "aunt_w_1"],
+      "status": "married"
+    },
+    "part_uncle_h_1": {
+      "id": "part_uncle_h_1",
+      "person1Id": "uncle_h_1",
+      "person2Id": "aunt_h_1_spouse",
+      "childIds": ["cousin_h_1", "cousin_h_2", "cousin_h_3"],
+      "status": "married"
+    },
+    "part_aunt_h_1": {
+      "id": "part_aunt_h_1",
+      "person1Id": "uncle_h_1_husband",
+      "person2Id": "aunt_h_1",
+      "childIds": ["cousin_h_4"],
+      "status": "married"
+    },
+    "part_uncle_w_1": {
+      "id": "part_uncle_w_1",
+      "person1Id": "uncle_w_1",
+      "person2Id": "aunt_w_1_spouse",
+      "childIds": ["cousin_w_1", "cousin_w_2"],
+      "status": "married"
+    },
+    "part_aunt_w_1": {
+      "id": "part_aunt_w_1",
+      "person1Id": "uncle_w_1_husband",
+      "person2Id": "aunt_w_1",
+      "childIds": ["cousin_w_3"],
+      "status": "married"
+    },
+    "part_parents": {
+      "id": "part_parents",
+      "person1Id": "father",
+      "person2Id": "mother",
+      "childIds": ["sibling_1", "focus", "sibling_2"],
+      "status": "married"
+    },
+    "part_father_2nd": {
+      "id": "part_father_2nd",
+      "person1Id": "father",
+      "person2Id": "stepmother",
+      "childIds": ["halfsibling_1"],
+      "status": "married"
+    },
+    "part_cousin_h_1": {
+      "id": "part_cousin_h_1",
+      "person1Id": "cousin_h_1",
+      "person2Id": "cousin_h_1_spouse",
+      "childIds": ["cousin_h_1_child_1", "cousin_h_1_child_2"],
+      "status": "married"
+    },
+    "part_sibling_1": {
+      "id": "part_sibling_1",
+      "person1Id": "sibling_1",
+      "person2Id": "sibling_1_spouse",
+      "childIds": ["nephew_1_1", "nephew_1_2", "nephew_1_3"],
+      "status": "married"
+    },
+    "part_sibling_2": {
+      "id": "part_sibling_2",
+      "person1Id": "sibling_2_spouse",
+      "person2Id": "sibling_2",
+      "childIds": ["nephew_2_1", "nephew_2_2"],
+      "status": "married"
+    },
+    "part_focus": {
+      "id": "part_focus",
+      "person1Id": "focus",
+      "person2Id": "focus_spouse",
+      "childIds": ["child_1", "child_2", "child_3", "child_4", "child_5"],
+      "status": "married"
+    },
+    "part_nephew_1_1": {
+      "id": "part_nephew_1_1",
+      "person1Id": "nephew_1_1",
+      "person2Id": "nephew_1_1_spouse",
+      "childIds": ["grandnephew_1_1_1"],
+      "status": "married"
+    },
+    "part_child_1": {
+      "id": "part_child_1",
+      "person1Id": "child_1",
+      "person2Id": "child_1_spouse",
+      "childIds": ["grandchild_1"],
+      "status": "married"
+    }
+  }
+}

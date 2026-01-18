@@ -1,0 +1,162 @@
+{
+  "persons": {
+    "r0_m": {
+      "id": "r0_m",
+      "firstName": "R0",
+      "lastName": "Male",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": ["part_r0"],
+      "parentIds": [],
+      "childIds": ["a", "b"]
+    },
+    "r0_f": {
+      "id": "r0_f",
+      "firstName": "R0",
+      "lastName": "Female",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": ["part_r0"],
+      "parentIds": [],
+      "childIds": ["a", "b"]
+    },
+    "a": {
+      "id": "a",
+      "firstName": "A",
+      "lastName": "Son",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": ["part_a"],
+      "parentIds": ["r0_m", "r0_f"],
+      "childIds": ["a1", "a2", "a3", "a4"],
+      "birthDate": "1970-01-01"
+    },
+    "a_spouse": {
+      "id": "a_spouse",
+      "firstName": "A",
+      "lastName": "Spouse",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": ["part_a"],
+      "parentIds": [],
+      "childIds": ["a1", "a2", "a3", "a4"]
+    },
+    "b": {
+      "id": "b",
+      "firstName": "B",
+      "lastName": "Son",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": ["part_b"],
+      "parentIds": ["r0_m", "r0_f"],
+      "childIds": ["b1"],
+      "birthDate": "1972-01-01"
+    },
+    "b_spouse": {
+      "id": "b_spouse",
+      "firstName": "B",
+      "lastName": "Spouse",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": ["part_b"],
+      "parentIds": [],
+      "childIds": ["b1"]
+    },
+    "a1": {
+      "id": "a1",
+      "firstName": "A1",
+      "lastName": "Child",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["a", "a_spouse"],
+      "childIds": [],
+      "birthDate": "1995-01-01"
+    },
+    "a2": {
+      "id": "a2",
+      "firstName": "A2",
+      "lastName": "Child",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": ["part_a2"],
+      "parentIds": ["a", "a_spouse"],
+      "childIds": ["a2_1"],
+      "birthDate": "1997-01-01"
+    },
+    "a3": {
+      "id": "a3",
+      "firstName": "A3",
+      "lastName": "Child",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["a", "a_spouse"],
+      "childIds": [],
+      "birthDate": "1999-01-01"
+    },
+    "a4": {
+      "id": "a4",
+      "firstName": "A4",
+      "lastName": "Child",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["a", "a_spouse"],
+      "childIds": [],
+      "birthDate": "2001-01-01"
+    },
+    "b1": {
+      "id": "b1",
+      "firstName": "B1",
+      "lastName": "Child",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["b", "b_spouse"],
+      "childIds": [],
+      "birthDate": "1996-01-01"
+    },
+    "a2_1": {
+      "id": "a2_1",
+      "firstName": "A2_1",
+      "lastName": "Grandchild",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["a2"],
+      "childIds": [],
+      "birthDate": "2020-01-01"
+    }
+  },
+  "partnerships": {
+    "part_r0": {
+      "id": "part_r0",
+      "person1Id": "r0_m",
+      "person2Id": "r0_f",
+      "childIds": ["a", "b"],
+      "status": "married"
+    },
+    "part_a": {
+      "id": "part_a",
+      "person1Id": "a",
+      "person2Id": "a_spouse",
+      "childIds": ["a1", "a2", "a3", "a4"],
+      "status": "married"
+    },
+    "part_b": {
+      "id": "part_b",
+      "person1Id": "b",
+      "person2Id": "b_spouse",
+      "childIds": ["b1"],
+      "status": "married"
+    },
+    "part_a2": {
+      "id": "part_a2",
+      "person1Id": "a2",
+      "person2Id": null,
+      "childIds": ["a2_1"],
+      "status": "single"
+    }
+  }
+}

@@ -1,0 +1,181 @@
+{
+  "persons": {
+    "a": {
+      "id": "a",
+      "firstName": "Adam",
+      "lastName": "Smith",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": ["part_a_b", "part_a_e"],
+      "parentIds": [],
+      "childIds": ["c1", "c2", "c3", "c4", "c5", "c6"]
+    },
+    "b": {
+      "id": "b",
+      "firstName": "Betty",
+      "lastName": "Jones",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": ["part_a_b"],
+      "parentIds": [],
+      "childIds": ["c1", "c2", "c3"]
+    },
+    "e": {
+      "id": "e",
+      "firstName": "Eva",
+      "lastName": "Brown",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": ["part_a_e"],
+      "parentIds": [],
+      "childIds": ["c4", "c5", "c6"]
+    },
+    "c1": {
+      "id": "c1",
+      "firstName": "Charlie",
+      "lastName": "Smith",
+      "gender": "male",
+      "birthDate": "1990-01-01",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["a", "b"],
+      "childIds": []
+    },
+    "c2": {
+      "id": "c2",
+      "firstName": "Clara",
+      "lastName": "Smith",
+      "gender": "female",
+      "birthDate": "1992-06-15",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["a", "b"],
+      "childIds": []
+    },
+    "c3": {
+      "id": "c3",
+      "firstName": "Carl",
+      "lastName": "Smith",
+      "gender": "male",
+      "birthDate": "1995-03-20",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["a", "b"],
+      "childIds": []
+    },
+    "c4": {
+      "id": "c4",
+      "firstName": "Diana",
+      "lastName": "Smith",
+      "gender": "female",
+      "birthDate": "2000-02-10",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["a", "e"],
+      "childIds": []
+    },
+    "c5": {
+      "id": "c5",
+      "firstName": "David",
+      "lastName": "Smith",
+      "gender": "male",
+      "birthDate": "2002-08-25",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["a", "e"],
+      "childIds": []
+    },
+    "c6": {
+      "id": "c6",
+      "firstName": "Donna",
+      "lastName": "Smith",
+      "gender": "female",
+      "birthDate": "2005-11-30",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["a", "e"],
+      "childIds": []
+    },
+    "f": {
+      "id": "f",
+      "firstName": "Fiona",
+      "lastName": "Wilson",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": ["part_f_unknown"],
+      "parentIds": [],
+      "childIds": ["c7"]
+    },
+    "f_partner": {
+      "id": "f_partner",
+      "firstName": "Unknown",
+      "lastName": "Father",
+      "gender": "male",
+      "isPlaceholder": true,
+      "partnerships": ["part_f_unknown"],
+      "parentIds": [],
+      "childIds": ["c7"]
+    },
+    "c7": {
+      "id": "c7",
+      "firstName": "Felix",
+      "lastName": "Wilson",
+      "gender": "male",
+      "birthDate": "2010-04-05",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["f", "f_partner"],
+      "childIds": []
+    },
+    "g": {
+      "id": "g",
+      "firstName": "George",
+      "lastName": "Taylor",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": ["part_g_h"],
+      "parentIds": [],
+      "childIds": []
+    },
+    "h": {
+      "id": "h",
+      "firstName": "Helen",
+      "lastName": "Taylor",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": ["part_g_h"],
+      "parentIds": [],
+      "childIds": []
+    }
+  },
+  "partnerships": {
+    "part_a_b": {
+      "id": "part_a_b",
+      "person1Id": "a",
+      "person2Id": "b",
+      "childIds": ["c1", "c2", "c3"],
+      "status": "divorced"
+    },
+    "part_a_e": {
+      "id": "part_a_e",
+      "person1Id": "a",
+      "person2Id": "e",
+      "childIds": ["c4", "c5", "c6"],
+      "status": "married"
+    },
+    "part_f_unknown": {
+      "id": "part_f_unknown",
+      "person1Id": "f",
+      "person2Id": "f_partner",
+      "childIds": ["c7"],
+      "status": "partners"
+    },
+    "part_g_h": {
+      "id": "part_g_h",
+      "person1Id": "g",
+      "person2Id": "h",
+      "childIds": [],
+      "status": "married"
+    }
+  }
+}

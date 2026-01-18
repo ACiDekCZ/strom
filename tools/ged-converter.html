@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEDCOM to Strom Converter</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+            font-weight: 500;
+        }
+        .drop-zone {
+            border: 2px dashed #ccc;
+            border-radius: 12px;
+            padding: 60px 40px;
+            text-align: center;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 20px;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: #2196F3;
+            background: #e3f2fd;
+        }
+        .drop-zone p {
+            color: #666;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        .drop-zone input[type="file"] {
+            display: none;
+        }
+        .drop-zone label {
+            color: #2196F3;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .stats {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .stats.visible {
+            display: block;
+        }
+        .stats h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-weight: 500;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        .stat-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        .stat-item .number {
+            font-size: 28px;
+            font-weight: 600;
+            color: #2196F3;
+        }
+        .stat-item .label {
+            font-size: 13px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .actions {
+            display: none;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .actions.visible {
+            display: flex;
+        }
+        .actions button {
+            flex: 1;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #1976D2;
+        }
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+        .btn-secondary:hover {
+            background: #bdbdbd;
+        }
+        .preview {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 400px;
+            overflow: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            display: none;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .preview.visible {
+            display: block;
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .error.visible {
+            display: block;
+        }
+        .filename {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .filename.visible {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GEDCOM → Strom Converter</h1>
+
+        <div class="drop-zone" id="drop-zone">
+            <p>Drop .ged file here</p>
+            <p>or <label for="file-input">browse</label></p>
+            <input type="file" id="file-input" accept=".ged">
+        </div>
+
+        <div class="filename" id="filename"></div>
+        <div class="error" id="error"></div>
+
+        <div class="stats" id="stats">
+            <h3>Conversion Results</h3>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="number" id="stat-persons">0</div>
+                    <div class="label">Persons</div>
+                </div>
+                <div class="stat-item">
+                    <div class="number" id="stat-partnerships">0</div>
+                    <div class="label">Partnerships</div>
+                </div>
+                <div class="stat-item">
+                    <div class="number" id="stat-families">0</div>
+                    <div class="label">Families (GED)</div>
+                </div>
+                <div class="stat-item">
+                    <div class="number" id="stat-skipped" style="color: #ff9800;">0</div>
+                    <div class="label">Skipped (empty)</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions" id="actions">
+            <button class="btn-primary" id="download-btn">Download JSON</button>
+            <button class="btn-secondary" id="copy-btn">Copy to Clipboard</button>
+        </div>
+
+        <pre class="preview" id="preview"></pre>
+    </div>
+
+    <script>
+        // ==================== GEDCOM PARSER ====================
+
+        const MONTHS = {
+            'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04',
+            'MAY': '05', 'JUN': '06', 'JUL': '07', 'AUG': '08',
+            'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
+        };
+
+        function parseGedcomDate(dateStr) {
+            if (!dateStr) return '';
+            // Handle formats: "3 JUN 1900", "JUN 1900", "1900"
+            const parts = dateStr.trim().split(/\s+/);
+
+            if (parts.length === 3) {
+                // "3 JUN 1900" -> "1900-06-03"
+                const day = parts[0].padStart(2, '0');
+                const month = MONTHS[parts[1].toUpperCase()] || '01';
+                const year = parts[2];
+                return `${year}-${month}-${day}`;
+            } else if (parts.length === 2) {
+                // "JUN 1900" -> "1900-06-01"
+                const month = MONTHS[parts[0].toUpperCase()] || '01';
+                const year = parts[1];
+                return `${year}-${month}-01`;
+            } else if (parts.length === 1 && /^\d{4}$/.test(parts[0])) {
+                // "1900" -> "1900-01-01"
+                return `${parts[0]}-01-01`;
+            }
+            return '';
+        }
+
+        function parseName(nameStr) {
+            // "John /Smith/" -> { firstName: "John", lastName: "Smith" }
+            // "  //" -> { firstName: "", lastName: "" }
+            // "/Smith/" -> { firstName: "", lastName: "Smith" }
+
+            // Try to match "Given /Surname/" pattern
+            const match = nameStr.match(/^(.*?)\/(.*)\/$/);
+            if (match) {
+                return {
+                    firstName: match[1].trim(),
+                    lastName: match[2].trim()
+                };
+            }
+            // Fallback: no surname delimiter - split by whitespace
+            const cleaned = nameStr.replace(/\//g, '').trim();
+            const parts = cleaned.split(/\s+/).filter(p => p);
+            return {
+                firstName: parts[0] || '',
+                lastName: parts.slice(1).join(' ') || ''
+            };
+        }
+
+        function parseGedcom(content) {
+            // Strip BOM (Byte Order Mark) if present
+            if (content.charCodeAt(0) === 0xFEFF) {
+                content = content.slice(1);
+            }
+            const lines = content.split(/\r?\n/);
+            const individuals = new Map(); // @I1@ -> individual data
+            const families = new Map();    // @F1@ -> family data
+
+            let currentRecord = null;
+            let currentType = null;
+            let currentSubTag = null;
+
+            for (const line of lines) {
+                const match = line.match(/^(\d+)\s+(@\w+@|\w+)\s*(.*)?$/);
+                if (!match) continue;
+
+                const level = parseInt(match[1]);
+                const tag = match[2];
+                const value = (match[3] || '').trim();
+
+                if (level === 0) {
+                    // New record
+                    if (tag.startsWith('@I') && value === 'INDI') {
+                        currentRecord = {
+                            id: tag,
+                            name: '',
+                            firstName: '',
+                            lastName: '',
+                            sex: '',
+                            birthDate: '',
+                            birthPlace: '',
+                            deathDate: '',
+                            deathPlace: '',
+                            fams: [],  // Families as spouse
+                            famc: null // Family as child
+                        };
+                        currentType = 'INDI';
+                        individuals.set(tag, currentRecord);
+                    } else if (tag.startsWith('@F') && value === 'FAM') {
+                        currentRecord = {
+                            id: tag,
+                            husb: null,
+                            wife: null,
+                            children: [],
+                            marriageDate: ''
+                        };
+                        currentType = 'FAM';
+                        families.set(tag, currentRecord);
+                    } else {
+                        currentRecord = null;
+                        currentType = null;
+                    }
+                    currentSubTag = null;
+                } else if (currentRecord) {
+                    if (level === 1) {
+                        currentSubTag = tag;
+
+                        if (currentType === 'INDI') {
+                            switch (tag) {
+                                case 'NAME':
+                                    const parsed = parseName(value);
+                                    currentRecord.name = value;
+                                    currentRecord.firstName = parsed.firstName;
+                                    currentRecord.lastName = parsed.lastName;
+                                    break;
+                                case 'SEX':
+                                    currentRecord.sex = value;
+                                    break;
+                                case 'FAMS':
+                                    currentRecord.fams.push(value);
+                                    break;
+                                case 'FAMC':
+                                    currentRecord.famc = value;
+                                    break;
+                            }
+                        } else if (currentType === 'FAM') {
+                            switch (tag) {
+                                case 'HUSB':
+                                    currentRecord.husb = value;
+                                    break;
+                                case 'WIFE':
+                                    currentRecord.wife = value;
+                                    break;
+                                case 'CHIL':
+                                    currentRecord.children.push(value);
+                                    break;
+                            }
+                        }
+                    } else if (level === 2) {
+                        if (currentType === 'INDI') {
+                            if (currentSubTag === 'BIRT') {
+                                if (tag === 'DATE') currentRecord.birthDate = parseGedcomDate(value);
+                                if (tag === 'PLAC') currentRecord.birthPlace = value;
+                            } else if (currentSubTag === 'DEAT') {
+                                if (tag === 'DATE') currentRecord.deathDate = parseGedcomDate(value);
+                                if (tag === 'PLAC') currentRecord.deathPlace = value;
+                            }
+                        } else if (currentType === 'FAM') {
+                            if (currentSubTag === 'MARR') {
+                                if (tag === 'DATE') currentRecord.marriageDate = parseGedcomDate(value);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return { individuals, families };
+        }
+
+        // ==================== CONVERTER ====================
+
+        function generateId(prefix) {
+            return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        }
+
+        function convertToStrom(gedcom) {
+            const { individuals, families } = gedcom;
+
+            // Filter out persons with empty names (unknown ancestors)
+            const validIndividuals = new Map();
+            const skippedIds = new Set();
+
+            for (const [gedId, indi] of individuals) {
+                // Skip if both firstName and lastName are empty
+                if (!indi.firstName && !indi.lastName) {
+                    skippedIds.add(gedId);
+                    continue;
+                }
+                validIndividuals.set(gedId, indi);
+            }
+
+            // Create ID mappings (only for valid individuals)
+            const personIdMap = new Map();  // @I1@ -> p_xxx
+            const partnershipIdMap = new Map(); // @F1@ -> u_xxx
+
+            // Generate new IDs
+            for (const [gedId] of validIndividuals) {
+                personIdMap.set(gedId, generateId('p'));
+            }
+            for (const [gedId] of families) {
+                partnershipIdMap.set(gedId, generateId('u'));
+            }
+
+            // Create persons
+            const persons = {};
+            for (const [gedId, indi] of validIndividuals) {
+                const personId = personIdMap.get(gedId);
+                persons[personId] = {
+                    id: personId,
+                    firstName: indi.firstName || '?',
+                    lastName: indi.lastName || '',
+                    gender: indi.sex === 'M' ? 'male' : 'female',
+                    isPlaceholder: !indi.firstName || indi.firstName === '?' || indi.firstName === '//',
+                    partnerships: [],
+                    parentIds: [],
+                    childIds: []
+                };
+
+                // Add extended info if present
+                if (indi.birthDate) persons[personId].birthDate = indi.birthDate;
+                if (indi.birthPlace) persons[personId].birthPlace = indi.birthPlace;
+                if (indi.deathDate) persons[personId].deathDate = indi.deathDate;
+                if (indi.deathPlace) persons[personId].deathPlace = indi.deathPlace;
+            }
+
+            // Create partnerships and link relationships
+            const partnerships = {};
+            for (const [gedFamId, fam] of families) {
+                const partnershipId = partnershipIdMap.get(gedFamId);
+
+                // Skip families without both spouses
+                if (!fam.husb || !fam.wife) continue;
+
+                const person1Id = personIdMap.get(fam.husb);
+                const person2Id = personIdMap.get(fam.wife);
+
+                if (!person1Id || !person2Id) continue;
+
+                // Create partnership
+                partnerships[partnershipId] = {
+                    id: partnershipId,
+                    person1Id: person1Id,
+                    person2Id: person2Id,
+                    childIds: [],
+                    status: 'married'
+                };
+
+                if (fam.marriageDate) {
+                    partnerships[partnershipId].weddingDate = fam.marriageDate;
+                }
+
+                // Add partnership to both persons
+                if (persons[person1Id]) {
+                    persons[person1Id].partnerships.push(partnershipId);
+                }
+                if (persons[person2Id]) {
+                    persons[person2Id].partnerships.push(partnershipId);
+                }
+
+                // Process children
+                for (const childGedId of fam.children) {
+                    const childId = personIdMap.get(childGedId);
+                    if (!childId || !persons[childId]) continue;
+
+                    // Add to partnership's childIds
+                    partnerships[partnershipId].childIds.push(childId);
+
+                    // Add parents to child's parentIds
+                    if (!persons[childId].parentIds.includes(person1Id)) {
+                        persons[childId].parentIds.push(person1Id);
+                    }
+                    if (!persons[childId].parentIds.includes(person2Id)) {
+                        persons[childId].parentIds.push(person2Id);
+                    }
+
+                    // Add child to parents' childIds
+                    if (!persons[person1Id].childIds.includes(childId)) {
+                        persons[person1Id].childIds.push(childId);
+                    }
+                    if (!persons[person2Id].childIds.includes(childId)) {
+                        persons[person2Id].childIds.push(childId);
+                    }
+                }
+            }
+
+            // Handle single-parent families (only HUSB or only WIFE)
+            for (const [gedFamId, fam] of families) {
+                // Skip if already processed (both spouses)
+                if (fam.husb && fam.wife) continue;
+
+                const parentGedId = fam.husb || fam.wife;
+                if (!parentGedId) continue;
+
+                const parentId = personIdMap.get(parentGedId);
+                if (!parentId || !persons[parentId]) continue;
+
+                // Process children for single parent
+                for (const childGedId of fam.children) {
+                    const childId = personIdMap.get(childGedId);
+                    if (!childId || !persons[childId]) continue;
+
+                    // Add parent to child's parentIds
+                    if (!persons[childId].parentIds.includes(parentId)) {
+                        persons[childId].parentIds.push(parentId);
+                    }
+
+                    // Add child to parent's childIds
+                    if (!persons[parentId].childIds.includes(childId)) {
+                        persons[parentId].childIds.push(childId);
+                    }
+                }
+            }
+
+            return {
+                persons,
+                partnerships,
+                stats: {
+                    skippedPersons: skippedIds.size,
+                    totalGedPersons: individuals.size
+                }
+            };
+        }
+
+        // ==================== UI ====================
+
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const filenameEl = document.getElementById('filename');
+        const errorEl = document.getElementById('error');
+        const statsEl = document.getElementById('stats');
+        const actionsEl = document.getElementById('actions');
+        const previewEl = document.getElementById('preview');
+        const downloadBtn = document.getElementById('download-btn');
+        const copyBtn = document.getElementById('copy-btn');
+
+        let convertedData = null;
+        let currentFilename = '';
+
+        // Drag and drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) processFile(file);
+        });
+
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) processFile(file);
+        });
+
+        function processFile(file) {
+            currentFilename = file.name.replace('.ged', '');
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const content = e.target.result;
+                    const gedcom = parseGedcom(content);
+                    convertedData = convertToStrom(gedcom);
+
+                    // Update UI
+                    filenameEl.textContent = `File: ${file.name}`;
+                    filenameEl.classList.add('visible');
+                    errorEl.classList.remove('visible');
+
+                    // Stats
+                    document.getElementById('stat-persons').textContent =
+                        Object.keys(convertedData.persons).length;
+                    document.getElementById('stat-partnerships').textContent =
+                        Object.keys(convertedData.partnerships).length;
+                    document.getElementById('stat-families').textContent =
+                        gedcom.families.size;
+                    document.getElementById('stat-skipped').textContent =
+                        convertedData.stats.skippedPersons;
+
+                    statsEl.classList.add('visible');
+                    actionsEl.classList.add('visible');
+
+                    // Preview (truncated, without stats)
+                    const exportData = { persons: convertedData.persons, partnerships: convertedData.partnerships };
+                    const json = JSON.stringify(exportData, null, 2);
+                    previewEl.textContent = json.length > 5000
+                        ? json.slice(0, 5000) + '\n\n... (truncated)'
+                        : json;
+                    previewEl.classList.add('visible');
+
+                } catch (err) {
+                    errorEl.textContent = `Error: ${err.message}`;
+                    errorEl.classList.add('visible');
+                    statsEl.classList.remove('visible');
+                    actionsEl.classList.remove('visible');
+                    previewEl.classList.remove('visible');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Helper to get exportable data (without stats)
+        function getExportData() {
+            if (!convertedData) return null;
+            return {
+                persons: convertedData.persons,
+                partnerships: convertedData.partnerships
+            };
+        }
+
+        // Download
+        downloadBtn.addEventListener('click', () => {
+            const exportData = getExportData();
+            if (!exportData) return;
+
+            const json = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `${currentFilename || 'family-tree'}.json`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        });
+
+        // Copy
+        copyBtn.addEventListener('click', async () => {
+            const exportData = getExportData();
+            if (!exportData) return;
+
+            const json = JSON.stringify(exportData, null, 2);
+            try {
+                await navigator.clipboard.writeText(json);
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                }, 2000);
+            } catch (err) {
+                errorEl.textContent = 'Failed to copy to clipboard';
+                errorEl.classList.add('visible');
+            }
+        });
+    </script>
+</body>
+</html>

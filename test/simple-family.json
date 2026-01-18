@@ -1,0 +1,55 @@
+{
+  "persons": {
+    "p1": {
+      "id": "p1",
+      "firstName": "Parent",
+      "lastName": "A",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": ["marriage"],
+      "parentIds": [],
+      "childIds": ["c1", "c2"]
+    },
+    "p2": {
+      "id": "p2",
+      "firstName": "Parent",
+      "lastName": "B",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": ["marriage"],
+      "parentIds": [],
+      "childIds": ["c1", "c2"]
+    },
+    "c1": {
+      "id": "c1",
+      "firstName": "Child",
+      "lastName": "A",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["p1", "p2"],
+      "childIds": [],
+      "birthDate": "1990-01-01"
+    },
+    "c2": {
+      "id": "c2",
+      "firstName": "Child",
+      "lastName": "B",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["p1", "p2"],
+      "childIds": [],
+      "birthDate": "1992-01-01"
+    }
+  },
+  "partnerships": {
+    "marriage": {
+      "id": "marriage",
+      "person1Id": "p1",
+      "person2Id": "p2",
+      "childIds": ["c1", "c2"],
+      "status": "married"
+    }
+  }
+}
