@@ -60,11 +60,11 @@ Note: Online and standalone versions use separate storage. To transfer data betw
 Visit [stromapp.info](https://stromapp.info) and start adding your family.
 
 ### Standalone
-Download `strom.html` from [Releases](https://github.com/AciDek/strom/releases) and open in any browser.
+Download `strom.html` from [Releases](https://github.com/ACiDekCZ/strom/releases) and open in any browser.
 
 ### Build from Source
 ```bash
-git clone https://github.com/AciDek/strom.git
+git clone https://github.com/ACiDekCZ/strom.git
 cd strom
 npm install
 npm run build
