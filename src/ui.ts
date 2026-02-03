@@ -651,17 +651,14 @@ class UIClass {
 
         this.relationContext = { personId, relationType };
 
-        // For child: automatically include partner (no confirmation needed)
+        // For child with single partner: pre-select (combo in modal allows changing)
         if (relationType === 'child') {
             const partners = DataManager.getPartners(personId);
-            if (partners.length > 0) {
-                // Auto-add to both parents
-                (this.relationContext as RelationContext & { includePartner?: PersonId }).includePartner = partners[partners.length - 1].id;
+            if (partners.length === 1) {
+                (this.relationContext as RelationContext & { includePartner?: PersonId }).includePartner = partners[0].id;
             }
+            // 0 or 2+ partners: combo in showRelationModal handles selection
         }
-
-        // Sibling without parents - auto-create 2 placeholder parents (no confirmation needed)
-        // The actual creation happens in createRelationship
 
         this.showRelationModal();
     }
@@ -687,6 +684,57 @@ class UIClass {
         };
 
         title.textContent = titles[this.relationContext.relationType];
+
+        // Setup "other parent" combo for child relation type
+        const otherParentGroup = document.getElementById('rel-other-parent');
+        const otherParentLabel = document.getElementById('rel-other-parent-label');
+        const otherParentSelect = document.getElementById('rel-other-parent-select') as HTMLSelectElement;
+        if (otherParentGroup && otherParentLabel && otherParentSelect) {
+            if (this.relationContext.relationType === 'child') {
+                const { personId } = this.relationContext;
+                const partners = DataManager.getPartners(personId);
+                otherParentLabel.textContent = strings.addChild.selectParent;
+                otherParentSelect.innerHTML = '';
+
+                // Add partner options
+                for (const partner of partners) {
+                    const partnership = DataManager.getPartnerships(personId)
+                        .find(p => p.person1Id === partner.id || p.person2Id === partner.id);
+                    const statusText = partnership ? strings.partnershipStatus[partnership.status] : '';
+                    const birthYear = partner.birthDate?.split('-')[0] || '';
+                    let nameStr: string;
+                    if (partner.isPlaceholder) {
+                        nameStr = strings.addChild.unknownPerson + (statusText ? ` (${statusText})` : '');
+                    } else {
+                        nameStr = `${partner.firstName} ${partner.lastName}`.trim();
+                        const detail = [birthYear ? `*${birthYear}` : '', statusText].filter(Boolean).join(', ');
+                        if (detail) nameStr += ` (${detail})`;
+                    }
+                    const opt = document.createElement('option');
+                    opt.value = partner.id;
+                    opt.textContent = nameStr;
+                    otherParentSelect.appendChild(opt);
+                }
+
+                // Add "New person (unknown)" option
+                const newOpt = document.createElement('option');
+                newOpt.value = '__new_placeholder__';
+                newOpt.textContent = strings.addChild.newPlaceholder;
+                otherParentSelect.appendChild(newOpt);
+
+                // Pre-select: if includePartner was set (1 partner), select it; otherwise select last partner
+                const includePartner = (this.relationContext as RelationContext & { includePartner?: PersonId }).includePartner;
+                if (includePartner) {
+                    otherParentSelect.value = includePartner;
+                } else if (partners.length > 0) {
+                    otherParentSelect.value = partners[partners.length - 1].id;
+                }
+
+                otherParentGroup.style.display = '';
+            } else {
+                otherParentGroup.style.display = 'none';
+            }
+        }
 
         // Reset form and link mode
         this.linkMode = false;
@@ -845,7 +893,22 @@ class UIClass {
         if (!this.relationContext) return;
 
         const { personId, relationType } = this.relationContext;
-        const includePartner = (this.relationContext as RelationContext & { includePartner?: PersonId }).includePartner;
+        const person = DataManager.getPerson(personId);
+        if (!person) return;
+
+        // Read other parent from combo (for child relation type)
+        let includePartner: PersonId | undefined;
+        if (relationType === 'child') {
+            const otherParentSelect = document.getElementById('rel-other-parent-select') as HTMLSelectElement;
+            if (otherParentSelect) {
+                const val = otherParentSelect.value;
+                if (val === '__new_placeholder__') {
+                    // Leave includePartner undefined — createRelationship() will create placeholder
+                } else if (val) {
+                    includePartner = val as PersonId;
+                }
+            }
+        }
 
         let newPersonId: PersonId;
 
@@ -904,15 +967,26 @@ class UIClass {
             }
 
             case 'child': {
-                // Add as child of person
-                DataManager.addParentChild(personId, newPersonId);
-
-                // If includePartner, add as child of partner too
                 if (includePartner) {
+                    // Has a selected partner — add child to both parents and partnership
+                    DataManager.addParentChild(personId, newPersonId);
                     DataManager.addParentChild(includePartner, newPersonId);
-                    // Also add to partnership
                     const partnership = DataManager.getPartnerships(personId)
                         .find(p => p.person1Id === includePartner || p.person2Id === includePartner);
+                    if (partnership) {
+                        DataManager.addParentChild(personId, newPersonId, partnership.id);
+                    }
+                } else {
+                    // No partner — create placeholder partner + partnership
+                    const placeholderGender: Gender = person.gender === 'male' ? 'female' : 'male';
+                    const placeholder = DataManager.createPerson({
+                        firstName: '?',
+                        lastName: '',
+                        gender: placeholderGender
+                    }, true);
+                    const partnership = DataManager.createPartnership(personId, placeholder.id);
+                    DataManager.addParentChild(personId, newPersonId);
+                    DataManager.addParentChild(placeholder.id, newPersonId);
                     if (partnership) {
                         DataManager.addParentChild(personId, newPersonId, partnership.id);
                     }
@@ -922,6 +996,21 @@ class UIClass {
 
             case 'parent': {
                 DataManager.addParentChild(newPersonId, personId);
+                // If child already has another parent, create partnership between both parents
+                const child = DataManager.getPerson(personId);
+                if (child && child.parentIds.length === 2) {
+                    const otherParentId = child.parentIds.find(pid => pid !== newPersonId);
+                    if (otherParentId) {
+                        // Create partnership if it doesn't exist
+                        const existingPartnership = DataManager.getPartnerships(newPersonId)
+                            .find(p => p.person1Id === otherParentId || p.person2Id === otherParentId);
+                        const partnership = existingPartnership || DataManager.createPartnership(newPersonId, otherParentId);
+                        // Add child to partnership's childIds
+                        if (partnership) {
+                            DataManager.addParentChild(newPersonId, personId, partnership.id);
+                        }
+                    }
+                }
                 break;
             }
 
@@ -930,6 +1019,14 @@ class UIClass {
                     // Add sibling to existing parents
                     for (const parentId of person.parentIds) {
                         DataManager.addParentChild(parentId, newPersonId);
+                    }
+                    // Also add to parents' partnership childIds
+                    if (person.parentIds.length === 2) {
+                        const partnership = DataManager.getPartnerships(person.parentIds[0])
+                            .find(p => p.person1Id === person.parentIds[1] || p.person2Id === person.parentIds[1]);
+                        if (partnership) {
+                            DataManager.addParentChild(person.parentIds[0], newPersonId, partnership.id);
+                        }
                     }
                 } else {
                     // Create 2 placeholder parents
@@ -946,12 +1043,12 @@ class UIClass {
                     }, true);
 
                     // Create partnership between placeholder parents
-                    DataManager.createPartnership(father.id, mother.id);
+                    const partnership = DataManager.createPartnership(father.id, mother.id);
 
-                    // Link both children to both parents
-                    DataManager.addParentChild(father.id, personId);
+                    // Link both children to both parents with partnership
+                    DataManager.addParentChild(father.id, personId, partnership?.id);
                     DataManager.addParentChild(mother.id, personId);
-                    DataManager.addParentChild(father.id, newPersonId);
+                    DataManager.addParentChild(father.id, newPersonId, partnership?.id);
                     DataManager.addParentChild(mother.id, newPersonId);
                 }
                 break;
@@ -1798,7 +1895,7 @@ class UIClass {
         const title = document.getElementById('confirm-title');
         const message = document.getElementById('confirm-message');
         const options = document.getElementById('confirm-options');
-        const confirmBtn = document.getElementById('confirm-btn');
+        const confirmBtn = document.getElementById('confirm-ok-btn');
 
         if (!modal || !title || !message || !options || !confirmBtn) return;
 
@@ -2429,6 +2526,13 @@ class UIClass {
             if (mergeBtn) mergeBtn.style.display = 'none';
             if (saveJsonBtn) saveJsonBtn.style.display = 'none';
             if (insertBtn) insertBtn.style.display = '';
+        } else if (this.importFromTreeManager) {
+            // From tree manager "New Tree" - only "Import as New Tree" and "Save as JSON"
+            // Merge is available via tree manager's "Merge into..." action
+            if (newTreeBtn) newTreeBtn.style.display = '';
+            if (mergeBtn) mergeBtn.style.display = 'none';
+            if (saveJsonBtn) saveJsonBtn.style.display = '';
+            if (insertBtn) insertBtn.style.display = 'none';
         } else {
             // Normal import - show standard options
             if (newTreeBtn) newTreeBtn.style.display = '';
@@ -2843,7 +2947,7 @@ class UIClass {
         const title = document.getElementById('confirm-title');
         const message = document.getElementById('confirm-message');
         const options = document.getElementById('confirm-options');
-        const confirmBtn = document.getElementById('confirm-btn');
+        const confirmBtn = document.getElementById('confirm-ok-btn');
 
         if (!modal || !title || !message || !options || !confirmBtn) return;
 

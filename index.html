@@ -1307,6 +1307,54 @@
             transform: translateY(-2px);
         }
 
+        /* Shared badge tooltip (used by hidden-partners, hidden-families, branch-tab ◆) */
+        .badge-tooltip {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 4px;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 10px;
+            min-width: 150px;
+            max-width: 240px;
+            box-shadow: 0 2px 8px var(--shadow);
+            font-size: 11px;
+            font-weight: normal;
+            color: var(--text);
+            text-align: left;
+            white-space: normal;
+            z-index: 9999;
+        }
+        .hidden-partners-btn:hover .badge-tooltip,
+        .hidden-families-btn:hover .badge-tooltip,
+        .branch-tab:hover .badge-tooltip {
+            display: block;
+        }
+        .badge-tooltip-header {
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--text-light);
+        }
+        .badge-tooltip-item {
+            padding: 2px 0;
+            border-bottom: 1px solid var(--border-light);
+            line-height: 1.3;
+        }
+        .badge-tooltip-item:last-child {
+            border-bottom: none;
+        }
+        .badge-tooltip-name {
+            font-weight: 500;
+        }
+        .badge-tooltip-detail {
+            color: var(--text-light);
+            font-size: 10px;
+        }
+
         /* ==================== CROSS-TREE BADGE ==================== */
         /* Badge showing person exists in other trees - positioned below card */
         .cross-tree-badge {
@@ -2151,7 +2199,9 @@
         #gedcom-result-modal,
         #import-tree-modal,
         #new-tree-menu-modal,
-        #new-tree-modal {
+        #new-tree-modal,
+        #merge-modal,
+        #pending-merge-modal {
             z-index: 300;  /* Above tree-manager (200), below confirmation (500) */
         }
 
@@ -4693,6 +4743,10 @@
     <div class="modal-overlay" id="relation-modal">
         <div class="modal">
             <h2 id="relation-title"></h2>
+            <div id="rel-other-parent" class="form-group" style="display:none;">
+                <label id="rel-other-parent-label"></label>
+                <select id="rel-other-parent-select"></select>
+            </div>
             <div id="new-person-fields">
                 <div class="form-group">
                     <label data-i18n="labels.firstName"></label>

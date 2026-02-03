@@ -376,9 +376,11 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     }
 
     // Handle single-parent families (only HUSB or only WIFE)
+    // Create placeholder for the missing parent + partnership so layout engine can render children
     for (const [, fam] of families) {
         // Skip if already processed (both spouses)
         if (fam.husb && fam.wife) continue;
+        if (fam.children.length === 0) continue;
 
         const parentGedId = fam.husb || fam.wife;
         if (!parentGedId) continue;
@@ -386,20 +388,58 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         const parentId = personIdMap.get(parentGedId);
         if (!parentId || !persons[parentId]) continue;
 
-        // Process children for single parent
+        // Create placeholder for the missing parent (opposite gender)
+        const placeholderId = toPersonId(generateId('p'));
+        const parentGender = persons[parentId].gender;
+        const placeholderGender = parentGender === 'male' ? 'female' : 'male';
+        const placeholder: Person = {
+            id: placeholderId,
+            firstName: '?',
+            lastName: '',
+            gender: placeholderGender,
+            parentIds: [],
+            childIds: [],
+            partnerships: [],
+            isPlaceholder: true
+        };
+        persons[placeholderId] = placeholder;
+
+        // Create partnership between parent and placeholder
+        const partnershipId = toPartnershipId(generateId('u'));
+        const partnership: Partnership = {
+            id: partnershipId,
+            person1Id: parentId,
+            person2Id: placeholderId,
+            childIds: [],
+            status: 'married'
+        };
+        partnerships[partnershipId] = partnership;
+
+        // Add partnership to both persons
+        persons[parentId].partnerships.push(partnershipId);
+        placeholder.partnerships.push(partnershipId);
+
+        // Process children
         for (const childGedId of fam.children) {
             const childId = personIdMap.get(childGedId);
             if (!childId || !persons[childId]) continue;
 
-            // Add parent to child's parentIds
+            // Add to partnership's childIds
+            partnership.childIds.push(childId);
+
+            // Add parents to child's parentIds
             if (!persons[childId].parentIds.includes(parentId)) {
                 persons[childId].parentIds.push(parentId);
             }
+            if (!persons[childId].parentIds.includes(placeholderId)) {
+                persons[childId].parentIds.push(placeholderId);
+            }
 
-            // Add child to parent's childIds
+            // Add child to parents' childIds
             if (!persons[parentId].childIds.includes(childId)) {
                 persons[parentId].childIds.push(childId);
             }
+            placeholder.childIds.push(childId);
         }
     }
 

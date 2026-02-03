@@ -237,6 +237,9 @@ const stringsEN = {
         exportFocus: 'Export Focus',
         hiddenPartners: (count: number) => `+${count} partner${count > 1 ? 's' : ''} (click to focus)`,
         hiddenFamilies: (count: number) => `${count} other famil${count > 1 ? 'ies' : 'y'} with children (click to focus)`,
+        hiddenPartnersTooltip: 'Other partners',
+        hiddenFamiliesTooltip: 'Other families',
+        hiddenSiblingsTooltip: 'Siblings',
         personCount: (visible: number, total: number) => `${visible} of ${total} persons`
     },
 
@@ -271,6 +274,14 @@ const stringsEN = {
     partnerSelection: {
         title: 'Select Partner',
         description: (name: string) => `Show relationship branch for ${name}:`
+    },
+
+    // Add child - parent selection
+    addChild: {
+        selectParent: 'Select the other parent',
+        selectParentDesc: (name: string) => `${name} has multiple partners. Select the other parent:`,
+        newPlaceholder: 'New person (unknown)',
+        unknownPerson: 'Unknown person'
     },
 
     // About dialog
@@ -941,6 +952,9 @@ const stringsCZ: StringsType = {
         exportFocus: 'Exportovat výběr',
         hiddenPartners: (count: number) => `+${count} partner${count > 1 ? 'ů' : ''} (klikněte pro zaměření)`,
         hiddenFamilies: (count: number) => `${count} další rodin${count > 1 ? 'y' : 'a'} s dětmi (klikněte pro zaměření)`,
+        hiddenPartnersTooltip: 'Další partneři',
+        hiddenFamiliesTooltip: 'Další rodiny',
+        hiddenSiblingsTooltip: 'Sourozenci',
         personCount: (visible: number, total: number) => `${visible} z ${total} osob`
     },
 
@@ -975,6 +989,14 @@ const stringsCZ: StringsType = {
     partnerSelection: {
         title: 'Vybrat partnera',
         description: (name: string) => `Zobrazit větev vztahů pro ${name}:`
+    },
+
+    // Add child - parent selection
+    addChild: {
+        selectParent: 'Vyberte druhého rodiče',
+        selectParentDesc: (name: string) => `${name} má více partnerů. Vyberte druhého rodiče:`,
+        newPlaceholder: 'Nová osoba (neznámá)',
+        unknownPerson: 'Neznámá osoba'
     },
 
     // About dialog

@@ -53,6 +53,9 @@ class TreeRendererClass {
     private debugOptions: DebugOptions | null = null;
     private currentDebugSnapshot: DebugSnapshot | null = null;
 
+    // Sibling rotation state: tracks which partner index to focus next per person
+    private siblingFocusIndex = new Map<PersonId, number>();
+
     /**
      * Set debug options for pipeline visualization.
      */
@@ -620,13 +623,38 @@ class TreeRendererClass {
             if (hasHiddenParents || hasHiddenChildren || hasHiddenSiblings) {
                 html += `<div class="branch-tabs">`;
                 if (hasHiddenParents) {
-                    html += `<button class="branch-tab" data-action="focus-person" title="${strings.branchTabs.viewParents}">▲</button>`;
+                    html += `<button class="branch-tab" data-action="focus-parent" title="${strings.branchTabs.viewParents}">▲</button>`;
                 }
                 if (hasHiddenSiblings) {
-                    html += `<button class="branch-tab" data-action="focus-person" title="${strings.branchTabs.viewSiblings}">◆</button>`;
+                    const hiddenSiblings = siblings.filter(s => !this.positions.has(s.id));
+                    // Find focus targets: step-parents (siblings' parents that are NOT my parents)
+                    // Focusing on step-parent shows their family with the siblings
+                    const myParentIds = new Set(person.parentIds);
+                    const focusTargetIds: PersonId[] = [];
+                    for (const sib of hiddenSiblings) {
+                        for (const sibParentId of sib.parentIds) {
+                            if (!myParentIds.has(sibParentId) && !focusTargetIds.includes(sibParentId)) {
+                                focusTargetIds.push(sibParentId);
+                            }
+                        }
+                    }
+                    // Fallback: if no step-parents (full siblings hidden by depth), use shared parents
+                    if (focusTargetIds.length === 0) {
+                        for (const parentId of person.parentIds) {
+                            focusTargetIds.push(parentId);
+                        }
+                    }
+                    // Build simple list tooltip (same format as hidden partners)
+                    const siblingItems = hiddenSiblings.map(s => {
+                        const name = `${s.firstName || '?'} ${s.lastName || ''}`.trim();
+                        const year = s.birthDate ? s.birthDate.split('-')[0] : '';
+                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
+                    }).join('');
+                    const targetIds = focusTargetIds.join(',');
+                    html += `<button class="branch-tab" data-action="focus-sibling" data-target-ids="${targetIds}">◆<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${siblingItems}</div></button>`;
                 }
                 if (hasHiddenChildren) {
-                    html += `<button class="branch-tab" data-action="focus-person" title="${strings.branchTabs.viewFamily}">▼</button>`;
+                    html += `<button class="branch-tab" data-action="focus-child" title="${strings.branchTabs.viewFamily}">▼</button>`;
                 }
                 html += `</div>`;
             }
@@ -635,10 +663,38 @@ class TreeRendererClass {
             if (hiddenPartnersCount > 0 || hiddenFamiliesCount > 0) {
                 html += `<div class="hidden-indicators">`;
                 if (hiddenPartnersCount > 0) {
-                    html += `<button class="hidden-partners-btn" data-action="focus" title="${strings.focus.hiddenPartners(hiddenPartnersCount)}">+${hiddenPartnersCount}</button>`;
+                    // Build rich tooltip with list of hidden partners
+                    const hiddenPartners = allPartners.filter(p => !this.positions.has(p.id));
+                    const partnerItems = hiddenPartners.map(p => {
+                        const name = `${p.firstName || '?'} ${p.lastName || ''}`.trim();
+                        const year = p.birthDate ? p.birthDate.split('-')[0] : '';
+                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
+                    }).join('');
+                    html += `<button class="hidden-partners-btn" data-action="focus">+${hiddenPartnersCount}<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenPartnersTooltip}</div>${partnerItems}</div></button>`;
                 }
                 if (hiddenFamiliesCount > 0) {
-                    html += `<button class="hidden-families-btn" data-action="focus" title="${strings.focus.hiddenFamilies(hiddenFamiliesCount)}">👨‍👩‍👧</button>`;
+                    // Build rich tooltip with hidden families (partner + children)
+                    const hiddenFamilyItems = partnerships
+                        .filter(p => {
+                            const pid = p.person1Id === id ? p.person2Id : p.person1Id;
+                            return !this.positions.has(pid) && p.childIds.length > 0;
+                        })
+                        .map(p => {
+                            const pid = p.person1Id === id ? p.person2Id : p.person1Id;
+                            const partner = DataManager.getPerson(pid);
+                            const partnerName = partner ? `${partner.firstName || '?'} ${partner.lastName || ''}`.trim() : '?';
+                            const partnerYear = partner?.birthDate ? partner.birthDate.split('-')[0] : '';
+                            const childLabels = p.childIds
+                                .map(cid => DataManager.getPerson(cid))
+                                .filter((c): c is Person => c !== null)
+                                .map(c => {
+                                    const name = `${c.firstName || '?'} ${c.lastName || ''}`.trim();
+                                    const year = c.birthDate ? c.birthDate.split('-')[0] : '';
+                                    return this.escapeHtml(name) + (year ? ` *${year}` : '');
+                                });
+                            return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(partnerName)}</span>${partnerYear ? `<span class="badge-tooltip-detail"> *${partnerYear}</span>` : ''}<div class="badge-tooltip-detail">${childLabels.join(', ')}</div></div>`;
+                        }).join('');
+                    html += `<button class="hidden-families-btn" data-action="focus">👨‍👩‍👧<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenFamiliesTooltip}</div>${hiddenFamilyItems}</div></button>`;
                 }
                 html += `</div>`;
             }
@@ -694,8 +750,25 @@ class TreeRendererClass {
             branchTabs.forEach(tab => {
                 tab.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    // Focus on this person - will show them with their parents/children
-                    this.setFocus(id);
+                    const action = (tab as HTMLElement).dataset.action;
+                    if (action === 'focus-sibling') {
+                        // Sibling rotation: cycle through step-parents (same as hidden families)
+                        const targetIdsStr = (tab as HTMLElement).dataset.targetIds || '';
+                        const targetIds = targetIdsStr.split(',').filter(Boolean) as PersonId[];
+                        if (targetIds.length === 1) {
+                            this.setFocus(targetIds[0]);
+                        } else if (targetIds.length > 1) {
+                            const currentIdx = this.siblingFocusIndex.get(id) ?? 0;
+                            const targetId = targetIds[currentIdx % targetIds.length];
+                            this.siblingFocusIndex.set(id, (currentIdx + 1) % targetIds.length);
+                            this.setFocus(targetId);
+                        } else {
+                            this.setFocus(id);
+                        }
+                    } else {
+                        // ▲ (parents) and ▼ (children) - focus on this person
+                        this.setFocus(id);
+                    }
                 });
             });
 
