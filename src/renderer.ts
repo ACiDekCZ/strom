@@ -599,7 +599,12 @@ class TreeRendererClass {
                 person.childIds.some(cid => this.positions.has(cid));
 
             // Check if siblings are currently visible
-            const siblings = DataManager.getSiblings(id);
+            // Filter to only siblings that are in a partnership.childIds (same as layout engine)
+            const siblings = DataManager.getSiblings(id).filter(s =>
+                Object.values(DataManager.getData().partnerships).some(
+                    p => p.childIds.includes(s.id)
+                )
+            );
             const hasSiblings = siblings.length > 0;
             const siblingsVisible = hasSiblings &&
                 siblings.some(s => this.positions.has(s.id));

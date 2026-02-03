@@ -59,8 +59,9 @@ export function buildLayoutModel(input: BuildModelInput): LayoutModel {
     // Sort partnerships by priority:
     // 1. Biological parent partnership (both partners are focus person's parents)
     // 2. isPrimary flag set
-    // 3. By wedding date (newest first)
-    // 4. By ID for determinism
+    // 3. Active status (married/partners/undefined) before terminated (divorced/separated)
+    // 4. By wedding date (newest first)
+    // 5. By ID for determinism
     const sortedPartnershipIds = [...selection.partnerships].sort((aId, bId) => {
         const a = data.partnerships[aId];
         const b = data.partnerships[bId];
@@ -76,12 +77,19 @@ export function buildLayoutModel(input: BuildModelInput): LayoutModel {
         if (a.isPrimary && !b.isPrimary) return -1;
         if (!a.isPrimary && b.isPrimary) return 1;
 
-        // Priority 3: Start date (newest first)
+        // Priority 3: Active status beats terminated
+        const isTerminated = (s?: string) => s === 'divorced' || s === 'separated';
+        const aTerminated = isTerminated(a.status);
+        const bTerminated = isTerminated(b.status);
+        if (!aTerminated && bTerminated) return -1;
+        if (aTerminated && !bTerminated) return 1;
+
+        // Priority 4: Start date (newest first)
         const aDate = a.startDate ?? '';
         const bDate = b.startDate ?? '';
         if (aDate !== bDate) return bDate.localeCompare(aDate);
 
-        // Priority 4: ID for determinism
+        // Priority 5: ID for determinism
         return aId.localeCompare(bId);
     });
 
@@ -133,8 +141,10 @@ export function buildLayoutModel(input: BuildModelInput): LayoutModel {
         };
 
         unions.set(unionId, union);
-        personToUnion.set(partnerA, unionId);
-        personToUnion.set(partnerB, unionId);
+        // Only set personToUnion for first (highest priority) partnership
+        // so the focus union is always the primary one
+        if (!personToUnion.has(partnerA)) personToUnion.set(partnerA, unionId);
+        if (!personToUnion.has(partnerB)) personToUnion.set(partnerB, unionId);
         assignedPersons.add(partnerA);
         assignedPersons.add(partnerB);
 
