@@ -178,6 +178,41 @@ class TreeManagerClass {
     }
 
     /**
+     * Get visible trees (for switcher and cross-tree matching)
+     * Excludes trees marked as hidden
+     */
+    getVisibleTrees(): TreeMetadata[] {
+        return this.index.trees.filter(t => !t.isHidden);
+    }
+
+    /**
+     * Toggle tree visibility
+     * @param id Tree ID
+     * @returns true if toggled, false if tree not found
+     */
+    toggleTreeVisibility(id: TreeId): boolean {
+        const tree = this.index.trees.find(t => t.id === id);
+        if (!tree) return false;
+
+        tree.isHidden = !tree.isHidden;
+        this.saveIndex();
+        return true;
+    }
+
+    /**
+     * Set tree visibility
+     * @param id Tree ID
+     * @param isHidden Whether tree should be hidden
+     */
+    setTreeVisibility(id: TreeId, isHidden: boolean): void {
+        const tree = this.index.trees.find(t => t.id === id);
+        if (tree) {
+            tree.isHidden = isHidden;
+            this.saveIndex();
+        }
+    }
+
+    /**
      * Get active tree ID
      */
     getActiveTreeId(): TreeId | null {

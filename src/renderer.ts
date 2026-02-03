@@ -11,8 +11,12 @@ import {
     Person,
     PersonId,
     Position,
-    DEFAULT_LAYOUT_CONFIG
+    DEFAULT_LAYOUT_CONFIG,
+    TreeId,
+    StromData
 } from './types.js';
+import { TreeManager } from './tree-manager.js';
+import * as CrossTree from './cross-tree.js';
 import {
     computeLayout,
     StromLayoutEngine,
@@ -484,9 +488,39 @@ class TreeRendererClass {
         return presumedDeceased;
     }
 
+    /**
+     * Get all trees for cross-tree matching
+     * Returns a Map of treeId -> { name, data }
+     * Only available when not in view mode and there are multiple visible trees
+     */
+    private getAllTreesForCrossTreeMatching(): Map<TreeId, { name: string; data: StromData }> | null {
+        // Don't do cross-tree matching in view mode
+        if (DataManager.isViewMode()) return null;
+
+        // Use getVisibleTrees() to exclude hidden trees
+        const trees = TreeManager.getVisibleTrees();
+        // Only show cross-tree links if there are multiple visible trees
+        if (trees.length < 2) return null;
+
+        const result = new Map<TreeId, { name: string; data: StromData }>();
+
+        for (const treeMeta of trees) {
+            const data = TreeManager.getTreeData(treeMeta.id);
+            if (data) {
+                result.set(treeMeta.id, { name: treeMeta.name, data });
+            }
+        }
+
+        return result;
+    }
+
     private renderCards(canvas: HTMLElement): void {
         // Pre-compute presumed deceased set
         const presumedDeceased = this.computePresumedDeceased();
+
+        // Get all trees for cross-tree matching (only if not in view mode)
+        const allTrees = this.getAllTreesForCrossTreeMatching();
+        const currentTreeId = DataManager.getCurrentTreeId();
 
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);
@@ -623,6 +657,31 @@ class TreeRendererClass {
             // Left: Add sibling
             html += `<button class="add-btn left" data-action="sibling" title="${strings.contextMenu.addSibling}">+</button>`;
 
+            // Add cross-tree badge if person exists in other trees
+            let crossTreeMatches: CrossTree.CrossTreeMatch[] = [];
+            if (allTrees && currentTreeId && !person.isPlaceholder) {
+                crossTreeMatches = CrossTree.findCrossTreeMatches(currentTreeId, person, allTrees);
+                if (crossTreeMatches.length > 0) {
+                    const tooltipItems = crossTreeMatches.slice(0, 5).map(m =>
+                        `<div class="cross-tree-tooltip-item">
+                            <div class="cross-tree-tooltip-tree">${this.escapeHtml(m.treeName)}</div>
+                            <div class="cross-tree-tooltip-person">${this.escapeHtml(m.personName)}</div>
+                        </div>`
+                    ).join('');
+                    const moreCount = crossTreeMatches.length > 5 ? crossTreeMatches.length - 5 : 0;
+
+                    html += `<div class="cross-tree-badge" data-person-id="${id}" title="${strings.crossTree.badgeTitle(crossTreeMatches.length)}">
+                        +${crossTreeMatches.length}
+                        <div class="cross-tree-tooltip">
+                            <div class="cross-tree-tooltip-header">${strings.crossTree.tooltipHeader}</div>
+                            ${tooltipItems}
+                            ${moreCount > 0 ? `<div class="cross-tree-tooltip-item">...${moreCount} more</div>` : ''}
+                            <div class="cross-tree-tooltip-hint">${strings.crossTree.clickToSwitch}</div>
+                        </div>
+                    </div>`;
+                }
+            }
+
             card.innerHTML = html;
 
             // Attach event listeners for branch tabs (may have multiple)
@@ -684,6 +743,18 @@ class TreeRendererClass {
                     UI.addRelation(id, action);
                 });
             });
+
+            // Attach event listener for cross-tree badge (cycle through trees)
+            const crossTreeBadge = card.querySelector('.cross-tree-badge');
+            if (crossTreeBadge && currentTreeId && crossTreeMatches.length > 0) {
+                crossTreeBadge.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const nextMatch = CrossTree.getNextMatch(currentTreeId, id, crossTreeMatches);
+                    if (nextMatch) {
+                        UI.switchToTreeAndFocus(nextMatch.treeId, nextMatch.personId);
+                    }
+                });
+            }
 
             canvas.appendChild(card);
         }

@@ -120,6 +120,25 @@ function handleUrlSearchParam(): void {
     }
 }
 
+/**
+ * Handle URL import parameter
+ * Shows new tree menu when coming from offline version
+ * @returns true if import dialog was shown
+ */
+function handleUrlImportParam(): boolean {
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.get('import') === 'from-file') {
+        // Clear URL parameters
+        history.replaceState(null, '', window.location.pathname);
+
+        // Show new tree menu with intro text explaining the situation
+        UI.showNewTreeMenu(true);
+        return true;
+    }
+    return false;
+}
+
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize settings (theme) early for smooth loading
@@ -284,6 +303,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Handle URL search parameter after render (may override fitToScreen)
     handleUrlSearchParam();
+
+    // Handle URL import parameter (from offline version redirect)
+    handleUrlImportParam();
 
     // Sync URL with current tree slug (for refresh persistence and bookmarking)
     const currentTreeId = DataManager.getCurrentTreeId();

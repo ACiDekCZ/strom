@@ -38,6 +38,7 @@ import { SettingsManager } from './settings.js';
 import { ThemeMode, LanguageSetting, AppMode } from './types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from './crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from './validation.js';
+import * as CrossTree from './cross-tree.js';
 
 class UIClass {
     private currentId: PersonId | null = null;
@@ -697,6 +698,24 @@ class UIClass {
         (document.getElementById('rel-lastname') as HTMLInputElement).value = '';
         genderSelect.value = 'male';
 
+        // Reset date and place fields
+        (document.getElementById('rel-birthdate') as HTMLInputElement).value = '';
+        (document.getElementById('rel-birthplace') as HTMLInputElement).value = '';
+        (document.getElementById('rel-deathdate') as HTMLInputElement).value = '';
+        (document.getElementById('rel-deathplace') as HTMLInputElement).value = '';
+
+        // Reset extended fields - collapse by default
+        const expandBtn = document.getElementById('rel-expand-btn');
+        const extendedFields = document.getElementById('rel-extended-fields');
+        if (expandBtn && extendedFields) {
+            expandBtn.classList.remove('expanded');
+            extendedFields.classList.remove('visible');
+            expandBtn.onclick = () => {
+                const isExpanded = expandBtn.classList.toggle('expanded');
+                extendedFields.classList.toggle('visible', isExpanded);
+            };
+        }
+
         // Initialize PersonPicker for existing persons
         this.initRelationPicker();
 
@@ -845,6 +864,10 @@ class UIClass {
             const firstName = (document.getElementById('rel-firstname') as HTMLInputElement)?.value.trim() || '';
             const lastName = (document.getElementById('rel-lastname') as HTMLInputElement)?.value.trim() || '';
             const gender = ((document.getElementById('rel-gender') as HTMLSelectElement)?.value || 'male') as Gender;
+            const birthDate = (document.getElementById('rel-birthdate') as HTMLInputElement)?.value || undefined;
+            const birthPlace = (document.getElementById('rel-birthplace') as HTMLInputElement)?.value.trim() || undefined;
+            const deathDate = (document.getElementById('rel-deathdate') as HTMLInputElement)?.value || undefined;
+            const deathPlace = (document.getElementById('rel-deathplace') as HTMLInputElement)?.value.trim() || undefined;
 
             if (!firstName && !lastName) {
                 this.clearDialogStack();
@@ -853,7 +876,7 @@ class UIClass {
                 return;
             }
 
-            const newPerson = DataManager.createPerson({ firstName, lastName, gender });
+            const newPerson = DataManager.createPerson({ firstName, lastName, gender, birthDate, birthPlace, deathDate, deathPlace });
             newPersonId = newPerson.id;
         }
 
@@ -1425,6 +1448,18 @@ class UIClass {
                     const isMarriedType = status === 'married' || status === 'divorced';
                     const startDateLabel = isMarriedType ? strings.labels.startDateMarried : strings.labels.startDatePartners;
                     const endDateLabel = isMarriedType ? strings.labels.endDateMarried : strings.labels.endDatePartners;
+                    // Only show primary checkbox when person has 2+ partnerships
+                    const showPrimaryCheckbox = persons.length >= 2;
+                    const primaryCheckboxHtml = showPrimaryCheckbox ? `
+                        <label class="partnership-primary-label">
+                            <input type="checkbox" class="partnership-primary-checkbox"
+                                data-partnership-id="${partnership.id}"
+                                data-person-id="${currentPersonId}"
+                                ${partnership.isPrimary ? 'checked' : ''}>
+                            ${strings.labels.isPrimary}
+                        </label>
+                    ` : '';
+
                     partnershipDetailsHtml = `
                         <div class="partnership-dates">
                             <input type="date" class="partnership-start-date"
@@ -1440,13 +1475,7 @@ class UIClass {
                                 value="${partnership.endDate || ''}"
                                 title="${endDateLabel}">
                         </div>
-                        <label class="partnership-primary-label">
-                            <input type="checkbox" class="partnership-primary-checkbox"
-                                data-partnership-id="${partnership.id}"
-                                data-person-id="${currentPersonId}"
-                                ${partnership.isPrimary ? 'checked' : ''}>
-                            ${strings.labels.isPrimary}
-                        </label>
+                        ${primaryCheckboxHtml}
                         <textarea class="partnership-note" data-partnership-id="${partnership.id}"
                             placeholder="${strings.labels.note}...">${partnership.note || ''}</textarea>
                     `;
@@ -2443,7 +2472,7 @@ class UIClass {
             document.getElementById('gedcom-result-modal')?.classList.remove('active');
             this.clearDialogStack();
             // Load data directly into current tree
-            DataManager.loadJSON(this.gedcomResult.data);
+            DataManager.loadStromData(this.gedcomResult.data);
             TreeRenderer.render();
             this.showToast(strings.buttons.importComplete);
             this.gedcomResult = null;
@@ -2636,7 +2665,7 @@ class UIClass {
             this.importToCurrentTree = false;
             this.closeImportDialog();
             // Load data directly into current tree
-            DataManager.loadJSON(data);
+            DataManager.loadStromData(data);
             TreeRenderer.render();
             this.showToast(strings.buttons.importComplete);
             return;
@@ -3565,12 +3594,13 @@ class UIClass {
 
         if (!dropdown) return;
 
-        const trees = TreeManager.getTrees();
+        // Use getVisibleTrees() to exclude hidden trees from switcher
+        const trees = TreeManager.getVisibleTrees();
         const activeId = TreeManager.getActiveTreeId();
 
         let html = '';
 
-        // Tree list
+        // Tree list (only visible trees)
         for (const tree of trees) {
             const isActive = tree.id === activeId;
             html += `
@@ -3736,11 +3766,18 @@ class UIClass {
             }
             // If undefined, don't show anything (first person is implicit default)
 
+            // Visibility toggle button - icon shows current state, text shows action
+            const visibilityIcon = tree.isHidden ? '🚫' : '👁';
+            const visibilityLabel = tree.isHidden ? strings.treeManager.showTree : strings.treeManager.hideTree;
+            const visibilityHint = tree.isHidden ? strings.treeManager.showTreeHint : strings.treeManager.hideTreeHint;
+
+            const hiddenLabel = tree.isHidden ? ` <span style="color:var(--text-light);font-weight:normal">${strings.treeManager.hiddenLabel}</span>` : '';
+
             html += `
-                <div class="tree-manager-item ${isActive ? 'active' : ''}">
+                <div class="tree-manager-item ${isActive ? 'active' : ''} ${tree.isHidden ? 'hidden-tree' : ''}">
                     <div class="tree-manager-item-header">
                         <span class="tree-manager-item-indicator"></span>
-                        <span class="tree-manager-item-name">${this.escapeHtml(tree.name)}</span>
+                        <span class="tree-manager-item-name">${this.escapeHtml(tree.name)}${hiddenLabel}</span>
                         <span class="tree-manager-item-stats">
                             ${tree.personCount} ${strings.treeManager.persons} • ${familyCount} ${strings.treeManager.families}
                             ${defaultPersonDisplay ? ` • ${this.escapeHtml(defaultPersonDisplay)}` : ''}
@@ -3750,6 +3787,7 @@ class UIClass {
                     <div class="tree-manager-item-actions">
                         <button onclick="window.Strom.UI.showTreeStatsDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.stats}"><span class="btn-icon">📊</span><span class="btn-text">${strings.treeManager.stats}</span></button>
                         <button onclick="window.Strom.UI.showTreeValidationDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.validate}"><span class="btn-icon">✅</span><span class="btn-text">${strings.treeManager.validate}</span></button>
+                        <button class="edit-only" onclick="window.Strom.UI.toggleTreeVisibility('${tree.id}')" title="${visibilityHint}"><span class="btn-icon">${visibilityIcon}</span><span class="btn-text">${visibilityLabel}</span></button>
                         <button class="edit-only" onclick="window.Strom.UI.showRenameTreeDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.rename}"><span class="btn-icon">✏️</span><span class="btn-text">${strings.treeManager.rename}</span></button>
                         <button class="edit-only" onclick="window.Strom.UI.showDefaultPersonDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.defaultPerson}"><span class="btn-icon">⭐</span><span class="btn-text">${strings.treeManager.defaultPerson}</span></button>
                         <button class="edit-only" onclick="window.Strom.UI.duplicateTree('${tree.id}')" title="${strings.treeManager.duplicate}"><span class="btn-icon">⧉</span><span class="btn-text">${strings.treeManager.duplicate}</span></button>
@@ -3829,13 +3867,20 @@ class UIClass {
 
     /**
      * Show new tree menu dialog with options (Empty, JSON, GEDCOM, Focus)
+     * @param showIntro If true, shows intro text for users coming from offline version
      */
-    showNewTreeMenu(): void {
+    showNewTreeMenu(showIntro?: boolean): void {
         // Handle dialog stack for ESC navigation
         this.clearDialogStack();
         this.pushDialog('tree-manager-modal');
         this.closeDialogById('tree-manager-modal');
         this.pushDialog('new-tree-menu-modal');
+
+        // Show/hide intro text
+        const introEl = document.getElementById('new-tree-menu-intro');
+        if (introEl) {
+            introEl.style.display = showIntro ? 'block' : 'none';
+        }
 
         document.getElementById('new-tree-menu-modal')?.classList.add('active');
     }
@@ -4364,6 +4409,26 @@ class UIClass {
         this.updateTreeManagerList();
         this.updateStorageDisplay();
         this.updateTreeSwitcher();
+    }
+
+    // ==================== TREE VISIBILITY ====================
+
+    /**
+     * Toggle tree visibility (hidden from switcher and cross-tree matching)
+     */
+    toggleTreeVisibility(treeId: string): void {
+        const id = treeId as TreeId;
+
+        // Toggle visibility
+        TreeManager.toggleTreeVisibility(id);
+
+        // Refresh displays
+        this.updateTreeManagerList();
+        this.updateTreeSwitcher();
+
+        // Invalidate cross-tree cache and re-render to update badges
+        CrossTree.invalidateCache();
+        TreeRenderer.render();
     }
 
     // ==================== TREE STATS ====================
@@ -5907,6 +5972,25 @@ class UIClass {
             banner.classList.add('visible');
         }
         document.body.classList.add('view-mode');
+
+        // Update go-online link with tree name
+        this.updateViewModeGoOnlineLink();
+    }
+
+    /**
+     * Update view mode go-online link with tree name
+     */
+    private updateViewModeGoOnlineLink(): void {
+        const treeName = DataManager.getCurrentEmbeddedTreeName();
+        if (!treeName) return;
+
+        const encodedName = encodeURIComponent(treeName);
+        const url = `https://stromapp.info?import=from-file&name=${encodedName}`;
+
+        const link = document.getElementById('view-mode-go-online');
+        if (link) {
+            link.setAttribute('href', url);
+        }
     }
 
     /**
@@ -6225,6 +6309,33 @@ class UIClass {
             banner.classList.add('visible');
         }
         document.body.classList.add('embedded-mode');
+
+        // Update go-online links with tree name parameter
+        this.updateGoOnlineLinks();
+    }
+
+    /**
+     * Update go-online links with current tree name in URL
+     */
+    private updateGoOnlineLinks(): void {
+        const metadata = TreeManager.getActiveTreeMetadata();
+        const treeName = metadata?.name;
+        if (!treeName) return;
+
+        const encodedName = encodeURIComponent(treeName);
+        const url = `https://stromapp.info?import=from-file&name=${encodedName}`;
+
+        // Update banner link
+        const bannerLink = document.getElementById('go-online-link');
+        if (bannerLink) {
+            bannerLink.setAttribute('href', url);
+        }
+
+        // Update info dialog link
+        const infoLink = document.getElementById('embedded-info-go-online');
+        if (infoLink) {
+            infoLink.setAttribute('href', url);
+        }
     }
 
     /**
@@ -6288,6 +6399,33 @@ class UIClass {
      */
     getAppMode(): AppMode {
         return this.appMode;
+    }
+
+    // ==================== CROSS-TREE NAVIGATION ====================
+
+    /**
+     * Switch to another tree and focus on a specific person
+     * Used for cross-tree link navigation
+     */
+    switchToTreeAndFocus(treeId: TreeId, personId: PersonId): void {
+        // Reset cross-tree navigation index when switching trees
+        CrossTree.resetNavigationIndex();
+
+        // Switch to the target tree
+        if (DataManager.switchTree(treeId)) {
+            // Update UI to reflect tree switch
+            this.updateTreeSwitcher();
+
+            // Re-render the tree
+            TreeRenderer.restoreFromSession();
+            TreeRenderer.render();
+
+            // Focus on the person
+            TreeRenderer.setFocus(personId, false);
+
+            // Center view on the person
+            ZoomPan.centerOnPerson(personId);
+        }
     }
 }
 

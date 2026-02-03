@@ -141,16 +141,18 @@ class AppExporterClass {
             // Get clean HTML (with inline JavaScript)
             const html = this.getExportHtml();
 
-            // Collect all trees data
+            // Collect all trees data (including isHidden flag)
             const trees = TreeManager.getTrees();
-            const allTreesData: Record<string, { name: string; data: StromData }> = {};
+            const allTreesData: Record<string, { name: string; data: StromData; isHidden?: boolean }> = {};
 
             for (const tree of trees) {
                 const data = TreeManager.getTreeData(tree.id);
                 if (data) {
                     allTreesData[tree.id] = {
                         name: tree.name,
-                        data
+                        data,
+                        // Include isHidden flag if set
+                        ...(tree.isHidden ? { isHidden: true } : {})
                     };
                 }
             }
@@ -165,7 +167,7 @@ class AppExporterClass {
 
             // Prepare data for embedding (optionally encrypted)
             let embedActiveDataContent: StromData | EncryptedData | null = activeData;
-            let embedAllTrees: Record<string, { name: string; data: StromData }> | EncryptedData = allTreesData;
+            let embedAllTrees: Record<string, { name: string; data: StromData; isHidden?: boolean }> | EncryptedData = allTreesData;
 
             if (password) {
                 if (activeData) {

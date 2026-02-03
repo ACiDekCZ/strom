@@ -921,6 +921,46 @@ export function detectConflicts(existing: Person, incoming: Person): FieldConfli
     return conflicts;
 }
 
+// ==================== CROSS-TREE MATCHING ====================
+
+/**
+ * Quick match score for cross-tree comparison
+ * Simplified version without relationship propagation (faster)
+ * Returns score 0-100, threshold 50+ = match
+ */
+export function quickMatchScore(p1: Person, p2: Person): number {
+    // Gender must match
+    if (p1.gender !== p2.gender) return 0;
+
+    const firstNameSim = stringSimilarity(p1.firstName, p2.firstName);
+    const lastNameSim = stringSimilarity(p1.lastName, p2.lastName);
+    const nameSim = (firstNameSim + lastNameSim) / 2;
+
+    // Names too different - no match
+    if (nameSim < 0.7) return 0;
+
+    // Base score from name similarity
+    let score = nameSim >= 0.9 ? 45 : nameSim >= 0.8 ? 35 : 25;
+
+    // Birth date bonus
+    if (datesMatch(p1.birthDate, p2.birthDate)) {
+        score += 40;
+    } else if (yearsMatch(p1.birthDate, p2.birthDate)) {
+        score += 25;
+    } else if (yearsClose(p1.birthDate, p2.birthDate, 3)) {
+        score += 10;
+    }
+
+    // Death date bonus
+    if (datesMatch(p1.deathDate, p2.deathDate)) {
+        score += 10;
+    } else if (yearsMatch(p1.deathDate, p2.deathDate)) {
+        score += 5;
+    }
+
+    return Math.min(score, 100);
+}
+
 // ==================== MERGE STATE HELPERS ====================
 
 /**

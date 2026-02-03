@@ -111,6 +111,10 @@ export interface NewPersonData {
     firstName: string;
     lastName: string;
     gender: Gender;
+    birthDate?: string;
+    birthPlace?: string;
+    deathDate?: string;
+    deathPlace?: string;
 }
 
 // ==================== RENDERING TYPES ====================
@@ -248,6 +252,8 @@ export interface TreeMetadata {
     sourceExportId?: string;
     /** Last export ID created from this tree */
     lastExportId?: string;
+    /** Whether tree is hidden from switcher and cross-tree matching */
+    isHidden?: boolean;
 }
 
 /** Index of all trees */

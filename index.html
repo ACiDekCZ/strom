@@ -1307,6 +1307,86 @@
             transform: translateY(-2px);
         }
 
+        /* ==================== CROSS-TREE BADGE ==================== */
+        /* Badge showing person exists in other trees - positioned below card */
+        .cross-tree-badge {
+            position: absolute;
+            bottom: -22px;
+            right: 25%;
+            transform: translateX(50%);
+            background: #4caf50;
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 10px;
+            cursor: pointer;
+            opacity: 0;
+            animation: crossTreeFadeIn 0.3s ease forwards;
+            transition: transform 0.15s, background 0.15s;
+            z-index: 5;
+        }
+        @keyframes crossTreeFadeIn {
+            from { opacity: 0; transform: translateX(50%) scale(0.8); }
+            to { opacity: 1; transform: translateX(50%) scale(1); }
+        }
+        .cross-tree-badge:hover {
+            background: #388e3c;
+            transform: translateX(50%) scale(1.1);
+            z-index: 9999;
+        }
+
+        /* Tooltip container for cross-tree badge */
+        .cross-tree-badge .cross-tree-tooltip {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            right: 50%;
+            transform: translateX(50%);
+            margin-bottom: 4px;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 10px;
+            min-width: 150px;
+            max-width: 220px;
+            box-shadow: 0 2px 8px var(--shadow);
+            font-size: 11px;
+            font-weight: normal;
+            color: var(--text);
+            text-align: left;
+            white-space: normal;
+            z-index: 9999;
+        }
+        .cross-tree-badge:hover .cross-tree-tooltip {
+            display: block;
+        }
+        .cross-tree-tooltip-header {
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--text-light);
+        }
+        .cross-tree-tooltip-item {
+            padding: 2px 0;
+            border-bottom: 1px solid var(--border-light);
+        }
+        .cross-tree-tooltip-item:last-child {
+            border-bottom: none;
+        }
+        .cross-tree-tooltip-tree {
+            font-weight: 500;
+        }
+        .cross-tree-tooltip-person {
+            color: var(--text-light);
+            font-size: 10px;
+        }
+        .cross-tree-tooltip-hint {
+            margin-top: 6px;
+            font-size: 10px;
+            color: var(--text-light);
+            font-style: italic;
+        }
+
         /* ==================== BRANCH TABS (ouška) ==================== */
         /* Small tabs above person card for navigating between family contexts */
         .branch-tabs {
@@ -1659,6 +1739,30 @@
             cursor: not-allowed;
             transform: none;
         }
+        .view-mode-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .view-mode-action {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .view-mode-action-hint {
+            font-size: 11px;
+            opacity: 0.8;
+        }
+        .view-mode-link {
+            color: white;
+            text-decoration: underline;
+            font-size: 13px;
+            opacity: 0.9;
+        }
+        .view-mode-link:hover {
+            opacity: 1;
+        }
         .info-text {
             color: var(--text-light);
             font-size: 13px;
@@ -1805,6 +1909,21 @@
         }
         .embedded-info-options li {
             margin-bottom: 6px;
+        }
+        .embedded-info-option {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin: 12px 0;
+            padding: 10px 12px;
+            background: rgba(0,0,0,0.03);
+            border-radius: 6px;
+        }
+        .embedded-info-option strong {
+            font-size: 14px;
+        }
+        [data-theme="dark"] .embedded-info-option {
+            background: rgba(255,255,255,0.05);
         }
         #embedded-info-modal .buttons {
             display: flex;
@@ -2177,6 +2296,17 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
+        }
+        .menu-intro {
+            padding: 0 16px 12px 16px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 8px;
+        }
+        .menu-intro p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.4;
         }
         .menu-option {
             display: flex;
@@ -2807,6 +2937,9 @@
         }
         [data-theme="dark"] .tree-manager-item.pending-merge {
             background: rgba(255, 193, 7, 0.1);
+        }
+        .tree-manager-item.hidden-tree {
+            opacity: 0.7;
         }
         .tree-manager-item-name {
             flex: 1;
@@ -4576,6 +4709,29 @@
                         <option value="female" data-i18n="gender.female"></option>
                     </select>
                 </div>
+                <div class="form-group">
+                    <label data-i18n="labels.birthDate"></label>
+                    <input type="date" id="rel-birthdate">
+                </div>
+                <div class="form-group">
+                    <label data-i18n="labels.birthPlace"></label>
+                    <input type="text" id="rel-birthplace">
+                </div>
+                <button type="button" id="rel-expand-btn" class="expand-btn">
+                    <span class="expand-icon">▶</span> <span data-i18n="labels.moreInfo"></span>
+                </button>
+                <div id="rel-extended-fields" class="extended-fields">
+                    <div class="form-row">
+                        <div class="form-group half">
+                            <label data-i18n="labels.deathDate"></label>
+                            <input type="date" id="rel-deathdate">
+                        </div>
+                        <div class="form-group half">
+                            <label data-i18n="labels.deathPlace"></label>
+                            <input type="text" id="rel-deathplace">
+                        </div>
+                    </div>
+                </div>
             </div>
             <div id="existing-person-field" style="display:none;">
                 <div class="form-group">
@@ -5295,8 +5451,11 @@
     <div class="modal-overlay" id="new-tree-menu-modal">
         <div class="modal menu-modal">
             <div class="modal-header">
-                <h2 data-i18n="treeManager.newTreeMenu">New Tree</h2>
+                <h2 id="new-tree-menu-title" data-i18n="treeManager.newTreeMenu">New Tree</h2>
                 <button class="close-btn" onclick="window.Strom.UI.closeNewTreeMenu()">&times;</button>
+            </div>
+            <div id="new-tree-menu-intro" class="menu-intro" style="display: none;">
+                <p data-i18n="importFromOffline.description">Welcome to stromapp.info! To continue with your data, import the file you were using.</p>
             </div>
             <div class="menu-options">
                 <button class="menu-option" onclick="window.Strom.UI.showNewTreeDialog()">
@@ -5550,21 +5709,26 @@
             <strong data-i18n="viewMode.banner">View mode (read-only)</strong>
             <span class="view-mode-detail" data-i18n="viewMode.bannerDetail">To edit, import data to storage first.</span>
         </span>
-        <button class="btn-primary" id="view-mode-import-btn" onclick="window.Strom.UI.importAsNew()" data-i18n="viewMode.importButton">Import to storage</button>
+        <div class="view-mode-actions">
+            <div class="view-mode-action">
+                <a id="view-mode-go-online" href="https://stromapp.info?import=from-file" target="_blank" class="btn-primary" data-i18n="viewMode.goOnline">Go to stromapp.info</a>
+                <span class="view-mode-action-hint" data-i18n="viewMode.goOnlineHint">Recommended</span>
+            </div>
+            <div class="view-mode-action">
+                <a href="#" class="view-mode-link" onclick="window.Strom.UI.importAsNew(); return false;" data-i18n="viewMode.stayOffline">Stay with this file</a>
+            </div>
+        </div>
     </div>
 
     <!-- Embedded Mode Banner -->
     <div id="embedded-mode-banner" class="embedded-mode-banner">
         <span class="embedded-mode-icon">📁</span>
         <span class="embedded-mode-text">
-            <strong data-i18n="embeddedMode.banner">Standalone file version</strong>
-            <span class="embedded-mode-detail" data-i18n="embeddedMode.bannerDetail">Data is stored separately from the online version.</span>
+            <strong data-i18n="embeddedMode.banner">Standalone file</strong>
+            <span class="embedded-mode-detail" data-i18n="embeddedMode.bannerDetail">This file has its own separate data storage.</span>
         </span>
         <button class="embedded-mode-info" onclick="window.Strom.UI.showEmbeddedInfoDialog()" title="Info">ℹ️</button>
-        <button class="embedded-mode-btn" onclick="window.Strom.UI.exportJsonForOnline()">
-            <span data-i18n="embeddedMode.exportJson">Export JSON</span>
-        </button>
-        <a href="https://stromapp.info" target="_blank" class="embedded-mode-link" data-i18n="embeddedMode.goOnline">Online version</a>
+        <a id="go-online-link" href="https://stromapp.info?import=from-file" target="_blank" class="embedded-mode-btn" data-i18n="embeddedMode.goOnline">stromapp.info</a>
         <button class="embedded-mode-close" onclick="window.Strom.UI.hideEmbeddedBanner()">&times;</button>
     </div>
 
@@ -5572,21 +5736,25 @@
     <div class="modal-overlay" id="embedded-info-modal">
         <div class="modal" style="max-width: 450px;">
             <div class="modal-header">
-                <h2 data-i18n="embeddedMode.infoTitle">About Standalone Version</h2>
+                <h2 data-i18n="embeddedMode.infoTitle">About This File</h2>
                 <button class="close-btn" onclick="window.Strom.UI.closeEmbeddedInfoDialog()">&times;</button>
             </div>
             <div class="embedded-info-content">
-                <p data-i18n="embeddedMode.infoText1">This is a standalone HTML file. Your data is stored in this browser's local storage.</p>
-                <p data-i18n="embeddedMode.infoText2">This storage is completely separate from the online version at stromapp.info.</p>
-                <p class="embedded-info-how"><strong data-i18n="embeddedMode.infoHow">How to switch to online version:</strong></p>
-                <ol class="embedded-info-options">
-                    <li data-i18n="embeddedMode.infoOption1">Import this HTML file directly at stromapp.info (recommended)</li>
-                    <li data-i18n="embeddedMode.infoOption2">Or export JSON and import it manually</li>
-                </ol>
+                <p data-i18n="embeddedMode.infoText1">This is a standalone HTML file. Your data is saved in this browser's storage.</p>
+                <p data-i18n="embeddedMode.infoText2">The web app at stromapp.info has its own separate storage. Data is NOT synchronized between them.</p>
+                <p class="embedded-info-how"><strong data-i18n="embeddedMode.infoHow">Your options:</strong></p>
+                <div class="embedded-info-option">
+                    <strong data-i18n="embeddedMode.infoStayOffline">Keep using this file</strong>
+                    <span class="info-text" data-i18n="embeddedMode.infoStayOfflineDesc">Your data stays in this browser. Use "Save File" to download a copy with your changes.</span>
+                </div>
+                <div class="embedded-info-option">
+                    <strong data-i18n="embeddedMode.infoGoOnline">Switch to stromapp.info</strong>
+                    <span class="info-text" data-i18n="embeddedMode.infoGoOnlineDesc">Use the web app instead. You'll need to import this file there to transfer your data.</span>
+                </div>
             </div>
             <div class="buttons">
                 <button class="secondary" onclick="window.Strom.UI.closeEmbeddedInfoDialog()" data-i18n="buttons.close">Close</button>
-                <a href="https://stromapp.info" target="_blank" class="btn-primary" data-i18n="embeddedMode.goOnline">Online version</a>
+                <a id="embedded-info-go-online" href="https://stromapp.info?import=from-file" target="_blank" class="btn-primary" data-i18n="embeddedMode.goOnline">stromapp.info</a>
             </div>
         </div>
     </div>

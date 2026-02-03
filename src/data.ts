@@ -23,6 +23,7 @@ import {
 import { strings } from './strings.js';
 import { TreeManager } from './tree-manager.js';
 import { isEncrypted, EncryptedData } from './crypto.js';
+import * as CrossTree from './cross-tree.js';
 
 /** Extended updates for Partnership */
 type PartnershipUpdates = Partial<Pick<Partnership, 'status' | 'startDate' | 'startPlace' | 'endDate' | 'note' | 'isPrimary'>>;
@@ -54,7 +55,7 @@ class DataManagerClass {
     // View mode state
     private viewMode = false;
     private embeddedEnvelope: EmbeddedDataEnvelope | null = null;
-    private embeddedAllTrees: Record<string, { name: string; data: StromData }> | null = null;
+    private embeddedAllTrees: Record<string, { name: string; data: StromData; isHidden?: boolean }> | null = null;
     private activeEmbeddedTreeId: string | null = null;
 
     // Newer version detection
@@ -75,7 +76,7 @@ class DataManagerClass {
 
         // Check for embedded data (from exported HTML)
         const embedded = (window as Window & { STROM_EMBEDDED_DATA?: EmbeddedDataEnvelope }).STROM_EMBEDDED_DATA;
-        const allTrees = (window as Window & { STROM_ALL_TREES?: Record<string, { name: string; data: StromData }> }).STROM_ALL_TREES;
+        const allTrees = (window as Window & { STROM_ALL_TREES?: Record<string, { name: string; data: StromData; isHidden?: boolean }> }).STROM_ALL_TREES;
 
         if (embedded) {
             // Validate envelope format
@@ -308,7 +309,11 @@ class DataManagerClass {
         if (this.embeddedAllTrees) {
             for (const [, tree] of Object.entries(this.embeddedAllTrees)) {
                 const name = this.getUniqueTreeName(tree.name, existingNames);
-                TreeManager.createTreeFromImport(this.migrateData(tree.data), name);
+                const newTreeId = TreeManager.createTreeFromImport(this.migrateData(tree.data), name);
+                // Apply isHidden flag if it was set in the export
+                if (tree.isHidden) {
+                    TreeManager.setTreeVisibility(newTreeId, true);
+                }
                 existingNames.add(name.toLowerCase());
                 imported++;
             }
@@ -722,11 +727,19 @@ class DataManagerClass {
             isPlaceholder,
             partnerships: [],
             parentIds: [],
-            childIds: []
+            childIds: [],
+            birthDate: personData.birthDate,
+            birthPlace: personData.birthPlace,
+            deathDate: personData.deathDate,
+            deathPlace: personData.deathPlace
         };
 
         this.data.persons[person.id] = person;
         this.save();
+        // Invalidate cross-tree cache when person is created
+        if (this.currentTreeId) {
+            CrossTree.invalidateCacheForTree(this.currentTreeId);
+        }
         return person;
     }
 
@@ -751,6 +764,10 @@ class DataManagerClass {
         if (updates.deathPlace !== undefined) person.deathPlace = updates.deathPlace || undefined;
 
         this.save();
+        // Invalidate cross-tree cache when person is updated
+        if (this.currentTreeId) {
+            CrossTree.invalidateCacheForTree(this.currentTreeId);
+        }
         return person;
     }
 
@@ -781,6 +798,10 @@ class DataManagerClass {
 
         delete this.data.persons[id];
         this.save();
+        // Invalidate cross-tree cache when person is deleted
+        if (this.currentTreeId) {
+            CrossTree.invalidateCacheForTree(this.currentTreeId);
+        }
         return true;
     }
 
@@ -1300,6 +1321,8 @@ class DataManagerClass {
     loadStromData(newData: StromData): void {
         this.data = this.migrateData(newData);
         this.save();
+        // Invalidate cross-tree cache when data is loaded
+        CrossTree.invalidateCache();
         window.dispatchEvent(new CustomEvent('strom:data-changed'));
     }
 
@@ -1314,6 +1337,8 @@ class DataManagerClass {
         const treeId = TreeManager.createTreeFromImport(migratedData, treeName);
         this.currentTreeId = treeId;
         this.data = migratedData;
+        // Invalidate cross-tree cache when new tree is imported
+        CrossTree.invalidateCache();
         window.dispatchEvent(new CustomEvent('strom:data-changed'));
         window.dispatchEvent(new CustomEvent('strom:tree-switched'));
         return treeId;

@@ -614,13 +614,22 @@ const stringsEN = {
         exportAllJson: 'Export as JSON',
         exportAllJsonDesc: 'All trees in one JSON file',
         exportAllApp: 'Export as App',
-        exportAllAppDesc: 'Standalone HTML with all trees'
+        exportAllAppDesc: 'Standalone HTML with all trees',
+        // Tree visibility
+        showTree: 'Show tree',
+        hideTree: 'Hide tree',
+        showTreeHint: 'Show tree',
+        hideTreeHint: 'Hide tree',
+        hiddenLabel: '(hidden)'
     },
 
     // View Mode (embedded data)
     viewMode: {
         banner: 'View mode (read-only)',
-        bannerDetail: 'To edit, import data to storage first.',
+        bannerDetail: 'Choose how to continue:',
+        goOnline: 'Go to stromapp.info',
+        goOnlineHint: 'Recommended',
+        stayOffline: 'Stay with this file',
         importButton: 'Import to storage',
         existingTitle: 'Tree Already Exists',
         existingMessage: 'A tree from this export is already in your storage.',
@@ -674,22 +683,36 @@ const stringsEN = {
         comparePersons: 'Compare'
     },
 
+    // Cross-tree links
+    crossTree: {
+        badgeTitle: (count: number) => `Found in ${count} other tree${count !== 1 ? 's' : ''}`,
+        tooltipHeader: 'Also in:',
+        clickToSwitch: 'Click to switch'
+    },
+
     // Embedded Mode (local HTML file)
     embeddedMode: {
-        banner: 'Standalone file version',
-        bannerDetail: 'Data is stored separately from the online version.',
-        goOnline: 'Online version',
+        banner: 'Standalone file',
+        bannerDetail: 'This file has its own separate data storage.',
+        goOnline: 'stromapp.info',
         exportJson: 'Export JSON',
         exportJsonDesc: 'For import into online version',
         saveFile: 'Save File',
         saveFileTitle: 'Download file with current data',
         unsavedWarning: 'You have unsaved changes. Use "Save File" to keep them.',
-        infoTitle: 'About Standalone Version',
-        infoText1: 'This is a standalone HTML file that works without internet. Your changes are saved to this browser\'s local storage.',
-        infoText2: 'Important: The online version (stromapp.info) and this file version each use their own separate storage. Data is not synchronized between them.',
-        infoHow: 'To switch to online version:',
-        infoOption1: 'Go to stromapp.info and import this HTML file directly (Tree Manager → New Tree → From HTML)',
-        infoOption2: 'Or click "Export JSON" above, then import the JSON file at stromapp.info'
+        infoTitle: 'About This File',
+        infoText1: 'This is a standalone HTML file. Your data is saved in this browser\'s storage.',
+        infoText2: 'The web app at stromapp.info has its own separate storage. Data is NOT synchronized between them.',
+        infoHow: 'Your options:',
+        infoStayOffline: 'Keep using this file',
+        infoStayOfflineDesc: 'Your data stays in this browser. Use "Save File" to download a copy with your changes.',
+        infoGoOnline: 'Switch to stromapp.info',
+        infoGoOnlineDesc: 'Use the web app instead. You\'ll need to import this file there to transfer your data.'
+    },
+
+    // Import from offline version (intro text in new tree menu)
+    importFromOffline: {
+        description: 'Welcome to stromapp.info! To continue with your data, import the file you were using.'
     }
 };
 
@@ -1295,13 +1318,22 @@ const stringsCZ: StringsType = {
         exportAllJson: 'Exportovat jako JSON',
         exportAllJsonDesc: 'Všechny stromy v jednom JSON souboru',
         exportAllApp: 'Exportovat jako aplikaci',
-        exportAllAppDesc: 'Samostatný HTML se všemi stromy'
+        exportAllAppDesc: 'Samostatný HTML se všemi stromy',
+        // Tree visibility
+        showTree: 'Zobrazovat strom',
+        hideTree: 'Nezobrazovat strom',
+        showTreeHint: 'Zobrazit strom',
+        hideTreeHint: 'Skrýt strom',
+        hiddenLabel: '(skrytý)'
     },
 
     // View Mode (embedded data)
     viewMode: {
         banner: 'Režim prohlížení (pouze pro čtení)',
-        bannerDetail: 'Pro editaci nejprve importujte data do úložiště.',
+        bannerDetail: 'Vyberte jak pokračovat:',
+        goOnline: 'Přejít na stromapp.info',
+        goOnlineHint: 'Doporučeno',
+        stayOffline: 'Zůstat s tímto souborem',
         importButton: 'Importovat do úložiště',
         existingTitle: 'Strom již existuje',
         existingMessage: 'Strom z tohoto exportu již máte v úložišti.',
@@ -1355,22 +1387,36 @@ const stringsCZ: StringsType = {
         comparePersons: 'Porovnat'
     },
 
+    // Cross-tree links
+    crossTree: {
+        badgeTitle: (count: number) => `Nalezeno v ${count} ${count === 1 ? 'jiném stromu' : count < 5 ? 'jiných stromech' : 'jiných stromech'}`,
+        tooltipHeader: 'Také v:',
+        clickToSwitch: 'Kliknutím přepnout'
+    },
+
     // Embedded Mode (local HTML file)
     embeddedMode: {
-        banner: 'Souborová verze',
-        bannerDetail: 'Data jsou oddělená od online verze.',
-        goOnline: 'Online verze',
+        banner: 'Samostatný soubor',
+        bannerDetail: 'Tento soubor má vlastní oddělené úložiště dat.',
+        goOnline: 'stromapp.info',
         exportJson: 'Exportovat JSON',
-        exportJsonDesc: 'Pro import do online verze',
+        exportJsonDesc: 'Pro import do webové aplikace',
         saveFile: 'Uložit soubor',
         saveFileTitle: 'Stáhnout soubor s aktuálními daty',
         unsavedWarning: 'Máte neuložené změny. Použijte "Uložit soubor" pro jejich zachování.',
-        infoTitle: 'O souborové verzi',
-        infoText1: 'Toto je samostatný HTML soubor, který funguje i bez internetu. Vaše změny se ukládají do lokálního úložiště tohoto prohlížeče.',
-        infoText2: 'Důležité: Online verze (stromapp.info) a tato souborová verze mají každá své vlastní oddělené úložiště. Data se mezi nimi nesynchronizují.',
-        infoHow: 'Přechod na online verzi:',
-        infoOption1: 'Otevřete stromapp.info a importujte tento HTML soubor (Správce stromů → Nový strom → Ze Strom HTML)',
-        infoOption2: 'Nebo klikněte na "Exportovat JSON" výše a JSON soubor importujte na stromapp.info'
+        infoTitle: 'O tomto souboru',
+        infoText1: 'Toto je samostatný HTML soubor. Vaše data se ukládají do úložiště tohoto prohlížeče.',
+        infoText2: 'Webová aplikace na stromapp.info má vlastní oddělené úložiště. Data se mezi nimi NESYNCHRONIZUJÍ.',
+        infoHow: 'Vaše možnosti:',
+        infoStayOffline: 'Pokračovat s tímto souborem',
+        infoStayOfflineDesc: 'Vaše data zůstávají v tomto prohlížeči. Použijte "Uložit soubor" pro stažení kopie se změnami.',
+        infoGoOnline: 'Přejít na stromapp.info',
+        infoGoOnlineDesc: 'Používat webovou aplikaci. Pro přenos dat budete muset tento soubor importovat.'
+    },
+
+    // Import from offline version (intro text in new tree menu)
+    importFromOffline: {
+        description: 'Vítejte na stromapp.info! Pro pokračování s vašimi daty importujte soubor, se kterým jste pracovali.'
     }
 };
 
