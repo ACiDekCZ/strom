@@ -25,6 +25,7 @@ import {
     reanalyzeMatches
 } from './matching.js';
 import { executeMerge, deleteBackup } from './executor.js';
+import { AuditLogManager } from '../audit-log.js';
 import { PersonPicker } from '../person-picker.js';
 import {
     saveCurrentMerge,
@@ -1164,6 +1165,13 @@ class MergerUIClass {
             // Create new tree with merged data
             const newTreeId = TreeManager.createTree(newTreeName);
             TreeManager.saveTreeData(newTreeId, result.mergedData);
+
+            // Audit log - record merge summary in the new tree
+            const sourceName = this.sourceTreeName || this.incomingFileName || '?';
+            AuditLogManager.log(
+                newTreeId, 'data.import',
+                strings.auditLog.treeMerge(result.stats.merged, result.stats.added, sourceName)
+            );
 
             // Clean up backup after success
             if (result.backupKey) {

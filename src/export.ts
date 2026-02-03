@@ -7,6 +7,7 @@ import { UI } from './ui.js';
 import { strings } from './strings.js';
 import { TreeId, StromData, EmbeddedDataEnvelope, APP_VERSION, generateExportId } from './types.js';
 import { encrypt, EncryptedData } from './crypto.js';
+import { AuditLogManager } from './audit-log.js';
 
 class AppExporterClass {
     /**
@@ -104,6 +105,15 @@ class AppExporterClass {
                 treeName,
                 data: embedDataContent
             };
+
+            // Include audit log if checkbox checked
+            const auditLogCheckbox = document.getElementById('export-audit-log-toggle') as HTMLInputElement;
+            if (auditLogCheckbox?.checked) {
+                const auditLog = AuditLogManager.exportForTree(targetTreeId);
+                if (auditLog) {
+                    envelope.auditLog = auditLog;
+                }
+            }
 
             // Track last export ID in the source tree
             TreeManager.setLastExportId(targetTreeId, exportId);

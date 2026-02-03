@@ -24,6 +24,7 @@ import { strings } from './strings.js';
 import { TreeManager } from './tree-manager.js';
 import { isEncrypted, EncryptedData } from './crypto.js';
 import * as CrossTree from './cross-tree.js';
+import { AuditLogManager } from './audit-log.js';
 
 /** Extended updates for Partnership */
 type PartnershipUpdates = Partial<Pick<Partnership, 'status' | 'startDate' | 'startPlace' | 'endDate' | 'note' | 'isPrimary'>>;
@@ -40,6 +41,17 @@ function normalizeText(text: string): string {
 
 /** Import action types for view mode */
 export type ViewModeImportAction = 'new' | 'update' | 'copy';
+
+/** Format person name for audit log: "FirstName LastName (*year)" or "[unknown]" for placeholders */
+export function auditPersonName(person: Person | null | undefined): string {
+    if (!person) return '?';
+    if (person.isPlaceholder) {
+        return `[${strings.gender[person.gender].toLowerCase()}]`;
+    }
+    const name = [person.firstName, person.lastName].filter(Boolean).join(' ') || '?';
+    const year = person.birthDate?.split('-')[0];
+    return year ? `${name} (*${year})` : name;
+}
 
 class DataManagerClass {
     private data: StromData = {
@@ -380,6 +392,11 @@ class DataManagerClass {
                 this.currentTreeId = treeId;
                 break;
             }
+        }
+
+        // Import audit log if present
+        if (this.embeddedEnvelope.auditLog && this.currentTreeId) {
+            AuditLogManager.importForTree(this.currentTreeId, this.embeddedEnvelope.auditLog);
         }
 
         // Exit view mode
@@ -736,6 +753,12 @@ class DataManagerClass {
 
         this.data.persons[person.id] = person;
         this.save();
+        // Audit log
+        if (isPlaceholder) {
+            AuditLogManager.log(this.currentTreeId, 'person.create', strings.auditLog.createdPlaceholder(strings.gender[person.gender]));
+        } else {
+            AuditLogManager.log(this.currentTreeId, 'person.create', strings.auditLog.createdPerson(auditPersonName(person)));
+        }
         // Invalidate cross-tree cache when person is created
         if (this.currentTreeId) {
             CrossTree.invalidateCacheForTree(this.currentTreeId);
@@ -746,6 +769,21 @@ class DataManagerClass {
     updatePerson(id: PersonId, updates: Partial<Person>): Person | null {
         const person = this.data.persons[id];
         if (!person) return null;
+
+        // Track changed fields with old→new values for audit log
+        const changedFields: string[] = [];
+        const diff = (label: string, oldVal: string | undefined, newVal: string | undefined) => {
+            const o = oldVal || '–';
+            const n = newVal || '–';
+            changedFields.push(`${label}: ${o} → ${n}`);
+        };
+        if (updates.firstName !== undefined && updates.firstName !== person.firstName) diff(strings.labels.firstName, person.firstName, updates.firstName);
+        if (updates.lastName !== undefined && updates.lastName !== person.lastName) diff(strings.labels.lastName, person.lastName, updates.lastName);
+        if (updates.gender !== undefined && updates.gender !== person.gender) diff(strings.labels.gender, strings.gender[person.gender], strings.gender[updates.gender]);
+        if (updates.birthDate !== undefined && (updates.birthDate || undefined) !== person.birthDate) diff(strings.labels.birthDate, person.birthDate, updates.birthDate);
+        if (updates.birthPlace !== undefined && (updates.birthPlace || undefined) !== person.birthPlace) diff(strings.labels.birthPlace, person.birthPlace, updates.birthPlace);
+        if (updates.deathDate !== undefined && (updates.deathDate || undefined) !== person.deathDate) diff(strings.labels.deathDate, person.deathDate, updates.deathDate);
+        if (updates.deathPlace !== undefined && (updates.deathPlace || undefined) !== person.deathPlace) diff(strings.labels.deathPlace, person.deathPlace, updates.deathPlace);
 
         if (updates.firstName !== undefined) {
             person.firstName = updates.firstName;
@@ -764,6 +802,10 @@ class DataManagerClass {
         if (updates.deathPlace !== undefined) person.deathPlace = updates.deathPlace || undefined;
 
         this.save();
+        // Audit log
+        if (changedFields.length > 0) {
+            AuditLogManager.log(this.currentTreeId, 'person.update', strings.auditLog.updatedPerson(auditPersonName(person), changedFields.join(', ')));
+        }
         // Invalidate cross-tree cache when person is updated
         if (this.currentTreeId) {
             CrossTree.invalidateCacheForTree(this.currentTreeId);
@@ -774,6 +816,9 @@ class DataManagerClass {
     deletePerson(id: PersonId): boolean {
         const person = this.data.persons[id];
         if (!person) return false;
+
+        // Capture name before deletion for audit log
+        const deletedName = auditPersonName(person);
 
         // Remove from all partnerships
         for (const partnershipId of [...person.partnerships]) {
@@ -798,6 +843,8 @@ class DataManagerClass {
 
         delete this.data.persons[id];
         this.save();
+        // Audit log
+        AuditLogManager.log(this.currentTreeId, 'person.delete', strings.auditLog.deletedPerson(deletedName));
         // Invalidate cross-tree cache when person is deleted
         if (this.currentTreeId) {
             CrossTree.invalidateCacheForTree(this.currentTreeId);
@@ -829,6 +876,11 @@ class DataManagerClass {
         p2.partnerships.push(partnership.id);
 
         this.save();
+        // Audit log
+        AuditLogManager.log(
+            this.currentTreeId, 'partnership.create',
+            strings.auditLog.createdPartnership(auditPersonName(p1), auditPersonName(p2), strings.partnershipStatus[status])
+        );
         return partnership;
     }
 
@@ -845,14 +897,25 @@ class DataManagerClass {
         const partnership = this.data.partnerships[partnershipId];
         if (!partnership) return null;
 
-        if (updates.status !== undefined) partnership.status = updates.status;
-        if (updates.startDate !== undefined) partnership.startDate = updates.startDate || undefined;
-        if (updates.startPlace !== undefined) partnership.startPlace = updates.startPlace || undefined;
-        if (updates.endDate !== undefined) partnership.endDate = updates.endDate || undefined;
-        if (updates.note !== undefined) partnership.note = updates.note || undefined;
-        if (updates.isPrimary !== undefined) partnership.isPrimary = updates.isPrimary || undefined;
+        // Track actual changes
+        let changed = false;
+        if (updates.status !== undefined && updates.status !== partnership.status) { partnership.status = updates.status; changed = true; }
+        if (updates.startDate !== undefined && (updates.startDate || undefined) !== partnership.startDate) { partnership.startDate = updates.startDate || undefined; changed = true; }
+        if (updates.startPlace !== undefined && (updates.startPlace || undefined) !== partnership.startPlace) { partnership.startPlace = updates.startPlace || undefined; changed = true; }
+        if (updates.endDate !== undefined && (updates.endDate || undefined) !== partnership.endDate) { partnership.endDate = updates.endDate || undefined; changed = true; }
+        if (updates.note !== undefined && (updates.note || undefined) !== partnership.note) { partnership.note = updates.note || undefined; changed = true; }
+        if (updates.isPrimary !== undefined && (updates.isPrimary || undefined) !== partnership.isPrimary) { partnership.isPrimary = updates.isPrimary || undefined; changed = true; }
+
+        if (!changed) return partnership;
 
         this.save();
+        // Audit log
+        const up1 = this.data.persons[partnership.person1Id];
+        const up2 = this.data.persons[partnership.person2Id];
+        AuditLogManager.log(
+            this.currentTreeId, 'partnership.update',
+            strings.auditLog.updatedPartnership(auditPersonName(up1), auditPersonName(up2))
+        );
         return partnership;
     }
 
@@ -937,6 +1000,11 @@ class DataManagerClass {
         }
 
         this.save();
+        // Audit log
+        AuditLogManager.log(
+            this.currentTreeId, 'parentChild.add',
+            strings.auditLog.addedParentChild(auditPersonName(parent), auditPersonName(child))
+        );
         return true;
     }
 
@@ -944,6 +1012,10 @@ class DataManagerClass {
         const parent = this.data.persons[parentId];
         const child = this.data.persons[childId];
         if (!parent || !child) return false;
+
+        // Capture names before modification for audit log
+        const parentName = auditPersonName(parent);
+        const childName = auditPersonName(child);
 
         // Remove from parent's childIds
         parent.childIds = parent.childIds.filter(id => id !== childId);
@@ -960,6 +1032,11 @@ class DataManagerClass {
         }
 
         this.save();
+        // Audit log
+        AuditLogManager.log(
+            this.currentTreeId, 'parentChild.remove',
+            strings.auditLog.removedParentChild(parentName, childName)
+        );
         return true;
     }
 
@@ -970,6 +1047,10 @@ class DataManagerClass {
         const p1 = this.data.persons[person1Id];
         const p2 = this.data.persons[person2Id];
 
+        // Capture names before modification for audit log
+        const p1Name = auditPersonName(p1);
+        const p2Name = auditPersonName(p2);
+
         if (p1) {
             p1.partnerships = p1.partnerships.filter(pid => pid !== partnership.id);
         }
@@ -979,6 +1060,11 @@ class DataManagerClass {
 
         delete this.data.partnerships[partnership.id];
         this.save();
+        // Audit log
+        AuditLogManager.log(
+            this.currentTreeId, 'partnership.delete',
+            strings.auditLog.removedPartnership(p1Name, p2Name)
+        );
         return true;
     }
 
@@ -1238,8 +1324,16 @@ class DataManagerClass {
      * Clear all data and start fresh (in current tree)
      */
     clearData(): void {
+        // Capture counts before clearing for audit log
+        const personCount = Object.keys(this.data.persons).length;
+        const partnershipCount = Object.keys(this.data.partnerships).length;
         this.data = this.createEmptyData();
         this.save();
+        // Audit log
+        AuditLogManager.log(
+            this.currentTreeId, 'data.clear',
+            strings.auditLog.clearedData(personCount, partnershipCount)
+        );
         window.dispatchEvent(new CustomEvent('strom:data-changed'));
     }
 
@@ -1321,6 +1415,13 @@ class DataManagerClass {
     loadStromData(newData: StromData): void {
         this.data = this.migrateData(newData);
         this.save();
+        // Audit log
+        const personCount = Object.keys(this.data.persons).length;
+        const partnershipCount = Object.keys(this.data.partnerships).length;
+        AuditLogManager.log(
+            this.currentTreeId, 'data.load',
+            strings.auditLog.loadedData(personCount, partnershipCount)
+        );
         // Invalidate cross-tree cache when data is loaded
         CrossTree.invalidateCache();
         window.dispatchEvent(new CustomEvent('strom:data-changed'));
@@ -1466,6 +1567,17 @@ class DataManagerClass {
         if (!keepPerson || !removePerson || keepId === removeId) {
             return false;
         }
+
+        // Capture names and changes before merge for audit log
+        const removedName = auditPersonName(removePerson);
+        const keptName = auditPersonName(keepPerson);
+        const mergeDetails: string[] = [];
+        if (resolvedFields.firstName !== undefined && resolvedFields.firstName !== keepPerson.firstName) mergeDetails.push(`${strings.labels.firstName}: ${resolvedFields.firstName}`);
+        if (resolvedFields.lastName !== undefined && resolvedFields.lastName !== keepPerson.lastName) mergeDetails.push(`${strings.labels.lastName}: ${resolvedFields.lastName}`);
+        if (resolvedFields.birthDate !== undefined && resolvedFields.birthDate !== (keepPerson.birthDate || '')) mergeDetails.push(`${strings.labels.birthDate}: ${resolvedFields.birthDate || '–'}`);
+        if (resolvedFields.birthPlace !== undefined && resolvedFields.birthPlace !== (keepPerson.birthPlace || '')) mergeDetails.push(`${strings.labels.birthPlace}: ${resolvedFields.birthPlace || '–'}`);
+        if (resolvedFields.deathDate !== undefined && resolvedFields.deathDate !== (keepPerson.deathDate || '')) mergeDetails.push(`${strings.labels.deathDate}: ${resolvedFields.deathDate || '–'}`);
+        if (resolvedFields.deathPlace !== undefined && resolvedFields.deathPlace !== (keepPerson.deathPlace || '')) mergeDetails.push(`${strings.labels.deathPlace}: ${resolvedFields.deathPlace || '–'}`);
 
         // 1. Apply resolved field values
         if (resolvedFields.firstName !== undefined) keepPerson.firstName = resolvedFields.firstName;
@@ -1615,6 +1727,11 @@ class DataManagerClass {
         delete this.data.persons[removeId];
 
         this.save();
+        // Audit log
+        AuditLogManager.log(
+            this.currentTreeId, 'persons.merge',
+            strings.auditLog.mergedPersons(removedName, keptName, mergeDetails.join(', '))
+        );
         return true;
     }
 

@@ -166,6 +166,38 @@ export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
     minEdgeClearance: 14
 };
 
+// ==================== AUDIT LOG ====================
+
+export const AUDIT_LOG_PREFIX = 'strom-audit-';
+
+export type AuditAction =
+    | 'person.create'
+    | 'person.update'
+    | 'person.delete'
+    | 'partnership.create'
+    | 'partnership.update'
+    | 'partnership.delete'
+    | 'parentChild.add'
+    | 'parentChild.remove'
+    | 'persons.merge'
+    | 'data.clear'
+    | 'data.load'
+    | 'data.import';
+
+export interface AuditEntry {
+    /** ISO timestamp */
+    t: string;
+    /** Action type */
+    a: AuditAction;
+    /** Human-readable description */
+    d: string;
+}
+
+export interface AuditLog {
+    version: number;
+    entries: AuditEntry[];
+}
+
 // ==================== STORAGE ====================
 
 export const STORAGE_KEY = 'strom-data-v5';
@@ -187,6 +219,8 @@ export interface EmbeddedDataEnvelope {
     treeName: string;
     /** Tree data (plain or encrypted) */
     data: StromData | EncryptedDataRef;
+    /** Optional audit log */
+    auditLog?: AuditLog;
 }
 
 /** Reference to encrypted data type (actual type in crypto.ts) */
@@ -222,6 +256,7 @@ export interface AppSettings {
     theme: ThemeMode;  // default: 'system'
     language: LanguageSetting;  // default: 'system'
     encryption: boolean;  // default: false - whether data encryption is enabled
+    auditLog: boolean;  // default: false - whether audit log is enabled
 }
 
 // ==================== MULTI-TREE STORAGE ====================

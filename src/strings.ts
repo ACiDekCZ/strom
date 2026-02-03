@@ -724,6 +724,41 @@ const stringsEN = {
     // Import from offline version (intro text in new tree menu)
     importFromOffline: {
         description: 'Welcome to stromapp.info! To continue with your data, import the file you were using.'
+    },
+
+    // Audit Log
+    auditLog: {
+        title: 'Change History',
+        empty: 'No entries recorded yet.',
+        clear: 'Clear History',
+        clearConfirm: 'Clear the entire change history? This cannot be undone.',
+        entries: (count: number) => `${count} ${count === 1 ? 'entry' : 'entries'}`,
+        enableSetting: 'Change history',
+        enabled: 'Change history enabled',
+        disabled: 'Change history disabled',
+        viewLog: 'Change History',
+        exportInclude: 'Include change history',
+        exportTxt: 'Export TXT',
+        // Action descriptions
+        createdPerson: (name: string) => `Created person: ${name}`,
+        createdPlaceholder: (gender: string) => `Created placeholder (${gender})`,
+        updatedPerson: (name: string, fields: string) => `Updated ${name}: ${fields}`,
+        deletedPerson: (name: string) => `Deleted person: ${name}`,
+        createdPartnership: (p1: string, p2: string, status: string) => `Created partnership: ${p1} & ${p2} (${status})`,
+        updatedPartnership: (p1: string, p2: string) => `Updated partnership: ${p1} & ${p2}`,
+        removedPartnership: (p1: string, p2: string) => `Removed partnership: ${p1} & ${p2}`,
+        addedParentChild: (parent: string, child: string) => `Added parent-child: ${parent} → ${child}`,
+        removedParentChild: (parent: string, child: string) => `Removed parent-child: ${parent} → ${child}`,
+        mergedPersons: (removed: string, kept: string, details: string) => `Merged persons: ${removed} → ${kept}${details ? ' (' + details + ')' : ''}`,
+        clearedData: (persons: number, partnerships: number) => `Cleared data: ${persons} persons, ${partnerships} partnerships`,
+        loadedData: (persons: number, partnerships: number) => `Loaded data: ${persons} persons, ${partnerships} partnerships`,
+        // Batch summaries
+        addedChild: (parent: string, child: string) => `Added child: ${parent} → ${child}`,
+        addedParent: (parent: string, child: string) => `Added parent: ${parent} → ${child}`,
+        addedSibling: (person: string, sibling: string) => `Added sibling: ${person} + ${sibling}`,
+        addedPartner: (person: string, partner: string) => `Added partner: ${person} & ${partner}`,
+        // Tree merge
+        treeMerge: (merged: number, added: number, source: string) => `Tree merge from "${source}": ${merged} merged, ${added} added`
     }
 };
 
@@ -1439,6 +1474,41 @@ const stringsCZ: StringsType = {
     // Import from offline version (intro text in new tree menu)
     importFromOffline: {
         description: 'Vítejte na stromapp.info! Pro pokračování s vašimi daty importujte soubor, se kterým jste pracovali.'
+    },
+
+    // Audit Log
+    auditLog: {
+        title: 'Historie změn',
+        empty: 'Zatím žádné záznamy.',
+        clear: 'Vyčistit historii',
+        clearConfirm: 'Vyčistit celou historii změn? Toto nelze vrátit zpět.',
+        entries: (count: number) => `${count} ${count === 1 ? 'záznam' : count < 5 ? 'záznamy' : 'záznamů'}`,
+        enableSetting: 'Historie změn',
+        enabled: 'Historie změn zapnuta',
+        disabled: 'Historie změn vypnuta',
+        viewLog: 'Historie změn',
+        exportInclude: 'Zahrnout historii změn',
+        exportTxt: 'Export TXT',
+        // Action descriptions
+        createdPerson: (name: string) => `Vytvořena osoba: ${name}`,
+        createdPlaceholder: (gender: string) => `Vytvořen zástupce (${gender})`,
+        updatedPerson: (name: string, fields: string) => `Aktualizace ${name}: ${fields}`,
+        deletedPerson: (name: string) => `Smazána osoba: ${name}`,
+        createdPartnership: (p1: string, p2: string, status: string) => `Vytvořen vztah: ${p1} & ${p2} (${status})`,
+        updatedPartnership: (p1: string, p2: string) => `Aktualizován vztah: ${p1} & ${p2}`,
+        removedPartnership: (p1: string, p2: string) => `Odebrán vztah: ${p1} & ${p2}`,
+        addedParentChild: (parent: string, child: string) => `Přidán rodič-dítě: ${parent} → ${child}`,
+        removedParentChild: (parent: string, child: string) => `Odebrán rodič-dítě: ${parent} → ${child}`,
+        mergedPersons: (removed: string, kept: string, details: string) => `Sloučeny osoby: ${removed} → ${kept}${details ? ' (' + details + ')' : ''}`,
+        clearedData: (persons: number, partnerships: number) => `Vymazána data: ${persons} osob, ${partnerships} vztahů`,
+        loadedData: (persons: number, partnerships: number) => `Načtena data: ${persons} osob, ${partnerships} vztahů`,
+        // Batch summaries
+        addedChild: (parent: string, child: string) => `Přidáno dítě: ${parent} → ${child}`,
+        addedParent: (parent: string, child: string) => `Přidán rodič: ${parent} → ${child}`,
+        addedSibling: (person: string, sibling: string) => `Přidán sourozenec: ${person} + ${sibling}`,
+        addedPartner: (person: string, partner: string) => `Přidán partner: ${person} & ${partner}`,
+        // Tree merge
+        treeMerge: (merged: number, added: number, source: string) => `Sloučení stromů z "${source}": ${merged} sloučeno, ${added} přidáno`
     }
 };
 

@@ -24,6 +24,7 @@ import {
 import { strings } from './strings.js';
 import { isEncrypted, EncryptedData, CryptoSession } from './crypto.js';
 import { SettingsManager } from './settings.js';
+import { AuditLogManager } from './audit-log.js';
 
 /** Key for legacy session state (to be cleaned up on first run) */
 const LEGACY_SESSION_KEY = 'strom-session';
@@ -278,6 +279,9 @@ class TreeManagerClass {
 
         // Remove tree data
         localStorage.removeItem(TREE_DATA_PREFIX + id);
+
+        // Remove audit log for this tree
+        AuditLogManager.deleteForTree(id);
 
         // Remove from index
         this.index.trees.splice(idx, 1);

@@ -7,7 +7,7 @@ import { AppSettings, ThemeMode, LanguageSetting, SETTINGS_KEY } from './types.j
 import { initLanguage, Language } from './strings.js';
 
 class SettingsManagerClass {
-    private settings: AppSettings = { theme: 'system', language: 'system', encryption: false };
+    private settings: AppSettings = { theme: 'system', language: 'system', encryption: false, auditLog: false };
 
     init(): void {
         this.load();
@@ -61,6 +61,15 @@ class SettingsManagerClass {
 
     setEncryption(enabled: boolean): void {
         this.settings.encryption = enabled;
+        this.save();
+    }
+
+    isAuditLogEnabled(): boolean {
+        return this.settings.auditLog;
+    }
+
+    setAuditLog(enabled: boolean): void {
+        this.settings.auditLog = enabled;
         this.save();
     }
 

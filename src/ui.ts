@@ -3,7 +3,7 @@
  * Handles context menus, relation dialogs, and form interactions
  */
 
-import { DataManager } from './data.js';
+import { DataManager, auditPersonName } from './data.js';
 import { TreeManager } from './tree-manager.js';
 import { TreeRenderer } from './renderer.js';
 import { ZoomPan } from './zoom.js';
@@ -39,6 +39,7 @@ import { ThemeMode, LanguageSetting, AppMode } from './types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from './crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from './validation.js';
 import * as CrossTree from './cross-tree.js';
+import { AuditLogManager } from './audit-log.js';
 
 class UIClass {
     private currentId: PersonId | null = null;
@@ -949,6 +950,9 @@ class UIClass {
             const deathDate = (document.getElementById('rel-deathdate') as HTMLInputElement)?.value || undefined;
             const deathPlace = (document.getElementById('rel-deathplace') as HTMLInputElement)?.value.trim() || undefined;
 
+            // Begin batch before person creation to suppress individual audit logs
+            AuditLogManager.beginBatch();
+
             const isPlaceholder = !firstName && !lastName;
             const newPerson = DataManager.createPerson(
                 { firstName: isPlaceholder ? '?' : firstName, lastName, gender, birthDate, birthPlace, deathDate, deathPlace },
@@ -957,7 +961,7 @@ class UIClass {
             newPersonId = newPerson.id;
         }
 
-        // Create the relationship
+        // Create the relationship (endBatch is called inside)
         this.createRelationship(personId, newPersonId, relationType, includePartner);
 
         this.closeRelationModal();
@@ -974,15 +978,23 @@ class UIClass {
         const person = DataManager.getPerson(personId);
         if (!person) return;
 
+        const treeId = DataManager.getCurrentTreeId();
+        // Begin batch if not already started (new person path starts it earlier)
+        if (!AuditLogManager.isBatching()) {
+            AuditLogManager.beginBatch();
+        }
+
         switch (relationType) {
             case 'partner': {
                 DataManager.createPartnership(personId, newPersonId);
-                break;
+                AuditLogManager.endBatch(treeId, 'partnership.create',
+                    strings.auditLog.addedPartner(auditPersonName(person), auditPersonName(DataManager.getPerson(newPersonId))));
+                return;
             }
 
             case 'child': {
+                const newChild = DataManager.getPerson(newPersonId);
                 if (includePartner) {
-                    // Has a selected partner — add child to both parents and partnership
                     DataManager.addParentChild(personId, newPersonId);
                     DataManager.addParentChild(includePartner, newPersonId);
                     const partnership = DataManager.getPartnerships(personId)
@@ -991,7 +1003,6 @@ class UIClass {
                         DataManager.addParentChild(personId, newPersonId, partnership.id);
                     }
                 } else {
-                    // No partner — create placeholder partner + partnership
                     const placeholderGender: Gender = person.gender === 'male' ? 'female' : 'male';
                     const placeholder = DataManager.createPerson({
                         firstName: '?',
@@ -1005,36 +1016,35 @@ class UIClass {
                         DataManager.addParentChild(personId, newPersonId, partnership.id);
                     }
                 }
-                break;
+                AuditLogManager.endBatch(treeId, 'person.create',
+                    strings.auditLog.addedChild(auditPersonName(person), auditPersonName(newChild)));
+                return;
             }
 
             case 'parent': {
                 DataManager.addParentChild(newPersonId, personId);
-                // If child already has another parent, create partnership between both parents
                 const child = DataManager.getPerson(personId);
                 if (child && child.parentIds.length === 2) {
                     const otherParentId = child.parentIds.find(pid => pid !== newPersonId);
                     if (otherParentId) {
-                        // Create partnership if it doesn't exist
                         const existingPartnership = DataManager.getPartnerships(newPersonId)
                             .find(p => p.person1Id === otherParentId || p.person2Id === otherParentId);
                         const partnership = existingPartnership || DataManager.createPartnership(newPersonId, otherParentId);
-                        // Add child to partnership's childIds
                         if (partnership) {
                             DataManager.addParentChild(newPersonId, personId, partnership.id);
                         }
                     }
                 }
-                break;
+                AuditLogManager.endBatch(treeId, 'person.create',
+                    strings.auditLog.addedParent(auditPersonName(DataManager.getPerson(newPersonId)), auditPersonName(person)));
+                return;
             }
 
             case 'sibling': {
                 if (person.parentIds.length > 0) {
-                    // Add sibling to existing parents
                     for (const parentId of person.parentIds) {
                         DataManager.addParentChild(parentId, newPersonId);
                     }
-                    // Also add to parents' partnership childIds
                     if (person.parentIds.length === 2) {
                         const partnership = DataManager.getPartnerships(person.parentIds[0])
                             .find(p => p.person1Id === person.parentIds[1] || p.person2Id === person.parentIds[1]);
@@ -1043,7 +1053,6 @@ class UIClass {
                         }
                     }
                 } else {
-                    // Create 2 placeholder parents
                     const father = DataManager.createPerson({
                         firstName: '?',
                         lastName: person.lastName,
@@ -1056,18 +1065,20 @@ class UIClass {
                         gender: 'female'
                     }, true);
 
-                    // Create partnership between placeholder parents
                     const partnership = DataManager.createPartnership(father.id, mother.id);
 
-                    // Link both children to both parents with partnership
                     DataManager.addParentChild(father.id, personId, partnership?.id);
                     DataManager.addParentChild(mother.id, personId);
                     DataManager.addParentChild(father.id, newPersonId, partnership?.id);
                     DataManager.addParentChild(mother.id, newPersonId);
                 }
-                break;
+                AuditLogManager.endBatch(treeId, 'person.create',
+                    strings.auditLog.addedSibling(auditPersonName(person), auditPersonName(DataManager.getPerson(newPersonId))));
+                return;
             }
         }
+
+        AuditLogManager.cancelBatch();
     }
 
     closeRelationModal(): void {
@@ -1708,9 +1719,20 @@ class UIClass {
      * Save all pending relationship changes
      */
     saveRelationships(): void {
+        // Batch multiple partnership updates into one log entry
+        if (this.pendingPartnershipChanges.size > 1) {
+            AuditLogManager.beginBatch();
+        }
+
         // Apply all pending partnership changes
         for (const [partnershipId, changes] of this.pendingPartnershipChanges) {
             DataManager.updatePartnership(partnershipId, changes);
+        }
+
+        if (this.pendingPartnershipChanges.size > 1) {
+            const treeId = DataManager.getCurrentTreeId();
+            AuditLogManager.endBatch(treeId, 'partnership.update',
+                strings.auditLog.updatedPartnership('…', '…'));
         }
 
         // Clear pending changes
@@ -2140,6 +2162,18 @@ class UIClass {
             encryptionStatus.textContent = SettingsManager.isEncryptionEnabled()
                 ? strings.encryption.encryptionEnabled
                 : strings.encryption.encryptionDisabled;
+        }
+
+        // Set current audit log state
+        const auditLogToggle = document.getElementById('audit-log-toggle') as HTMLInputElement;
+        const auditLogStatus = document.getElementById('audit-log-status');
+        if (auditLogToggle) {
+            auditLogToggle.checked = AuditLogManager.isEnabled();
+        }
+        if (auditLogStatus) {
+            auditLogStatus.textContent = AuditLogManager.isEnabled()
+                ? strings.auditLog.enabled
+                : strings.auditLog.disabled;
         }
 
         modal.classList.add('active');
@@ -3911,6 +3945,7 @@ class UIClass {
                         <button class="edit-only" onclick="window.Strom.UI.duplicateTree('${tree.id}')" title="${strings.treeManager.duplicate}"><span class="btn-icon">⧉</span><span class="btn-text">${strings.treeManager.duplicate}</span></button>
                         <button onclick="window.Strom.UI.showExportDialogFromManager('${tree.id}')" title="${strings.treeManager.export}"><span class="btn-icon">💾</span><span class="btn-text">${strings.treeManager.export}</span></button>
                         <button class="edit-only" onclick="window.Strom.UI.showMergeTreesDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.mergeInto}"><span class="btn-icon">🔀</span><span class="btn-text">${strings.treeManager.mergeInto}</span></button>
+                        ${AuditLogManager.isEnabled() || AuditLogManager.hasEntries(tree.id) ? `<button onclick="window.Strom.UI.showAuditLogDialog('${tree.id}', 'tree-manager-modal')" title="${strings.auditLog.viewLog}"><span class="btn-icon">📋</span><span class="btn-text">${strings.auditLog.viewLog}</span></button>` : ''}
                         <button class="danger edit-only" onclick="window.Strom.UI.confirmDeleteTree('${tree.id}')" title="${strings.treeManager.delete}"><span class="btn-icon">❌</span><span class="btn-text">${strings.treeManager.delete}</span></button>
                     </div>
                 </div>
@@ -5987,6 +6022,16 @@ class UIClass {
             error.textContent = '';
         }
 
+        // Show/hide audit log checkbox based on whether tree has entries
+        const auditLogSection = document.getElementById('export-audit-log-section');
+        const auditLogToggle = document.getElementById('export-audit-log-toggle') as HTMLInputElement;
+        const exportTreeId = this.getExportTargetTreeId() || DataManager.getCurrentTreeId();
+        if (auditLogSection && auditLogToggle && exportTreeId) {
+            const hasEntries = AuditLogManager.hasEntries(exportTreeId);
+            auditLogSection.style.display = hasEntries ? 'block' : 'none';
+            auditLogToggle.checked = false;
+        }
+
         modal.classList.add('active');
         input.focus();
 
@@ -6544,6 +6589,139 @@ class UIClass {
             // Center view on the person
             ZoomPan.centerOnPerson(personId);
         }
+    }
+
+    // ==================== AUDIT LOG ====================
+
+    toggleAuditLog(enabled: boolean): void {
+        AuditLogManager.setEnabled(enabled);
+        const status = document.getElementById('audit-log-status');
+        if (status) {
+            status.textContent = enabled
+                ? strings.auditLog.enabled
+                : strings.auditLog.disabled;
+        }
+    }
+
+    showAuditLogDialog(treeId?: TreeId | string, parentDialogId?: string): void {
+        const modal = document.getElementById('audit-log-modal');
+        if (!modal) return;
+
+        const targetTreeId = (treeId || DataManager.getCurrentTreeId()) as TreeId;
+        if (!targetTreeId) return;
+
+        // Store target tree id for clear action
+        modal.dataset.treeId = targetTreeId;
+
+        // Set tree name in header
+        const titleEl = modal.querySelector('.audit-log-title-text');
+        const treeMeta = TreeManager.getTreeMetadata(targetTreeId);
+        if (titleEl && treeMeta) {
+            titleEl.textContent = `${strings.auditLog.title} — ${treeMeta.name}`;
+        }
+
+        this.renderAuditLogEntries(targetTreeId);
+
+        // Handle dialog stack for ESC navigation
+        this.clearDialogStack();
+        if (parentDialogId) {
+            this.pushDialog(parentDialogId);
+            this.closeDialogById(parentDialogId);
+        }
+        this.pushDialog('audit-log-modal');
+        modal.classList.add('active');
+    }
+
+    private renderAuditLogEntries(treeId: TreeId): void {
+        const listEl = document.getElementById('audit-log-list');
+        if (!listEl) return;
+
+        const log = AuditLogManager.load(treeId);
+
+        if (log.entries.length === 0) {
+            listEl.innerHTML = `<div class="audit-log-empty">${strings.auditLog.empty}</div>`;
+            const countEl = document.getElementById('audit-log-count');
+            if (countEl) countEl.textContent = strings.auditLog.entries(0);
+            return;
+        }
+
+        const countEl = document.getElementById('audit-log-count');
+        if (countEl) countEl.textContent = strings.auditLog.entries(log.entries.length);
+
+        // Render newest first
+        const entries = [...log.entries].reverse();
+        let html = '';
+        for (const entry of entries) {
+            const date = new Date(entry.t);
+            const timeStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // Icon based on action type
+            let icon = '+';
+            if (entry.a.includes('update')) icon = '✎';
+            else if (entry.a.includes('delete') || entry.a.includes('remove')) icon = '−';
+            else if (entry.a.includes('merge')) icon = '⇄';
+            else if (entry.a === 'data.clear') icon = '!';
+            else if (entry.a === 'data.load' || entry.a === 'data.import') icon = '↓';
+
+            html += `
+                <div class="audit-log-entry">
+                    <span class="audit-log-time">${this.escapeHtml(timeStr)}</span>
+                    <span class="audit-log-icon">${icon}</span>
+                    <span class="audit-log-desc">${this.escapeHtml(entry.d)}</span>
+                </div>
+            `;
+        }
+
+        listEl.innerHTML = html;
+    }
+
+    closeAuditLogDialog(): void {
+        document.getElementById('audit-log-modal')?.classList.remove('active');
+        this.returnToParentDialog();
+    }
+
+    exportAuditLogTxt(): void {
+        const modal = document.getElementById('audit-log-modal');
+        const treeId = modal?.dataset.treeId as TreeId;
+        if (!treeId) return;
+
+        const log = AuditLogManager.load(treeId);
+        if (log.entries.length === 0) return;
+
+        const treeMeta = TreeManager.getTreeMetadata(treeId);
+        const treeName = treeMeta?.name || 'tree';
+
+        const lines: string[] = [];
+        lines.push(`${strings.auditLog.title} — ${treeName}`);
+        lines.push(`${strings.auditLog.entries(log.entries.length)}`);
+        lines.push('');
+
+        // Chronological order (oldest first) for TXT export
+        for (const entry of log.entries) {
+            const date = new Date(entry.t);
+            const timeStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            lines.push(`${timeStr}  ${entry.d}`);
+        }
+
+        const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `audit-log-${treeName.replace(/[^a-zA-Z0-9_-]/g, '_')}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    async clearAuditLog(): Promise<void> {
+        const modal = document.getElementById('audit-log-modal');
+        const treeId = modal?.dataset.treeId as TreeId;
+        if (!treeId) return;
+
+        const confirmed = await this.showConfirm(strings.auditLog.clearConfirm);
+        if (!confirmed) return;
+
+        AuditLogManager.clear(treeId);
+        this.renderAuditLogEntries(treeId);
     }
 }
 

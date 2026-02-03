@@ -11,6 +11,7 @@ import { ZoomPan, setTreeRendererGetter } from './zoom.js';
 import { AppExporter } from './export.js';
 import { MergerUI } from './merge/index.js';
 import { SettingsManager } from './settings.js';
+import { AuditLogManager } from './audit-log.js';
 import { TreePreview, TreeCompare } from './tree-preview.js';
 import { DebugOptions, DebugStep, DebugPhase } from './layout/pipeline/debug-types.js';
 import { decrypt, CryptoSession } from './crypto.js';
@@ -143,6 +144,9 @@ function handleUrlImportParam(): boolean {
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize settings (theme) early for smooth loading
     SettingsManager.init();
+
+    // Initialize audit log (reads enabled state from settings)
+    AuditLogManager.init();
 
     // Initialize UI strings from strings.ts
     UI.initializeStrings();
