@@ -744,7 +744,24 @@ class UIClass {
         submitBtn.textContent = strings.buttons.add;
         (document.getElementById('rel-firstname') as HTMLInputElement).value = '';
         (document.getElementById('rel-lastname') as HTMLInputElement).value = '';
-        genderSelect.value = 'male';
+
+        // Smart gender pre-fill based on relation context
+        if (this.relationContext.relationType === 'partner') {
+            // Partner: opposite gender
+            const sourcePerson = DataManager.getPerson(this.relationContext.personId);
+            genderSelect.value = sourcePerson?.gender === 'male' ? 'female' : 'male';
+        } else if (this.relationContext.relationType === 'parent') {
+            // Parent: if one parent exists, pre-fill opposite gender
+            const child = DataManager.getPerson(this.relationContext.personId);
+            const existingParents = child ? child.parentIds.map(pid => DataManager.getPerson(pid)).filter(Boolean) : [];
+            if (existingParents.length === 1 && existingParents[0]) {
+                genderSelect.value = existingParents[0].gender === 'male' ? 'female' : 'male';
+            } else {
+                genderSelect.value = 'male';
+            }
+        } else {
+            genderSelect.value = 'male';
+        }
 
         // Reset date and place fields
         (document.getElementById('rel-birthdate') as HTMLInputElement).value = '';
@@ -932,14 +949,11 @@ class UIClass {
             const deathDate = (document.getElementById('rel-deathdate') as HTMLInputElement)?.value || undefined;
             const deathPlace = (document.getElementById('rel-deathplace') as HTMLInputElement)?.value.trim() || undefined;
 
-            if (!firstName && !lastName) {
-                this.clearDialogStack();
-                this.pushDialog('relation-modal');
-                this.showAlert(strings.relationModal.enterName, 'warning');
-                return;
-            }
-
-            const newPerson = DataManager.createPerson({ firstName, lastName, gender, birthDate, birthPlace, deathDate, deathPlace });
+            const isPlaceholder = !firstName && !lastName;
+            const newPerson = DataManager.createPerson(
+                { firstName: isPlaceholder ? '?' : firstName, lastName, gender, birthDate, birthPlace, deathDate, deathPlace },
+                isPlaceholder
+            );
             newPersonId = newPerson.id;
         }
 
