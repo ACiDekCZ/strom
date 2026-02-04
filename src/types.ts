@@ -168,8 +168,6 @@ export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
 
 // ==================== AUDIT LOG ====================
 
-export const AUDIT_LOG_PREFIX = 'strom-audit-';
-
 export type AuditAction =
     | 'person.create'
     | 'person.update'
@@ -200,8 +198,6 @@ export interface AuditLog {
 }
 
 // ==================== STORAGE ====================
-
-export const STORAGE_KEY = 'strom-data-v5';
 
 // ==================== EMBEDDED DATA ENVELOPE ====================
 
@@ -303,17 +299,3 @@ export interface TreeIndex {
     lastTreeId?: TreeId;  // used when defaultTreeId === LAST_FOCUSED
 }
 
-/** Storage usage information */
-export interface StorageInfo {
-    used: number;
-    total: number;
-    trees: Array<{
-        id: TreeId;
-        name: string;
-        size: number;
-    }>;
-}
-
-/** Storage keys for multi-tree architecture */
-export const TREE_INDEX_KEY = 'strom-trees-index';
-export const TREE_DATA_PREFIX = 'strom-tree-';

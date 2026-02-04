@@ -78,7 +78,7 @@ class AppExporterClass {
             const html = this.getExportHtml();
 
             // Get data for the specified tree
-            const data = TreeManager.getTreeData(targetTreeId);
+            const data = await TreeManager.getTreeData(targetTreeId);
             if (!data) {
                 UI.showAlert(strings.export.failed, 'error');
                 return;
@@ -148,7 +148,7 @@ class AppExporterClass {
             const allTreesData: Record<string, { name: string; data: StromData; isHidden?: boolean }> = {};
 
             for (const tree of trees) {
-                const data = TreeManager.getTreeData(tree.id);
+                const data = await TreeManager.getTreeData(tree.id);
                 if (data) {
                     allTreesData[tree.id] = {
                         name: tree.name,
@@ -161,7 +161,7 @@ class AppExporterClass {
 
             // Use active tree as the primary embedded data
             const activeTreeId = TreeManager.getActiveTreeId();
-            const activeData = activeTreeId ? TreeManager.getTreeData(activeTreeId) : null;
+            const activeData = activeTreeId ? await TreeManager.getTreeData(activeTreeId) : null;
             const activeTreeMeta = activeTreeId ? TreeManager.getTreeMetadata(activeTreeId) : null;
 
             // Generate export ID for the main tree
@@ -185,8 +185,8 @@ class AppExporterClass {
                 appVersion: APP_VERSION,
                 treeName: activeTreeMeta?.name || 'All Trees',
                 data: embedActiveDataContent!,
-                ...(includeAuditLog && activeTreeId ? (() => {
-                    const log = AuditLogManager.exportForTree(activeTreeId);
+                ...(includeAuditLog && activeTreeId ? await (async () => {
+                    const log = await AuditLogManager.exportForTree(activeTreeId);
                     return log ? { auditLog: log } : {};
                 })() : {})
             } : null;

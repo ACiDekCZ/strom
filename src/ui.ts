@@ -1985,9 +1985,6 @@ class UIClass {
         // Calculate and display stats
         this.updateAboutStats();
 
-        // Update storage info
-        this.updateAboutStorage();
-
         modal.classList.add('active');
     }
 
@@ -2039,7 +2036,7 @@ class UIClass {
     /**
      * Calculate and display aggregate statistics across all trees
      */
-    private updateAboutTotalStats(): void {
+    private async updateAboutTotalStats(): Promise<void> {
         const trees = TreeManager.getTrees();
         const totalStatsRow = document.getElementById('about-stats-total-row');
         const totalStatsSection = document.getElementById('about-stats-total');
@@ -2057,7 +2054,7 @@ class UIClass {
         let totalFamilies = 0;
 
         for (const tree of trees) {
-            const treeData = TreeManager.getTreeData(tree.id);
+            const treeData = await TreeManager.getTreeData(tree.id);
             if (!treeData) continue;
 
             const persons = Object.values(treeData.persons).filter(p => !p.isPlaceholder);
@@ -2285,7 +2282,7 @@ class UIClass {
     async exportTargetTreeGedcom(): Promise<void> {
         const { exportToGedcom } = await import('./ged-exporter.js');
         const treeId = this.getExportTargetTreeId();
-        const data = treeId ? TreeManager.getTreeData(treeId) : null;
+        const data = treeId ? await TreeManager.getTreeData(treeId) : null;
         const metadata = treeId ? TreeManager.getTreeMetadata(treeId) : null;
 
         if (!data) {
@@ -3049,9 +3046,9 @@ class UIClass {
     /**
      * Check for pending merges and show dialog if found
      */
-    checkPendingMerges(): void {
-        const currentMerge = getCurrentMergeInfo();
-        const savedSessions = listMergeSessionsInfo();
+    async checkPendingMerges(): Promise<void> {
+        const currentMerge = await getCurrentMergeInfo();
+        const savedSessions = await listMergeSessionsInfo();
 
         if (!currentMerge && savedSessions.length === 0) {
             return;
@@ -3063,13 +3060,13 @@ class UIClass {
     /**
      * Show pending merge dialog
      */
-    showPendingMergeDialog(): void {
+    async showPendingMergeDialog(): Promise<void> {
         const modal = document.getElementById('pending-merge-modal');
         const list = document.getElementById('pending-merge-list');
         if (!modal || !list) return;
 
-        const currentMerge = getCurrentMergeInfo();
-        const savedSessions = listMergeSessionsInfo();
+        const currentMerge = await getCurrentMergeInfo();
+        const savedSessions = await listMergeSessionsInfo();
 
         let html = '';
 
@@ -3136,7 +3133,7 @@ class UIClass {
     /**
      * Discard a pending merge
      */
-    discardPendingMerge(sessionId: string): void {
+    async discardPendingMerge(sessionId: string): Promise<void> {
         if (sessionId === 'current') {
             MergerUI.discardCurrentMerge();
         } else {
@@ -3144,8 +3141,8 @@ class UIClass {
         }
 
         // Refresh the list
-        const currentMerge = getCurrentMergeInfo();
-        const savedSessions = listMergeSessionsInfo();
+        const currentMerge = await getCurrentMergeInfo();
+        const savedSessions = await listMergeSessionsInfo();
 
         if (!currentMerge && savedSessions.length === 0) {
             this.closePendingMergeDialog();
@@ -3796,7 +3793,7 @@ class UIClass {
         const dropdown = document.getElementById('tree-switcher-dropdown');
         dropdown?.classList.remove('active');
 
-        if (await DataManager.switchTreeAsync(treeId as TreeId)) {
+        if (await DataManager.switchTree(treeId as TreeId)) {
             this.updateTreeSwitcher();
             // Restore focus from per-tree session state (uses tree's defaultPersonId setting)
             TreeRenderer.restoreFromSession();
@@ -3867,7 +3864,6 @@ class UIClass {
         closeObserver.observe(modal, { attributes: true });
 
         this.updateTreeManagerList();
-        this.updateStorageDisplay();
         modal.classList.add('active');
     }
 
@@ -3882,27 +3878,23 @@ class UIClass {
     /**
      * Update tree manager list
      */
-    private updateTreeManagerList(): void {
+    private async updateTreeManagerList(): Promise<void> {
         const list = document.getElementById('tree-manager-list');
         if (!list) return;
 
         const trees = TreeManager.getTrees();
         const activeId = TreeManager.getActiveTreeId();
 
-        // Get storage info to show size per tree
-        const storageInfo = TreeManager.getStorageUsage();
-        const treeSizes = new Map(storageInfo.trees.map(t => [t.id, t.size]));
-
         let html = '';
         for (const tree of trees) {
             const isActive = tree.id === activeId;
 
             // Get tree data for additional stats
-            const treeData = TreeManager.getTreeData(tree.id);
+            const treeData = await TreeManager.getTreeData(tree.id);
             const familyCount = treeData ? Object.keys(treeData.partnerships).length : 0;
 
-            // Get tree size
-            const treeSize = treeSizes.get(tree.id) || 0;
+            // Get tree size from metadata
+            const treeSize = tree.sizeBytes;
             const treeSizeFormatted = TreeManager.formatBytes(treeSize);
 
             // Get default person setting
@@ -3946,7 +3938,7 @@ class UIClass {
                         <button class="edit-only" onclick="window.Strom.UI.duplicateTree('${tree.id}')" title="${strings.treeManager.duplicate}"><span class="btn-icon">⧉</span><span class="btn-text">${strings.treeManager.duplicate}</span></button>
                         <button onclick="window.Strom.UI.showExportDialogFromManager('${tree.id}')" title="${strings.treeManager.export}"><span class="btn-icon">💾</span><span class="btn-text">${strings.treeManager.export}</span></button>
                         <button class="edit-only" onclick="window.Strom.UI.showMergeTreesDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.mergeInto}"><span class="btn-icon">🔀</span><span class="btn-text">${strings.treeManager.mergeInto}</span></button>
-                        ${AuditLogManager.isEnabled() || AuditLogManager.hasEntries(tree.id) ? `<button onclick="window.Strom.UI.showAuditLogDialog('${tree.id}', 'tree-manager-modal')" title="${strings.auditLog.viewLog}"><span class="btn-icon">📋</span><span class="btn-text">${strings.auditLog.viewLog}</span></button>` : ''}
+                        ${AuditLogManager.isEnabled() || await AuditLogManager.hasEntries(tree.id) ? `<button onclick="window.Strom.UI.showAuditLogDialog('${tree.id}', 'tree-manager-modal')" title="${strings.auditLog.viewLog}"><span class="btn-icon">📋</span><span class="btn-text">${strings.auditLog.viewLog}</span></button>` : ''}
                         <button class="danger edit-only" onclick="window.Strom.UI.confirmDeleteTree('${tree.id}')" title="${strings.treeManager.delete}"><span class="btn-icon">❌</span><span class="btn-text">${strings.treeManager.delete}</span></button>
                     </div>
                 </div>
@@ -3954,7 +3946,7 @@ class UIClass {
         }
 
         // Add pending merge sessions
-        const pendingMerges = listMergeSessionsInfo();
+        const pendingMerges = await listMergeSessionsInfo();
         for (const session of pendingMerges) {
             const date = new Date(session.savedAt).toLocaleString();
 
@@ -3995,27 +3987,6 @@ class UIClass {
         list.innerHTML = html || `<p style="text-align:center;color:var(--text-light);">${strings.merge.noItems}</p>`;
     }
 
-    /**
-     * Update storage display in tree manager
-     */
-    private updateStorageDisplay(): void {
-        const usage = TreeManager.getStorageUsage();
-        const percentage = Math.round((usage.used / usage.total) * 100);
-
-        // Tree manager storage
-        const fill = document.getElementById('storage-bar-fill');
-        const text = document.getElementById('storage-text');
-
-        if (fill) {
-            fill.style.width = `${percentage}%`;
-            fill.classList.remove('warning', 'danger');
-            if (percentage > 80) fill.classList.add('danger');
-            else if (percentage > 60) fill.classList.add('warning');
-        }
-        if (text) {
-            text.textContent = `${TreeManager.formatBytes(usage.used)} / ${TreeManager.formatBytes(usage.total)} (${percentage}%)`;
-        }
-    }
 
     // ==================== NEW TREE MENU ====================
 
@@ -4321,14 +4292,14 @@ class UIClass {
             const allData: Record<string, { name: string; data: StromData; auditLog?: AuditLog }> = {};
 
             for (const tree of trees) {
-                const data = TreeManager.getTreeData(tree.id);
+                const data = await TreeManager.getTreeData(tree.id);
                 if (data) {
                     const entry: { name: string; data: StromData; auditLog?: AuditLog } = {
                         name: tree.name,
                         data
                     };
                     if (includeAuditLog) {
-                        const log = AuditLogManager.exportForTree(tree.id);
+                        const log = await AuditLogManager.exportForTree(tree.id);
                         if (log) entry.auditLog = log;
                     }
                     allData[tree.id] = entry;
@@ -4423,7 +4394,6 @@ class UIClass {
 
         // Update and show tree manager with new tree
         this.updateTreeManagerList();
-        this.updateStorageDisplay();
         this.showTreeManagerDialog();
 
         this.updateTreeSwitcher();
@@ -4553,7 +4523,7 @@ class UIClass {
     /**
      * Confirm duplicate tree
      */
-    confirmDuplicateTree(): void {
+    async confirmDuplicateTree(): Promise<void> {
         if (!this.duplicateTreeId) return;
 
         const input = document.getElementById('duplicate-tree-name') as HTMLInputElement;
@@ -4564,10 +4534,9 @@ class UIClass {
             return;
         }
 
-        TreeManager.duplicateTree(this.duplicateTreeId, newName);
+        await TreeManager.duplicateTree(this.duplicateTreeId, newName);
         this.closeDuplicateTreeDialog();
         this.updateTreeManagerList();
-        this.updateStorageDisplay();
         this.updateTreeSwitcher();
     }
 
@@ -4596,9 +4565,9 @@ class UIClass {
     /**
      * Show tree statistics dialog
      */
-    showTreeStatsDialog(treeId: string, parentDialogId?: string): void {
+    async showTreeStatsDialog(treeId: string, parentDialogId?: string): Promise<void> {
         const tree = TreeManager.getTreeMetadata(treeId as TreeId);
-        const treeData = TreeManager.getTreeData(treeId as TreeId);
+        const treeData = await TreeManager.getTreeData(treeId as TreeId);
         if (!tree || !treeData) return;
 
         const modal = document.getElementById('tree-stats-modal');
@@ -4637,9 +4606,9 @@ class UIClass {
     /**
      * Show tree validation dialog (checks for genealogical inconsistencies)
      */
-    showTreeValidationDialog(treeId: string, parentDialogId?: string): void {
+    async showTreeValidationDialog(treeId: string, parentDialogId?: string): Promise<void> {
         const tree = TreeManager.getTreeMetadata(treeId as TreeId);
-        const treeData = TreeManager.getTreeData(treeId as TreeId);
+        const treeData = await TreeManager.getTreeData(treeId as TreeId);
         if (!tree || !treeData) return;
 
         const modal = document.getElementById('tree-validation-modal');
@@ -4707,8 +4676,8 @@ class UIClass {
     /**
      * Re-render validation dialog with fresh data (after a fix)
      */
-    private refreshTreeValidationDialog(treeId: string): void {
-        const treeData = TreeManager.getTreeData(treeId as TreeId);
+    private async refreshTreeValidationDialog(treeId: string): Promise<void> {
+        const treeData = await TreeManager.getTreeData(treeId as TreeId);
         if (!treeData) return;
 
         const content = document.getElementById('tree-validation-content');
@@ -5219,7 +5188,7 @@ class UIClass {
         const confirmed = await this.showConfirm(strings.treeManager.confirmDelete(tree.name), strings.buttons.delete);
         if (confirmed) {
             const wasActive = TreeManager.getActiveTreeId() === treeId;
-            TreeManager.deleteTree(treeId as TreeId);
+            await TreeManager.deleteTree(treeId as TreeId);
 
             // If no trees left, create a new empty one
             if (!TreeManager.hasTrees()) {
@@ -5228,13 +5197,12 @@ class UIClass {
             } else if (wasActive) {
                 // Reload data from the new active tree
                 const newActiveId = TreeManager.getActiveTreeId()!;
-                DataManager.switchTree(newActiveId);
+                await DataManager.switchTree(newActiveId);
                 // Update URL to reflect new active tree
                 this.updateUrlTreeParam(newActiveId);
             }
 
             this.updateTreeManagerList();
-            this.updateStorageDisplay();
             this.updateTreeSwitcher();
             TreeRenderer.render();
         }
@@ -5325,7 +5293,7 @@ class UIClass {
     /**
      * Start tree merge process
      */
-    startTreeMerge(): void {
+    async startTreeMerge(): Promise<void> {
         if (!this.mergeSourceTreeId || !this.mergeTargetTreeId) {
             this.clearDialogStack();
             this.pushDialog('merge-trees-modal');
@@ -5333,11 +5301,11 @@ class UIClass {
             return;
         }
 
-        const sourceData = TreeManager.getTreeData(this.mergeSourceTreeId);
+        const sourceData = await TreeManager.getTreeData(this.mergeSourceTreeId);
         if (!sourceData) return;
 
         // Switch to target tree first
-        DataManager.switchTree(this.mergeTargetTreeId);
+        await DataManager.switchTree(this.mergeTargetTreeId);
         // Update URL to reflect target tree
         this.updateUrlTreeParam(this.mergeTargetTreeId);
 
@@ -5393,18 +5361,17 @@ class UIClass {
     /**
      * Confirm import as new tree
      */
-    confirmImportTree(): void {
+    async confirmImportTree(): Promise<void> {
         if (!this.importTreeData) return;
 
         const nameInput = document.getElementById('import-tree-name') as HTMLInputElement;
         const name = nameInput?.value.trim() || strings.treeManager.importTreeName;
 
-        const newTreeId = DataManager.importAsNewTree(this.importTreeData, name);
+        const newTreeId = await DataManager.importAsNewTree(this.importTreeData, name);
 
         this.closeImportTreeDialog();
         this.updateTreeSwitcher();
         this.updateTreeManagerList();
-        this.updateStorageDisplay();
         TreeRenderer.render();
         this.refreshSearch();
         // Update URL to reflect new tree
@@ -5416,7 +5383,7 @@ class UIClass {
     /**
      * Show default person dialog for a tree
      */
-    showDefaultPersonDialog(treeId: string, parentDialogId?: string): void {
+    async showDefaultPersonDialog(treeId: string, parentDialogId?: string): Promise<void> {
         const modal = document.getElementById('default-person-modal');
         if (!modal) return;
 
@@ -5431,7 +5398,7 @@ class UIClass {
         this.pushDialog('default-person-modal');
 
         // Get tree data
-        const treeData = TreeManager.getTreeData(this.defaultPersonTreeId);
+        const treeData = await TreeManager.getTreeData(this.defaultPersonTreeId);
         const currentSetting = treeData?.defaultPersonId;
 
         // Get first person name for display
@@ -5532,7 +5499,7 @@ class UIClass {
     /**
      * Confirm and save default person
      */
-    confirmDefaultPerson(): void {
+    async confirmDefaultPerson(): Promise<void> {
         if (!this.defaultPersonTreeId) return;
 
         const radioFirst = document.getElementById('default-person-first') as HTMLInputElement;
@@ -5553,7 +5520,7 @@ class UIClass {
             }
         }
 
-        TreeManager.setDefaultPerson(this.defaultPersonTreeId, value);
+        await TreeManager.setDefaultPerson(this.defaultPersonTreeId, value);
 
         // If this is the current tree, also update DataManager
         if (this.defaultPersonTreeId === DataManager.getCurrentTreeId()) {
@@ -5675,29 +5642,6 @@ class UIClass {
         this.showNewTreeDialog();
     }
 
-    // ==================== ABOUT DIALOG STORAGE ====================
-
-    /**
-     * Update about dialog with storage info
-     */
-    private updateAboutStorage(): void {
-        const usage = TreeManager.getStorageUsage();
-        const percentage = Math.round((usage.used / usage.total) * 100);
-
-        const fill = document.getElementById('about-storage-bar-fill');
-        const text = document.getElementById('about-storage-text');
-
-        if (fill) {
-            fill.style.width = `${percentage}%`;
-            fill.classList.remove('warning', 'danger');
-            if (percentage > 80) fill.classList.add('danger');
-            else if (percentage > 60) fill.classList.add('warning');
-        }
-        if (text) {
-            text.textContent = `${TreeManager.formatBytes(usage.used)} / ${TreeManager.formatBytes(usage.total)}`;
-        }
-    }
-
     // ==================== ENCRYPTION ====================
 
     /**
@@ -5759,7 +5703,7 @@ class UIClass {
             let verified = false;
 
             for (const tree of trees) {
-                const encryptedData = TreeManager.getEncryptedData(tree.id);
+                const encryptedData = await TreeManager.getEncryptedData(tree.id);
                 if (encryptedData) {
                     // Try to decrypt to verify password
                     await decrypt(encryptedData, password);
@@ -5783,7 +5727,7 @@ class UIClass {
             // Find salt from any encrypted tree
             let salt: Uint8Array | undefined;
             for (const tree of trees) {
-                const encryptedData = TreeManager.getEncryptedData(tree.id);
+                const encryptedData = await TreeManager.getEncryptedData(tree.id);
                 if (encryptedData) {
                     salt = new Uint8Array(atob(encryptedData.salt).split('').map(c => c.charCodeAt(0)));
                     break;
@@ -5798,9 +5742,9 @@ class UIClass {
 
             // Re-save all trees to decrypt them
             for (const tree of trees) {
-                const data = await TreeManager.getTreeDataAsync(tree.id as TreeId);
+                const data = await TreeManager.getTreeData(tree.id as TreeId);
                 if (data) {
-                    await TreeManager.saveTreeDataAsync(tree.id as TreeId, data);
+                    await TreeManager.saveTreeData(tree.id as TreeId, data);
                 }
             }
 
@@ -5938,9 +5882,9 @@ class UIClass {
             // Re-save all trees to encrypt them immediately
             const trees = TreeManager.getTrees();
             for (const tree of trees) {
-                const data = await TreeManager.getTreeDataAsync(tree.id as TreeId);
+                const data = await TreeManager.getTreeData(tree.id as TreeId);
                 if (data) {
-                    await TreeManager.saveTreeDataAsync(tree.id as TreeId, data);
+                    await TreeManager.saveTreeData(tree.id as TreeId, data);
                 }
             }
 
@@ -6281,9 +6225,9 @@ class UIClass {
     /**
      * View the stored version (switch to localStorage tree)
      */
-    viewStoredVersion(): void {
+    async viewStoredVersion(): Promise<void> {
         this.closeExistingExportDialog();
-        DataManager.switchToStoredVersion();
+        await DataManager.switchToStoredVersion();
         this.hideViewModeBanner();
         TreeRenderer.render();
         setTimeout(() => ZoomPan.centerOnFocusWithContext(), 50);
@@ -6336,12 +6280,12 @@ class UIClass {
      * Import embedded trees to storage (handles both single and multiple trees)
      * Always creates new trees, adds date suffix if name already exists
      */
-    importAsNew(): void {
+    async importAsNew(): Promise<void> {
         this.closeImportViewModeDialog();
         this.closeExistingExportDialog();
 
         // Import all embedded trees (works for single tree too)
-        const result = DataManager.importAllEmbeddedTrees();
+        const result = await DataManager.importAllEmbeddedTrees();
         this.hideViewModeBanner();
 
         if (result.imported > 1) {
@@ -6358,9 +6302,9 @@ class UIClass {
     /**
      * Import as copy
      */
-    importAsCopy(): void {
+    async importAsCopy(): Promise<void> {
         this.closeImportViewModeDialog();
-        DataManager.importFromViewMode('copy');
+        await DataManager.importFromViewMode('copy');
         this.hideViewModeBanner();
         this.showToast(strings.viewMode.importSuccess);
         this.updateTreeSwitcher();
@@ -6399,8 +6343,8 @@ class UIClass {
     /**
      * Show newer version warning dialog for storage (blocking - no continue option)
      */
-    showNewerVersionStorageDialog(): void {
-        const check = DataManager.checkStorageVersion();
+    async showNewerVersionStorageDialog(): Promise<void> {
+        const check = await DataManager.checkStorageVersion();
 
         const yourVersionEl = document.getElementById('storage-your-version');
         const dataVersionEl = document.getElementById('storage-data-version');
@@ -6513,10 +6457,10 @@ class UIClass {
      * Check storage version on startup
      * @returns true if OK to continue, false if blocked
      */
-    checkStorageVersionOnStartup(): boolean {
-        const check = DataManager.checkStorageVersion();
+    async checkStorageVersionOnStartup(): Promise<boolean> {
+        const check = await DataManager.checkStorageVersion();
         if (!check.compatible) {
-            this.showNewerVersionStorageDialog();
+            await this.showNewerVersionStorageDialog();
             return false;
         }
         return true;
@@ -6660,12 +6604,12 @@ class UIClass {
      * Switch to another tree and focus on a specific person
      * Used for cross-tree link navigation
      */
-    switchToTreeAndFocus(treeId: TreeId, personId: PersonId): void {
+    async switchToTreeAndFocus(treeId: TreeId, personId: PersonId): Promise<void> {
         // Reset cross-tree navigation index when switching trees
         CrossTree.resetNavigationIndex();
 
         // Switch to the target tree
-        if (DataManager.switchTree(treeId)) {
+        if (await DataManager.switchTree(treeId)) {
             // Update UI to reflect tree switch
             this.updateTreeSwitcher();
 
@@ -6722,11 +6666,11 @@ class UIClass {
         modal.classList.add('active');
     }
 
-    private renderAuditLogEntries(treeId: TreeId): void {
+    private async renderAuditLogEntries(treeId: TreeId): Promise<void> {
         const listEl = document.getElementById('audit-log-list');
         if (!listEl) return;
 
-        const log = AuditLogManager.load(treeId);
+        const log = await AuditLogManager.load(treeId);
 
         if (log.entries.length === 0) {
             listEl.innerHTML = `<div class="audit-log-empty">${strings.auditLog.empty}</div>`;
@@ -6770,12 +6714,12 @@ class UIClass {
         this.returnToParentDialog();
     }
 
-    exportAuditLogTxt(): void {
+    async exportAuditLogTxt(): Promise<void> {
         const modal = document.getElementById('audit-log-modal');
         const treeId = modal?.dataset.treeId as TreeId;
         if (!treeId) return;
 
-        const log = AuditLogManager.load(treeId);
+        const log = await AuditLogManager.load(treeId);
         if (log.entries.length === 0) return;
 
         const treeMeta = TreeManager.getTreeMetadata(treeId);
@@ -6810,8 +6754,8 @@ class UIClass {
         const confirmed = await this.showConfirm(strings.auditLog.clearConfirm);
         if (!confirmed) return;
 
-        AuditLogManager.clear(treeId);
-        this.renderAuditLogEntries(treeId);
+        await AuditLogManager.clear(treeId);
+        this.renderAuditLogEntries(treeId);  // async, fire and forget
     }
 }
 

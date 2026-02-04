@@ -16,6 +16,7 @@ import { TreePreview, TreeCompare } from './tree-preview.js';
 import { DebugOptions, DebugStep, DebugPhase } from './layout/pipeline/debug-types.js';
 import { decrypt, CryptoSession } from './crypto.js';
 import { StromData, AppMode, PWA_HOSTNAME } from './types.js';
+import { StorageManager } from './storage.js';
 
 // Make modules available globally for HTML event handlers
 declare global {
@@ -141,7 +142,7 @@ function handleUrlImportParam(): boolean {
 }
 
 // Initialize on DOM ready
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     // Initialize settings (theme) early for smooth loading
     SettingsManager.init();
 
@@ -171,13 +172,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Check if we have embedded data (from exported HTML)
     const hasEmbeddedData = !!(window as Window & { STROM_EMBEDDED_DATA?: unknown }).STROM_EMBEDDED_DATA;
 
+    // Initialize IndexedDB
+    await StorageManager.init();
+
     // Initialize data (includes TreeManager initialization)
-    DataManager.init();
+    await DataManager.init();
 
     // Check for tree ID in URL - if specified and valid, switch to it
     const urlTreeId = getTreeIdFromUrl();
     if (urlTreeId && DataManager.getCurrentTreeId() !== urlTreeId) {
-        DataManager.switchTree(urlTreeId as any);
+        await DataManager.switchTree(urlTreeId as any);
     }
 
     // Initialize zoom/pan
@@ -239,8 +243,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Check for encrypted localStorage data that needs password
-    if (SettingsManager.isEncryptionEnabled() && TreeManager.hasEncryptedTrees()) {
-        const encryptedData = TreeManager.getFirstEncryptedData();
+    if (SettingsManager.isEncryptionEnabled() && await TreeManager.hasEncryptedTrees()) {
+        const encryptedData = await TreeManager.getFirstEncryptedData();
         if (encryptedData) {
             // Set pending data for password validation
             UI.setPendingEncryptedData(encryptedData);
@@ -274,7 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Check storage version compatibility (for non-embedded data)
     if (!hasEmbeddedData) {
-        if (!UI.checkStorageVersionOnStartup()) {
+        if (!await UI.checkStorageVersionOnStartup()) {
             // Newer version detected in storage - dialog shown, stop here
             return;
         }

@@ -1,6 +1,6 @@
 /**
  * Merge Import - Persistence Module
- * Handles saving and loading merge sessions to/from localStorage
+ * Handles saving and loading merge sessions to/from IndexedDB
  */
 
 import { PersonId, StromData } from '../types.js';
@@ -11,11 +11,12 @@ import {
     FieldConflict,
     MatchDecision
 } from './types.js';
+import { StorageManager } from '../storage.js';
 
-// ==================== STORAGE KEYS ====================
+// ==================== IDB KEYS ====================
 
-const MERGE_SESSIONS_KEY = 'strom-merge-sessions';
-const CURRENT_MERGE_KEY = 'strom-current-merge';
+const SESSIONS_KEY = 'sessions';
+const CURRENT_KEY = 'current';
 
 // ==================== SERIALIZABLE TYPES ====================
 
@@ -51,9 +52,6 @@ export interface SavedMergeSession {
 
 // ==================== SERIALIZATION ====================
 
-/**
- * Convert MergeState to serializable format
- */
 function serializeState(state: MergeState): SerializableMergeState {
     return {
         existingData: state.existingData,
@@ -67,9 +65,6 @@ function serializeState(state: MergeState): SerializableMergeState {
     };
 }
 
-/**
- * Convert serialized state back to MergeState
- */
 function deserializeState(serialized: SerializableMergeState): MergeState {
     return {
         existingData: serialized.existingData,
@@ -83,21 +78,14 @@ function deserializeState(serialized: SerializableMergeState): MergeState {
     };
 }
 
-/**
- * Generate unique session ID
- */
 function generateSessionId(): string {
     return `merge-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
-/**
- * Calculate session stats from merge state
- */
 function calculateStats(state: MergeState): SavedMergeSession['stats'] {
     const total = state.matches.length + state.unmatchedIncoming.length;
     const reviewed = state.decisions.size;
 
-    // Count total conflicts and resolved conflicts
     let conflicts = 0;
     let resolved = 0;
     for (const match of state.matches) {
@@ -115,10 +103,7 @@ function calculateStats(state: MergeState): SavedMergeSession['stats'] {
 
 // ==================== CURRENT MERGE (AUTO-SAVE) ====================
 
-/**
- * Save current merge state (auto-save)
- */
-export function saveCurrentMerge(state: MergeState, fileName?: string): void {
+export async function saveCurrentMerge(state: MergeState, fileName?: string): Promise<void> {
     try {
         const session: SavedMergeSession = {
             id: 'current',
@@ -128,21 +113,16 @@ export function saveCurrentMerge(state: MergeState, fileName?: string): void {
             state: serializeState(state)
         };
 
-        localStorage.setItem(CURRENT_MERGE_KEY, JSON.stringify(session));
+        await StorageManager.set('merge', CURRENT_KEY, session);
     } catch (error) {
         console.error('Failed to save current merge:', error);
     }
 }
 
-/**
- * Load current merge state
- */
-export function getCurrentMerge(): MergeState | null {
+export async function getCurrentMerge(): Promise<MergeState | null> {
     try {
-        const json = localStorage.getItem(CURRENT_MERGE_KEY);
-        if (!json) return null;
-
-        const session: SavedMergeSession = JSON.parse(json);
+        const session = await StorageManager.get<SavedMergeSession>('merge', CURRENT_KEY);
+        if (!session) return null;
         return deserializeState(session.state);
     } catch (error) {
         console.error('Failed to load current merge:', error);
@@ -150,15 +130,10 @@ export function getCurrentMerge(): MergeState | null {
     }
 }
 
-/**
- * Get current merge session metadata (without full state)
- */
-export function getCurrentMergeInfo(): Omit<SavedMergeSession, 'state'> | null {
+export async function getCurrentMergeInfo(): Promise<Omit<SavedMergeSession, 'state'> | null> {
     try {
-        const json = localStorage.getItem(CURRENT_MERGE_KEY);
-        if (!json) return null;
-
-        const session: SavedMergeSession = JSON.parse(json);
+        const session = await StorageManager.get<SavedMergeSession>('merge', CURRENT_KEY);
+        if (!session) return null;
         return {
             id: session.id,
             savedAt: session.savedAt,
@@ -171,24 +146,18 @@ export function getCurrentMergeInfo(): Omit<SavedMergeSession, 'state'> | null {
     }
 }
 
-/**
- * Clear current merge state
- */
-export function clearCurrentMerge(): void {
-    localStorage.removeItem(CURRENT_MERGE_KEY);
+export async function clearCurrentMerge(): Promise<void> {
+    await StorageManager.delete('merge', CURRENT_KEY);
 }
 
 // ==================== SAVED SESSIONS ====================
 
-/**
- * Save merge session for later
- */
-export function saveMergeSession(
+export async function saveMergeSession(
     state: MergeState,
     fileName?: string,
     targetTreeName?: string,
     sourceTreeName?: string
-): string {
+): Promise<string> {
     try {
         const id = generateSessionId();
         const session: SavedMergeSession = {
@@ -201,14 +170,13 @@ export function saveMergeSession(
             state: serializeState(state)
         };
 
-        // Get existing sessions
-        const sessions = listMergeSessions();
+        const sessions = await listMergeSessions();
         sessions.push(session);
 
-        localStorage.setItem(MERGE_SESSIONS_KEY, JSON.stringify(sessions));
+        await StorageManager.set('merge', SESSIONS_KEY, sessions);
 
         // Clear current merge after saving
-        clearCurrentMerge();
+        await clearCurrentMerge();
 
         return id;
     } catch (error) {
@@ -217,12 +185,9 @@ export function saveMergeSession(
     }
 }
 
-/**
- * Load merge session by ID
- */
-export function loadMergeSession(id: string): MergeState | null {
+export async function loadMergeSession(id: string): Promise<MergeState | null> {
     try {
-        const sessions = listMergeSessions();
+        const sessions = await listMergeSessions();
         const session = sessions.find(s => s.id === id);
 
         if (!session) return null;
@@ -234,55 +199,41 @@ export function loadMergeSession(id: string): MergeState | null {
     }
 }
 
-/**
- * Delete merge session by ID
- */
-export function deleteMergeSession(id: string): void {
+export async function deleteMergeSession(id: string): Promise<void> {
     try {
-        const sessions = listMergeSessions();
+        const sessions = await listMergeSessions();
         const filtered = sessions.filter(s => s.id !== id);
-        localStorage.setItem(MERGE_SESSIONS_KEY, JSON.stringify(filtered));
+        await StorageManager.set('merge', SESSIONS_KEY, filtered);
     } catch (error) {
         console.error('Failed to delete merge session:', error);
     }
 }
 
-/**
- * Rename merge session (update incomingFileName which serves as display name)
- */
-export function renameMergeSession(id: string, newName: string): void {
+export async function renameMergeSession(id: string, newName: string): Promise<void> {
     try {
-        const sessions = listMergeSessions();
+        const sessions = await listMergeSessions();
         const session = sessions.find(s => s.id === id);
         if (session) {
             session.incomingFileName = newName;
-            localStorage.setItem(MERGE_SESSIONS_KEY, JSON.stringify(sessions));
+            await StorageManager.set('merge', SESSIONS_KEY, sessions);
         }
     } catch (error) {
         console.error('Failed to rename merge session:', error);
     }
 }
 
-/**
- * List all saved merge sessions (without full state data)
- */
-export function listMergeSessions(): SavedMergeSession[] {
+export async function listMergeSessions(): Promise<SavedMergeSession[]> {
     try {
-        const json = localStorage.getItem(MERGE_SESSIONS_KEY);
-        if (!json) return [];
-
-        return JSON.parse(json);
+        const sessions = await StorageManager.get<SavedMergeSession[]>('merge', SESSIONS_KEY);
+        return sessions || [];
     } catch (error) {
         console.error('Failed to list merge sessions:', error);
         return [];
     }
 }
 
-/**
- * Get session metadata without state
- */
-export function listMergeSessionsInfo(): Array<Omit<SavedMergeSession, 'state'>> {
-    const sessions = listMergeSessions();
+export async function listMergeSessionsInfo(): Promise<Array<Omit<SavedMergeSession, 'state'>>> {
+    const sessions = await listMergeSessions();
     return sessions.map(({ id, savedAt, incomingFileName, targetTreeName, sourceTreeName, stats }) => ({
         id,
         savedAt,
@@ -293,11 +244,8 @@ export function listMergeSessionsInfo(): Array<Omit<SavedMergeSession, 'state'>>
     }));
 }
 
-/**
- * Check if there are any pending merges (current or saved)
- */
-export function hasPendingMerges(): boolean {
-    const currentInfo = getCurrentMergeInfo();
-    const savedSessions = listMergeSessionsInfo();
+export async function hasPendingMerges(): Promise<boolean> {
+    const currentInfo = await getCurrentMergeInfo();
+    const savedSessions = await listMergeSessionsInfo();
     return currentInfo !== null || savedSessions.length > 0;
 }

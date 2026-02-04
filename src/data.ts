@@ -82,9 +82,9 @@ class DataManagerClass {
     /**
      * Initialize the DataManager
      */
-    init(): void {
+    async init(): Promise<void> {
         // Initialize TreeManager first
-        TreeManager.init();
+        await TreeManager.init();
 
         // Check for embedded data (from exported HTML)
         const embedded = (window as Window & { STROM_EMBEDDED_DATA?: EmbeddedDataEnvelope }).STROM_EMBEDDED_DATA;
@@ -94,7 +94,7 @@ class DataManagerClass {
             // Validate envelope format
             if (!isEmbeddedEnvelope(embedded)) {
                 console.error('Invalid embedded data format - missing envelope');
-                this.loadStartupTree();
+                await this.loadStartupTree();
                 return;
             }
 
@@ -123,7 +123,7 @@ class DataManagerClass {
         }
 
         // Load startup tree based on defaultTreeId setting
-        this.loadStartupTree();
+        await this.loadStartupTree();
     }
 
     /**
@@ -309,7 +309,7 @@ class DataManagerClass {
      * Import all embedded trees to storage
      * @returns Number of trees imported
      */
-    importAllEmbeddedTrees(): { imported: number; skipped: number } {
+    async importAllEmbeddedTrees(): Promise<{ imported: number; skipped: number }> {
         if (!this.viewMode) return { imported: 0, skipped: 0 };
 
         let imported = 0;
@@ -335,6 +335,11 @@ class DataManagerClass {
             imported = 1;
         }
 
+        // Remove empty default tree after import
+        if (imported > 0) {
+            await this.removeEmptyDefaultTree();
+        }
+
         // Exit view mode
         this.viewMode = false;
         this.embeddedEnvelope = null;
@@ -345,7 +350,7 @@ class DataManagerClass {
         const trees = TreeManager.getTrees();
         if (trees.length > 0) {
             const lastTree = trees[trees.length - 1];
-            this.switchTree(lastTree.id);
+            await this.switchTree(lastTree.id);
         }
 
         window.dispatchEvent(new CustomEvent('strom:data-changed'));
@@ -359,7 +364,7 @@ class DataManagerClass {
      * Import from view mode with specified action
      * @param action 'new' = create new tree, 'update' = update existing, 'copy' = create copy
      */
-    importFromViewMode(action: ViewModeImportAction): void {
+    async importFromViewMode(action: ViewModeImportAction): Promise<void> {
         if (!this.embeddedEnvelope || !this.viewMode) return;
 
         const data = this.data;
@@ -371,6 +376,8 @@ class DataManagerClass {
                 const treeId = TreeManager.createTreeFromImport(data, this.embeddedEnvelope.treeName);
                 TreeManager.setSourceExportId(treeId, this.embeddedEnvelope.exportId);
                 this.currentTreeId = treeId;
+                // Remove empty default tree(s) after import
+                await this.removeEmptyDefaultTree();
                 break;
             }
 
@@ -389,13 +396,15 @@ class DataManagerClass {
                 const copyName = `${this.embeddedEnvelope.treeName} (${strings.treeManager.duplicateSuffix})`;
                 const treeId = TreeManager.createTreeFromImport(data, copyName);
                 this.currentTreeId = treeId;
+                // Remove empty default tree(s) after import
+                await this.removeEmptyDefaultTree();
                 break;
             }
         }
 
         // Import audit log if present
         if (this.embeddedEnvelope.auditLog && this.currentTreeId) {
-            AuditLogManager.importForTree(this.currentTreeId, this.embeddedEnvelope.auditLog);
+            await AuditLogManager.importForTree(this.currentTreeId, this.embeddedEnvelope.auditLog);
         }
 
         // Exit view mode
@@ -411,7 +420,7 @@ class DataManagerClass {
     /**
      * Switch to stored version of the tree (exit view mode, load from localStorage)
      */
-    switchToStoredVersion(): void {
+    async switchToStoredVersion(): Promise<void> {
         if (!this.embeddedEnvelope) return;
 
         const existingTree = TreeManager.findTreeByExportId(this.embeddedEnvelope.exportId);
@@ -419,7 +428,7 @@ class DataManagerClass {
             // Exit view mode and switch to stored tree
             this.viewMode = false;
             this.embeddedEnvelope = null;
-            this.switchTree(existingTree.id);
+            await this.switchTree(existingTree.id);
         }
     }
 
@@ -496,11 +505,11 @@ class DataManagerClass {
      * Check localStorage data version on startup
      * @returns true if data is compatible, false if newer version detected
      */
-    checkStorageVersion(): { compatible: boolean; dataVersion?: number; currentVersion: number } {
+    async checkStorageVersion(): Promise<{ compatible: boolean; dataVersion?: number; currentVersion: number }> {
         const activeTreeId = TreeManager.getActiveTreeId();
         if (!activeTreeId) return { compatible: true, currentVersion: STROM_DATA_VERSION };
 
-        const data = TreeManager.getTreeData(activeTreeId);
+        const data = await TreeManager.getTreeData(activeTreeId);
         if (!data) return { compatible: true, currentVersion: STROM_DATA_VERSION };
 
         const dataVersion = data.version ?? 1;
@@ -536,7 +545,7 @@ class DataManagerClass {
     /**
      * Load the startup tree based on defaultTreeId setting
      */
-    private loadStartupTree(): void {
+    private async loadStartupTree(): Promise<void> {
         // Get the tree that should be loaded at startup
         const startupTreeId = TreeManager.getStartupTreeId();
 
@@ -545,7 +554,10 @@ class DataManagerClass {
             TreeManager.setActiveTree(startupTreeId);
             this.currentTreeId = startupTreeId;
 
-            const treeData = TreeManager.getTreeData(startupTreeId);
+            // Load audit log cache for startup tree
+            await AuditLogManager.loadForTree(startupTreeId);
+
+            const treeData = await TreeManager.getTreeData(startupTreeId);
             if (treeData) {
                 this.data = this.migrateData(treeData);
                 return;
@@ -562,44 +574,21 @@ class DataManagerClass {
      * @param treeId The tree to switch to
      * @returns true if successful
      */
-    switchTree(treeId: TreeId): boolean {
+    async switchTree(treeId: TreeId): Promise<boolean> {
         if (!TreeManager.setActiveTree(treeId)) {
             return false;
         }
 
         this.currentTreeId = treeId;
-        const treeData = TreeManager.getTreeData(treeId);
-        if (treeData) {
-            this.data = this.migrateData(treeData);
-        } else {
-            // Data might be encrypted - try async load if session is unlocked
-            this.data = this.createEmptyData();
-        }
-
-        // Save last tree if setting is LAST_FOCUSED
-        TreeManager.saveLastTree(treeId);
-
-        window.dispatchEvent(new CustomEvent('strom:data-changed'));
-        return true;
-    }
-
-    /**
-     * Switch to a different tree (async version for encrypted data)
-     * @param treeId The tree to switch to
-     * @returns true if successful
-     */
-    async switchTreeAsync(treeId: TreeId): Promise<boolean> {
-        if (!TreeManager.setActiveTree(treeId)) {
-            return false;
-        }
-
-        this.currentTreeId = treeId;
-        const treeData = await TreeManager.getTreeDataAsync(treeId);
+        const treeData = await TreeManager.getTreeData(treeId);
         if (treeData) {
             this.data = this.migrateData(treeData);
         } else {
             this.data = this.createEmptyData();
         }
+
+        // Load audit log cache for the new tree
+        await AuditLogManager.loadForTree(treeId);
 
         // Save last tree if setting is LAST_FOCUSED
         TreeManager.saveLastTree(treeId);
@@ -615,7 +604,7 @@ class DataManagerClass {
     async reloadCurrentTree(): Promise<void> {
         if (!this.currentTreeId) return;
 
-        const treeData = await TreeManager.getTreeDataAsync(this.currentTreeId);
+        const treeData = await TreeManager.getTreeData(this.currentTreeId);
         if (treeData) {
             this.data = this.migrateData(treeData);
         } else {
@@ -1432,11 +1421,13 @@ class DataManagerClass {
      * @param treeName Name for the new tree
      * @returns The new tree's ID
      */
-    importAsNewTree(data: StromData, treeName: string): TreeId {
+    async importAsNewTree(data: StromData, treeName: string): Promise<TreeId> {
         const migratedData = this.migrateData(data);
         const treeId = TreeManager.createTreeFromImport(migratedData, treeName);
         this.currentTreeId = treeId;
         this.data = migratedData;
+        // Remove empty default tree(s) after import
+        await this.removeEmptyDefaultTree();
         // Invalidate cross-tree cache when new tree is imported
         CrossTree.invalidateCache();
         window.dispatchEvent(new CustomEvent('strom:data-changed'));
@@ -1459,6 +1450,24 @@ class DataManagerClass {
         return treeId;
     }
 
+    /**
+     * Remove the auto-created default tree if it's still empty and untouched.
+     * Only deletes the first tree if it has 0 persons and still has the default name.
+     */
+    private async removeEmptyDefaultTree(): Promise<void> {
+        const trees = TreeManager.getTrees();
+        if (trees.length < 2) return; // Need at least the default + imported tree
+
+        const first = trees[0];
+        if (first.personCount !== 0) return;
+
+        // Only remove if it still has the default name (not renamed by user)
+        const defaultNames = ['My Family Tree', 'Můj rodokmen'];
+        if (!defaultNames.includes(first.name)) return;
+
+        await TreeManager.deleteTree(first.id);
+    }
+
     // ==================== EXPORT/IMPORT ====================
 
     exportJSON(): void {
@@ -1477,7 +1486,7 @@ class DataManagerClass {
      * @param password Optional password for encryption
      */
     async exportTreeJSON(treeId: TreeId, password?: string | null): Promise<void> {
-        const treeData = TreeManager.getTreeData(treeId);
+        const treeData = await TreeManager.getTreeData(treeId);
         if (!treeData) return;
 
         // Ensure version is set

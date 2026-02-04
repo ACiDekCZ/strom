@@ -18,37 +18,31 @@ import {
     IdMapping,
     FieldConflict
 } from './types.js';
+import { StorageManager } from '../storage.js';
 
 // ==================== BACKUP ====================
 
 /**
  * Create backup of existing data before merge
  */
-export function createMergeBackup(data: StromData): string {
-    const key = `strom-backup-${Date.now()}`;
-    localStorage.setItem(key, JSON.stringify(data));
+export async function createMergeBackup(data: StromData): Promise<string> {
+    const key = `backup-${Date.now()}`;
+    await StorageManager.set('merge', key, data);
     return key;
 }
 
 /**
  * Restore data from backup
  */
-export function restoreFromBackup(key: string): StromData | null {
-    const stored = localStorage.getItem(key);
-    if (!stored) return null;
-
-    try {
-        return JSON.parse(stored) as StromData;
-    } catch {
-        return null;
-    }
+export async function restoreFromBackup(key: string): Promise<StromData | null> {
+    return StorageManager.get<StromData>('merge', key);
 }
 
 /**
  * Delete backup
  */
-export function deleteBackup(key: string): void {
-    localStorage.removeItem(key);
+export async function deleteBackup(key: string): Promise<void> {
+    await StorageManager.delete('merge', key);
 }
 
 // ==================== ID MAPPING ====================
@@ -115,10 +109,10 @@ export function buildIdMapping(state: MergeState): IdMapping {
 /**
  * Execute the merge operation
  */
-export function executeMerge(state: MergeState): MergeResult {
+export async function executeMerge(state: MergeState): Promise<MergeResult> {
     try {
         // Create backup
-        const backupKey = createMergeBackup(state.existingData);
+        const backupKey = await createMergeBackup(state.existingData);
 
         // Build ID mapping
         const mapping = buildIdMapping(state);

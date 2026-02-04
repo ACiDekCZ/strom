@@ -64,6 +64,11 @@ class TreeRendererClass {
     }
 
     render(): void {
+        // render() stays sync externally - the async part (cross-tree matching) is handled internally
+        void this.renderInternal();
+    }
+
+    private async renderInternal(): Promise<void> {
         const canvas = document.getElementById('tree-canvas');
         const svg = document.getElementById('tree-lines') as SVGSVGElement | null;
         const empty = document.getElementById('empty-state');
@@ -148,7 +153,7 @@ class TreeRendererClass {
         this.connections = result.connections;
         this.spouseLines = result.spouseLines;
 
-        this.renderCards(canvas);
+        await this.renderCards(canvas);
         this.renderLines(svg);
         this.updateSVGSize(svg);
 
@@ -496,7 +501,7 @@ class TreeRendererClass {
      * Returns a Map of treeId -> { name, data }
      * Only available when not in view mode and there are multiple visible trees
      */
-    private getAllTreesForCrossTreeMatching(): Map<TreeId, { name: string; data: StromData }> | null {
+    private async getAllTreesForCrossTreeMatching(): Promise<Map<TreeId, { name: string; data: StromData }> | null> {
         // Don't do cross-tree matching in view mode
         if (DataManager.isViewMode()) return null;
 
@@ -508,7 +513,7 @@ class TreeRendererClass {
         const result = new Map<TreeId, { name: string; data: StromData }>();
 
         for (const treeMeta of trees) {
-            const data = TreeManager.getTreeData(treeMeta.id);
+            const data = await TreeManager.getTreeData(treeMeta.id);
             if (data) {
                 result.set(treeMeta.id, { name: treeMeta.name, data });
             }
@@ -517,12 +522,12 @@ class TreeRendererClass {
         return result;
     }
 
-    private renderCards(canvas: HTMLElement): void {
+    private async renderCards(canvas: HTMLElement): Promise<void> {
         // Pre-compute presumed deceased set
         const presumedDeceased = this.computePresumedDeceased();
 
         // Get all trees for cross-tree matching (only if not in view mode)
-        const allTrees = this.getAllTreesForCrossTreeMatching();
+        const allTrees = await this.getAllTreesForCrossTreeMatching();
         const currentTreeId = DataManager.getCurrentTreeId();
 
         for (const [id, pos] of this.positions) {

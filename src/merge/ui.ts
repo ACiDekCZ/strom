@@ -124,11 +124,11 @@ class MergerUIClass {
     /**
      * Resume current pending merge (auto-saved)
      */
-    resumeCurrentMerge(): boolean {
-        const state = getCurrentMerge();
+    async resumeCurrentMerge(): Promise<boolean> {
+        const state = await getCurrentMerge();
         if (!state) return false;
 
-        const info = getCurrentMergeInfo();
+        const info = await getCurrentMergeInfo();
         this.resumeMerge(state, info?.incomingFileName);
         return true;
     }
@@ -138,16 +138,16 @@ class MergerUIClass {
      * @param sessionId The session ID to resume
      * @param fromTreeManager Whether this was opened from tree manager (for returning to it)
      */
-    resumeSavedMerge(sessionId: string, fromTreeManager: boolean = false): boolean {
-        const sessions = listMergeSessionsInfo();
+    async resumeSavedMerge(sessionId: string, fromTreeManager: boolean = false): Promise<boolean> {
+        const sessions = await listMergeSessionsInfo();
         const session = sessions.find(s => s.id === sessionId);
         if (!session) return false;
 
-        const state = loadMergeSession(sessionId);
+        const state = await loadMergeSession(sessionId);
         if (!state) return false;
 
         // Delete the saved session after loading (will be auto-saved again)
-        deleteMergeSession(sessionId);
+        await deleteMergeSession(sessionId);
 
         this.openedFromTreeManager = fromTreeManager;
         this.resumeMerge(state, session.incomingFileName, session.targetTreeName, session.sourceTreeName);
@@ -248,7 +248,7 @@ class MergerUIClass {
      */
     handleCloseDiscard(): void {
         this.hideCloseConfirmation();
-        clearCurrentMerge();
+        void clearCurrentMerge();
         this.closeMergeModalInternal();
     }
 
@@ -261,7 +261,7 @@ class MergerUIClass {
             const displayName = this.targetTreeName && this.sourceTreeName
                 ? `${this.targetTreeName} + ${this.sourceTreeName}`
                 : this.incomingFileName || 'Merge';
-            saveMergeSession(this.mergeState, displayName, this.targetTreeName, this.sourceTreeName);
+            void saveMergeSession(this.mergeState, displayName, this.targetTreeName, this.sourceTreeName);
         }
         this.hideCloseConfirmation();
         this.closeMergeModalInternal();
@@ -286,7 +286,7 @@ class MergerUIClass {
             const displayName = this.targetTreeName && this.sourceTreeName
                 ? `${this.targetTreeName} + ${this.sourceTreeName}`
                 : this.incomingFileName || 'Merge';
-            saveMergeSession(this.mergeState, displayName, this.targetTreeName, this.sourceTreeName);
+            void saveMergeSession(this.mergeState, displayName, this.targetTreeName, this.sourceTreeName);
             UI.showToast(strings.merge.closeSave);
         }
         this.closeMergeModalInternal();
@@ -323,7 +323,7 @@ class MergerUIClass {
      */
     private performAutoSave(): void {
         if (this.mergeState) {
-            saveCurrentMerge(this.mergeState, this.incomingFileName);
+            void saveCurrentMerge(this.mergeState, this.incomingFileName);
         }
     }
 
@@ -342,17 +342,17 @@ class MergerUIClass {
     /**
      * Check if there are pending merges
      */
-    hasPendingMerges(): boolean {
+    async hasPendingMerges(): Promise<boolean> {
         return hasPendingMerges();
     }
 
     /**
      * Get pending merge info for display
      */
-    getPendingMergeInfo(): { current: ReturnType<typeof getCurrentMergeInfo>; saved: ReturnType<typeof listMergeSessionsInfo> } {
+    async getPendingMergeInfo(): Promise<{ current: Awaited<ReturnType<typeof getCurrentMergeInfo>>; saved: Awaited<ReturnType<typeof listMergeSessionsInfo>> }> {
         return {
-            current: getCurrentMergeInfo(),
-            saved: listMergeSessionsInfo()
+            current: await getCurrentMergeInfo(),
+            saved: await listMergeSessionsInfo()
         };
     }
 
@@ -1159,7 +1159,7 @@ class MergerUIClass {
 
         this.mergeState.phase = 'executing';
 
-        const result = executeMerge(this.mergeState);
+        const result = await executeMerge(this.mergeState);
 
         if (result.success) {
             // Create new tree with merged data
@@ -1175,7 +1175,7 @@ class MergerUIClass {
 
             // Clean up backup after success
             if (result.backupKey) {
-                deleteBackup(result.backupKey);
+                await deleteBackup(result.backupKey);
             }
 
             // Mark as no unsaved changes to prevent close confirmation
@@ -1186,7 +1186,7 @@ class MergerUIClass {
             modal?.classList.remove('active');
             this.removeEscapeHandler();
             this.clearAutoSave();
-            clearCurrentMerge();
+            void clearCurrentMerge();
 
             // Reset state
             this.mergeState = null;
@@ -1216,7 +1216,7 @@ class MergerUIClass {
 
             if (shouldSwitch) {
                 // Switch to new tree and close tree manager
-                await DataManager.switchTreeAsync(newTreeId);
+                await DataManager.switchTree(newTreeId);
                 UI.updateTreeSwitcher();
                 TreeRenderer.restoreFromSession();
                 TreeRenderer.render();

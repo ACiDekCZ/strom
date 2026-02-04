@@ -1,34 +1,46 @@
 /**
  * AuditLogManager - Records changes to tree data
- * Stored per-tree in localStorage, separate from tree data.
+ * Stored per-tree in IndexedDB 'audit' store.
  * Max 500 entries with rotation of oldest.
+ *
+ * Design:
+ * - In-memory cache per tree for sync log() calls
+ * - IDB writes are fire-and-forget
+ * - Cache is loaded on switchTree via loadForTree()
  */
 
-import { AuditAction, AuditEntry, AuditLog, AUDIT_LOG_PREFIX, TreeId } from './types.js';
+import { AuditAction, AuditEntry, AuditLog, TreeId } from './types.js';
 import { SettingsManager } from './settings.js';
+import { StorageManager } from './storage.js';
 
 const MAX_ENTRIES = 500;
 const AUDIT_LOG_VERSION = 1;
+
+function emptyLog(): AuditLog {
+    return { version: AUDIT_LOG_VERSION, entries: [] };
+}
 
 class AuditLogManagerClass {
     private enabled = false;
     private batching = false;
 
+    /** In-memory cache: treeId -> AuditLog */
+    private cache = new Map<string, AuditLog>();
+    /** Currently loaded tree ID (for fast log() calls) */
+    private currentTreeId: TreeId | null = null;
+
     init(): void {
         this.enabled = SettingsManager.isAuditLogEnabled();
     }
 
-    /** Check if currently batching */
     isBatching(): boolean {
         return this.batching;
     }
 
-    /** Suppress individual log calls until endBatch */
     beginBatch(): void {
         this.batching = true;
     }
 
-    /** End batch and log a single summary entry */
     endBatch(
         treeId: TreeId | null,
         action: AuditAction,
@@ -38,7 +50,6 @@ class AuditLogManagerClass {
         this.log(treeId, action, description);
     }
 
-    /** Cancel batch without logging */
     cancelBatch(): void {
         this.batching = false;
     }
@@ -52,6 +63,23 @@ class AuditLogManagerClass {
         SettingsManager.setAuditLog(value);
     }
 
+    /**
+     * Load audit log for a tree into cache
+     * Call on switchTree / init
+     */
+    async loadForTree(treeId: TreeId): Promise<void> {
+        this.currentTreeId = treeId;
+        const stored = await StorageManager.get<AuditLog>('audit', treeId);
+        if (stored && Array.isArray(stored.entries)) {
+            this.cache.set(treeId, stored);
+        } else {
+            this.cache.set(treeId, emptyLog());
+        }
+    }
+
+    /**
+     * Synchronous log - writes to in-memory cache, fire-and-forget to IDB
+     */
     log(
         treeId: TreeId | null,
         action: AuditAction,
@@ -59,7 +87,12 @@ class AuditLogManagerClass {
     ): void {
         if (!this.enabled || !treeId || this.batching) return;
 
-        const log = this.load(treeId);
+        let log = this.cache.get(treeId);
+        if (!log) {
+            log = emptyLog();
+            this.cache.set(treeId, log);
+        }
+
         const entry: AuditEntry = {
             t: new Date().toISOString(),
             a: action,
@@ -73,75 +106,69 @@ class AuditLogManagerClass {
             log.entries = log.entries.slice(log.entries.length - MAX_ENTRIES);
         }
 
-        this.save(treeId, log);
+        // Fire-and-forget write to IDB
+        void StorageManager.set('audit', treeId, log);
     }
 
-    load(treeId: TreeId): AuditLog {
-        try {
-            const key = AUDIT_LOG_PREFIX + treeId;
-            const stored = localStorage.getItem(key);
-            if (stored) {
-                const parsed = JSON.parse(stored) as AuditLog;
-                if (parsed && Array.isArray(parsed.entries)) {
-                    return parsed;
-                }
-            }
-        } catch {
-            // Return empty log on error
+    /**
+     * Load audit log from IDB (or cache)
+     */
+    async load(treeId: TreeId): Promise<AuditLog> {
+        // Check cache first
+        const cached = this.cache.get(treeId);
+        if (cached) return cached;
+
+        const stored = await StorageManager.get<AuditLog>('audit', treeId);
+        if (stored && Array.isArray(stored.entries)) {
+            this.cache.set(treeId, stored);
+            return stored;
         }
-        return { version: AUDIT_LOG_VERSION, entries: [] };
+        const empty = emptyLog();
+        this.cache.set(treeId, empty);
+        return empty;
     }
 
-    private save(treeId: TreeId, log: AuditLog): void {
-        try {
-            const key = AUDIT_LOG_PREFIX + treeId;
-            localStorage.setItem(key, JSON.stringify(log));
-        } catch {
-            // Storage full - silently fail
-        }
+    async clear(treeId: TreeId): Promise<void> {
+        const empty = emptyLog();
+        this.cache.set(treeId, empty);
+        await StorageManager.set('audit', treeId, empty);
     }
 
-    clear(treeId: TreeId): void {
-        const key = AUDIT_LOG_PREFIX + treeId;
-        localStorage.setItem(key, JSON.stringify({ version: AUDIT_LOG_VERSION, entries: [] }));
+    async deleteForTree(treeId: TreeId): Promise<void> {
+        this.cache.delete(treeId);
+        await StorageManager.delete('audit', treeId);
     }
 
-    deleteForTree(treeId: TreeId): void {
-        const key = AUDIT_LOG_PREFIX + treeId;
-        localStorage.removeItem(key);
-    }
-
-    exportForTree(treeId: TreeId): AuditLog | null {
-        const log = this.load(treeId);
+    async exportForTree(treeId: TreeId): Promise<AuditLog | null> {
+        const log = await this.load(treeId);
         if (log.entries.length === 0) return null;
         return log;
     }
 
-    importForTree(treeId: TreeId, log: AuditLog): void {
+    async importForTree(treeId: TreeId, log: AuditLog): Promise<void> {
         if (!log || !Array.isArray(log.entries)) return;
-        this.save(treeId, log);
+        this.cache.set(treeId, log);
+        await StorageManager.set('audit', treeId, log);
     }
 
-    hasEntries(treeId: TreeId): boolean {
-        const log = this.load(treeId);
+    async hasEntries(treeId: TreeId): Promise<boolean> {
+        const log = await this.load(treeId);
         return log.entries.length > 0;
     }
 
     /**
-     * Get total storage size of all audit logs
+     * Get total storage size of all audit logs (estimate from metadata)
      */
-    getTotalSize(): number {
+    async getTotalSize(): Promise<number> {
+        const keys = await StorageManager.keys('audit');
         let total = 0;
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith(AUDIT_LOG_PREFIX)) {
-                const value = localStorage.getItem(key);
-                if (value) {
-                    total += key.length + value.length;
-                }
+        for (const key of keys) {
+            const log = await StorageManager.get<AuditLog>('audit', key);
+            if (log) {
+                total += JSON.stringify(log).length * 2; // rough UTF-16 estimate
             }
         }
-        return total * 2; // UTF-16 = 2 bytes per char
+        return total;
     }
 }
 
