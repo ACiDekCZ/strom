@@ -106,15 +106,6 @@ class AppExporterClass {
                 data: embedDataContent
             };
 
-            // Include audit log if checkbox checked
-            const auditLogCheckbox = document.getElementById('export-audit-log-toggle') as HTMLInputElement;
-            if (auditLogCheckbox?.checked) {
-                const auditLog = AuditLogManager.exportForTree(targetTreeId);
-                if (auditLog) {
-                    envelope.auditLog = auditLog;
-                }
-            }
-
             // Track last export ID in the source tree
             TreeManager.setLastExportId(targetTreeId, exportId);
 
@@ -139,8 +130,9 @@ class AppExporterClass {
     /**
      * Export all trees as a single standalone HTML app
      * @param password Optional password to encrypt the exported data
+     * @param includeAuditLog Whether to include audit logs for all trees
      */
-    async exportAllAsApp(password?: string | null): Promise<void> {
+    async exportAllAsApp(password?: string | null, includeAuditLog = false): Promise<void> {
         // Export only works from built version (strom.html)
         if (!this.isBuiltVersion()) {
             UI.showAlert(strings.export.devModeNotSupported, 'warning');
@@ -192,7 +184,11 @@ class AppExporterClass {
                 exportedAt: new Date().toISOString(),
                 appVersion: APP_VERSION,
                 treeName: activeTreeMeta?.name || 'All Trees',
-                data: embedActiveDataContent!
+                data: embedActiveDataContent!,
+                ...(includeAuditLog && activeTreeId ? (() => {
+                    const log = AuditLogManager.exportForTree(activeTreeId);
+                    return log ? { auditLog: log } : {};
+                })() : {})
             } : null;
 
             // Create embedded data script (with active tree data as envelope)

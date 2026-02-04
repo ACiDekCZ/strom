@@ -25,6 +25,7 @@ import { TreeManager } from './tree-manager.js';
 import { isEncrypted, EncryptedData } from './crypto.js';
 import * as CrossTree from './cross-tree.js';
 import { AuditLogManager } from './audit-log.js';
+import { ValidationIssue } from './validation.js';
 
 /** Extended updates for Partnership */
 type PartnershipUpdates = Partial<Pick<Partnership, 'status' | 'startDate' | 'startPlace' | 'endDate' | 'note' | 'isPrimary'>>;
@@ -1791,6 +1792,213 @@ class DataManagerClass {
 
         // Reset input so same file can be re-imported
         input.value = '';
+    }
+
+    // ==================== VALIDATION REPAIR ====================
+
+    /** Set of issue types that can be auto-fixed */
+    private static readonly FIXABLE_TYPES = new Set([
+        'orphanedParentRef',
+        'orphanedChildRef',
+        'orphanedPartnershipRef',
+        'orphanedPartnerRef',
+        'orphanedPartnershipChildRef',
+        'missingChildRef',
+        'missingParentRef',
+        'missingPartnershipRef',
+        'selfPartnership',
+        'duplicatePartnership',
+    ]);
+
+    /**
+     * Check if a validation issue type is auto-fixable
+     */
+    isFixableIssue(issue: ValidationIssue): boolean {
+        return DataManagerClass.FIXABLE_TYPES.has(issue.type);
+    }
+
+    /**
+     * Repair a single validation issue
+     * @returns true if the issue was successfully repaired
+     */
+    repairValidationIssue(issue: ValidationIssue): boolean {
+        let repaired = false;
+
+        switch (issue.type) {
+            case 'orphanedParentRef': {
+                // Remove non-existent parent ID from person.parentIds
+                const personId = issue.personIds?.[0];
+                if (!personId) break;
+                const person = this.data.persons[personId];
+                if (!person) break;
+                const before = person.parentIds.length;
+                person.parentIds = person.parentIds.filter(id => this.data.persons[id] !== undefined);
+                repaired = person.parentIds.length < before;
+                break;
+            }
+
+            case 'orphanedChildRef': {
+                // Remove non-existent child ID from person.childIds
+                const personId = issue.personIds?.[0];
+                if (!personId) break;
+                const person = this.data.persons[personId];
+                if (!person) break;
+                const before = person.childIds.length;
+                person.childIds = person.childIds.filter(id => this.data.persons[id] !== undefined);
+                repaired = person.childIds.length < before;
+                break;
+            }
+
+            case 'orphanedPartnershipRef': {
+                // Remove non-existent partnership ID from person.partnerships
+                const personId = issue.personIds?.[0];
+                if (!personId) break;
+                const person = this.data.persons[personId];
+                if (!person) break;
+                const before = person.partnerships.length;
+                person.partnerships = person.partnerships.filter(id => this.data.partnerships[id] !== undefined);
+                repaired = person.partnerships.length < before;
+                break;
+            }
+
+            case 'orphanedPartnerRef': {
+                // Delete partnership with non-existent partner
+                const partnershipId = issue.partnershipIds?.[0];
+                if (!partnershipId) break;
+                const partnership = this.data.partnerships[partnershipId];
+                if (!partnership) break;
+                // Remove partnership ref from existing partners
+                const p1 = this.data.persons[partnership.person1Id];
+                const p2 = this.data.persons[partnership.person2Id];
+                if (p1) p1.partnerships = p1.partnerships.filter(id => id !== partnershipId);
+                if (p2) p2.partnerships = p2.partnerships.filter(id => id !== partnershipId);
+                delete this.data.partnerships[partnershipId];
+                repaired = true;
+                break;
+            }
+
+            case 'orphanedPartnershipChildRef': {
+                // Remove non-existent child ID from partnership.childIds
+                const partnershipId = issue.partnershipIds?.[0];
+                if (!partnershipId) break;
+                const partnership = this.data.partnerships[partnershipId];
+                if (!partnership) break;
+                const before = partnership.childIds.length;
+                partnership.childIds = partnership.childIds.filter(id => this.data.persons[id] !== undefined);
+                repaired = partnership.childIds.length < before;
+                break;
+            }
+
+            case 'missingChildRef': {
+                // Parent is missing child in childIds - add it
+                // personIds: [childId, parentId]
+                const childId = issue.personIds?.[0];
+                const parentId = issue.personIds?.[1];
+                if (!childId || !parentId) break;
+                const parent = this.data.persons[parentId];
+                if (!parent) break;
+                if (!parent.childIds.includes(childId)) {
+                    parent.childIds.push(childId);
+                    repaired = true;
+                }
+                break;
+            }
+
+            case 'missingParentRef': {
+                // Child is missing parent in parentIds - add it
+                // personIds: [parentId, childId]
+                const parentId = issue.personIds?.[0];
+                const childId = issue.personIds?.[1];
+                if (!parentId || !childId) break;
+                const child = this.data.persons[childId];
+                if (!child) break;
+                if (!child.parentIds.includes(parentId) && child.parentIds.length < 2) {
+                    child.parentIds.push(parentId);
+                    repaired = true;
+                }
+                break;
+            }
+
+            case 'missingPartnershipRef': {
+                // Person is missing partnership ref - add it
+                // personIds: [personId], partnershipIds: [partnershipId]
+                const personId = issue.personIds?.[0];
+                const partnershipId = issue.partnershipIds?.[0];
+                if (!personId || !partnershipId) break;
+                const person = this.data.persons[personId];
+                if (!person) break;
+                if (!person.partnerships.includes(partnershipId)) {
+                    person.partnerships.push(partnershipId);
+                    repaired = true;
+                }
+                break;
+            }
+
+            case 'selfPartnership': {
+                // Delete partnership where person1Id === person2Id
+                const partnershipId = issue.partnershipIds?.[0];
+                if (!partnershipId) break;
+                const partnership = this.data.partnerships[partnershipId];
+                if (!partnership) break;
+                const person = this.data.persons[partnership.person1Id];
+                if (person) {
+                    person.partnerships = person.partnerships.filter(id => id !== partnershipId);
+                }
+                delete this.data.partnerships[partnershipId];
+                repaired = true;
+                break;
+            }
+
+            case 'duplicatePartnership': {
+                // Delete duplicate partnership (keep first, remove second)
+                // partnershipIds: [keptId, duplicateId]
+                const keptId = issue.partnershipIds?.[0];
+                const duplicateId = issue.partnershipIds?.[1];
+                if (!keptId || !duplicateId) break;
+                const duplicate = this.data.partnerships[duplicateId];
+                const kept = this.data.partnerships[keptId];
+                if (!duplicate || !kept) break;
+                // Move children from duplicate to kept
+                for (const childId of duplicate.childIds) {
+                    if (!kept.childIds.includes(childId)) {
+                        kept.childIds.push(childId);
+                    }
+                }
+                // Remove duplicate ref from partners
+                const dp1 = this.data.persons[duplicate.person1Id];
+                const dp2 = this.data.persons[duplicate.person2Id];
+                if (dp1) dp1.partnerships = dp1.partnerships.filter(id => id !== duplicateId);
+                if (dp2) dp2.partnerships = dp2.partnerships.filter(id => id !== duplicateId);
+                delete this.data.partnerships[duplicateId];
+                repaired = true;
+                break;
+            }
+        }
+
+        if (repaired) {
+            this.save();
+            AuditLogManager.log(
+                this.currentTreeId, 'data.repair',
+                strings.auditLog.repairedIssue(issue.message)
+            );
+        }
+
+        return repaired;
+    }
+
+    /**
+     * Repair all fixable validation issues in batch
+     * @returns number of issues repaired
+     */
+    repairAllFixableIssues(issues: ValidationIssue[]): number {
+        const fixable = issues.filter(i => this.isFixableIssue(i));
+        let count = 0;
+        for (const issue of fixable) {
+            if (this.repairValidationIssue(issue)) {
+                count++;
+            }
+        }
+        return count;
     }
 }
 

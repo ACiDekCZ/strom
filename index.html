@@ -3321,7 +3321,9 @@
         }
         .validation-summary {
             display: flex;
-            gap: 16px;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px 16px;
             justify-content: center;
             padding: 12px;
             background: #f8f8f8;
@@ -3350,6 +3352,7 @@
         }
         .validation-issue {
             display: flex;
+            align-items: center;
             gap: 10px;
             padding: 10px 12px;
             background: #fff5f5;
@@ -3397,6 +3400,36 @@
         }
         .validation-person-link:hover {
             text-decoration: underline;
+        }
+        .validation-fix-btn {
+            padding: 2px 8px;
+            font-size: 11px;
+            border: 1px solid var(--primary);
+            background: transparent;
+            color: var(--primary);
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+            align-self: center;
+        }
+        .validation-fix-btn:hover {
+            background: var(--primary);
+            color: #fff;
+        }
+        .validation-fix-all-btn {
+            padding: 4px 12px;
+            font-size: 12px;
+            font-weight: 500;
+            border: 1px solid var(--primary);
+            background: var(--primary);
+            color: #fff;
+            border-radius: 6px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .validation-fix-all-btn:hover {
+            opacity: 0.9;
         }
 
         /* Merge trees dialog */

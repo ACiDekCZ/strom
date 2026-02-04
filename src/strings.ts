@@ -594,6 +594,9 @@ const stringsEN = {
         valPartnerIsChild: 'Partner is also child',
         valSiblingIsParent: 'Sibling is also parent',
         valSiblingIsChild: 'Sibling is also child',
+        valFix: 'Fix',
+        valFixAll: 'Fix all',
+        valFixed: (count: number) => `Fixed ${count} issue${count !== 1 ? 's' : ''}`,
         // Default person dialog
         defaultPerson: 'Default Person',
         defaultPersonDesc: 'When opening this tree, focus on:',
@@ -758,7 +761,9 @@ const stringsEN = {
         addedSibling: (person: string, sibling: string) => `Added sibling: ${person} + ${sibling}`,
         addedPartner: (person: string, partner: string) => `Added partner: ${person} & ${partner}`,
         // Tree merge
-        treeMerge: (merged: number, added: number, source: string) => `Tree merge from "${source}": ${merged} merged, ${added} added`
+        treeMerge: (merged: number, added: number, source: string) => `Tree merge from "${source}": ${merged} merged, ${added} added`,
+        // Auto-repair
+        repairedIssue: (desc: string) => `Auto-repair: ${desc}`
     }
 };
 
@@ -1344,6 +1349,9 @@ const stringsCZ: StringsType = {
         valPartnerIsChild: 'Partner je také dítě',
         valSiblingIsParent: 'Sourozenec je také rodič',
         valSiblingIsChild: 'Sourozenec je také dítě',
+        valFix: 'Opravit',
+        valFixAll: 'Opravit vše',
+        valFixed: (count: number) => `Opraveno ${count} ${count === 1 ? 'problém' : count < 5 ? 'problémy' : 'problémů'}`,
         // Default person dialog
         defaultPerson: 'Výchozí osoba',
         defaultPersonDesc: 'Při otevření tohoto stromu zaměřit na:',
@@ -1508,7 +1516,9 @@ const stringsCZ: StringsType = {
         addedSibling: (person: string, sibling: string) => `Přidán sourozenec: ${person} + ${sibling}`,
         addedPartner: (person: string, partner: string) => `Přidán partner: ${person} & ${partner}`,
         // Tree merge
-        treeMerge: (merged: number, added: number, source: string) => `Sloučení stromů z "${source}": ${merged} sloučeno, ${added} přidáno`
+        treeMerge: (merged: number, added: number, source: string) => `Sloučení stromů z "${source}": ${merged} sloučeno, ${added} přidáno`,
+        // Auto-repair
+        repairedIssue: (desc: string) => `Automatická oprava: ${desc}`
     }
 };
 

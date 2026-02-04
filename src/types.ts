@@ -182,7 +182,8 @@ export type AuditAction =
     | 'persons.merge'
     | 'data.clear'
     | 'data.load'
-    | 'data.import';
+    | 'data.import'
+    | 'data.repair';
 
 export interface AuditEntry {
     /** ISO timestamp */

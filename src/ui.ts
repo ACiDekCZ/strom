@@ -35,7 +35,7 @@ import {
 import { PersonPicker } from './person-picker.js';
 import { AppExporter } from './export.js';
 import { SettingsManager } from './settings.js';
-import { ThemeMode, LanguageSetting, AppMode } from './types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog } from './types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from './crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from './validation.js';
 import * as CrossTree from './cross-tree.js';
@@ -2328,9 +2328,10 @@ class UIClass {
         this.closeExportAllDialog();
 
         this.showExportPasswordDialog(async (password: string | null) => {
+            const includeAuditLog = (document.getElementById('export-audit-log-toggle') as HTMLInputElement)?.checked || false;
             const { AppExporter } = await import('./export.js');
-            await AppExporter.exportAllAsApp(password);
-        });
+            await AppExporter.exportAllAsApp(password, includeAuditLog);
+        }, true);
     }
 
     /**
@@ -4315,16 +4316,22 @@ class UIClass {
         this.closeExportAllDialog();
 
         this.showExportPasswordDialog(async (password: string | null) => {
+            const includeAuditLog = (document.getElementById('export-audit-log-toggle') as HTMLInputElement)?.checked || false;
             const trees = TreeManager.getTrees();
-            const allData: Record<string, { name: string; data: StromData }> = {};
+            const allData: Record<string, { name: string; data: StromData; auditLog?: AuditLog }> = {};
 
             for (const tree of trees) {
                 const data = TreeManager.getTreeData(tree.id);
                 if (data) {
-                    allData[tree.id] = {
+                    const entry: { name: string; data: StromData; auditLog?: AuditLog } = {
                         name: tree.name,
                         data
                     };
+                    if (includeAuditLog) {
+                        const log = AuditLogManager.exportForTree(tree.id);
+                        if (log) entry.auditLog = log;
+                    }
+                    allData[tree.id] = entry;
                 }
             }
 
@@ -4343,7 +4350,7 @@ class UIClass {
             a.download = 'strom-all-trees.json';
             a.click();
             URL.revokeObjectURL(a.href);
-        });
+        }, true);
     }
 
     // ==================== CREATE TREE FROM FOCUS ====================
@@ -4647,7 +4654,7 @@ class UIClass {
             const result = validateTreeData(treeData);
             content.innerHTML = this.generateTreeValidationHtml(result, treeData, treeId);
 
-            // Add click handler for person links using event delegation
+            // Add click handler for person links and fix buttons using event delegation
             content.onclick = (e) => {
                 const target = e.target as HTMLElement;
                 if (target.classList.contains('validation-person-link')) {
@@ -4657,6 +4664,26 @@ class UIClass {
                     if (treeIdAttr && personIdAttr) {
                         this.focusPersonFromValidation(treeIdAttr, personIdAttr);
                     }
+                } else if (target.classList.contains('validation-fix-btn')) {
+                    e.preventDefault();
+                    const issueIdx = target.getAttribute('data-issue-idx');
+                    if (issueIdx !== null) {
+                        const issue = result.issues[parseInt(issueIdx, 10)];
+                        if (issue) {
+                            DataManager.repairValidationIssue(issue);
+                            // Re-render with fresh validation
+                            this.refreshTreeValidationDialog(treeId);
+                        }
+                    }
+                } else if (target.classList.contains('validation-fix-all-btn')) {
+                    e.preventDefault();
+                    const fixable = result.issues.filter(i => DataManager.isFixableIssue(i));
+                    const count = DataManager.repairAllFixableIssues(fixable);
+                    if (count > 0) {
+                        this.showAlert(strings.treeManager.valFixed(count), 'info');
+                    }
+                    // Re-render with fresh validation
+                    this.refreshTreeValidationDialog(treeId);
                 }
             };
         }
@@ -4675,6 +4702,51 @@ class UIClass {
     closeTreeValidationDialog(): void {
         document.getElementById('tree-validation-modal')?.classList.remove('active');
         this.returnToParentDialog();
+    }
+
+    /**
+     * Re-render validation dialog with fresh data (after a fix)
+     */
+    private refreshTreeValidationDialog(treeId: string): void {
+        const treeData = TreeManager.getTreeData(treeId as TreeId);
+        if (!treeData) return;
+
+        const content = document.getElementById('tree-validation-content');
+        if (!content) return;
+
+        const result = validateTreeData(treeData);
+        content.innerHTML = this.generateTreeValidationHtml(result, treeData, treeId);
+
+        // Re-attach click handler
+        content.onclick = (e) => {
+            const target = e.target as HTMLElement;
+            if (target.classList.contains('validation-person-link')) {
+                e.preventDefault();
+                const treeIdAttr = target.getAttribute('data-tree-id');
+                const personIdAttr = target.getAttribute('data-person-id');
+                if (treeIdAttr && personIdAttr) {
+                    this.focusPersonFromValidation(treeIdAttr, personIdAttr);
+                }
+            } else if (target.classList.contains('validation-fix-btn')) {
+                e.preventDefault();
+                const issueIdx = target.getAttribute('data-issue-idx');
+                if (issueIdx !== null) {
+                    const issue = result.issues[parseInt(issueIdx, 10)];
+                    if (issue) {
+                        DataManager.repairValidationIssue(issue);
+                        this.refreshTreeValidationDialog(treeId);
+                    }
+                }
+            } else if (target.classList.contains('validation-fix-all-btn')) {
+                e.preventDefault();
+                const fixable = result.issues.filter(i => DataManager.isFixableIssue(i));
+                const count = DataManager.repairAllFixableIssues(fixable);
+                if (count > 0) {
+                    this.showAlert(strings.treeManager.valFixed(count), 'info');
+                }
+                this.refreshTreeValidationDialog(treeId);
+            }
+        };
     }
 
     /**
@@ -4697,11 +4769,15 @@ class UIClass {
         const warnings = result.issues.filter(i => i.severity === 'warning');
         const infos = result.issues.filter(i => i.severity === 'info');
 
+        // Count fixable issues
+        const fixableCount = result.issues.filter(i => DataManager.isFixableIssue(i)).length;
+
         let html = `
             <div class="validation-summary">
                 ${result.stats.errors > 0 ? `<span class="validation-count error">❌ ${result.stats.errors} ${s.validationErrors}</span>` : ''}
                 ${result.stats.warnings > 0 ? `<span class="validation-count warning">⚠️ ${result.stats.warnings} ${s.validationWarnings}</span>` : ''}
                 ${result.stats.infos > 0 ? `<span class="validation-count info">ℹ️ ${result.stats.infos} ${s.validationInfos}</span>` : ''}
+                ${fixableCount > 0 ? `<button class="validation-fix-all-btn">${s.valFixAll} (${fixableCount})</button>` : ''}
             </div>
             <div class="validation-issues">
         `;
@@ -4735,9 +4811,10 @@ class UIClass {
             return key ? (s[key] as string) : type;
         };
 
-        const renderIssue = (issue: ValidationIssue) => {
+        const renderIssue = (issue: ValidationIssue, issueIdx: number) => {
             const icon = issue.severity === 'error' ? '❌' : issue.severity === 'warning' ? '⚠️' : 'ℹ️';
             const translatedMessage = translateIssueType(issue.type);
+            const isFixable = DataManager.isFixableIssue(issue);
 
             // Create clickable person links with data attributes
             const personLinks = issue.personIds?.map(id => {
@@ -4746,6 +4823,10 @@ class UIClass {
                 return `<a href="#" class="validation-person-link" data-tree-id="${treeId}" data-person-id="${id}">${this.escapeHtml(name)}</a>`;
             }).join(', ') || '';
 
+            const fixBtn = isFixable
+                ? `<button class="validation-fix-btn" data-issue-idx="${issueIdx}">${s.valFix}</button>`
+                : '';
+
             return `
                 <div class="validation-issue ${issue.severity}">
                     <span class="validation-issue-icon">${icon}</span>
@@ -4753,19 +4834,23 @@ class UIClass {
                         <div class="validation-issue-message">${this.escapeHtml(translatedMessage)}</div>
                         ${personLinks ? `<div class="validation-issue-persons">${personLinks}</div>` : ''}
                     </div>
+                    ${fixBtn}
                 </div>
             `;
         };
 
         // Render errors first, then warnings, then infos
         for (const issue of errors) {
-            html += renderIssue(issue);
+            const idx = result.issues.indexOf(issue);
+            html += renderIssue(issue, idx);
         }
         for (const issue of warnings) {
-            html += renderIssue(issue);
+            const idx = result.issues.indexOf(issue);
+            html += renderIssue(issue, idx);
         }
         for (const issue of infos) {
-            html += renderIssue(issue);
+            const idx = result.issues.indexOf(issue);
+            html += renderIssue(issue, idx);
         }
 
         html += '</div>';
@@ -5999,8 +6084,9 @@ class UIClass {
     /**
      * Show export password dialog
      * @param callback Called with password (or null for no password) when user confirms
+     * @param includeAuditLogOption Show audit log checkbox (only for full backup / Export All)
      */
-    showExportPasswordDialog(callback: (password: string | null) => void): void {
+    showExportPasswordDialog(callback: (password: string | null) => void, includeAuditLogOption = false): void {
         this.exportPasswordCallback = callback;
 
         const modal = document.getElementById('export-password-modal');
@@ -6022,13 +6108,17 @@ class UIClass {
             error.textContent = '';
         }
 
-        // Show/hide audit log checkbox based on whether tree has entries
+        // Show audit log checkbox only for full backup (Export All) when audit logging is enabled
         const auditLogSection = document.getElementById('export-audit-log-section');
         const auditLogToggle = document.getElementById('export-audit-log-toggle') as HTMLInputElement;
-        const exportTreeId = this.getExportTargetTreeId() || DataManager.getCurrentTreeId();
-        if (auditLogSection && auditLogToggle && exportTreeId) {
-            const hasEntries = AuditLogManager.hasEntries(exportTreeId);
-            auditLogSection.style.display = hasEntries ? 'block' : 'none';
+        if (auditLogSection && auditLogToggle) {
+            if (includeAuditLogOption && SettingsManager.isAuditLogEnabled()) {
+                const trees = TreeManager.getTrees();
+                const hasAnyEntries = trees.some(t => AuditLogManager.hasEntries(t.id));
+                auditLogSection.style.display = hasAnyEntries ? 'block' : 'none';
+            } else {
+                auditLogSection.style.display = 'none';
+            }
             auditLogToggle.checked = false;
         }
 
