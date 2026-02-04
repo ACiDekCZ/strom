@@ -68,6 +68,11 @@ class TreeRendererClass {
         void this.renderInternal();
     }
 
+    /** Async render that resolves when rendering is complete */
+    renderAsync(): Promise<void> {
+        return this.renderInternal();
+    }
+
     private async renderInternal(): Promise<void> {
         const canvas = document.getElementById('tree-canvas');
         const svg = document.getElementById('tree-lines') as SVGSVGElement | null;
@@ -245,12 +250,14 @@ class TreeRendererClass {
             }
         }
 
-        this.render();
-        this.updateFocusUI();
-        // Center view on focused person
-        if (personId) {
-            ZoomPan.centerOnPerson(personId);
-        }
+        // Render async, then center on the focused person once cards are in DOM
+        const focusId = personId;
+        void this.renderInternal().then(() => {
+            this.updateFocusUI();
+            if (focusId) {
+                ZoomPan.centerOnPerson(focusId);
+            }
+        });
     }
 
     setFocusDepth(up: number, down: number): void {

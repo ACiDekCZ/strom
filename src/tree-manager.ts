@@ -208,6 +208,9 @@ class TreeManagerClass {
         const idx = this.index.trees.findIndex(t => t.id === id);
         if (idx === -1) return false;
 
+        // Flush pending writes before delete (ensure index is up to date)
+        await StorageManager.flush();
+
         // Remove tree data from IDB
         await StorageManager.delete('trees', id);
 
@@ -225,6 +228,8 @@ class TreeManagerClass {
         }
 
         this.saveIndex();
+        // Wait for index write to complete before returning
+        await StorageManager.flush();
         return true;
     }
 
@@ -278,6 +283,8 @@ class TreeManagerClass {
      * Get tree data by ID (async, handles encryption)
      */
     async getTreeData(id: TreeId): Promise<StromData | null> {
+        // Ensure any pending writes are flushed before reading
+        await StorageManager.flush();
         const raw = await StorageManager.get<StromData | EncryptedData>('trees', id);
         if (!raw) return null;
 

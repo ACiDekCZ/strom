@@ -461,6 +461,9 @@ const stringsEN = {
         // New tree name prompt
         newTreeNamePrompt: 'Enter name for the merged tree:',
 
+        // Manual match dialog
+        incomingPerson: 'Incoming person:',
+
         // Tree preview labels
         existingTree: 'Existing Tree',
         incomingTree: 'Incoming Data',
@@ -1212,6 +1215,9 @@ const stringsCZ: StringsType = {
 
         // New tree name prompt
         newTreeNamePrompt: 'Zadejte název pro sloučený strom:',
+
+        // Manual match dialog
+        incomingPerson: 'Příchozí osoba:',
 
         // Tree preview labels
         existingTree: 'Stávající strom',

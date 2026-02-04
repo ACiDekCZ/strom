@@ -3827,11 +3827,11 @@ class UIClass {
             this.updateTreeSwitcher();
             // Restore focus from per-tree session state (uses tree's defaultPersonId setting)
             TreeRenderer.restoreFromSession();
-            TreeRenderer.render();
+            await TreeRenderer.renderAsync();
             this.refreshSearch();
 
             // Center view on focused person
-            setTimeout(() => ZoomPan.centerOnFocusWithContext(), 50);
+            ZoomPan.centerOnFocusWithContext();
 
             // Update URL with tree parameter (enables refresh persistence and bookmarking)
             this.updateUrlTreeParam(treeId);
@@ -3855,17 +3855,17 @@ class UIClass {
     /**
      * Switch to a different embedded tree (view mode only)
      */
-    switchEmbeddedTree(treeId: string): void {
+    async switchEmbeddedTree(treeId: string): Promise<void> {
         const dropdown = document.getElementById('tree-switcher-dropdown');
         dropdown?.classList.remove('active');
 
         if (DataManager.switchEmbeddedTree(treeId)) {
             this.updateTreeSwitcher();
-            TreeRenderer.render();
+            await TreeRenderer.renderAsync();
             this.refreshSearch();
 
             // Center view on first person
-            setTimeout(() => ZoomPan.centerOnFocusWithContext(), 50);
+            ZoomPan.centerOnFocusWithContext();
         }
     }
 
@@ -6259,30 +6259,30 @@ class UIClass {
         this.closeExistingExportDialog();
         await DataManager.switchToStoredVersion();
         this.hideViewModeBanner();
-        TreeRenderer.render();
-        setTimeout(() => ZoomPan.centerOnFocusWithContext(), 50);
+        await TreeRenderer.renderAsync();
+        ZoomPan.centerOnFocusWithContext();
     }
 
     /**
      * View the embedded version (stay in view mode)
      */
-    viewEmbeddedVersion(): void {
+    async viewEmbeddedVersion(): Promise<void> {
         this.closeExistingExportDialog();
         // Already in view mode, just render
-        TreeRenderer.render();
-        setTimeout(() => ZoomPan.centerOnFocusWithContext(), 50);
+        await TreeRenderer.renderAsync();
+        ZoomPan.centerOnFocusWithContext();
     }
 
     /**
      * Update stored version with embedded data
      */
-    updateStoredVersion(): void {
+    async updateStoredVersion(): Promise<void> {
         this.closeExistingExportDialog();
         DataManager.importFromViewMode('update');
         this.hideViewModeBanner();
         this.showToast(strings.viewMode.updateSuccess);
-        TreeRenderer.render();
-        setTimeout(() => ZoomPan.centerOnFocusWithContext(), 50);
+        await TreeRenderer.renderAsync();
+        ZoomPan.centerOnFocusWithContext();
     }
 
     /**
@@ -6325,8 +6325,8 @@ class UIClass {
         }
 
         this.updateTreeSwitcher();
-        TreeRenderer.render();
-        setTimeout(() => ZoomPan.centerOnFocusWithContext(), 50);
+        await TreeRenderer.renderAsync();
+        ZoomPan.centerOnFocusWithContext();
     }
 
     /**
@@ -6338,8 +6338,8 @@ class UIClass {
         this.hideViewModeBanner();
         this.showToast(strings.viewMode.importSuccess);
         this.updateTreeSwitcher();
-        TreeRenderer.render();
-        setTimeout(() => ZoomPan.centerOnFocusWithContext(), 50);
+        await TreeRenderer.renderAsync();
+        ZoomPan.centerOnFocusWithContext();
     }
 
     /**
@@ -6451,15 +6451,15 @@ class UIClass {
     /**
      * View newer version data in read-only mode (import will be blocked)
      */
-    viewNewerVersionData(): void {
+    async viewNewerVersionData(): Promise<void> {
         document.getElementById('newer-version-viewmode-modal')?.classList.remove('active');
         DataManager.viewNewerVersionData();
 
         // Show view mode banner (without import button functional)
         this.showViewModeBannerNoImport();
 
-        TreeRenderer.render();
-        setTimeout(() => ZoomPan.centerOnFocusWithContext(), 50);
+        await TreeRenderer.renderAsync();
+        ZoomPan.centerOnFocusWithContext();
     }
 
     /**
@@ -6645,7 +6645,7 @@ class UIClass {
 
             // Re-render the tree
             TreeRenderer.restoreFromSession();
-            TreeRenderer.render();
+            await TreeRenderer.renderAsync();
 
             // Focus on the person
             TreeRenderer.setFocus(personId, false);

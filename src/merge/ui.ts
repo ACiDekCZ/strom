@@ -1219,10 +1219,10 @@ class MergerUIClass {
                 await DataManager.switchTree(newTreeId);
                 UI.updateTreeSwitcher();
                 TreeRenderer.restoreFromSession();
-                TreeRenderer.render();
+                await TreeRenderer.renderAsync();
                 UI.refreshSearch();
                 // Center view on focused person
-                setTimeout(() => ZoomPan.centerOnFocusWithContext(), 50);
+                ZoomPan.centerOnFocusWithContext();
                 window.dispatchEvent(new CustomEvent('strom:tree-switched'));
                 UI.closeTreeManagerDialog();
             }

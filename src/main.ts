@@ -230,8 +230,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     // Restore focus and render
                     TreeRenderer.restoreFromSession();
-                    TreeRenderer.render();
-                    setTimeout(() => ZoomPan.centerOnFocusWithContext(), 50);
+                    await TreeRenderer.renderAsync();
+                    ZoomPan.centerOnFocusWithContext();
                 } catch {
                     UI.showAlert(UI.getString('encryption.decryptionFailed'), 'error');
                 }
@@ -264,8 +264,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     // Restore focus and render
                     TreeRenderer.restoreFromSession();
-                    TreeRenderer.render();
-                    setTimeout(() => ZoomPan.centerOnFocusWithContext(), 50);
+                    await TreeRenderer.renderAsync();
+                    ZoomPan.centerOnFocusWithContext();
                 } catch {
                     UI.showAlert(UI.getString('encryption.decryptionFailed'), 'error');
                 }
@@ -304,10 +304,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // For view mode with embedded data: use data as-is (no saved focus state)
 
     // Initial render
-    TreeRenderer.render();
+    await TreeRenderer.renderAsync();
 
-    // Center on focused person with context on initial load (with delay for DOM)
-    setTimeout(() => ZoomPan.centerOnFocusWithContext(), 50);
+    // Center on focused person with context on initial load
+    ZoomPan.centerOnFocusWithContext();
 
     // Handle URL search parameter after render (may override fitToScreen)
     handleUrlSearchParam();

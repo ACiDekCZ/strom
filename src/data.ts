@@ -25,6 +25,7 @@ import { TreeManager } from './tree-manager.js';
 import { isEncrypted, EncryptedData } from './crypto.js';
 import * as CrossTree from './cross-tree.js';
 import { AuditLogManager } from './audit-log.js';
+import { StorageManager } from './storage.js';
 import { ValidationIssue } from './validation.js';
 
 /** Extended updates for Partnership */
@@ -575,6 +576,9 @@ class DataManagerClass {
      * @returns true if successful
      */
     async switchTree(treeId: TreeId): Promise<boolean> {
+        // Flush pending writes before switching (ensure current tree data is persisted)
+        await StorageManager.flush();
+
         if (!TreeManager.setActiveTree(treeId)) {
             return false;
         }
