@@ -1,6 +1,6 @@
 /**
  * TreeManager - Manages multiple family trees in the application
- * Handles tree CRUD operations, storage, and migration from legacy format
+ * Handles tree CRUD operations and storage
  */
 
 import {
@@ -16,7 +16,6 @@ import {
     generateTreeId,
     TREE_INDEX_KEY,
     TREE_DATA_PREFIX,
-    LEGACY_STORAGE_KEY,
     LAST_FOCUSED,
     LastFocusedMarker,
     STROM_DATA_VERSION
@@ -25,9 +24,6 @@ import { strings } from './strings.js';
 import { isEncrypted, EncryptedData, CryptoSession } from './crypto.js';
 import { SettingsManager } from './settings.js';
 import { AuditLogManager } from './audit-log.js';
-
-/** Key for legacy session state (to be cleaned up on first run) */
-const LEGACY_SESSION_KEY = 'strom-session';
 
 /** Current tree index version */
 const TREE_INDEX_VERSION = 1;
@@ -63,16 +59,9 @@ class TreeManagerClass {
     /**
      * Initialize the tree manager
      * - Loads existing tree index or creates new one
-     * - Migrates legacy data if present
-     * @returns true if migration occurred
      */
-    init(): boolean {
-        if (this.initialized) return false;
-
-        let migrated = false;
-
-        // Clean up legacy session state (no longer used - all state is now in tree data)
-        localStorage.removeItem(LEGACY_SESSION_KEY);
+    init(): void {
+        if (this.initialized) return;
 
         // Try to load existing tree index
         const storedIndex = localStorage.getItem(TREE_INDEX_KEY);
@@ -80,57 +69,13 @@ class TreeManagerClass {
             try {
                 this.index = JSON.parse(storedIndex);
                 this.initialized = true;
-                return false;
+                return;
             } catch {
                 console.error('Failed to parse tree index, creating new');
             }
         }
 
-        // Check for legacy data to migrate
-        const legacyData = localStorage.getItem(LEGACY_STORAGE_KEY);
-        if (legacyData) {
-            try {
-                const data = JSON.parse(legacyData) as StromData;
-                const personCount = Object.keys(data.persons || {}).length;
-                const partnershipCount = Object.keys(data.partnerships || {}).length;
-
-                if (personCount > 0) {
-                    // Create new tree from legacy data
-                    const treeId = generateTreeId();
-                    const now = new Date().toISOString();
-                    const sizeBytes = new Blob([legacyData]).size;
-
-                    const metadata: TreeMetadata = {
-                        id: treeId,
-                        name: strings.treeManager.defaultTreeName,
-                        createdAt: now,
-                        lastModifiedAt: now,
-                        personCount,
-                        partnershipCount,
-                        sizeBytes
-                    };
-
-                    // Save tree data with new key
-                    localStorage.setItem(TREE_DATA_PREFIX + treeId, legacyData);
-
-                    // Create index with migrated tree
-                    this.index = {
-                        version: TREE_INDEX_VERSION,
-                        activeTreeId: treeId,
-                        trees: [metadata]
-                    };
-
-                    // Remove legacy key
-                    localStorage.removeItem(LEGACY_STORAGE_KEY);
-
-                    migrated = true;
-                }
-            } catch {
-                console.error('Failed to migrate legacy data');
-            }
-        }
-
-        // If still no trees, create a default empty tree
+        // No index found, create a default empty tree
         if (this.index.trees.length === 0) {
             const treeId = generateTreeId();
             const now = new Date().toISOString();
@@ -162,7 +107,6 @@ class TreeManagerClass {
         // Save the index
         this.saveIndex();
         this.initialized = true;
-        return migrated;
     }
 
     // ==================== INDEX MANAGEMENT ====================

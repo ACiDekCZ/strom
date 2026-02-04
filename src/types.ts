@@ -317,4 +317,3 @@ export interface StorageInfo {
 /** Storage keys for multi-tree architecture */
 export const TREE_INDEX_KEY = 'strom-trees-index';
 export const TREE_DATA_PREFIX = 'strom-tree-';
-export const LEGACY_STORAGE_KEY = 'strom-data-v5';

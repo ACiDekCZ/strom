@@ -81,11 +81,10 @@ class DataManagerClass {
 
     /**
      * Initialize the DataManager
-     * @returns true if migration occurred (for showing notification)
      */
-    init(): boolean {
-        // Initialize TreeManager first (handles migration)
-        const migrated = TreeManager.init();
+    init(): void {
+        // Initialize TreeManager first
+        TreeManager.init();
 
         // Check for embedded data (from exported HTML)
         const embedded = (window as Window & { STROM_EMBEDDED_DATA?: EmbeddedDataEnvelope }).STROM_EMBEDDED_DATA;
@@ -96,7 +95,7 @@ class DataManagerClass {
             if (!isEmbeddedEnvelope(embedded)) {
                 console.error('Invalid embedded data format - missing envelope');
                 this.loadStartupTree();
-                return migrated;
+                return;
             }
 
             this.embeddedEnvelope = embedded;
@@ -115,17 +114,16 @@ class DataManagerClass {
                 // Store encrypted data - will need password prompt
                 this.pendingEncryptedEmbedded = embeddedData;
                 // Return early - UI will show password prompt, then call handleEmbeddedData
-                return migrated;
+                return;
             }
 
             // Handle the embedded data (view mode or dialogs)
             this.handleEmbeddedData(embeddedData as StromData);
-            return migrated;
+            return;
         }
 
         // Load startup tree based on defaultTreeId setting
         this.loadStartupTree();
-        return migrated;
     }
 
     /**

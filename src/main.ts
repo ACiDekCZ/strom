@@ -172,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasEmbeddedData = !!(window as Window & { STROM_EMBEDDED_DATA?: unknown }).STROM_EMBEDDED_DATA;
 
     // Initialize data (includes TreeManager initialization)
-    const migrated = DataManager.init();
+    DataManager.init();
 
     // Check for tree ID in URL - if specified and valid, switch to it
     const urlTreeId = getTreeIdFromUrl();
@@ -324,12 +324,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 history.replaceState(null, '', url.toString());
             }
         }
-    }
-
-    // Check for pending merges after initial render
-    // Show migration notification if data was migrated
-    if (migrated) {
-        UI.showToast(UI.getString('treeManager.migrationComplete'));
     }
 
     // Listen for data changes (e.g., after import)
