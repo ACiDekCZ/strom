@@ -140,6 +140,7 @@ export class PersonPicker {
         this.input.type = 'text';
         this.input.className = 'person-picker-input';
         this.input.placeholder = this.options.placeholder || '';
+        this.input.autocomplete = 'off';
         this.container.appendChild(this.input);
 
         // Toggle button

@@ -1282,7 +1282,7 @@ class UIClass {
             // Add input field in options area
             if (optionsEl) {
                 optionsEl.innerHTML = `
-                    <input type="text" id="prompt-input" class="prompt-input" value="${this.escapeHtml(defaultValue || '')}">
+                    <input type="text" id="prompt-input" class="prompt-input" value="${this.escapeHtml(defaultValue || '')}" autocomplete="off">
                 `;
             }
 
@@ -1932,6 +1932,7 @@ class UIClass {
         const message = document.getElementById('confirm-message');
         const options = document.getElementById('confirm-options');
         const confirmBtn = document.getElementById('confirm-ok-btn');
+        const cancelBtn = document.getElementById('confirm-cancel-btn');
 
         if (!modal || !title || !message || !options || !confirmBtn) return;
 
@@ -1957,6 +1958,15 @@ class UIClass {
             options.appendChild(opt);
         }
 
+        const close = () => {
+            modal.classList.remove('active');
+        };
+
+        // Setup cancel button
+        if (cancelBtn) {
+            cancelBtn.onclick = close;
+        }
+
         // Setup confirm button
         confirmBtn.onclick = () => {
             const selected = options.querySelector('input:checked') as HTMLInputElement;
@@ -1964,7 +1974,12 @@ class UIClass {
                 const partnerId = selected.value as PersonId;
                 TreeRenderer.setFocus(partnerId);
             }
-            modal.classList.remove('active');
+            close();
+        };
+
+        // Close on overlay click
+        modal.onclick = (e) => {
+            if (e.target === modal) close();
         };
 
         modal.classList.add('active');
@@ -2994,6 +3009,7 @@ class UIClass {
         const message = document.getElementById('confirm-message');
         const options = document.getElementById('confirm-options');
         const confirmBtn = document.getElementById('confirm-ok-btn');
+        const cancelBtn = document.getElementById('confirm-cancel-btn');
 
         if (!modal || !title || !message || !options || !confirmBtn) return;
 
@@ -3018,6 +3034,15 @@ class UIClass {
             options.appendChild(opt);
         }
 
+        const close = () => {
+            modal.classList.remove('active');
+        };
+
+        // Setup cancel button
+        if (cancelBtn) {
+            cancelBtn.onclick = close;
+        }
+
         // Setup confirm button
         confirmBtn.onclick = () => {
             const selected = options.querySelector('input:checked') as HTMLInputElement;
@@ -3029,7 +3054,12 @@ class UIClass {
                     ZoomPan.highlightPerson(personId);
                 }, 100);
             }
-            modal.classList.remove('active');
+            close();
+        };
+
+        // Close on overlay click
+        modal.onclick = (e) => {
+            if (e.target === modal) close();
         };
 
         modal.classList.add('active');
