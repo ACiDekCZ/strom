@@ -2980,6 +2980,7 @@
         }
         .tree-manager-footer {
             display: flex;
+            flex-wrap: wrap;
             gap: 8px;
             justify-content: flex-start;
             align-items: center;
@@ -3064,6 +3065,7 @@
         }
         .tree-manager-item-actions {
             display: flex;
+            flex-wrap: wrap;
             gap: 6px;
             margin-top: 8px;
         }
@@ -5329,7 +5331,7 @@
             </div>
             <div class="tree-manager-footer">
                 <button class="primary edit-only" onclick="window.Strom.UI.showNewTreeMenu()">
-                    <span class="btn-icon">🌱</span><span class="btn-text" data-i18n="treeManager.newTree">New Tree</span>
+                    <span class="btn-icon">🌳</span><span class="btn-text" data-i18n="treeManager.newTree">New Tree</span>
                 </button>
                 <button class="secondary edit-only" onclick="window.Strom.UI.showDefaultTreeDialog()" title="Default Tree">
                     <span class="btn-icon">⭐</span><span class="btn-text" data-i18n="treeManager.defaultTree">Default Tree</span>
