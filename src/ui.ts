@@ -84,6 +84,7 @@ class UIClass {
     private personModalSnapshot: {
         firstName: string; lastName: string; gender: string;
         birthDate: string; birthPlace: string; deathDate: string; deathPlace: string;
+        notes: string;
     } | null = null;
 
     // ==================== CONTEXT MENU (NEW UX) ====================
@@ -277,6 +278,7 @@ class UIClass {
         const birthPlaceInput = document.getElementById('input-birthplace') as HTMLInputElement;
         const deathDateInput = document.getElementById('input-deathdate') as HTMLInputElement;
         const deathPlaceInput = document.getElementById('input-deathplace') as HTMLInputElement;
+        const notesInput = document.getElementById('input-notes') as HTMLTextAreaElement;
 
         const mergeBtn = document.getElementById('btn-merge');
 
@@ -292,11 +294,12 @@ class UIClass {
         if (birthPlaceInput) birthPlaceInput.value = '';
         if (deathDateInput) deathDateInput.value = '';
         if (deathPlaceInput) deathPlaceInput.value = '';
+        if (notesInput) notesInput.value = '';
 
         // Snapshot original values (all empty for add)
         this.personModalSnapshot = {
             firstName: '', lastName: '', gender: 'male',
-            birthDate: '', birthPlace: '', deathDate: '', deathPlace: '',
+            birthDate: '', birthPlace: '', deathDate: '', deathPlace: '', notes: '',
         };
 
         // Setup gender change listener for dynamic labels
@@ -419,6 +422,7 @@ class UIClass {
         const birthPlaceInput = document.getElementById('input-birthplace') as HTMLInputElement;
         const deathDateInput = document.getElementById('input-deathdate') as HTMLInputElement;
         const deathPlaceInput = document.getElementById('input-deathplace') as HTMLInputElement;
+        const notesInput = document.getElementById('input-notes') as HTMLTextAreaElement;
 
         const mergeBtn = document.getElementById('btn-merge');
 
@@ -436,6 +440,7 @@ class UIClass {
         if (birthPlaceInput) birthPlaceInput.value = person.birthPlace || '';
         if (deathDateInput) deathDateInput.value = person.deathDate || '';
         if (deathPlaceInput) deathPlaceInput.value = person.deathPlace || '';
+        if (notesInput) notesInput.value = person.notes || '';
 
         // Snapshot original values for unsaved changes detection
         this.personModalSnapshot = {
@@ -446,6 +451,7 @@ class UIClass {
             birthPlace: birthPlaceInput?.value || '',
             deathDate: deathDateInput?.value || '',
             deathPlace: deathPlaceInput?.value || '',
+            notes: notesInput?.value || '',
         };
 
         // Setup gender change listener for dynamic labels
@@ -453,8 +459,8 @@ class UIClass {
         // Setup date input styling
         this.setupDateInputs();
 
-        // Setup expand button - expand if there's death data (deathDate or deathPlace)
-        const hasExtendedData = !!(person.deathDate || person.deathPlace);
+        // Setup expand button - expand if there's death data or notes
+        const hasExtendedData = !!(person.deathDate || person.deathPlace || person.notes);
         this.setupExpandButton(hasExtendedData);
 
         // Show link-relationships button
@@ -486,6 +492,7 @@ class UIClass {
         const birthPlaceInput = document.getElementById('input-birthplace') as HTMLInputElement;
         const deathDateInput = document.getElementById('input-deathdate') as HTMLInputElement;
         const deathPlaceInput = document.getElementById('input-deathplace') as HTMLInputElement;
+        const notesInput = document.getElementById('input-notes') as HTMLTextAreaElement;
 
         const firstName = firstNameInput?.value.trim() || '';
         const lastName = lastNameInput?.value.trim() || '';
@@ -494,6 +501,7 @@ class UIClass {
         const birthPlace = birthPlaceInput?.value.trim() || '';
         const deathDate = deathDateInput?.value || '';
         const deathPlace = deathPlaceInput?.value.trim() || '';
+        const notes = notesInput?.value.trim() || '';
 
         if (!firstName && !lastName && !this.currentId) {
             this.clearDialogStack();
@@ -511,18 +519,20 @@ class UIClass {
                 birthDate,
                 birthPlace,
                 deathDate,
-                deathPlace
+                deathPlace,
+                notes
             });
         } else {
             // Create new
             const newPerson = DataManager.createPerson({ firstName, lastName, gender });
             // Update with extended info if provided
-            if (birthDate || birthPlace || deathDate || deathPlace) {
+            if (birthDate || birthPlace || deathDate || deathPlace || notes) {
                 DataManager.updatePerson(newPerson.id, {
                     birthDate,
                     birthPlace,
                     deathDate,
-                    deathPlace
+                    deathPlace,
+                    notes
                 });
             }
         }
@@ -605,10 +615,12 @@ class UIClass {
         const birthPlace = (document.getElementById('input-birthplace') as HTMLInputElement)?.value || '';
         const deathDate = (document.getElementById('input-deathdate') as HTMLInputElement)?.value || '';
         const deathPlace = (document.getElementById('input-deathplace') as HTMLInputElement)?.value || '';
+        const notes = (document.getElementById('input-notes') as HTMLTextAreaElement)?.value || '';
 
         return firstName !== s.firstName || lastName !== s.lastName || gender !== s.gender
             || birthDate !== s.birthDate || birthPlace !== s.birthPlace
-            || deathDate !== s.deathDate || deathPlace !== s.deathPlace;
+            || deathDate !== s.deathDate || deathPlace !== s.deathPlace
+            || notes !== s.notes;
     }
 
     /**
@@ -2493,6 +2505,49 @@ class UIClass {
                 this.closeDefaultPersonDialog();
                 this.closeTreeManagerDialog();
                 this.closePersonMergeDialog();
+            }
+
+            // Skip remaining shortcuts if modal is open
+            if (this.dialogStack.length > 0) return;
+            const activeModals = document.querySelectorAll('.modal-overlay.active');
+            if (activeModals.length > 0) return;
+
+            // Ctrl/Cmd+F: Focus search
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                this.toolbarSearchPicker?.focusInput();
+                return;
+            }
+
+            // Skip shortcuts when focus is in input/textarea/select
+            const activeEl = document.activeElement;
+            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) return;
+
+            // Delete: delete focused person
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                const focusId = TreeRenderer.getFocusPersonId();
+                if (focusId) {
+                    this.confirmDelete(focusId);
+                }
+                return;
+            }
+
+            // +/= : Zoom in
+            if (e.key === '+' || e.key === '=') {
+                ZoomPan.zoomIn();
+                return;
+            }
+
+            // - : Zoom out
+            if (e.key === '-') {
+                ZoomPan.zoomOut();
+                return;
+            }
+
+            // 0 : Reset zoom
+            if (e.key === '0') {
+                ZoomPan.reset();
+                return;
             }
         });
     }

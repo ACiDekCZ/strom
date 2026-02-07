@@ -338,47 +338,51 @@ function buildChainBlockPersonOrder(
     const partnerA = primaryUnion.partnerA;  // Left (typically male)
     const partnerB = primaryUnion.partnerB;  // Right (typically female)
 
-    // Primary partner is the one in the primary union who is NOT the shared person
-    const primaryPartner = (chain.sharedPersonId === partnerA) ? partnerB : partnerA;
-
-    // Collect extra partners: for each non-primary union, find the "other" person.
-    // In merged chains, some unions belong to the sharedPerson's chain (sharedPerson is a partner)
-    // and some belong to the primaryPartner's chain (primaryPartner is a partner).
-    const sharedExtras: PersonId[] = [];   // Extra partners of the shared person
-    const primaryExtras: PersonId[] = [];  // Extra partners of the primary partner
+    // Build person→unions index for this chain
+    const chainUnionSet = new Set(chain.unionIds);
+    const personUnions = new Map<PersonId, UnionId[]>();
     for (const uid of chain.unionIds) {
-        if (uid === primaryUnionId) continue;
         const u = model.unions.get(uid);
         if (!u) continue;
-
-        if (u.partnerA === chain.sharedPersonId || u.partnerB === chain.sharedPersonId) {
-            // This union belongs to the shared person's chain
-            const other = u.partnerA === chain.sharedPersonId ? u.partnerB : u.partnerA;
-            if (other) sharedExtras.push(other);
-        } else if (primaryPartner && (u.partnerA === primaryPartner || u.partnerB === primaryPartner)) {
-            // This union belongs to the primary partner's chain (merged)
-            const other = u.partnerA === primaryPartner ? u.partnerB : u.partnerA;
-            if (other) primaryExtras.push(other);
+        if (!personUnions.has(u.partnerA)) personUnions.set(u.partnerA, []);
+        personUnions.get(u.partnerA)!.push(uid);
+        if (u.partnerB) {
+            if (!personUnions.has(u.partnerB)) personUnions.set(u.partnerB, []);
+            personUnions.get(u.partnerB)!.push(uid);
         }
     }
 
-    if (chain.sharedPersonId === partnerB || chain.sharedPersonId === null) {
-        // Shared person is female/right → stays RIGHT
-        // [primaryExtras(reversed, outer left), primaryPartner, sharedPerson, sharedExtras(outer right)]
-        const order: PersonId[] = [...primaryExtras.reverse()];
-        if (primaryPartner) order.push(primaryPartner);
-        order.push(chain.sharedPersonId);
-        order.push(...sharedExtras);
-        return order;
-    } else {
-        // Shared person is male/left → stays LEFT
-        // [sharedExtras(reversed, outer left), sharedPerson, primaryPartner, primaryExtras(outer right)]
-        const order: PersonId[] = [...sharedExtras.reverse()];
-        order.push(chain.sharedPersonId);
-        if (primaryPartner) order.push(primaryPartner);
-        order.push(...primaryExtras);
-        return order;
+    // Walk LEFT from partnerA: follow extra unions transitively
+    const leftSide: PersonId[] = [];
+    const visited = new Set<PersonId>();
+    visited.add(partnerA);
+    if (partnerB) visited.add(partnerB);
+
+    function walkExtras(fromPerson: PersonId, result: PersonId[]): void {
+        const uids = personUnions.get(fromPerson) || [];
+        for (const uid of uids) {
+            if (uid === primaryUnionId) continue;
+            const u = model.unions.get(uid);
+            if (!u) continue;
+            const other = u.partnerA === fromPerson ? u.partnerB : u.partnerA;
+            if (!other || visited.has(other)) continue;
+            visited.add(other);
+            result.push(other);
+            // Continue walking from this new person
+            walkExtras(other, result);
+        }
     }
+
+    walkExtras(partnerA, leftSide);
+    const rightSide: PersonId[] = [];
+    if (partnerB) walkExtras(partnerB, rightSide);
+
+    // Build order: [leftExtras(reversed, outer left), partnerA, partnerB, rightExtras(outer right)]
+    const order: PersonId[] = [...leftSide.reverse()];
+    order.push(partnerA);
+    if (partnerB) order.push(partnerB);
+    order.push(...rightSide);
+    return order;
 }
 
 /**

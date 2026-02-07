@@ -6,7 +6,7 @@
 import { DataManager } from './data.js';
 import { UI } from './ui.js';
 import { ZoomPan } from './zoom.js';
-import { strings } from './strings.js';
+import { strings, getCurrentLanguage } from './strings.js';
 import {
     Person,
     PersonId,
@@ -793,6 +793,38 @@ class TreeRendererClass {
                 }
             }
 
+            // Build tooltip content
+            const tooltipLines: string[] = [];
+            if (person.birthDate) {
+                const bStr = this.formatDateFull(person.birthDate);
+                tooltipLines.push(`* ${bStr}${person.birthPlace ? ', ' + this.escapeHtml(person.birthPlace) : ''}`);
+            }
+            if (person.deathDate) {
+                const dStr = this.formatDateFull(person.deathDate);
+                tooltipLines.push(`† ${dStr}${person.deathPlace ? ', ' + this.escapeHtml(person.deathPlace) : ''}`);
+            }
+            const age = this.calculateAge(person);
+            if (age !== null) {
+                tooltipLines.push(`${strings.tooltip.age}: ${age}`);
+            }
+            for (const p of partnerships) {
+                const partnerId = p.person1Id === id ? p.person2Id : p.person1Id;
+                const partner = DataManager.getPerson(partnerId);
+                if (partner) {
+                    const partnerName = `${partner.firstName || '?'} ${partner.lastName || ''}`.trim();
+                    const statusLabel = strings.partnershipStatus[p.status];
+                    const startYear = p.startDate ? ` (${p.startDate.split('-')[0]})` : '';
+                    tooltipLines.push(`${statusLabel}: ${this.escapeHtml(partnerName)}${startYear}`);
+                }
+            }
+            if (person.notes) {
+                const truncated = person.notes.length > 100 ? person.notes.substring(0, 100) + '...' : person.notes;
+                tooltipLines.push(`${strings.tooltip.notes}: ${this.escapeHtml(truncated)}`);
+            }
+            if (tooltipLines.length > 0) {
+                html += `<div class="card-tooltip">${tooltipLines.join('<br>')}</div>`;
+            }
+
             card.innerHTML = html;
 
             // Attach event listeners for branch tabs (may have multiple)
@@ -882,6 +914,8 @@ class TreeRendererClass {
 
         if (!skipLines) {
             // PHASE 1: Draw spouse lines from layout engine
+            // Collect all card X ranges at each Y for gap detection
+            const cardGap = 4; // px gap before/after intermediate cards
             for (const spouseLine of this.spouseLines) {
                 const partnership = spouseLine.partnershipId
                     ? DataManager.getPartnership(spouseLine.partnershipId)
@@ -890,7 +924,38 @@ class TreeRendererClass {
                     ? this.getLineStyleForStatus(partnership.status)
                     : {};
 
-                this.drawLine(svg, spouseLine.xMin, spouseLine.y, spouseLine.xMax, spouseLine.y, lineStyle);
+                // Find intermediate cards that this line passes through
+                const gaps: { left: number; right: number }[] = [];
+                for (const [personId, pos] of this.positions) {
+                    if (personId === spouseLine.person1Id || personId === spouseLine.person2Id) continue;
+                    const cardLeft = pos.x;
+                    const cardRight = pos.x + this.config.cardWidth;
+                    // Card overlaps line's X range and is at same Y (within card height)
+                    if (cardRight > spouseLine.xMin && cardLeft < spouseLine.xMax) {
+                        const cardCenterY = pos.y + this.config.cardHeight / 2;
+                        if (Math.abs(cardCenterY - spouseLine.y) < this.config.cardHeight / 2 + 2) {
+                            gaps.push({ left: cardLeft - cardGap, right: cardRight + cardGap });
+                        }
+                    }
+                }
+
+                if (gaps.length === 0) {
+                    this.drawLine(svg, spouseLine.xMin, spouseLine.y, spouseLine.xMax, spouseLine.y, lineStyle);
+                } else {
+                    // Sort gaps by left edge and draw segments between them
+                    gaps.sort((a, b) => a.left - b.left);
+                    let currentX = spouseLine.xMin;
+                    for (const gap of gaps) {
+                        if (gap.left > currentX) {
+                            this.drawLine(svg, currentX, spouseLine.y, gap.left, spouseLine.y, lineStyle);
+                        }
+                        currentX = Math.max(currentX, gap.right);
+                    }
+                    if (currentX < spouseLine.xMax) {
+                        this.drawLine(svg, currentX, spouseLine.y, spouseLine.xMax, spouseLine.y, lineStyle);
+                    }
+                }
+
             }
 
             // PHASE 2: Render cluster connections (simple lines, no jump detection)
@@ -1059,6 +1124,53 @@ class TreeRendererClass {
 
         svg.setAttribute('width', String(maxX));
         svg.setAttribute('height', String(maxY));
+    }
+
+    private formatDateFull(dateStr: string): string {
+        const parts = dateStr.split('-');
+        if (parts.length !== 3 || parts[1] === '00' || parts[2] === '00') {
+            return parts[0]; // year only
+        }
+        const day = parseInt(parts[2], 10);
+        const month = parseInt(parts[1], 10);
+        const year = parts[0];
+        if (getCurrentLanguage() === 'cs') {
+            return `${day}. ${month}. ${year}`;
+        }
+        return `${month}/${day}/${year}`;
+    }
+
+    private calculateAge(person: Person): number | null {
+        if (!person.birthDate) return null;
+        const birthParts = person.birthDate.split('-');
+        if (birthParts.length < 1) return null;
+        const birthYear = parseInt(birthParts[0], 10);
+        if (isNaN(birthYear)) return null;
+
+        let endYear: number;
+        let endMonth = 0;
+        let endDay = 0;
+        if (person.deathDate) {
+            const deathParts = person.deathDate.split('-');
+            endYear = parseInt(deathParts[0], 10);
+            if (isNaN(endYear)) return null;
+            endMonth = deathParts.length >= 2 ? parseInt(deathParts[1], 10) : 0;
+            endDay = deathParts.length >= 3 ? parseInt(deathParts[2], 10) : 0;
+        } else {
+            const now = new Date();
+            endYear = now.getFullYear();
+            endMonth = now.getMonth() + 1;
+            endDay = now.getDate();
+        }
+
+        const birthMonth = birthParts.length >= 2 ? parseInt(birthParts[1], 10) : 0;
+        const birthDay = birthParts.length >= 3 ? parseInt(birthParts[2], 10) : 0;
+
+        let age = endYear - birthYear;
+        if (birthMonth && endMonth && (endMonth < birthMonth || (endMonth === birthMonth && endDay < birthDay))) {
+            age--;
+        }
+        return age >= 0 ? age : null;
     }
 
     private escapeHtml(text: string): string {

@@ -96,37 +96,33 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
         }
     }
 
-    // Y-offset secondary chain spouse lines (fan-out from shared person)
+    // Y-offset overlapping spouse lines: only fan out lines that actually
+    // share the same X range (e.g., two unions from the same person going
+    // in the same direction). Lines in separate X ranges stay at card center.
     const LINE_SPACING = 3;
-    for (const [, chain] of model.partnerChains) {
-        const primaryUnionId = model.personToUnion.get(chain.sharedPersonId);
-        if (!primaryUnionId) continue;
-
-        const sharedPX = personX.get(chain.sharedPersonId);
-        if (sharedPX === undefined) continue;
-        const sharedCenterX = sharedPX + config.cardWidth / 2;
-
-        // Collect secondary unions sorted by distance from shared person
-        const secondaryInfos: { unionId: UnionId; distance: number }[] = [];
-        for (const uid of chain.unionIds) {
-            if (uid === primaryUnionId) continue;
-            const u = model.unions.get(uid);
-            if (!u) continue;
-            const extraPartner = u.partnerA === chain.sharedPersonId ? u.partnerB : u.partnerA;
-            if (!extraPartner) continue;
-            const epX = personX.get(extraPartner);
-            if (epX === undefined) continue;
-            secondaryInfos.push({ unionId: uid, distance: Math.abs(epX + config.cardWidth / 2 - sharedCenterX) });
-        }
-        secondaryInfos.sort((a, b) => a.distance - b.distance);
-
-        // Apply Y offset: nearest secondary = +LINE_SPACING, next = +2*LINE_SPACING, etc.
-        for (let i = 0; i < secondaryInfos.length; i++) {
-            const sl = spouseLines.find(s => s.unionId === secondaryInfos[i].unionId);
-            if (sl) {
-                sl.y += (i + 1) * LINE_SPACING;
+    for (let i = 0; i < spouseLines.length; i++) {
+        const slA = spouseLines[i];
+        // Find all lines that overlap with slA in X (and are at the same base Y)
+        const group = [i];
+        for (let j = i + 1; j < spouseLines.length; j++) {
+            const slB = spouseLines[j];
+            if (Math.abs(slA.y - slB.y) > 1) continue; // Different generation
+            // Check X overlap
+            if (slA.xMax > slB.xMin && slB.xMax > slA.xMin) {
+                group.push(j);
             }
         }
+        if (group.length <= 1) continue;
+
+        // Fan out this group symmetrically around card center Y
+        const baseY = slA.y;
+        const centerOffset = (group.length - 1) / 2 * LINE_SPACING;
+        for (let k = 0; k < group.length; k++) {
+            spouseLines[group[k]].y = baseY + k * LINE_SPACING - centerOffset;
+        }
+
+        // Skip already-processed lines
+        i = Math.max(i, group[group.length - 1]);
     }
 
     // Resolve bus collisions via lane allocation (branch-aware)

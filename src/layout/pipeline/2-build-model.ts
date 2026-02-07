@@ -520,36 +520,39 @@ function expandPartnerChains(
 function mergeOverlappingChains(
     partnerChains: Map<PersonId, PartnerChain>,
     unions: Map<UnionId, UnionNode>,
-    personToUnion: Map<PersonId, UnionId>
+    _personToUnion: Map<PersonId, UnionId>
 ): void {
-    // Group chains by their primary union ID
-    const primaryToChainPersons = new Map<UnionId, PersonId[]>();
-    for (const [personId] of partnerChains) {
-        const primaryUid = personToUnion.get(personId);
-        if (!primaryUid) continue;
-        if (!primaryToChainPersons.has(primaryUid)) primaryToChainPersons.set(primaryUid, []);
-        primaryToChainPersons.get(primaryUid)!.push(personId);
+    // Build reverse map: unionId → which chain persons use it
+    const unionToChainPersons = new Map<UnionId, Set<PersonId>>();
+    for (const [personId, chain] of partnerChains) {
+        for (const uid of chain.unionIds) {
+            if (!unionToChainPersons.has(uid)) unionToChainPersons.set(uid, new Set());
+            unionToChainPersons.get(uid)!.add(personId);
+        }
     }
 
-    for (const [primaryUid, personIds] of primaryToChainPersons) {
+    // Find pairs of chains that share a union
+    const merged = new Set<PersonId>();
+    for (const [, chainPersons] of unionToChainPersons) {
+        if (chainPersons.size <= 1) continue;
+
+        const personIds = [...chainPersons].filter(pid => !merged.has(pid));
         if (personIds.length <= 1) continue;
 
-        const primaryUnion = unions.get(primaryUid);
-        if (!primaryUnion || !primaryUnion.partnerB) continue;
+        // Merge all overlapping chains into the first one
+        const keepId = personIds[0];
+        const keepChain = partnerChains.get(keepId)!;
+        const allUnionIds = new Set<UnionId>(keepChain.unionIds);
 
-        const chainA = partnerChains.get(primaryUnion.partnerA);
-        const chainB = partnerChains.get(primaryUnion.partnerB);
-        if (!chainA || !chainB) continue;
+        for (let i = 1; i < personIds.length; i++) {
+            const absorbId = personIds[i];
+            const absorbChain = partnerChains.get(absorbId);
+            if (!absorbChain) continue;
+            for (const uid of absorbChain.unionIds) allUnionIds.add(uid);
+            partnerChains.delete(absorbId);
+            merged.add(absorbId);
+        }
 
-        // Merge: combine union IDs from both chains (deduplicated)
-        const allUnionIds = new Set<UnionId>();
-        for (const uid of chainA.unionIds) allUnionIds.add(uid);
-        for (const uid of chainB.unionIds) allUnionIds.add(uid);
-
-        // Update chainA with merged union IDs
-        chainA.unionIds = [...allUnionIds];
-
-        // Remove chainB (partnerB's chain is absorbed into partnerA's)
-        partnerChains.delete(primaryUnion.partnerB);
+        keepChain.unionIds = [...allUnionIds];
     }
 }

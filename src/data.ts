@@ -776,6 +776,7 @@ class DataManagerClass {
         if (updates.birthPlace !== undefined && (updates.birthPlace || undefined) !== person.birthPlace) diff(strings.labels.birthPlace, person.birthPlace, updates.birthPlace);
         if (updates.deathDate !== undefined && (updates.deathDate || undefined) !== person.deathDate) diff(strings.labels.deathDate, person.deathDate, updates.deathDate);
         if (updates.deathPlace !== undefined && (updates.deathPlace || undefined) !== person.deathPlace) diff(strings.labels.deathPlace, person.deathPlace, updates.deathPlace);
+        if (updates.notes !== undefined && (updates.notes || undefined) !== person.notes) diff(strings.labels.notes, person.notes, updates.notes);
 
         if (updates.firstName !== undefined) {
             person.firstName = updates.firstName;
@@ -792,6 +793,7 @@ class DataManagerClass {
         if (updates.birthPlace !== undefined) person.birthPlace = updates.birthPlace || undefined;
         if (updates.deathDate !== undefined) person.deathDate = updates.deathDate || undefined;
         if (updates.deathPlace !== undefined) person.deathPlace = updates.deathPlace || undefined;
+        if (updates.notes !== undefined) person.notes = updates.notes || undefined;
 
         this.save();
         // Audit log

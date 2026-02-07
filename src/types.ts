@@ -51,6 +51,7 @@ export interface Person {
     birthPlace?: string;
     deathDate?: string;
     deathPlace?: string;
+    notes?: string;
 }
 
 export interface Partnership {

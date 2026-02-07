@@ -430,6 +430,13 @@ export class PersonPicker {
     }
 
     /**
+     * Focus the search input
+     */
+    focusInput(): void {
+        this.input.focus();
+    }
+
+    /**
      * Destroy the picker
      */
     destroy(): void {

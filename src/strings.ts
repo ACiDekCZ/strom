@@ -90,9 +90,18 @@ const stringsEN = {
         endDateMarried: 'Divorce Date',
         endDatePartners: 'Relationship End',
         note: 'Note',
+        notes: 'Notes',
         moreInfo: 'More Info',
         partner: 'Partner',
         isPrimary: 'Primary relationship'
+    },
+
+    // Tooltip
+    tooltip: {
+        age: 'Age',
+        born: 'Born',
+        died: 'Died',
+        notes: 'Notes'
     },
 
     // Placeholders
@@ -849,9 +858,18 @@ const stringsCZ: StringsType = {
         endDateMarried: 'Datum rozvodu',
         endDatePartners: 'Konec vztahu',
         note: 'Poznámka',
+        notes: 'Poznámky',
         moreInfo: 'Více informací',
         partner: 'Partner',
         isPrimary: 'Hlavní vztah'
+    },
+
+    // Tooltip
+    tooltip: {
+        age: 'Věk',
+        born: 'Narozen/a',
+        died: 'Zemřel/a',
+        notes: 'Poznámky'
     },
 
     // Placeholders

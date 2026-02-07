@@ -4590,6 +4590,62 @@
             color: #f44336;
             font-weight: 500;
         }
+
+        /* Notes textarea */
+        #input-notes { width: 100%; resize: vertical; max-height: 120px; box-sizing: border-box; }
+
+        /* Card tooltip */
+        .card-tooltip {
+            display: none;
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            line-height: 1.4;
+            white-space: nowrap;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        .person-card:hover .card-tooltip { display: block; }
+        @media (max-width: 900px) { .card-tooltip { display: none !important; } }
+
+        /* Print CSS */
+        @media print {
+            .toolbar, .zoom-controls, .add-btn, .mobile-menu,
+            .context-menu, .modal-overlay, .rel-link-icon,
+            .hidden-partners-btn, .hidden-families-btn,
+            .cross-tree-badge, .branch-tab, .badge-tooltip,
+            .card-tooltip, .collapse-chain-btn,
+            .tree-tabs, #empty-state { display: none !important; }
+
+            #canvas { transform: none !important; position: relative !important; }
+            #tree-container { overflow: visible !important; height: auto !important; }
+            body { background: white !important; margin: 0; }
+
+            .person-card {
+                box-shadow: none !important;
+                background: white !important;
+                border: 2px solid #999 !important;
+            }
+            .person-card.male {
+                border-color: #5b9bd5 !important;
+                color: #333 !important;
+            }
+            .person-card.female {
+                border-color: #e06088 !important;
+                color: #333 !important;
+            }
+            .person-card.placeholder {
+                border: 2px dashed #999 !important;
+            }
+            svg line { stroke: #333 !important; }
+            @page { size: landscape; margin: 1cm; }
+        }
     </style>
 </head>
 <body>
@@ -4749,6 +4805,10 @@
                         <label data-i18n="labels.deathPlace"></label>
                         <input type="text" id="input-deathplace" autocomplete="off">
                     </div>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="labels.notes"></label>
+                    <textarea id="input-notes" rows="3" autocomplete="off"></textarea>
                 </div>
             </div>
             <button type="button" class="link-relationships-btn" id="link-relationships" style="display:none;">
