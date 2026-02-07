@@ -1368,19 +1368,24 @@
             left: 50%;
             transform: translateX(-50%);
             margin-bottom: 4px;
-            background: var(--card-bg);
-            border: 1px solid var(--border);
+            background: rgba(0,0,0,0.85);
+            border: none;
             border-radius: 6px;
             padding: 8px 10px;
             min-width: 150px;
             max-width: 240px;
-            box-shadow: 0 2px 8px var(--shadow);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             font-size: 11px;
             font-weight: normal;
-            color: var(--text);
+            color: #f0f0f0;
             text-align: left;
             white-space: normal;
             z-index: 9999;
+        }
+        [data-theme="dark"] .badge-tooltip {
+            background: rgba(240,240,240,0.92);
+            color: #1a1a1a;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
         }
         .hidden-partners-btn:hover .badge-tooltip,
         .hidden-families-btn:hover .badge-tooltip,
@@ -1390,12 +1395,18 @@
         .badge-tooltip-header {
             font-weight: 600;
             margin-bottom: 4px;
-            color: var(--text-light);
+            color: #bbb;
+        }
+        [data-theme="dark"] .badge-tooltip-header {
+            color: #666;
         }
         .badge-tooltip-item {
             padding: 2px 0;
-            border-bottom: 1px solid var(--border-light);
+            border-bottom: 1px solid rgba(255,255,255,0.15);
             line-height: 1.3;
+        }
+        [data-theme="dark"] .badge-tooltip-item {
+            border-bottom-color: rgba(0,0,0,0.1);
         }
         .badge-tooltip-item:last-child {
             border-bottom: none;
@@ -1404,8 +1415,11 @@
             font-weight: 500;
         }
         .badge-tooltip-detail {
-            color: var(--text-light);
+            color: #aaa;
             font-size: 10px;
+        }
+        [data-theme="dark"] .badge-tooltip-detail {
+            color: #666;
         }
 
         /* ==================== CROSS-TREE BADGE ==================== */
@@ -1445,19 +1459,24 @@
             right: 50%;
             transform: translateX(50%);
             margin-bottom: 4px;
-            background: var(--card-bg);
-            border: 1px solid var(--border);
+            background: rgba(0,0,0,0.85);
+            border: none;
             border-radius: 6px;
             padding: 8px 10px;
             min-width: 150px;
             max-width: 220px;
-            box-shadow: 0 2px 8px var(--shadow);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             font-size: 11px;
             font-weight: normal;
-            color: var(--text);
+            color: #f0f0f0;
             text-align: left;
             white-space: normal;
             z-index: 9999;
+        }
+        [data-theme="dark"] .cross-tree-badge .cross-tree-tooltip {
+            background: rgba(240,240,240,0.92);
+            color: #1a1a1a;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
         }
         .cross-tree-badge:hover .cross-tree-tooltip {
             display: block;
@@ -1465,11 +1484,17 @@
         .cross-tree-tooltip-header {
             font-weight: 600;
             margin-bottom: 4px;
-            color: var(--text-light);
+            color: #bbb;
+        }
+        [data-theme="dark"] .cross-tree-tooltip-header {
+            color: #666;
         }
         .cross-tree-tooltip-item {
             padding: 2px 0;
-            border-bottom: 1px solid var(--border-light);
+            border-bottom: 1px solid rgba(255,255,255,0.15);
+        }
+        [data-theme="dark"] .cross-tree-tooltip-item {
+            border-bottom-color: rgba(0,0,0,0.1);
         }
         .cross-tree-tooltip-item:last-child {
             border-bottom: none;
@@ -1478,14 +1503,20 @@
             font-weight: 500;
         }
         .cross-tree-tooltip-person {
-            color: var(--text-light);
+            color: #aaa;
             font-size: 10px;
+        }
+        [data-theme="dark"] .cross-tree-tooltip-person {
+            color: #666;
         }
         .cross-tree-tooltip-hint {
             margin-top: 6px;
             font-size: 10px;
-            color: var(--text-light);
+            color: #aaa;
             font-style: italic;
+        }
+        [data-theme="dark"] .cross-tree-tooltip-hint {
+            color: #666;
         }
 
         /* ==================== BRANCH TABS (ouška) ==================== */
@@ -4598,11 +4629,11 @@
         .card-tooltip {
             display: none;
             position: absolute;
-            bottom: calc(100% + 8px);
+            bottom: calc(100% + 30px);
             left: 50%;
             transform: translateX(-50%);
             background: rgba(0,0,0,0.85);
-            color: white;
+            color: #f0f0f0;
             padding: 6px 10px;
             border-radius: 6px;
             font-size: 11px;
@@ -4611,7 +4642,14 @@
             z-index: 1000;
             pointer-events: none;
         }
+        [data-theme="dark"] .card-tooltip {
+            background: rgba(240,240,240,0.92);
+            color: #1a1a1a;
+        }
         .person-card:hover .card-tooltip { display: block; }
+        .person-card:has(button:hover) .card-tooltip,
+        .person-card:has(.rel-link-icon:hover) .card-tooltip,
+        .person-card:has(.cross-tree-badge:hover) .card-tooltip { display: none !important; }
         @media (max-width: 900px) { .card-tooltip { display: none !important; } }
 
         /* Print CSS */

@@ -54,9 +54,6 @@ class TreeRendererClass {
     private debugOptions: DebugOptions | null = null;
     private currentDebugSnapshot: DebugSnapshot | null = null;
 
-    // Sibling rotation state: tracks which partner index to focus next per person
-    private siblingFocusIndex = new Map<PersonId, number>();
-
     // Expanded display mode: persons whose all partnerships are shown inline
     private showAllPartnerships = true;
 
@@ -667,31 +664,12 @@ class TreeRendererClass {
                 }
                 if (hasHiddenSiblings) {
                     const hiddenSiblings = siblings.filter(s => !this.positions.has(s.id));
-                    // Find focus targets: step-parents (siblings' parents that are NOT my parents)
-                    // Focusing on step-parent shows their family with the siblings
-                    const myParentIds = new Set(person.parentIds);
-                    const focusTargetIds: PersonId[] = [];
-                    for (const sib of hiddenSiblings) {
-                        for (const sibParentId of sib.parentIds) {
-                            if (!myParentIds.has(sibParentId) && !focusTargetIds.includes(sibParentId)) {
-                                focusTargetIds.push(sibParentId);
-                            }
-                        }
-                    }
-                    // Fallback: if no step-parents (full siblings hidden by depth), use shared parents
-                    if (focusTargetIds.length === 0) {
-                        for (const parentId of person.parentIds) {
-                            focusTargetIds.push(parentId);
-                        }
-                    }
-                    // Build simple list tooltip (same format as hidden partners)
                     const siblingItems = hiddenSiblings.map(s => {
                         const name = `${s.firstName || '?'} ${s.lastName || ''}`.trim();
                         const year = s.birthDate ? s.birthDate.split('-')[0] : '';
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
                     }).join('');
-                    const targetIds = focusTargetIds.join(',');
-                    html += `<button class="branch-tab" data-action="focus-sibling" data-target-ids="${targetIds}">◆<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${siblingItems}</div></button>`;
+                    html += `<button class="branch-tab" data-action="focus-sibling">◆<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${siblingItems}</div></button>`;
                 }
                 if (hasHiddenChildren) {
                     const hiddenChildren = person.childIds
@@ -827,30 +805,12 @@ class TreeRendererClass {
 
             card.innerHTML = html;
 
-            // Attach event listeners for branch tabs (may have multiple)
+            // Attach event listeners for branch tabs - all focus on this person
             const branchTabs = card.querySelectorAll('.branch-tab');
             branchTabs.forEach(tab => {
                 tab.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    const action = (tab as HTMLElement).dataset.action;
-                    if (action === 'focus-sibling') {
-                        // Sibling rotation: cycle through step-parents (same as hidden families)
-                        const targetIdsStr = (tab as HTMLElement).dataset.targetIds || '';
-                        const targetIds = targetIdsStr.split(',').filter(Boolean) as PersonId[];
-                        if (targetIds.length === 1) {
-                            this.setFocus(targetIds[0]);
-                        } else if (targetIds.length > 1) {
-                            const currentIdx = this.siblingFocusIndex.get(id) ?? 0;
-                            const targetId = targetIds[currentIdx % targetIds.length];
-                            this.siblingFocusIndex.set(id, (currentIdx + 1) % targetIds.length);
-                            this.setFocus(targetId);
-                        } else {
-                            this.setFocus(id);
-                        }
-                    } else {
-                        // ▲ (parents) and ▼ (children) - focus on this person
-                        this.setFocus(id);
-                    }
+                    this.setFocus(id);
                 });
             });
 
