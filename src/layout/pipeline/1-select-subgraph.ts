@@ -13,7 +13,7 @@
  */
 
 import { PersonId, PartnershipId, Person, Partnership, StromData } from '../../types.js';
-import { SelectSubgraphInput, GraphSelection } from './types.js';
+import { SelectSubgraphInput, GraphSelection, DisplayPolicy } from './types.js';
 
 /**
  * Select visible subgraph based on focus person and policy.
@@ -330,6 +330,41 @@ function collectPartnerships(
             const hasChildInSelection = partnership.childIds.some(childId => persons.has(childId));
             if (hasChildInSelection || partnerships.has(partnershipId as PartnershipId)) {
                 partnerships.add(partnershipId as PartnershipId);
+            }
+        }
+    }
+}
+
+/**
+ * Expand selection for expanded persons (display policy).
+ * Adds missing partners, partnerships, and children for persons
+ * whose all partnerships should be shown inline.
+ */
+export function expandSelectionForDisplay(
+    data: StromData,
+    selection: GraphSelection,
+    displayPolicy: DisplayPolicy
+): void {
+    if (displayPolicy.mode !== 'expanded' || !displayPolicy.expandedPersonIds) return;
+
+    for (const personId of displayPolicy.expandedPersonIds) {
+        const person = data.persons[personId];
+        if (!person || !selection.persons.has(personId)) continue;
+
+        for (const partnershipId of person.partnerships) {
+            const partnership = data.partnerships[partnershipId];
+            if (!partnership) continue;
+
+            // Add both partners to selection
+            selection.persons.add(partnership.person1Id);
+            selection.persons.add(partnership.person2Id);
+            selection.partnerships.add(partnershipId);
+
+            // Add children from this partnership
+            for (const childId of partnership.childIds) {
+                selection.persons.add(childId);
+                // Also add the child's partners
+                addPartners(data, childId, selection.persons, selection.partnerships);
             }
         }
     }

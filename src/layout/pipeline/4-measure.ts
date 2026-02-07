@@ -22,6 +22,7 @@ import {
     UnionId,
     GenerationalModel,
     LayoutModel,
+    PartnerChain,
     toFamilyBlockId,
     toBranchId
 } from './types.js';
@@ -114,7 +115,7 @@ export function measureSubtrees(input: MeasureInput): BranchModel {
     }
 
     // Measure widths bottom-up
-    measureBlockWidths(blocks, config);
+    measureBlockWidths(blocks, config, model);
 
     // Compute envelopes (after widths are known)
     computeEnvelopes(blocks, genModel.model, config);
@@ -179,12 +180,33 @@ function buildBlockRecursive(
     const union = model.unions.get(unionId);
     if (!union) return null;
 
+    // Check if this union is the primary union of a PartnerChain
+    const chain = findChainForPrimaryUnion(unionId, model);
+
     const gen = genModel.unionGen.get(unionId) ?? 0;
     const blockId = toFamilyBlockId(`block_${unionId}`);
 
-    const coupleWidth = union.partnerB
-        ? config.cardWidth * 2 + config.partnerGap
-        : config.cardWidth;
+    let coupleWidth: number;
+    let chainInfo: FamilyBlock['chainInfo'];
+
+    if (chain) {
+        // Chain block: wider coupleWidth for all unique persons
+        const personOrder = buildChainBlockPersonOrder(chain, model);
+        const uniquePersonCount = personOrder.length;
+        coupleWidth = uniquePersonCount * config.cardWidth + (uniquePersonCount - 1) * config.partnerGap;
+        chainInfo = {
+            chainPersonId: chain.sharedPersonId,
+            unionIds: [...chain.unionIds],
+            personOrder,
+            personPositions: new Map(),
+            unionChildBlockIds: new Map(),
+            personSlotWidths: new Map()
+        };
+    } else {
+        coupleWidth = union.partnerB
+            ? config.cardWidth * 2 + config.partnerGap
+            : config.cardWidth;
+    }
 
     const block: FamilyBlock = {
         id: blockId,
@@ -206,31 +228,157 @@ function buildBlockRecursive(
         husbandAnchorX: 0,
         wifeAnchorX: 0,
         childrenCenterX: 0,
-        coupleCenterX: 0
+        coupleCenterX: 0,
+        chainInfo
     };
 
     blocks.set(blockId, block);
     unionToBlock.set(unionId, blockId);
 
+    // Map ALL chain unions to this same block
+    if (chain) {
+        for (const chainUnionId of chain.unionIds) {
+            unionToBlock.set(chainUnionId, blockId);
+        }
+    }
+
     // Build child blocks for descendants
-    const childUnionIds = getChildUnions(unionId, model, genModel);
-    for (const childUnionId of childUnionIds) {
-        const childBlockId = buildBlockRecursive(
-            childUnionId,
-            blockId,
-            side,
-            genModel,
-            model,
-            config,
-            blocks,
-            unionToBlock
-        );
-        if (childBlockId) {
-            block.childBlockIds.push(childBlockId);
+    // For chain blocks, include children from ALL chain unions and track per-union mapping
+    if (chain && chainInfo) {
+        const seenChildUnions = new Set<UnionId>();
+        for (const chainUnionId of chain.unionIds) {
+            const perUnionChildBlocks: FamilyBlockId[] = [];
+            const childUnions = getChildUnions(chainUnionId, model, genModel);
+            for (const childUnionId of childUnions) {
+                if (seenChildUnions.has(childUnionId)) continue;
+                seenChildUnions.add(childUnionId);
+                const childBlockId = buildBlockRecursive(
+                    childUnionId,
+                    blockId,
+                    side,
+                    genModel,
+                    model,
+                    config,
+                    blocks,
+                    unionToBlock
+                );
+                if (childBlockId) {
+                    block.childBlockIds.push(childBlockId);
+                    perUnionChildBlocks.push(childBlockId);
+                }
+            }
+            if (perUnionChildBlocks.length > 0) {
+                chainInfo.unionChildBlockIds.set(chainUnionId, perUnionChildBlocks);
+            }
+        }
+    } else {
+        const childUnionIds = getChildUnions(unionId, model, genModel);
+        for (const childUnionId of childUnionIds) {
+            const childBlockId = buildBlockRecursive(
+                childUnionId,
+                blockId,
+                side,
+                genModel,
+                model,
+                config,
+                blocks,
+                unionToBlock
+            );
+            if (childBlockId) {
+                block.childBlockIds.push(childBlockId);
+            }
         }
     }
 
     return blockId;
+}
+
+/**
+ * Find the PartnerChain whose primary union matches the given union.
+ * The primary union is identified via personToUnion for the chain's shared person.
+ * Returns null if the union is not the primary of any chain.
+ */
+function findChainForPrimaryUnion(
+    unionId: UnionId,
+    model: LayoutModel
+): PartnerChain | null {
+    for (const [, chain] of model.partnerChains) {
+        const primaryUnionId = model.personToUnion.get(chain.sharedPersonId);
+        if (primaryUnionId === unionId) {
+            return chain;
+        }
+    }
+    return null;
+}
+
+/**
+ * Build person order for a chain block (left-to-right unique persons).
+ *
+ * Extra partners go on the OUTER side of their assigned parent:
+ *   [partnerA_extras, partnerA, partnerB, partnerB_extras]
+ *
+ * If shared person is male (partnerA = LEFT):
+ *   [sharedExtras(reversed), sharedPerson, primaryPartner, primaryExtras]
+ *   Shared person's extras go LEFT of him, primary partner's extras go RIGHT of her.
+ *
+ * If shared person is female (partnerB = RIGHT):
+ *   [primaryExtras(reversed), primaryPartner, sharedPerson, sharedExtras]
+ *   Primary partner's extras go LEFT of him, shared person's extras go RIGHT of her.
+ */
+function buildChainBlockPersonOrder(
+    chain: PartnerChain,
+    model: LayoutModel
+): PersonId[] {
+    const primaryUnionId = model.personToUnion.get(chain.sharedPersonId);
+    if (!primaryUnionId) return [chain.sharedPersonId];
+
+    const primaryUnion = model.unions.get(primaryUnionId);
+    if (!primaryUnion) return [chain.sharedPersonId];
+
+    const partnerA = primaryUnion.partnerA;  // Left (typically male)
+    const partnerB = primaryUnion.partnerB;  // Right (typically female)
+
+    // Primary partner is the one in the primary union who is NOT the shared person
+    const primaryPartner = (chain.sharedPersonId === partnerA) ? partnerB : partnerA;
+
+    // Collect extra partners: for each non-primary union, find the "other" person.
+    // In merged chains, some unions belong to the sharedPerson's chain (sharedPerson is a partner)
+    // and some belong to the primaryPartner's chain (primaryPartner is a partner).
+    const sharedExtras: PersonId[] = [];   // Extra partners of the shared person
+    const primaryExtras: PersonId[] = [];  // Extra partners of the primary partner
+    for (const uid of chain.unionIds) {
+        if (uid === primaryUnionId) continue;
+        const u = model.unions.get(uid);
+        if (!u) continue;
+
+        if (u.partnerA === chain.sharedPersonId || u.partnerB === chain.sharedPersonId) {
+            // This union belongs to the shared person's chain
+            const other = u.partnerA === chain.sharedPersonId ? u.partnerB : u.partnerA;
+            if (other) sharedExtras.push(other);
+        } else if (primaryPartner && (u.partnerA === primaryPartner || u.partnerB === primaryPartner)) {
+            // This union belongs to the primary partner's chain (merged)
+            const other = u.partnerA === primaryPartner ? u.partnerB : u.partnerA;
+            if (other) primaryExtras.push(other);
+        }
+    }
+
+    if (chain.sharedPersonId === partnerB || chain.sharedPersonId === null) {
+        // Shared person is female/right → stays RIGHT
+        // [primaryExtras(reversed, outer left), primaryPartner, sharedPerson, sharedExtras(outer right)]
+        const order: PersonId[] = [...primaryExtras.reverse()];
+        if (primaryPartner) order.push(primaryPartner);
+        order.push(chain.sharedPersonId);
+        order.push(...sharedExtras);
+        return order;
+    } else {
+        // Shared person is male/left → stays LEFT
+        // [sharedExtras(reversed, outer left), sharedPerson, primaryPartner, primaryExtras(outer right)]
+        const order: PersonId[] = [...sharedExtras.reverse()];
+        order.push(chain.sharedPersonId);
+        if (primaryPartner) order.push(primaryPartner);
+        order.push(...primaryExtras);
+        return order;
+    }
 }
 
 /**
@@ -278,9 +426,30 @@ function buildAncestorBlocks(
     const gen = genModel.unionGen.get(parentUnionId) ?? 0;
     const blockId = toFamilyBlockId(`block_${parentUnionId}`);
 
-    const coupleWidth = parentUnion.partnerB
-        ? config.cardWidth * 2 + config.partnerGap
-        : config.cardWidth;
+    // Check if this union is the primary union of a PartnerChain
+    const chain = findChainForPrimaryUnion(parentUnionId, model);
+
+    let coupleWidth: number;
+    let chainInfo: FamilyBlock['chainInfo'];
+
+    if (chain) {
+        // Chain block: wider coupleWidth for all unique persons
+        const personOrder = buildChainBlockPersonOrder(chain, model);
+        const uniquePersonCount = personOrder.length;
+        coupleWidth = uniquePersonCount * config.cardWidth + (uniquePersonCount - 1) * config.partnerGap;
+        chainInfo = {
+            chainPersonId: chain.sharedPersonId,
+            unionIds: [...chain.unionIds],
+            personOrder,
+            personPositions: new Map(),
+            unionChildBlockIds: new Map(),
+            personSlotWidths: new Map()
+        };
+    } else {
+        coupleWidth = parentUnion.partnerB
+            ? config.cardWidth * 2 + config.partnerGap
+            : config.cardWidth;
+    }
 
     // Detect if this is the focus parents block:
     // - directLineUnionId is the focus union (gen 0)
@@ -312,53 +481,111 @@ function buildAncestorBlocks(
         husbandAnchorX: 0,
         wifeAnchorX: 0,
         childrenCenterX: 0,
-        coupleCenterX: 0
+        coupleCenterX: 0,
+        chainInfo
     };
 
     blocks.set(blockId, block);
     unionToBlock.set(parentUnionId, blockId);
 
-    // Build ALL child blocks (including the direct-line child if not already claimed)
-    // This ensures siblings are in the correct contiguous order
-    const childUnionIds = getChildUnions(parentUnionId, model, genModel);
-    for (const childUnionId of childUnionIds) {
-        if (childUnionId === directLineUnionId) {
-            // Include the already-built direct-line block as a child,
-            // but only if it doesn't already have a parent
-            const existingBlockId = unionToBlock.get(directLineUnionId);
-            if (existingBlockId) {
+    // Map ALL chain unions to this same block
+    if (chain) {
+        for (const chainUnionId of chain.unionIds) {
+            unionToBlock.set(chainUnionId, blockId);
+        }
+    }
+
+    // Build child blocks
+    if (chain && chainInfo) {
+        // Chain block: collect children from ALL chain unions, tracking per-union mapping
+        const seenChildUnions = new Set<UnionId>();
+        for (const chainUnionId of chain.unionIds) {
+            const perUnionChildBlocks: FamilyBlockId[] = [];
+            const childUnionIds = getChildUnions(chainUnionId, model, genModel);
+            for (const childUnionId of childUnionIds) {
+                if (seenChildUnions.has(childUnionId)) continue;
+                seenChildUnions.add(childUnionId);
+
+                if (childUnionId === directLineUnionId) {
+                    // Include the already-built direct-line block
+                    const existingBlockId = unionToBlock.get(directLineUnionId);
+                    if (existingBlockId) {
+                        const existingBlock = blocks.get(existingBlockId);
+                        if (existingBlock && existingBlock.parentBlockId === null) {
+                            block.childBlockIds.push(existingBlockId);
+                            existingBlock.parentBlockId = blockId;
+                            perUnionChildBlocks.push(existingBlockId);
+                        }
+                    }
+                } else if (!unionToBlock.has(childUnionId)) {
+                    const siblingBlockId = buildBlockRecursive(
+                        childUnionId,
+                        blockId,
+                        side,
+                        genModel,
+                        model,
+                        config,
+                        blocks,
+                        unionToBlock
+                    );
+                    if (siblingBlockId) {
+                        block.childBlockIds.push(siblingBlockId);
+                        perUnionChildBlocks.push(siblingBlockId);
+                    }
+                } else {
+                    const existingBlockId = unionToBlock.get(childUnionId)!;
+                    const existingBlock = blocks.get(existingBlockId);
+                    if (existingBlock && existingBlock.parentBlockId === null) {
+                        block.childBlockIds.push(existingBlockId);
+                        existingBlock.parentBlockId = blockId;
+                        perUnionChildBlocks.push(existingBlockId);
+                    }
+                }
+            }
+            chainInfo.unionChildBlockIds.set(chainUnionId, perUnionChildBlocks);
+        }
+    } else {
+        // Standard: build child blocks from this union only
+        const childUnionIds = getChildUnions(parentUnionId, model, genModel);
+        for (const childUnionId of childUnionIds) {
+            if (childUnionId === directLineUnionId) {
+                // Include the already-built direct-line block as a child,
+                // but only if it doesn't already have a parent
+                const existingBlockId = unionToBlock.get(directLineUnionId);
+                if (existingBlockId) {
+                    const existingBlock = blocks.get(existingBlockId);
+                    if (existingBlock && existingBlock.parentBlockId === null) {
+                        block.childBlockIds.push(existingBlockId);
+                        existingBlock.parentBlockId = blockId;
+                    }
+                    // If already claimed by another ancestor, skip
+                }
+            } else if (!unionToBlock.has(childUnionId)) {
+                // For siblings at gen -1 (aunts/uncles), we need to determine which side they belong to:
+                // - If we're building from partnerA (father), siblings get 'HUSBAND'
+                // - If we're building from partnerB (mother), siblings get 'WIFE'
+                // The 'side' parameter already tells us which partner we traced through
+                const siblingBlockId = buildBlockRecursive(
+                    childUnionId,
+                    blockId,
+                    side,  // Use the side we were called with (HUSBAND for father's siblings, WIFE for mother's)
+                    genModel,
+                    model,
+                    config,
+                    blocks,
+                    unionToBlock
+                );
+                if (siblingBlockId) {
+                    block.childBlockIds.push(siblingBlockId);
+                }
+            } else {
+                // Block already exists - include as child only if unclaimed
+                const existingBlockId = unionToBlock.get(childUnionId)!;
                 const existingBlock = blocks.get(existingBlockId);
                 if (existingBlock && existingBlock.parentBlockId === null) {
                     block.childBlockIds.push(existingBlockId);
                     existingBlock.parentBlockId = blockId;
                 }
-                // If already claimed by another ancestor, skip
-            }
-        } else if (!unionToBlock.has(childUnionId)) {
-            // For siblings at gen -1 (aunts/uncles), we need to determine which side they belong to:
-            // - If we're building from partnerA (father), siblings get 'HUSBAND'
-            // - If we're building from partnerB (mother), siblings get 'WIFE'
-            // The 'side' parameter already tells us which partner we traced through
-            const siblingBlockId = buildBlockRecursive(
-                childUnionId,
-                blockId,
-                side,  // Use the side we were called with (HUSBAND for father's siblings, WIFE for mother's)
-                genModel,
-                model,
-                config,
-                blocks,
-                unionToBlock
-            );
-            if (siblingBlockId) {
-                block.childBlockIds.push(siblingBlockId);
-            }
-        } else {
-            // Block already exists - include as child only if unclaimed
-            const existingBlockId = unionToBlock.get(childUnionId)!;
-            const existingBlock = blocks.get(existingBlockId);
-            if (existingBlock && existingBlock.parentBlockId === null) {
-                block.childBlockIds.push(existingBlockId);
-                existingBlock.parentBlockId = blockId;
             }
         }
     }
@@ -407,7 +634,8 @@ function buildAncestorBlocks(
  */
 function measureBlockWidths(
     blocks: Map<FamilyBlockId, FamilyBlock>,
-    config: LayoutConfig
+    config: LayoutConfig,
+    model: LayoutModel
 ): void {
     // Sort blocks by generation (highest first = leaves first)
     const sorted = Array.from(blocks.values()).sort((a, b) => b.generation - a.generation);
@@ -416,6 +644,20 @@ function measureBlockWidths(
         if (block.childBlockIds.length === 0) {
             block.childrenWidth = 0;
             block.width = block.coupleWidth;
+        } else if (block.chainInfo && block.chainInfo.unionChildBlockIds.size > 0) {
+            // Chain block: adjust coupleWidth so extra partners have room for subtrees
+            block.coupleWidth = computeChainCoupleWidth(block, blocks, config, model);
+            // childrenWidth = sum of all child block widths (used for overall block width)
+            let totalChildWidth = 0;
+            for (const childId of block.childBlockIds) {
+                const childBlock = blocks.get(childId);
+                if (childBlock) {
+                    totalChildWidth += childBlock.width;
+                }
+            }
+            totalChildWidth += (block.childBlockIds.length - 1) * config.horizontalGap;
+            block.childrenWidth = totalChildWidth;
+            block.width = Math.max(block.coupleWidth, block.childrenWidth);
         } else {
             let totalChildWidth = 0;
             for (const childId of block.childBlockIds) {
@@ -429,6 +671,70 @@ function measureBlockWidths(
             block.width = Math.max(block.coupleWidth, block.childrenWidth);
         }
     }
+}
+
+/**
+ * Compute coupleWidth for a chain block, widening gaps for extra partners
+ * whose children subtree is wider than cardWidth.
+ *
+ * Each extra partner gets a slot of max(cardWidth, subtreeWidth) so the
+ * children tree fits entirely under them (MyHeritage convention).
+ */
+function computeChainCoupleWidth(
+    block: FamilyBlock,
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    config: LayoutConfig,
+    model: LayoutModel
+): number {
+    if (!block.chainInfo) return block.coupleWidth;
+
+    const { chainPersonId } = block.chainInfo;
+    const { unionChildBlockIds } = block.chainInfo;
+    const personOrder = block.chainInfo.personOrder;
+
+    // Determine primary couple persons
+    const primaryUnionId = model.personToUnion.get(chainPersonId);
+    const primaryUnion = primaryUnionId ? model.unions.get(primaryUnionId) : null;
+    const primaryCoupleIds = new Set<PersonId>();
+    primaryCoupleIds.add(chainPersonId);
+    if (primaryUnion?.partnerA) primaryCoupleIds.add(primaryUnion.partnerA);
+    if (primaryUnion?.partnerB) primaryCoupleIds.add(primaryUnion.partnerB);
+
+    // Build map: extra partner personId → subtree width of their union's children
+    const extraPartnerSubtreeWidth = new Map<PersonId, number>();
+    for (const [unionId, childBlockIds] of unionChildBlockIds) {
+        if (unionId === primaryUnionId) continue; // Primary union children aren't under any extra partner
+        const union = model.unions.get(unionId);
+        if (!union) continue;
+        // Extra partner = the person in this union who is NOT in the primary couple
+        const extraPartner = !primaryCoupleIds.has(union.partnerA) ? union.partnerA
+            : !primaryCoupleIds.has(union.partnerB!) ? union.partnerB
+            : null;
+        if (!extraPartner) continue;
+
+        // Compute total children width for this union
+        let childrenWidth = 0;
+        for (const cbId of childBlockIds) {
+            const cb = blocks.get(cbId);
+            if (cb) childrenWidth += cb.width;
+        }
+        if (childBlockIds.length > 1) {
+            childrenWidth += (childBlockIds.length - 1) * config.horizontalGap;
+        }
+        extraPartnerSubtreeWidth.set(extraPartner, childrenWidth);
+    }
+
+    // Compute total width with variable slot sizes and store per-person slot widths
+    let totalWidth = 0;
+    for (let i = 0; i < personOrder.length; i++) {
+        if (i > 0) totalWidth += config.partnerGap;
+        const subtreeW = extraPartnerSubtreeWidth.get(personOrder[i]) ?? 0;
+        const slotWidth = Math.max(config.cardWidth, subtreeW);
+        block.chainInfo.personSlotWidths.set(personOrder[i], slotWidth);
+        totalWidth += slotWidth;
+    }
+
+    return totalWidth;
 }
 
 /**

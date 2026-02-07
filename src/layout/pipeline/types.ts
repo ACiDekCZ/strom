@@ -5,6 +5,31 @@
 
 import { PersonId, PartnershipId, StromData, LayoutConfig, Position } from '../../types.js';
 
+// ==================== DISPLAY POLICY ====================
+
+/** Controls how multiple partnerships are displayed in the layout */
+export interface DisplayPolicy {
+    mode: 'standard' | 'expanded';
+    /** Person IDs whose all partnerships should be shown inline as a PartnerChain */
+    expandedPersonIds?: Set<PersonId>;
+    /** Auto-expand all partnerships for gen >= -1 persons (default: true) */
+    autoExpand?: boolean;
+}
+
+export const DEFAULT_DISPLAY_POLICY: DisplayPolicy = { mode: 'standard' };
+
+/** Chain of unions sharing one person, laid out horizontally */
+export interface PartnerChain {
+    /** The person shared across all unions in the chain */
+    sharedPersonId: PersonId;
+    /** Ordered union IDs in the chain (left to right) */
+    unionIds: UnionId[];
+    /** Total width of the chain couple row */
+    width: number;
+    /** X position of the shared person's card center */
+    sharedPersonCenterX: number;
+}
+
 // ==================== BRANDED TYPES ====================
 
 /** Branded type for Union IDs - atomic layout unit */
@@ -51,6 +76,7 @@ export interface BuildModelInput {
     data: StromData;
     selection: GraphSelection;
     focusPersonId: PersonId;
+    displayPolicy?: DisplayPolicy;
 }
 
 /**
@@ -95,6 +121,8 @@ export interface LayoutModel {
     // Helper maps:
     personToUnion: Map<PersonId, UnionId>;       // Which union contains a person
     childToParentUnion: Map<PersonId, UnionId>;  // Parent union of a child
+    // Partner chains (expanded display mode):
+    partnerChains: Map<PersonId, PartnerChain>;
 }
 
 // ==================== STEP 3: ASSIGN GENERATIONS ====================
@@ -203,6 +231,16 @@ export interface FamilyBlock {
     wifeAnchorX: number;      // Center X of partnerB card (or =husband if single)
     childrenCenterX: number;  // Center of children span
     coupleCenterX: number;    // Midpoint of couple (stem point)
+
+    // Partner chain info (expanded display mode)
+    chainInfo?: {
+        chainPersonId: PersonId;         // Shared person in the chain
+        unionIds: UnionId[];             // Ordered union IDs in this chain
+        personOrder: PersonId[];         // All unique persons left-to-right
+        personPositions: Map<PersonId, number>;  // X center for each person in chain
+        unionChildBlockIds: Map<UnionId, FamilyBlockId[]>;  // Child blocks per chain union
+        personSlotWidths: Map<PersonId, number>;  // Slot width per person (>= cardWidth)
+    };
 }
 
 /**
@@ -390,6 +428,7 @@ export interface LayoutResult {
     connections: Connection[];
     spouseLines: SpouseLine[];
     diagnostics: LayoutDiagnostics;
+    partnerChains?: Map<PersonId, PartnerChain>;
 }
 
 // ==================== PIPELINE ORCHESTRATION ====================
@@ -410,6 +449,8 @@ export interface PipelineInput {
     // Constraint solver:
     maxIterations?: number;
     tolerance?: number;
+    // Display policy:
+    displayPolicy?: DisplayPolicy;
 }
 
 // ==================== ANCESTOR CLUSTER ====================
@@ -470,4 +511,5 @@ export interface LayoutRequest {
     focusPersonId: PersonId;
     policy: SelectionPolicy;
     config: LayoutConfig;
+    displayPolicy?: DisplayPolicy;
 }

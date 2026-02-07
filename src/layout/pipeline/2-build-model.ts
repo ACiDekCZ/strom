@@ -10,7 +10,7 @@
  * Partners are ordered: male left, otherwise alphabetically by ID.
  */
 
-import { PersonId, StromData } from '../../types.js';
+import { PersonId, PartnershipId, StromData } from '../../types.js';
 import {
     BuildModelInput,
     LayoutModel,
@@ -19,14 +19,17 @@ import {
     ParentChildEdge,
     UnionId,
     toUnionId,
-    GenerationalModel
+    GenerationalModel,
+    DisplayPolicy,
+    DEFAULT_DISPLAY_POLICY,
+    PartnerChain
 } from './types.js';
 
 /**
  * Build the layout model from selected subgraph.
  */
 export function buildLayoutModel(input: BuildModelInput): LayoutModel {
-    const { data, selection, focusPersonId } = input;
+    const { data, selection, focusPersonId, displayPolicy = DEFAULT_DISPLAY_POLICY } = input;
 
     const persons = new Map<PersonId, PersonNode>();
     const unions = new Map<UnionId, UnionNode>();
@@ -215,12 +218,29 @@ export function buildLayoutModel(input: BuildModelInput): LayoutModel {
         }
     }
 
+    // Step 4: Expand partner chains for expanded display mode
+    const partnerChains = new Map<PersonId, PartnerChain>();
+
+    if (displayPolicy.mode === 'expanded' && displayPolicy.expandedPersonIds && displayPolicy.expandedPersonIds.size > 0) {
+        expandPartnerChains(
+            displayPolicy.expandedPersonIds,
+            data,
+            selection,
+            unions,
+            edges,
+            personToUnion,
+            childToParentUnion,
+            partnerChains
+        );
+    }
+
     return {
         persons,
         unions,
         edges,
         personToUnion,
-        childToParentUnion
+        childToParentUnion,
+        partnerChains
     };
 }
 
@@ -351,4 +371,185 @@ function addChildrenToUnion(
 
     // Re-sort children
     union.childIds = sortChildren(union.childIds, data);
+}
+
+/**
+ * Expand partner chains for expanded persons.
+ *
+ * For each expanded person with multiple partnerships:
+ * 1. Find the primary union (already created)
+ * 2. For each additional partnership that was "folded" (both partners assigned):
+ *    create a NEW UnionNode with a chain-specific ID
+ * 3. Move children that belong to that specific partnership from primary union
+ *    to the new chain union
+ * 4. Build a PartnerChain record with ordered union IDs
+ *
+ * Key: personToUnion for the shared person still points to the PRIMARY union.
+ * Secondary partners in chain unions get their personToUnion updated.
+ */
+function expandPartnerChains(
+    expandedPersonIds: Set<PersonId>,
+    data: StromData,
+    selection: { persons: Set<PersonId>; partnerships: Set<PartnershipId> },
+    unions: Map<UnionId, UnionNode>,
+    edges: ParentChildEdge[],
+    personToUnion: Map<PersonId, UnionId>,
+    childToParentUnion: Map<PersonId, UnionId>,
+    partnerChains: Map<PersonId, PartnerChain>
+): void {
+    // Build reverse lookup: partnershipId → existing unionId
+    const partnershipToUnion = new Map<PartnershipId, UnionId>();
+    for (const [unionId, union] of unions) {
+        if (union.partnershipId) {
+            partnershipToUnion.set(union.partnershipId, unionId);
+        }
+    }
+
+    for (const sharedPersonId of expandedPersonIds) {
+        const person = data.persons[sharedPersonId];
+        if (!person) continue;
+
+        // Find primary union for this person
+        const primaryUnionId = personToUnion.get(sharedPersonId);
+        if (!primaryUnionId) continue;
+
+        const primaryUnion = unions.get(primaryUnionId);
+        if (!primaryUnion) continue;
+
+        // Collect all partnerships for this person that are in selection
+        const personPartnerships = person.partnerships
+            .filter(pid => selection.partnerships.has(pid))
+            .map(pid => ({ id: pid, partnership: data.partnerships[pid] }))
+            .filter(p => p.partnership && selection.persons.has(p.partnership.person1Id) && selection.persons.has(p.partnership.person2Id));
+
+        if (personPartnerships.length <= 1) {
+            continue;
+        }
+
+        const primaryPartnershipId = primaryUnion.partnershipId;
+        const chainUnionIds: UnionId[] = [primaryUnionId];
+
+        for (const { id: partnershipId, partnership } of personPartnerships) {
+            if (partnershipId === primaryPartnershipId) continue;
+
+            const partnerId = partnership.person1Id === sharedPersonId
+                ? partnership.person2Id
+                : partnership.person1Id;
+
+            // Check if a union already exists for this partnership
+            const existingUnionId = partnershipToUnion.get(partnershipId);
+
+            if (existingUnionId) {
+                // Union already exists (partner was not folded) — reuse it
+                chainUnionIds.push(existingUnionId);
+            } else {
+                // Partnership was folded (both partners already assigned) —
+                // create a new chain union and move children from primary union
+                const [partnerA, partnerB] = orderPartners(sharedPersonId, partnerId, data);
+                const chainUnionId = toUnionId(`chain_${sharedPersonId}_${partnershipId}`);
+
+                const partnershipChildIds = partnership.childIds.filter(id => selection.persons.has(id));
+                const sortedChildIds = sortChildren(partnershipChildIds, data);
+
+                const chainUnion: UnionNode = {
+                    id: chainUnionId,
+                    partnerA,
+                    partnerB,
+                    partnershipId,
+                    childIds: sortedChildIds
+                };
+
+                unions.set(chainUnionId, chainUnion);
+                chainUnionIds.push(chainUnionId);
+
+                // Update personToUnion for the secondary partner
+                const existingPartnerUnion = personToUnion.get(partnerId);
+                if (existingPartnerUnion === primaryUnionId) {
+                    personToUnion.set(partnerId, chainUnionId);
+                }
+
+                // Move children from primary union to chain union
+                for (const childId of sortedChildIds) {
+                    const primaryIdx = primaryUnion.childIds.indexOf(childId);
+                    if (primaryIdx !== -1) {
+                        primaryUnion.childIds.splice(primaryIdx, 1);
+                    }
+
+                    childToParentUnion.set(childId, chainUnionId);
+
+                    // Update edges
+                    const oldEdgeIdx = edges.findIndex(e =>
+                        e.parentUnionId === primaryUnionId && e.childPersonId === childId
+                    );
+                    if (oldEdgeIdx !== -1) {
+                        edges.splice(oldEdgeIdx, 1);
+                    }
+                    edges.push({
+                        parentUnionId: chainUnionId,
+                        childPersonId: childId
+                    });
+                }
+            }
+        }
+
+        partnerChains.set(sharedPersonId, {
+            sharedPersonId,
+            unionIds: chainUnionIds,
+            width: 0, // Computed later in measure step
+            sharedPersonCenterX: 0 // Computed later in place step
+        });
+    }
+
+    // Post-process: merge chains that share the same primary union
+    // This happens when BOTH partners in a couple are expanded (both have multiple partnerships)
+    mergeOverlappingChains(partnerChains, unions, personToUnion);
+
+}
+
+/**
+ * Merge chains that share the same primary union.
+ *
+ * When both partners (A and B) in a couple have multiple partnerships
+ * and both are expanded, each gets its own chain with the same primary union.
+ * This merges them into a single chain owned by partnerA (convention).
+ *
+ * Result: one chain with unionIds from both, sharedPersonId = partnerA.
+ * buildChainBlockPersonOrder in measure step will then produce:
+ * [A's extras LEFT, A, B, B's extras RIGHT]
+ */
+function mergeOverlappingChains(
+    partnerChains: Map<PersonId, PartnerChain>,
+    unions: Map<UnionId, UnionNode>,
+    personToUnion: Map<PersonId, UnionId>
+): void {
+    // Group chains by their primary union ID
+    const primaryToChainPersons = new Map<UnionId, PersonId[]>();
+    for (const [personId] of partnerChains) {
+        const primaryUid = personToUnion.get(personId);
+        if (!primaryUid) continue;
+        if (!primaryToChainPersons.has(primaryUid)) primaryToChainPersons.set(primaryUid, []);
+        primaryToChainPersons.get(primaryUid)!.push(personId);
+    }
+
+    for (const [primaryUid, personIds] of primaryToChainPersons) {
+        if (personIds.length <= 1) continue;
+
+        const primaryUnion = unions.get(primaryUid);
+        if (!primaryUnion || !primaryUnion.partnerB) continue;
+
+        const chainA = partnerChains.get(primaryUnion.partnerA);
+        const chainB = partnerChains.get(primaryUnion.partnerB);
+        if (!chainA || !chainB) continue;
+
+        // Merge: combine union IDs from both chains (deduplicated)
+        const allUnionIds = new Set<UnionId>();
+        for (const uid of chainA.unionIds) allUnionIds.add(uid);
+        for (const uid of chainB.unionIds) allUnionIds.add(uid);
+
+        // Update chainA with merged union IDs
+        chainA.unionIds = [...allUnionIds];
+
+        // Remove chainB (partnerB's chain is absorbed into partnerA's)
+        partnerChains.delete(primaryUnion.partnerB);
+    }
 }

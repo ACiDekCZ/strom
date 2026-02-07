@@ -19,12 +19,34 @@ import {
     PlaceXInput,
     PlacedModel,
     UnionId,
+    UnionNode,
     FamilyBlock,
     FamilyBlockId,
     FamilyBlockModel,
     BranchModel,
     LayoutModel
 } from './types.js';
+
+/**
+ * Find the "extra partner" in a secondary chain union.
+ * In a merged chain, the extra partner is the person NOT in the primary couple.
+ */
+function findChainExtraPartner(
+    union: UnionNode,
+    chainInfo: NonNullable<FamilyBlock['chainInfo']>,
+    model: LayoutModel
+): PersonId | null {
+    const primaryUnionId = model.personToUnion.get(chainInfo.chainPersonId);
+    const primaryUnion = primaryUnionId ? model.unions.get(primaryUnionId) : null;
+    const primaryCoupleIds = new Set<PersonId>();
+    primaryCoupleIds.add(chainInfo.chainPersonId);
+    if (primaryUnion?.partnerA) primaryCoupleIds.add(primaryUnion.partnerA);
+    if (primaryUnion?.partnerB) primaryCoupleIds.add(primaryUnion.partnerB);
+
+    if (!primaryCoupleIds.has(union.partnerA)) return union.partnerA;
+    if (union.partnerB && !primaryCoupleIds.has(union.partnerB)) return union.partnerB;
+    return null;
+}
 
 /**
  * Place X positions using envelope-based tree geometry.
@@ -133,6 +155,13 @@ function placeDescendantsTopDown(
 ): void {
     if (parentBlock.childBlockIds.length === 0) return;
 
+    // Chain blocks: place children per-union under each partner's position
+    if (parentBlock.chainInfo && parentBlock.chainInfo.unionChildBlockIds.size > 0) {
+        placeChainChildrenPerUnion(parentBlock, blocks, model, unionToBlock, config, placedBlocks);
+        return;
+    }
+
+    // Standard block: center all children under parent
     // Step 1: Compute total width using envelopeWidth for each child
     let totalWidth = 0;
     for (const childId of parentBlock.childBlockIds) {
@@ -174,6 +203,87 @@ function placeDescendantsTopDown(
     }
 
     // Step 6: Update parent xLeft/xRight to match actual children extent (bottom-up)
+    updateBlockExtentFromChildren(parentBlock, blocks);
+}
+
+/**
+ * Place children of a chain block per-union.
+ * Each union's children are centered under the appropriate anchor:
+ * - Primary union children: centered under couple midpoint
+ * - Secondary union children: centered under the extra partner
+ */
+function placeChainChildrenPerUnion(
+    parentBlock: FamilyBlock,
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    unionToBlock: Map<UnionId, FamilyBlockId>,
+    config: LayoutConfig,
+    placedBlocks: Set<FamilyBlockId>
+): void {
+    if (!parentBlock.chainInfo) return;
+
+    const { chainPersonId, unionChildBlockIds } = parentBlock.chainInfo;
+    const primaryUnionId = model.personToUnion.get(chainPersonId);
+
+    // For each union in the chain, place its children centered under the anchor
+    for (const [unionId, childBlockIds] of unionChildBlockIds) {
+        if (childBlockIds.length === 0) continue;
+
+        // Determine anchor X for this union's children
+        let anchorX: number;
+        if (unionId === primaryUnionId) {
+            // Primary union: children center under couple midpoint
+            const union = model.unions.get(unionId);
+            if (union && union.partnerB) {
+                const aX = parentBlock.chainInfo.personPositions.get(union.partnerA);
+                const bX = parentBlock.chainInfo.personPositions.get(union.partnerB);
+                anchorX = (aX !== undefined && bX !== undefined) ? (aX + bX) / 2 : parentBlock.xCenter;
+            } else {
+                anchorX = parentBlock.xCenter;
+            }
+        } else {
+            // Secondary union: children center under extra partner
+            const union = model.unions.get(unionId);
+            if (!union) continue;
+            const extraPartner = findChainExtraPartner(union, parentBlock.chainInfo!, model);
+            if (extraPartner) {
+                anchorX = parentBlock.chainInfo.personPositions.get(extraPartner) ?? parentBlock.xCenter;
+            } else {
+                anchorX = parentBlock.xCenter;
+            }
+        }
+
+        // Place this union's children centered under anchorX
+        let groupWidth = 0;
+        for (const cbId of childBlockIds) {
+            const cb = blocks.get(cbId);
+            if (cb) groupWidth += cb.envelopeWidth;
+        }
+        groupWidth += (childBlockIds.length - 1) * config.horizontalGap;
+
+        let x = anchorX - groupWidth / 2;
+        for (const cbId of childBlockIds) {
+            const cb = blocks.get(cbId);
+            if (!cb) continue;
+            const childCenter = x + cb.envelopeWidth / 2;
+            setBlockPosition(cb, childCenter, config);
+            placedBlocks.add(cbId);
+            x += cb.envelopeWidth + config.horizontalGap;
+        }
+    }
+
+    // Update childrenCenterX
+    updateChildrenCenter(parentBlock, blocks);
+
+    // Recurse into each child
+    for (const childId of parentBlock.childBlockIds) {
+        const childBlock = blocks.get(childId);
+        if (childBlock) {
+            placeDescendantsTopDown(childBlock, blocks, model, unionToBlock, config, placedBlocks);
+        }
+    }
+
+    // Update extents
     updateBlockExtentFromChildren(parentBlock, blocks);
 }
 
@@ -274,27 +384,36 @@ function placeAncestorChain(
         placeDescendantsTopDown(directLineChild, blocks, model, unionToBlock, config, placedBlocks);
     }
 
-    // Determine sibling direction based on anchor person's role in their couple.
-    // Ancestor Side Ownership (ASO): siblings of a husband fan LEFT, siblings of a wife fan RIGHT.
-    const anchorUnionId2 = model.personToUnion.get(anchorPersonId);
-    let sibDir: 'LEFT' | 'RIGHT' | 'NATURAL' = 'NATURAL';
-    if (anchorUnionId2) {
-        const anchorUnion = model.unions.get(anchorUnionId2);
-        if (anchorUnion) {
-            if (anchorUnion.partnerA === anchorPersonId) {
-                sibDir = 'LEFT';  // Husband's siblings go left
-            } else if (anchorUnion.partnerB === anchorPersonId) {
-                sibDir = 'RIGHT'; // Wife's siblings go right
+    // Chain ancestor blocks: use per-union placement for children
+    if (block.chainInfo && block.chainInfo.unionChildBlockIds.size > 0) {
+        placeAncestorChainBlockChildren(
+            block, ancestorUnionId, anchorX, directLineChild,
+            blocks, model, unionToBlock, config, placedBlocks
+        );
+        placedBlocks.add(blockId);
+    } else {
+        // Determine sibling direction based on anchor person's role in their couple.
+        // Ancestor Side Ownership (ASO): siblings of a husband fan LEFT, siblings of a wife fan RIGHT.
+        const anchorUnionId2 = model.personToUnion.get(anchorPersonId);
+        let sibDir: 'LEFT' | 'RIGHT' | 'NATURAL' = 'NATURAL';
+        if (anchorUnionId2) {
+            const anchorUnion = model.unions.get(anchorUnionId2);
+            if (anchorUnion) {
+                if (anchorUnion.partnerA === anchorPersonId) {
+                    sibDir = 'LEFT';  // Husband's siblings go left
+                } else if (anchorUnion.partnerB === anchorPersonId) {
+                    sibDir = 'RIGHT'; // Wife's siblings go right
+                }
             }
         }
+
+        // Place sibling blocks around the direct-line child
+        placeSiblingsAround(block, directLineChild, blocks, model, unionToBlock, config, placedBlocks, sibDir);
+
+        // Center parent block over all children's couple-bounds
+        centerBlockOverChildren(block, blocks, model, unionToBlock, config);
+        placedBlocks.add(blockId);
     }
-
-    // Place sibling blocks around the direct-line child
-    placeSiblingsAround(block, directLineChild, blocks, model, unionToBlock, config, placedBlocks, sibDir);
-
-    // Center parent block over all children's couple-bounds
-    centerBlockOverChildren(block, blocks, model, unionToBlock, config);
-    placedBlocks.add(blockId);
 
     // Recurse UP: place this block's own ancestor chains
     const union = model.unions.get(block.rootUnionId);
@@ -337,6 +456,136 @@ function placeAncestorChain(
             }
         }
     }
+}
+
+/**
+ * Place children of an ancestor chain block per-union.
+ *
+ * The direct-line child is already placed at anchorX. We position the chain block
+ * so the appropriate union anchor aligns with the direct-line child, then place
+ * remaining children centered under their respective extra partners.
+ */
+function placeAncestorChainBlockChildren(
+    block: FamilyBlock,
+    ancestorUnionId: UnionId,
+    anchorX: number,
+    directLineChild: FamilyBlock,
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    unionToBlock: Map<UnionId, FamilyBlockId>,
+    config: LayoutConfig,
+    placedBlocks: Set<FamilyBlockId>
+): void {
+    if (!block.chainInfo) return;
+
+    const { unionChildBlockIds } = block.chainInfo;
+
+    // === PASS 1: Place ancestor union's unplaced children as siblings of the direct-line child ===
+    const ancestorChildBlockIds = unionChildBlockIds.get(ancestorUnionId) ?? [];
+    const unplacedSiblings = ancestorChildBlockIds.filter(id => !placedBlocks.has(id));
+
+    if (unplacedSiblings.length > 0) {
+        // Place unplaced siblings to the right of the direct-line child
+        let x = directLineChild.xCenter + directLineChild.envelopeWidth / 2 + config.horizontalGap;
+        for (const cbId of unplacedSiblings) {
+            const cb = blocks.get(cbId);
+            if (!cb) continue;
+            const childCenter = x + cb.envelopeWidth / 2;
+            setBlockPosition(cb, childCenter, config);
+            placedBlocks.add(cbId);
+            placeDescendantsTopDown(cb, blocks, model, unionToBlock, config, placedBlocks);
+            x += cb.envelopeWidth + config.horizontalGap;
+        }
+    }
+
+    // Compute children center for the ancestor union (ALL children: placed + just-placed)
+    let minChildX = Infinity, maxChildX = -Infinity;
+    for (const cbId of ancestorChildBlockIds) {
+        const cb = blocks.get(cbId);
+        if (!cb) continue;
+        minChildX = Math.min(minChildX, cb.xCenter - cb.envelopeWidth / 2);
+        maxChildX = Math.max(maxChildX, cb.xCenter + cb.envelopeWidth / 2);
+    }
+    const childrenSpanCenter = minChildX < Infinity ? (minChildX + maxChildX) / 2 : anchorX;
+
+    // === PASS 2: Position chain block so the ancestor union's couple is centered over children ===
+    setBlockPosition(block, 0, config);
+
+    // Compute the ancestor union's couple offset at position 0
+    let coupleOffset: number;
+    const ancestorUnion = model.unions.get(ancestorUnionId);
+    if (ancestorUnion) {
+        const extraPartner = findChainExtraPartner(ancestorUnion, block.chainInfo, model);
+        if (extraPartner) {
+            // Secondary union → center extra partner over children
+            coupleOffset = block.chainInfo.personPositions.get(extraPartner) ?? 0;
+        } else {
+            // Primary union → center couple midpoint over children
+            if (ancestorUnion.partnerB) {
+                const aX = block.chainInfo.personPositions.get(ancestorUnion.partnerA);
+                const bX = block.chainInfo.personPositions.get(ancestorUnion.partnerB);
+                coupleOffset = (aX !== undefined && bX !== undefined) ? (aX + bX) / 2 : 0;
+            } else {
+                coupleOffset = 0;
+            }
+        }
+    } else {
+        coupleOffset = 0;
+    }
+
+    // Position block so couple center aligns with children center
+    setBlockPosition(block, childrenSpanCenter - coupleOffset, config);
+
+    // === PASS 3: Place secondary unions' children under their extra partners ===
+    for (const [unionId, childBlockIds] of unionChildBlockIds) {
+        if (unionId === ancestorUnionId) continue; // already handled
+
+        const unplacedIds = childBlockIds.filter(id => !placedBlocks.has(id));
+        if (unplacedIds.length === 0) continue;
+
+        // Get extra partner position for this union
+        const su = model.unions.get(unionId);
+        if (!su) continue;
+        const extraPartner = findChainExtraPartner(su, block.chainInfo, model);
+        const uAnchorX = extraPartner
+            ? (block.chainInfo.personPositions.get(extraPartner) ?? block.xCenter)
+            : block.xCenter;
+
+        // Center children under the extra partner
+        let groupWidth = 0;
+        for (const cbId of unplacedIds) {
+            const cb = blocks.get(cbId);
+            if (cb) groupWidth += cb.envelopeWidth;
+        }
+        groupWidth += (unplacedIds.length - 1) * config.horizontalGap;
+
+        let x = uAnchorX - groupWidth / 2;
+        for (const cbId of unplacedIds) {
+            const cb = blocks.get(cbId);
+            if (!cb) continue;
+            const childCenter = x + cb.envelopeWidth / 2;
+            setBlockPosition(cb, childCenter, config);
+            placedBlocks.add(cbId);
+            placeDescendantsTopDown(cb, blocks, model, unionToBlock, config, placedBlocks);
+            x += cb.envelopeWidth + config.horizontalGap;
+        }
+    }
+
+    // Handle any children not in unionChildBlockIds
+    for (const childId of block.childBlockIds) {
+        if (!placedBlocks.has(childId)) {
+            const cb = blocks.get(childId);
+            if (cb) {
+                setBlockPosition(cb, block.xCenter, config);
+                placedBlocks.add(childId);
+                placeDescendantsTopDown(cb, blocks, model, unionToBlock, config, placedBlocks);
+            }
+        }
+    }
+
+    // Update children center and extents
+    updateChildrenCenter(block, blocks);
+    updateBlockExtentFromChildren(block, blocks);
 }
 
 /**
@@ -610,7 +859,26 @@ function setBlockPosition(block: FamilyBlock, centerX: number, config: LayoutCon
     block.xRight = centerX + block.width / 2;
     block.coupleCenterX = centerX;
 
-    if (block.coupleWidth > config.cardWidth) {
+    if (block.chainInfo) {
+        // Chain block: compute X positions with variable slot widths
+        // Extra partners with wider subtrees get bigger slots
+        const personOrder = block.chainInfo.personOrder;
+        const personCount = personOrder.length;
+        const startX = centerX - block.coupleWidth / 2;
+
+        let x = startX;
+        for (let i = 0; i < personCount; i++) {
+            if (i > 0) x += config.partnerGap;
+            const slotWidth = block.chainInfo.personSlotWidths.get(personOrder[i]) ?? config.cardWidth;
+            const personCenterX = x + slotWidth / 2;
+            block.chainInfo.personPositions.set(personOrder[i], personCenterX);
+            x += slotWidth;
+        }
+
+        // Husband anchor = first person center, wife anchor = last person center
+        block.husbandAnchorX = block.chainInfo.personPositions.get(personOrder[0]) ?? centerX;
+        block.wifeAnchorX = block.chainInfo.personPositions.get(personOrder[personCount - 1]) ?? centerX;
+    } else if (block.coupleWidth > config.cardWidth) {
         block.husbandAnchorX = centerX - config.partnerGap / 2 - config.cardWidth / 2;
         block.wifeAnchorX = centerX + config.partnerGap / 2 + config.cardWidth / 2;
     } else {
@@ -645,6 +913,13 @@ function shiftSubtree(
         block.husbandAnchorX += deltaX;
         block.wifeAnchorX += deltaX;
         block.childrenCenterX += deltaX;
+
+        // Shift chain person positions
+        if (block.chainInfo) {
+            for (const [pid, x] of block.chainInfo.personPositions) {
+                block.chainInfo.personPositions.set(pid, x + deltaX);
+            }
+        }
 
         for (const childId of block.childBlockIds) {
             stack.push(childId);
@@ -806,6 +1081,47 @@ function extractPositions(
     unionX: Map<UnionId, number>
 ): void {
     for (const [, block] of blocks) {
+        if (block.chainInfo) {
+            // Chain block: extract positions for all persons from personPositions
+            for (const [pid, centerX] of block.chainInfo.personPositions) {
+                personX.set(pid, centerX - config.cardWidth / 2);
+            }
+
+            // Set unionX for each chain union:
+            // - Primary union: midpoint between partners (standard stem)
+            // - Secondary unions: extra partner's center (stem from that partner)
+            const primaryUnionId = model.personToUnion.get(block.chainInfo.chainPersonId);
+            for (const chainUnionId of block.chainInfo.unionIds) {
+                const chainUnion = model.unions.get(chainUnionId);
+                if (!chainUnion) continue;
+
+                if (chainUnionId === primaryUnionId) {
+                    // Primary union: midpoint between partners
+                    const aCenterX = block.chainInfo.personPositions.get(chainUnion.partnerA);
+                    const bCenterX = chainUnion.partnerB ? block.chainInfo.personPositions.get(chainUnion.partnerB) : null;
+                    if (aCenterX !== undefined && bCenterX !== undefined && bCenterX !== null) {
+                        unionX.set(chainUnionId, (aCenterX + bCenterX) / 2);
+                    } else if (aCenterX !== undefined) {
+                        unionX.set(chainUnionId, aCenterX);
+                    }
+                } else {
+                    // Secondary union: stem from the extra partner's center
+                    const extraPartner = findChainExtraPartner(chainUnion, block.chainInfo!, model);
+                    if (extraPartner) {
+                        const extraCenterX = block.chainInfo.personPositions.get(extraPartner);
+                        if (extraCenterX !== undefined) {
+                            unionX.set(chainUnionId, extraCenterX);
+                        }
+                    } else {
+                        // Single-parent secondary union (shouldn't happen, fallback)
+                        const aCenterX = block.chainInfo.personPositions.get(chainUnion.partnerA);
+                        if (aCenterX !== undefined) unionX.set(chainUnionId, aCenterX);
+                    }
+                }
+            }
+            continue;
+        }
+
         const union = model.unions.get(block.rootUnionId);
         if (!union) continue;
 

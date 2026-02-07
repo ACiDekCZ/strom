@@ -239,7 +239,11 @@ const stringsEN = {
         hiddenFamilies: (count: number) => `${count} other famil${count > 1 ? 'ies' : 'y'} with children (click to focus)`,
         hiddenPartnersTooltip: 'Other partners',
         hiddenFamiliesTooltip: 'Other families',
+        collapsePartners: 'Collapse expanded partners',
+        collapsePartnersLabel: '−',
         hiddenSiblingsTooltip: 'Siblings',
+        hiddenParentsTooltip: 'Parents',
+        hiddenChildrenTooltip: 'Children',
         personCount: (visible: number, total: number) => `${visible} of ${total} persons`
     },
 
@@ -994,7 +998,11 @@ const stringsCZ: StringsType = {
         hiddenFamilies: (count: number) => `${count} další rodin${count > 1 ? 'y' : 'a'} s dětmi (klikněte pro zaměření)`,
         hiddenPartnersTooltip: 'Další partneři',
         hiddenFamiliesTooltip: 'Další rodiny',
+        collapsePartners: 'Sbalit rozbalené partnery',
+        collapsePartnersLabel: '−',
         hiddenSiblingsTooltip: 'Sourozenci',
+        hiddenParentsTooltip: 'Rodiče',
+        hiddenChildrenTooltip: 'Děti',
         personCount: (visible: number, total: number) => `${visible} z ${total} osob`
     },
 

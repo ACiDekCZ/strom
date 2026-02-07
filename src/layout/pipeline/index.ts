@@ -19,7 +19,7 @@ export * from './types.js';
 export * from './debug-types.js';
 
 // Re-export individual steps
-export { selectSubgraph } from './1-select-subgraph.js';
+export { selectSubgraph, expandSelectionForDisplay } from './1-select-subgraph.js';
 export { buildLayoutModel, getChildUnions } from './2-build-model.js';
 export { assignGenerations, validateGenerations } from './3-assign-generations.js';
 export { measureSubtrees, getTotalWidth } from './4-measure.js';
@@ -31,11 +31,15 @@ export { validateLayout } from './validation.js';
 export { computeDebugValidation } from './debug-validation.js';
 export { computeDebugGeometry } from './debug-geometry.js';
 
+import { PersonId, PartnershipId, StromData } from '../../types.js';
 import {
     PipelineInput,
     LayoutResult,
     LayoutRequest,
-    LayoutEngine
+    LayoutEngine,
+    DisplayPolicy,
+    DEFAULT_DISPLAY_POLICY,
+    GraphSelection
 } from './types.js';
 
 import {
@@ -46,7 +50,7 @@ import {
     DEBUG_STEP_NAMES
 } from './debug-types.js';
 
-import { selectSubgraph } from './1-select-subgraph.js';
+import { selectSubgraph, expandSelectionForDisplay } from './1-select-subgraph.js';
 import { buildLayoutModel } from './2-build-model.js';
 import { assignGenerations } from './3-assign-generations.js';
 import { measureSubtrees } from './4-measure.js';
@@ -57,6 +61,167 @@ import { emitLayoutResult } from './8-emit-result.js';
 import { validateLayout } from './validation.js';
 import { computeDebugValidation } from './debug-validation.js';
 import { computeDebugGeometry } from './debug-geometry.js';
+
+/**
+ * Find persons with multiple partnerships for auto-expansion.
+ *
+ * Expansion scope (direct line + their partners at every generation):
+ * - Gen -1: biological parents of focus person + parents' partners
+ * - Gen  0: focus person + their partners + siblings + siblings' partners
+ * - Gen 1+: descendants of all gen-0 members + descendants' partners
+ *
+ * All persons in scope who have multiple partnerships get auto-expanded.
+ */
+function findAutoExpandPersonIds(
+    data: StromData,
+    focusPersonId: PersonId,
+    selection: GraphSelection
+): Set<PersonId> {
+    const expandScope = new Set<PersonId>();
+
+    const focusPerson = data.persons[focusPersonId];
+    if (!focusPerson) return new Set();
+
+    // Gen 0: focus person
+    expandScope.add(focusPersonId);
+
+    // Gen 0: partners of focus person
+    for (const pid of focusPerson.partnerships) {
+        if (!selection.partnerships.has(pid)) continue;
+        const p = data.partnerships[pid];
+        if (!p) continue;
+        const partnerId = p.person1Id === focusPersonId ? p.person2Id : p.person1Id;
+        if (selection.persons.has(partnerId)) {
+            expandScope.add(partnerId);
+        }
+    }
+
+    // Gen 0: siblings of focus person (children of focus's parents)
+    // and their partners
+    for (const parentId of focusPerson.parentIds) {
+        const parent = data.persons[parentId];
+        if (!parent) continue;
+        for (const ppid of parent.partnerships) {
+            if (!selection.partnerships.has(ppid)) continue;
+            const pp = data.partnerships[ppid];
+            if (!pp) continue;
+            for (const siblingId of pp.childIds) {
+                if (!selection.persons.has(siblingId)) continue;
+                expandScope.add(siblingId);
+                // Partners of sibling
+                const sibling = data.persons[siblingId];
+                if (!sibling) continue;
+                for (const spid of sibling.partnerships) {
+                    if (!selection.partnerships.has(spid)) continue;
+                    const sp = data.partnerships[spid];
+                    if (!sp) continue;
+                    const sibPartnerId = sp.person1Id === siblingId ? sp.person2Id : sp.person1Id;
+                    if (selection.persons.has(sibPartnerId)) {
+                        expandScope.add(sibPartnerId);
+                    }
+                }
+            }
+        }
+    }
+
+    // Gen -1: parents + parents' partners + parents' siblings + their partners
+    // (same "family cluster" logic as gen 0)
+    for (const parentId of focusPerson.parentIds) {
+        if (!selection.persons.has(parentId)) continue;
+        expandScope.add(parentId);
+        const parent = data.persons[parentId];
+        if (!parent) continue;
+        // Partners of parent
+        for (const ppid of parent.partnerships) {
+            if (!selection.partnerships.has(ppid)) continue;
+            const pp = data.partnerships[ppid];
+            if (!pp) continue;
+            const parentPartnerId = pp.person1Id === parentId ? pp.person2Id : pp.person1Id;
+            if (selection.persons.has(parentPartnerId)) {
+                expandScope.add(parentPartnerId);
+            }
+        }
+        // Siblings of parent (children of grandparents) + their partners
+        for (const gpId of parent.parentIds) {
+            const gp = data.persons[gpId];
+            if (!gp) continue;
+            for (const gpPid of gp.partnerships) {
+                if (!selection.partnerships.has(gpPid)) continue;
+                const gpP = data.partnerships[gpPid];
+                if (!gpP) continue;
+                for (const auntUncleId of gpP.childIds) {
+                    if (!selection.persons.has(auntUncleId)) continue;
+                    expandScope.add(auntUncleId);
+                    const auntUncle = data.persons[auntUncleId];
+                    if (!auntUncle) continue;
+                    for (const auPid of auntUncle.partnerships) {
+                        if (!selection.partnerships.has(auPid)) continue;
+                        const auP = data.partnerships[auPid];
+                        if (!auP) continue;
+                        const auPartnerId = auP.person1Id === auntUncleId ? auP.person2Id : auP.person1Id;
+                        if (selection.persons.has(auPartnerId)) {
+                            expandScope.add(auPartnerId);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Gen >= 1: biological descendants of ALL gen-0 family members (BFS)
+    // Parents (gen -1) are excluded from descendant seeding
+    const parentIds = new Set(focusPerson.parentIds);
+    const queue: PersonId[] = [];
+    for (const gen0Id of expandScope) {
+        if (parentIds.has(gen0Id)) continue;
+        const person = data.persons[gen0Id];
+        if (!person) continue;
+        for (const pid of person.partnerships) {
+            if (!selection.partnerships.has(pid)) continue;
+            const p = data.partnerships[pid];
+            if (!p) continue;
+            for (const childId of p.childIds) {
+                if (selection.persons.has(childId) && !expandScope.has(childId)) {
+                    queue.push(childId);
+                }
+            }
+        }
+    }
+
+    while (queue.length > 0) {
+        const childId = queue.shift()!;
+        if (expandScope.has(childId)) continue;
+        expandScope.add(childId);
+        const child = data.persons[childId];
+        if (!child) continue;
+        for (const pid of child.partnerships) {
+            if (!selection.partnerships.has(pid)) continue;
+            const p = data.partnerships[pid];
+            if (!p) continue;
+            // Add partner of descendant to scope
+            const partnerId = p.person1Id === childId ? p.person2Id : p.person1Id;
+            if (partnerId && selection.persons.has(partnerId) && !expandScope.has(partnerId)) {
+                expandScope.add(partnerId);
+            }
+            for (const gcId of p.childIds) {
+                if (selection.persons.has(gcId) && !expandScope.has(gcId)) {
+                    queue.push(gcId);
+                }
+            }
+        }
+    }
+
+    // Filter to persons with multiple partnerships (in data, not selection —
+    // expandSelectionForDisplay will add missing partnerships later)
+    const result = new Set<PersonId>();
+    for (const personId of expandScope) {
+        const person = data.persons[personId];
+        if (!person || person.partnerships.length <= 1) continue;
+        result.add(personId);
+    }
+
+    return result;
+}
 
 /**
  * Run the complete layout pipeline.
@@ -72,7 +237,8 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
         includeParentSiblings,
         includeParentSiblingDescendants,
         maxIterations = 20,
-        tolerance = 0.5
+        tolerance = 0.5,
+        displayPolicy = DEFAULT_DISPLAY_POLICY
     } = input;
 
     // Step 1: Select subgraph
@@ -91,11 +257,28 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
         return emptyResult();
     }
 
+    // Auto-expand: find persons at gen >= -1 with multiple partnerships
+    let effectivePolicy = displayPolicy;
+    if (displayPolicy.autoExpand !== false) {
+        const autoExpandIds = findAutoExpandPersonIds(data, focusPersonId, selection);
+        if (autoExpandIds.size > 0) {
+            const merged = new Set(autoExpandIds);
+            if (displayPolicy.expandedPersonIds) {
+                for (const id of displayPolicy.expandedPersonIds) merged.add(id);
+            }
+            effectivePolicy = { mode: 'expanded', expandedPersonIds: merged, autoExpand: true };
+        }
+    }
+
+    // Expand selection for expanded persons (add missing partners/children)
+    expandSelectionForDisplay(data, selection, effectivePolicy);
+
     // Step 2: Build layout model
     const model = buildLayoutModel({
         data,
         selection,
-        focusPersonId
+        focusPersonId,
+        displayPolicy: effectivePolicy
     });
 
     // Step 3: Assign generations
@@ -195,7 +378,8 @@ export function runLayoutPipelineWithDebug(
         includeParentSiblings,
         includeParentSiblingDescendants,
         maxIterations = 20,
-        tolerance = 0.5
+        tolerance = 0.5,
+        displayPolicy = DEFAULT_DISPLAY_POLICY
     } = input;
 
     // Helper to create a snapshot
@@ -235,6 +419,22 @@ export function runLayoutPipelineWithDebug(
         includeParentSiblingDescendants
     });
 
+    // Auto-expand: find persons at gen >= -1 with multiple partnerships
+    let effectivePolicyDebug = displayPolicy;
+    if (displayPolicy.autoExpand !== false) {
+        const autoExpandIdsDebug = findAutoExpandPersonIds(data, focusPersonId, selection);
+        if (autoExpandIdsDebug.size > 0) {
+            const merged = new Set(autoExpandIdsDebug);
+            if (displayPolicy.expandedPersonIds) {
+                for (const id of displayPolicy.expandedPersonIds) merged.add(id);
+            }
+            effectivePolicyDebug = { mode: 'expanded', expandedPersonIds: merged, autoExpand: true };
+        }
+    }
+
+    // Expand selection for expanded persons (add missing partners/children)
+    expandSelectionForDisplay(data, selection, effectivePolicyDebug);
+
     snapshots.push(createSnapshot(1, { selection }));
     if (targetStep === 1 || selection.persons.size === 0) {
         return { result: emptyResult(), snapshots };
@@ -244,7 +444,8 @@ export function runLayoutPipelineWithDebug(
     const model = buildLayoutModel({
         data,
         selection,
-        focusPersonId
+        focusPersonId,
+        displayPolicy: effectivePolicyDebug
     });
 
     snapshots.push(createSnapshot(2, { selection, model }));
@@ -369,7 +570,8 @@ export class StromLayoutEngine implements LayoutEngine {
             descendantDepth: request.policy.descendantDepth,
             includeSpouseAncestors: false,  // Only show focus person's ancestors
             includeParentSiblings: request.policy.includeAuntsUncles,
-            includeParentSiblingDescendants: request.policy.includeCousins
+            includeParentSiblingDescendants: request.policy.includeCousins,
+            displayPolicy: request.displayPolicy
         });
     }
 }

@@ -23,6 +23,7 @@ import {
     LayoutRequest,
     Connection,
     SpouseLine,
+    DisplayPolicy,
     runLayoutPipelineWithDebug,
     DebugOptions,
     DebugSnapshot,
@@ -55,6 +56,9 @@ class TreeRendererClass {
 
     // Sibling rotation state: tracks which partner index to focus next per person
     private siblingFocusIndex = new Map<PersonId, number>();
+
+    // Expanded display mode: persons whose all partnerships are shown inline
+    private showAllPartnerships = true;
 
     /**
      * Set debug options for pipeline visualization.
@@ -102,6 +106,7 @@ class TreeRendererClass {
         }
 
         // Compute layout using the new layout engine
+        // Auto-expand for gen >= -1 persons is handled by the pipeline
         const request: LayoutRequest = {
             data: DataManager.getData(),
             focusPersonId: this.focusPersonId,
@@ -111,7 +116,11 @@ class TreeRendererClass {
                 includeAuntsUncles: true,
                 includeCousins: true
             },
-            config: this.config
+            config: this.config,
+            displayPolicy: {
+                mode: this.showAllPartnerships ? 'expanded' : 'standard',
+                autoExpand: this.showAllPartnerships
+            }
         };
 
         let result;
@@ -459,6 +468,14 @@ class TreeRendererClass {
     }
 
     /**
+     * Toggle showing all partnerships inline.
+     */
+    toggleShowAllPartnerships(): void {
+        this.showAllPartnerships = !this.showAllPartnerships;
+        this.render();
+    }
+
+    /**
      * Compute set of persons who are presumed deceased:
      * - Has death date, OR
      * - Birth year is more than 120 years ago, OR
@@ -560,6 +577,8 @@ class TreeRendererClass {
             card.onclick = (e) => {
                 const target = e.target as HTMLElement;
                 if (target.classList.contains('add-btn') || target.classList.contains('branch-tab')) return;
+                // Don't open context menu when clicking on badge buttons or their children
+                if (target.closest('.hidden-partners-btn') || target.closest('.hidden-families-btn')) return;
                 UI.showContextMenu(id, e);
             };
 
@@ -635,7 +654,16 @@ class TreeRendererClass {
             if (hasHiddenParents || hasHiddenChildren || hasHiddenSiblings) {
                 html += `<div class="branch-tabs">`;
                 if (hasHiddenParents) {
-                    html += `<button class="branch-tab" data-action="focus-parent" title="${strings.branchTabs.viewParents}">▲</button>`;
+                    const hiddenParents = person.parentIds
+                        .filter(pid => !this.positions.has(pid))
+                        .map(pid => DataManager.getPerson(pid))
+                        .filter((p): p is Person => p !== null);
+                    const parentItems = hiddenParents.map(p => {
+                        const name = `${p.firstName || '?'} ${p.lastName || ''}`.trim();
+                        const year = p.birthDate ? p.birthDate.split('-')[0] : '';
+                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
+                    }).join('');
+                    html += `<button class="branch-tab" data-action="focus-parent">▲<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenParentsTooltip}</div>${parentItems}</div></button>`;
                 }
                 if (hasHiddenSiblings) {
                     const hiddenSiblings = siblings.filter(s => !this.positions.has(s.id));
@@ -666,12 +694,22 @@ class TreeRendererClass {
                     html += `<button class="branch-tab" data-action="focus-sibling" data-target-ids="${targetIds}">◆<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${siblingItems}</div></button>`;
                 }
                 if (hasHiddenChildren) {
-                    html += `<button class="branch-tab" data-action="focus-child" title="${strings.branchTabs.viewFamily}">▼</button>`;
+                    const hiddenChildren = person.childIds
+                        .filter(cid => !this.positions.has(cid))
+                        .map(cid => DataManager.getPerson(cid))
+                        .filter((c): c is Person => c !== null);
+                    const childItems = hiddenChildren.map(c => {
+                        const name = `${c.firstName || '?'} ${c.lastName || ''}`.trim();
+                        const year = c.birthDate ? c.birthDate.split('-')[0] : '';
+                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
+                    }).join('');
+                    html += `<button class="branch-tab" data-action="focus-child">▼<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenChildrenTooltip}</div>${childItems}</div></button>`;
                 }
                 html += `</div>`;
             }
 
             // Add hidden relationship indicators (above card on left, mirror of branch tabs)
+            // Gen >= -1 persons are auto-expanded, so badges only appear for ancestors (gen <= -2)
             if (hiddenPartnersCount > 0 || hiddenFamiliesCount > 0) {
                 html += `<div class="hidden-indicators">`;
                 if (hiddenPartnersCount > 0) {
@@ -793,35 +831,23 @@ class TreeRendererClass {
                 });
             }
 
-            // Attach event listener for hidden partners button (toggle to hidden partner)
+            // Attach event listener for hidden partners button
+            // Since gen >= -1 persons are auto-expanded, remaining badges are for ancestors (gen <= -2)
+            // → navigate to that person (setFocus)
             const hiddenPartnersBtn = card.querySelector('.hidden-partners-btn');
             if (hiddenPartnersBtn) {
                 hiddenPartnersBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    const hiddenPartners = this.getHiddenPartners(id);
-                    if (hiddenPartners.length === 1) {
-                        // Toggle: focus on the single hidden partner
-                        this.setFocus(hiddenPartners[0].id);
-                    } else if (hiddenPartners.length > 1) {
-                        // Show selection dialog for multiple hidden partners
-                        UI.showPartnerSelectionDialog(id, hiddenPartners);
-                    }
+                    this.setFocus(id);
                 });
             }
 
-            // Attach event listener for hidden families button (focus to show other families)
+            // Attach event listener for hidden families button → setFocus
             const hiddenFamiliesBtn = card.querySelector('.hidden-families-btn');
             if (hiddenFamiliesBtn) {
                 hiddenFamiliesBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    const hiddenFamilyPartners = this.getHiddenFamilyPartners(id);
-                    if (hiddenFamilyPartners.length === 1) {
-                        // Single hidden family: focus on that partner
-                        this.setFocus(hiddenFamilyPartners[0].id);
-                    } else if (hiddenFamilyPartners.length > 1) {
-                        // Multiple hidden families: show selection dialog
-                        UI.showPartnerSelectionDialog(id, hiddenFamilyPartners);
-                    }
+                    this.setFocus(id);
                 });
             }
 

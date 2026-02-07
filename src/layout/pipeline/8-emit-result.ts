@@ -70,11 +70,15 @@ export function emitLayoutResult(input: EmitInput): LayoutResult {
         errors: []
     };
 
+    // Include partner chains if present
+    const partnerChains = model.partnerChains.size > 0 ? model.partnerChains : undefined;
+
     return {
         positions,
         connections,
         spouseLines,
-        diagnostics
+        diagnostics,
+        partnerChains
     };
 }
 

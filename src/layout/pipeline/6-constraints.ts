@@ -13,6 +13,7 @@ import {
     ConstraintsInput,
     ConstrainedModel,
     UnionId,
+    UnionNode,
     FamilyBlock,
     FamilyBlockId,
     FamilyBlockModel,
@@ -21,6 +22,27 @@ import {
     LayoutModel,
     GenerationalModel
 } from './types.js';
+
+/**
+ * Find the "extra partner" in a secondary chain union.
+ * In a merged chain, the extra partner is the person NOT in the primary couple.
+ */
+function findChainExtraPartner(
+    union: UnionNode,
+    chainInfo: NonNullable<FamilyBlock['chainInfo']>,
+    model: LayoutModel
+): PersonId | null {
+    const primaryUnionId = model.personToUnion.get(chainInfo.chainPersonId);
+    const primaryUnion = primaryUnionId ? model.unions.get(primaryUnionId) : null;
+    const primaryCoupleIds = new Set<PersonId>();
+    primaryCoupleIds.add(chainInfo.chainPersonId);
+    if (primaryUnion?.partnerA) primaryCoupleIds.add(primaryUnion.partnerA);
+    if (primaryUnion?.partnerB) primaryCoupleIds.add(primaryUnion.partnerB);
+
+    if (!primaryCoupleIds.has(union.partnerA)) return union.partnerA;
+    if (union.partnerB && !primaryCoupleIds.has(union.partnerB)) return union.partnerB;
+    return null;
+}
 
 // ==================== PHASE B INDEPENDENT ANCESTOR TREE ====================
 
@@ -56,6 +78,37 @@ interface AncestorNode {
     coupleWidth: number;
     /** Center X position (computed top-down) */
     xCenter: number;
+}
+
+// ==================== BLOCK CARD EXTENT HELPER ====================
+
+/**
+ * Get the visual card extent (left, right) of a block.
+ * Handles chain blocks (wider coupleWidth) correctly.
+ */
+function getBlockCardExtent(
+    block: FamilyBlock,
+    model: LayoutModel,
+    config: LayoutConfig
+): { left: number; right: number } {
+    if (block.chainInfo) {
+        // Chain block: use actual coupleWidth
+        return {
+            left: block.xCenter - block.coupleWidth / 2,
+            right: block.xCenter + block.coupleWidth / 2
+        };
+    }
+    const union = model.unions.get(block.rootUnionId);
+    if (union?.partnerB) {
+        return {
+            left: block.xCenter - config.partnerGap / 2 - config.cardWidth,
+            right: block.xCenter + config.partnerGap / 2 + config.cardWidth
+        };
+    }
+    return {
+        left: block.xCenter - config.cardWidth / 2,
+        right: block.xCenter + config.cardWidth / 2
+    };
 }
 
 // ==================== LOCKED POSITIONS ====================
@@ -103,18 +156,22 @@ function captureLockedPositions(
                 if (blockId) {
                     const block = blocks.get(blockId);
                     if (block) {
-                        const union = model.unions.get(uid);
-                        if (union) {
-                            // Compute person X from block
-                            let personX: number;
-                            if (union.partnerB === null) {
-                                personX = block.xCenter - config.cardWidth / 2;
-                            } else if (pid === union.partnerA) {
-                                personX = block.xCenter - config.partnerGap / 2 - config.cardWidth;
-                            } else {
-                                personX = block.xCenter + config.partnerGap / 2;
+                        if (block.chainInfo && block.chainInfo.personPositions.has(pid)) {
+                            const centerX = block.chainInfo.personPositions.get(pid)!;
+                            locked.personX.set(pid, centerX - config.cardWidth / 2);
+                        } else {
+                            const union = model.unions.get(uid);
+                            if (union) {
+                                let personX: number;
+                                if (union.partnerB === null) {
+                                    personX = block.xCenter - config.cardWidth / 2;
+                                } else if (pid === union.partnerA) {
+                                    personX = block.xCenter - config.partnerGap / 2 - config.cardWidth;
+                                } else {
+                                    personX = block.xCenter + config.partnerGap / 2;
+                                }
+                                locked.personX.set(pid, personX);
                             }
-                            locked.personX.set(pid, personX);
                         }
                     }
                 }
@@ -165,16 +222,22 @@ function assertLockedDescendantsUnchanged(
             if (blockId) {
                 const block = blocks.get(blockId);
                 if (block) {
-                    const union = model.unions.get(uid);
-                    if (union) {
-                        let newX: number;
-                        if (union.partnerB === null) {
-                            newX = block.xCenter - config.cardWidth / 2;
-                        } else if (pid === union.partnerA) {
-                            newX = block.xCenter - config.partnerGap / 2 - config.cardWidth;
-                        } else {
-                            newX = block.xCenter + config.partnerGap / 2;
+                    let newX: number | undefined;
+                    if (block.chainInfo && block.chainInfo.personPositions.has(pid)) {
+                        newX = block.chainInfo.personPositions.get(pid)! - config.cardWidth / 2;
+                    } else {
+                        const union = model.unions.get(uid);
+                        if (union) {
+                            if (union.partnerB === null) {
+                                newX = block.xCenter - config.cardWidth / 2;
+                            } else if (pid === union.partnerA) {
+                                newX = block.xCenter - config.partnerGap / 2 - config.cardWidth;
+                            } else {
+                                newX = block.xCenter + config.partnerGap / 2;
+                            }
                         }
+                    }
+                    if (newX !== undefined) {
                         const delta = Math.abs(newX - oldX);
                         if (delta > tolerance) {
                             violations.push(
@@ -716,12 +779,12 @@ export function applyConstraints(input: ConstraintsInput): ConstrainedModel {
 
     // === PHASE A: DESCENDANTS FIRST (gen >= 0) ===
     // Stabilize descendant positions before ancestors center over them.
+
     for (let pass = 0; pass < 10; pass++) {
         const delta = resolveOverlapsDescOnly(blocks, model, config);
         recenterDescendantParents(blocks, model, fbm.unionToBlock, personX, config);
         if (delta < 0.5) break;
     }
-
     // BCO enforcement: prevent subtree interleaving
     // First pass: resolve BCO without overlap resolution to let BCO converge
     for (let bcoPass = 0; bcoPass < 15; bcoPass++) {
@@ -951,18 +1014,10 @@ function resolveOverlapsDescOnly(
             const union = model.unions.get(block.rootUnionId);
             if (!union) continue;
 
-            let left: number;
-            let right: number;
-            if (union.partnerB) {
-                left = block.xCenter - config.partnerGap / 2 - config.cardWidth;
-                right = block.xCenter + config.partnerGap / 2 + config.cardWidth;
-            } else {
-                left = block.xCenter - config.cardWidth / 2;
-                right = block.xCenter + config.cardWidth / 2;
-            }
+            const ext = getBlockCardExtent(block, model, config);
 
             if (!byGen.has(block.generation)) byGen.set(block.generation, []);
-            byGen.get(block.generation)!.push({ blockId: block.id, left, right });
+            byGen.get(block.generation)!.push({ blockId: block.id, left: ext.left, right: ext.right });
         }
 
         for (const [, genBlocks] of byGen) {
@@ -1014,6 +1069,13 @@ function shiftBlockSubtree(
         block.husbandAnchorX += deltaX;
         block.wifeAnchorX += deltaX;
         block.childrenCenterX += deltaX;
+
+        // Shift chain person positions
+        if (block.chainInfo) {
+            for (const [pid, x] of block.chainInfo.personPositions) {
+                block.chainInfo.personPositions.set(pid, x + deltaX);
+            }
+        }
 
         for (const childId of block.childBlockIds) {
             stack.push(childId);
@@ -1121,16 +1183,9 @@ function subtreeCardExtent(
     const block = blocks.get(blockId);
     if (!block) return { minX: 0, maxX: 0 };
 
-    const union = model.unions.get(block.rootUnionId);
-    let minX: number;
-    let maxX: number;
-    if (union?.partnerB) {
-        minX = block.xCenter - config.partnerGap / 2 - config.cardWidth;
-        maxX = block.xCenter + config.partnerGap / 2 + config.cardWidth;
-    } else {
-        minX = block.xCenter - config.cardWidth / 2;
-        maxX = block.xCenter + config.cardWidth / 2;
-    }
+    const rootExt = getBlockCardExtent(block, model, config);
+    let minX = rootExt.left;
+    let maxX = rootExt.right;
 
     const stack = [...block.childBlockIds];
     const visited = new Set<FamilyBlockId>([blockId]);
@@ -1143,16 +1198,9 @@ function subtreeCardExtent(
         const child = blocks.get(childId);
         if (!child) continue;
 
-        const childUnion = model.unions.get(child.rootUnionId);
-        let childLeft: number;
-        let childRight: number;
-        if (childUnion?.partnerB) {
-            childLeft = child.xCenter - config.partnerGap / 2 - config.cardWidth;
-            childRight = child.xCenter + config.partnerGap / 2 + config.cardWidth;
-        } else {
-            childLeft = child.xCenter - config.cardWidth / 2;
-            childRight = child.xCenter + config.cardWidth / 2;
-        }
+        const childExt = getBlockCardExtent(child, model, config);
+        const childLeft = childExt.left;
+        const childRight = childExt.right;
 
         minX = Math.min(minX, childLeft);
         maxX = Math.max(maxX, childRight);
@@ -1338,16 +1386,9 @@ function computeSafePull(
         const subBlock = blocks.get(subId);
         if (!subBlock || subBlock.generation < 0) continue;
 
-        const subUnion = model.unions.get(subBlock.rootUnionId);
-        if (!subUnion) continue;
-
         // Compute current card left edge of this subtree block
-        let subLeft: number;
-        if (subUnion.partnerB) {
-            subLeft = subBlock.xCenter - config.partnerGap / 2 - config.cardWidth;
-        } else {
-            subLeft = subBlock.xCenter - config.cardWidth / 2;
-        }
+        const subExt = getBlockCardExtent(subBlock, model, config);
+        const subLeft = subExt.left;
 
         // Find closest non-subtree block to the left at same generation
         for (const [otherId, otherBlock] of blocks) {
@@ -1355,15 +1396,8 @@ function computeSafePull(
             if (otherBlock.generation !== subBlock.generation) continue;
             if (otherBlock.generation < 0) continue;
 
-            const otherUnion = model.unions.get(otherBlock.rootUnionId);
-            if (!otherUnion) continue;
-
-            let otherRight: number;
-            if (otherUnion.partnerB) {
-                otherRight = otherBlock.xCenter + config.partnerGap / 2 + config.cardWidth;
-            } else {
-                otherRight = otherBlock.xCenter + config.cardWidth / 2;
-            }
+            const otherExt = getBlockCardExtent(otherBlock, model, config);
+            const otherRight = otherExt.right;
 
             // Only consider blocks to the left
             if (otherRight > subLeft) continue;
@@ -1415,6 +1449,22 @@ function enforceCousinSeparation(
             fsBlockIds.add(blockId);
         }
     }
+
+    // Chain blocks: include ALL gen=0 children from ALL unions in the chain.
+    // Half-siblings from the same chain are part of the focus family, not cousins.
+    const focusParentBlockId = unionToBlock.get(focusParentUnionId);
+    if (focusParentBlockId) {
+        const focusParentBlock = blocks.get(focusParentBlockId);
+        if (focusParentBlock?.chainInfo) {
+            for (const childId of focusParentBlock.childBlockIds) {
+                const childBlock = blocks.get(childId);
+                if (childBlock && childBlock.generation === 0) {
+                    fsBlockIds.add(childId);
+                }
+            }
+        }
+    }
+
     if (fsBlockIds.size === 0) return false;
 
     // 3. Compute FS span (combined subtreeCardExtent of all FS blocks)
@@ -1730,6 +1780,13 @@ function shiftBranch(
         block.husbandAnchorX += deltaX;
         block.wifeAnchorX += deltaX;
         block.childrenCenterX += deltaX;
+
+        // Shift chain person positions
+        if (block.chainInfo) {
+            for (const [pid, x] of block.chainInfo.personPositions) {
+                block.chainInfo.personPositions.set(pid, x + deltaX);
+            }
+        }
     }
 
     branch.minX += deltaX;
@@ -1915,22 +1972,6 @@ function resolveAncestorOverlapsOutward(
         const genBlocks = getBlocksAtGeneration(blocks, gen);
         if (genBlocks.length < 2) continue;
 
-        // Helper: compute visual extent for a block
-        const getVisualExtent = (block: FamilyBlock): { left: number; right: number } => {
-            const union = model.unions.get(block.rootUnionId);
-            if (union?.partnerB) {
-                return {
-                    left: block.xCenter - config.partnerGap / 2 - config.cardWidth,
-                    right: block.xCenter + config.partnerGap / 2 + config.cardWidth
-                };
-            } else {
-                return {
-                    left: block.xCenter - config.cardWidth / 2,
-                    right: block.xCenter + config.cardWidth / 2
-                };
-            }
-        };
-
         // Build sorted entries for ALL blocks in this generation
         const entries: Array<{
             block: FamilyBlock;
@@ -1939,7 +1980,7 @@ function resolveAncestorOverlapsOutward(
         }> = [];
 
         for (const block of genBlocks) {
-            const extent = getVisualExtent(block);
+            const extent = getBlockCardExtent(block, model, config);
             entries.push({ block, left: extent.left, right: extent.right });
         }
 
@@ -2243,20 +2284,7 @@ function enforceFSPCWithOverlapResolution(
     }
 
     // Helper to get visual extent
-    const getExtent = (block: FamilyBlock): { left: number; right: number } => {
-        const union = model.unions.get(block.rootUnionId);
-        if (union?.partnerB) {
-            return {
-                left: block.xCenter - config.partnerGap / 2 - config.cardWidth,
-                right: block.xCenter + config.partnerGap / 2 + config.cardWidth
-            };
-        } else {
-            return {
-                left: block.xCenter - config.cardWidth / 2,
-                right: block.xCenter + config.cardWidth / 2
-            };
-        }
-    };
+    const getExtent = (block: FamilyBlock) => getBlockCardExtent(block, model, config);
 
     // === H-side: enforce barrier (right edge <= husbandCenterX) ===
     // Then resolve overlaps by pushing LEFT (outward)
@@ -2659,12 +2687,6 @@ function compactAncestorsInward(
         byGen.get(block.generation)!.push(block);
     }
 
-    // DEBUG: Log what blocks are being processed
-    console.log('[A-COMP] Processing generations:', Array.from(byGen.keys()));
-    for (const [gen, genBlocks] of byGen) {
-        console.log(`[A-COMP] Gen ${gen}:`, genBlocks.map(b => `${b.id} (side=${b.side}, x=${b.xCenter.toFixed(0)})`));
-    }
-
     // Process each generation from CLOSEST to DEEPEST (-2 to -N)
     const gens = Array.from(byGen.keys()).sort((a, b) => b - a);
 
@@ -2713,9 +2735,6 @@ function compactAncestorsInward(
                 dxChild = Math.max(0, targetX - block.xCenter);
             }
 
-            // DEBUG: Log constraints
-            console.log(`[A-COMP H] Block ${block.id}: collision=${dxCollision}, child=${dxChild}, childBlock=${childBlock?.id ?? 'null'}`);
-
             // Compute dx: use the most restrictive constraint
             let dx: number;
             const constraints = [dxCollision, dxChild].filter(c => c !== null) as number[];
@@ -2724,8 +2743,6 @@ function compactAncestorsInward(
             } else {
                 dx = 0; // No constraints at all
             }
-
-            console.log(`[A-COMP H] Block ${block.id}: dx=${dx.toFixed(1)}`);
 
             if (dx > 0.5) {
                 shiftBlock(block, dx);
@@ -2945,20 +2962,7 @@ function compactAncestorSides(
     }
 
     // Helper to get visual extent
-    const getExtent = (block: FamilyBlock): { left: number; right: number } => {
-        const union = model.unions.get(block.rootUnionId);
-        if (union?.partnerB) {
-            return {
-                left: block.xCenter - config.partnerGap / 2 - config.cardWidth,
-                right: block.xCenter + config.partnerGap / 2 + config.cardWidth
-            };
-        } else {
-            return {
-                left: block.xCenter - config.cardWidth / 2,
-                right: block.xCenter + config.cardWidth / 2
-            };
-        }
-    };
+    const getExtent = (block: FamilyBlock) => getBlockCardExtent(block, model, config);
 
     // === H-side: sort by xCenter DESC, pull RIGHT toward focus ===
     hBlocks.sort((a, b) => b.xCenter - a.xCenter);
@@ -3120,8 +3124,9 @@ function enforceFocusParentContainment(
     // 2. Compute barrier positions from focus couple CARD positions
     // husbandX = left edge of husband card
     // wifeRightEdge = right edge of wife card
-    const husbandX = focusBlock.xCenter - config.partnerGap / 2 - config.cardWidth;
-    const wifeRightEdge = focusBlock.xCenter + config.partnerGap / 2 + config.cardWidth;
+    const focusExt = getBlockCardExtent(focusBlock, model, config);
+    const husbandX = focusExt.left;
+    const wifeRightEdge = focusExt.right;
 
     // 3. H-side: collect all ancestors of partnerA, push LEFT if maxX > husbandX
     const hBlocks = collectAncestorSubtree(focusUnion.partnerA, model, unionToBlock, blocks);
@@ -3311,16 +3316,8 @@ function resolveOverlapsOutward(
             const union = model.unions.get(block.rootUnionId);
             if (!union) continue;
 
-            let left: number;
-            let right: number;
-            if (union.partnerB) {
-                left = block.xCenter - config.partnerGap / 2 - config.cardWidth;
-                right = block.xCenter + config.partnerGap / 2 + config.cardWidth;
-            } else {
-                left = block.xCenter - config.cardWidth / 2;
-                right = block.xCenter + config.cardWidth / 2;
-            }
-            entries.push({ block, left, right });
+            const ext = getBlockCardExtent(block, model, config);
+            entries.push({ block, left: ext.left, right: ext.right });
         }
 
         entries.sort((a, b) => a.left - b.left);
@@ -3478,6 +3475,13 @@ function shiftBlock(block: FamilyBlock, deltaX: number): void {
     block.husbandAnchorX += deltaX;
     block.wifeAnchorX += deltaX;
     block.childrenCenterX += deltaX;
+
+    // Shift chain person positions
+    if (block.chainInfo) {
+        for (const [pid, x] of block.chainInfo.personPositions) {
+            block.chainInfo.personPositions.set(pid, x + deltaX);
+        }
+    }
 }
 
 
@@ -3503,13 +3507,21 @@ function recenterDescendantParents(
         for (const [, block] of blocks) {
             if (block.generation !== gen) continue;
 
+            // Chain blocks: children are placed per-union under each partner
+            // by step 5's placeChainChildrenPerUnion. Don't re-center globally.
+            if (block.chainInfo) continue;
+
+            const allChildIds: PersonId[] = [];
             const union = model.unions.get(block.rootUnionId);
             if (!union || union.childIds.length === 0) continue;
+            allChildIds.push(...union.childIds);
+
+            if (allChildIds.length === 0) continue;
 
             let minChildX = Infinity;
             let maxChildX = -Infinity;
 
-            for (const childId of union.childIds) {
+            for (const childId of allChildIds) {
                 // Try to get child's position from their block first
                 const childUnionId = model.personToUnion.get(childId);
                 if (childUnionId) {
@@ -3519,9 +3531,11 @@ function recenterDescendantParents(
                         if (childBlock) {
                             const childUnion = model.unions.get(childUnionId);
                             if (childUnion) {
-                                const childWidth = childUnion.partnerB
-                                    ? 2 * config.cardWidth + config.partnerGap
-                                    : config.cardWidth;
+                                const childWidth = childBlock.chainInfo
+                                    ? childBlock.coupleWidth
+                                    : childUnion.partnerB
+                                        ? 2 * config.cardWidth + config.partnerGap
+                                        : config.cardWidth;
                                 minChildX = Math.min(minChildX, childBlock.xCenter - childWidth / 2);
                                 maxChildX = Math.max(maxChildX, childBlock.xCenter + childWidth / 2);
                                 continue;
@@ -3562,6 +3576,10 @@ function recenterSiblingFamilyParents(
     for (const [, block] of blocks) {
         // Only process gen = -1 blocks (aunt/uncle level)
         if (block.generation !== -1) continue;
+
+        // Chain blocks: children are placed per-union under each partner
+        // by step 5's placeAncestorChainBlockChildren. Don't re-center globally.
+        if (block.chainInfo) continue;
 
         const union = model.unions.get(block.rootUnionId);
         if (!union || union.childIds.length === 0) continue;
@@ -3819,6 +3837,20 @@ function compactSiblingFamilyClusters(
         }
     }
 
+    // Chain blocks: include ALL gen=0 children from ALL unions in the chain.
+    const focusParentBlockId2 = unionToBlock.get(focusParentUnionId);
+    if (focusParentBlockId2) {
+        const focusParentBlock2 = blocks.get(focusParentBlockId2);
+        if (focusParentBlock2?.chainInfo) {
+            for (const childId of focusParentBlock2.childBlockIds) {
+                const childBlock = blocks.get(childId);
+                if (childBlock && childBlock.generation === 0) {
+                    fsBlockIds.add(childId);
+                }
+            }
+        }
+    }
+
     // Compute FS span (combined subtreeCardExtent of all FS blocks)
     let fsMinX = Infinity, fsMaxX = -Infinity;
     for (const blockId of fsBlockIds) {
@@ -3981,32 +4013,18 @@ function compactOneSideOfFamily(
             const subBlock = blocks.get(subId);
             if (!subBlock) continue;
 
-            const subUnion = model.unions.get(subBlock.rootUnionId);
-            if (!subUnion) continue;
-
             // Card left edge
-            let subCardLeft: number;
-            if (subUnion.partnerB) {
-                subCardLeft = subBlock.xCenter - config.partnerGap / 2 - config.cardWidth;
-            } else {
-                subCardLeft = subBlock.xCenter - config.cardWidth / 2;
-            }
+            const subCardExt = getBlockCardExtent(subBlock, model, config);
+            const subCardLeft = subCardExt.left;
 
             // Find nearest non-subtree block to the left at same generation
             for (const [otherId, otherBlock] of blocks) {
                 if (subtreeIds.has(otherId)) continue;
                 if (otherBlock.generation !== subBlock.generation) continue;
 
-                const otherUnion = model.unions.get(otherBlock.rootUnionId);
-                if (!otherUnion) continue;
-
                 // Card right edge
-                let otherCardRight: number;
-                if (otherUnion.partnerB) {
-                    otherCardRight = otherBlock.xCenter + config.partnerGap / 2 + config.cardWidth;
-                } else {
-                    otherCardRight = otherBlock.xCenter + config.cardWidth / 2;
-                }
+                const otherCardExt = getBlockCardExtent(otherBlock, model, config);
+                const otherCardRight = otherCardExt.right;
 
                 if (otherCardRight > subCardLeft) continue; // Not to the left
 
@@ -4027,15 +4045,8 @@ function compactOneSideOfFamily(
                 if (!subBlock || subBlock.generation !== 0) continue;
 
                 // This is a cousin block - compute its card extent
-                const subUnion = model.unions.get(subBlock.rootUnionId);
-                if (!subUnion) continue;
-
-                let subCardLeft: number;
-                if (subUnion.partnerB) {
-                    subCardLeft = subBlock.xCenter - config.partnerGap / 2 - config.cardWidth;
-                } else {
-                    subCardLeft = subBlock.xCenter - config.cardWidth / 2;
-                }
+                const cspExt = getBlockCardExtent(subBlock, model, config);
+                const subCardLeft = cspExt.left;
 
                 // After pulling LEFT by safePull, new left edge would be: subCardLeft - safePull
                 // This must not intrude into FS span (must stay >= fsMaxX + horizontalGap)
@@ -4096,13 +4107,48 @@ function recomputePositions(
         if (!union) continue;
 
         const coupleCenter = block.xCenter;
-        unionX.set(block.rootUnionId, coupleCenter);
 
-        if (union.partnerB) {
-            personX.set(union.partnerA, coupleCenter - config.partnerGap / 2 - config.cardWidth);
-            personX.set(union.partnerB, coupleCenter + config.partnerGap / 2);
+        if (block.chainInfo) {
+            // Chain block: extract positions from personPositions
+            for (const [pid, centerX] of block.chainInfo.personPositions) {
+                personX.set(pid, centerX - config.cardWidth / 2);
+            }
+            // Set unionX for each chain union:
+            // - Primary union: midpoint between partners
+            // - Secondary unions: extra partner's center (stem from that partner)
+            const primaryUnionId = model.personToUnion.get(block.chainInfo.chainPersonId);
+            for (const chainUnionId of block.chainInfo.unionIds) {
+                const chainUnion = model.unions.get(chainUnionId);
+                if (!chainUnion) continue;
+
+                if (chainUnionId === primaryUnionId) {
+                    const aCenterX = block.chainInfo.personPositions.get(chainUnion.partnerA);
+                    const bCenterX = chainUnion.partnerB ? block.chainInfo.personPositions.get(chainUnion.partnerB) : null;
+                    if (aCenterX !== undefined && bCenterX !== undefined && bCenterX !== null) {
+                        unionX.set(chainUnionId, (aCenterX + bCenterX) / 2);
+                    } else if (aCenterX !== undefined) {
+                        unionX.set(chainUnionId, aCenterX);
+                    }
+                } else {
+                    // Secondary: stem from extra partner's center
+                    const extraPartner = findChainExtraPartner(chainUnion, block.chainInfo!, model);
+                    if (extraPartner) {
+                        const extraCenterX = block.chainInfo.personPositions.get(extraPartner);
+                        if (extraCenterX !== undefined) {
+                            unionX.set(chainUnionId, extraCenterX);
+                        }
+                    }
+                }
+            }
         } else {
-            personX.set(union.partnerA, coupleCenter - config.cardWidth / 2);
+            unionX.set(block.rootUnionId, coupleCenter);
+
+            if (union.partnerB) {
+                personX.set(union.partnerA, coupleCenter - config.partnerGap / 2 - config.cardWidth);
+                personX.set(union.partnerB, coupleCenter + config.partnerGap / 2);
+            } else {
+                personX.set(union.partnerA, coupleCenter - config.cardWidth / 2);
+            }
         }
 
         // Shift children without their own blocks to match the block's movement

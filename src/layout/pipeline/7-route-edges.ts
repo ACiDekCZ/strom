@@ -46,6 +46,17 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
         genY.set(gen, config.padding + row * rowHeight);
     }
 
+    // Build set of secondary chain union IDs (stem from card bottom, not spouse line)
+    const secondaryChainUnions = new Set<UnionId>();
+    for (const [, chain] of model.partnerChains) {
+        const primaryUnionId = model.personToUnion.get(chain.sharedPersonId);
+        for (const uid of chain.unionIds) {
+            if (uid !== primaryUnionId) {
+                secondaryChainUnions.add(uid);
+            }
+        }
+    }
+
     // Create connections for each union with children
     for (const [unionId, union] of model.unions) {
         if (union.childIds.length === 0) continue;
@@ -58,7 +69,8 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
             unionX,
             personX,
             genY,
-            config
+            config,
+            secondaryChainUnions.has(unionId)
         );
 
         if (connection) {
@@ -81,6 +93,39 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
 
         if (spouseLine) {
             spouseLines.push(spouseLine);
+        }
+    }
+
+    // Y-offset secondary chain spouse lines (fan-out from shared person)
+    const LINE_SPACING = 3;
+    for (const [, chain] of model.partnerChains) {
+        const primaryUnionId = model.personToUnion.get(chain.sharedPersonId);
+        if (!primaryUnionId) continue;
+
+        const sharedPX = personX.get(chain.sharedPersonId);
+        if (sharedPX === undefined) continue;
+        const sharedCenterX = sharedPX + config.cardWidth / 2;
+
+        // Collect secondary unions sorted by distance from shared person
+        const secondaryInfos: { unionId: UnionId; distance: number }[] = [];
+        for (const uid of chain.unionIds) {
+            if (uid === primaryUnionId) continue;
+            const u = model.unions.get(uid);
+            if (!u) continue;
+            const extraPartner = u.partnerA === chain.sharedPersonId ? u.partnerB : u.partnerA;
+            if (!extraPartner) continue;
+            const epX = personX.get(extraPartner);
+            if (epX === undefined) continue;
+            secondaryInfos.push({ unionId: uid, distance: Math.abs(epX + config.cardWidth / 2 - sharedCenterX) });
+        }
+        secondaryInfos.sort((a, b) => a.distance - b.distance);
+
+        // Apply Y offset: nearest secondary = +LINE_SPACING, next = +2*LINE_SPACING, etc.
+        for (let i = 0; i < secondaryInfos.length; i++) {
+            const sl = spouseLines.find(s => s.unionId === secondaryInfos[i].unionId);
+            if (sl) {
+                sl.y += (i + 1) * LINE_SPACING;
+            }
         }
     }
 
@@ -116,7 +161,8 @@ function createConnection(
     unionX: Map<UnionId, number>,
     personX: Map<PersonId, number>,
     genY: Map<number, number>,
-    config: { cardWidth: number; cardHeight: number; verticalGap: number }
+    config: { cardWidth: number; cardHeight: number; verticalGap: number },
+    isSecondaryChain: boolean = false
 ): Connection | null {
     const parentCenterX = unionX.get(unionId);
     const parentGen = unionGen.get(unionId);
@@ -146,13 +192,16 @@ function createConnection(
         return null;
     }
 
-    // Stem position (center of parent union)
+    // Stem position (center of parent union, or extra partner center for secondary chains)
     const stemX = parentCenterX;
-    // For two-partner unions: stem starts at spouse line level
-    // For single-parent unions: stem starts at card bottom
-    const stemTopY = union.partnerB
-        ? parentY + config.cardHeight / 2
-        : parentY + config.cardHeight;
+    // Secondary chain unions: stem from card bottom (like MyHeritage)
+    // Standard two-partner unions: stem from spouse line level
+    // Single-parent unions: stem from card bottom
+    const stemTopY = isSecondaryChain
+        ? parentY + config.cardHeight
+        : union.partnerB
+            ? parentY + config.cardHeight / 2
+            : parentY + config.cardHeight;
 
     // Child Y (next generation down)
     const childGen = parentGen + 1;
@@ -247,8 +296,11 @@ function createSpouseLine(
     }
 
     const lineY = y + config.cardHeight / 2;
-    const xMin = xA + config.cardWidth;
-    const xMax = xB;
+    // Use min/max to handle either partner ordering (chain blocks may reverse visual order)
+    const leftX = Math.min(xA, xB);
+    const rightX = Math.max(xA, xB);
+    const xMin = leftX + config.cardWidth;
+    const xMax = rightX;
 
     return {
         unionId,
