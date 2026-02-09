@@ -198,6 +198,23 @@ class DataManagerClass {
     // ==================== VIEW MODE ====================
 
     /**
+     * Check if a person is locked (either individually or via tree lock)
+     */
+    isPersonLocked(personId: PersonId): boolean {
+        const person = this.data.persons[personId];
+        if (person?.isLocked) return true;
+        return this.isTreeLocked();
+    }
+
+    /**
+     * Check if the active tree is locked
+     */
+    isTreeLocked(): boolean {
+        const meta = TreeManager.getActiveTreeMetadata();
+        return meta?.isLocked === true;
+    }
+
+    /**
      * Check if currently in view mode (read-only)
      */
     isViewMode(): boolean {
@@ -762,6 +779,20 @@ class DataManagerClass {
         const person = this.data.persons[id];
         if (!person) return null;
 
+        // Allow toggling isLocked even when person is locked
+        if (updates.isLocked !== undefined) {
+            person.isLocked = updates.isLocked || undefined;
+            // If only isLocked changed, save and return early
+            const otherKeys = Object.keys(updates).filter(k => k !== 'isLocked');
+            if (otherKeys.length === 0) {
+                this.save();
+                return person;
+            }
+        }
+
+        // Block updates on locked persons (except isLocked which is handled above)
+        if (this.isPersonLocked(id)) return person;
+
         // Track changed fields with old→new values for audit log
         const changedFields: string[] = [];
         const diff = (label: string, oldVal: string | undefined, newVal: string | undefined) => {
@@ -811,6 +842,9 @@ class DataManagerClass {
         const person = this.data.persons[id];
         if (!person) return false;
 
+        // Block deletion of locked persons
+        if (this.isPersonLocked(id)) return false;
+
         // Capture name before deletion for audit log
         const deletedName = auditPersonName(person);
 
@@ -852,6 +886,9 @@ class DataManagerClass {
         const p1 = this.data.persons[person1Id];
         const p2 = this.data.persons[person2Id];
         if (!p1 || !p2) return null;
+
+        // Block if either person is locked
+        if (this.isPersonLocked(person1Id) || this.isPersonLocked(person2Id)) return null;
 
         // Check if partnership already exists
         const existing = this.findPartnership(person1Id, person2Id);
@@ -975,6 +1012,9 @@ class DataManagerClass {
         const child = this.data.persons[childId];
         if (!parent || !child) return false;
 
+        // Block if either person is locked
+        if (this.isPersonLocked(parentId) || this.isPersonLocked(childId)) return false;
+
         // Add to parent's childIds if not already there
         if (!parent.childIds.includes(childId)) {
             parent.childIds.push(childId);
@@ -1007,6 +1047,9 @@ class DataManagerClass {
         const child = this.data.persons[childId];
         if (!parent || !child) return false;
 
+        // Block if either person is locked
+        if (this.isPersonLocked(parentId) || this.isPersonLocked(childId)) return false;
+
         // Capture names before modification for audit log
         const parentName = auditPersonName(parent);
         const childName = auditPersonName(child);
@@ -1037,6 +1080,9 @@ class DataManagerClass {
     removePartnership(person1Id: PersonId, person2Id: PersonId): boolean {
         const partnership = this.findPartnership(person1Id, person2Id);
         if (!partnership) return false;
+
+        // Block if either person is locked
+        if (this.isPersonLocked(person1Id) || this.isPersonLocked(person2Id)) return false;
 
         const p1 = this.data.persons[person1Id];
         const p2 = this.data.persons[person2Id];

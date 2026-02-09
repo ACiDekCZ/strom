@@ -101,6 +101,8 @@ class UIClass {
 
         // Check if in view mode (read-only)
         const isViewMode = DataManager.isViewMode();
+        const isPersonLocked = DataManager.isPersonLocked(personId);
+        const isTreeLocked = DataManager.isTreeLocked();
 
         // Create context menu - show only non-editing actions in view mode
         const menu = document.createElement('div');
@@ -113,8 +115,21 @@ class UIClass {
                     <span class="icon">&#127919;</span> ${strings.contextMenu.focus}
                 </div>
             `;
+        } else if (isPersonLocked) {
+            // Locked person: Focus + optional unlock (if tree is not locked)
+            menu.innerHTML = `
+                <div class="context-menu-item" data-action="focus">
+                    <span class="icon">&#127919;</span> ${strings.contextMenu.focus}
+                </div>
+                ${!isTreeLocked ? `
+                <div class="context-menu-divider"></div>
+                <div class="context-menu-item" data-action="toggle-lock">
+                    <span class="icon">&#128275;</span> ${strings.lock.unlockPerson}
+                </div>
+                ` : ''}
+            `;
         } else {
-            // Normal mode: all actions
+            // Normal mode: all actions + lock
             menu.innerHTML = `
                 <div class="context-menu-item" data-action="edit">
                     <span class="icon">&#9998;</span> ${strings.contextMenu.edit}
@@ -138,6 +153,9 @@ class UIClass {
                     <span class="icon">&#8596;</span> ${strings.contextMenu.addSibling}
                 </div>
                 <div class="context-menu-divider"></div>
+                <div class="context-menu-item" data-action="toggle-lock">
+                    <span class="icon">&#128274;</span> ${strings.lock.lockPerson}
+                </div>
                 <div class="context-menu-item" data-action="merge">
                     <span class="icon">&#128279;</span> ${strings.personMerge.mergeWith}...
                 </div>
@@ -179,6 +197,14 @@ class UIClass {
                         this.pushDialog('relation-modal');
                         this.addRelation(personId, action as RelationType);
                         break;
+                    case 'toggle-lock': {
+                        const p = DataManager.getPerson(personId);
+                        if (p) {
+                            DataManager.updatePerson(personId, { isLocked: !p.isLocked });
+                            TreeRenderer.render();
+                        }
+                        break;
+                    }
                     case 'merge':
                         // Setup stack for ESC handling
                         this.clearDialogStack();
@@ -267,6 +293,9 @@ class UIClass {
     // ==================== PERSON MODAL ====================
 
     showAddPersonModal(): void {
+        // Block adding persons when tree is locked
+        if (DataManager.isTreeLocked()) return;
+
         this.currentId = null;
         const modal = document.getElementById('person-modal');
         const title = document.getElementById('modal-title');
@@ -281,8 +310,20 @@ class UIClass {
         const notesInput = document.getElementById('input-notes') as HTMLTextAreaElement;
 
         const mergeBtn = document.getElementById('btn-merge');
+        const saveBtn = document.getElementById('btn-save');
 
         if (!modal || !title || !deleteBtn || !firstNameInput || !lastNameInput || !genderSelect) return;
+
+        // Reset readonly states (may have been set by edit modal for locked person)
+        firstNameInput.readOnly = false;
+        lastNameInput.readOnly = false;
+        genderSelect.disabled = false;
+        if (birthDateInput) birthDateInput.readOnly = false;
+        if (birthPlaceInput) birthPlaceInput.readOnly = false;
+        if (deathDateInput) deathDateInput.readOnly = false;
+        if (deathPlaceInput) deathPlaceInput.readOnly = false;
+        if (notesInput) notesInput.readOnly = false;
+        if (saveBtn) saveBtn.style.display = '';
 
         title.textContent = strings.personModal.addTitle;
         deleteBtn.style.display = 'none';
@@ -477,8 +518,25 @@ class UIClass {
             };
         }
 
+        // Lock handling: make form read-only if person is locked
+        const saveBtn = document.getElementById('btn-save');
+        if (DataManager.isPersonLocked(id)) {
+            firstNameInput.readOnly = true;
+            lastNameInput.readOnly = true;
+            genderSelect.disabled = true;
+            if (birthDateInput) birthDateInput.readOnly = true;
+            if (birthPlaceInput) birthPlaceInput.readOnly = true;
+            if (deathDateInput) deathDateInput.readOnly = true;
+            if (deathPlaceInput) deathPlaceInput.readOnly = true;
+            if (notesInput) notesInput.readOnly = true;
+            if (saveBtn) saveBtn.style.display = 'none';
+            deleteBtn.style.display = 'none';
+            if (mergeBtn) mergeBtn.style.display = 'none';
+            if (linkRelBtn) linkRelBtn.style.display = 'none';
+        }
+
         modal.classList.add('active');
-        firstNameInput.focus();
+        if (!DataManager.isPersonLocked(id)) firstNameInput.focus();
 
         // Setup Enter as Tab for form fields
         this.setupEnterAsTab('person-modal', ['input-firstname', 'input-lastname', 'input-gender', 'input-birthdate', 'input-birthplace', 'input-deathdate', 'input-deathplace'], () => this.savePerson());
@@ -1415,11 +1473,13 @@ class UIClass {
 
         const siblings = DataManager.getSiblings(personId);
 
+        const isLocked = DataManager.isPersonLocked(personId);
+
         content.innerHTML = `
-            ${this.buildRelSection('parents', strings.relationships.parents, parents, personId, person.parentIds.length < 2)}
-            ${this.buildRelSection('partners', strings.relationships.partners, partners, personId, true)}
-            ${this.buildRelSection('children', strings.relationships.children, children, personId, true)}
-            ${this.buildRelSection('siblings', strings.relationships.siblings, siblings, personId, true)}
+            ${this.buildRelSection('parents', strings.relationships.parents, parents, personId, person.parentIds.length < 2, isLocked)}
+            ${this.buildRelSection('partners', strings.relationships.partners, partners, personId, true, isLocked)}
+            ${this.buildRelSection('children', strings.relationships.children, children, personId, true, isLocked)}
+            ${this.buildRelSection('siblings', strings.relationships.siblings, siblings, personId, true, isLocked)}
         `;
 
         // Attach event listeners for remove buttons
@@ -1549,7 +1609,7 @@ class UIClass {
         modal.classList.add('active');
     }
 
-    private buildRelSection(type: string, title: string, persons: import('./types.js').Person[], currentPersonId: PersonId, canAdd: boolean): string {
+    private buildRelSection(type: string, title: string, persons: import('./types.js').Person[], currentPersonId: PersonId, canAdd: boolean, isLocked: boolean = false): string {
         const addBtnText: Record<string, string> = {
             parents: strings.relationships.addParent,
             partners: strings.relationships.addPartner,
@@ -1622,9 +1682,9 @@ class UIClass {
                         ${p.firstName} ${p.lastName}
                     </span>
                     ${statusHtml}
-                    <button class="rel-remove-btn" data-rel-type="${relType[type]}" data-rel-id="${p.id}">
+                    ${!isLocked ? `<button class="rel-remove-btn" data-rel-type="${relType[type]}" data-rel-id="${p.id}">
                         ${strings.relationships.remove}
-                    </button>
+                    </button>` : ''}
                 </div>
                 ${partnershipDetailsHtml}
             `;
@@ -1634,7 +1694,7 @@ class UIClass {
             <div class="rel-section">
                 <div class="rel-section-title">${title}</div>
                 ${items || `<div style="color: var(--text-light); font-size: 13px; padding: 8px 0;">—</div>`}
-                ${canAdd ? `<button class="rel-add-btn" data-rel-type="${relType[type]}">${addBtnText[type]}</button>` : ''}
+                ${canAdd && !isLocked ? `<button class="rel-add-btn" data-rel-type="${relType[type]}">${addBtnText[type]}</button>` : ''}
             </div>
         `;
     }
@@ -2523,10 +2583,10 @@ class UIClass {
             const activeEl = document.activeElement;
             if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) return;
 
-            // Delete: delete focused person
+            // Delete: delete focused person (skip if locked)
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 const focusId = TreeRenderer.getFocusPersonId();
-                if (focusId) {
+                if (focusId && !DataManager.isPersonLocked(focusId)) {
                     this.confirmDelete(focusId);
                 }
                 return;
@@ -4001,13 +4061,18 @@ class UIClass {
             const visibilityLabel = tree.isHidden ? strings.treeManager.showTree : strings.treeManager.hideTree;
             const visibilityHint = tree.isHidden ? strings.treeManager.showTreeHint : strings.treeManager.hideTreeHint;
 
+            // Lock toggle button
+            const lockIcon = tree.isLocked ? '🔒' : '🔓';
+            const lockLabel = tree.isLocked ? strings.lock.unlockTree : strings.lock.lockTree;
+
             const hiddenLabel = tree.isHidden ? ` <span style="color:var(--text-light);font-weight:normal">${strings.treeManager.hiddenLabel}</span>` : '';
+            const lockedLabel = tree.isLocked ? ' 🔒' : '';
 
             html += `
                 <div class="tree-manager-item ${isActive ? 'active' : ''} ${tree.isHidden ? 'hidden-tree' : ''}">
                     <div class="tree-manager-item-header">
                         <span class="tree-manager-item-indicator"></span>
-                        <span class="tree-manager-item-name">${this.escapeHtml(tree.name)}${hiddenLabel}</span>
+                        <span class="tree-manager-item-name">${this.escapeHtml(tree.name)}${hiddenLabel}${lockedLabel}</span>
                         <span class="tree-manager-item-stats">
                             ${tree.personCount} ${strings.treeManager.persons} • ${familyCount} ${strings.treeManager.families}
                             ${defaultPersonDisplay ? ` • ${this.escapeHtml(defaultPersonDisplay)}` : ''}
@@ -4018,6 +4083,7 @@ class UIClass {
                         <button onclick="window.Strom.UI.showTreeStatsDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.stats}"><span class="btn-icon">📊</span><span class="btn-text">${strings.treeManager.stats}</span></button>
                         <button onclick="window.Strom.UI.showTreeValidationDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.validate}"><span class="btn-icon">✅</span><span class="btn-text">${strings.treeManager.validate}</span></button>
                         <button class="edit-only" onclick="window.Strom.UI.toggleTreeVisibility('${tree.id}')" title="${visibilityHint}"><span class="btn-icon">${visibilityIcon}</span><span class="btn-text">${visibilityLabel}</span></button>
+                        <button class="edit-only" onclick="window.Strom.UI.toggleTreeLock('${tree.id}')" title="${lockLabel}"><span class="btn-icon">${lockIcon}</span><span class="btn-text">${lockLabel}</span></button>
                         <button class="edit-only" onclick="window.Strom.UI.showRenameTreeDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.rename}"><span class="btn-icon">✏️</span><span class="btn-text">${strings.treeManager.rename}</span></button>
                         <button class="edit-only" onclick="window.Strom.UI.showDefaultPersonDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.defaultPerson}"><span class="btn-icon">⭐</span><span class="btn-text">${strings.treeManager.defaultPerson}</span></button>
                         <button class="edit-only" onclick="window.Strom.UI.duplicateTree('${tree.id}')" title="${strings.treeManager.duplicate}"><span class="btn-icon">⧉</span><span class="btn-text">${strings.treeManager.duplicate}</span></button>
@@ -4642,6 +4708,15 @@ class UIClass {
 
         // Invalidate cross-tree cache and re-render to update badges
         CrossTree.invalidateCache();
+        TreeRenderer.render();
+    }
+
+    toggleTreeLock(treeId: string): void {
+        const id = treeId as TreeId;
+        TreeManager.toggleTreeLock(id);
+
+        // Refresh displays
+        this.updateTreeManagerList();
         TreeRenderer.render();
     }
 

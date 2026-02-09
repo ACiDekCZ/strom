@@ -138,6 +138,18 @@ class TreeManagerClass {
     }
 
     /**
+     * Toggle tree lock
+     */
+    toggleTreeLock(id: TreeId): boolean {
+        const tree = this.index.trees.find(t => t.id === id);
+        if (!tree) return false;
+
+        tree.isLocked = !tree.isLocked;
+        this.saveIndex();
+        return true;
+    }
+
+    /**
      * Set tree visibility
      */
     setTreeVisibility(id: TreeId, isHidden: boolean): void {

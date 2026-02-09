@@ -2095,6 +2095,21 @@
         body.view-mode .tree-switcher-divider { display: none !important; }
         body.view-mode .empty-state button { display: none !important; }
 
+        /* Lock styles */
+        .person-card.locked .add-btn { display: none !important; }
+        .person-card.locked .rel-link-icon { display: none !important; }
+        .lock-icon {
+            position: absolute;
+            top: 2px;
+            right: 4px;
+            font-size: 10px;
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        body.tree-locked .add-person-round { display: none !important; }
+        body.tree-locked .toolbar-buttons button[onclick*="showAddPersonModal"] { display: none !important; }
+        body.tree-locked #mobile-menu button[data-i18n="mobileMenu.addPerson"] { display: none !important; }
+
         /* Existing export tree name */
         .existing-tree-name,
         .import-tree-name {
@@ -4199,6 +4214,9 @@
                 gap: 10px;
                 z-index: 50;
             }
+            .focus-controls.hidden {
+                display: none !important;
+            }
             .person-picker-dropdown {
                 z-index: 500 !important;
             }
@@ -4771,7 +4789,7 @@
     </div>
 
     <!-- Focus Mode Controls -->
-    <div id="focus-controls" class="focus-controls">
+    <div id="focus-controls" class="focus-controls hidden">
         <div class="focus-info">
             <strong id="focus-name" onclick="window.Strom.ZoomPan.centerOnFocusWithContext()" style="cursor:pointer;" title="Vycentrovat"></strong>
             <span id="focus-person-count" class="focus-count" onclick="window.Strom.UI.showActiveTreeStats()" style="cursor:pointer;" title="Zobrazit statistiku"></span>

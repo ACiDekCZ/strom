@@ -52,6 +52,7 @@ export interface Person {
     deathDate?: string;
     deathPlace?: string;
     notes?: string;
+    isLocked?: boolean;
 }
 
 export interface Partnership {
@@ -287,6 +288,8 @@ export interface TreeMetadata {
     lastExportId?: string;
     /** Whether tree is hidden from switcher and cross-tree matching */
     isHidden?: boolean;
+    /** Whether tree is locked (all persons read-only) */
+    isLocked?: boolean;
 }
 
 /** Index of all trees */

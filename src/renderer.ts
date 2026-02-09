@@ -307,7 +307,7 @@ class TreeRendererClass {
         // Hide everything if there are no persons in the tree
         const totalCount = DataManager.getAllPersons().length;
         if (totalCount === 0) {
-            focusControls.style.display = 'none';
+            focusControls.classList.add('hidden');
             if (toolbarFocus) toolbarFocus.style.display = 'none';
             if (toolbarFocusName) toolbarFocusName.textContent = '';
             if (toolbarFocusCount) toolbarFocusCount.textContent = '';
@@ -349,13 +349,16 @@ class TreeRendererClass {
             this.updateGenerationSelect(toolbarDepthUp, maxGen.up, this.focusDepthUp);
             this.updateGenerationSelect(toolbarDepthDown, maxGen.down, this.focusDepthDown);
 
-            focusControls.style.display = 'flex';
+            focusControls.classList.remove('hidden');
         } else {
-            focusControls.style.display = 'none';
+            focusControls.classList.add('hidden');
             // Clear toolbar focus display when no focus person
             if (toolbarFocusName) toolbarFocusName.textContent = '';
             if (toolbarFocusCount) toolbarFocusCount.textContent = '';
         }
+
+        // Toggle tree-locked body class
+        document.body.classList.toggle('tree-locked', DataManager.isTreeLocked());
     }
 
     /**
@@ -566,6 +569,10 @@ class TreeRendererClass {
             if (this.focusPersonId && id === this.focusPersonId) {
                 classes += ' focused';
             }
+            // Add locked class if person is locked
+            if (DataManager.isPersonLocked(id)) {
+                classes += ' locked';
+            }
             card.className = classes;
             card.style.left = pos.x + 'px';
             card.style.top = pos.y + 'px';
@@ -727,24 +734,29 @@ class TreeRendererClass {
                 html += `</div>`;
             }
 
+            const isLocked = DataManager.isPersonLocked(id);
+
             html += `
                 <div class="name"><span class="name-text">${this.escapeHtml(displayName)}</span>${isDeceased ? '<span class="deceased-marker">†</span>' : ''}</div>
                 <div class="surname">${this.escapeHtml(displaySurname)}</div>
                 ${birthYear ? `<div class="birth-date"><span class="date-year">${birthYear}</span>${birthFull ? `<span class="date-full">${birthFull}</span>` : ''}</div>` : ''}
-                <button class="rel-link-icon" data-action="relationships" title="${strings.buttons.manageRelationships}">&#128279;</button>
+                ${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">&#128274;</span>` : ''}
+                ${!isLocked ? `<button class="rel-link-icon" data-action="relationships" title="${strings.buttons.manageRelationships}">&#128279;</button>` : ''}
             `;
 
-            // Add buttons based on context
-            // Top: Add parent (if < 2 parents)
-            if (person.parentIds.length < 2) {
-                html += `<button class="add-btn top" data-action="parent" title="${strings.contextMenu.addParent}">+</button>`;
+            // Add buttons based on context (hidden for locked persons)
+            if (!isLocked) {
+                // Top: Add parent (if < 2 parents)
+                if (person.parentIds.length < 2) {
+                    html += `<button class="add-btn top" data-action="parent" title="${strings.contextMenu.addParent}">+</button>`;
+                }
+                // Right: Add partner
+                html += `<button class="add-btn right" data-action="partner" title="${strings.contextMenu.addPartner}">+</button>`;
+                // Bottom: Add child
+                html += `<button class="add-btn bottom" data-action="child" title="${strings.contextMenu.addChild}">+</button>`;
+                // Left: Add sibling
+                html += `<button class="add-btn left" data-action="sibling" title="${strings.contextMenu.addSibling}">+</button>`;
             }
-            // Right: Add partner
-            html += `<button class="add-btn right" data-action="partner" title="${strings.contextMenu.addPartner}">+</button>`;
-            // Bottom: Add child
-            html += `<button class="add-btn bottom" data-action="child" title="${strings.contextMenu.addChild}">+</button>`;
-            // Left: Add sibling
-            html += `<button class="add-btn left" data-action="sibling" title="${strings.contextMenu.addSibling}">+</button>`;
 
             // Add cross-tree badge if person exists in other trees
             let crossTreeMatches: CrossTree.CrossTreeMatch[] = [];

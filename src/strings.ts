@@ -742,6 +742,15 @@ const stringsEN = {
         description: 'Welcome to stromapp.info! To continue with your data, import the file you were using.'
     },
 
+    // Lock
+    lock: {
+        lockPerson: 'Lock',
+        unlockPerson: 'Unlock',
+        lockTree: 'Lock tree',
+        unlockTree: 'Unlock tree',
+        lockedTooltip: 'Locked'
+    },
+
     // Audit Log
     auditLog: {
         title: 'Change History',
@@ -1508,6 +1517,15 @@ const stringsCZ: StringsType = {
     // Import from offline version (intro text in new tree menu)
     importFromOffline: {
         description: 'Vítejte na stromapp.info! Pro pokračování s vašimi daty importujte soubor, se kterým jste pracovali.'
+    },
+
+    // Lock
+    lock: {
+        lockPerson: 'Zamknout',
+        unlockPerson: 'Odemknout',
+        lockTree: 'Zamknout strom',
+        unlockTree: 'Odemknout strom',
+        lockedTooltip: 'Zamčeno'
     },
 
     // Audit Log
