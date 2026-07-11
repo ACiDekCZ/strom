@@ -2,7 +2,13 @@
 
 This document describes the actual behavior of the layout pipeline as currently implemented.
 
-**Last updated:** 2026-01
+**Last updated:** 2026-01 — **PARTIALLY OUTDATED as of 2026-07-11.**
+Phase B was rewritten (independent compact ancestor trees above EVERY gen -1
+anchor couple, shared-ancestor claiming, V-fan side ownership above the focus
+couple, deterministic two-sided cluster sweep) and bus lane allocation is now
+a topological assignment over a constraint graph. For the current behavior see
+the "Layout Algorithm Reference" and "Testing" sections in `CLAUDE.md`, the
+`SPEC.md` changelog entries from 2026-07-11, and `docs/ETALON_FINDINGS.md`.
 
 ---
 

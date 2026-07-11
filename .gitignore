@@ -5,3 +5,7 @@ strom.html
 .DS_Store
 test/failures-*.txt
 
+# Family data stays local only - never in git
+test/real-large.json
+test.ged
+/*.jpg

@@ -2,7 +2,12 @@
 
 This document describes the invariants enforced by the Strom layout algorithm.
 
-**Last updated:** 2026-01
+**Last updated:** 2026-01 — **addendum 2026-07-11:** invariants are now
+machine-enforced by the all-persons harness + strict geometry audit (see
+"Testing" in `CLAUDE.md`). Two documented relaxations: `inherent-crossing`
+(one clean perpendicular crossing between cross-married unions is
+topologically unavoidable — proof in `docs/ETALON_FINDINGS.md`) and the
+`KNOWN_LINE_KNOTS` class (in-law column inside a sibling bus span).
 
 ---
 

@@ -2,9 +2,9 @@
 
 A systematically designed set of family-tree fixtures that cover known and
 conceivable constellations for the layout engine, in depth and in breadth. The
-etalon replaces the reliance on real family data (`test/real-large.json`, based
-on the author's actual family) as the primary correctness reference for
-rendering.
+etalon replaces the reliance on real family data as the primary correctness
+reference for rendering. (`test/real-large.json` is the author's family data —
+anonymized, kept LOCAL ONLY and gitignored; the harness skips it when absent.)
 
 ## Generating
 
