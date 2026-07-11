@@ -624,14 +624,26 @@ function transferAncestorTreeToBlocks(
     node: AncestorNode | null,
     blocks: Map<FamilyBlockId, FamilyBlock>,
     unionToBlock: Map<UnionId, FamilyBlockId>,
-    config: LayoutConfig
+    config: LayoutConfig,
+    claimed?: Set<FamilyBlockId>,
+    transferred?: Set<FamilyBlockId>
 ): void {
     if (!node) return;
 
     const blockId = unionToBlock.get(node.unionId);
+    if (blockId && claimed?.has(blockId)) {
+        // Already positioned by an earlier (higher-priority) tree — shared
+        // ancestors in a pedigree collapse belong to the first tree that
+        // reached them.
+        transferAncestorTreeToBlocks(node.hSubtree, blocks, unionToBlock, config, claimed, transferred);
+        transferAncestorTreeToBlocks(node.wSubtree, blocks, unionToBlock, config, claimed, transferred);
+        return;
+    }
     if (blockId) {
         const block = blocks.get(blockId);
         if (block) {
+            claimed?.add(blockId);
+            transferred?.add(blockId);
             // Update block positions from tree node
             const oldCenter = block.xCenter;
             const deltaX = node.xCenter - oldCenter;
@@ -656,22 +668,145 @@ function transferAncestorTreeToBlocks(
     }
 
     // Recurse to subtrees
-    transferAncestorTreeToBlocks(node.hSubtree, blocks, unionToBlock, config);
-    transferAncestorTreeToBlocks(node.wSubtree, blocks, unionToBlock, config);
+    transferAncestorTreeToBlocks(node.hSubtree, blocks, unionToBlock, config, claimed, transferred);
+    transferAncestorTreeToBlocks(node.wSubtree, blocks, unionToBlock, config, claimed, transferred);
+}
+
+/**
+ * Prune tree nodes whose blocks were already positioned by an earlier tree
+ * (shared ancestors in a pedigree collapse belong to the first tree).
+ */
+function pruneClaimedTreeNodes(
+    node: AncestorNode | null,
+    claimed: Set<FamilyBlockId>,
+    unionToBlock: Map<UnionId, FamilyBlockId>
+): AncestorNode | null {
+    if (!node) return null;
+    const blockId = unionToBlock.get(node.unionId);
+    if (blockId && claimed.has(blockId)) return null;
+    node.hSubtree = pruneClaimedTreeNodes(node.hSubtree, claimed, unionToBlock);
+    node.wSubtree = pruneClaimedTreeNodes(node.wSubtree, claimed, unionToBlock);
+    return node;
+}
+
+/**
+ * Rigidly separate placed ancestor-tree clusters. Overlaps (per generation
+ * band, card extents) are resolved by shifting the LOWER-priority cluster
+ * away from the higher-priority one; each cluster moves as a whole so its
+ * internal tree geometry stays intact.
+ */
+interface TreeCluster {
+    blockIds: Set<FamilyBlockId>;
+    anchorX: number;
+    priority: number;
+    /** Cumulative shift applied during separation (0 = still on anchor). */
+    totalShift: number;
+}
+
+function separateTreeClusters(
+    clusters: TreeCluster[],
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    config: LayoutConfig
+): void {
+    if (clusters.length < 2) return;
+
+    const clusterExtents = (c: TreeCluster): Map<number, { left: number; right: number }> => {
+        const map = new Map<number, { left: number; right: number }>();
+        for (const id of c.blockIds) {
+            const block = blocks.get(id);
+            if (!block) continue;
+            const ext = getBlockCardExtent(block, model, config);
+            const row = map.get(block.generation);
+            if (row) {
+                row.left = Math.min(row.left, ext.left);
+                row.right = Math.max(row.right, ext.right);
+            } else {
+                map.set(block.generation, { left: ext.left, right: ext.right });
+            }
+        }
+        return map;
+    };
+
+    // Deterministic two-sided sweep around the focus cluster (priority 0):
+    // clusters keep their anchor left-to-right ORDER; the focus cluster does
+    // not move; clusters left of it are pushed only further LEFT, clusters
+    // right of it only further RIGHT. This displaces each cluster minimally
+    // while never dragging one across another (a pairwise loop could walk a
+    // cluster across the whole layout, far away from its anchor).
+    const ordered = [...clusters].sort((a, b) => a.anchorX - b.anchorX);
+    let focusIdx = ordered.findIndex(c => c.priority === 0);
+    if (focusIdx < 0) focusIdx = 0;
+
+    type Frontier = Map<number, { left: number; right: number }>;
+    const mergeFrontier = (frontier: Frontier, ext: Map<number, { left: number; right: number }>): void => {
+        for (const [gen, e] of ext) {
+            const row = frontier.get(gen);
+            if (row) {
+                row.left = Math.min(row.left, e.left);
+                row.right = Math.max(row.right, e.right);
+            } else {
+                frontier.set(gen, { ...e });
+            }
+        }
+    };
+
+    const shiftCluster = (c: TreeCluster, delta: number): void => {
+        if (Math.abs(delta) < 0.5) return;
+        for (const id of c.blockIds) {
+            const block = blocks.get(id);
+            if (block) shiftBlock(block, delta);
+        }
+        c.totalShift += delta;
+    };
+
+    // Rightward sweep from the focus cluster
+    const rightFrontier: Frontier = new Map();
+    mergeFrontier(rightFrontier, clusterExtents(ordered[focusIdx]));
+    for (let i = focusIdx + 1; i < ordered.length; i++) {
+        const ext = clusterExtents(ordered[i]);
+        let shift = 0;
+        for (const [gen, e] of ext) {
+            const row = rightFrontier.get(gen);
+            if (!row) continue;
+            shift = Math.max(shift, row.right + config.horizontalGap - e.left);
+        }
+        shiftCluster(ordered[i], shift);
+        mergeFrontier(rightFrontier, clusterExtents(ordered[i]));
+    }
+
+    // Leftward sweep from the focus cluster
+    const leftFrontier: Frontier = new Map();
+    mergeFrontier(leftFrontier, clusterExtents(ordered[focusIdx]));
+    for (let i = focusIdx - 1; i >= 0; i--) {
+        const ext = clusterExtents(ordered[i]);
+        let shift = 0;
+        for (const [gen, e] of ext) {
+            const row = leftFrontier.get(gen);
+            if (!row) continue;
+            shift = Math.min(shift, row.left - config.horizontalGap - e.right);
+        }
+        shiftCluster(ordered[i], shift);
+        mergeFrontier(leftFrontier, clusterExtents(ordered[i]));
+    }
 }
 
 /**
  * Phase B v2: Build and place independent compact ancestor trees.
  *
- * This is the main Phase B entry point. It:
- * 1. Finds the anchor couple (focus parents at gen -1)
- * 2. Builds independent H-tree and W-tree for their ancestors
- * 3. Computes widths bottom-up
- * 4. Places each tree so it doesn't cross the midpoint between H and W
- * 5. Resolves any remaining overlap between trees
- * 6. Transfers positions to FamilyBlocks
+ * This is the main Phase B entry point. For EVERY gen -1 anchor couple
+ * (focus parents first, then the spouse's parents and any other parent
+ * couples left-to-right) it:
+ * 1. Builds independent H-tree and W-tree for the couple's ancestors
+ * 2. Computes widths bottom-up
+ * 3. Places each tree so it doesn't cross the couple midpoint
+ * 4. Resolves overlap between the couple's own two trees
+ * 5. Transfers positions to FamilyBlocks (shared ancestors stay with the
+ *    first tree that claimed them)
+ * Finally, whole tree clusters of different anchors are rigidly separated.
  *
- * Key invariant: H-tree stays LEFT of midpoint, W-tree stays RIGHT of midpoint.
+ * Key invariant: within a couple, H-tree stays LEFT of the midpoint and
+ * W-tree RIGHT of it; between couples, clusters never overlap.
  */
 function runPhaseBIndependentTrees(
     blocks: Map<FamilyBlockId, FamilyBlock>,
@@ -681,83 +816,108 @@ function runPhaseBIndependentTrees(
     focusPersonId: PersonId,
     config: LayoutConfig
 ): void {
-    // Step 1: Find anchor couple (parents of focus at gen -1)
+    // Anchor couples: every gen -1 block roots an ancestor tree pair.
+    // Focus parents get priority 0, the rest follow left-to-right.
+    const anchorBlocks: FamilyBlock[] = [];
     const focusParentUnionId = model.childToParentUnion.get(focusPersonId);
-    if (!focusParentUnionId) return; // Focus has no parents
+    const focusParentBlockId = focusParentUnionId ? unionToBlock.get(focusParentUnionId) : undefined;
+    const focusParentBlock = focusParentBlockId ? blocks.get(focusParentBlockId) : undefined;
+    if (focusParentBlock) anchorBlocks.push(focusParentBlock);
 
-    const anchorUnion = model.unions.get(focusParentUnionId);
-    if (!anchorUnion) return;
-
-    // Get anchor block to find anchor positions
-    const anchorBlockId = unionToBlock.get(focusParentUnionId);
-    if (!anchorBlockId) return;
-
-    const anchorBlock = blocks.get(anchorBlockId);
-    if (!anchorBlock) return;
-
-    // Determine H/W for anchor couple
-    const { husbandId: anchorHusbandId, wifeId: anchorWifeId } =
-        determineHusbandWife(anchorUnion, model);
-
-    // Compute key positions (from gen -1 block, which is LOCKED)
-    const husbandCenterX = anchorWifeId
-        ? anchorBlock.xCenter - config.partnerGap / 2 - config.cardWidth / 2
-        : anchorBlock.xCenter;
-    const wifeCenterX = anchorWifeId
-        ? anchorBlock.xCenter + config.partnerGap / 2 + config.cardWidth / 2
-        : anchorBlock.xCenter;
-    const midpointX = anchorBlock.xCenter; // Center between H and W
+    const otherAnchors: FamilyBlock[] = [];
+    for (const [, block] of blocks) {
+        if (block.generation !== -1) continue;
+        if (block === focusParentBlock) continue;
+        otherAnchors.push(block);
+    }
+    otherAnchors.sort((a, b) => a.xCenter - b.xCenter);
+    anchorBlocks.push(...otherAnchors);
+    if (anchorBlocks.length === 0) return;
 
     // Find minimum generation (deepest ancestors)
     const minGen = genModel.minGen;
 
-    // Step 2: Build independent ancestor trees
-    const hTree = buildAncestorTree(anchorHusbandId, -2, model, minGen);
-    const wTree = anchorWifeId ? buildAncestorTree(anchorWifeId, -2, model, minGen) : null;
+    const claimed = new Set<FamilyBlockId>();
+    const clusters: TreeCluster[] = [];
 
-    // Step 3: Compute widths (bottom-up)
-    const hWidth = computeAncestorTreeWidth(hTree, config);
-    const wWidth = computeAncestorTreeWidth(wTree, config);
+    for (let priority = 0; priority < anchorBlocks.length; priority++) {
+        const anchorBlock = anchorBlocks[priority];
+        const anchorUnion = model.unions.get(anchorBlock.rootUnionId);
+        if (!anchorUnion) continue;
 
-    // Compute card edges (not centers) - boundaries for tree placement
-    const husbandRightEdge = husbandCenterX + config.cardWidth / 2;
-    const wifeLeftEdge = wifeCenterX - config.cardWidth / 2;
+        // Determine H/W for anchor couple
+        const { husbandId: anchorHusbandId, wifeId: anchorWifeId } =
+            determineHusbandWife(anchorUnion, model);
 
-    // Step 4: Place trees
-    // Special case: if only ONE tree exists, center it above its parent
-    // (no need to push it to the side to avoid collision with non-existent tree)
-    if (hTree && !wTree) {
-        // Only H-tree exists: center it above husband
-        placeAncestorTree(hTree, husbandCenterX, config);
-    } else if (wTree && !hTree) {
-        // Only W-tree exists: center it above wife
-        placeAncestorTree(wTree, wifeCenterX, config);
-    } else {
-        // Both trees exist: place them so they don't cross the midpoint
-        // H-tree: place so its RIGHT edge is at husband's RIGHT CARD EDGE
-        if (hTree) {
-            const hTreeCenterX = husbandRightEdge - hWidth / 2;
-            placeAncestorTree(hTree, hTreeCenterX, config);
+        // Compute key positions (from gen -1 block, which is LOCKED).
+        // Chain anchors know each person's actual position.
+        const chainPos = (pid: PersonId | null): number | undefined =>
+            pid && anchorBlock.chainInfo ? anchorBlock.chainInfo.personPositions.get(pid) : undefined;
+        const husbandCenterX = chainPos(anchorHusbandId) ?? (anchorWifeId
+            ? anchorBlock.xCenter - config.partnerGap / 2 - config.cardWidth / 2
+            : anchorBlock.xCenter);
+        const wifeCenterX = chainPos(anchorWifeId) ?? (anchorWifeId
+            ? anchorBlock.xCenter + config.partnerGap / 2 + config.cardWidth / 2
+            : anchorBlock.xCenter);
+
+        // Build independent ancestor trees, pruning nodes already claimed
+        // by a higher-priority anchor's tree
+        const hTree = pruneClaimedTreeNodes(
+            buildAncestorTree(anchorHusbandId, -2, model, minGen), claimed, unionToBlock);
+        const wTree = anchorWifeId
+            ? pruneClaimedTreeNodes(
+                buildAncestorTree(anchorWifeId, -2, model, minGen), claimed, unionToBlock)
+            : null;
+        if (!hTree && !wTree) continue;
+
+        // Compute widths (bottom-up)
+        const hWidth = computeAncestorTreeWidth(hTree, config);
+        const wWidth = computeAncestorTreeWidth(wTree, config);
+
+        // Compute card edges (not centers) - boundaries for tree placement
+        const husbandRightEdge = husbandCenterX + config.cardWidth / 2;
+        const wifeLeftEdge = wifeCenterX - config.cardWidth / 2;
+
+        // Place trees
+        // Special case: if only ONE tree exists, center it above its parent
+        if (hTree && !wTree) {
+            placeAncestorTree(hTree, husbandCenterX, config);
+        } else if (wTree && !hTree) {
+            placeAncestorTree(wTree, wifeCenterX, config);
+        } else {
+            // Both trees exist: place them so they don't cross the midpoint
+            if (hTree) {
+                const hTreeCenterX = husbandRightEdge - hWidth / 2;
+                placeAncestorTree(hTree, hTreeCenterX, config);
+            }
+            if (wTree) {
+                const wTreeCenterX = wifeLeftEdge + wWidth / 2;
+                placeAncestorTree(wTree, wTreeCenterX, config);
+            }
         }
 
-        // W-tree: place so its LEFT edge is at wife's LEFT CARD EDGE
-        if (wTree) {
-            const wTreeCenterX = wifeLeftEdge + wWidth / 2;
-            placeAncestorTree(wTree, wTreeCenterX, config);
+        // Enforce H/W boundaries for ALL couples in each tree
+        enforceAllBoundariesUntilConvergence(hTree, config);
+        enforceAllBoundariesUntilConvergence(wTree, config);
+
+        // Resolve any overlap between the couple's own two trees
+        resolveAncestorTreeOverlap(hTree, wTree, config);
+
+        // Transfer positions to FamilyBlocks
+        const transferred = new Set<FamilyBlockId>();
+        transferAncestorTreeToBlocks(hTree, blocks, unionToBlock, config, claimed, transferred);
+        transferAncestorTreeToBlocks(wTree, blocks, unionToBlock, config, claimed, transferred);
+
+        if ((globalThis as unknown as { __PHB_DEBUG?: boolean }).__PHB_DEBUG) {
+            console.log(`[PHB] anchor=${anchorBlock.id} x=${anchorBlock.xCenter.toFixed(0)} hTree=${!!hTree} wTree=${!!wTree} transferred=${transferred.size}`);
+        }
+        if (transferred.size > 0) {
+            clusters.push({ blockIds: transferred, anchorX: anchorBlock.xCenter, priority, totalShift: 0 });
         }
     }
 
-    // Step 5: Enforce H/W boundaries for ALL couples in each tree
-    // This fixes any violations that occurred during recursive placement
-    enforceAllBoundariesUntilConvergence(hTree, config);
-    enforceAllBoundariesUntilConvergence(wTree, config);
-
-    // Step 6: Resolve any overlap between trees (shouldn't happen with above placement)
-    resolveAncestorTreeOverlap(hTree, wTree, config);
-
-    // Step 7: Transfer positions to FamilyBlocks
-    transferAncestorTreeToBlocks(hTree, blocks, unionToBlock, config);
-    transferAncestorTreeToBlocks(wTree, blocks, unionToBlock, config);
+    // Rigidly separate tree clusters of different anchors
+    separateTreeClusters(clusters, blocks, model, config);
 }
 
 /**

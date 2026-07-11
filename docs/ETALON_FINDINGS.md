@@ -38,6 +38,14 @@ Geometry: [collinear] connector-union_eB_FMFF_eB_FMFM and connector-union_eB_MFF
 This is the highest-volume finding and the main reason the etalon replaces
 `real-large.json` as the ancestor-density stress reference.
 
+**RESOLVED (2026-07-11).** Phase B generalized: independent compact ancestor
+trees are now built above EVERY gen -1 anchor couple (focus parents first,
+then the spouse's parents and all other parent couples), with shared ancestors
+(pedigree collapse) claimed by the first tree, followed by a deterministic
+two-sided cluster sweep around the focus cluster (anchor order preserved,
+left clusters pushed only left, right ones only right). The full binary
+ancestor tree now renders as a clean symmetric fan.
+
 ---
 
 ## Finding 2 — Second-degree cousin marriage: lineage collision
@@ -54,6 +62,12 @@ great-grandparents four generations up, and when the couple is reunited at the
 bottom their independently-placed parent columns overlap —
 `eH_d2_b1` and `eH_d2_b2_sp` land on the same rect, and the `a1` couple's stem
 crosses the `a2` couple's connector.
+
+**RESOLVED (2026-07-11).** Three fixes: `recenterSiblingFamilyParents` skips
+children hosted in a block claimed by another parent; `shiftAncestorComponent`
+stops its upward walk before a shared ancestor whose subtree contains the block
+being pushed away from; `placeAncestorChain` anchors a parent block whose
+children are all claimed elsewhere over its specific person.
 
 ---
 
@@ -132,6 +146,11 @@ Geometry: [collinear] stem-union_eF_p2_eF_p3 and stem-union_eF_p3_eF_p4 merge at
 Only `eF_p2` trips it, which isolates the case to a chain member that is
 simultaneously the shared spouse of one union and an extra partner of the next.
 
+**RESOLVED (2026-07-11).** `findChainExtraPartner`: for a transitive chain link
+whose BOTH partners are outside the primary couple, the stem now belongs to the
+person FARTHER out in the chain order (the closer one already carries the stem
+of the previous link).
+
 ---
 
 ## Finding 6 — Stress bridges: marriage stem through an unrelated card
@@ -156,6 +175,18 @@ Aside from these bridge artifacts, `etalon-stress-all` reproduces exactly the
 same finding classes as the standalone scenarios (`NB` → Finding 1, `NH` →
 Finding 2, `NI` → Finding 3), confirming the defects survive at ~250-person
 scale.
+
+**RESOLVED (2026-07-11)** — with one exception. The bridge stems-through-cards
+disappeared with the claimed-children anchoring fix plus a "tethered candidate"
+guard in `relocateSplitSiblingSubtrees` (a block whose union has a child hosted
+outside its own subtree must not be relocated — the parent-child bond outranks
+sibling contiguity). The one remaining case, focus `eNC_gk10_1`: the bridge
+spouse's parents anchor above the spouse INSIDE the 12-child `NC` sibling bus
+span — the drop to them crosses that bus at every lane order. This is the same
+knot class as scenario K and is tolerated in `KNOWN_LINE_KNOTS`; a real fix
+needs couple re-orientation planning (place the married-in spouse on the outer
+side of the focus couple so the in-law column lands outside the sibling span)
+or duplicated in-law cards.
 
 ---
 

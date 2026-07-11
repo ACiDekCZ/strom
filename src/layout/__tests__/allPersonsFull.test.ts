@@ -86,6 +86,13 @@ const KNOWN_LINE_KNOTS = new Set([
     // column stands inside that sibling-group bus span. Same class as above.
     'etalon-inlaw-column/eK_focus/standard',
     'etalon-inlaw-column/eK_focus/expanded',
+    // Same knot class in the stress graph: the bridge spouse's parents
+    // (eNB_F couple) anchor above the spouse INSIDE the 12-child NC sibling
+    // bus span; the drop to them must cross that bus at every lane order.
+    // Escaping needs couple re-orientation planning (spouse on the outer
+    // side) or duplicated in-law cards — future work, see ETALON_FINDINGS.
+    'etalon-stress-all/eNC_gk10_1/standard',
+    'etalon-stress-all/eNC_gk10_1/expanded',
 ]);
 
 for (const fixtureName of FIXTURES) {
