@@ -837,6 +837,37 @@ function runPhaseBIndependentTrees(
     // Find minimum generation (deepest ancestors)
     const minGen = genModel.minGen;
 
+    // V-fan context: when BOTH partners of the focus couple have ancestors,
+    // each partner's entire ancestry must stay on that partner's side of the
+    // couple midline. sideOf() tells which side a parent union belongs to.
+    let focusSideFan: {
+        midlineX: number;
+        sideOf: (parentUnion: UnionNode) => 'LEFT' | 'RIGHT' | null;
+    } | null = null;
+    const focusUnionId = model.personToUnion.get(focusPersonId);
+    const focusUnion = focusUnionId ? model.unions.get(focusUnionId) : undefined;
+    const focusBlockId = focusUnionId ? unionToBlock.get(focusUnionId) : undefined;
+    const focusBlock = focusBlockId ? blocks.get(focusBlockId) : undefined;
+    if (focusUnion && focusUnion.partnerB && focusBlock && !focusBlock.chainInfo) {
+        const aParentUnion = model.childToParentUnion.get(focusUnion.partnerA);
+        const bParentUnion = model.childToParentUnion.get(focusUnion.partnerB);
+        if (aParentUnion && bParentUnion && aParentUnion !== bParentUnion) {
+            // partnerA renders left, partnerB right (visual swap only changes
+            // card X, and the swap decision itself follows parent positions)
+            const leftPartner = focusUnion.swapped ? focusUnion.partnerB : focusUnion.partnerA;
+            const leftParentUnion = model.childToParentUnion.get(leftPartner);
+            focusSideFan = {
+                midlineX: focusBlock.xCenter,
+                sideOf: (parentUnion: UnionNode): 'LEFT' | 'RIGHT' | null => {
+                    if (parentUnion.id === aParentUnion || parentUnion.id === bParentUnion) {
+                        return parentUnion.id === leftParentUnion ? 'LEFT' : 'RIGHT';
+                    }
+                    return null;
+                }
+            };
+        }
+    }
+
     const claimed = new Set<FamilyBlockId>();
     const clusters: TreeCluster[] = [];
 
@@ -902,6 +933,32 @@ function runPhaseBIndependentTrees(
 
         // Resolve any overlap between the couple's own two trees
         resolveAncestorTreeOverlap(hTree, wTree, config);
+
+        // V-fan side ownership above the focus couple: the ENTIRE ancestry of
+        // each focus-couple partner stays on that partner's side of the couple
+        // midline (paternal branch left, maternal branch right — classic
+        // pedigree reading). Without this, the anchor couple's wife-tree is
+        // packed tight against her card and sprawls over the other partner's
+        // zone. Applied only when BOTH partners have ancestors — a lone tree
+        // stays centered, which is more compact.
+        if (focusSideFan) {
+            const side = focusSideFan.sideOf(anchorUnion);
+            if (side === 'LEFT') {
+                const pairMax = Math.max(findTreeMaxX(hTree, config), findTreeMaxX(wTree, config));
+                const limit = focusSideFan.midlineX - config.horizontalGap / 2;
+                if (isFinite(pairMax) && pairMax > limit) {
+                    shiftAncestorTree(hTree, limit - pairMax);
+                    shiftAncestorTree(wTree, limit - pairMax);
+                }
+            } else if (side === 'RIGHT') {
+                const pairMin = Math.min(findTreeMinX(hTree, config), findTreeMinX(wTree, config));
+                const limit = focusSideFan.midlineX + config.horizontalGap / 2;
+                if (isFinite(pairMin) && pairMin < limit) {
+                    shiftAncestorTree(hTree, limit - pairMin);
+                    shiftAncestorTree(wTree, limit - pairMin);
+                }
+            }
+        }
 
         // Transfer positions to FamilyBlocks
         const transferred = new Set<FamilyBlockId>();
