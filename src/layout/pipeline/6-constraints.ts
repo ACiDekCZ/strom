@@ -1193,27 +1193,37 @@ function compactLeafSiblingGroups(
             if (!hasForeignBetween) continue;
 
             const width = leaf.right - leaf.left;
-            const targetLeft = onRight ? coreRight + gap : coreLeft - gap - width;
-            const targetRight = targetLeft + width;
 
-            // Target slot must be free of ALL other cards in the row
-            let free = true;
-            for (const ext of rowExtents) {
-                if (ext.blockId === leaf.block.id) continue;
-                if (targetLeft < ext.right + gap && targetRight > ext.left - gap) {
-                    free = false;
-                    break;
+            // Try the slot on the leaf's own side of the core first; if that
+            // is occupied, the OTHER side of the core is just as good — the
+            // point is contiguity of the sibling group, not which side.
+            const candidates = onRight
+                ? [coreRight + gap, coreLeft - gap - width]
+                : [coreLeft - gap - width, coreRight + gap];
+
+            for (const targetLeft of candidates) {
+                const targetRight = targetLeft + width;
+
+                // Target slot must be free of ALL other cards in the row
+                let free = true;
+                for (const ext of rowExtents) {
+                    if (ext.blockId === leaf.block.id) continue;
+                    if (targetLeft < ext.right + gap && targetRight > ext.left - gap) {
+                        free = false;
+                        break;
+                    }
                 }
-            }
-            if (!free) continue;
+                if (!free) continue;
 
-            const delta = targetLeft - leaf.left;
-            shiftBlock(leaf.block, delta);
-            // Update bookkeeping
-            const rowEntry = rowExtents.find(e => e.blockId === leaf.block.id);
-            if (rowEntry) { rowEntry.left += delta; rowEntry.right += delta; }
-            coreLeft = Math.min(coreLeft, targetLeft);
-            coreRight = Math.max(coreRight, targetRight);
+                const delta = targetLeft - leaf.left;
+                shiftBlock(leaf.block, delta);
+                // Update bookkeeping
+                const rowEntry = rowExtents.find(e => e.blockId === leaf.block.id);
+                if (rowEntry) { rowEntry.left += delta; rowEntry.right += delta; }
+                coreLeft = Math.min(coreLeft, targetLeft);
+                coreRight = Math.max(coreRight, targetRight);
+                break;
+            }
         }
     }
 }
@@ -1300,6 +1310,26 @@ function relocateSplitSiblingSubtrees(
         for (const cand of siblingBlocks) {
             if (cand.parentBlockId !== parentBlock.id) continue;
 
+            // Tethered candidate: its union has a child hosted in a block
+            // OUTSIDE its own subtree (e.g. the child couple was claimed by
+            // the in-law side). Relocating it would tear the parent away
+            // from that child — sibling contiguity never outranks the
+            // parent-child bond.
+            const candUnion = model.unions.get(cand.rootUnionId);
+            if (candUnion && candUnion.childIds.length > 0) {
+                const candSubIds = subtreeCardExtentsByGen(cand.id, blocks, model, config).ids;
+                let tethered = false;
+                for (const childId of candUnion.childIds) {
+                    const childUnionId = model.personToUnion.get(childId);
+                    const childBlockId = childUnionId ? unionToBlock.get(childUnionId) : undefined;
+                    if (childBlockId && !candSubIds.has(childBlockId)) {
+                        tethered = true;
+                        break;
+                    }
+                }
+                if (tethered) continue;
+            }
+
             const coreExts = siblingBlocks
                 .filter(s => s.id !== cand.id)
                 .map(s => getBlockCardExtent(s, model, config));
@@ -1355,6 +1385,9 @@ function relocateSplitSiblingSubtrees(
                 }
                 if (!feasible) continue;
 
+                if ((globalThis as unknown as { __RELOC_DEBUG?: boolean }).__RELOC_DEBUG) {
+                    console.log(`[RELOC] cand=${cand.id} core=[${coreLeft.toFixed(0)},${coreRight.toFixed(0)}] candExt=[${candExt.left.toFixed(0)},${candExt.right.toFixed(0)}] sub=[${subMinX.toFixed(0)},${subMaxX.toFixed(0)}] delta=${delta.toFixed(1)}`);
+                }
                 shiftBlockSubtree(cand.id, delta, blocks);
                 // Update row bookkeeping for all moved blocks
                 for (const [gen, list] of rowsByGen) {
@@ -1922,6 +1955,9 @@ function enforceCousinSeparation(
         fsMaxX = Math.max(fsMaxX, ext.maxX);
     }
     if (!isFinite(fsMinX)) return false;
+    if ((globalThis as unknown as { __CSP_DEBUG?: boolean }).__CSP_DEBUG) {
+        console.log(`[CSP] FS=${[...fsBlockIds].join(',')} span=[${fsMinX.toFixed(0)},${fsMaxX.toFixed(0)}]`);
+    }
 
     // 4. Collect CB blocks (gen=0, NOT in FS)
     const cbBlocks: Array<{
