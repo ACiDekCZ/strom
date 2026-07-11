@@ -1,0 +1,190 @@
+/**
+ * UI - User interface logic and modals
+ * Handles context menus, relation dialogs, and form interactions
+ */
+
+import { DataManager, auditPersonName } from '../data.js';
+import { TreeManager } from '../tree-manager.js';
+import { TreeRenderer } from '../renderer.js';
+import { ZoomPan } from '../zoom.js';
+import { TreePreview, TreeCompare } from '../tree-preview.js';
+import {
+    Person,
+    PersonId,
+    PartnershipId,
+    PartnershipStatus,
+    Gender,
+    RelationType,
+    RelationContext,
+    StromData,
+    TreeId,
+    LAST_FOCUSED,
+    LastFocusedMarker
+} from '../types.js';
+import { strings } from '../strings.js';
+import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
+import {
+    validateJsonImport,
+    ValidationResult,
+    MergerUI,
+    getCurrentMergeInfo,
+    listMergeSessionsInfo,
+    deleteMergeSession,
+    renameMergeSession
+} from '../merge/index.js';
+import { PersonPicker } from '../person-picker.js';
+import { AppExporter } from '../export.js';
+import { SettingsManager } from '../settings.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
+import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
+import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
+import * as CrossTree from '../cross-tree.js';
+import { AuditLogManager } from '../audit-log.js';
+
+// Extracted method modules (composed onto UIClass at the bottom of this file).
+import { contextMenuMethods } from './context-menu.js';
+
+import { personModalMethods } from './person-modal.js';
+import { relationModalMethods } from './relation-modal.js';
+import { dialogsMethods } from './dialogs.js';
+import { relationshipsPanelMethods } from './relationships-panel.js';
+import { searchMethods } from './search.js';
+import { importExportMethods } from './import-export.js';
+import { mergeUiMethods } from './merge-ui.js';
+import { encryptionUiMethods } from './encryption-ui.js';
+import { treeStatsMethods } from './tree-stats.js';
+import { treeManagementMethods } from './tree-management.js';
+import { miscMethods } from './misc.js';
+import { appModeMethods } from './app-mode.js';
+
+export class UIClass {
+    currentId: PersonId | null = null;
+    relationContext: RelationContext | null = null;
+    contextMenu: HTMLElement | null = null;
+    contextMenuCloseHandler: ((e: Event) => void) | null = null;
+    linkMode = false;
+    gedcomResult: GedcomConversionResult | null = null;
+    saveCurrentCallback: (() => void) | null = null;
+    relationPicker: PersonPicker | null = null;
+    toolbarSearchPicker: PersonPicker | null = null;
+
+    // Tree management state
+    renameTreeId: TreeId | null = null;
+    duplicateTreeId: TreeId | null = null;
+    mergeSourceTreeId: TreeId | null = null;
+    mergeTargetTreeId: TreeId | null = null;
+    importTreeData: StromData | null = null;
+    exportTargetTreeId: TreeId | null = null;
+    defaultPersonTreeId: TreeId | null = null;
+    defaultPersonPicker: PersonPicker | null = null;
+
+    // Encryption state
+    passwordPromptCallback: ((password: string) => void) | null = null;
+    passwordPromptCallbackManagesDialog: boolean = false;  // If true, callback handles dialog close
+    exportPasswordCallback: ((password: string | null) => void) | null = null;
+    pendingEncryptedData: EncryptedData | null = null;
+    pendingEncryptedImport: EncryptedData | null = null;
+
+    // Dialog stack for ESC navigation (child -> parent)
+    dialogStack: string[] = [];
+
+    // Embedded mode state
+    appMode: AppMode = 'pwa';
+    lastExportTime: number = Date.now();
+    lastChangeTime: number = 0;
+
+    // Track if import is coming from tree manager
+    importFromTreeManager: boolean = false;
+
+    // Person modal: snapshot of original values for unsaved changes detection
+    personModalSnapshot: {
+        firstName: string; lastName: string; gender: string;
+        birthDate: string; birthPlace: string; deathDate: string; deathPlace: string;
+        notes: string;
+    } | null = null;
+
+    // Relationships panel state
+    relationshipsPanelPersonId: PersonId | null = null;
+    returnToEditPersonId: PersonId | null = null;  // Track if we should return to edit dialog
+    // Pending changes for relationships (not saved until user clicks Save)
+    pendingPartnershipChanges: Map<PartnershipId, {
+        status?: PartnershipStatus;
+        startDate?: string;
+        startPlace?: string;
+        endDate?: string;
+        note?: string;
+        isPrimary?: boolean;
+    }> = new Map();
+
+    // Custom dialog promise resolver
+    dialogResolve: ((value: boolean) => void) | null = null;
+
+    // Person merge (duplicate resolution) state
+    personMergeKeepId: PersonId | null = null;
+    personMergePicker: PersonPicker | null = null;
+    personMergeOtherId: PersonId | null = null;
+    personMergeFieldResolutions: Map<string, 'keep' | 'other'> = new Map();
+    personMergePartnershipResolutions: Map<PartnershipId, 'merge' | 'keep_both'> = new Map();
+
+    // Import-as-new-tree flag
+    importToCurrentTree: boolean = false;
+}
+
+// ---- Module composition ----
+// Each extracted module contributes its method types to the UIClass interface
+// (declaration merging, one `extends` per module) and its implementations to
+// the prototype. The runtime object stays a single UIClass instance, so `this`
+// binding is unchanged.
+type ContextMenuMethods = typeof contextMenuMethods;
+export interface UIClass extends ContextMenuMethods {}
+Object.assign(UIClass.prototype, contextMenuMethods);
+
+type PersonModalMethods = typeof personModalMethods;
+export interface UIClass extends PersonModalMethods {}
+Object.assign(UIClass.prototype, personModalMethods);
+
+type RelationModalMethods = typeof relationModalMethods;
+export interface UIClass extends RelationModalMethods {}
+Object.assign(UIClass.prototype, relationModalMethods);
+
+type DialogsMethods = typeof dialogsMethods;
+export interface UIClass extends DialogsMethods {}
+Object.assign(UIClass.prototype, dialogsMethods);
+
+type RelationshipsPanelMethods = typeof relationshipsPanelMethods;
+export interface UIClass extends RelationshipsPanelMethods {}
+Object.assign(UIClass.prototype, relationshipsPanelMethods);
+
+type SearchMethods = typeof searchMethods;
+export interface UIClass extends SearchMethods {}
+Object.assign(UIClass.prototype, searchMethods);
+
+type ImportExportMethods = typeof importExportMethods;
+export interface UIClass extends ImportExportMethods {}
+Object.assign(UIClass.prototype, importExportMethods);
+
+type MergeUiMethods = typeof mergeUiMethods;
+export interface UIClass extends MergeUiMethods {}
+Object.assign(UIClass.prototype, mergeUiMethods);
+
+type EncryptionUiMethods = typeof encryptionUiMethods;
+export interface UIClass extends EncryptionUiMethods {}
+Object.assign(UIClass.prototype, encryptionUiMethods);
+
+type TreeStatsMethods = typeof treeStatsMethods;
+export interface UIClass extends TreeStatsMethods {}
+Object.assign(UIClass.prototype, treeStatsMethods);
+
+type TreeManagementMethods = typeof treeManagementMethods;
+export interface UIClass extends TreeManagementMethods {}
+Object.assign(UIClass.prototype, treeManagementMethods);
+
+type MiscMethods = typeof miscMethods;
+export interface UIClass extends MiscMethods {}
+Object.assign(UIClass.prototype, miscMethods);
+
+type AppModeMethods = typeof appModeMethods;
+export interface UIClass extends AppModeMethods {}
+Object.assign(UIClass.prototype, appModeMethods);
+
+export const UI = new UIClass();

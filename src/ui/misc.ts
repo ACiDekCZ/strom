@@ -1,0 +1,643 @@
+/**
+ * misc UI methods. Extracted from the original UIClass;
+ * see src/ui/module.ts for the composition pattern.
+ */
+
+import { DataManager, auditPersonName } from '../data.js';
+import { TreeManager } from '../tree-manager.js';
+import { TreeRenderer } from '../renderer.js';
+import { ZoomPan } from '../zoom.js';
+import { TreePreview, TreeCompare } from '../tree-preview.js';
+import {
+    Person,
+    PersonId,
+    PartnershipId,
+    PartnershipStatus,
+    Gender,
+    RelationType,
+    RelationContext,
+    StromData,
+    TreeId,
+    LAST_FOCUSED,
+    LastFocusedMarker
+} from '../types.js';
+import { strings } from '../strings.js';
+import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
+import {
+    validateJsonImport,
+    ValidationResult,
+    MergerUI,
+    getCurrentMergeInfo,
+    listMergeSessionsInfo,
+    deleteMergeSession,
+    renameMergeSession
+} from '../merge/index.js';
+import { PersonPicker } from '../person-picker.js';
+import { AppExporter } from '../export.js';
+import { SettingsManager } from '../settings.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
+import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
+import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
+import * as CrossTree from '../cross-tree.js';
+import { AuditLogManager } from '../audit-log.js';
+import { uiModule } from './module.js';
+
+export const miscMethods = uiModule({
+    // ---- ABOUT DIALOG ----
+    showAboutDialog(): void {
+        const modal = document.getElementById('about-modal');
+        if (!modal) return;
+
+        // Set version
+        const versionEl = document.getElementById('about-version');
+        if (versionEl) {
+            versionEl.textContent = '1.0';
+        }
+
+        // Calculate and display stats
+        this.updateAboutStats();
+
+        modal.classList.add('active');
+    },
+
+    updateAboutStats(): void {
+        const persons = DataManager.getAllPersons();
+        const partnerships = DataManager.getAllPartnerships();
+
+        // Count persons (excluding placeholders)
+        const realPersons = persons.filter(p => !p.isPlaceholder);
+        const men = realPersons.filter(p => p.gender === 'male').length;
+        const women = realPersons.filter(p => p.gender === 'female').length;
+
+        // Count families (partnerships)
+        const families = partnerships.length;
+
+        // Calculate generations
+        const generations = this.calculateMaxGenerations(persons);
+
+        // Find oldest person (by birth year)
+        const oldest = this.findOldestPerson(realPersons);
+
+        // Get current tree name
+        const activeTree = TreeManager.getActiveTreeMetadata();
+        const treeName = activeTree?.name || '-';
+
+        // Update tree name
+        const treeNameEl = document.getElementById('stat-tree-name');
+        if (treeNameEl) treeNameEl.textContent = treeName;
+
+        // Update compact stats row for current tree
+        const statsRow = document.getElementById('about-stats-row');
+        if (statsRow) {
+            const parts = [
+                `${realPersons.length} persons`,
+                `${men}♂ ${women}♀`,
+                `${families} families`,
+                `${generations} gen`
+            ];
+            if (oldest !== '-') {
+                parts.push(`since ${oldest}`);
+            }
+            statsRow.textContent = parts.join(' • ');
+        }
+
+        // Calculate and update aggregate stats across all trees
+        this.updateAboutTotalStats();
+    },
+
+    /**
+     * Calculate and display aggregate statistics across all trees
+     */
+    async updateAboutTotalStats(): Promise<void> {
+        const trees = TreeManager.getTrees();
+        const totalStatsRow = document.getElementById('about-stats-total-row');
+        const totalStatsSection = document.getElementById('about-stats-total');
+
+        // Hide total stats if only one tree
+        if (totalStatsSection) {
+            totalStatsSection.style.display = trees.length > 1 ? 'block' : 'none';
+        }
+
+        if (!totalStatsRow || trees.length <= 1) return;
+
+        let totalPersons = 0;
+        let totalMen = 0;
+        let totalWomen = 0;
+        let totalFamilies = 0;
+
+        for (const tree of trees) {
+            const treeData = await TreeManager.getTreeData(tree.id);
+            if (!treeData) continue;
+
+            const persons = Object.values(treeData.persons).filter(p => !p.isPlaceholder);
+            totalPersons += persons.length;
+            totalMen += persons.filter(p => p.gender === 'male').length;
+            totalWomen += persons.filter(p => p.gender === 'female').length;
+            totalFamilies += Object.keys(treeData.partnerships).length;
+        }
+
+        const parts = [
+            `${trees.length} ${strings.about.stats.trees}`,
+            `${totalPersons} ${strings.about.stats.persons.toLowerCase()}`,
+            `${totalMen}♂ ${totalWomen}♀`,
+            `${totalFamilies} ${strings.about.stats.families.toLowerCase()}`
+        ];
+
+        totalStatsRow.textContent = parts.join(' • ');
+    },
+
+    calculateMaxGenerations(persons: import('../types.js').Person[]): number {
+        if (persons.length === 0) return 0;
+
+        // Find a root person (someone without parents)
+        const roots = persons.filter(p => p.parentIds.length === 0 && !p.isPlaceholder);
+        if (roots.length === 0) return 1;
+
+        // BFS to find max depth
+        let maxDepth = 0;
+        const visited = new Set<PersonId>();
+
+        const getDepth = (personId: PersonId, depth: number): number => {
+            if (visited.has(personId)) return depth;
+            visited.add(personId);
+
+            const person = DataManager.getPerson(personId);
+            if (!person) return depth;
+
+            let maxChildDepth = depth;
+            for (const childId of person.childIds) {
+                const childDepth = getDepth(childId, depth + 1);
+                maxChildDepth = Math.max(maxChildDepth, childDepth);
+            }
+            return maxChildDepth;
+        };
+
+        for (const root of roots) {
+            const depth = getDepth(root.id, 1);
+            maxDepth = Math.max(maxDepth, depth);
+        }
+
+        return maxDepth;
+    },
+
+    findOldestPerson(persons: import('../types.js').Person[]): string {
+        let oldestYear = Infinity;
+        let oldestName = '-';
+
+        for (const person of persons) {
+            if (person.birthDate) {
+                const year = parseInt(person.birthDate.split('-')[0], 10);
+                if (year && year < oldestYear) {
+                    oldestYear = year;
+                    oldestName = `${year}`;
+                }
+            }
+        }
+
+        return oldestName;
+    },
+
+    closeAboutDialog(): void {
+        document.getElementById('about-modal')?.classList.remove('active');
+    },
+
+    // ---- SETTINGS DIALOG ----
+    showSettingsDialog(): void {
+        const modal = document.getElementById('settings-modal');
+        if (!modal) return;
+
+        // Set current theme selection
+        const currentTheme = SettingsManager.getTheme();
+        const themeRadios = modal.querySelectorAll<HTMLInputElement>('input[name="theme"]');
+        themeRadios.forEach(radio => {
+            radio.checked = radio.value === currentTheme;
+        });
+
+        // Set current language selection
+        const currentLanguage = SettingsManager.getLanguage();
+        const languageRadios = modal.querySelectorAll<HTMLInputElement>('input[name="language"]');
+        languageRadios.forEach(radio => {
+            radio.checked = radio.value === currentLanguage;
+        });
+
+        // Set current encryption state
+        const encryptionToggle = document.getElementById('encryption-toggle') as HTMLInputElement;
+        const encryptionStatus = document.getElementById('encryption-status');
+        if (encryptionToggle) {
+            encryptionToggle.checked = SettingsManager.isEncryptionEnabled();
+        }
+        if (encryptionStatus) {
+            encryptionStatus.textContent = SettingsManager.isEncryptionEnabled()
+                ? strings.encryption.encryptionEnabled
+                : strings.encryption.encryptionDisabled;
+        }
+
+        // Set current audit log state
+        const auditLogToggle = document.getElementById('audit-log-toggle') as HTMLInputElement;
+        const auditLogStatus = document.getElementById('audit-log-status');
+        if (auditLogToggle) {
+            auditLogToggle.checked = AuditLogManager.isEnabled();
+        }
+        if (auditLogStatus) {
+            auditLogStatus.textContent = AuditLogManager.isEnabled()
+                ? strings.auditLog.enabled
+                : strings.auditLog.disabled;
+        }
+
+        modal.classList.add('active');
+    },
+
+    closeSettingsDialog(): void {
+        document.getElementById('settings-modal')?.classList.remove('active');
+    },
+
+    setTheme(theme: ThemeMode): void {
+        SettingsManager.setTheme(theme);
+    },
+
+    setLanguage(language: LanguageSetting): void {
+        SettingsManager.setLanguage(language);
+        // Refresh UI to update all strings
+        this.initializeStrings();
+        // Refresh dynamically created components
+        this.initSearch();
+        this.updateTreeSwitcher();
+        this.updateEncryptionStatus();
+        TreeRenderer.render();
+    },
+
+    // ---- MOBILE MENU ----
+    toggleMobileMenu(): void {
+        const menu = document.getElementById('mobile-menu');
+        menu?.classList.toggle('active');
+    },
+
+    closeMobileMenu(): void {
+        document.getElementById('mobile-menu')?.classList.remove('active');
+    },
+
+    // ---- KEYBOARD SHORTCUTS ----
+    initKeyboard(): void {
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                // Check if merge modal is open - it handles its own escape
+                const mergeModal = document.getElementById('merge-modal');
+                if (mergeModal?.classList.contains('active')) {
+                    // Merge modal has its own escape handler
+                    return;
+                }
+
+                // Special check for relation-modal in link mode (regardless of stack state)
+                const relationModal = document.getElementById('relation-modal');
+                if (relationModal?.classList.contains('active') && this.linkMode) {
+                    // First close any open PersonPicker dropdown
+                    this.relationPicker?.hide();
+                    // Toggle back to create mode
+                    this.toggleLinkMode();
+                    return;
+                }
+
+                // Handle dialog stack - return to parent dialog
+                if (this.dialogStack.length > 0) {
+                    const currentDialog = this.dialogStack[this.dialogStack.length - 1];
+
+                    // Intercept Escape for relationships-modal to check pending changes
+                    if (currentDialog === 'relationships-modal' && this.pendingPartnershipChanges.size > 0) {
+                        this.showUnsavedChangesDialog();
+                        return;
+                    }
+
+                    // Special handling for relation-modal
+                    if (currentDialog === 'relation-modal') {
+                        this.closeRelationModal();
+                        return;
+                    }
+
+                    // Special handling for person-merge-modal: closePersonMergeDialog handles stack and parent
+                    if (currentDialog === 'person-merge-modal') {
+                        this.closePersonMergeDialog();
+                        return;
+                    }
+
+                    this.dialogStack.pop();
+
+                    this.closeDialogById(currentDialog);
+
+                    // Special handling for relationships-modal: use closeRelationshipsPanel for proper cleanup
+                    if (currentDialog === 'relationships-modal') {
+                        // Don't re-close (already closed above), but do the cleanup
+                        this.pendingPartnershipChanges.clear();
+                        const returnToId = this.returnToEditPersonId;
+                        this.relationshipsPanelPersonId = null;
+                        this.returnToEditPersonId = null;
+                        if (this.dialogStack.length > 0) {
+                            const parentDialog = this.dialogStack[this.dialogStack.length - 1];
+                            if (returnToId && parentDialog === 'person-modal') {
+                                this.openDialogById(parentDialog);
+                            }
+                            this.dialogStack = [];
+                        }
+                        return;
+                    }
+
+                    // Reopen parent if exists
+                    if (this.dialogStack.length > 0) {
+                        const parentDialog = this.dialogStack[this.dialogStack.length - 1];
+                        this.openDialogById(parentDialog);
+                    }
+                    return;
+                }
+
+                // Close all dialogs (fallback for dialogs not in stack)
+                // Check for unsaved relationship changes before closing
+                if (this.relationshipsPanelPersonId && this.pendingPartnershipChanges.size > 0) {
+                    this.showUnsavedChangesDialog();
+                    return;
+                }
+                // Check for unsaved person modal changes before closing
+                if (this.hasPersonModalChanges()) {
+                    this.showPersonUnsavedChangesDialog();
+                    return;
+                }
+                this.forceCloseModal();
+                this.closeRelationModal();
+                this.closeConfirmModal();
+                this.closeRelationshipsPanel();
+                this.closeAboutDialog();
+                this.closeSettingsDialog();
+                this.closeExportDialog();
+                this.closeImportDialog();
+                this.closeMobileMenu();
+                this.hideContextMenu();
+                this.closeGedcomResultDialog();
+                this.closeSaveCurrentDialog();
+                this.closeValidationDialog();
+                this.closePendingMergeDialog();
+                this.closeNewTreeMenu();
+                this.closeExportAllDialog();
+                this.closeExportFocusDialog();
+                this.closeDefaultPersonDialog();
+                this.closeTreeManagerDialog();
+                this.closePersonMergeDialog();
+            }
+
+            // Skip remaining shortcuts if modal is open
+            if (this.dialogStack.length > 0) return;
+            const activeModals = document.querySelectorAll('.modal-overlay.active');
+            if (activeModals.length > 0) return;
+
+            // Ctrl/Cmd+F: Focus search
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                this.toolbarSearchPicker?.focusInput();
+                return;
+            }
+
+            // Skip shortcuts when focus is in input/textarea/select
+            const activeEl = document.activeElement;
+            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) return;
+
+            // Delete: delete focused person (skip if locked)
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                const focusId = TreeRenderer.getFocusPersonId();
+                if (focusId && !DataManager.isPersonLocked(focusId)) {
+                    this.confirmDelete(focusId);
+                }
+                return;
+            }
+
+            // +/= : Zoom in
+            if (e.key === '+' || e.key === '=') {
+                ZoomPan.zoomIn();
+                return;
+            }
+
+            // - : Zoom out
+            if (e.key === '-') {
+                ZoomPan.zoomOut();
+                return;
+            }
+
+            // 0 : Reset zoom
+            if (e.key === '0') {
+                ZoomPan.reset();
+                return;
+            }
+        });
+    },
+
+    /**
+     * Close dialog by ID
+     */
+    closeDialogById(dialogId: string | undefined): void {
+        if (!dialogId) return;
+        document.getElementById(dialogId)?.classList.remove('active');
+    },
+
+    /**
+     * Open dialog by ID
+     */
+    openDialogById(dialogId: string | undefined): void {
+        if (!dialogId) return;
+        document.getElementById(dialogId)?.classList.add('active');
+    },
+
+    /**
+     * Push dialog to stack (for nested dialogs)
+     */
+    pushDialog(dialogId: string): void {
+        this.dialogStack.push(dialogId);
+    },
+
+    /**
+     * Clear dialog stack
+     */
+    clearDialogStack(): void {
+        this.dialogStack = [];
+    },
+
+    // ---- VALIDATION DIALOG ----
+    /**
+     * Show validation errors/warnings dialog
+     */
+    showValidationDialog(result: ValidationResult, onContinue?: () => void): void {
+        const modal = document.getElementById('validation-modal');
+        const content = document.getElementById('validation-content');
+        const continueBtn = document.getElementById('validation-continue-btn');
+
+        if (!modal || !content || !continueBtn) return;
+
+        let html = '';
+
+        // Show errors
+        if (result.errors.length > 0) {
+            html += `
+                <div class="validation-section">
+                    <div class="validation-section-title errors">
+                        ❌ ${strings.validation.errors} (${result.errors.length})
+                    </div>
+                    ${result.errors.map(err => `
+                        <div class="validation-item">${this.formatValidationMessage(err)}</div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Show warnings
+        if (result.warnings.length > 0) {
+            html += `
+                <div class="validation-section">
+                    <div class="validation-section-title warnings">
+                        ⚠️ ${strings.validation.warnings} (${result.warnings.length})
+                    </div>
+                    ${result.warnings.map(warn => `
+                        <div class="validation-item">${this.formatValidationMessage(warn)}</div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        content.innerHTML = html;
+
+        // Show continue button only if there are no errors (only warnings)
+        if (result.errors.length === 0 && onContinue) {
+            continueBtn.style.display = 'block';
+            continueBtn.onclick = () => {
+                this.closeValidationDialog();
+                onContinue();
+            };
+        } else {
+            continueBtn.style.display = 'none';
+        }
+
+        modal.classList.add('active');
+    },
+
+    closeValidationDialog(): void {
+        document.getElementById('validation-modal')?.classList.remove('active');
+    },
+
+    formatValidationMessage(code: string): string {
+        // Parse error code: type:detail1:detail2
+        const parts = code.split(':');
+        const type = parts[0];
+        const detail = parts.slice(1).join(':');
+
+        switch (type) {
+            case 'parseError':
+                return strings.validation.parseError;
+            case 'invalidStructure':
+                return strings.validation.invalidStructure;
+            case 'missingPersons':
+                return strings.validation.missingPersons;
+            case 'missingPersonId':
+            case 'missingFirstName':
+            case 'missingLastName':
+            case 'invalidGender':
+                return `${strings.validation.missingField}: ${detail || type}`;
+            case 'invalidParentRef':
+            case 'invalidChildRef':
+            case 'invalidPartnershipRef':
+                return `${strings.validation.invalidReference}: ${detail}`;
+            case 'missingHeader':
+                return strings.validation.missingGedcomHeader;
+            case 'noIndividuals':
+                return strings.validation.noIndividuals;
+            case 'invalidLine':
+                return `${strings.validation.invalidLine}: ${detail}`;
+            case 'noVersion':
+                return strings.validation.noVersion;
+            case 'olderVersion':
+                return strings.validation.olderVersion?.replace('{0}', detail) || `Older version: ${detail}`;
+            case 'newerVersion':
+                return strings.validation.newerVersion?.replace('{0}', detail) || `Newer version: ${detail}`;
+            default:
+                return code;
+        }
+    },
+
+    // ---- STRING INITIALIZATION ----
+    initializeStrings(): void {
+        // Helper to get nested property from strings object
+        const getString = (path: string): string => {
+            const parts = path.split('.');
+            let value: unknown = strings;
+            for (const part of parts) {
+                if (value && typeof value === 'object' && part in value) {
+                    value = (value as Record<string, unknown>)[part];
+                } else {
+                    console.warn(`String not found: ${path}`);
+                    return path;
+                }
+            }
+            return typeof value === 'string' ? value : path;
+        };
+
+        // Set text content for data-i18n elements
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (key) {
+                el.textContent = getString(key);
+            }
+        });
+
+        // Set placeholder for data-i18n-placeholder elements
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+            const key = el.getAttribute('data-i18n-placeholder');
+            if (key && el instanceof HTMLInputElement) {
+                el.placeholder = getString(key);
+            }
+        });
+
+        // Set title for data-i18n-title elements
+        document.querySelectorAll('[data-i18n-title]').forEach(el => {
+            const key = el.getAttribute('data-i18n-title');
+            if (key && el instanceof HTMLElement) {
+                el.title = getString(key);
+            }
+        });
+    },
+
+    /**
+     * Public helper to get localized string
+     */
+    getString(path: string): string {
+        const parts = path.split('.');
+        let value: unknown = strings;
+        for (const part of parts) {
+            if (value && typeof value === 'object' && part in value) {
+                value = (value as Record<string, unknown>)[part];
+            } else {
+                return path;
+            }
+        }
+        return typeof value === 'string' ? value : path;
+    },
+
+    // ---- TOAST NOTIFICATIONS ----
+    /**
+     * Show a toast notification
+     */
+    showToast(message: string, duration = 3000): void {
+        // Remove existing toast
+        const existing = document.querySelector('.toast');
+        if (existing) existing.remove();
+
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+
+        // Trigger animation
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+
+        // Auto-hide
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
+    },
+
+});
