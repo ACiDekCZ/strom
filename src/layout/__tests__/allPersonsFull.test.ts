@@ -18,7 +18,6 @@ import { loadFixture } from './helpers/loadFixture.js';
 import { runLayoutPipeline } from '../pipeline/index.js';
 import {
     assertNoNodeOverlap,
-    assertNoEdgeCrossings,
     assertValidPositions,
 } from './helpers/assertions.js';
 import { auditGeometry } from './helpers/geometryAudit.js';
@@ -138,24 +137,31 @@ for (const fixtureName of FIXTURES) {
                         failures.push(`Overlap: ${(e as Error).message.split('\n')[0]}`);
                     }
 
-                    // 3. No edge crossings (stems, connectors, buses, drops)
-                    try {
-                        assertNoEdgeCrossings(result.connections);
-                    } catch (e: unknown) {
-                        failures.push(`Crossing: ${(e as Error).message.split('\n')[0]}`);
-                    }
-
-                    // 4. Built-in validation (bus overlaps, refs, bounds)
+                    // 3. Built-in validation (bus overlaps, refs, bounds)
                     if (!result.diagnostics.validationPassed) {
                         for (const err of result.diagnostics.errors.slice(0, 5)) {
                             failures.push(`Validation: ${err}`);
                         }
                     }
 
-                    // 5. Strict geometry audit: collinear line merges, endpoint
-                    // touches on foreign lines, lines through cards
-                    for (const violation of auditGeometry(result, config).slice(0, 5)) {
+                    // 4. Strict geometry audit: crossings (incl. classification
+                    // of topologically forced ones between cross-married
+                    // unions), collinear line merges, endpoint touches on
+                    // foreign lines, lines through cards
+                    const violations = auditGeometry(result, config, data);
+                    const inherent = violations.filter(v => v.type === 'inherent-crossing');
+                    const hard = violations.filter(v => v.type !== 'inherent-crossing');
+                    for (const violation of hard.slice(0, 5)) {
                         failures.push(`Geometry: [${violation.type}] ${violation.detail}`);
+                    }
+                    // Inherent crossings (double in-law etc.) are logged in the
+                    // report but do not fail the test — they cannot be avoided
+                    // with atomic couples and single-bus T-routing.
+                    if (failures.length === 0 && inherent.length > 0) {
+                        allFailures.push({
+                            personId, name: displayName, mode: mode.name,
+                            failures: inherent.slice(0, 3).map(v => `INHERENT: ${v.detail}`)
+                        });
                     }
 
                     const limitationKey = `${fixtureName}/${personId}/${mode.name}`;

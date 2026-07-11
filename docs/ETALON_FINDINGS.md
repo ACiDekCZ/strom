@@ -95,6 +95,21 @@ Findings 3 and 4 together show the defect is not specific to the sibling
 relationship: any time two side-by-side parent couples are cross-linked by
 marriage below them, the descendant drop is routed across the neighbour's bus.
 
+**RESOLVED as topologically inherent (2026-07-11).** Enumeration proof: with
+atomic couples on one generation row, the two unions' drop targets can only
+INTERLEAVE (1,3)/(2,4) or NEST (2,3)/(1,4) — never separate. With single-bus
+perpendicular T-routing, every lane assignment then forces either one union's
+stem, or one of its drops, through the other union's horizontal run (verified
+for all member orders, couple orders, parent placements and lane orders). One
+clean perpendicular crossing is exactly how genealogists draw double in-law on
+paper. The geometry audit now classifies crossings between CROSS-MARRIED unions
+(a child of one partnered with a child of the other, both unions with 2+ drops)
+as `inherent-crossing`; the harness logs them (`INHERENT` in the report) without
+failing. Avoidable crossings (single-drop unions, e.g. pedigree collapse) keep
+failing hard. The only rendering that removes the crossing entirely would be
+duplicating the in-law parent cards (MyHeritage-style) — a possible future
+feature, not a layout defect.
+
 ---
 
 ## Finding 5 — Merged transitive chain (expanded mode): collinear stem merge
