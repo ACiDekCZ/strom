@@ -1,0 +1,221 @@
+{
+  "persons": {
+    "a": {
+      "id": "a",
+      "firstName": "Anna",
+      "lastName": "Cascade",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_a_b"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "k_ab"
+      ],
+      "birthDate": "1950-01-01"
+    },
+    "b": {
+      "id": "b",
+      "firstName": "Bohus",
+      "lastName": "Cascade",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_a_b",
+        "u_b_c"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "k_ab",
+        "k_bc"
+      ],
+      "birthDate": "1948-01-01"
+    },
+    "c": {
+      "id": "c",
+      "firstName": "Cilka",
+      "lastName": "Cascade",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_b_c",
+        "u_c_d"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "k_bc",
+        "k_cd"
+      ],
+      "birthDate": "1952-01-01"
+    },
+    "d": {
+      "id": "d",
+      "firstName": "Dusan",
+      "lastName": "Cascade",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_c_d",
+        "u_d_e"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "k_cd",
+        "k_de"
+      ],
+      "birthDate": "1947-01-01"
+    },
+    "e": {
+      "id": "e",
+      "firstName": "Eva",
+      "lastName": "Cascade",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_d_e"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "k_de"
+      ],
+      "birthDate": "1953-01-01"
+    },
+    "k_ab": {
+      "id": "k_ab",
+      "firstName": "Kid",
+      "lastName": "AB",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "a",
+        "b"
+      ],
+      "childIds": [],
+      "birthDate": "1972-01-01"
+    },
+    "k_bc": {
+      "id": "k_bc",
+      "firstName": "Kid",
+      "lastName": "BC",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_k_bc_sp_k_bc"
+      ],
+      "parentIds": [
+        "b",
+        "c"
+      ],
+      "childIds": [
+        "gk_bc"
+      ],
+      "birthDate": "1976-01-01"
+    },
+    "k_cd": {
+      "id": "k_cd",
+      "firstName": "Kid",
+      "lastName": "CD",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "c",
+        "d"
+      ],
+      "childIds": [],
+      "birthDate": "1980-01-01"
+    },
+    "k_de": {
+      "id": "k_de",
+      "firstName": "Kid",
+      "lastName": "DE",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "d",
+        "e"
+      ],
+      "childIds": [],
+      "birthDate": "1984-01-01"
+    },
+    "k_bc_sp": {
+      "id": "k_bc_sp",
+      "firstName": "Spouse",
+      "lastName": "KBC",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_k_bc_sp_k_bc"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "gk_bc"
+      ],
+      "birthDate": "1975-01-01"
+    },
+    "gk_bc": {
+      "id": "gk_bc",
+      "firstName": "Grand",
+      "lastName": "BC",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "k_bc_sp",
+        "k_bc"
+      ],
+      "childIds": [],
+      "birthDate": "2000-01-01"
+    }
+  },
+  "partnerships": {
+    "u_a_b": {
+      "id": "u_a_b",
+      "person1Id": "a",
+      "person2Id": "b",
+      "childIds": [
+        "k_ab"
+      ],
+      "status": "divorced"
+    },
+    "u_b_c": {
+      "id": "u_b_c",
+      "person1Id": "b",
+      "person2Id": "c",
+      "childIds": [
+        "k_bc"
+      ],
+      "status": "divorced"
+    },
+    "u_c_d": {
+      "id": "u_c_d",
+      "person1Id": "c",
+      "person2Id": "d",
+      "childIds": [
+        "k_cd"
+      ],
+      "status": "divorced"
+    },
+    "u_d_e": {
+      "id": "u_d_e",
+      "person1Id": "d",
+      "person2Id": "e",
+      "childIds": [
+        "k_de"
+      ],
+      "status": "married"
+    },
+    "u_k_bc_sp_k_bc": {
+      "id": "u_k_bc_sp_k_bc",
+      "person1Id": "k_bc_sp",
+      "person2Id": "k_bc",
+      "childIds": [
+        "gk_bc"
+      ],
+      "status": "married"
+    }
+  }
+}

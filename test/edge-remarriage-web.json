@@ -1,0 +1,255 @@
+{
+  "persons": {
+    "adam": {
+      "id": "adam",
+      "firstName": "Adam",
+      "lastName": "First",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_adam_bea",
+        "u_adam_dana"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "k_ab1",
+        "k_ab2",
+        "k_ad1"
+      ],
+      "birthDate": "1950-01-01"
+    },
+    "bea": {
+      "id": "bea",
+      "firstName": "Bea",
+      "lastName": "First",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_adam_bea",
+        "u_cyril_bea",
+        "u_emil_bea"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "k_ab1",
+        "k_ab2",
+        "k_cb1",
+        "k_eb1"
+      ],
+      "birthDate": "1952-01-01"
+    },
+    "cyril": {
+      "id": "cyril",
+      "firstName": "Cyril",
+      "lastName": "Second",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_cyril_bea"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "k_cb1"
+      ],
+      "birthDate": "1948-01-01"
+    },
+    "dana": {
+      "id": "dana",
+      "firstName": "Dana",
+      "lastName": "Second",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_adam_dana"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "k_ad1"
+      ],
+      "birthDate": "1955-01-01"
+    },
+    "emil": {
+      "id": "emil",
+      "firstName": "Emil",
+      "lastName": "Third",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_emil_bea"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "k_eb1"
+      ],
+      "birthDate": "1951-01-01"
+    },
+    "k_ab1": {
+      "id": "k_ab1",
+      "firstName": "Kid",
+      "lastName": "K_AB1",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "adam",
+        "bea"
+      ],
+      "childIds": [],
+      "birthDate": "1975-01-01"
+    },
+    "k_ab2": {
+      "id": "k_ab2",
+      "firstName": "Kid",
+      "lastName": "K_AB2",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "adam",
+        "bea"
+      ],
+      "childIds": [],
+      "birthDate": "1977-01-01"
+    },
+    "k_ad1": {
+      "id": "k_ad1",
+      "firstName": "Kid",
+      "lastName": "K_AD1",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_k_ad1_k_ad1_sp"
+      ],
+      "parentIds": [
+        "adam",
+        "dana"
+      ],
+      "childIds": [
+        "gk1",
+        "gk2"
+      ],
+      "birthDate": "1985-01-01"
+    },
+    "k_cb1": {
+      "id": "k_cb1",
+      "firstName": "Kid",
+      "lastName": "K_CB1",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "cyril",
+        "bea"
+      ],
+      "childIds": [],
+      "birthDate": "1980-01-01"
+    },
+    "k_eb1": {
+      "id": "k_eb1",
+      "firstName": "Kid",
+      "lastName": "K_EB1",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "emil",
+        "bea"
+      ],
+      "childIds": [],
+      "birthDate": "1990-01-01"
+    },
+    "gk1": {
+      "id": "gk1",
+      "firstName": "Grand",
+      "lastName": "Kid1",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "k_ad1",
+        "k_ad1_sp"
+      ],
+      "childIds": [],
+      "birthDate": "2005-01-01"
+    },
+    "gk2": {
+      "id": "gk2",
+      "firstName": "Grand",
+      "lastName": "Kid2",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "k_ad1",
+        "k_ad1_sp"
+      ],
+      "childIds": [],
+      "birthDate": "2007-01-01"
+    },
+    "k_ad1_sp": {
+      "id": "k_ad1_sp",
+      "firstName": "Spouse",
+      "lastName": "OfKAD1",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_k_ad1_k_ad1_sp"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "gk1",
+        "gk2"
+      ],
+      "birthDate": "1986-01-01"
+    }
+  },
+  "partnerships": {
+    "u_adam_bea": {
+      "id": "u_adam_bea",
+      "person1Id": "adam",
+      "person2Id": "bea",
+      "childIds": [
+        "k_ab1",
+        "k_ab2"
+      ],
+      "status": "divorced"
+    },
+    "u_adam_dana": {
+      "id": "u_adam_dana",
+      "person1Id": "adam",
+      "person2Id": "dana",
+      "childIds": [
+        "k_ad1"
+      ],
+      "status": "married"
+    },
+    "u_cyril_bea": {
+      "id": "u_cyril_bea",
+      "person1Id": "cyril",
+      "person2Id": "bea",
+      "childIds": [
+        "k_cb1"
+      ],
+      "status": "divorced"
+    },
+    "u_emil_bea": {
+      "id": "u_emil_bea",
+      "person1Id": "emil",
+      "person2Id": "bea",
+      "childIds": [
+        "k_eb1"
+      ],
+      "status": "married"
+    },
+    "u_k_ad1_k_ad1_sp": {
+      "id": "u_k_ad1_k_ad1_sp",
+      "person1Id": "k_ad1",
+      "person2Id": "k_ad1_sp",
+      "childIds": [
+        "gk1",
+        "gk2"
+      ],
+      "status": "married"
+    }
+  }
+}

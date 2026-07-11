@@ -1,0 +1,452 @@
+{
+  "persons": {
+    "gen0_h": {
+      "id": "gen0_h",
+      "firstName": "Gen0",
+      "lastName": "Founder",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen0_h_gen0_w"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "gen1_heir",
+        "gen1_sib"
+      ],
+      "birthDate": "1830-01-01"
+    },
+    "gen0_w": {
+      "id": "gen0_w",
+      "firstName": "Gen0",
+      "lastName": "Founderova",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen0_h_gen0_w"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "gen1_heir",
+        "gen1_sib"
+      ],
+      "birthDate": "1832-01-01"
+    },
+    "gen1_heir": {
+      "id": "gen1_heir",
+      "firstName": "Gen1",
+      "lastName": "Heir",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen1_heir_gen1_wife"
+      ],
+      "parentIds": [
+        "gen0_h",
+        "gen0_w"
+      ],
+      "childIds": [
+        "gen2_heir",
+        "gen2_sib"
+      ],
+      "birthDate": "1852-01-01"
+    },
+    "gen1_sib": {
+      "id": "gen1_sib",
+      "firstName": "Gen1",
+      "lastName": "Sib",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "gen0_h",
+        "gen0_w"
+      ],
+      "childIds": [],
+      "birthDate": "1854-01-01"
+    },
+    "gen1_wife": {
+      "id": "gen1_wife",
+      "firstName": "Gen1",
+      "lastName": "Wife",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen1_heir_gen1_wife"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "gen2_heir",
+        "gen2_sib"
+      ],
+      "birthDate": "1853-01-01"
+    },
+    "gen2_heir": {
+      "id": "gen2_heir",
+      "firstName": "Gen2",
+      "lastName": "Heir",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen2_heir_gen2_wife"
+      ],
+      "parentIds": [
+        "gen1_heir",
+        "gen1_wife"
+      ],
+      "childIds": [
+        "gen3_heir",
+        "gen3_sib"
+      ],
+      "birthDate": "1874-01-01"
+    },
+    "gen2_sib": {
+      "id": "gen2_sib",
+      "firstName": "Gen2",
+      "lastName": "Sib",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "gen1_heir",
+        "gen1_wife"
+      ],
+      "childIds": [],
+      "birthDate": "1876-01-01"
+    },
+    "gen2_wife": {
+      "id": "gen2_wife",
+      "firstName": "Gen2",
+      "lastName": "Wife",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen2_heir_gen2_wife"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "gen3_heir",
+        "gen3_sib"
+      ],
+      "birthDate": "1875-01-01"
+    },
+    "gen3_heir": {
+      "id": "gen3_heir",
+      "firstName": "Gen3",
+      "lastName": "Heir",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen3_heir_gen3_wife"
+      ],
+      "parentIds": [
+        "gen2_heir",
+        "gen2_wife"
+      ],
+      "childIds": [
+        "gen4_heir",
+        "gen4_sib"
+      ],
+      "birthDate": "1896-01-01"
+    },
+    "gen3_sib": {
+      "id": "gen3_sib",
+      "firstName": "Gen3",
+      "lastName": "Sib",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "gen2_heir",
+        "gen2_wife"
+      ],
+      "childIds": [],
+      "birthDate": "1898-01-01"
+    },
+    "gen3_wife": {
+      "id": "gen3_wife",
+      "firstName": "Gen3",
+      "lastName": "Wife",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen3_heir_gen3_wife"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "gen4_heir",
+        "gen4_sib"
+      ],
+      "birthDate": "1897-01-01"
+    },
+    "gen4_heir": {
+      "id": "gen4_heir",
+      "firstName": "Gen4",
+      "lastName": "Heir",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen4_heir_gen4_wife"
+      ],
+      "parentIds": [
+        "gen3_heir",
+        "gen3_wife"
+      ],
+      "childIds": [
+        "gen5_heir",
+        "gen5_sib"
+      ],
+      "birthDate": "1918-01-01"
+    },
+    "gen4_sib": {
+      "id": "gen4_sib",
+      "firstName": "Gen4",
+      "lastName": "Sib",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "gen3_heir",
+        "gen3_wife"
+      ],
+      "childIds": [],
+      "birthDate": "1920-01-01"
+    },
+    "gen4_wife": {
+      "id": "gen4_wife",
+      "firstName": "Gen4",
+      "lastName": "Wife",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen4_heir_gen4_wife"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "gen5_heir",
+        "gen5_sib"
+      ],
+      "birthDate": "1919-01-01"
+    },
+    "gen5_heir": {
+      "id": "gen5_heir",
+      "firstName": "Gen5",
+      "lastName": "Heir",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen5_heir_gen5_wife"
+      ],
+      "parentIds": [
+        "gen4_heir",
+        "gen4_wife"
+      ],
+      "childIds": [
+        "gen6_heir",
+        "gen6_sib"
+      ],
+      "birthDate": "1940-01-01"
+    },
+    "gen5_sib": {
+      "id": "gen5_sib",
+      "firstName": "Gen5",
+      "lastName": "Sib",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "gen4_heir",
+        "gen4_wife"
+      ],
+      "childIds": [],
+      "birthDate": "1942-01-01"
+    },
+    "gen5_wife": {
+      "id": "gen5_wife",
+      "firstName": "Gen5",
+      "lastName": "Wife",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen5_heir_gen5_wife"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "gen6_heir",
+        "gen6_sib"
+      ],
+      "birthDate": "1941-01-01"
+    },
+    "gen6_heir": {
+      "id": "gen6_heir",
+      "firstName": "Gen6",
+      "lastName": "Heir",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen6_heir_gen6_wife"
+      ],
+      "parentIds": [
+        "gen5_heir",
+        "gen5_wife"
+      ],
+      "childIds": [
+        "gen7_heir",
+        "gen7_sib"
+      ],
+      "birthDate": "1962-01-01"
+    },
+    "gen6_sib": {
+      "id": "gen6_sib",
+      "firstName": "Gen6",
+      "lastName": "Sib",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "gen5_heir",
+        "gen5_wife"
+      ],
+      "childIds": [],
+      "birthDate": "1964-01-01"
+    },
+    "gen6_wife": {
+      "id": "gen6_wife",
+      "firstName": "Gen6",
+      "lastName": "Wife",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen6_heir_gen6_wife"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "gen7_heir",
+        "gen7_sib"
+      ],
+      "birthDate": "1963-01-01"
+    },
+    "gen7_heir": {
+      "id": "gen7_heir",
+      "firstName": "Gen7",
+      "lastName": "Heir",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen7_heir_gen7_wife"
+      ],
+      "parentIds": [
+        "gen6_heir",
+        "gen6_wife"
+      ],
+      "childIds": [],
+      "birthDate": "1984-01-01"
+    },
+    "gen7_sib": {
+      "id": "gen7_sib",
+      "firstName": "Gen7",
+      "lastName": "Sib",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "gen6_heir",
+        "gen6_wife"
+      ],
+      "childIds": [],
+      "birthDate": "1986-01-01"
+    },
+    "gen7_wife": {
+      "id": "gen7_wife",
+      "firstName": "Gen7",
+      "lastName": "Wife",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gen7_heir_gen7_wife"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1985-01-01"
+    }
+  },
+  "partnerships": {
+    "u_gen0_h_gen0_w": {
+      "id": "u_gen0_h_gen0_w",
+      "person1Id": "gen0_h",
+      "person2Id": "gen0_w",
+      "childIds": [
+        "gen1_heir",
+        "gen1_sib"
+      ],
+      "status": "married"
+    },
+    "u_gen1_heir_gen1_wife": {
+      "id": "u_gen1_heir_gen1_wife",
+      "person1Id": "gen1_heir",
+      "person2Id": "gen1_wife",
+      "childIds": [
+        "gen2_heir",
+        "gen2_sib"
+      ],
+      "status": "married"
+    },
+    "u_gen2_heir_gen2_wife": {
+      "id": "u_gen2_heir_gen2_wife",
+      "person1Id": "gen2_heir",
+      "person2Id": "gen2_wife",
+      "childIds": [
+        "gen3_heir",
+        "gen3_sib"
+      ],
+      "status": "married"
+    },
+    "u_gen3_heir_gen3_wife": {
+      "id": "u_gen3_heir_gen3_wife",
+      "person1Id": "gen3_heir",
+      "person2Id": "gen3_wife",
+      "childIds": [
+        "gen4_heir",
+        "gen4_sib"
+      ],
+      "status": "married"
+    },
+    "u_gen4_heir_gen4_wife": {
+      "id": "u_gen4_heir_gen4_wife",
+      "person1Id": "gen4_heir",
+      "person2Id": "gen4_wife",
+      "childIds": [
+        "gen5_heir",
+        "gen5_sib"
+      ],
+      "status": "married"
+    },
+    "u_gen5_heir_gen5_wife": {
+      "id": "u_gen5_heir_gen5_wife",
+      "person1Id": "gen5_heir",
+      "person2Id": "gen5_wife",
+      "childIds": [
+        "gen6_heir",
+        "gen6_sib"
+      ],
+      "status": "married"
+    },
+    "u_gen6_heir_gen6_wife": {
+      "id": "u_gen6_heir_gen6_wife",
+      "person1Id": "gen6_heir",
+      "person2Id": "gen6_wife",
+      "childIds": [
+        "gen7_heir",
+        "gen7_sib"
+      ],
+      "status": "married"
+    },
+    "u_gen7_heir_gen7_wife": {
+      "id": "u_gen7_heir_gen7_wife",
+      "person1Id": "gen7_heir",
+      "person2Id": "gen7_wife",
+      "childIds": [],
+      "status": "married"
+    }
+  }
+}
