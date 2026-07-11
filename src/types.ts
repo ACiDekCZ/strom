@@ -204,7 +204,7 @@ export interface AuditLog {
 // ==================== EMBEDDED DATA ENVELOPE ====================
 
 /** Current app version for exports */
-export const APP_VERSION = '1.0';
+export const APP_VERSION = '1.1';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
