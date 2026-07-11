@@ -158,6 +158,22 @@ export function assignGenerations(input: AssignGenInput): GenerationalModel {
             }
         }
 
+        // Partners always share their union's generation. This catches spouses
+        // that have neither parents nor children in the selection (e.g. sibling
+        // spouses reached only via edge propagation) — without it they would
+        // fall through to the gen-0 fallback and land on the wrong row.
+        for (const [personId] of model.persons) {
+            if (personGen.has(personId)) continue;
+            const unionId = model.personToUnion.get(personId);
+            if (unionId) {
+                const uGen = unionGen.get(unionId);
+                if (uGen !== undefined) {
+                    personGen.set(personId, uGen);
+                    changed = true;
+                }
+            }
+        }
+
         // Also check union children directly (for unions with children but no edges somehow)
         for (const [personId] of model.persons) {
             if (personGen.has(personId)) continue;

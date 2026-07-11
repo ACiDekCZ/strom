@@ -90,36 +90,39 @@ export function placeX(input: PlaceXInput): PlacedModel {
     // Phase B: Place ancestors (bottom-up from focus, anchored to person positions)
     const focusUnion = model.unions.get(focusBlock.rootUnionId);
     if (focusUnion) {
-        // Place husband-side ancestors (anchored to partnerA card center)
-        const husbandParentUnion = model.childToParentUnion.get(focusUnion.partnerA);
-        if (husbandParentUnion) {
+        // For chain blocks, EVERY chain person may have parents to anchor above
+        // their own chain position (not just the primary couple). For regular
+        // blocks this reduces to partnerA/partnerB with husband/wife anchors.
+        const anchorPersons: Array<{ personId: PersonId; anchorX: number }> = [];
+        if (focusBlock.chainInfo) {
+            for (const pid of focusBlock.chainInfo.personOrder) {
+                anchorPersons.push({
+                    personId: pid,
+                    anchorX: getPersonAnchorX(focusBlock, pid, focusBlock.xCenter)
+                });
+            }
+        } else {
+            anchorPersons.push({ personId: focusUnion.partnerA, anchorX: focusBlock.husbandAnchorX });
+            if (focusUnion.partnerB) {
+                anchorPersons.push({ personId: focusUnion.partnerB, anchorX: focusBlock.wifeAnchorX });
+            }
+        }
+
+        for (const { personId, anchorX } of anchorPersons) {
+            const parentUnion = model.childToParentUnion.get(personId);
+            if (!parentUnion) continue;
+            const parentBlockId = fbm.unionToBlock.get(parentUnion);
+            if (!parentBlockId || placedBlocks.has(parentBlockId)) continue;
             placeAncestorChain(
-                husbandParentUnion,
-                focusBlock.husbandAnchorX,
-                focusUnion.partnerA,
+                parentUnion,
+                anchorX,
+                personId,
                 blocks,
                 model,
                 fbm.unionToBlock,
                 config,
                 placedBlocks
             );
-        }
-
-        // Place wife-side ancestors (anchored to partnerB card center)
-        if (focusUnion.partnerB) {
-            const wifeParentUnion = model.childToParentUnion.get(focusUnion.partnerB);
-            if (wifeParentUnion) {
-                placeAncestorChain(
-                    wifeParentUnion,
-                    focusBlock.wifeAnchorX,
-                    focusUnion.partnerB,
-                    blocks,
-                    model,
-                    fbm.unionToBlock,
-                    config,
-                    placedBlocks
-                );
-            }
         }
     }
 
@@ -225,7 +228,16 @@ function placeChainChildrenPerUnion(
     const { chainPersonId, unionChildBlockIds } = parentBlock.chainInfo;
     const primaryUnionId = model.personToUnion.get(chainPersonId);
 
-    // For each union in the chain, place its children centered under the anchor
+    // Pass 1: compute anchor and width for each union's children group
+    interface ChildGroup {
+        childBlockIds: FamilyBlockId[];
+        anchorX: number;
+        groupWidth: number;
+        left: number;
+        isPrimary: boolean;
+    }
+    const groups: ChildGroup[] = [];
+
     for (const [unionId, childBlockIds] of unionChildBlockIds) {
         if (childBlockIds.length === 0) continue;
 
@@ -253,7 +265,6 @@ function placeChainChildrenPerUnion(
             }
         }
 
-        // Place this union's children centered under anchorX
         let groupWidth = 0;
         for (const cbId of childBlockIds) {
             const cb = blocks.get(cbId);
@@ -261,8 +272,35 @@ function placeChainChildrenPerUnion(
         }
         groupWidth += (childBlockIds.length - 1) * config.horizontalGap;
 
-        let x = anchorX - groupWidth / 2;
-        for (const cbId of childBlockIds) {
+        groups.push({
+            childBlockIds,
+            anchorX,
+            groupWidth,
+            left: anchorX - groupWidth / 2,
+            isPrimary: unionId === primaryUnionId
+        });
+    }
+
+    // Pass 2: enforce disjoint group intervals in anchor order.
+    // The primary union's children stay centered under the couple; secondary
+    // groups are pushed outward so sibling sets never interleave (a wide
+    // primary group would otherwise overflow into the extra partners' slots).
+    groups.sort((a, b) => a.anchorX - b.anchorX);
+    let primaryIdx = groups.findIndex(g => g.isPrimary);
+    if (primaryIdx < 0) primaryIdx = 0;
+    for (let i = primaryIdx - 1; i >= 0; i--) {
+        const maxLeft = groups[i + 1].left - config.horizontalGap - groups[i].groupWidth;
+        if (groups[i].left > maxLeft) groups[i].left = maxLeft;
+    }
+    for (let i = primaryIdx + 1; i < groups.length; i++) {
+        const minLeft = groups[i - 1].left + groups[i - 1].groupWidth + config.horizontalGap;
+        if (groups[i].left < minLeft) groups[i].left = minLeft;
+    }
+
+    // Pass 3: apply positions
+    for (const group of groups) {
+        let x = group.left;
+        for (const cbId of group.childBlockIds) {
             const cb = blocks.get(cbId);
             if (!cb) continue;
             const childCenter = x + cb.envelopeWidth / 2;
@@ -394,15 +432,28 @@ function placeAncestorChain(
     } else {
         // Determine sibling direction based on anchor person's role in their couple.
         // Ancestor Side Ownership (ASO): siblings of a husband fan LEFT, siblings of a wife fan RIGHT.
-        const anchorUnionId2 = model.personToUnion.get(anchorPersonId);
         let sibDir: 'LEFT' | 'RIGHT' | 'NATURAL' = 'NATURAL';
-        if (anchorUnionId2) {
-            const anchorUnion = model.unions.get(anchorUnionId2);
-            if (anchorUnion) {
-                if (anchorUnion.partnerA === anchorPersonId) {
-                    sibDir = 'LEFT';  // Husband's siblings go left
-                } else if (anchorUnion.partnerB === anchorPersonId) {
-                    sibDir = 'RIGHT'; // Wife's siblings go right
+        if (directLineChild.chainInfo) {
+            // Direct-line child is a partner chain: fan siblings toward the side
+            // where the anchor person actually sits in the chain. Using the
+            // couple role here would route the siblings' bus across the chain
+            // (over the other partners' columns), crossing foreign stems.
+            const order = directLineChild.chainInfo.personOrder;
+            const idx = order.indexOf(anchorPersonId);
+            if (idx >= 0) {
+                sibDir = idx <= (order.length - 1) / 2 ? 'LEFT' : 'RIGHT';
+            }
+        }
+        if (sibDir === 'NATURAL') {
+            const anchorUnionId2 = model.personToUnion.get(anchorPersonId);
+            if (anchorUnionId2) {
+                const anchorUnion = model.unions.get(anchorUnionId2);
+                if (anchorUnion) {
+                    if (anchorUnion.partnerA === anchorPersonId) {
+                        sibDir = 'LEFT';  // Husband's siblings go left
+                    } else if (anchorUnion.partnerB === anchorPersonId) {
+                        sibDir = 'RIGHT'; // Wife's siblings go right
+                    }
                 }
             }
         }
@@ -415,47 +466,56 @@ function placeAncestorChain(
         placedBlocks.add(blockId);
     }
 
-    // Recurse UP: place this block's own ancestor chains
+    // Recurse UP: place this block's own ancestor chains.
+    // For chain blocks, every chain person may have parents; anchor each
+    // parent chain above that person's actual chain position.
     const union = model.unions.get(block.rootUnionId);
     if (!union) return;
 
-    // PartnerA's parent chain
-    const partnerAParent = model.childToParentUnion.get(union.partnerA);
-    if (partnerAParent) {
-        const parentBlockId = unionToBlock.get(partnerAParent);
-        if (parentBlockId && !placedBlocks.has(parentBlockId)) {
-            placeAncestorChain(
-                partnerAParent,
-                block.husbandAnchorX,
-                union.partnerA,
-                blocks,
-                model,
-                unionToBlock,
-                config,
-                placedBlocks
-            );
+    const upAnchorPersons: Array<{ personId: PersonId; anchorX: number }> = [];
+    if (block.chainInfo) {
+        for (const pid of block.chainInfo.personOrder) {
+            upAnchorPersons.push({
+                personId: pid,
+                anchorX: getPersonAnchorX(block, pid, block.xCenter)
+            });
+        }
+    } else {
+        upAnchorPersons.push({ personId: union.partnerA, anchorX: block.husbandAnchorX });
+        if (union.partnerB) {
+            upAnchorPersons.push({ personId: union.partnerB, anchorX: block.wifeAnchorX });
         }
     }
 
-    // PartnerB's parent chain
-    if (union.partnerB) {
-        const partnerBParent = model.childToParentUnion.get(union.partnerB);
-        if (partnerBParent) {
-            const parentBlockId = unionToBlock.get(partnerBParent);
-            if (parentBlockId && !placedBlocks.has(parentBlockId)) {
-                placeAncestorChain(
-                    partnerBParent,
-                    block.wifeAnchorX,
-                    union.partnerB,
-                    blocks,
-                    model,
-                    unionToBlock,
-                    config,
-                    placedBlocks
-                );
-            }
-        }
+    for (const { personId, anchorX: upAnchorX } of upAnchorPersons) {
+        const parentUnionId = model.childToParentUnion.get(personId);
+        if (!parentUnionId) continue;
+        const parentBlockId = unionToBlock.get(parentUnionId);
+        if (!parentBlockId || placedBlocks.has(parentBlockId)) continue;
+        placeAncestorChain(
+            parentUnionId,
+            upAnchorX,
+            personId,
+            blocks,
+            model,
+            unionToBlock,
+            config,
+            placedBlocks
+        );
     }
+}
+
+/**
+ * Anchor X for a specific person within a block. For chain blocks the person's
+ * actual chain position is used — husband/wife anchors point at the chain
+ * ENDS, which may belong to a different person (e.g. an extra partner).
+ */
+function getPersonAnchorX(block: FamilyBlock, personId: PersonId, defaultX: number): number {
+    if (block.chainInfo) {
+        const x = block.chainInfo.personPositions.get(personId);
+        if (x !== undefined) return x;
+    }
+    return defaultX;
 }
 
 /**
@@ -537,6 +597,13 @@ function placeAncestorChainBlockChildren(
     setBlockPosition(block, childrenSpanCenter - coupleOffset, config);
 
     // === PASS 3: Place secondary unions' children under their extra partners ===
+    // Track the X span already occupied by placed children (the ancestor union's
+    // children + earlier secondary groups). Secondary groups prefer to center
+    // under their extra partner, but must stay OUTSIDE the occupied span so
+    // sibling sets of different unions never interleave.
+    let spanLeft = minChildX;
+    let spanRight = maxChildX;
+
     for (const [unionId, childBlockIds] of unionChildBlockIds) {
         if (unionId === ancestorUnionId) continue; // already handled
 
@@ -560,6 +627,18 @@ function placeAncestorChainBlockChildren(
         groupWidth += (unplacedIds.length - 1) * config.horizontalGap;
 
         let x = uAnchorX - groupWidth / 2;
+        if (spanLeft < spanRight) {
+            if (uAnchorX <= childrenSpanCenter) {
+                // Extra partner on the left side: group must end before the span
+                x = Math.min(x, spanLeft - config.horizontalGap - groupWidth);
+            } else {
+                // Extra partner on the right side: group must start after the span
+                x = Math.max(x, spanRight + config.horizontalGap);
+            }
+        }
+        spanLeft = Math.min(spanLeft, x);
+        spanRight = Math.max(spanRight, x + groupWidth);
+
         for (const cbId of unplacedIds) {
             const cb = blocks.get(cbId);
             if (!cb) continue;

@@ -177,6 +177,25 @@ function buildBlockRecursive(
         return unionToBlock.get(unionId)!;
     }
 
+    // If this union is a NON-PRIMARY member of a PartnerChain, build the chain
+    // block rooted at the primary union instead. Building a standalone block here
+    // would leave a duplicate root block in the map once the chain block forms
+    // and remaps this union — the orphan would still participate in collision
+    // resolution as a ghost.
+    const primaryUnionId = findChainPrimaryUnionId(unionId, model);
+    if (primaryUnionId && primaryUnionId !== unionId) {
+        return buildBlockRecursive(
+            primaryUnionId,
+            parentBlockId,
+            side,
+            genModel,
+            model,
+            config,
+            blocks,
+            unionToBlock
+        );
+    }
+
     const union = model.unions.get(unionId);
     if (!union) return null;
 
@@ -244,6 +263,9 @@ function buildBlockRecursive(
 
     // Build child blocks for descendants
     // For chain blocks, include children from ALL chain unions and track per-union mapping
+    // NOTE: a child union already claimed by another parent block (pedigree
+    // collapse — e.g. cousins marrying) must NOT be attached again; both
+    // parents would center over the same block and end up at identical X.
     if (chain && chainInfo) {
         const seenChildUnions = new Set<UnionId>();
         for (const chainUnionId of chain.unionIds) {
@@ -252,6 +274,7 @@ function buildBlockRecursive(
             for (const childUnionId of childUnions) {
                 if (seenChildUnions.has(childUnionId)) continue;
                 seenChildUnions.add(childUnionId);
+                if (unionToBlock.has(childUnionId)) continue; // claimed elsewhere
                 const childBlockId = buildBlockRecursive(
                     childUnionId,
                     blockId,
@@ -274,6 +297,7 @@ function buildBlockRecursive(
     } else {
         const childUnionIds = getChildUnions(unionId, model, genModel);
         for (const childUnionId of childUnionIds) {
+            if (unionToBlock.has(childUnionId)) continue; // claimed elsewhere
             const childBlockId = buildBlockRecursive(
                 childUnionId,
                 blockId,
@@ -306,6 +330,23 @@ function findChainForPrimaryUnion(
         const primaryUnionId = model.personToUnion.get(chain.sharedPersonId);
         if (primaryUnionId === unionId) {
             return chain;
+        }
+    }
+    return null;
+}
+
+/**
+ * Find the primary union ID of the PartnerChain containing the given union
+ * (as ANY member, not just primary). Returns null if the union is not part
+ * of any chain, or the chain's primary union cannot be resolved.
+ */
+function findChainPrimaryUnionId(
+    unionId: UnionId,
+    model: LayoutModel
+): UnionId | null {
+    for (const [, chain] of model.partnerChains) {
+        if (chain.unionIds.includes(unionId)) {
+            return model.personToUnion.get(chain.sharedPersonId) ?? null;
         }
     }
     return null;
@@ -420,8 +461,17 @@ function buildAncestorBlocks(
     directLineUnionId: UnionId,
     isFocusPersonAncestorChain: boolean = false
 ): void {
-    const parentUnionId = model.childToParentUnion.get(personId);
+    let parentUnionId = model.childToParentUnion.get(personId);
     if (!parentUnionId) return;
+
+    // If the parent union is a NON-PRIMARY member of a PartnerChain, build the
+    // chain block rooted at the primary union instead (same reasoning as in
+    // buildBlockRecursive — avoids a duplicate ghost block for this union).
+    const primaryParentUnionId = findChainPrimaryUnionId(parentUnionId, model);
+    if (primaryParentUnionId && model.unions.has(primaryParentUnionId)) {
+        parentUnionId = primaryParentUnionId;
+    }
+
     if (unionToBlock.has(parentUnionId)) return;
 
     const parentUnion = model.unions.get(parentUnionId);

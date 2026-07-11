@@ -337,6 +337,52 @@ function resolveBusCollisions(
         byGroup.get(key)!.push(conn);
     }
 
+    const EPS = 0.5;
+    const MAX_LANES = 8;
+
+    // Full horizontal footprint includes connector (stem to bus edge)
+    const footprint = (conn: Connection): [number, number] => [
+        Math.min(conn.stemX, conn.branchLeftX),
+        Math.max(conn.stemX, conn.branchRightX)
+    ];
+
+    /**
+     * Conflict test between two connections at candidate lanes.
+     * Lane N sits N*LANE_OFFSET below lane 0. Considers:
+     * - collinear horizontal overlap (same lane),
+     * - a stem passing through a higher lane's horizontal run,
+     * - drops passing through a lower lane's horizontal run.
+     */
+    const conflicts = (
+        a: Connection, laneA: number,
+        b: Connection, laneB: number
+    ): boolean => {
+        const [aLeft, aRight] = footprint(a);
+        const [bLeft, bRight] = footprint(b);
+
+        if (laneA === laneB) {
+            // Same lane: any horizontal footprint overlap is a collision
+            return aLeft <= bRight && aRight >= bLeft;
+        }
+
+        // Let hi = connection on the higher lane (smaller Y), lo = lower lane
+        const [hi, hiL, hiR, lo, loL, loR] = laneA < laneB
+            ? [a, aLeft, aRight, b, bLeft, bRight]
+            : [b, bLeft, bRight, a, aLeft, aRight];
+
+        // lo's stem extends DOWN through hi's lane Y: crossing if its X is
+        // strictly inside hi's horizontal run
+        if (lo.stemX > hiL + EPS && lo.stemX < hiR - EPS) return true;
+
+        // hi's drops extend DOWN through lo's lane Y: crossing if a drop X is
+        // strictly inside lo's horizontal run
+        for (const drop of hi.drops) {
+            if (drop.x > loL + EPS && drop.x < loR - EPS) return true;
+        }
+
+        return false;
+    };
+
     for (const [, group] of byGroup) {
         if (group.length < 2) continue;
 
@@ -350,57 +396,24 @@ function resolveBusCollisions(
 
         for (let i = 1; i < group.length; i++) {
             const curr = group[i];
+
+            // Find the lowest lane with no conflict against ALL prior connections
             let assignedLane = 0;
-            let collides = true;
-
-            // Full horizontal footprint includes connector (stem to bus edge)
-            const currLeft = Math.min(curr.stemX, curr.branchLeftX);
-            const currRight = Math.max(curr.stemX, curr.branchRightX);
-
-            // Find the lowest lane where this connection doesn't collide
-            while (collides) {
-                collides = false;
+            for (let candidate = 0; candidate <= MAX_LANES; candidate++) {
+                let ok = true;
                 for (const prev of lanes) {
-                    if (prev.lane !== assignedLane) continue;
-                    // Check full footprint overlap (bus + connector)
-                    const prevLeft = Math.min(prev.conn.stemX, prev.conn.branchLeftX);
-                    const prevRight = Math.max(prev.conn.stemX, prev.conn.branchRightX);
-                    if (currLeft <= prevRight && currRight >= prevLeft) {
-                        collides = true;
-                        assignedLane++;
+                    if (conflicts(curr, candidate, prev.conn, prev.lane)) {
+                        ok = false;
                         break;
                     }
                 }
-            }
-
-            // Before applying offset, check if it would create crossings:
-            // 1. curr's stem crossing a lane-0 bus
-            // 2. A lane-0 drop crossing curr's offset bus
-            // Both happen when ancestor connections share children in the same block.
-            // Keep both at lane 0 and accept collinear horizontal overlap.
-            if (assignedLane > 0) {
-                let wouldCross = false;
-                for (const prev of lanes) {
-                    if (prev.lane !== 0) continue;
-                    // Check 1: curr's stem inside prev's bus footprint
-                    const prevLeft = Math.min(prev.conn.stemX, prev.conn.branchLeftX);
-                    const prevRight = Math.max(prev.conn.stemX, prev.conn.branchRightX);
-                    if (curr.stemX > prevLeft && curr.stemX < prevRight) {
-                        wouldCross = true;
-                        break;
-                    }
-                    // Check 2: prev's drops inside curr's bus range
-                    for (const drop of prev.conn.drops) {
-                        if (drop.x > currLeft && drop.x < currRight) {
-                            wouldCross = true;
-                            break;
-                        }
-                    }
-                    if (wouldCross) break;
+                if (ok) {
+                    assignedLane = candidate;
+                    break;
                 }
-                if (wouldCross) {
-                    assignedLane = 0;
-                }
+                // No conflict-free lane found: fall back to lane 0 and accept
+                // collinear overlap (better than introducing a crossing)
+                if (candidate === MAX_LANES) assignedLane = 0;
             }
 
             lanes.push({ conn: curr, lane: assignedLane });

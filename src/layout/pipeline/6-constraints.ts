@@ -859,6 +859,14 @@ export function applyConstraints(input: ConstraintsInput): ConstrainedModel {
     // Final recentering pass to fix any centering issues from constraint operations
     recenterDescendantParents(blocks, model, fbm.unionToBlock, personX, config);
 
+    // Resolve card overlaps between gen -1 parent couples (focus parents vs
+    // spouse parents). These fall outside both the descendant sweep (gen >= 0)
+    // and Phase B (gen <= -2). The non-focus-parent block moves away, together
+    // with its ancestor stack, without touching gen >= 0 positions.
+    if (input.focusPersonId) {
+        resolveParentCoupleOverlaps(blocks, model, fbm.unionToBlock, input.focusPersonId, config);
+    }
+
     // Capture locked positions for gen>=0 after Phase A is complete
     // This will be used to verify Phase B doesn't modify descendant positions
     const lockedX = captureLockedPositions(
@@ -1041,6 +1049,109 @@ function resolveOverlapsDescOnly(
     }
 
     return totalShift;
+}
+
+/**
+ * Resolve card overlaps between gen -1 blocks (parent couples of the focus
+ * generation). The focus-parent block is the anchor and never moves; any
+ * overlapping other gen -1 block (typically the spouse's parents) is shifted
+ * away from it, together with its ancestor component (gen <= -2 stack above
+ * it), while gen >= 0 blocks stay untouched.
+ */
+function resolveParentCoupleOverlaps(
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    unionToBlock: Map<UnionId, FamilyBlockId>,
+    focusPersonId: PersonId,
+    config: LayoutConfig
+): void {
+    const focusParentUnionId = model.childToParentUnion.get(focusPersonId);
+    const focusParentBlockId = focusParentUnionId
+        ? unionToBlock.get(focusParentUnionId)
+        : undefined;
+
+    const genMinus1: Array<{ block: FamilyBlock; left: number; right: number }> = [];
+    for (const [, block] of blocks) {
+        if (block.generation !== -1) continue;
+        const ext = getBlockCardExtent(block, model, config);
+        genMinus1.push({ block, left: ext.left, right: ext.right });
+    }
+    if (genMinus1.length < 2) return;
+
+    genMinus1.sort((a, b) => a.left - b.left);
+
+    for (let pass = 0; pass < 5; pass++) {
+        let shifted = false;
+        for (let i = 1; i < genMinus1.length; i++) {
+            const prev = genMinus1[i - 1];
+            const curr = genMinus1[i];
+            const overlap = prev.right + config.horizontalGap - curr.left;
+            if (overlap <= 0.5) continue;
+
+            // Never move the focus-parent block; move the other one away from it
+            let target = curr;
+            let delta = overlap;
+            if (curr.block.id === focusParentBlockId) {
+                target = prev;
+                delta = -overlap;
+            }
+
+            shiftAncestorComponent(target.block.id, delta, blocks);
+            target.left += delta;
+            target.right += delta;
+            shifted = true;
+        }
+        genMinus1.sort((a, b) => a.left - b.left);
+        if (!shifted) break;
+    }
+}
+
+/**
+ * Shift a block together with its ancestor component: the block itself, all
+ * blocks reachable upward via parentBlockId, and their subtrees — but never
+ * any block at gen >= 0 (descendant positions are locked by Phase A).
+ */
+function shiftAncestorComponent(
+    blockId: FamilyBlockId,
+    deltaX: number,
+    blocks: Map<FamilyBlockId, FamilyBlock>
+): void {
+    const component = new Set<FamilyBlockId>();
+
+    // Walk UP via parentBlockId, collecting each ancestor's subtree
+    let currentId: FamilyBlockId | null = blockId;
+    while (currentId && !component.has(currentId)) {
+        const block = blocks.get(currentId);
+        if (!block || block.generation >= 0) break;
+        collectSubtreeAboveGen0(currentId, blocks, component);
+        currentId = block.parentBlockId;
+    }
+
+    for (const id of component) {
+        const block = blocks.get(id);
+        if (block) shiftBlock(block, deltaX);
+    }
+}
+
+/**
+ * Collect a block and its descendants into `out`, pruning at gen >= 0.
+ */
+function collectSubtreeAboveGen0(
+    blockId: FamilyBlockId,
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    out: Set<FamilyBlockId>
+): void {
+    const stack = [blockId];
+    while (stack.length > 0) {
+        const id = stack.pop()!;
+        if (out.has(id)) continue;
+        const block = blocks.get(id);
+        if (!block || block.generation >= 0) continue;
+        out.add(id);
+        for (const childId of block.childBlockIds) {
+            stack.push(childId);
+        }
+    }
 }
 
 /**
@@ -3529,6 +3640,14 @@ function recenterDescendantParents(
                     if (childBlockId) {
                         const childBlock = blocks.get(childBlockId);
                         if (childBlock) {
+                            // Pedigree collapse: the child's block may be claimed
+                            // by ANOTHER parent block (e.g. cousins married). Only
+                            // one parent may center over it — otherwise both
+                            // parents converge to the same X and overlap.
+                            if (childBlock.parentBlockId !== null &&
+                                childBlock.parentBlockId !== block.id) {
+                                continue;
+                            }
                             const childUnion = model.unions.get(childUnionId);
                             if (childUnion) {
                                 const childWidth = childBlock.chainInfo

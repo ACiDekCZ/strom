@@ -72,7 +72,7 @@ import { computeDebugGeometry } from './debug-geometry.js';
  *
  * All persons in scope who have multiple partnerships get auto-expanded.
  */
-function findAutoExpandPersonIds(
+export function findAutoExpandPersonIds(
     data: StromData,
     focusPersonId: PersonId,
     selection: GraphSelection
