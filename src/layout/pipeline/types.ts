@@ -100,6 +100,13 @@ export interface UnionNode {
     partnerB: PersonId | null;       // Right partner (may be null for single parent)
     partnershipId: PartnershipId | null;
     childIds: PersonId[];            // Children of this union, sorted by birthDate then id
+    /**
+     * Visual partner order swap (pedigree collapse): set when partnerA's
+     * parents are placed RIGHT of partnerB's parents — rendering each partner
+     * on the side of their own parents avoids inherent line crossings.
+     * Only affects card X extraction, not the logical A/B roles.
+     */
+    swapped?: boolean;
 }
 
 /**
@@ -240,6 +247,10 @@ export interface FamilyBlock {
         personPositions: Map<PersonId, number>;  // X center for each person in chain
         unionChildBlockIds: Map<UnionId, FamilyBlockId[]>;  // Child blocks per chain union
         personSlotWidths: Map<PersonId, number>;  // Slot width per person (>= cardWidth)
+        // Primary union partners: they share ONE combined slot area (cards stay
+        // adjacent at its center) sized for the primary union's children, so
+        // extra partners are pushed outside the primary subtree span
+        primaryCouple?: PersonId[];
     };
 }
 

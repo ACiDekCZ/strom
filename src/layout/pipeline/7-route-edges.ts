@@ -386,44 +386,103 @@ function resolveBusCollisions(
     for (const [, group] of byGroup) {
         if (group.length < 2) continue;
 
-        // Sort by full left extent (including connector) for deterministic sweep
+        // Sort by full left extent (including connector) for deterministic order
         group.sort((a, b) => Math.min(a.stemX, a.branchLeftX) - Math.min(b.stemX, b.branchLeftX));
 
-        // Track which lane each connection is assigned to
-        const lanes: Array<{ conn: Connection; lane: number }> = [
-            { conn: group[0], lane: 0 }
-        ];
+        // Build ordering constraints between connections:
+        //   "b ABOVE a" (lane(b) < lane(a)) is required when
+        //     - b's stem X falls inside a's horizontal run (b's stem would
+        //       otherwise pierce a's run), or
+        //     - a's drop X falls inside b's horizontal run (a's drop pierces
+        //       b's run whenever b is below a).
+        // A cycle means a genuine topological knot — those pairs stay at the
+        // same lane (collinear overlap is the least-bad rendering).
+        const n = group.length;
+        const above: boolean[][] = Array.from({ length: n }, () => new Array(n).fill(false));
+        const inside = (x: number, left: number, right: number): boolean =>
+            x > left + EPS && x < right - EPS;
 
-        for (let i = 1; i < group.length; i++) {
-            const curr = group[i];
+        for (let i = 0; i < n; i++) {
+            for (let j = 0; j < n; j++) {
+                if (i === j) continue;
+                const [jL, jR] = footprint(group[j]);
+                // group[i]'s stem inside group[j]'s run → i must be above j
+                // (otherwise i's stem, coming down from its cards, pierces j's run)
+                if (inside(group[i].stemX, jL, jR)) above[i][j] = true;
+                // group[j]'s drops inside group[i]'s run → i must be above j
+                // (j's drops descend from j's lane; they pierce any run below it)
+                for (const drop of group[j].drops) {
+                    const [iL, iR] = footprint(group[i]);
+                    if (inside(drop.x, iL, iR)) { above[i][j] = true; break; }
+                }
+            }
+        }
 
-            // Find the lowest lane with no conflict against ALL prior connections
-            let assignedLane = 0;
-            for (let candidate = 0; candidate <= MAX_LANES; candidate++) {
-                let ok = true;
-                for (const prev of lanes) {
-                    if (conflicts(curr, candidate, prev.conn, prev.lane)) {
-                        ok = false;
+        // Drop mutually-contradictory constraints (knots): keep neither
+        for (let i = 0; i < n; i++) {
+            for (let j = i + 1; j < n; j++) {
+                if (above[i][j] && above[j][i]) {
+                    above[i][j] = false;
+                    above[j][i] = false;
+                }
+            }
+        }
+
+        // Longest-path lane assignment over the constraint DAG (cycles beyond
+        // 2-node knots are broken by the iteration bound)
+        const lane = new Array<number>(n).fill(0);
+        for (let pass = 0; pass < n; pass++) {
+            let changed = false;
+            for (let i = 0; i < n; i++) {
+                for (let j = 0; j < n; j++) {
+                    if (above[j][i] && lane[i] < lane[j] + 1) {
+                        lane[i] = Math.min(lane[j] + 1, MAX_LANES);
+                        changed = true;
+                    }
+                }
+            }
+            if (!changed) break;
+        }
+
+        // Same-lane horizontal overlaps (without ordering constraints between
+        // them) get bumped to the next free lane that violates no constraint.
+        for (let i = 0; i < n; i++) {
+            let candidate = lane[i];
+            let moved = true;
+            let guard = 0;
+            while (moved && guard++ <= MAX_LANES) {
+                moved = false;
+                for (let j = 0; j < i; j++) {
+                    if (lane[j] !== candidate) continue;
+                    if (conflicts(group[i], candidate, group[j], lane[j])) {
+                        candidate++;
+                        moved = true;
                         break;
                     }
                 }
-                if (ok) {
-                    assignedLane = candidate;
-                    break;
+                // A bump must not push i below a connection that must be under it
+                if (!moved) {
+                    for (let j = 0; j < n; j++) {
+                        if (above[i][j] && candidate >= lane[j]) {
+                            // i must stay above j — can't resolve by bumping; give up
+                            candidate = lane[i];
+                            moved = false;
+                            break;
+                        }
+                    }
                 }
-                // No conflict-free lane found: fall back to lane 0 and accept
-                // collinear overlap (better than introducing a crossing)
-                if (candidate === MAX_LANES) assignedLane = 0;
             }
+            lane[i] = Math.min(candidate, MAX_LANES);
+        }
 
-            lanes.push({ conn: curr, lane: assignedLane });
-
-            if (assignedLane > 0) {
-                const offset = assignedLane * LANE_OFFSET;
-                curr.branchY += offset;
-                curr.connectorY += offset;
-                curr.stemBottomY += offset;
-                for (const drop of curr.drops) {
+        for (let i = 0; i < n; i++) {
+            if (lane[i] > 0) {
+                const conn = group[i];
+                const offset = lane[i] * LANE_OFFSET;
+                conn.branchY += offset;
+                conn.connectorY += offset;
+                conn.stemBottomY += offset;
+                for (const drop of conn.drops) {
                     drop.topY += offset;
                 }
             }

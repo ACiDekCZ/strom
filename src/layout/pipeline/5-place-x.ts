@@ -939,19 +939,51 @@ function setBlockPosition(block: FamilyBlock, centerX: number, config: LayoutCon
     block.coupleCenterX = centerX;
 
     if (block.chainInfo) {
-        // Chain block: compute X positions with variable slot widths
-        // Extra partners with wider subtrees get bigger slots
+        // Chain block: compute X positions with variable slot widths.
+        // Extra partners with wider subtrees get bigger slots. The primary
+        // couple shares one combined area (sized for its children subtree)
+        // with the two cards ADJACENT at the area center — not spread out to
+        // their individual slot centers.
         const personOrder = block.chainInfo.personOrder;
         const personCount = personOrder.length;
         const startX = centerX - block.coupleWidth / 2;
+        const primaryCouple = block.chainInfo.primaryCouple ?? [];
+        const primaryPersonsInOrder = personOrder.filter(p => primaryCouple.includes(p));
 
+        // Compute the primary couple's combined area bounds while walking slots
         let x = startX;
+        let primaryAreaLeft = Infinity;
+        let primaryAreaRight = -Infinity;
+        const slotLefts = new Map<PersonId, number>();
         for (let i = 0; i < personCount; i++) {
             if (i > 0) x += config.partnerGap;
             const slotWidth = block.chainInfo.personSlotWidths.get(personOrder[i]) ?? config.cardWidth;
-            const personCenterX = x + slotWidth / 2;
-            block.chainInfo.personPositions.set(personOrder[i], personCenterX);
+            slotLefts.set(personOrder[i], x);
+            if (primaryCouple.includes(personOrder[i])) {
+                primaryAreaLeft = Math.min(primaryAreaLeft, x);
+                primaryAreaRight = Math.max(primaryAreaRight, x + slotWidth);
+            }
             x += slotWidth;
+        }
+
+        const primaryAreaCenter = (primaryAreaLeft + primaryAreaRight) / 2;
+
+        for (let i = 0; i < personCount; i++) {
+            const pid = personOrder[i];
+            const slotWidth = block.chainInfo.personSlotWidths.get(pid) ?? config.cardWidth;
+            let personCenterX: number;
+            const primaryIdx = primaryPersonsInOrder.indexOf(pid);
+            if (primaryIdx >= 0 && isFinite(primaryAreaCenter) && primaryPersonsInOrder.length === 2) {
+                // Primary couple: cards adjacent around the area center
+                personCenterX = primaryIdx === 0
+                    ? primaryAreaCenter - config.partnerGap / 2 - config.cardWidth / 2
+                    : primaryAreaCenter + config.partnerGap / 2 + config.cardWidth / 2;
+            } else if (primaryIdx >= 0 && isFinite(primaryAreaCenter)) {
+                personCenterX = primaryAreaCenter;
+            } else {
+                personCenterX = (slotLefts.get(pid) ?? centerX) + slotWidth / 2;
+            }
+            block.chainInfo.personPositions.set(pid, personCenterX);
         }
 
         // Husband anchor = first person center, wife anchor = last person center
@@ -1208,8 +1240,11 @@ function extractPositions(
         unionX.set(block.rootUnionId, coupleCenter);
 
         if (union.partnerB) {
-            personX.set(union.partnerA, coupleCenter - config.partnerGap / 2 - config.cardWidth);
-            personX.set(union.partnerB, coupleCenter + config.partnerGap / 2);
+            const [leftId, rightId] = union.swapped
+                ? [union.partnerB, union.partnerA]
+                : [union.partnerA, union.partnerB];
+            personX.set(leftId, coupleCenter - config.partnerGap / 2 - config.cardWidth);
+            personX.set(rightId, coupleCenter + config.partnerGap / 2);
         } else {
             personX.set(union.partnerA, coupleCenter - config.cardWidth / 2);
         }

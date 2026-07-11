@@ -859,6 +859,15 @@ export function applyConstraints(input: ConstraintsInput): ConstrainedModel {
     // Final recentering pass to fix any centering issues from constraint operations
     recenterDescendantParents(blocks, model, fbm.unionToBlock, personX, config);
 
+    // Pull childless sibling cards out from behind foreign columns (e.g.
+    // spouse siblings placed beyond an in-law ancestor stack) so their bus
+    // doesn't have to span across foreign stems.
+    compactLeafSiblingGroups(blocks, model, fbm.unionToBlock, config);
+
+    // Same idea for whole sibling SUBTREES split from their group by a
+    // foreign column, when a free slot exists next to the group core.
+    relocateSplitSiblingSubtrees(blocks, model, fbm.unionToBlock, config);
+
     // Resolve card overlaps between gen -1 parent couples (focus parents vs
     // spouse parents). These fall outside both the descendant sweep (gen >= 0)
     // and Phase B (gen <= -2). The non-focus-parent block moves away, together
@@ -874,6 +883,7 @@ export function applyConstraints(input: ConstraintsInput): ConstrainedModel {
     );
 
     if (input.stopAfterPhase === 'A') {
+        applyDiamondPartnerSwaps(blocks, model, fbm.unionToBlock);
         recomputePositions(blocks, model, fbm.unionToBlock, config, unionX, personX);
         return { placed: { measured, personX, unionX }, iterations: 1, finalMaxViolation: 0 };
     }
@@ -920,6 +930,7 @@ export function applyConstraints(input: ConstraintsInput): ConstrainedModel {
         recomputeBranchBounds(branchModel, blocks);
     }
     // Pass genModel to preserve gen>=0 children without blocks (e.g. focus person)
+    applyDiamondPartnerSwaps(blocks, model, fbm.unionToBlock);
     recomputePositions(blocks, model, fbm.unionToBlock, config, unionX, personX, measured.genModel);
 
     return {
@@ -1049,6 +1060,270 @@ function resolveOverlapsDescOnly(
     }
 
     return totalShift;
+}
+
+/**
+ * Pull childless sibling blocks next to their sibling-group core when a
+ * FOREIGN card column stands between them.
+ *
+ * Typical case: focus spouse's siblings get placed beyond the focus block's
+ * descendants envelope, and an in-law ancestor column (parents of a
+ * descendant's spouse) ends up between them and the rest of the group. The
+ * parents' bus must then span across the foreign column — its stem pierces
+ * the bus. Childless sibling cards can instead sit in free row space right
+ * next to the group core, keeping the bus span clear of foreign columns.
+ */
+function compactLeafSiblingGroups(
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    unionToBlock: Map<UnionId, FamilyBlockId>,
+    config: LayoutConfig
+): void {
+    // Card extents of every block per generation (for free-space checks)
+    const extentsByGen = new Map<number, Array<{ blockId: FamilyBlockId; left: number; right: number }>>();
+    for (const [, b] of blocks) {
+        const ext = getBlockCardExtent(b, model, config);
+        if (!extentsByGen.has(b.generation)) extentsByGen.set(b.generation, []);
+        extentsByGen.get(b.generation)!.push({ blockId: b.id, left: ext.left, right: ext.right });
+    }
+
+    for (const [uid, union] of model.unions) {
+        if (union.childIds.length < 2) continue;
+        const parentBlockId = unionToBlock.get(uid);
+        const parentBlock = parentBlockId ? blocks.get(parentBlockId) : undefined;
+        if (!parentBlock || parentBlock.chainInfo) continue;
+
+        // Partition children: relocatable leaves vs core (everything else)
+        interface LeafInfo { block: FamilyBlock; left: number; right: number }
+        const leaves: LeafInfo[] = [];
+        let coreLeft = Infinity;
+        let coreRight = -Infinity;
+        const siblingBlockIds = new Set<FamilyBlockId>();
+
+        for (const childId of union.childIds) {
+            const childUnionId = model.personToUnion.get(childId);
+            const childBlockId = childUnionId ? unionToBlock.get(childUnionId) : undefined;
+            const childBlock = childBlockId ? blocks.get(childBlockId) : undefined;
+            if (!childBlock) continue;
+            if (siblingBlockIds.has(childBlock.id)) continue;
+            siblingBlockIds.add(childBlock.id);
+            const ext = getBlockCardExtent(childBlock, model, config);
+            const childUnion = model.unions.get(childBlock.rootUnionId);
+            const isLeaf = childBlock.parentBlockId === parentBlock.id &&
+                childBlock.childBlockIds.length === 0 &&
+                !childBlock.chainInfo &&
+                (childUnion?.childIds.length ?? 0) === 0;
+            if (isLeaf) {
+                leaves.push({ block: childBlock, left: ext.left, right: ext.right });
+            } else {
+                coreLeft = Math.min(coreLeft, ext.left);
+                coreRight = Math.max(coreRight, ext.right);
+            }
+        }
+        if (leaves.length === 0 || !isFinite(coreLeft)) continue;
+
+        const gen = leaves[0].block.generation;
+        const rowExtents = extentsByGen.get(gen) ?? [];
+        const gap = config.horizontalGap;
+
+        // Process leaves nearest to the core first
+        leaves.sort((a, b) => {
+            const da = a.left > coreRight ? a.left - coreRight : coreLeft - a.right;
+            const db = b.left > coreRight ? b.left - coreRight : coreLeft - b.right;
+            return da - db;
+        });
+
+        for (const leaf of leaves) {
+            const onRight = leaf.left >= coreRight;
+            // Is a foreign card column standing between the leaf and the core?
+            let hasForeignBetween = false;
+            for (const ext of rowExtents) {
+                if (ext.blockId === leaf.block.id || siblingBlockIds.has(ext.blockId)) continue;
+                const inBetween = onRight
+                    ? ext.right > coreRight && ext.left < leaf.left
+                    : ext.left < coreLeft && ext.right > leaf.right;
+                if (inBetween) { hasForeignBetween = true; break; }
+            }
+            if (!hasForeignBetween) continue;
+
+            const width = leaf.right - leaf.left;
+            const targetLeft = onRight ? coreRight + gap : coreLeft - gap - width;
+            const targetRight = targetLeft + width;
+
+            // Target slot must be free of ALL other cards in the row
+            let free = true;
+            for (const ext of rowExtents) {
+                if (ext.blockId === leaf.block.id) continue;
+                if (targetLeft < ext.right + gap && targetRight > ext.left - gap) {
+                    free = false;
+                    break;
+                }
+            }
+            if (!free) continue;
+
+            const delta = targetLeft - leaf.left;
+            shiftBlock(leaf.block, delta);
+            // Update bookkeeping
+            const rowEntry = rowExtents.find(e => e.blockId === leaf.block.id);
+            if (rowEntry) { rowEntry.left += delta; rowEntry.right += delta; }
+            coreLeft = Math.min(coreLeft, targetLeft);
+            coreRight = Math.max(coreRight, targetRight);
+        }
+    }
+}
+
+/**
+ * Card extents of a block's whole subtree, per generation.
+ */
+function subtreeCardExtentsByGen(
+    rootBlockId: FamilyBlockId,
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    config: LayoutConfig
+): { extents: Map<number, { left: number; right: number }>; ids: Set<FamilyBlockId> } {
+    const extents = new Map<number, { left: number; right: number }>();
+    const ids = new Set<FamilyBlockId>();
+    const stack = [rootBlockId];
+    while (stack.length > 0) {
+        const id = stack.pop()!;
+        if (ids.has(id)) continue;
+        ids.add(id);
+        const block = blocks.get(id);
+        if (!block) continue;
+        const ext = getBlockCardExtent(block, model, config);
+        const row = extents.get(block.generation);
+        if (row) {
+            row.left = Math.min(row.left, ext.left);
+            row.right = Math.max(row.right, ext.right);
+        } else {
+            extents.set(block.generation, { left: ext.left, right: ext.right });
+        }
+        for (const childId of block.childBlockIds) stack.push(childId);
+    }
+    return { extents, ids };
+}
+
+/**
+ * Relocate whole sibling SUBTREES that ended up beyond a foreign column
+ * (e.g. an uncle's family pushed past the in-law ancestor complex). The
+ * subtree is moved next to the sibling-group core — same side first, then
+ * the opposite side — but only when every generation row it occupies has
+ * free space at the target. Runs after compactLeafSiblingGroups; leaf
+ * blocks are already handled there.
+ */
+function relocateSplitSiblingSubtrees(
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    unionToBlock: Map<UnionId, FamilyBlockId>,
+    config: LayoutConfig
+): void {
+    const gap = config.horizontalGap;
+
+    // All block card extents grouped per generation
+    const rowsByGen = new Map<number, Array<{ blockId: FamilyBlockId; left: number; right: number }>>();
+    for (const [, b] of blocks) {
+        const ext = getBlockCardExtent(b, model, config);
+        if (!rowsByGen.has(b.generation)) rowsByGen.set(b.generation, []);
+        rowsByGen.get(b.generation)!.push({ blockId: b.id, left: ext.left, right: ext.right });
+    }
+
+    for (const [uid, union] of model.unions) {
+        if (union.childIds.length < 2) continue;
+        const parentBlockId = unionToBlock.get(uid);
+        const parentBlock = parentBlockId ? blocks.get(parentBlockId) : undefined;
+        if (!parentBlock || parentBlock.chainInfo) continue;
+
+        // Sibling child blocks with their card extents
+        const siblingBlocks: FamilyBlock[] = [];
+        const seen = new Set<FamilyBlockId>();
+        for (const childId of union.childIds) {
+            const childUnionId = model.personToUnion.get(childId);
+            const childBlockId = childUnionId ? unionToBlock.get(childUnionId) : undefined;
+            const childBlock = childBlockId ? blocks.get(childBlockId) : undefined;
+            if (!childBlock || seen.has(childBlock.id)) continue;
+            seen.add(childBlock.id);
+            siblingBlocks.push(childBlock);
+        }
+        if (siblingBlocks.length < 2) continue;
+
+        // Core = the sibling block whose subtree contains other siblings'
+        // parent (the direct line), or simply the widest-anchored one: use
+        // the block that is NOT relocatable (claimed elsewhere / has the
+        // focus subtree). Relocation candidates: siblings owned by this
+        // parent block.
+        for (const cand of siblingBlocks) {
+            if (cand.parentBlockId !== parentBlock.id) continue;
+
+            const coreExts = siblingBlocks
+                .filter(s => s.id !== cand.id)
+                .map(s => getBlockCardExtent(s, model, config));
+            if (coreExts.length === 0) continue;
+            const coreLeft = Math.min(...coreExts.map(e => e.left));
+            const coreRight = Math.max(...coreExts.map(e => e.right));
+
+            const candExt = getBlockCardExtent(cand, model, config);
+            const onRight = candExt.left >= coreRight;
+            const onLeft = candExt.right <= coreLeft;
+            if (!onRight && !onLeft) continue;
+
+            // Foreign column between candidate and core?
+            const row = rowsByGen.get(cand.generation) ?? [];
+            const siblingIds = new Set(siblingBlocks.map(s => s.id));
+            let hasForeignBetween = false;
+            for (const ext of row) {
+                if (siblingIds.has(ext.blockId)) continue;
+                const inBetween = onRight
+                    ? ext.right > coreRight && ext.left < candExt.left
+                    : ext.left < coreLeft && ext.right > candExt.right;
+                if (inBetween) { hasForeignBetween = true; break; }
+            }
+            if (!hasForeignBetween) continue;
+
+            const { extents: subExts, ids: subIds } = subtreeCardExtentsByGen(cand.id, blocks, model, config);
+            let subMinX = Infinity, subMaxX = -Infinity;
+            for (const [, e] of subExts) {
+                subMinX = Math.min(subMinX, e.left);
+                subMaxX = Math.max(subMaxX, e.right);
+            }
+            if (!isFinite(subMinX)) continue;
+
+            // Try same side of the core first, then the opposite side
+            const deltas = onRight
+                ? [coreRight + gap - subMinX, coreLeft - gap - subMaxX]
+                : [coreLeft - gap - subMaxX, coreRight + gap - subMinX];
+
+            for (const delta of deltas) {
+                if (Math.abs(delta) < 1) break;
+                let feasible = true;
+                for (const [gen, e] of subExts) {
+                    const targetL = e.left + delta;
+                    const targetR = e.right + delta;
+                    for (const ext of rowsByGen.get(gen) ?? []) {
+                        if (subIds.has(ext.blockId)) continue;
+                        if (targetL < ext.right + gap && targetR > ext.left - gap) {
+                            feasible = false;
+                            break;
+                        }
+                    }
+                    if (!feasible) break;
+                }
+                if (!feasible) continue;
+
+                shiftBlockSubtree(cand.id, delta, blocks);
+                // Update row bookkeeping for all moved blocks
+                for (const [gen, list] of rowsByGen) {
+                    void gen;
+                    for (const entry of list) {
+                        if (subIds.has(entry.blockId)) {
+                            entry.left += delta;
+                            entry.right += delta;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
 }
 
 /**
@@ -4212,6 +4487,49 @@ function compactOneSideOfFamily(
  * @param genModel Optional - if provided, gen>=0 children without blocks are NOT shifted
  *                 (preserves locked positions from Phase A)
  */
+/**
+ * Detect pedigree-collapse couples whose partners sit on the wrong side of
+ * their respective parents and mark them for visual order swap.
+ *
+ * When BOTH partners of a couple have parent unions in the layout, the lines
+ * from the two parent couples down to the partners inevitably cross if each
+ * partner is on the far side from their own parents. Rendering each partner
+ * under their own parents (swapping the couple's visual order if needed)
+ * removes the crossing entirely.
+ */
+function applyDiamondPartnerSwaps(
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    unionToBlock: Map<UnionId, FamilyBlockId>
+): void {
+    for (const [, union] of model.unions) {
+        union.swapped = false;
+        if (!union.partnerB) continue;
+
+        const blockId = unionToBlock.get(union.id);
+        const block = blockId ? blocks.get(blockId) : undefined;
+        // Chain blocks manage per-person positions themselves
+        if (!block || block.chainInfo) continue;
+
+        const aParentUnion = model.childToParentUnion.get(union.partnerA);
+        const bParentUnion = model.childToParentUnion.get(union.partnerB);
+        if (!aParentUnion || !bParentUnion || aParentUnion === bParentUnion) continue;
+
+        const aParentBlockId = unionToBlock.get(aParentUnion);
+        const bParentBlockId = unionToBlock.get(bParentUnion);
+        if (!aParentBlockId || !bParentBlockId) continue;
+
+        const aParentBlock = blocks.get(aParentBlockId);
+        const bParentBlock = blocks.get(bParentBlockId);
+        if (!aParentBlock || !bParentBlock) continue;
+
+        // Anchor of each parent connection = its stem X (couple center)
+        if (aParentBlock.coupleCenterX > bParentBlock.coupleCenterX + 0.5) {
+            union.swapped = true;
+        }
+    }
+}
+
 function recomputePositions(
     blocks: Map<FamilyBlockId, FamilyBlock>,
     model: LayoutModel,
@@ -4263,8 +4581,11 @@ function recomputePositions(
             unionX.set(block.rootUnionId, coupleCenter);
 
             if (union.partnerB) {
-                personX.set(union.partnerA, coupleCenter - config.partnerGap / 2 - config.cardWidth);
-                personX.set(union.partnerB, coupleCenter + config.partnerGap / 2);
+                const [leftId, rightId] = union.swapped
+                    ? [union.partnerB, union.partnerA]
+                    : [union.partnerA, union.partnerB];
+                personX.set(leftId, coupleCenter - config.partnerGap / 2 - config.cardWidth);
+                personX.set(rightId, coupleCenter + config.partnerGap / 2);
             } else {
                 personX.set(union.partnerA, coupleCenter - config.cardWidth / 2);
             }

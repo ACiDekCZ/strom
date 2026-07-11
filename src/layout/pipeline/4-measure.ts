@@ -219,7 +219,8 @@ function buildBlockRecursive(
             personOrder,
             personPositions: new Map(),
             unionChildBlockIds: new Map(),
-            personSlotWidths: new Map()
+            personSlotWidths: new Map(),
+            primaryCouple: getChainPrimaryCouple(chain, model)
         };
     } else {
         coupleWidth = union.partnerB
@@ -333,6 +334,19 @@ function findChainForPrimaryUnion(
         }
     }
     return null;
+}
+
+/**
+ * Partners of a chain's primary union (the couple that stays adjacent at the
+ * center of the chain block).
+ */
+function getChainPrimaryCouple(chain: PartnerChain, model: LayoutModel): PersonId[] {
+    const primaryUnionId = model.personToUnion.get(chain.sharedPersonId);
+    const primaryUnion = primaryUnionId ? model.unions.get(primaryUnionId) : null;
+    if (!primaryUnion) return [chain.sharedPersonId];
+    return primaryUnion.partnerB
+        ? [primaryUnion.partnerA, primaryUnion.partnerB]
+        : [primaryUnion.partnerA];
 }
 
 /**
@@ -497,7 +511,8 @@ function buildAncestorBlocks(
             personOrder,
             personPositions: new Map(),
             unionChildBlockIds: new Map(),
-            personSlotWidths: new Map()
+            personSlotWidths: new Map(),
+            primaryCouple: getChainPrimaryCouple(chain, model)
         };
     } else {
         coupleWidth = parentUnion.partnerB
@@ -756,16 +771,9 @@ function computeChainCoupleWidth(
 
     // Build map: extra partner personId → subtree width of their union's children
     const extraPartnerSubtreeWidth = new Map<PersonId, number>();
+    // Total children width of the primary union (for the primary couple's slot area)
+    let primaryChildrenWidth = 0;
     for (const [unionId, childBlockIds] of unionChildBlockIds) {
-        if (unionId === primaryUnionId) continue; // Primary union children aren't under any extra partner
-        const union = model.unions.get(unionId);
-        if (!union) continue;
-        // Extra partner = the person in this union who is NOT in the primary couple
-        const extraPartner = !primaryCoupleIds.has(union.partnerA) ? union.partnerA
-            : !primaryCoupleIds.has(union.partnerB!) ? union.partnerB
-            : null;
-        if (!extraPartner) continue;
-
         // Compute total children width for this union
         let childrenWidth = 0;
         for (const cbId of childBlockIds) {
@@ -775,15 +783,46 @@ function computeChainCoupleWidth(
         if (childBlockIds.length > 1) {
             childrenWidth += (childBlockIds.length - 1) * config.horizontalGap;
         }
+
+        if (unionId === primaryUnionId) {
+            primaryChildrenWidth = childrenWidth;
+            continue;
+        }
+
+        const union = model.unions.get(unionId);
+        if (!union) continue;
+        // Extra partner = the person in this union who is NOT in the primary couple
+        const extraPartner = !primaryCoupleIds.has(union.partnerA) ? union.partnerA
+            : !primaryCoupleIds.has(union.partnerB!) ? union.partnerB
+            : null;
+        if (!extraPartner) continue;
+
         extraPartnerSubtreeWidth.set(extraPartner, childrenWidth);
     }
+
+    // Primary couple persons share a combined slot area that must also fit the
+    // primary union's children — otherwise the primary subtree would extend
+    // under the extra partners' columns (their stems would pierce its bus).
+    const primaryCouple = block.chainInfo.primaryCouple ?? [];
+    const primaryPersonsInOrder = personOrder.filter(p => primaryCouple.includes(p));
+    const primaryBaseWidth = primaryPersonsInOrder.length * config.cardWidth +
+        Math.max(0, primaryPersonsInOrder.length - 1) * config.partnerGap;
+    const primaryAreaWidth = Math.max(primaryBaseWidth, primaryChildrenWidth);
+    const primarySlotWidth = primaryPersonsInOrder.length > 0
+        ? (primaryAreaWidth - Math.max(0, primaryPersonsInOrder.length - 1) * config.partnerGap) / primaryPersonsInOrder.length
+        : config.cardWidth;
 
     // Compute total width with variable slot sizes and store per-person slot widths
     let totalWidth = 0;
     for (let i = 0; i < personOrder.length; i++) {
         if (i > 0) totalWidth += config.partnerGap;
-        const subtreeW = extraPartnerSubtreeWidth.get(personOrder[i]) ?? 0;
-        const slotWidth = Math.max(config.cardWidth, subtreeW);
+        let slotWidth: number;
+        if (primaryCouple.includes(personOrder[i])) {
+            slotWidth = Math.max(config.cardWidth, primarySlotWidth);
+        } else {
+            const subtreeW = extraPartnerSubtreeWidth.get(personOrder[i]) ?? 0;
+            slotWidth = Math.max(config.cardWidth, subtreeW);
+        }
         block.chainInfo.personSlotWidths.set(personOrder[i], slotWidth);
         totalWidth += slotWidth;
     }
