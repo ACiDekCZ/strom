@@ -1,0 +1,460 @@
+{
+  "persons": {
+    "eH_gf": {
+      "id": "eH_gf",
+      "firstName": "H-Gf",
+      "lastName": "H",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_gf_eH_gm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eH_s1",
+        "eH_s2"
+      ],
+      "birthDate": "1900-06-15"
+    },
+    "eH_gm": {
+      "id": "eH_gm",
+      "firstName": "H-Gm",
+      "lastName": "H",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_gf_eH_gm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eH_s1",
+        "eH_s2"
+      ],
+      "birthDate": "1902-06-15"
+    },
+    "eH_s1": {
+      "id": "eH_s1",
+      "firstName": "H-S1",
+      "lastName": "H",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_s1_eH_s1_sp"
+      ],
+      "parentIds": [
+        "eH_gf",
+        "eH_gm"
+      ],
+      "childIds": [
+        "eH_c1"
+      ],
+      "birthDate": "1928-01-15"
+    },
+    "eH_s2": {
+      "id": "eH_s2",
+      "firstName": "H-S2",
+      "lastName": "H",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_s2_sp_eH_s2"
+      ],
+      "parentIds": [
+        "eH_gf",
+        "eH_gm"
+      ],
+      "childIds": [
+        "eH_c2"
+      ],
+      "birthDate": "1930-02-15"
+    },
+    "eH_s1_sp": {
+      "id": "eH_s1_sp",
+      "firstName": "H-S1 Sp",
+      "lastName": "H",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_s1_eH_s1_sp"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eH_c1"
+      ],
+      "birthDate": "1929-06-15"
+    },
+    "eH_s2_sp": {
+      "id": "eH_s2_sp",
+      "firstName": "H-S2 Sp",
+      "lastName": "H",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_s2_sp_eH_s2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eH_c2"
+      ],
+      "birthDate": "1927-06-15"
+    },
+    "eH_c1": {
+      "id": "eH_c1",
+      "firstName": "H-C1",
+      "lastName": "H",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_c1_eH_c2"
+      ],
+      "parentIds": [
+        "eH_s1",
+        "eH_s1_sp"
+      ],
+      "childIds": [
+        "eH_cc"
+      ],
+      "birthDate": "1955-06-15"
+    },
+    "eH_c2": {
+      "id": "eH_c2",
+      "firstName": "H-C2",
+      "lastName": "H",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_c1_eH_c2"
+      ],
+      "parentIds": [
+        "eH_s2_sp",
+        "eH_s2"
+      ],
+      "childIds": [
+        "eH_cc"
+      ],
+      "birthDate": "1957-06-15"
+    },
+    "eH_cc": {
+      "id": "eH_cc",
+      "firstName": "H-Cc",
+      "lastName": "H",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eH_c1",
+        "eH_c2"
+      ],
+      "childIds": [],
+      "birthDate": "1985-06-15"
+    },
+    "eH_d2_ggf": {
+      "id": "eH_d2_ggf",
+      "firstName": "H-D2 Ggf",
+      "lastName": "H",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_d2_ggf_eH_d2_ggm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eH_d2_a1",
+        "eH_d2_a2"
+      ],
+      "birthDate": "1870-06-15"
+    },
+    "eH_d2_ggm": {
+      "id": "eH_d2_ggm",
+      "firstName": "H-D2 Ggm",
+      "lastName": "H",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_d2_ggf_eH_d2_ggm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eH_d2_a1",
+        "eH_d2_a2"
+      ],
+      "birthDate": "1872-06-15"
+    },
+    "eH_d2_a1": {
+      "id": "eH_d2_a1",
+      "firstName": "H-D2 A1",
+      "lastName": "H",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_d2_a1_eH_d2_a1_sp"
+      ],
+      "parentIds": [
+        "eH_d2_ggf",
+        "eH_d2_ggm"
+      ],
+      "childIds": [
+        "eH_d2_b1"
+      ],
+      "birthDate": "1898-01-15"
+    },
+    "eH_d2_a2": {
+      "id": "eH_d2_a2",
+      "firstName": "H-D2 A2",
+      "lastName": "H",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_d2_a2_sp_eH_d2_a2"
+      ],
+      "parentIds": [
+        "eH_d2_ggf",
+        "eH_d2_ggm"
+      ],
+      "childIds": [
+        "eH_d2_b2"
+      ],
+      "birthDate": "1900-02-15"
+    },
+    "eH_d2_a1_sp": {
+      "id": "eH_d2_a1_sp",
+      "firstName": "H-D2 A1 Sp",
+      "lastName": "H",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_d2_a1_eH_d2_a1_sp"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eH_d2_b1"
+      ],
+      "birthDate": "1899-06-15"
+    },
+    "eH_d2_a2_sp": {
+      "id": "eH_d2_a2_sp",
+      "firstName": "H-D2 A2 Sp",
+      "lastName": "H",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_d2_a2_sp_eH_d2_a2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eH_d2_b2"
+      ],
+      "birthDate": "1897-06-15"
+    },
+    "eH_d2_b1": {
+      "id": "eH_d2_b1",
+      "firstName": "H-D2 B1",
+      "lastName": "H",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_d2_b1_eH_d2_b1_sp"
+      ],
+      "parentIds": [
+        "eH_d2_a1",
+        "eH_d2_a1_sp"
+      ],
+      "childIds": [
+        "eH_d2_cc1"
+      ],
+      "birthDate": "1926-06-15"
+    },
+    "eH_d2_b2": {
+      "id": "eH_d2_b2",
+      "firstName": "H-D2 B2",
+      "lastName": "H",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_d2_b2_sp_eH_d2_b2"
+      ],
+      "parentIds": [
+        "eH_d2_a2_sp",
+        "eH_d2_a2"
+      ],
+      "childIds": [
+        "eH_d2_cc2"
+      ],
+      "birthDate": "1928-06-15"
+    },
+    "eH_d2_b1_sp": {
+      "id": "eH_d2_b1_sp",
+      "firstName": "H-D2 B1 Sp",
+      "lastName": "H",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_d2_b1_eH_d2_b1_sp"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eH_d2_cc1"
+      ],
+      "birthDate": "1927-06-15"
+    },
+    "eH_d2_b2_sp": {
+      "id": "eH_d2_b2_sp",
+      "firstName": "H-D2 B2 Sp",
+      "lastName": "H",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_d2_b2_sp_eH_d2_b2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eH_d2_cc2"
+      ],
+      "birthDate": "1925-06-15"
+    },
+    "eH_d2_cc1": {
+      "id": "eH_d2_cc1",
+      "firstName": "H-D2 Cc1",
+      "lastName": "H",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_d2_cc1_eH_d2_cc2"
+      ],
+      "parentIds": [
+        "eH_d2_b1",
+        "eH_d2_b1_sp"
+      ],
+      "childIds": [
+        "eH_d2_ccc"
+      ],
+      "birthDate": "1954-06-15"
+    },
+    "eH_d2_cc2": {
+      "id": "eH_d2_cc2",
+      "firstName": "H-D2 Cc2",
+      "lastName": "H",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eH_d2_cc1_eH_d2_cc2"
+      ],
+      "parentIds": [
+        "eH_d2_b2_sp",
+        "eH_d2_b2"
+      ],
+      "childIds": [
+        "eH_d2_ccc"
+      ],
+      "birthDate": "1956-06-15"
+    },
+    "eH_d2_ccc": {
+      "id": "eH_d2_ccc",
+      "firstName": "H-D2 Ccc",
+      "lastName": "H",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eH_d2_cc1",
+        "eH_d2_cc2"
+      ],
+      "childIds": [],
+      "birthDate": "1984-06-15"
+    }
+  },
+  "partnerships": {
+    "u_eH_gf_eH_gm": {
+      "id": "u_eH_gf_eH_gm",
+      "person1Id": "eH_gf",
+      "person2Id": "eH_gm",
+      "childIds": [
+        "eH_s1",
+        "eH_s2"
+      ],
+      "status": "married"
+    },
+    "u_eH_s1_eH_s1_sp": {
+      "id": "u_eH_s1_eH_s1_sp",
+      "person1Id": "eH_s1",
+      "person2Id": "eH_s1_sp",
+      "childIds": [
+        "eH_c1"
+      ],
+      "status": "married"
+    },
+    "u_eH_s2_sp_eH_s2": {
+      "id": "u_eH_s2_sp_eH_s2",
+      "person1Id": "eH_s2_sp",
+      "person2Id": "eH_s2",
+      "childIds": [
+        "eH_c2"
+      ],
+      "status": "married"
+    },
+    "u_eH_c1_eH_c2": {
+      "id": "u_eH_c1_eH_c2",
+      "person1Id": "eH_c1",
+      "person2Id": "eH_c2",
+      "childIds": [
+        "eH_cc"
+      ],
+      "status": "married"
+    },
+    "u_eH_d2_ggf_eH_d2_ggm": {
+      "id": "u_eH_d2_ggf_eH_d2_ggm",
+      "person1Id": "eH_d2_ggf",
+      "person2Id": "eH_d2_ggm",
+      "childIds": [
+        "eH_d2_a1",
+        "eH_d2_a2"
+      ],
+      "status": "married"
+    },
+    "u_eH_d2_a1_eH_d2_a1_sp": {
+      "id": "u_eH_d2_a1_eH_d2_a1_sp",
+      "person1Id": "eH_d2_a1",
+      "person2Id": "eH_d2_a1_sp",
+      "childIds": [
+        "eH_d2_b1"
+      ],
+      "status": "married"
+    },
+    "u_eH_d2_a2_sp_eH_d2_a2": {
+      "id": "u_eH_d2_a2_sp_eH_d2_a2",
+      "person1Id": "eH_d2_a2_sp",
+      "person2Id": "eH_d2_a2",
+      "childIds": [
+        "eH_d2_b2"
+      ],
+      "status": "married"
+    },
+    "u_eH_d2_b1_eH_d2_b1_sp": {
+      "id": "u_eH_d2_b1_eH_d2_b1_sp",
+      "person1Id": "eH_d2_b1",
+      "person2Id": "eH_d2_b1_sp",
+      "childIds": [
+        "eH_d2_cc1"
+      ],
+      "status": "married"
+    },
+    "u_eH_d2_b2_sp_eH_d2_b2": {
+      "id": "u_eH_d2_b2_sp_eH_d2_b2",
+      "person1Id": "eH_d2_b2_sp",
+      "person2Id": "eH_d2_b2",
+      "childIds": [
+        "eH_d2_cc2"
+      ],
+      "status": "married"
+    },
+    "u_eH_d2_cc1_eH_d2_cc2": {
+      "id": "u_eH_d2_cc1_eH_d2_cc2",
+      "person1Id": "eH_d2_cc1",
+      "person2Id": "eH_d2_cc2",
+      "childIds": [
+        "eH_d2_ccc"
+      ],
+      "status": "married"
+    }
+  }
+}

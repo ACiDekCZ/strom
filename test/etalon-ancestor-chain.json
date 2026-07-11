@@ -1,0 +1,265 @@
+{
+  "persons": {
+    "eG_focus": {
+      "id": "eG_focus",
+      "firstName": "G-Focus",
+      "lastName": "G",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eG_focus_sp_eG_focus"
+      ],
+      "parentIds": [
+        "eG_father",
+        "eG_mother"
+      ],
+      "childIds": [
+        "eG_focus_kid"
+      ],
+      "birthDate": "1980-06-15"
+    },
+    "eG_father": {
+      "id": "eG_father",
+      "firstName": "G-Father",
+      "lastName": "G",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eG_father_eG_mother",
+        "u_eG_father_eG_father_ow"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eG_focus",
+        "eG_half_pat"
+      ],
+      "birthDate": "1950-06-15"
+    },
+    "eG_mother": {
+      "id": "eG_mother",
+      "firstName": "G-Mother",
+      "lastName": "G",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eG_father_eG_mother",
+        "u_eG_mother_oh_eG_mother"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eG_focus",
+        "eG_half_mat"
+      ],
+      "birthDate": "1952-06-15"
+    },
+    "eG_father_ow": {
+      "id": "eG_father_ow",
+      "firstName": "G-Father Ow",
+      "lastName": "G",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eG_father_eG_father_ow"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eG_half_pat"
+      ],
+      "birthDate": "1955-06-15"
+    },
+    "eG_half_pat": {
+      "id": "eG_half_pat",
+      "firstName": "G-Half Pat",
+      "lastName": "G",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eG_half_pat_eG_half_pat_sp"
+      ],
+      "parentIds": [
+        "eG_father",
+        "eG_father_ow"
+      ],
+      "childIds": [
+        "eG_half_pat_kid"
+      ],
+      "birthDate": "1978-06-15"
+    },
+    "eG_half_pat_sp": {
+      "id": "eG_half_pat_sp",
+      "firstName": "G-Half Pat Sp",
+      "lastName": "G",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eG_half_pat_eG_half_pat_sp"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eG_half_pat_kid"
+      ],
+      "birthDate": "1979-06-15"
+    },
+    "eG_half_pat_kid": {
+      "id": "eG_half_pat_kid",
+      "firstName": "G-Half Pat Kid",
+      "lastName": "G",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eG_half_pat",
+        "eG_half_pat_sp"
+      ],
+      "childIds": [],
+      "birthDate": "2005-06-15"
+    },
+    "eG_mother_oh": {
+      "id": "eG_mother_oh",
+      "firstName": "G-Mother Oh",
+      "lastName": "G",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eG_mother_oh_eG_mother"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eG_half_mat"
+      ],
+      "birthDate": "1948-06-15"
+    },
+    "eG_half_mat": {
+      "id": "eG_half_mat",
+      "firstName": "G-Half Mat",
+      "lastName": "G",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eG_half_mat_sp_eG_half_mat"
+      ],
+      "parentIds": [
+        "eG_mother_oh",
+        "eG_mother"
+      ],
+      "childIds": [
+        "eG_half_mat_kid"
+      ],
+      "birthDate": "1974-06-15"
+    },
+    "eG_half_mat_sp": {
+      "id": "eG_half_mat_sp",
+      "firstName": "G-Half Mat Sp",
+      "lastName": "G",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eG_half_mat_sp_eG_half_mat"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eG_half_mat_kid"
+      ],
+      "birthDate": "1973-06-15"
+    },
+    "eG_half_mat_kid": {
+      "id": "eG_half_mat_kid",
+      "firstName": "G-Half Mat Kid",
+      "lastName": "G",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eG_half_mat_sp",
+        "eG_half_mat"
+      ],
+      "childIds": [],
+      "birthDate": "2000-06-15"
+    },
+    "eG_focus_sp": {
+      "id": "eG_focus_sp",
+      "firstName": "G-Focus Sp",
+      "lastName": "G",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eG_focus_sp_eG_focus"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eG_focus_kid"
+      ],
+      "birthDate": "1979-06-15"
+    },
+    "eG_focus_kid": {
+      "id": "eG_focus_kid",
+      "firstName": "G-Focus Kid",
+      "lastName": "G",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eG_focus_sp",
+        "eG_focus"
+      ],
+      "childIds": [],
+      "birthDate": "2008-06-15"
+    }
+  },
+  "partnerships": {
+    "u_eG_father_eG_mother": {
+      "id": "u_eG_father_eG_mother",
+      "person1Id": "eG_father",
+      "person2Id": "eG_mother",
+      "childIds": [
+        "eG_focus"
+      ],
+      "status": "married"
+    },
+    "u_eG_father_eG_father_ow": {
+      "id": "u_eG_father_eG_father_ow",
+      "person1Id": "eG_father",
+      "person2Id": "eG_father_ow",
+      "childIds": [
+        "eG_half_pat"
+      ],
+      "status": "married"
+    },
+    "u_eG_half_pat_eG_half_pat_sp": {
+      "id": "u_eG_half_pat_eG_half_pat_sp",
+      "person1Id": "eG_half_pat",
+      "person2Id": "eG_half_pat_sp",
+      "childIds": [
+        "eG_half_pat_kid"
+      ],
+      "status": "married"
+    },
+    "u_eG_mother_oh_eG_mother": {
+      "id": "u_eG_mother_oh_eG_mother",
+      "person1Id": "eG_mother_oh",
+      "person2Id": "eG_mother",
+      "childIds": [
+        "eG_half_mat"
+      ],
+      "status": "married"
+    },
+    "u_eG_half_mat_sp_eG_half_mat": {
+      "id": "u_eG_half_mat_sp_eG_half_mat",
+      "person1Id": "eG_half_mat_sp",
+      "person2Id": "eG_half_mat",
+      "childIds": [
+        "eG_half_mat_kid"
+      ],
+      "status": "married"
+    },
+    "u_eG_focus_sp_eG_focus": {
+      "id": "u_eG_focus_sp_eG_focus",
+      "person1Id": "eG_focus_sp",
+      "person2Id": "eG_focus",
+      "childIds": [
+        "eG_focus_kid"
+      ],
+      "status": "married"
+    }
+  }
+}

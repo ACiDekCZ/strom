@@ -1,0 +1,208 @@
+{
+  "persons": {
+    "eJ_f_fa": {
+      "id": "eJ_f_fa",
+      "firstName": "J-F Fa",
+      "lastName": "J",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eJ_f_fa_eJ_f_mo"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eJ_focus",
+        "eJ_focus_sib"
+      ],
+      "birthDate": "1925-06-15"
+    },
+    "eJ_f_mo": {
+      "id": "eJ_f_mo",
+      "firstName": "J-F Mo",
+      "lastName": "J",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eJ_f_fa_eJ_f_mo"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eJ_focus",
+        "eJ_focus_sib"
+      ],
+      "birthDate": "1927-06-15"
+    },
+    "eJ_focus": {
+      "id": "eJ_focus",
+      "firstName": "J-Focus",
+      "lastName": "J",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eJ_focus_eJ_partner"
+      ],
+      "parentIds": [
+        "eJ_f_fa",
+        "eJ_f_mo"
+      ],
+      "childIds": [
+        "eJ_focus_kid"
+      ],
+      "birthDate": "1952-01-15"
+    },
+    "eJ_focus_sib": {
+      "id": "eJ_focus_sib",
+      "firstName": "J-Focus Sib",
+      "lastName": "J",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eJ_partner_sib_eJ_focus_sib"
+      ],
+      "parentIds": [
+        "eJ_f_fa",
+        "eJ_f_mo"
+      ],
+      "childIds": [
+        "eJ_sib_kid"
+      ],
+      "birthDate": "1954-02-15"
+    },
+    "eJ_p_fa": {
+      "id": "eJ_p_fa",
+      "firstName": "J-P Fa",
+      "lastName": "J",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eJ_p_fa_eJ_p_mo"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eJ_partner",
+        "eJ_partner_sib"
+      ],
+      "birthDate": "1926-06-15"
+    },
+    "eJ_p_mo": {
+      "id": "eJ_p_mo",
+      "firstName": "J-P Mo",
+      "lastName": "J",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eJ_p_fa_eJ_p_mo"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eJ_partner",
+        "eJ_partner_sib"
+      ],
+      "birthDate": "1928-06-15"
+    },
+    "eJ_partner": {
+      "id": "eJ_partner",
+      "firstName": "J-Partner",
+      "lastName": "J",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eJ_focus_eJ_partner"
+      ],
+      "parentIds": [
+        "eJ_p_fa",
+        "eJ_p_mo"
+      ],
+      "childIds": [
+        "eJ_focus_kid"
+      ],
+      "birthDate": "1953-01-15"
+    },
+    "eJ_partner_sib": {
+      "id": "eJ_partner_sib",
+      "firstName": "J-Partner Sib",
+      "lastName": "J",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eJ_partner_sib_eJ_focus_sib"
+      ],
+      "parentIds": [
+        "eJ_p_fa",
+        "eJ_p_mo"
+      ],
+      "childIds": [
+        "eJ_sib_kid"
+      ],
+      "birthDate": "1955-02-15"
+    },
+    "eJ_focus_kid": {
+      "id": "eJ_focus_kid",
+      "firstName": "J-Focus Kid",
+      "lastName": "J",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eJ_focus",
+        "eJ_partner"
+      ],
+      "childIds": [],
+      "birthDate": "1980-06-15"
+    },
+    "eJ_sib_kid": {
+      "id": "eJ_sib_kid",
+      "firstName": "J-Sib Kid",
+      "lastName": "J",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eJ_partner_sib",
+        "eJ_focus_sib"
+      ],
+      "childIds": [],
+      "birthDate": "1982-06-15"
+    }
+  },
+  "partnerships": {
+    "u_eJ_f_fa_eJ_f_mo": {
+      "id": "u_eJ_f_fa_eJ_f_mo",
+      "person1Id": "eJ_f_fa",
+      "person2Id": "eJ_f_mo",
+      "childIds": [
+        "eJ_focus",
+        "eJ_focus_sib"
+      ],
+      "status": "married"
+    },
+    "u_eJ_p_fa_eJ_p_mo": {
+      "id": "u_eJ_p_fa_eJ_p_mo",
+      "person1Id": "eJ_p_fa",
+      "person2Id": "eJ_p_mo",
+      "childIds": [
+        "eJ_partner",
+        "eJ_partner_sib"
+      ],
+      "status": "married"
+    },
+    "u_eJ_focus_eJ_partner": {
+      "id": "u_eJ_focus_eJ_partner",
+      "person1Id": "eJ_focus",
+      "person2Id": "eJ_partner",
+      "childIds": [
+        "eJ_focus_kid"
+      ],
+      "status": "married"
+    },
+    "u_eJ_partner_sib_eJ_focus_sib": {
+      "id": "u_eJ_partner_sib_eJ_focus_sib",
+      "person1Id": "eJ_partner_sib",
+      "person2Id": "eJ_focus_sib",
+      "childIds": [
+        "eJ_sib_kid"
+      ],
+      "status": "married"
+    }
+  }
+}

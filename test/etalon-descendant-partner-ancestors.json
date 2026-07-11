@@ -1,0 +1,244 @@
+{
+  "persons": {
+    "eL_focus": {
+      "id": "eL_focus",
+      "firstName": "L-Focus",
+      "lastName": "L",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eL_focus_eL_focus_sp"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eL_child",
+        "eL_child_sib"
+      ],
+      "birthDate": "1950-06-15"
+    },
+    "eL_focus_sp": {
+      "id": "eL_focus_sp",
+      "firstName": "L-Focus Sp",
+      "lastName": "L",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eL_focus_eL_focus_sp"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eL_child",
+        "eL_child_sib"
+      ],
+      "birthDate": "1951-06-15"
+    },
+    "eL_child": {
+      "id": "eL_child",
+      "firstName": "L-Child",
+      "lastName": "L",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eL_child_eL_child_partner"
+      ],
+      "parentIds": [
+        "eL_focus",
+        "eL_focus_sp"
+      ],
+      "childIds": [
+        "eL_gchild"
+      ],
+      "birthDate": "1978-01-15"
+    },
+    "eL_child_sib": {
+      "id": "eL_child_sib",
+      "firstName": "L-Child Sib",
+      "lastName": "L",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eL_focus",
+        "eL_focus_sp"
+      ],
+      "childIds": [],
+      "birthDate": "1980-02-15"
+    },
+    "eL_child_partner": {
+      "id": "eL_child_partner",
+      "firstName": "L-Child Partner",
+      "lastName": "L",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eL_child_eL_child_partner"
+      ],
+      "parentIds": [
+        "eL_cp_fa",
+        "eL_cp_mo"
+      ],
+      "childIds": [
+        "eL_gchild"
+      ],
+      "birthDate": "1979-06-15"
+    },
+    "eL_gchild": {
+      "id": "eL_gchild",
+      "firstName": "L-Gchild",
+      "lastName": "L",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eL_child",
+        "eL_child_partner"
+      ],
+      "childIds": [],
+      "birthDate": "2005-06-15"
+    },
+    "eL_cp_fa": {
+      "id": "eL_cp_fa",
+      "firstName": "L-Cp Fa",
+      "lastName": "L",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eL_cp_fa_eL_cp_mo"
+      ],
+      "parentIds": [
+        "eL_cp_pgf",
+        "eL_cp_pgm"
+      ],
+      "childIds": [
+        "eL_child_partner"
+      ],
+      "birthDate": "1950-06-15"
+    },
+    "eL_cp_mo": {
+      "id": "eL_cp_mo",
+      "firstName": "L-Cp Mo",
+      "lastName": "L",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eL_cp_fa_eL_cp_mo"
+      ],
+      "parentIds": [
+        "eL_cp_mgf",
+        "eL_cp_mgm"
+      ],
+      "childIds": [
+        "eL_child_partner"
+      ],
+      "birthDate": "1952-06-15"
+    },
+    "eL_cp_pgf": {
+      "id": "eL_cp_pgf",
+      "firstName": "L-Cp Pgf",
+      "lastName": "L",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eL_cp_pgf_eL_cp_pgm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eL_cp_fa"
+      ],
+      "birthDate": "1920-06-15"
+    },
+    "eL_cp_pgm": {
+      "id": "eL_cp_pgm",
+      "firstName": "L-Cp Pgm",
+      "lastName": "L",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eL_cp_pgf_eL_cp_pgm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eL_cp_fa"
+      ],
+      "birthDate": "1922-06-15"
+    },
+    "eL_cp_mgf": {
+      "id": "eL_cp_mgf",
+      "firstName": "L-Cp Mgf",
+      "lastName": "L",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eL_cp_mgf_eL_cp_mgm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eL_cp_mo"
+      ],
+      "birthDate": "1921-06-15"
+    },
+    "eL_cp_mgm": {
+      "id": "eL_cp_mgm",
+      "firstName": "L-Cp Mgm",
+      "lastName": "L",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eL_cp_mgf_eL_cp_mgm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eL_cp_mo"
+      ],
+      "birthDate": "1923-06-15"
+    }
+  },
+  "partnerships": {
+    "u_eL_focus_eL_focus_sp": {
+      "id": "u_eL_focus_eL_focus_sp",
+      "person1Id": "eL_focus",
+      "person2Id": "eL_focus_sp",
+      "childIds": [
+        "eL_child",
+        "eL_child_sib"
+      ],
+      "status": "married"
+    },
+    "u_eL_child_eL_child_partner": {
+      "id": "u_eL_child_eL_child_partner",
+      "person1Id": "eL_child",
+      "person2Id": "eL_child_partner",
+      "childIds": [
+        "eL_gchild"
+      ],
+      "status": "married"
+    },
+    "u_eL_cp_fa_eL_cp_mo": {
+      "id": "u_eL_cp_fa_eL_cp_mo",
+      "person1Id": "eL_cp_fa",
+      "person2Id": "eL_cp_mo",
+      "childIds": [
+        "eL_child_partner"
+      ],
+      "status": "married"
+    },
+    "u_eL_cp_pgf_eL_cp_pgm": {
+      "id": "u_eL_cp_pgf_eL_cp_pgm",
+      "person1Id": "eL_cp_pgf",
+      "person2Id": "eL_cp_pgm",
+      "childIds": [
+        "eL_cp_fa"
+      ],
+      "status": "married"
+    },
+    "u_eL_cp_mgf_eL_cp_mgm": {
+      "id": "u_eL_cp_mgf_eL_cp_mgm",
+      "person1Id": "eL_cp_mgf",
+      "person2Id": "eL_cp_mgm",
+      "childIds": [
+        "eL_cp_mo"
+      ],
+      "status": "married"
+    }
+  }
+}

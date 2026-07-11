@@ -1,0 +1,287 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="4624.5" height="830">
+  <g transform="translate(-30, -30)">
+    <!-- Spouse lines -->
+    <line x1="1187.5" y1="517.5" x2="1199.5" y2="517.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="1187.5" y1="662.5" x2="1199.5" y2="662.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="615" y1="372.5" x2="627" y2="372.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="329.5" y1="227.5" x2="341.5" y2="227.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="180" y1="82.5" x2="192" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="467.5" y1="82.5" x2="479.5" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="900.5" y1="227.5" x2="912.5" y2="227.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="755" y1="82.5" x2="767" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="1042.5" y1="82.5" x2="1054.5" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="1762" y1="372.5" x2="1774" y2="372.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="2050" y1="227.5" x2="2062" y2="227.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="3342.5" y1="82.5" x2="3354.5" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="3917.5" y1="82.5" x2="3929.5" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="2625" y1="227.5" x2="2637" y2="227.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="4205" y1="82.5" x2="4217" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="4492.5" y1="82.5" x2="4504.5" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="1474.5" y1="517.5" x2="1486.5" y2="517.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="1474.5" y1="372.5" x2="1486.5" y2="372.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="2337.5" y1="227.5" x2="2349.5" y2="227.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="3630" y1="82.5" x2="3642" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="1330" y1="82.5" x2="1342" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="1187.5" y1="227.5" x2="1199.5" y2="227.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="1617.5" y1="82.5" x2="1629.5" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="1905" y1="82.5" x2="1917" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="1187.5" y1="372.5" x2="1199.5" y2="372.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="1475" y1="227.5" x2="1487" y2="227.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="2192.5" y1="82.5" x2="2204.5" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="2480" y1="82.5" x2="2492" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="1762.5" y1="227.5" x2="1774.5" y2="227.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="2767.5" y1="82.5" x2="2779.5" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="3055" y1="82.5" x2="3067" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <!-- Connections -->
+    <line x1="1193.5" y1="517.5" x2="1193.5" y2="590" stroke="#333"/>
+    <line x1="1193.5" y1="590" x2="1122.5" y2="590" stroke="#333"/>
+    <line x1="1122.5" y1="590" x2="1122.5" y2="590" stroke="#333"/>
+    <line x1="1122.5" y1="590" x2="1122.5" y2="630" stroke="#333"/>
+    <line x1="1193.5" y1="662.5" x2="1193.5" y2="735" stroke="#333"/>
+    <line x1="1193.5" y1="735" x2="1193.5" y2="735" stroke="#333"/>
+    <line x1="1193.5" y1="735" x2="1193.5" y2="775" stroke="#333"/>
+    <line x1="621" y1="372.5" x2="621" y2="445" stroke="#333"/>
+    <line x1="621" y1="445" x2="1122.5" y2="445" stroke="#333"/>
+    <line x1="1122.5" y1="445" x2="1122.5" y2="445" stroke="#333"/>
+    <line x1="1122.5" y1="445" x2="1122.5" y2="485" stroke="#333"/>
+    <line x1="335.5" y1="227.5" x2="335.5" y2="300" stroke="#333"/>
+    <line x1="335.5" y1="300" x2="550" y2="300" stroke="#333"/>
+    <line x1="550" y1="300" x2="550" y2="300" stroke="#333"/>
+    <line x1="550" y1="300" x2="550" y2="340" stroke="#333"/>
+    <line x1="186" y1="82.5" x2="186" y2="155" stroke="#333"/>
+    <line x1="186" y1="155" x2="264.5" y2="155" stroke="#333"/>
+    <line x1="264.5" y1="155" x2="264.5" y2="155" stroke="#333"/>
+    <line x1="264.5" y1="155" x2="264.5" y2="195" stroke="#333"/>
+    <line x1="473.5" y1="82.5" x2="473.5" y2="155" stroke="#333"/>
+    <line x1="473.5" y1="155" x2="406.5" y2="155" stroke="#333"/>
+    <line x1="406.5" y1="155" x2="406.5" y2="155" stroke="#333"/>
+    <line x1="406.5" y1="155" x2="406.5" y2="195" stroke="#333"/>
+    <line x1="906.5" y1="227.5" x2="906.5" y2="300" stroke="#333"/>
+    <line x1="906.5" y1="300" x2="692" y2="300" stroke="#333"/>
+    <line x1="692" y1="300" x2="692" y2="300" stroke="#333"/>
+    <line x1="692" y1="300" x2="692" y2="340" stroke="#333"/>
+    <line x1="761" y1="82.5" x2="761" y2="155" stroke="#333"/>
+    <line x1="761" y1="155" x2="835.5" y2="155" stroke="#333"/>
+    <line x1="835.5" y1="155" x2="835.5" y2="155" stroke="#333"/>
+    <line x1="835.5" y1="155" x2="835.5" y2="195" stroke="#333"/>
+    <line x1="1048.5" y1="82.5" x2="1048.5" y2="155" stroke="#333"/>
+    <line x1="1048.5" y1="155" x2="977.5" y2="155" stroke="#333"/>
+    <line x1="977.5" y1="155" x2="977.5" y2="155" stroke="#333"/>
+    <line x1="977.5" y1="155" x2="977.5" y2="195" stroke="#333"/>
+    <line x1="1768" y1="372.5" x2="1768" y2="453" stroke="#333"/>
+    <line x1="1768" y1="453" x2="1264.5" y2="453" stroke="#333"/>
+    <line x1="1264.5" y1="453" x2="1264.5" y2="453" stroke="#333"/>
+    <line x1="1264.5" y1="453" x2="1264.5" y2="485" stroke="#333"/>
+    <line x1="2056" y1="227.5" x2="2056" y2="316" stroke="#333"/>
+    <line x1="2056" y1="316" x2="1697" y2="316" stroke="#333"/>
+    <line x1="1697" y1="316" x2="1697" y2="316" stroke="#333"/>
+    <line x1="1697" y1="316" x2="1697" y2="340" stroke="#333"/>
+    <line x1="3348.5" y1="82.5" x2="3348.5" y2="203" stroke="#333"/>
+    <line x1="3348.5" y1="203" x2="1985" y2="203" stroke="#333"/>
+    <line x1="1985" y1="203" x2="1985" y2="203" stroke="#333"/>
+    <line x1="1985" y1="203" x2="1985" y2="195" stroke="#333"/>
+    <line x1="3923.5" y1="82.5" x2="3923.5" y2="211" stroke="#333"/>
+    <line x1="3923.5" y1="211" x2="2127" y2="211" stroke="#333"/>
+    <line x1="2127" y1="211" x2="2127" y2="211" stroke="#333"/>
+    <line x1="2127" y1="211" x2="2127" y2="195" stroke="#333"/>
+    <line x1="2631" y1="227.5" x2="2631" y2="324" stroke="#333"/>
+    <line x1="2631" y1="324" x2="1839" y2="324" stroke="#333"/>
+    <line x1="1839" y1="324" x2="1839" y2="324" stroke="#333"/>
+    <line x1="1839" y1="324" x2="1839" y2="340" stroke="#333"/>
+    <line x1="4211" y1="82.5" x2="4211" y2="219" stroke="#333"/>
+    <line x1="4211" y1="219" x2="2560" y2="219" stroke="#333"/>
+    <line x1="2560" y1="219" x2="2560" y2="219" stroke="#333"/>
+    <line x1="2560" y1="219" x2="2560" y2="195" stroke="#333"/>
+    <line x1="4498.5" y1="82.5" x2="4498.5" y2="219" stroke="#333"/>
+    <line x1="4498.5" y1="219" x2="2702" y2="219" stroke="#333"/>
+    <line x1="2702" y1="219" x2="2702" y2="219" stroke="#333"/>
+    <line x1="2702" y1="219" x2="2702" y2="195" stroke="#333"/>
+    <line x1="1480.5" y1="517.5" x2="1480.5" y2="590" stroke="#333"/>
+    <line x1="1480.5" y1="590" x2="1264.5" y2="590" stroke="#333"/>
+    <line x1="1264.5" y1="590" x2="1264.5" y2="590" stroke="#333"/>
+    <line x1="1264.5" y1="590" x2="1264.5" y2="630" stroke="#333"/>
+    <line x1="1480.5" y1="372.5" x2="1480.5" y2="445" stroke="#333"/>
+    <line x1="1480.5" y1="445" x2="1551.5" y2="445" stroke="#333"/>
+    <line x1="1551.5" y1="445" x2="1551.5" y2="445" stroke="#333"/>
+    <line x1="1551.5" y1="445" x2="1551.5" y2="485" stroke="#333"/>
+    <line x1="2343.5" y1="227.5" x2="2343.5" y2="316" stroke="#333"/>
+    <line x1="2343.5" y1="316" x2="1551.5" y2="316" stroke="#333"/>
+    <line x1="1551.5" y1="316" x2="1551.5" y2="316" stroke="#333"/>
+    <line x1="1551.5" y1="316" x2="1551.5" y2="340" stroke="#333"/>
+    <line x1="3636" y1="82.5" x2="3636" y2="211" stroke="#333"/>
+    <line x1="3636" y1="211" x2="2414.5" y2="211" stroke="#333"/>
+    <line x1="2414.5" y1="211" x2="2414.5" y2="211" stroke="#333"/>
+    <line x1="2414.5" y1="211" x2="2414.5" y2="195" stroke="#333"/>
+    <line x1="1336" y1="82.5" x2="1336" y2="171" stroke="#333"/>
+    <line x1="1336" y1="171" x2="2272.5" y2="171" stroke="#333"/>
+    <line x1="2272.5" y1="171" x2="2272.5" y2="171" stroke="#333"/>
+    <line x1="2272.5" y1="171" x2="2272.5" y2="195" stroke="#333"/>
+    <line x1="1193.5" y1="227.5" x2="1193.5" y2="308" stroke="#333"/>
+    <line x1="1193.5" y1="308" x2="1409.5" y2="308" stroke="#333"/>
+    <line x1="1409.5" y1="308" x2="1409.5" y2="308" stroke="#333"/>
+    <line x1="1409.5" y1="308" x2="1409.5" y2="340" stroke="#333"/>
+    <line x1="1623.5" y1="82.5" x2="1623.5" y2="155" stroke="#333"/>
+    <line x1="1623.5" y1="155" x2="1122.5" y2="155" stroke="#333"/>
+    <line x1="1122.5" y1="155" x2="1122.5" y2="155" stroke="#333"/>
+    <line x1="1122.5" y1="155" x2="1122.5" y2="195" stroke="#333"/>
+    <line x1="1911" y1="82.5" x2="1911" y2="163" stroke="#333"/>
+    <line x1="1911" y1="163" x2="1264.5" y2="163" stroke="#333"/>
+    <line x1="1264.5" y1="163" x2="1264.5" y2="163" stroke="#333"/>
+    <line x1="1264.5" y1="163" x2="1264.5" y2="195" stroke="#333"/>
+    <line x1="1193.5" y1="372.5" x2="1193.5" y2="445" stroke="#333"/>
+    <line x1="1193.5" y1="445" x2="1409.5" y2="445" stroke="#333"/>
+    <line x1="1409.5" y1="445" x2="1409.5" y2="445" stroke="#333"/>
+    <line x1="1409.5" y1="445" x2="1409.5" y2="485" stroke="#333"/>
+    <line x1="1481" y1="227.5" x2="1481" y2="300" stroke="#333"/>
+    <line x1="1481" y1="300" x2="1122.5" y2="300" stroke="#333"/>
+    <line x1="1122.5" y1="300" x2="1122.5" y2="300" stroke="#333"/>
+    <line x1="1122.5" y1="300" x2="1122.5" y2="340" stroke="#333"/>
+    <line x1="2198.5" y1="82.5" x2="2198.5" y2="171" stroke="#333"/>
+    <line x1="2198.5" y1="171" x2="1410" y2="171" stroke="#333"/>
+    <line x1="1410" y1="171" x2="1410" y2="171" stroke="#333"/>
+    <line x1="1410" y1="171" x2="1410" y2="195" stroke="#333"/>
+    <line x1="2486" y1="82.5" x2="2486" y2="179" stroke="#333"/>
+    <line x1="2486" y1="179" x2="1552" y2="179" stroke="#333"/>
+    <line x1="1552" y1="179" x2="1552" y2="179" stroke="#333"/>
+    <line x1="1552" y1="179" x2="1552" y2="195" stroke="#333"/>
+    <line x1="1768.5" y1="227.5" x2="1768.5" y2="308" stroke="#333"/>
+    <line x1="1768.5" y1="308" x2="1264.5" y2="308" stroke="#333"/>
+    <line x1="1264.5" y1="308" x2="1264.5" y2="308" stroke="#333"/>
+    <line x1="1264.5" y1="308" x2="1264.5" y2="340" stroke="#333"/>
+    <line x1="2773.5" y1="82.5" x2="2773.5" y2="187" stroke="#333"/>
+    <line x1="2773.5" y1="187" x2="1697.5" y2="187" stroke="#333"/>
+    <line x1="1697.5" y1="187" x2="1697.5" y2="187" stroke="#333"/>
+    <line x1="1697.5" y1="187" x2="1697.5" y2="195" stroke="#333"/>
+    <line x1="3061" y1="82.5" x2="3061" y2="195" stroke="#333"/>
+    <line x1="3061" y1="195" x2="1839.5" y2="195" stroke="#333"/>
+    <line x1="1839.5" y1="195" x2="1839.5" y2="195" stroke="#333"/>
+    <line x1="1839.5" y1="195" x2="1839.5" y2="195" stroke="#333"/>
+    <!-- Cards -->
+    <rect x="1057.5" y="630" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="1122.5" y="666.5" text-anchor="middle" font-size="10">B-F B</text>
+    <rect x="1057.5" y="485" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="1122.5" y="521.5" text-anchor="middle" font-size="10">B-FF B</text>
+    <rect x="485" y="340" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="550" y="376.5" text-anchor="middle" font-size="10">B-FFF B</text>
+    <rect x="199.5" y="195" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="264.5" y="231.5" text-anchor="middle" font-size="10">B-FFFF B</text>
+    <rect x="50" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="115" y="86.5" text-anchor="middle" font-size="10">B-FFFFF B</text>
+    <rect x="192" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="257" y="86.5" text-anchor="middle" font-size="10">B-FFFFM B</text>
+    <rect x="341.5" y="195" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="406.5" y="231.5" text-anchor="middle" font-size="10">B-FFFM B</text>
+    <rect x="337.5" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="402.5" y="86.5" text-anchor="middle" font-size="10">B-FFFMF B</text>
+    <rect x="479.5" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="544.5" y="86.5" text-anchor="middle" font-size="10">B-FFFMM B</text>
+    <rect x="627" y="340" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="692" y="376.5" text-anchor="middle" font-size="10">B-FFM B</text>
+    <rect x="770.5" y="195" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="835.5" y="231.5" text-anchor="middle" font-size="10">B-FFMF B</text>
+    <rect x="625" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="690" y="86.5" text-anchor="middle" font-size="10">B-FFMFF B</text>
+    <rect x="767" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="832" y="86.5" text-anchor="middle" font-size="10">B-FFMFM B</text>
+    <rect x="912.5" y="195" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="977.5" y="231.5" text-anchor="middle" font-size="10">B-FFMM B</text>
+    <rect x="912.5" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="977.5" y="86.5" text-anchor="middle" font-size="10">B-FFMMF B</text>
+    <rect x="1054.5" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="1119.5" y="86.5" text-anchor="middle" font-size="10">B-FFMMM B</text>
+    <rect x="1199.5" y="485" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="1264.5" y="521.5" text-anchor="middle" font-size="10">B-FM B</text>
+    <rect x="1632" y="340" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="1697" y="376.5" text-anchor="middle" font-size="10">B-FMF B</text>
+    <rect x="1920" y="195" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="1985" y="231.5" text-anchor="middle" font-size="10">B-FMFF B</text>
+    <rect x="3212.5" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="3277.5" y="86.5" text-anchor="middle" font-size="10">B-FMFFF B</text>
+    <rect x="3354.5" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="3419.5" y="86.5" text-anchor="middle" font-size="10">B-FMFFM B</text>
+    <rect x="2062" y="195" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="2127" y="231.5" text-anchor="middle" font-size="10">B-FMFM B</text>
+    <rect x="3787.5" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="3852.5" y="86.5" text-anchor="middle" font-size="10">B-FMFMF B</text>
+    <rect x="3929.5" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="3994.5" y="86.5" text-anchor="middle" font-size="10">B-FMFMM B</text>
+    <rect x="1774" y="340" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="1839" y="376.5" text-anchor="middle" font-size="10">B-FMM B</text>
+    <rect x="2495" y="195" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="2560" y="231.5" text-anchor="middle" font-size="10">B-FMMF B</text>
+    <rect x="4075" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="4140" y="86.5" text-anchor="middle" font-size="10">B-FMMFF B</text>
+    <rect x="4217" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="4282" y="86.5" text-anchor="middle" font-size="10">B-FMMFM B</text>
+    <rect x="2637" y="195" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="2702" y="231.5" text-anchor="middle" font-size="10">B-FMMM B</text>
+    <rect x="4362.5" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="4427.5" y="86.5" text-anchor="middle" font-size="10">B-FMMMF B</text>
+    <rect x="4504.5" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="4569.5" y="86.5" text-anchor="middle" font-size="10">B-FMMMM B</text>
+    <rect x="1128.5" y="775" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="1193.5" y="811.5" text-anchor="middle" font-size="10">B-Focus B</text>
+    <rect x="1199.5" y="630" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="1264.5" y="666.5" text-anchor="middle" font-size="10">B-M B</text>
+    <rect x="1486.5" y="485" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="1551.5" y="521.5" text-anchor="middle" font-size="10">B-MF B</text>
+    <rect x="1486.5" y="340" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="1551.5" y="376.5" text-anchor="middle" font-size="10">B-MFF B</text>
+    <rect x="2349.5" y="195" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="2414.5" y="231.5" text-anchor="middle" font-size="10">B-MFFF B</text>
+    <rect x="3500" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="3565" y="86.5" text-anchor="middle" font-size="10">B-MFFFF B</text>
+    <rect x="3642" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="3707" y="86.5" text-anchor="middle" font-size="10">B-MFFFM B</text>
+    <rect x="2207.5" y="195" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="2272.5" y="231.5" text-anchor="middle" font-size="10">B-MFFM B</text>
+    <rect x="1200" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="1265" y="86.5" text-anchor="middle" font-size="10">B-MFFMF B</text>
+    <rect x="1342" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="1407" y="86.5" text-anchor="middle" font-size="10">B-MFFMM B</text>
+    <rect x="1344.5" y="340" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="1409.5" y="376.5" text-anchor="middle" font-size="10">B-MFM B</text>
+    <rect x="1057.5" y="195" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="1122.5" y="231.5" text-anchor="middle" font-size="10">B-MFMF B</text>
+    <rect x="1487.5" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="1552.5" y="86.5" text-anchor="middle" font-size="10">B-MFMFF B</text>
+    <rect x="1629.5" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="1694.5" y="86.5" text-anchor="middle" font-size="10">B-MFMFM B</text>
+    <rect x="1199.5" y="195" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="1264.5" y="231.5" text-anchor="middle" font-size="10">B-MFMM B</text>
+    <rect x="1775" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="1840" y="86.5" text-anchor="middle" font-size="10">B-MFMMF B</text>
+    <rect x="1917" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="1982" y="86.5" text-anchor="middle" font-size="10">B-MFMMM B</text>
+    <rect x="1344.5" y="485" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="1409.5" y="521.5" text-anchor="middle" font-size="10">B-MM B</text>
+    <rect x="1057.5" y="340" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="1122.5" y="376.5" text-anchor="middle" font-size="10">B-MMF B</text>
+    <rect x="1345" y="195" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="1410" y="231.5" text-anchor="middle" font-size="10">B-MMFF B</text>
+    <rect x="2062.5" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="2127.5" y="86.5" text-anchor="middle" font-size="10">B-MMFFF B</text>
+    <rect x="2204.5" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="2269.5" y="86.5" text-anchor="middle" font-size="10">B-MMFFM B</text>
+    <rect x="1487" y="195" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="1552" y="231.5" text-anchor="middle" font-size="10">B-MMFM B</text>
+    <rect x="2350" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="2415" y="86.5" text-anchor="middle" font-size="10">B-MMFMF B</text>
+    <rect x="2492" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="2557" y="86.5" text-anchor="middle" font-size="10">B-MMFMM B</text>
+    <rect x="1199.5" y="340" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="1264.5" y="376.5" text-anchor="middle" font-size="10">B-MMM B</text>
+    <rect x="1632.5" y="195" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="1697.5" y="231.5" text-anchor="middle" font-size="10">B-MMMF B</text>
+    <rect x="2637.5" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="2702.5" y="86.5" text-anchor="middle" font-size="10">B-MMMFF B</text>
+    <rect x="2779.5" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="2844.5" y="86.5" text-anchor="middle" font-size="10">B-MMMFM B</text>
+    <rect x="1774.5" y="195" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="1839.5" y="231.5" text-anchor="middle" font-size="10">B-MMMM B</text>
+    <rect x="2925" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="2990" y="86.5" text-anchor="middle" font-size="10">B-MMMMF B</text>
+    <rect x="3067" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="3132" y="86.5" text-anchor="middle" font-size="10">B-MMMMM B</text>
+  </g>
+</svg>

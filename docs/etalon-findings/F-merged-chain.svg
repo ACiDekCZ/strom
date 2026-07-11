@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="673" height="395">
+  <g transform="translate(-30, -30)">
+    <!-- Spouse lines -->
+    <line x1="396" y1="227.5" x2="408" y2="227.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="180" y1="82.5" x2="192" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="322" y1="82.5" x2="334" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="464" y1="82.5" x2="476" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <!-- Connections -->
+    <line x1="402" y1="227.5" x2="402" y2="300" stroke="#333"/>
+    <line x1="402" y1="300" x2="402" y2="300" stroke="#333"/>
+    <line x1="402" y1="300" x2="402" y2="340" stroke="#333"/>
+    <line x1="186" y1="82.5" x2="186" y2="155" stroke="#333"/>
+    <line x1="186" y1="155" x2="186" y2="155" stroke="#333"/>
+    <line x1="186" y1="155" x2="186" y2="195" stroke="#333"/>
+    <line x1="399" y1="115" x2="399" y2="155" stroke="#333"/>
+    <line x1="399" y1="155" x2="331" y2="155" stroke="#333"/>
+    <line x1="331" y1="155" x2="331" y2="155" stroke="#333"/>
+    <line x1="331" y1="155" x2="331" y2="195" stroke="#333"/>
+    <line x1="399" y1="115" x2="399" y2="163" stroke="#333"/>
+    <line x1="399" y1="163" x2="618" y2="163" stroke="#333"/>
+    <line x1="618" y1="163" x2="618" y2="163" stroke="#333"/>
+    <line x1="618" y1="163" x2="618" y2="195" stroke="#333"/>
+    <!-- Cards -->
+    <rect x="337" y="340" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="402" y="376.5" text-anchor="middle" font-size="10">F-Gk1 F</text>
+    <rect x="121" y="195" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="186" y="231.5" text-anchor="middle" font-size="10">F-K0 F</text>
+    <rect x="266" y="195" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="331" y="231.5" text-anchor="middle" font-size="10">F-K1 F</text>
+    <rect x="408" y="195" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="473" y="231.5" text-anchor="middle" font-size="10">F-K1 Sp F</text>
+    <rect x="553" y="195" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="618" y="231.5" text-anchor="middle" font-size="10">F-K2 F</text>
+    <rect x="50" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="115" y="86.5" text-anchor="middle" font-size="10">F-P1 F</text>
+    <rect x="192" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="257" y="86.5" text-anchor="middle" font-size="10">F-P2 F</text>
+    <rect x="334" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="399" y="86.5" text-anchor="middle" font-size="10">F-P3 F</text>
+    <rect x="476" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="541" y="86.5" text-anchor="middle" font-size="10">F-P4 F</text>
+  </g>
+</svg>

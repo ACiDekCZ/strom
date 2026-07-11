@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:real": "npx tsx scripts/test-real-data.ts"
+    "test:real": "npx tsx scripts/test-real-data.ts",
+    "gen:etalon": "tsx scripts/generate-etalon.ts"
   },
   "keywords": [
     "family-tree",
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@types/node": "^25.0.10",
     "esbuild": "^0.27.2",
+    "tsx": "^4.23.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.17"
   }

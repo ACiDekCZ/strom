@@ -1,0 +1,211 @@
+{
+  "persons": {
+    "eM_gmother": {
+      "id": "eM_gmother",
+      "firstName": "M-Gmother",
+      "lastName": "M",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [
+        "eM_mother"
+      ],
+      "birthDate": "1920-06-15"
+    },
+    "eM_mother": {
+      "id": "eM_mother",
+      "firstName": "M-Mother",
+      "lastName": "M",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eM_ph_father_eM_mother"
+      ],
+      "parentIds": [
+        "eM_gmother"
+      ],
+      "childIds": [
+        "eM_kid_dated1",
+        "eM_kid_undated_a",
+        "eM_kid_nosurname",
+        "eM_kid_undated_b",
+        "eM_kid_dated2"
+      ],
+      "birthDate": "1945-06-15"
+    },
+    "eM_ph_father": {
+      "id": "eM_ph_father",
+      "firstName": "?",
+      "lastName": "",
+      "gender": "male",
+      "isPlaceholder": true,
+      "partnerships": [
+        "u_eM_ph_father_eM_mother"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eM_kid_dated1",
+        "eM_kid_undated_a",
+        "eM_kid_nosurname",
+        "eM_kid_undated_b",
+        "eM_kid_dated2"
+      ]
+    },
+    "eM_kid_dated1": {
+      "id": "eM_kid_dated1",
+      "firstName": "M-Kid Dated1",
+      "lastName": "M",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eM_ph_father",
+        "eM_mother"
+      ],
+      "childIds": [
+        "eM_grandchild_single_parent"
+      ],
+      "birthDate": "1970-03-15"
+    },
+    "eM_kid_undated_a": {
+      "id": "eM_kid_undated_a",
+      "firstName": "M-Kid Undated A",
+      "lastName": "M",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eM_ph_father",
+        "eM_mother"
+      ],
+      "childIds": []
+    },
+    "eM_kid_nosurname": {
+      "id": "eM_kid_nosurname",
+      "firstName": "M-Kid Nosurname",
+      "lastName": "",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eM_ph_father",
+        "eM_mother"
+      ],
+      "childIds": [],
+      "birthDate": "1972-01-15"
+    },
+    "eM_kid_undated_b": {
+      "id": "eM_kid_undated_b",
+      "firstName": "M-Kid Undated B",
+      "lastName": "",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eM_ph_father",
+        "eM_mother"
+      ],
+      "childIds": []
+    },
+    "eM_kid_dated2": {
+      "id": "eM_kid_dated2",
+      "firstName": "M-Kid Dated2",
+      "lastName": "M",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_eM_kid_dated2_ph_sp_eM_kid_dated2"
+      ],
+      "parentIds": [
+        "eM_ph_father",
+        "eM_mother"
+      ],
+      "childIds": [
+        "eM_gc_undated",
+        "eM_gc_dated"
+      ],
+      "birthDate": "1971-06-15"
+    },
+    "eM_grandchild_single_parent": {
+      "id": "eM_grandchild_single_parent",
+      "firstName": "M-Grandchild Single Parent",
+      "lastName": "M",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eM_kid_dated1"
+      ],
+      "childIds": [],
+      "birthDate": "1995-06-15"
+    },
+    "eM_kid_dated2_ph_sp": {
+      "id": "eM_kid_dated2_ph_sp",
+      "firstName": "?",
+      "lastName": "",
+      "gender": "male",
+      "isPlaceholder": true,
+      "partnerships": [
+        "u_eM_kid_dated2_ph_sp_eM_kid_dated2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "eM_gc_undated",
+        "eM_gc_dated"
+      ]
+    },
+    "eM_gc_undated": {
+      "id": "eM_gc_undated",
+      "firstName": "M-Gc Undated",
+      "lastName": "M",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eM_kid_dated2_ph_sp",
+        "eM_kid_dated2"
+      ],
+      "childIds": []
+    },
+    "eM_gc_dated": {
+      "id": "eM_gc_dated",
+      "firstName": "M-Gc Dated",
+      "lastName": "M",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "eM_kid_dated2_ph_sp",
+        "eM_kid_dated2"
+      ],
+      "childIds": [],
+      "birthDate": "1998-04-15"
+    }
+  },
+  "partnerships": {
+    "u_eM_ph_father_eM_mother": {
+      "id": "u_eM_ph_father_eM_mother",
+      "person1Id": "eM_ph_father",
+      "person2Id": "eM_mother",
+      "childIds": [
+        "eM_kid_dated1",
+        "eM_kid_undated_a",
+        "eM_kid_nosurname",
+        "eM_kid_undated_b",
+        "eM_kid_dated2"
+      ],
+      "status": "married"
+    },
+    "u_eM_kid_dated2_ph_sp_eM_kid_dated2": {
+      "id": "u_eM_kid_dated2_ph_sp_eM_kid_dated2",
+      "person1Id": "eM_kid_dated2_ph_sp",
+      "person2Id": "eM_kid_dated2",
+      "childIds": [
+        "eM_gc_undated",
+        "eM_gc_dated"
+      ],
+      "status": "married"
+    }
+  }
+}

@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="886.5" height="540">
+  <g transform="translate(-30, -30)">
+    <!-- Spouse lines -->
+    <line x1="611" y1="227.5" x2="623" y2="227.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="538.25" y1="372.5" x2="550.25" y2="372.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="180" y1="82.5" x2="192" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="324" y1="227.5" x2="336" y2="227.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="467.5" y1="82.5" x2="479.5" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="249.25" y1="227.5" x2="261.25" y2="227.5" stroke="#666" stroke-dasharray="4,2"/>
+    <line x1="754.5" y1="82.5" x2="766.5" y2="82.5" stroke="#666" stroke-dasharray="4,2"/>
+    <!-- Connections -->
+    <line x1="617" y1="227.5" x2="617" y2="300" stroke="#333"/>
+    <line x1="615.25" y1="300" x2="760.75" y2="300" stroke="#333"/>
+    <line x1="760.75" y1="300" x2="760.75" y2="340" stroke="#333"/>
+    <line x1="615.25" y1="300" x2="615.25" y2="340" stroke="#333"/>
+    <line x1="544.25" y1="372.5" x2="544.25" y2="445" stroke="#333"/>
+    <line x1="544.25" y1="445" x2="544.25" y2="445" stroke="#333"/>
+    <line x1="544.25" y1="445" x2="544.25" y2="485" stroke="#333"/>
+    <line x1="186" y1="82.5" x2="186" y2="163" stroke="#333"/>
+    <line x1="186" y1="163" x2="401" y2="163" stroke="#333"/>
+    <line x1="401" y1="163" x2="401" y2="163" stroke="#333"/>
+    <line x1="401" y1="163" x2="401" y2="195" stroke="#333"/>
+    <line x1="330" y1="227.5" x2="330" y2="300" stroke="#333"/>
+    <line x1="330" y1="300" x2="473.25" y2="300" stroke="#333"/>
+    <line x1="473.25" y1="300" x2="473.25" y2="300" stroke="#333"/>
+    <line x1="473.25" y1="300" x2="473.25" y2="340" stroke="#333"/>
+    <line x1="473.5" y1="82.5" x2="473.5" y2="155" stroke="#333"/>
+    <line x1="172" y1="155" x2="546" y2="155" stroke="#333"/>
+    <line x1="546" y1="155" x2="546" y2="195" stroke="#333"/>
+    <line x1="172" y1="155" x2="172" y2="195" stroke="#333"/>
+    <line x1="255.25" y1="227.5" x2="255.25" y2="300" stroke="#333"/>
+    <line x1="182.75" y1="300" x2="316" y2="300" stroke="#333"/>
+    <line x1="182.75" y1="300" x2="182.75" y2="340" stroke="#333"/>
+    <line x1="316" y1="300" x2="316" y2="340" stroke="#333"/>
+    <line x1="760.5" y1="82.5" x2="760.5" y2="171" stroke="#333"/>
+    <line x1="760.5" y1="171" x2="688" y2="171" stroke="#333"/>
+    <line x1="326.25" y1="171" x2="688" y2="171" stroke="#333"/>
+    <line x1="688" y1="171" x2="688" y2="195" stroke="#333"/>
+    <line x1="326.25" y1="171" x2="326.25" y2="195" stroke="#333"/>
+    <!-- Cards -->
+    <rect x="479.25" y="485" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="544.25" y="521.5" text-anchor="middle" font-size="10">N-Bridge Kid3 N</text>
+    <rect x="408.25" y="340" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="473.25" y="376.5" text-anchor="middle" font-size="10">NE-V2 Gk1 NE</text>
+    <rect x="50" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="115" y="86.5" text-anchor="middle" font-size="10">NE-V2 Hub NE</text>
+    <rect x="336" y="195" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="401" y="231.5" text-anchor="middle" font-size="10">NE-V2 K1 NE</text>
+    <rect x="194" y="195" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="259" y="231.5" text-anchor="middle" font-size="10">NE-V2 K1 Sp NE</text>
+    <rect x="192" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="257" y="86.5" text-anchor="middle" font-size="10">NE-V2 P1 NE</text>
+    <rect x="337.5" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="402.5" y="86.5" text-anchor="middle" font-size="10">NI-A Fa NI</text>
+    <rect x="479.5" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="544.5" y="86.5" text-anchor="middle" font-size="10">NI-A Mo NI</text>
+    <rect x="481" y="195" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="546" y="231.5" text-anchor="middle" font-size="10">NI-Bro1 NI</text>
+    <rect x="119.25" y="195" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="184.25" y="231.5" text-anchor="middle" font-size="10">NI-Bro2 NI</text>
+    <rect x="624.5" y="50" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="689.5" y="86.5" text-anchor="middle" font-size="10">NI-C Fa NI</text>
+    <rect x="766.5" y="50" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="831.5" y="86.5" text-anchor="middle" font-size="10">NI-C Mo NI</text>
+    <rect x="695.75" y="340" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="760.75" y="376.5" text-anchor="middle" font-size="10">NI-K1a NI</text>
+    <rect x="550.25" y="340" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="615.25" y="376.5" text-anchor="middle" font-size="10">NI-K1b NI</text>
+    <rect x="117.75" y="340" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="182.75" y="376.5" text-anchor="middle" font-size="10">NI-K2a NI</text>
+    <rect x="262.75" y="340" width="130" height="65" fill="#e3f2fd" stroke="#999"/>
+    <text x="327.75" y="376.5" text-anchor="middle" font-size="10">NI-K2b NI</text>
+    <rect x="623" y="195" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="688" y="231.5" text-anchor="middle" font-size="10">NI-Sis1 NI</text>
+    <rect x="261.25" y="195" width="130" height="65" fill="#fce4ec" stroke="#999"/>
+    <text x="326.25" y="231.5" text-anchor="middle" font-size="10">NI-Sis2 NI</text>
+  </g>
+</svg>

@@ -33,6 +33,21 @@ const DEFAULT_FIXTURES = [
     'edge-wide-family',
     'edge-placeholder-parents',
     'edge-marriage-cascade',
+    // Synthetic etalon: systematically designed constellations (see docs/ETALON.md).
+    'etalon-line-10gen',
+    'etalon-ancestors-binary5',
+    'etalon-wide-12',
+    'etalon-deep-both',
+    'etalon-multi-partners',
+    'etalon-merged-chain',
+    'etalon-ancestor-chain',
+    'etalon-cousin-marriage',
+    'etalon-double-inlaw',
+    'etalon-inlaw-loop',
+    'etalon-inlaw-column',
+    'etalon-descendant-partner-ancestors',
+    'etalon-incomplete-data',
+    'etalon-stress-all',
 ];
 const FIXTURES = (process.env.FIXTURES || DEFAULT_FIXTURES.join(','))
     .split(',')
@@ -66,6 +81,12 @@ const MODES = [
 const KNOWN_LINE_KNOTS = new Set([
     'real-large/p_1783746448938_6w3g1/standard',
     'real-large/p_1783746448938_6w3g1/expanded',
+    // Etalon scenario K (etalon-inlaw-column): isolated minimal reproduction of
+    // the same knot. With eK_focus as focus, the husband's paternal-grandparent
+    // stem must cross the focus's paternal-grandparent bus — the foreign in-law
+    // column stands inside that sibling-group bus span. Same class as above.
+    'etalon-inlaw-column/eK_focus/standard',
+    'etalon-inlaw-column/eK_focus/expanded',
 ]);
 
 for (const fixtureName of FIXTURES) {
