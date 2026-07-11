@@ -43,8 +43,32 @@ function findChainExtraPartner(
     if (primaryUnion?.partnerA) primaryCoupleIds.add(primaryUnion.partnerA);
     if (primaryUnion?.partnerB) primaryCoupleIds.add(primaryUnion.partnerB);
 
-    if (!primaryCoupleIds.has(union.partnerA)) return union.partnerA;
-    if (union.partnerB && !primaryCoupleIds.has(union.partnerB)) return union.partnerB;
+    const aOutside = !primaryCoupleIds.has(union.partnerA);
+    const bOutside = union.partnerB !== null && !primaryCoupleIds.has(union.partnerB);
+
+    if (aOutside && !bOutside) return union.partnerA;
+    if (bOutside && !aOutside) return union.partnerB;
+    if (aOutside && bOutside && union.partnerB) {
+        // Transitive chain link: BOTH partners are outside the primary couple.
+        // The stem belongs to the person FARTHER out in the chain order — the
+        // closer one already carries the stem of the previous link (two links
+        // stemming from the same card would merge into one vertical line).
+        const order = chainInfo.personOrder;
+        const primaryIdxs: number[] = [];
+        for (let i = 0; i < order.length; i++) {
+            if (primaryCoupleIds.has(order[i])) primaryIdxs.push(i);
+        }
+        const distance = (pid: PersonId): number => {
+            const i = order.indexOf(pid);
+            if (i < 0 || primaryIdxs.length === 0) return 0;
+            let best = Infinity;
+            for (const pi of primaryIdxs) best = Math.min(best, Math.abs(i - pi));
+            return best;
+        };
+        return distance(union.partnerB) > distance(union.partnerA)
+            ? union.partnerB
+            : union.partnerA;
+    }
     return null;
 }
 
@@ -461,8 +485,14 @@ function placeAncestorChain(
         // Place sibling blocks around the direct-line child
         placeSiblingsAround(block, directLineChild, blocks, model, unionToBlock, config, placedBlocks, sibDir);
 
-        // Center parent block over all children's couple-bounds
-        centerBlockOverChildren(block, blocks, model, unionToBlock, config);
+        if (block.childBlockIds.length === 0) {
+            // All children claimed by other blocks (pedigree collapse): anchor
+            // over the specific person like any spouse-parent block
+            setBlockPosition(block, anchorX, config);
+        } else {
+            // Center parent block over all children's couple-bounds
+            centerBlockOverChildren(block, blocks, model, unionToBlock, config);
+        }
         placedBlocks.add(blockId);
     }
 

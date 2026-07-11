@@ -39,8 +39,32 @@ function findChainExtraPartner(
     if (primaryUnion?.partnerA) primaryCoupleIds.add(primaryUnion.partnerA);
     if (primaryUnion?.partnerB) primaryCoupleIds.add(primaryUnion.partnerB);
 
-    if (!primaryCoupleIds.has(union.partnerA)) return union.partnerA;
-    if (union.partnerB && !primaryCoupleIds.has(union.partnerB)) return union.partnerB;
+    const aOutside = !primaryCoupleIds.has(union.partnerA);
+    const bOutside = union.partnerB !== null && !primaryCoupleIds.has(union.partnerB);
+
+    if (aOutside && !bOutside) return union.partnerA;
+    if (bOutside && !aOutside) return union.partnerB;
+    if (aOutside && bOutside && union.partnerB) {
+        // Transitive chain link: BOTH partners are outside the primary couple.
+        // The stem belongs to the person FARTHER out in the chain order — the
+        // closer one already carries the stem of the previous link (two links
+        // stemming from the same card would merge into one vertical line).
+        const order = chainInfo.personOrder;
+        const primaryIdxs: number[] = [];
+        for (let i = 0; i < order.length; i++) {
+            if (primaryCoupleIds.has(order[i])) primaryIdxs.push(i);
+        }
+        const distance = (pid: PersonId): number => {
+            const i = order.indexOf(pid);
+            if (i < 0 || primaryIdxs.length === 0) return 0;
+            let best = Infinity;
+            for (const pi of primaryIdxs) best = Math.min(best, Math.abs(i - pi));
+            return best;
+        };
+        return distance(union.partnerB) > distance(union.partnerA)
+            ? union.partnerB
+            : union.partnerA;
+    }
     return null;
 }
 
@@ -774,6 +798,28 @@ export function applyConstraints(input: ConstraintsInput): ConstrainedModel {
     const blocks = fbm.blocks;
     const model = measured.genModel.model;
 
+    {
+        const trapIds = (globalThis as unknown as { __TRAP_BLOCKS?: string[] }).__TRAP_BLOCKS;
+        if (trapIds) {
+            for (const tid of trapIds) {
+                const blk = blocks.get(tid as FamilyBlockId);
+                if (!blk) continue;
+                let val = blk.xCenter;
+                Object.defineProperty(blk, 'xCenter', {
+                    get() { return val; },
+                    set(v: number) {
+                        if (Math.abs(v - val) > 0.5) {
+                            console.log(`[TRAP] ${tid} xCenter ${val.toFixed(1)} -> ${v.toFixed(1)}\n` +
+                                new Error().stack?.split('\n').slice(2, 6).join('\n'));
+                        }
+                        val = v;
+                    },
+                    configurable: true,
+                });
+            }
+        }
+    }
+
     const branchModel = measured as BranchModel;
     const hasBranches = branchModel.branches && branchModel.branches.size > 0;
 
@@ -1365,13 +1411,15 @@ function resolveParentCoupleOverlaps(
 
             // Never move the focus-parent block; move the other one away from it
             let target = curr;
+            let other = prev;
             let delta = overlap;
             if (curr.block.id === focusParentBlockId) {
                 target = prev;
+                other = curr;
                 delta = -overlap;
             }
 
-            shiftAncestorComponent(target.block.id, delta, blocks);
+            shiftAncestorComponent(target.block.id, delta, blocks, other.block.id);
             target.left += delta;
             target.right += delta;
             shifted = true;
@@ -1385,11 +1433,19 @@ function resolveParentCoupleOverlaps(
  * Shift a block together with its ancestor component: the block itself, all
  * blocks reachable upward via parentBlockId, and their subtrees — but never
  * any block at gen >= 0 (descendant positions are locked by Phase A).
+ *
+ * `forbiddenBlockId` (the block this one is being pushed away from) must not
+ * be dragged along. In a pedigree collapse the two couples share an ancestor
+ * higher up — walking into the shared ancestor's subtree would capture the
+ * other couple and move both together. The upward walk stops before any
+ * ancestor whose subtree contains the forbidden block; the shared ancestors
+ * stay put and Phase B re-places them.
  */
 function shiftAncestorComponent(
     blockId: FamilyBlockId,
     deltaX: number,
-    blocks: Map<FamilyBlockId, FamilyBlock>
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    forbiddenBlockId?: FamilyBlockId
 ): void {
     const component = new Set<FamilyBlockId>();
 
@@ -1398,7 +1454,12 @@ function shiftAncestorComponent(
     while (currentId && !component.has(currentId)) {
         const block = blocks.get(currentId);
         if (!block || block.generation >= 0) break;
-        collectSubtreeAboveGen0(currentId, blocks, component);
+
+        const levelSubtree = new Set<FamilyBlockId>();
+        collectSubtreeAboveGen0(currentId, blocks, levelSubtree);
+        if (forbiddenBlockId && levelSubtree.has(forbiddenBlockId)) break;
+
+        for (const id of levelSubtree) component.add(id);
         currentId = block.parentBlockId;
     }
 
@@ -4007,6 +4068,14 @@ function recenterSiblingFamilyParents(
                 if (childBlockId) {
                     const childBlock = blocks.get(childBlockId);
                     if (childBlock) {
+                        // Pedigree collapse: a child living in a block CLAIMED
+                        // by another parent block must not pull this parent —
+                        // centering both parents over the same shared couple
+                        // block would stack them onto each other.
+                        if (childBlock.parentBlockId !== null &&
+                            childBlock.parentBlockId !== block.id) {
+                            continue;
+                        }
                         const childUnion = model.unions.get(childUnionId);
                         if (childUnion) {
                             const childWidth = childUnion.partnerB
