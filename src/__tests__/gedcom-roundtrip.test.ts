@@ -1,0 +1,197 @@
+/**
+ * GEDCOM round-trip tests.
+ *
+ * import -> export -> import must return identical data (IDs normalized), and
+ * export -> import -> export must return identical GEDCOM (volatile header
+ * lines stripped). Fixtures are inline strings — no real family data.
+ */
+
+import { describe, it, expect } from 'vitest';
+import { parseGedcom, convertToStrom } from '../ged-parser.js';
+import { exportToGedcom } from '../ged-exporter.js';
+import { StromData, PersonId, PartnershipId } from '../types.js';
+
+function importGed(ged: string): StromData {
+    return convertToStrom(parseGedcom(ged)).data;
+}
+
+function exportGed(data: StromData): string {
+    return exportToGedcom(data).content;
+}
+
+/**
+ * Re-key persons and partnerships to positional IDs (P0, P1, U0, …) so two
+ * imports of the same tree compare equal despite random generated IDs. Relies
+ * on the parser/exporter preserving record order across the round-trip.
+ */
+function normalize(data: StromData): StromData {
+    const pIds = Object.keys(data.persons) as PersonId[];
+    const uIds = Object.keys(data.partnerships) as PartnershipId[];
+    const p = new Map(pIds.map((id, i) => [id, `P${i}` as PersonId]));
+    const u = new Map(uIds.map((id, i) => [id, `U${i}` as PartnershipId]));
+
+    const persons: StromData['persons'] = {};
+    for (const id of pIds) {
+        const person = data.persons[id];
+        persons[p.get(id)!] = {
+            ...person,
+            id: p.get(id)!,
+            partnerships: person.partnerships.map(x => u.get(x)!),
+            parentIds: person.parentIds.map(x => p.get(x)!),
+            childIds: person.childIds.map(x => p.get(x)!),
+        };
+    }
+    const partnerships: StromData['partnerships'] = {};
+    for (const id of uIds) {
+        const part = data.partnerships[id];
+        partnerships[u.get(id)!] = {
+            ...part,
+            id: u.get(id)!,
+            person1Id: p.get(part.person1Id)!,
+            person2Id: p.get(part.person2Id)!,
+            childIds: part.childIds.map(x => p.get(x)!),
+        };
+    }
+    return { persons, partnerships };
+}
+
+/** Drop lines that legitimately vary (the generated header date). */
+function stripVolatile(ged: string): string {
+    return ged.split('\n').filter(l => !l.startsWith('1 DATE ')).join('\n');
+}
+
+const FIXTURES: Record<string, string> = {
+    'full family': [
+        '0 HEAD', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M',
+        '1 BIRT', '2 DATE 3 JUN 1900', '2 PLAC Praha',
+        '1 DEAT', '2 DATE 1970', '2 PLAC Brno',
+        '1 NOTE Founder of the family',
+        '0 @I2@ INDI', '1 NAME Marie /Novakova/', '1 SEX F', '1 BIRT', '2 DATE 1905',
+        '0 @I3@ INDI', '1 NAME Petr /Novak/', '1 SEX M', '1 BIRT', '2 DATE 1930',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 CHIL @I3@',
+        '1 MARR', '2 DATE 1925', '2 PLAC Brno', '1 NOTE Married in a small church',
+        '0 TRLR',
+    ].join('\n'),
+
+    'single parent': [
+        '0 HEAD', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Anna /Svobodova/', '1 SEX F',
+        '0 @I2@ INDI', '1 NAME Josef /Svoboda/', '1 SEX M',
+        '0 @I3@ INDI', '1 NAME Eva /Svobodova/', '1 SEX F',
+        '0 @F1@ FAM', '1 WIFE @I1@', '1 CHIL @I2@', '1 CHIL @I3@',
+        '0 TRLR',
+    ].join('\n'),
+
+    'divorce': [
+        '0 HEAD', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Karel /Dvorak/', '1 SEX M',
+        '0 @I2@ INDI', '1 NAME Jana /Dvorakova/', '1 SEX F',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@',
+        '1 MARR', '2 DATE 1950', '1 DIV', '2 DATE 1960',
+        '0 TRLR',
+    ].join('\n'),
+
+    'multiple marriages': [
+        '0 HEAD', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Adam /Kral/', '1 SEX M',
+        '0 @I2@ INDI', '1 NAME Bela /Kralova/', '1 SEX F',
+        '0 @I3@ INDI', '1 NAME Dana /Kralova/', '1 SEX F',
+        '0 @I4@ INDI', '1 NAME Cyril /Kral/', '1 SEX M',
+        '0 @I5@ INDI', '1 NAME Emil /Kral/', '1 SEX M',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 CHIL @I4@', '1 MARR', '2 DATE 1940',
+        '0 @F2@ FAM', '1 HUSB @I1@', '1 WIFE @I3@', '1 CHIL @I5@', '1 MARR', '2 DATE 1955',
+        '0 TRLR',
+    ].join('\n'),
+
+    'czech diacritics': [
+        '0 HEAD', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Bohuslav /Příliš/', '1 SEX M', '1 BIRT', '2 PLAC Žďár nad Sázavou',
+        '1 NOTE Přezdívka: Žluťoučký kůň',
+        '0 @I2@ INDI', '1 NAME Růžena /Přílišová/', '1 SEX F',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@',
+        '0 TRLR',
+    ].join('\n'),
+
+    'partial dates': [
+        '0 HEAD', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Old /Ancestor/', '1 SEX M', '1 BIRT', '2 DATE ABT 1780',
+        '1 DEAT', '2 DATE BEF 1850',
+        '0 @I2@ INDI', '1 NAME Year /Only/', '1 SEX F', '1 BIRT', '2 DATE 1800',
+        '0 @I3@ INDI', '1 NAME Month /Known/', '1 SEX M', '1 BIRT', '2 DATE MAR 1820',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 CHIL @I3@', '1 MARR', '2 DATE AFT 1799',
+        '0 TRLR',
+    ].join('\n'),
+
+    'nameless individual': [
+        '0 HEAD', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Known /Person/', '1 SEX M',
+        '0 @I2@ INDI', '1 SEX F',
+        '0 @I3@ INDI', '1 NAME Child /Person/', '1 SEX M',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 CHIL @I3@',
+        '0 TRLR',
+    ].join('\n'),
+};
+
+describe('GEDCOM round-trip', () => {
+    for (const [name, ged] of Object.entries(FIXTURES)) {
+        it(`data is stable across import->export->import: ${name}`, () => {
+            const data1 = importGed(ged);
+            const data2 = importGed(exportGed(data1));
+            expect(normalize(data2)).toEqual(normalize(data1));
+        });
+
+        it(`GEDCOM is stable across export->import->export: ${name}`, () => {
+            const data1 = importGed(ged);
+            const ged2 = exportGed(data1);
+            const ged3 = exportGed(importGed(ged2));
+            expect(stripVolatile(ged3)).toEqual(stripVolatile(ged2));
+        });
+    }
+
+    it('imports single-parent families with a placeholder partner (no drop)', () => {
+        const result = convertToStrom(parseGedcom(FIXTURES['single parent']));
+        const persons = Object.values(result.data.persons);
+        // 3 real + 1 placeholder partner
+        expect(persons.filter(p => !p.isPlaceholder)).toHaveLength(3);
+        expect(persons.filter(p => p.isPlaceholder)).toHaveLength(1);
+        // the two children are linked to a partnership
+        expect(Object.keys(result.data.partnerships)).toHaveLength(1);
+        const part = Object.values(result.data.partnerships)[0];
+        expect(part.childIds).toHaveLength(2);
+    });
+
+    it('keeps nameless individuals as placeholders instead of skipping them', () => {
+        const result = convertToStrom(parseGedcom(FIXTURES['nameless individual']));
+        expect(result.stats.placeholderPersons).toBe(1);
+        expect(Object.keys(result.data.persons)).toHaveLength(3);
+        // the family stays intact: father + placeholder mother + child
+        const part = Object.values(result.data.partnerships)[0];
+        expect(part.childIds).toHaveLength(1);
+    });
+
+    it('preserves Czech diacritics through a round-trip', () => {
+        const data = importGed(FIXTURES['czech diacritics']);
+        const father = Object.values(data.persons).find(p => p.firstName === 'Bohuslav');
+        expect(father?.lastName).toBe('Příliš');
+        expect(father?.birthPlace).toBe('Žďár nad Sázavou');
+        expect(father?.notes).toBe('Přezdívka: Žluťoučký kůň');
+    });
+
+    it('preserves partial-date qualifiers', () => {
+        const data = importGed(FIXTURES['partial dates']);
+        const byName = (n: string) => Object.values(data.persons).find(p => p.firstName === n);
+        expect(byName('Old')?.birthDate).toBe('~1780');
+        expect(byName('Old')?.deathDate).toBe('<1850');
+        expect(byName('Year')?.birthDate).toBe('1800');
+        expect(byName('Month')?.birthDate).toBe('1820-03');
+    });
+
+    it('round-trips marriage place and notes into partnership fields', () => {
+        const data = importGed(FIXTURES['full family']);
+        const part = Object.values(data.partnerships)[0];
+        expect(part.startDate).toBe('1925');
+        expect(part.startPlace).toBe('Brno');
+        expect(part.note).toBe('Married in a small church');
+    });
+});

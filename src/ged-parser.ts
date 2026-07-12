@@ -1,6 +1,17 @@
 /**
  * GEDCOM Parser Module
- * Parses GEDCOM files and converts them to Strom data format
+ * Parses GEDCOM files and converts them to Strom data format.
+ *
+ * Round-trip (import -> export -> import) is lossless for everything the data
+ * model represents: names, sex, birth/death date+place, individual notes,
+ * parent-child structure, placeholders (nameless individuals), single-parent
+ * families (a placeholder partner fills the missing spouse), and partnership
+ * married/divorced status with marriage date+place, divorce date, and note.
+ *
+ * Known unsupported (counted in stats.unsupportedTags, not representable in the
+ * model, so intentionally dropped): OCCU (no occupation field). Partnership
+ * statuses 'partners'/'separated' and the isPrimary flag have no GEDCOM
+ * equivalent and normalize to 'married' / unset on round-trip.
  */
 
 import {
@@ -26,6 +37,9 @@ interface GedcomIndividual {
     birthPlace: string;
     deathDate: string;
     deathPlace: string;
+    notes: string;
+    /** OCCU has no field in our model; kept only to count as unsupported. */
+    occupation: string;
     fams: string[];  // Families as spouse
     famc: string | null;  // Family as child
 }
@@ -37,7 +51,9 @@ interface GedcomFamily {
     wife: string | null;
     children: string[];
     marriageDate: string;
+    marriagePlace: string;
     divorceDate: string;
+    note: string;
 }
 
 /** Parsed GEDCOM data */
@@ -52,7 +68,10 @@ export interface GedcomConversionResult {
     stats: {
         totalPersons: number;
         totalPartnerships: number;
-        skippedPersons: number;
+        /** Nameless individuals imported as placeholders (kept, not dropped). */
+        placeholderPersons: number;
+        /** Count of encountered tags our data model cannot represent (see header). */
+        unsupportedTags: number;
         totalGedFamilies: number;
     };
 }
@@ -177,6 +196,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     birthPlace: '',
                     deathDate: '',
                     deathPlace: '',
+                    notes: '',
+                    occupation: '',
                     fams: [],
                     famc: null
                 };
@@ -189,7 +210,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                     wife: null,
                     children: [],
                     marriageDate: '',
-                    divorceDate: ''
+                    marriagePlace: '',
+                    divorceDate: '',
+                    note: ''
                 };
                 currentType = 'FAM';
                 families.set(tag, currentRecord as GedcomFamily);
@@ -221,6 +244,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case 'FAMC':
                             indi.famc = value;
                             break;
+                        case 'NOTE':
+                            indi.notes = value;
+                            break;
+                        case 'OCCU':
+                            indi.occupation = value;
+                            break;
                     }
                 } else if (currentType === 'FAM') {
                     const fam = currentRecord as GedcomFamily;
@@ -234,6 +263,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case 'CHIL':
                             fam.children.push(value);
                             break;
+                        case 'NOTE':
+                            fam.note = value;
+                            break;
                     }
                 }
             } else if (level === 2) {
@@ -245,13 +277,21 @@ export function parseGedcom(content: string): ParsedGedcom {
                     } else if (currentSubTag === 'DEAT') {
                         if (tag === 'DATE') indi.deathDate = parseGedcomDate(value);
                         if (tag === 'PLAC') indi.deathPlace = value;
+                    } else if (currentSubTag === 'NOTE') {
+                        // Multi-line notes: CONT = new line, CONC = continuation.
+                        if (tag === 'CONT') indi.notes += '\n' + value;
+                        else if (tag === 'CONC') indi.notes += value;
                     }
                 } else if (currentType === 'FAM') {
                     const fam = currentRecord as GedcomFamily;
                     if (currentSubTag === 'MARR') {
                         if (tag === 'DATE') fam.marriageDate = parseGedcomDate(value);
+                        if (tag === 'PLAC') fam.marriagePlace = value;
                     } else if (currentSubTag === 'DIV') {
                         if (tag === 'DATE') fam.divorceDate = parseGedcomDate(value);
+                    } else if (currentSubTag === 'NOTE') {
+                        if (tag === 'CONT') fam.note += '\n' + value;
+                        else if (tag === 'CONC') fam.note += value;
                     }
                 }
             }
@@ -269,17 +309,14 @@ export function parseGedcom(content: string): ParsedGedcom {
 export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     const { individuals, families } = gedcom;
 
-    // Filter out persons with empty names (unknown ancestors)
-    const validIndividuals = new Map<string, GedcomIndividual>();
-    const skippedIds = new Set<string>();
-
-    for (const [gedId, indi] of individuals) {
-        // Skip if both firstName and lastName are empty
-        if (!indi.firstName && !indi.lastName) {
-            skippedIds.add(gedId);
-            continue;
-        }
-        validIndividuals.set(gedId, indi);
+    // Keep ALL individuals. Nameless ones (unknown ancestors) become
+    // placeholders instead of being dropped, so relationships stay intact.
+    const validIndividuals = individuals;
+    let placeholderPersons = 0;
+    let unsupportedTags = 0;
+    for (const indi of individuals.values()) {
+        if (!indi.firstName && !indi.lastName) placeholderPersons++;
+        if (indi.occupation) unsupportedTags++;
     }
 
     // Create ID mappings (only for valid individuals)
@@ -314,6 +351,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (indi.birthPlace) person.birthPlace = indi.birthPlace;
         if (indi.deathDate) person.deathDate = indi.deathDate;
         if (indi.deathPlace) person.deathPlace = indi.deathPlace;
+        if (indi.notes) person.notes = indi.notes;
 
         persons[personId] = person;
     }
@@ -342,6 +380,12 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
 
         if (fam.marriageDate) {
             partnership.startDate = fam.marriageDate;
+        }
+        if (fam.marriagePlace) {
+            partnership.startPlace = fam.marriagePlace;
+        }
+        if (fam.note) {
+            partnership.note = fam.note;
         }
 
         if (fam.divorceDate) {
@@ -414,20 +458,33 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         };
         persons[placeholderId] = placeholder;
 
-        // Create partnership between parent and placeholder
+        // Create partnership. Keep the male partner as person1 (HUSB), matching
+        // the two-parent path and the exporter, so import->export->import is
+        // order-stable even when the known parent is the mother.
+        const parentIsMale = parentGender === 'male';
+        const person1Id = parentIsMale ? parentId : placeholderId;
+        const person2Id = parentIsMale ? placeholderId : parentId;
+
         const partnershipId = toPartnershipId(generateId('u'));
         const partnership: Partnership = {
             id: partnershipId,
-            person1Id: parentId,
-            person2Id: placeholderId,
+            person1Id,
+            person2Id,
             childIds: [],
             status: 'married'
         };
+        if (fam.marriageDate) partnership.startDate = fam.marriageDate;
+        if (fam.marriagePlace) partnership.startPlace = fam.marriagePlace;
+        if (fam.note) partnership.note = fam.note;
+        if (fam.divorceDate) {
+            partnership.endDate = fam.divorceDate;
+            partnership.status = 'divorced';
+        }
         partnerships[partnershipId] = partnership;
 
         // Add partnership to both persons
-        persons[parentId].partnerships.push(partnershipId);
-        placeholder.partnerships.push(partnershipId);
+        persons[person1Id].partnerships.push(partnershipId);
+        persons[person2Id].partnerships.push(partnershipId);
 
         // Process children
         for (const childGedId of fam.children) {
@@ -437,19 +494,21 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             // Add to partnership's childIds
             partnership.childIds.push(childId);
 
-            // Add parents to child's parentIds
-            if (!persons[childId].parentIds.includes(parentId)) {
-                persons[childId].parentIds.push(parentId);
+            // Add parents to child's parentIds (person1, then person2)
+            if (!persons[childId].parentIds.includes(person1Id)) {
+                persons[childId].parentIds.push(person1Id);
             }
-            if (!persons[childId].parentIds.includes(placeholderId)) {
-                persons[childId].parentIds.push(placeholderId);
+            if (!persons[childId].parentIds.includes(person2Id)) {
+                persons[childId].parentIds.push(person2Id);
             }
 
             // Add child to parents' childIds
-            if (!persons[parentId].childIds.includes(childId)) {
-                persons[parentId].childIds.push(childId);
+            if (!persons[person1Id].childIds.includes(childId)) {
+                persons[person1Id].childIds.push(childId);
             }
-            placeholder.childIds.push(childId);
+            if (!persons[person2Id].childIds.includes(childId)) {
+                persons[person2Id].childIds.push(childId);
+            }
         }
     }
 
@@ -461,7 +520,8 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         stats: {
             totalPersons: Object.keys(persons).length,
             totalPartnerships: Object.keys(partnerships).length,
-            skippedPersons: skippedIds.size,
+            placeholderPersons,
+            unsupportedTags,
             totalGedFamilies: families.size
         }
     };

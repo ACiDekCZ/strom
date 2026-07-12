@@ -78,6 +78,18 @@ function escapeGedcomText(text: string): string {
 }
 
 /**
+ * Emit a NOTE structure, splitting embedded newlines into CONT lines so
+ * multi-line notes survive the round-trip.
+ */
+function pushNote(lines: string[], level: number, text: string): void {
+    const parts = text.split('\n');
+    lines.push(`${level} NOTE ${escapeGedcomText(parts[0])}`);
+    for (let i = 1; i < parts.length; i++) {
+        lines.push(`${level + 1} CONT ${escapeGedcomText(parts[i])}`);
+    }
+}
+
+/**
  * Export StromData to GEDCOM 5.5.1 format
  */
 export function exportToGedcom(data: StromData, treeName?: string): GedcomExportResult {
@@ -128,16 +140,16 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
         const gedcomId = personIdMap.get(personId);
         if (!gedcomId) continue;
 
-        // Skip placeholder persons with no meaningful data
-        if (person.isPlaceholder && person.firstName === '?' && !person.lastName) {
-            continue;
-        }
-
         lines.push(`0 ${gedcomId} INDI`);
 
-        // Name
-        const name = formatGedcomName(person.firstName, person.lastName);
-        lines.push(`1 NAME ${escapeGedcomText(name)}`);
+        // Name. Placeholders are exported with an empty name so they re-import
+        // as placeholders (lossless), instead of being dropped.
+        if (person.isPlaceholder && (person.firstName === '?' || !person.firstName) && !person.lastName) {
+            lines.push('1 NAME //');
+        } else {
+            const name = formatGedcomName(person.firstName, person.lastName);
+            lines.push(`1 NAME ${escapeGedcomText(name)}`);
+        }
 
         // Sex
         lines.push(`1 SEX ${person.gender === 'male' ? 'M' : 'F'}`);
@@ -164,6 +176,11 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
             if (person.deathPlace) {
                 lines.push(`2 PLAC ${escapeGedcomText(person.deathPlace)}`);
             }
+        }
+
+        // Note
+        if (person.notes) {
+            pushNote(lines, 1, person.notes);
         }
 
         // Family as spouse (FAMS) - partnerships where this person is a partner
@@ -193,26 +210,25 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
         const person1 = data.persons[partnership.person1Id];
         const person2 = data.persons[partnership.person2Id];
 
-        // Skip if both persons are placeholders
-        if (person1?.isPlaceholder && person2?.isPlaceholder) {
-            continue;
-        }
-
         lines.push(`0 ${gedcomId} FAM`);
 
-        // Determine HUSB/WIFE based on gender
-        // GEDCOM 5.5.1 uses HUSB for male, WIFE for female
-        // For same-sex couples, we use HUSB for first person, WIFE for second
-        if (person1 && personIdMap.has(partnership.person1Id)) {
-            const role = person1.gender === 'male' ? 'HUSB' : 'WIFE';
-            lines.push(`1 ${role} ${personIdMap.get(partnership.person1Id)}`);
+        // Determine HUSB/WIFE by gender (male = HUSB, female = WIFE). For a
+        // mixed-gender couple this is independent of person1/person2 order, so
+        // HUSB is always emitted before WIFE and the GEDCOM is round-trip
+        // stable. Same-gender couples keep person1 = HUSB, person2 = WIFE.
+        const p1Id = partnership.person1Id;
+        const p2Id = partnership.person2Id;
+        let husbId = p1Id;
+        let wifeId = p2Id;
+        if (person1 && person2 && (person1.gender === 'male') !== (person2.gender === 'male')) {
+            husbId = person1.gender === 'male' ? p1Id : p2Id;
+            wifeId = person1.gender === 'male' ? p2Id : p1Id;
         }
-        if (person2 && personIdMap.has(partnership.person2Id)) {
-            const role = person2.gender === 'male' ? 'HUSB' : 'WIFE';
-            // Avoid duplicate HUSB or WIFE tags for same-sex couples
-            const person1Role = person1?.gender === 'male' ? 'HUSB' : 'WIFE';
-            const role2 = role === person1Role ? (role === 'HUSB' ? 'WIFE' : 'HUSB') : role;
-            lines.push(`1 ${role2} ${personIdMap.get(partnership.person2Id)}`);
+        if (personIdMap.has(husbId)) {
+            lines.push(`1 HUSB ${personIdMap.get(husbId)}`);
+        }
+        if (personIdMap.has(wifeId)) {
+            lines.push(`1 WIFE ${personIdMap.get(wifeId)}`);
         }
 
         // Children
@@ -247,7 +263,7 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
 
         // Note
         if (partnership.note) {
-            lines.push(`1 NOTE ${escapeGedcomText(partnership.note)}`);
+            pushNote(lines, 1, partnership.note);
         }
     }
 

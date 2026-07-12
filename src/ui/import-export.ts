@@ -251,11 +251,13 @@ export const importExportMethods = uiModule({
         // Update stats
         const personsEl = document.getElementById('gedcom-stat-persons');
         const partnershipsEl = document.getElementById('gedcom-stat-partnerships');
-        const skippedEl = document.getElementById('gedcom-stat-skipped');
+        const placeholdersEl = document.getElementById('gedcom-stat-placeholders');
+        const unsupportedEl = document.getElementById('gedcom-stat-unsupported');
 
         if (personsEl) personsEl.textContent = String(this.gedcomResult.stats.totalPersons);
         if (partnershipsEl) partnershipsEl.textContent = String(this.gedcomResult.stats.totalPartnerships);
-        if (skippedEl) skippedEl.textContent = String(this.gedcomResult.stats.skippedPersons);
+        if (placeholdersEl) placeholdersEl.textContent = String(this.gedcomResult.stats.placeholderPersons);
+        if (unsupportedEl) unsupportedEl.textContent = String(this.gedcomResult.stats.unsupportedTags);
 
         // Show/hide buttons based on context
         const newTreeBtn = document.getElementById('gedcom-new-tree-btn');
