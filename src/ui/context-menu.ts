@@ -38,6 +38,9 @@ export const contextMenuMethods = uiModule({
                 <div class="context-menu-item" data-action="relationship">
                     <span class="icon">&#129309;</span> ${strings.contextMenu.relationship}
                 </div>
+                <div class="context-menu-item" data-action="archives">
+                    <span class="icon">&#128218;</span> ${strings.contextMenu.archives}
+                </div>
             `;
         } else if (isPersonLocked) {
             // Locked person: Focus + optional unlock (if tree is not locked)
@@ -63,6 +66,9 @@ export const contextMenuMethods = uiModule({
                 </div>
                 <div class="context-menu-item" data-action="relationship">
                     <span class="icon">&#129309;</span> ${strings.contextMenu.relationship}
+                </div>
+                <div class="context-menu-item" data-action="archives">
+                    <span class="icon">&#128218;</span> ${strings.contextMenu.archives}
                 </div>
                 <div class="context-menu-divider"></div>
                 ${person.parentIds.length < 2 ? `
@@ -117,6 +123,9 @@ export const contextMenuMethods = uiModule({
                         break;
                     case 'relationship':
                         this.showRelationshipCalculator(personId);
+                        break;
+                    case 'archives':
+                        this.showArchiveSearch(personId);
                         break;
                     case 'parent':
                     case 'partner':

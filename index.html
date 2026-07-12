@@ -1664,7 +1664,18 @@
             border-color: var(--primary);
         }
         /* Make empty date input placeholder very light */
-                /* Relationship calculator */
+                /* Archive search */
+        .archives-modal { max-width: 520px; }
+        .archives-modal h3 { margin: 12px 0 6px; font-size: 0.95em; opacity: 0.8; }
+        .archive-link { display: block; padding: 8px 10px; margin: 4px 0; border-radius: 8px;
+            background: rgba(127,127,127,0.08); text-decoration: none; color: inherit; }
+        .archive-link:hover { background: rgba(127,127,127,0.18); }
+        .archive-link-name { display: block; font-weight: 600; }
+        .archive-link-hint { display: block; font-size: 0.8em; opacity: 0.7; }
+        .archive-disclaimer { font-size: 0.75em; opacity: 0.6; margin-top: 10px; }
+        .archives-modal details summary { cursor: pointer; font-size: 0.9em; margin: 6px 0; }
+        @media (max-width: 500px) { .archives-modal { max-width: 94vw; } }
+        /* Relationship calculator */
         .kinship-modal { max-width: 480px; }
         .kinship-result { margin: 12px 0; padding: 10px 12px; border-radius: 8px; background: rgba(127,127,127,0.08); }
         .kinship-term { font-weight: 700; color: var(--accent-color, #4a90d9); }

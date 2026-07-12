@@ -57,6 +57,7 @@ import { treeManagementMethods } from './tree-management.js';
 import { miscMethods } from './misc.js';
 import { appModeMethods } from './app-mode.js';
 import { kinshipUiMethods } from './kinship-ui.js';
+import { archivesUiMethods } from './archives-ui.js';
 
 export class UIClass {
     currentId: PersonId | null = null;
@@ -194,5 +195,9 @@ Object.assign(UIClass.prototype, appModeMethods);
 type KinshipUiMethods = typeof kinshipUiMethods;
 export interface UIClass extends KinshipUiMethods {}
 Object.assign(UIClass.prototype, kinshipUiMethods);
+
+type ArchivesUiMethods = typeof archivesUiMethods;
+export interface UIClass extends ArchivesUiMethods {}
+Object.assign(UIClass.prototype, archivesUiMethods);
 
 export const UI = new UIClass();

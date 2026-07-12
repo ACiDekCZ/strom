@@ -112,6 +112,17 @@ const stringsEN = {
         flexDate: '5/15/1880 · 5/1880 · 1880 · about 1880'
     },
 
+    // Archive search
+    archives: {
+        title: 'Search in archives',
+        internationalSection: 'International',
+        czechSection: 'Czech registers (matriky)',
+        familySearchHint: 'Prefilled record search (name, years, place)',
+        suggestedFor: 'Suggested for',
+        allPortals: 'All Czech regional archives',
+        disclaimer: 'External sites open in a new tab. Suggestions are based on place names and may not be accurate.',
+    },
+
     // Relationship calculator
     kinship: {
         title: 'Relationship',
@@ -128,6 +139,7 @@ const stringsEN = {
         edit: 'Edit',
         focus: 'Focus',
         relationship: 'Find relationship…',
+        archives: 'Search in archives…',
         addParent: 'Add Parent',
         addPartner: 'Add Partner',
         addChild: 'Add Child',
@@ -903,6 +915,17 @@ const stringsCZ: StringsType = {
         flexDate: '15.5.1880 · 5/1880 · 1880 · kolem 1880'
     },
 
+    // Archive search
+    archives: {
+        title: 'Hledat v archivech',
+        internationalSection: 'Mezinárodní',
+        czechSection: 'České matriky',
+        familySearchHint: 'Předvyplněné hledání záznamů (jméno, roky, místo)',
+        suggestedFor: 'Doporučeno pro',
+        allPortals: 'Všechny oblastní archivy ČR',
+        disclaimer: 'Externí weby se otevřou v nové záložce. Doporučení vychází z názvů míst a nemusí být přesné.',
+    },
+
     // Relationship calculator
     kinship: {
         title: 'Příbuzenský vztah',
@@ -919,6 +942,7 @@ const stringsCZ: StringsType = {
         edit: 'Upravit',
         focus: 'Zaměřit',
         relationship: 'Zjistit vztah…',
+        archives: 'Hledat v archivech…',
         addParent: 'Přidat rodiče',
         addPartner: 'Přidat partnera',
         addChild: 'Přidat dítě',
