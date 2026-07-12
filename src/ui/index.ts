@@ -58,6 +58,7 @@ import { miscMethods } from './misc.js';
 import { appModeMethods } from './app-mode.js';
 import { kinshipUiMethods } from './kinship-ui.js';
 import { archivesUiMethods } from './archives-ui.js';
+import { exportImageMethods } from './export-image-ui.js';
 
 export class UIClass {
     currentId: PersonId | null = null;
@@ -199,5 +200,9 @@ Object.assign(UIClass.prototype, kinshipUiMethods);
 type ArchivesUiMethods = typeof archivesUiMethods;
 export interface UIClass extends ArchivesUiMethods {}
 Object.assign(UIClass.prototype, archivesUiMethods);
+
+type ExportImageMethods = typeof exportImageMethods;
+export interface UIClass extends ExportImageMethods {}
+Object.assign(UIClass.prototype, exportImageMethods);
 
 export const UI = new UIClass();

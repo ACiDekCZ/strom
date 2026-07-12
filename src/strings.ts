@@ -853,6 +853,27 @@ const stringsEN = {
         modeAnonymous: 'Hide names',
         modeMinimal: 'Keep surname only',
         stripPhotos: 'Export without photos'
+    },
+
+    // Poster export (SVG / PNG / tiled PDF)
+    poster: {
+        menu: 'Export poster',
+        title: 'Export as poster',
+        description: 'Export the current tree as a vector, image, or printable multi-page poster.',
+        svg: 'SVG (vector)',
+        svgDesc: 'Scalable vector, opens in a browser or Inkscape',
+        png: 'PNG (image)',
+        pngDesc: 'High-resolution raster image',
+        pdf: 'Print / PDF (tiled)',
+        pdfDesc: 'Print across multiple pages with glue marks',
+        format: 'Paper size',
+        orientation: 'Orientation',
+        portrait: 'Portrait',
+        landscape: 'Landscape',
+        empty: 'Nothing to export — open a tree first.',
+        pngScaledDown: 'The image was scaled down to fit the size limit.',
+        pngError: 'Could not create the image.',
+        pageLabel: (row: number, col: number) => `row ${row} · col ${col}`
     }
 };
 
@@ -1697,6 +1718,27 @@ const stringsCZ: StringsType = {
         modeAnonymous: 'Skrýt jména',
         modeMinimal: 'Ponechat jen příjmení',
         stripPhotos: 'Exportovat bez fotek'
+    },
+
+    // Poster export (SVG / PNG / tiled PDF)
+    poster: {
+        menu: 'Export plakátu',
+        title: 'Export jako plakát',
+        description: 'Exportuj aktuální strom jako vektor, obrázek nebo tisknutelný plakát na více stran.',
+        svg: 'SVG (vektor)',
+        svgDesc: 'Škálovatelný vektor, otevře se v prohlížeči nebo Inkscape',
+        png: 'PNG (obrázek)',
+        pngDesc: 'Rastrový obrázek ve vysokém rozlišení',
+        pdf: 'Tisk / PDF (dlaždice)',
+        pdfDesc: 'Tisk na více stran se značkami pro slepení',
+        format: 'Formát papíru',
+        orientation: 'Orientace',
+        portrait: 'Na výšku',
+        landscape: 'Na šířku',
+        empty: 'Není co exportovat — nejdřív otevři strom.',
+        pngScaledDown: 'Obrázek byl zmenšen kvůli limitu velikosti.',
+        pngError: 'Obrázek se nepodařilo vytvořit.',
+        pageLabel: (row: number, col: number) => `řádek ${row} · sloupec ${col}`
     }
 };
 

@@ -4768,6 +4768,9 @@
         @media (max-width: 900px) { .card-tooltip { display: none !important; } }
 
         /* Print CSS */
+        /* Tiled poster print container: hidden on screen, shown only while printing. */
+        #poster-print { display: none; }
+
         @media print {
             .toolbar, .zoom-controls, .add-btn, .mobile-menu,
             .context-menu, .modal-overlay, .rel-link-icon,
@@ -4865,6 +4868,7 @@
         <button class="edit-only" onclick="window.Strom.UI.performUndo(); window.Strom.UI.closeMobileMenu()">↶ <span data-i18n="undo.undo"></span></button>
         <button class="edit-only" onclick="window.Strom.UI.performRedo(); window.Strom.UI.closeMobileMenu()">↷ <span data-i18n="undo.redo"></span></button>
         <button class="edit-only" onclick="window.Strom.UI.showTreeManagerDialog(); window.Strom.UI.closeMobileMenu()">🌳 <span data-i18n="treeManager.manageTreesTitle"></span></button>
+        <button onclick="window.Strom.UI.showPosterDialog()">🖼️ <span data-i18n="poster.menu"></span></button>
         <button onclick="window.Strom.UI.showSettingsDialog(); window.Strom.UI.closeMobileMenu()">⚙ <span data-i18n="settings.title"></span></button>
     </div>
 
@@ -5233,6 +5237,66 @@
                         <span class="option-desc" data-i18n="menu.exportGedcomDesc"></span>
                     </span>
                 </button>
+                <button class="menu-option" onclick="window.Strom.UI.closeExportDialog(); window.Strom.UI.showPosterDialog()">
+                    <span class="option-icon">🖼️</span>
+                    <span class="option-text">
+                        <span class="option-title" data-i18n="poster.title"></span>
+                        <span class="option-desc" data-i18n="poster.description"></span>
+                    </span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Poster Export Dialog -->
+    <div class="modal-overlay" id="poster-modal">
+        <div class="modal menu-modal">
+            <div class="modal-header">
+                <h2 data-i18n="poster.title"></h2>
+                <button class="close-btn" onclick="window.Strom.UI.closePosterDialog()">&times;</button>
+            </div>
+            <p class="modal-description" data-i18n="poster.description"></p>
+            <div class="form-row">
+                <div class="form-group half">
+                    <label data-i18n="poster.format"></label>
+                    <select id="poster-format">
+                        <option value="A4">A4</option>
+                        <option value="A3">A3</option>
+                    </select>
+                </div>
+                <div class="form-group half">
+                    <label data-i18n="poster.orientation"></label>
+                    <select id="poster-orientation">
+                        <option value="portrait" data-i18n="poster.portrait"></option>
+                        <option value="landscape" data-i18n="poster.landscape"></option>
+                    </select>
+                </div>
+            </div>
+            <div class="menu-options">
+                <button class="menu-option" onclick="window.Strom.UI.exportPosterSvg()">
+                    <span class="option-icon">🖼️</span>
+                    <span class="option-text">
+                        <span class="option-title" data-i18n="poster.svg"></span>
+                        <span class="option-desc" data-i18n="poster.svgDesc"></span>
+                    </span>
+                </button>
+                <button class="menu-option" onclick="window.Strom.UI.exportPosterPng()">
+                    <span class="option-icon">📷</span>
+                    <span class="option-text">
+                        <span class="option-title" data-i18n="poster.png"></span>
+                        <span class="option-desc" data-i18n="poster.pngDesc"></span>
+                    </span>
+                </button>
+                <button class="menu-option" onclick="window.Strom.UI.printPosterPdf()">
+                    <span class="option-icon">🖨️</span>
+                    <span class="option-text">
+                        <span class="option-title" data-i18n="poster.pdf"></span>
+                        <span class="option-desc" data-i18n="poster.pdfDesc"></span>
+                    </span>
+                </button>
+            </div>
+            <div class="buttons">
+                <button class="secondary" onclick="window.Strom.UI.closePosterDialog()" data-i18n="buttons.cancel"></button>
             </div>
         </div>
     </div>

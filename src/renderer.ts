@@ -402,6 +402,18 @@ class TreeRendererClass {
     }
 
     /**
+     * Current layout geometry (positions/connections/spouse lines) for the
+     * poster export. Empty when nothing is rendered.
+     */
+    getPosterLayout(): { positions: Map<PersonId, Position>; connections: Connection[]; spouseLines: SpouseLine[] } {
+        return {
+            positions: this.positions,
+            connections: this.connections,
+            spouseLines: this.spouseLines,
+        };
+    }
+
+    /**
      * Get focused data as StromData object (for creating new tree from focus)
      */
     getFocusedData(): import('./types.js').StromData | null {
