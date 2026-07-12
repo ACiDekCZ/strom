@@ -1664,6 +1664,12 @@
             border-color: var(--primary);
         }
         /* Make empty date input placeholder very light */
+                .modal input.flex-date.invalid,
+        .partnership-start-date.invalid,
+        .partnership-end-date.invalid {
+            border-color: #d9534f !important;
+            background: rgba(217, 83, 79, 0.08);
+        }
         .modal input[type="date"]::-webkit-datetime-edit-text,
         .modal input[type="date"]::-webkit-datetime-edit-month-field,
         .modal input[type="date"]::-webkit-datetime-edit-day-field,
@@ -4849,7 +4855,7 @@
             </div>
             <div class="form-group">
                 <label data-i18n="labels.birthDate"></label>
-                <input type="date" id="input-birthdate">
+                <input type="text" class="flex-date" id="input-birthdate" autocomplete="off" data-i18n-placeholder="placeholders.flexDate" inputmode="text">
             </div>
             <div class="form-group">
                 <label data-i18n="labels.birthPlace"></label>
@@ -4862,7 +4868,7 @@
                 <div class="form-row">
                     <div class="form-group half">
                         <label data-i18n="labels.deathDate"></label>
-                        <input type="date" id="input-deathdate">
+                        <input type="text" class="flex-date" id="input-deathdate" autocomplete="off" data-i18n-placeholder="placeholders.flexDate" inputmode="text">
                     </div>
                     <div class="form-group half">
                         <label data-i18n="labels.deathPlace"></label>

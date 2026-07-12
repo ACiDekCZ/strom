@@ -17,37 +17,40 @@ export interface GedcomExportResult {
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
 /**
- * Format ISO date (YYYY-MM-DD) to GEDCOM format (D MON YYYY)
- * Handles partial dates (year only, year-month)
+ * Format a canonical flex date (see src/dates.ts) to GEDCOM format.
+ * Preserves precision and qualifiers: "~1900" -> "ABT 1900",
+ * "1900-06" -> "JUN 1900", "<1900-06-03" -> "BEF 3 JUN 1900".
  */
 function formatGedcomDate(isoDate: string | undefined): string | null {
     if (!isoDate) return null;
 
-    const parts = isoDate.split('-');
+    // Flex-date qualifier prefix -> GEDCOM keyword
+    let prefix = '';
+    let value = isoDate;
+    const q = value[0];
+    if (q === '~' || q === '<' || q === '>') {
+        prefix = q === '~' ? 'ABT ' : q === '<' ? 'BEF ' : 'AFT ';
+        value = value.slice(1);
+    }
+
+    const parts = value.split('-');
     if (parts.length === 0) return null;
 
     const year = parts[0];
-    if (!year || year.length !== 4) return null;
-
-    // Year only
-    if (parts.length === 1 || (parts[1] === '01' && parts[2] === '01' && parts.length === 3)) {
-        // Check if it's really just a year (common pattern: 1942-01-01 for "just 1942")
-        // We'll assume if month is 01 and day is 01, it might be a year-only date
-        // But we can't be 100% sure, so we'll output full date to be safe
-    }
+    if (!year || year.length < 3 || year.length > 4) return null;
 
     const month = parts[1] ? parseInt(parts[1], 10) : null;
     const day = parts[2] ? parseInt(parts[2], 10) : null;
 
     if (month && day) {
         // Full date: D MON YYYY
-        return `${day} ${MONTHS[month - 1]} ${year}`;
+        return `${prefix}${day} ${MONTHS[month - 1]} ${year}`;
     } else if (month) {
         // Year and month: MON YYYY
-        return `${MONTHS[month - 1]} ${year}`;
+        return `${prefix}${MONTHS[month - 1]} ${year}`;
     } else {
         // Year only: YYYY
-        return year;
+        return `${prefix}${year}`;
     }
 }
 

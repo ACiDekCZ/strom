@@ -41,6 +41,19 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
+import { yearOf, parseFlexDate, formatFlexDate } from '../dates.js';
+
+
+/**
+ * Flex-date components for anniversary math: [year, month, day].
+ * Missing parts come back as NaN so existing `if (month && day)` guards
+ * skip partial dates; qualified dates still yield a numeric year.
+ */
+function flexDateParts(value: string): [number, number, number] {
+    const d = parseFlexDate(value);
+    if (!d) return [NaN, NaN, NaN];
+    return [d.year, d.month ?? NaN, d.day ?? NaN];
+}
 
 export const treeStatsMethods = uiModule({
     /**
@@ -339,8 +352,8 @@ export const treeStatsMethods = uiModule({
         const isPresumedDeceased = (p: { birthDate?: string; deathDate?: string }): boolean => {
             if (p.deathDate) return true;
             if (p.birthDate) {
-                const birthYear = parseInt(p.birthDate.split('-')[0], 10);
-                if (!isNaN(birthYear) && (currentYear - birthYear) > MAX_AGE) return true;
+                const birthYear = yearOf(p.birthDate);
+                if (birthYear !== null && (currentYear - birthYear) > MAX_AGE) return true;
             }
             return false;
         };
@@ -485,8 +498,8 @@ export const treeStatsMethods = uiModule({
         const isPresumedDeceased = (person: { birthDate?: string; deathDate?: string }): boolean => {
             if (person.deathDate) return true;
             if (person.birthDate) {
-                const birthYear = parseInt(person.birthDate.split('-')[0], 10);
-                if (!isNaN(birthYear) && (todayYear - birthYear) > MAX_AGE) {
+                const birthYear = yearOf(person.birthDate);
+                if (birthYear !== null && (todayYear - birthYear) > MAX_AGE) {
                     return true;
                 }
             }
@@ -511,7 +524,7 @@ export const treeStatsMethods = uiModule({
 
             // Birthday / Birth anniversary
             if (person.birthDate) {
-                const [year, month, day] = person.birthDate.split('-').map(Number);
+                const [year, month, day] = flexDateParts(person.birthDate);
                 if (month && day) {
                     const daysUntil = getDaysUntil(month - 1, day);
                     if (daysUntil <= 30) {
@@ -544,7 +557,7 @@ export const treeStatsMethods = uiModule({
 
             // Death memorial
             if (person.deathDate) {
-                const [year, month, day] = person.deathDate.split('-').map(Number);
+                const [year, month, day] = flexDateParts(person.deathDate);
                 if (month && day) {
                     const daysUntil = getDaysUntil(month - 1, day);
                     if (daysUntil <= 30) {
@@ -565,7 +578,7 @@ export const treeStatsMethods = uiModule({
         // Process partnerships for wedding/relationship anniversaries
         for (const partnership of Object.values(treeData.partnerships)) {
             if (partnership.startDate) {
-                const [year, month, day] = partnership.startDate.split('-').map(Number);
+                const [year, month, day] = flexDateParts(partnership.startDate);
                 if (month && day) {
                     const daysUntil = getDaysUntil(month - 1, day);
                     if (daysUntil <= 30) {
@@ -621,11 +634,7 @@ export const treeStatsMethods = uiModule({
      */
     formatDateShort(dateStr: string): string {
         if (!dateStr || dateStr === '-') return '-';
-        const parts = dateStr.split('-');
-        if (parts.length === 3) {
-            return `${parts[2]}.${parts[1]}.${parts[0]}`;
-        }
-        return dateStr;
+        return formatFlexDate(dateStr);
     },
 
     /**

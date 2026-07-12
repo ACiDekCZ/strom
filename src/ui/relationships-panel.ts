@@ -41,6 +41,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
+import { normalizeDateInput } from '../dates.js';
 
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
@@ -139,7 +140,11 @@ export const relationshipsPanelMethods = uiModule({
             input.addEventListener('change', (e) => {
                 const target = e.target as HTMLInputElement;
                 const partnershipId = target.dataset.partnershipId as PartnershipId;
-                this.setPendingPartnershipChange(partnershipId, { startDate: target.value });
+                const normalized = normalizeDateInput(target.value);
+                target.classList.toggle('invalid', normalized === null);
+                if (normalized === null) return;
+                target.value = normalized;
+                this.setPendingPartnershipChange(partnershipId, { startDate: normalized });
             });
         });
 
@@ -157,7 +162,11 @@ export const relationshipsPanelMethods = uiModule({
             input.addEventListener('change', (e) => {
                 const target = e.target as HTMLInputElement;
                 const partnershipId = target.dataset.partnershipId as PartnershipId;
-                this.setPendingPartnershipChange(partnershipId, { endDate: target.value });
+                const normalized = normalizeDateInput(target.value);
+                target.classList.toggle('invalid', normalized === null);
+                if (normalized === null) return;
+                target.value = normalized;
+                this.setPendingPartnershipChange(partnershipId, { endDate: normalized });
             });
         });
 
@@ -266,7 +275,8 @@ export const relationshipsPanelMethods = uiModule({
 
                     partnershipDetailsHtml = `
                         <div class="partnership-dates">
-                            <input type="date" class="partnership-start-date"
+                            <input type="text" class="partnership-start-date flex-date" autocomplete="off"
+                                placeholder="${strings.placeholders.flexDate}"
                                 data-partnership-id="${partnership.id}"
                                 value="${partnership.startDate || ''}"
                                 title="${startDateLabel}">
@@ -274,7 +284,8 @@ export const relationshipsPanelMethods = uiModule({
                                 data-partnership-id="${partnership.id}"
                                 value="${partnership.startPlace || ''}"
                                 placeholder="${strings.labels.startPlace}">
-                            <input type="date" class="partnership-end-date"
+                            <input type="text" class="partnership-end-date flex-date" autocomplete="off"
+                                placeholder="${strings.placeholders.flexDate}"
                                 data-partnership-id="${partnership.id}"
                                 value="${partnership.endDate || ''}"
                                 title="${endDateLabel}">

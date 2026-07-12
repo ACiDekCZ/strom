@@ -41,6 +41,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
+import { isValidDateInput, normalizeDateInput } from '../dates.js';
 
 export const personModalMethods = uiModule({
     showAddPersonModal(): void {
@@ -163,8 +164,9 @@ export const personModalMethods = uiModule({
     },
 
     setupDateInputs(): void {
-        // Add/remove 'has-value' class on date inputs to control placeholder styling
-        const dateInputs = document.querySelectorAll('.modal input[type="date"]');
+        // Flex-date text inputs: live validation (red border while the value
+        // doesn't parse) + 'has-value' class for placeholder styling
+        const dateInputs = document.querySelectorAll('.modal input[type="date"], .modal input.flex-date');
         dateInputs.forEach(input => {
             const dateInput = input as HTMLInputElement;
             const updateClass = () => {
@@ -173,8 +175,12 @@ export const personModalMethods = uiModule({
                 } else {
                     dateInput.classList.remove('has-value');
                 }
+                if (dateInput.classList.contains('flex-date')) {
+                    dateInput.classList.toggle('invalid', !isValidDateInput(dateInput.value));
+                }
             };
             dateInput.addEventListener('change', updateClass);
+            dateInput.addEventListener('input', updateClass);
             updateClass(); // Initial state
         });
     },
@@ -306,11 +312,18 @@ export const personModalMethods = uiModule({
         const firstName = firstNameInput?.value.trim() || '';
         const lastName = lastNameInput?.value.trim() || '';
         const gender = (genderSelect?.value || 'male') as Gender;
-        const birthDate = birthDateInput?.value || '';
+        const birthDate = normalizeDateInput(birthDateInput?.value || '');
         const birthPlace = birthPlaceInput?.value.trim() || '';
-        const deathDate = deathDateInput?.value || '';
+        const deathDate = normalizeDateInput(deathDateInput?.value || '');
         const deathPlace = deathPlaceInput?.value.trim() || '';
         const notes = notesInput?.value.trim() || '';
+
+        if (birthDate === null || deathDate === null) {
+            this.clearDialogStack();
+            this.pushDialog('person-modal');
+            this.showAlert(strings.personModal.invalidDate, 'warning');
+            return;
+        }
 
         if (!firstName && !lastName && !this.currentId) {
             this.clearDialogStack();

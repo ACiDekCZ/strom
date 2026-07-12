@@ -31,6 +31,7 @@ import {
 } from './layout/index.js';
 import { renderDebugOverlay, clearDebugOverlay } from './debug-overlay.js';
 import { debugPanel } from './debug-panel.js';
+import { yearOf, displayYear, formatFlexDate } from './dates.js';
 
 class TreeRendererClass {
     private config = DEFAULT_LAYOUT_CONFIG;
@@ -491,8 +492,8 @@ class TreeRendererClass {
             if (person.deathDate) {
                 presumedDeceased.add(person.id);
             } else if (person.birthDate) {
-                const birthYear = parseInt(person.birthDate.split('-')[0], 10);
-                if (!isNaN(birthYear) && (currentYear - birthYear) > MAX_AGE) {
+                const birthYear = yearOf(person.birthDate);
+                if (birthYear !== null && (currentYear - birthYear) > MAX_AGE) {
                     presumedDeceased.add(person.id);
                 }
             }
@@ -596,12 +597,10 @@ class TreeRendererClass {
             let birthYear = '';
             let birthFull = '';
             if (person.birthDate) {
-                const parts = person.birthDate.split('-');
-                birthYear = parts[0];
-                if (parts.length === 3 && parts[1] !== '00' && parts[2] !== '00') {
-                    // Full date available - format according to locale
-                    const date = new Date(person.birthDate);
-                    birthFull = date.toLocaleDateString();
+                birthYear = displayYear(person.birthDate);
+                const formatted = formatFlexDate(person.birthDate);
+                if (formatted !== birthYear) {
+                    birthFull = formatted;
                 }
             }
 

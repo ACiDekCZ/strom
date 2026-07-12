@@ -68,15 +68,25 @@ const MONTHS: Record<string, string> = {
 // ==================== HELPER FUNCTIONS ====================
 
 /**
- * Parse GEDCOM date format to ISO date string
- * Handles: "3 JUN 1900", "JUN 1900", "1900", "ABT 1900", "BEF 1900", etc.
+ * Parse GEDCOM date format to a canonical flex date string (see src/dates.ts).
+ * Precision and qualifiers are PRESERVED: "ABT 1900" -> "~1900",
+ * "JUN 1900" -> "1900-06", "3 JUN 1900" -> "1900-06-03", "BEF 1900" -> "<1900".
  */
 export function parseGedcomDate(dateStr: string): string {
     if (!dateStr) return '';
 
-    // Remove approximate/before/after prefixes
-    const cleaned = dateStr.trim()
-        .replace(/^(ABT|ABOUT|BEF|BEFORE|AFT|AFTER|EST|CAL|INT)\s+/i, '');
+    // Qualifier prefixes map to flex-date qualifiers instead of being dropped
+    let qualifier = '';
+    const cleaned = dateStr.trim().replace(
+        /^(ABT|ABOUT|EST|CAL|INT|BEF|BEFORE|AFT|AFTER)\s+/i,
+        (m) => {
+            const q = m.trim().toUpperCase();
+            if (q === 'BEF' || q === 'BEFORE') qualifier = '<';
+            else if (q === 'AFT' || q === 'AFTER') qualifier = '>';
+            else qualifier = '~';
+            return '';
+        }
+    );
 
     const parts = cleaned.split(/\s+/);
 
@@ -85,15 +95,15 @@ export function parseGedcomDate(dateStr: string): string {
         const day = parts[0].padStart(2, '0');
         const month = MONTHS[parts[1].toUpperCase()] || '01';
         const year = parts[2];
-        return `${year}-${month}-${day}`;
-    } else if (parts.length === 2) {
-        // "JUN 1900" -> "1900-06-01"
-        const month = MONTHS[parts[0].toUpperCase()] || '01';
+        return `${qualifier}${year}-${month}-${day}`;
+    } else if (parts.length === 2 && MONTHS[parts[0].toUpperCase()]) {
+        // "JUN 1900" -> "1900-06" (month precision, no fabricated day)
+        const month = MONTHS[parts[0].toUpperCase()];
         const year = parts[1];
-        return `${year}-${month}-01`;
-    } else if (parts.length === 1 && /^\d{4}$/.test(parts[0])) {
-        // "1900" -> "1900-01-01"
-        return `${parts[0]}-01-01`;
+        return `${qualifier}${year}-${month}`;
+    } else if (parts.length === 1 && /^\d{3,4}$/.test(parts[0])) {
+        // "1900" -> "1900" (year precision, no fabricated month/day)
+        return `${qualifier}${parts[0]}`;
     }
     return '';
 }

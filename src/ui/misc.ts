@@ -41,6 +41,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
+import { yearOf } from '../dates.js';
 
 export const miscMethods = uiModule({
     // ---- ABOUT DIALOG ----
@@ -186,7 +187,7 @@ export const miscMethods = uiModule({
 
         for (const person of persons) {
             if (person.birthDate) {
-                const year = parseInt(person.birthDate.split('-')[0], 10);
+                const year = yearOf(person.birthDate) ?? 0;
                 if (year && year < oldestYear) {
                     oldestYear = year;
                     oldestName = `${year}`;

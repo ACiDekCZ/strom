@@ -291,6 +291,12 @@ function getSelectedChildren(
     return sortChildren(children, data);
 }
 
+
+/** Strip a flex-date qualifier prefix ('~', '<', '>') for sorting. */
+function stripDateQualifier(value: string): string {
+    return /^[~<>]/.test(value) ? value.slice(1) : value;
+}
+
 /**
  * Sort children by birthDate, then by ID.
  */
@@ -299,9 +305,11 @@ function sortChildren(childIds: PersonId[], data: StromData): PersonId[] {
         const personA = data.persons[a];
         const personB = data.persons[b];
 
-        // Sort by birth date first
-        const birthA = personA?.birthDate ?? '';
-        const birthB = personB?.birthDate ?? '';
+        // Sort by birth date first (flex-date qualifier chars like '~' must
+        // not affect ordering — strip them; precision-by-omission compares
+        // fine lexically: '1880' < '1880-05' < '1880-05-15' < '1881')
+        const birthA = stripDateQualifier(personA?.birthDate ?? '');
+        const birthB = stripDateQualifier(personB?.birthDate ?? '');
         if (birthA !== birthB) {
             return birthA.localeCompare(birthB);
         }

@@ -108,7 +108,8 @@ const stringsEN = {
     placeholders: {
         firstName: 'First name',
         lastName: 'Last name',
-        maidenName: 'Maiden name'
+        maidenName: 'Maiden name',
+        flexDate: '5/15/1880 · 5/1880 · 1880 · about 1880'
     },
 
     // Context menu
@@ -129,6 +130,7 @@ const stringsEN = {
         completeTitle: 'Complete Person',
         enterName: 'Please enter first name or last name',
         unsavedMessage: 'You have unsaved changes in person details.',
+        invalidDate: 'Invalid date. Use e.g. 5/15/1880, 5/1880, 1880 or "about 1880".',
     },
 
     // Relation modal
@@ -885,7 +887,8 @@ const stringsCZ: StringsType = {
     placeholders: {
         firstName: 'Jméno',
         lastName: 'Příjmení',
-        maidenName: 'Rodné příjmení'
+        maidenName: 'Rodné příjmení',
+        flexDate: '15.5.1880 · 5/1880 · 1880 · kolem 1880'
     },
 
     // Context menu
@@ -906,6 +909,7 @@ const stringsCZ: StringsType = {
         completeTitle: 'Doplnit osobu',
         enterName: 'Zadejte prosím jméno nebo příjmení',
         unsavedMessage: 'Máte neuložené změny v údajích osoby.',
+        invalidDate: 'Neplatné datum. Použijte např. 15.5.1880, 5/1880, 1880 nebo „kolem 1880".',
     },
 
     // Relation modal
