@@ -45,11 +45,8 @@ function stripDetails(person: Person): void {
     delete person.deathDate;
     delete person.deathPlace;
     delete person.notes;
-    // `photo` does not exist on Person yet (added by the photos feature); strip
-    // it defensively so privacy already covers it once it lands.
-    if ('photo' in person) {
-        delete (person as Record<string, unknown>).photo;
-    }
+    delete person.photo;
+    delete person.photoOriginalName;
 }
 
 /**

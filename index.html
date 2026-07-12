@@ -358,6 +358,69 @@
             opacity: 0.85;
         }
 
+        /* Photo avatar: only present when a person has a photo; the card keeps
+           its fixed 130x65 size and the text is shifted right of the avatar. */
+        .card-avatar {
+            position: absolute;
+            left: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            overflow: hidden;
+            background: var(--card-bg);
+            box-shadow: 0 1px 3px var(--shadow);
+        }
+        .card-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .person-card.has-photo {
+            padding-left: 52px;
+        }
+        .card-tooltip-photo {
+            display: block;
+            width: 128px;
+            height: 128px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin: 0 auto 6px;
+        }
+
+        /* Photo editor in the person modal */
+        .photo-editor {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .photo-preview {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            overflow: hidden;
+            background: var(--placeholder-bg);
+            flex-shrink: 0;
+        }
+        .photo-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .photo-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+        }
+        .photo-size {
+            font-size: 12px;
+            color: var(--text-light);
+        }
+
         .person-card .name {
             font-weight: 600;
             font-size: 14px;
@@ -4908,6 +4971,18 @@
                         <span data-i18n="labels.deceased"></span>
                     </label>
                 </div>
+                <div class="form-group">
+                    <label data-i18n="labels.photo"></label>
+                    <div class="photo-editor">
+                        <div class="photo-preview" id="photo-preview"></div>
+                        <div class="photo-actions">
+                            <input type="file" id="input-photo" accept="image/*" style="display:none" onchange="window.Strom.UI.handlePhotoInput(event)">
+                            <button type="button" class="secondary" onclick="document.getElementById('input-photo').click()" data-i18n="labels.photoChoose"></button>
+                            <button type="button" class="secondary" id="photo-remove-btn" onclick="window.Strom.UI.removePersonPhoto()" data-i18n="labels.photoRemove"></button>
+                            <span class="photo-size" id="photo-size"></span>
+                        </div>
+                    </div>
+                </div>
             </div>
             <button type="button" class="link-relationships-btn" id="link-relationships" style="display:none;">
                 &#128279; <span data-i18n="buttons.manageRelationships">Manage Relationships</span>
@@ -5922,6 +5997,13 @@
                 <label class="settings-checkbox" style="margin-top: 8px;">
                     <input type="checkbox" id="export-audit-log-toggle">
                     <span data-i18n="auditLog.exportInclude"></span>
+                </label>
+            </div>
+            <div id="export-photos-section" class="form-group" style="display: none;">
+                <label class="settings-checkbox" style="margin-top: 8px;">
+                    <input type="checkbox" id="export-strip-photos">
+                    <span data-i18n="privacy.stripPhotos"></span>
+                    <span class="photo-size" id="export-photo-size"></span>
                 </label>
             </div>
             <div class="buttons export-buttons">

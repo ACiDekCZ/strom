@@ -23,6 +23,7 @@ import {
 } from '../types.js';
 import { strings } from '../strings.js';
 import { isLivingPerson } from '../privacy.js';
+import { compressPhoto, dataUrlByteSize } from '../photo.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -89,6 +90,9 @@ export const personModalMethods = uiModule({
         if (deathDateInput) deathDateInput.value = '';
         if (deathPlaceInput) deathPlaceInput.value = '';
         if (notesInput) notesInput.value = '';
+        const addDeceased = document.getElementById('input-is-deceased') as HTMLInputElement;
+        if (addDeceased) addDeceased.checked = false;
+        this.setPhotoPreview(undefined);
 
         // Snapshot original values (all empty for add)
         this.personModalSnapshot = {
@@ -245,6 +249,9 @@ export const personModalMethods = uiModule({
         const deceasedInput = document.getElementById('input-is-deceased') as HTMLInputElement;
         if (deceasedInput) deceasedInput.checked = !isLivingPerson(person);
 
+        // Photo preview
+        this.setPhotoPreview(person.photo);
+
         // Snapshot original values for unsaved changes detection
         this.personModalSnapshot = {
             firstName: firstNameInput.value,
@@ -262,8 +269,8 @@ export const personModalMethods = uiModule({
         // Setup date input styling
         this.setupDateInputs();
 
-        // Setup expand button - expand if there's death data or notes
-        const hasExtendedData = !!(person.deathDate || person.deathPlace || person.notes);
+        // Setup expand button - expand if there's death data, notes or a photo
+        const hasExtendedData = !!(person.deathDate || person.deathPlace || person.notes || person.photo);
         this.setupExpandButton(hasExtendedData);
 
         // Show link-relationships button
@@ -304,6 +311,37 @@ export const personModalMethods = uiModule({
         this.setupEnterAsTab('person-modal', ['input-firstname', 'input-lastname', 'input-gender', 'input-birthdate', 'input-birthplace', 'input-deathdate', 'input-deathplace'], () => this.savePerson());
     },
 
+    /** Update the modal's photo preview, remove button and size label. */
+    setPhotoPreview(dataUrl: string | undefined): void {
+        const preview = document.getElementById('photo-preview');
+        const removeBtn = document.getElementById('photo-remove-btn');
+        const sizeEl = document.getElementById('photo-size');
+        if (preview) {
+            preview.innerHTML = dataUrl ? `<img src="${dataUrl}" alt="">` : '';
+        }
+        if (removeBtn) removeBtn.style.display = dataUrl ? '' : 'none';
+        if (sizeEl) sizeEl.textContent = dataUrl ? `${Math.round(dataUrlByteSize(dataUrl) / 1024)} kB` : '';
+    },
+
+    /** Compress the selected file and show it in the preview. */
+    async handlePhotoInput(event: Event): Promise<void> {
+        const input = event.target as HTMLInputElement;
+        const file = input.files?.[0];
+        input.value = '';  // allow re-selecting the same file
+        if (!file) return;
+        try {
+            const dataUrl = await compressPhoto(file);
+            this.setPhotoPreview(dataUrl);
+        } catch (e) {
+            console.error('Photo processing failed:', e);
+            this.showAlert(strings.personModal.photoError, 'error');
+        }
+    },
+
+    removePersonPhoto(): void {
+        this.setPhotoPreview(undefined);
+    },
+
     savePerson(): void {
         const firstNameInput = document.getElementById('input-firstname') as HTMLInputElement;
         const lastNameInput = document.getElementById('input-lastname') as HTMLInputElement;
@@ -325,6 +363,9 @@ export const personModalMethods = uiModule({
         // Explicit alive/deceased override; a death date already implies deceased.
         const deceasedChecked = (document.getElementById('input-is-deceased') as HTMLInputElement)?.checked || false;
         const isDeceased = deathDate ? undefined : deceasedChecked;
+        // Current photo from the preview (data URL) or none.
+        const photoImg = document.querySelector('#photo-preview img') as HTMLImageElement | null;
+        const photo = photoImg?.getAttribute('src') || undefined;
 
         if (birthDate === null || deathDate === null) {
             this.clearDialogStack();
@@ -351,19 +392,21 @@ export const personModalMethods = uiModule({
                 deathDate,
                 deathPlace,
                 notes,
-                isDeceased
+                isDeceased,
+                photo
             });
         } else {
             // Create new
             const newPerson = DataManager.createPerson({ firstName, lastName, gender });
             // Update with extended info if provided
-            if (birthDate || birthPlace || deathDate || deathPlace || notes) {
+            if (birthDate || birthPlace || deathDate || deathPlace || notes || photo) {
                 DataManager.updatePerson(newPerson.id, {
                     birthDate,
                     birthPlace,
                     deathDate,
                     deathPlace,
-                    notes
+                    notes,
+                    photo
                 });
             }
         }

@@ -22,6 +22,7 @@ import {
     LastFocusedMarker
 } from '../types.js';
 import { strings } from '../strings.js';
+import { totalPhotoBytes } from '../photo.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -385,6 +386,8 @@ export const treeStatsMethods = uiModule({
         const withBirthDate = persons.filter(p => p.birthDate).length;
         const withDeathDate = persons.filter(p => p.deathDate).length;
         const withBirthPlace = persons.filter(p => p.birthPlace).length;
+        const withPhoto = persons.filter(p => p.photo).length;
+        const photoKb = Math.round(totalPhotoBytes(treeData) / 1024);
 
         const s = strings.treeManager;
 
@@ -460,6 +463,11 @@ export const treeStatsMethods = uiModule({
                     <span class="label">${s.statsWithBirthPlace}</span>
                     <span class="value">${birthPlacePct}%</span>
                 </div>
+                ${withPhoto > 0 ? `
+                <div class="tree-stats-row">
+                    <span class="label">${s.statsPhotos}</span>
+                    <span class="value">${withPhoto} (${photoKb} kB)</span>
+                </div>` : ''}
             </div>
 
             <div class="tree-stats-section">

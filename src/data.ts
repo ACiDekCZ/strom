@@ -29,6 +29,7 @@ import { StorageManager } from './storage.js';
 import { ValidationIssue } from './validation.js';
 import { UndoManager } from './undo.js';
 import { applyLivingPrivacy, PrivacyMode } from './privacy.js';
+import { stripPhotos } from './photo.js';
 
 /** Extended updates for Partnership */
 type PartnershipUpdates = Partial<Pick<Partnership, 'status' | 'startDate' | 'startPlace' | 'endDate' | 'note' | 'isPrimary'>>;
@@ -905,6 +906,7 @@ class DataManagerClass {
         if (updates.notes !== undefined) person.notes = updates.notes || undefined;
         // isDeceased is tri-state (true / false / undefined); apply verbatim when provided.
         if ('isDeceased' in updates) person.isDeceased = updates.isDeceased;
+        if ('photo' in updates) person.photo = updates.photo || undefined;
 
         this.commitMutation(strings.undo.editPerson(auditPersonName(person)));
         // Audit log
@@ -1617,8 +1619,10 @@ class DataManagerClass {
 
     // ==================== EXPORT/IMPORT ====================
 
-    exportJSON(privacyMode: PrivacyMode = 'full'): void {
-        const dataStr = JSON.stringify(applyLivingPrivacy(this.data, privacyMode), null, 2);
+    exportJSON(privacyMode: PrivacyMode = 'full', dropPhotos = false): void {
+        let out = applyLivingPrivacy(this.data, privacyMode);
+        if (dropPhotos) out = stripPhotos(out);
+        const dataStr = JSON.stringify(out, null, 2);
         const blob = new Blob([dataStr], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -1632,11 +1636,13 @@ class DataManagerClass {
      * @param treeId The tree to export
      * @param password Optional password for encryption
      */
-    async exportTreeJSON(treeId: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full'): Promise<void> {
+    async exportTreeJSON(treeId: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', dropPhotos = false): Promise<void> {
         const rawTreeData = await TreeManager.getTreeData(treeId);
         if (!rawTreeData) return;
 
-        const treeData = applyLivingPrivacy(rawTreeData, privacyMode);
+        const treeData = dropPhotos
+            ? stripPhotos(applyLivingPrivacy(rawTreeData, privacyMode))
+            : applyLivingPrivacy(rawTreeData, privacyMode);
         // Ensure version is set
         treeData.version = STROM_DATA_VERSION;
 
@@ -1661,7 +1667,7 @@ class DataManagerClass {
         URL.revokeObjectURL(a.href);
     }
 
-    async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full'): Promise<void> {
+    async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full', dropPhotos = false): Promise<void> {
         // Filter persons - only visible ones
         const filteredPersons: Record<PersonId, Person> = {} as Record<PersonId, Person>;
         for (const id of visiblePersonIds) {
@@ -1680,11 +1686,12 @@ class DataManagerClass {
             }
         }
 
-        const focusedData: StromData = applyLivingPrivacy({
+        let focusedData: StromData = applyLivingPrivacy({
             version: STROM_DATA_VERSION,
             persons: filteredPersons,
             partnerships: filteredPartnerships
         }, privacyMode);
+        if (dropPhotos) focusedData = stripPhotos(focusedData);
 
         let dataStr: string;
         if (password) {

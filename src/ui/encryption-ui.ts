@@ -23,6 +23,7 @@ import {
 } from '../types.js';
 import { strings } from '../strings.js';
 import { PrivacyMode } from '../privacy.js';
+import { totalPhotoBytes } from '../photo.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -435,6 +436,11 @@ export const encryptionUiMethods = uiModule({
         return (v === 'initials' || v === 'anonymous' || v === 'minimal') ? v : 'full';
     },
 
+    /** Whether the export dialog's "without photos" checkbox is ticked. */
+    readExportStripPhotos(): boolean {
+        return (document.getElementById('export-strip-photos') as HTMLInputElement | null)?.checked || false;
+    },
+
     showExportPasswordDialog(
         callback: (password: string | null) => void,
         includeAuditLogOption = false,
@@ -455,6 +461,15 @@ export const encryptionUiMethods = uiModule({
         if (pwGroup) pwGroup.style.display = passwordless ? 'none' : '';
         if (pwConfirmGroup) pwConfirmGroup.style.display = passwordless ? 'none' : '';
         if (encryptedBtn) encryptedBtn.style.display = passwordless ? 'none' : '';
+
+        // "Export without photos" — shown only when the active tree has photos.
+        const photosSection = document.getElementById('export-photos-section');
+        const photoSizeEl = document.getElementById('export-photo-size');
+        const stripToggle = document.getElementById('export-strip-photos') as HTMLInputElement | null;
+        const photoBytes = totalPhotoBytes(DataManager.getData());
+        if (photosSection) photosSection.style.display = photoBytes > 0 ? 'block' : 'none';
+        if (photoSizeEl) photoSizeEl.textContent = photoBytes > 0 ? ` (${Math.round(photoBytes / 1024)} kB)` : '';
+        if (stripToggle) stripToggle.checked = false;
 
         const modal = document.getElementById('export-password-modal');
         const input = document.getElementById('export-password-input') as HTMLInputElement;

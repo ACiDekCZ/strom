@@ -59,6 +59,10 @@ export interface Person {
      * undefined = fall back to the age heuristic.
      */
     isDeceased?: boolean;
+    /** Compressed square JPEG portrait as a data URL (see src/photo.ts). */
+    photo?: string;
+    /** Original file name of the uploaded photo (UX only). */
+    photoOriginalName?: string;
 }
 
 export interface Partnership {

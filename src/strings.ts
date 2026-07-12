@@ -83,6 +83,9 @@ const stringsEN = {
         deathDate: 'Death Date',
         deathPlace: 'Death Place',
         deceased: 'Deceased',
+        photo: 'Photo',
+        photoChoose: 'Choose photo',
+        photoRemove: 'Remove',
         maidenName: 'Maiden Name',
         // Partnership dates - used based on status
         startDateMarried: 'Wedding Date',
@@ -156,6 +159,7 @@ const stringsEN = {
         enterName: 'Please enter first name or last name',
         unsavedMessage: 'You have unsaved changes in person details.',
         invalidDate: 'Invalid date. Use e.g. 5/15/1880, 5/1880, 1880 or "about 1880".',
+        photoError: 'Could not process the image.',
     },
 
     // Relation modal
@@ -595,6 +599,7 @@ const stringsEN = {
         statsWithBirthDate: 'With birth date',
         statsWithDeathDate: 'With death date',
         statsWithBirthPlace: 'With birth place',
+        statsPhotos: 'Photos',
         statsSize: 'Storage',
         statsTreeSize: 'Tree size',
         // Anniversaries
@@ -846,7 +851,8 @@ const stringsEN = {
         modeFull: 'Full data',
         modeInitials: 'Initials + birth year',
         modeAnonymous: 'Hide names',
-        modeMinimal: 'Keep surname only'
+        modeMinimal: 'Keep surname only',
+        stripPhotos: 'Export without photos'
     }
 };
 
@@ -921,6 +927,9 @@ const stringsCZ: StringsType = {
         deathDate: 'Datum úmrtí',
         deathPlace: 'Místo úmrtí',
         deceased: 'Zemřel/a',
+        photo: 'Fotka',
+        photoChoose: 'Vybrat fotku',
+        photoRemove: 'Odebrat',
         maidenName: 'Rodné příjmení',
         // Partnership dates - used based on status
         startDateMarried: 'Datum sňatku',
@@ -994,6 +1003,7 @@ const stringsCZ: StringsType = {
         enterName: 'Zadejte prosím jméno nebo příjmení',
         unsavedMessage: 'Máte neuložené změny v údajích osoby.',
         invalidDate: 'Neplatné datum. Použijte např. 15.5.1880, 5/1880, 1880 nebo „kolem 1880".',
+        photoError: 'Obrázek se nepodařilo zpracovat.',
     },
 
     // Relation modal
@@ -1433,6 +1443,7 @@ const stringsCZ: StringsType = {
         statsWithBirthDate: 'S datem narození',
         statsWithDeathDate: 'S datem úmrtí',
         statsWithBirthPlace: 'S místem narození',
+        statsPhotos: 'Fotky',
         statsSize: 'Úložiště',
         statsTreeSize: 'Velikost stromu',
         // Anniversaries
@@ -1684,7 +1695,8 @@ const stringsCZ: StringsType = {
         modeFull: 'Plná data',
         modeInitials: 'Iniciály + rok narození',
         modeAnonymous: 'Skrýt jména',
-        modeMinimal: 'Ponechat jen příjmení'
+        modeMinimal: 'Ponechat jen příjmení',
+        stripPhotos: 'Exportovat bez fotek'
     }
 };
 

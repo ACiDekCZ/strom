@@ -566,6 +566,11 @@ class TreeRendererClass {
             } else {
                 classes += ' ' + person.gender;
             }
+            // Photo avatar shifts the text right; without a photo the card is
+            // rendered exactly as before (no avatar element, no class).
+            if (person.photo) {
+                classes += ' has-photo';
+            }
             // Add focused class if this is the focus person
             if (this.focusPersonId && id === this.focusPersonId) {
                 classes += ' focused';
@@ -736,6 +741,7 @@ class TreeRendererClass {
             const isLocked = DataManager.isPersonLocked(id);
 
             html += `
+                ${person.photo ? `<div class="card-avatar"><img src="${person.photo}" alt=""></div>` : ''}
                 <div class="name"><span class="name-text">${this.escapeHtml(displayName)}</span>${isDeceased ? '<span class="deceased-marker">†</span>' : ''}</div>
                 <div class="surname">${this.escapeHtml(displaySurname)}</div>
                 ${birthYear ? `<div class="birth-date"><span class="date-year">${birthYear}</span>${birthFull ? `<span class="date-full">${birthFull}</span>` : ''}</div>` : ''}
@@ -810,8 +816,9 @@ class TreeRendererClass {
                 const truncated = person.notes.length > 100 ? person.notes.substring(0, 100) + '...' : person.notes;
                 tooltipLines.push(`${strings.tooltip.notes}: ${this.escapeHtml(truncated)}`);
             }
-            if (tooltipLines.length > 0) {
-                html += `<div class="card-tooltip">${tooltipLines.join('<br>')}</div>`;
+            if (tooltipLines.length > 0 || person.photo) {
+                const tooltipPhoto = person.photo ? `<img class="card-tooltip-photo" src="${person.photo}" alt="">` : '';
+                html += `<div class="card-tooltip">${tooltipPhoto}${tooltipLines.join('<br>')}</div>`;
             }
 
             card.innerHTML = html;
