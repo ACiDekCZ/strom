@@ -183,7 +183,9 @@ export type AuditAction =
     | 'data.clear'
     | 'data.load'
     | 'data.import'
-    | 'data.repair';
+    | 'data.repair'
+    | 'undo'
+    | 'redo';
 
 export interface AuditEntry {
     /** ISO timestamp */

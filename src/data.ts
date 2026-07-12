@@ -27,6 +27,7 @@ import * as CrossTree from './cross-tree.js';
 import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
 import { ValidationIssue } from './validation.js';
+import { UndoManager } from './undo.js';
 
 /** Extended updates for Partnership */
 type PartnershipUpdates = Partial<Pick<Partnership, 'status' | 'startDate' | 'startPlace' | 'endDate' | 'note' | 'isPrimary'>>;
@@ -62,6 +63,9 @@ class DataManagerClass {
     };
 
     private currentTreeId: TreeId | null = null;
+
+    // Undo/redo: deep copy of the data taken at the start of the current mutation.
+    private pendingBefore: StromData | null = null;
 
     // Pending encrypted embedded data (requires password to unlock)
     private pendingEncryptedEmbedded: EncryptedData | null = null;
@@ -696,6 +700,76 @@ class DataManagerClass {
         }
     }
 
+    // ==================== UNDO / REDO ====================
+
+    /**
+     * Snapshot the data as it is now (before the current mutation changes it).
+     * Called at the start of every undoable mutation. No-op in view mode.
+     */
+    private beginMutation(): void {
+        if (this.viewMode) return;
+        this.pendingBefore = structuredClone(this.data);
+    }
+
+    /**
+     * Finish an undoable mutation: push the pre-mutation snapshot onto the undo
+     * stack with a description, then persist. Replaces this.save() at the end of
+     * mutation methods.
+     */
+    private commitMutation(description: string): void {
+        UndoManager.setActiveTree(this.currentTreeId);
+        if (this.pendingBefore) {
+            UndoManager.push({ data: this.pendingBefore, description });
+            this.pendingBefore = null;
+        }
+        this.save();
+    }
+
+    canUndo(): boolean {
+        UndoManager.setActiveTree(this.currentTreeId);
+        return UndoManager.canUndo();
+    }
+
+    canRedo(): boolean {
+        UndoManager.setActiveTree(this.currentTreeId);
+        return UndoManager.canRedo();
+    }
+
+    /**
+     * Restore the previous data snapshot. Returns the undone action's
+     * description (for the toast), or null when there is nothing to undo.
+     */
+    undo(): { description: string } | null {
+        if (this.viewMode || !this.currentTreeId) return null;
+        UndoManager.setActiveTree(this.currentTreeId);
+        const restored = UndoManager.undo(structuredClone(this.data));
+        if (!restored) return null;
+        this.applyRestoredData(restored.data);
+        AuditLogManager.log(this.currentTreeId, 'undo', strings.auditLog.undoAction(restored.description));
+        return { description: restored.description };
+    }
+
+    /** Replay the last undone snapshot. Symmetric to undo(). */
+    redo(): { description: string } | null {
+        if (this.viewMode || !this.currentTreeId) return null;
+        UndoManager.setActiveTree(this.currentTreeId);
+        const restored = UndoManager.redo(structuredClone(this.data));
+        if (!restored) return null;
+        this.applyRestoredData(restored.data);
+        AuditLogManager.log(this.currentTreeId, 'redo', strings.auditLog.redoAction(restored.description));
+        return { description: restored.description };
+    }
+
+    /** Swap in restored data and persist it, without recording a new undo step. */
+    private applyRestoredData(data: StromData): void {
+        this.data = structuredClone(data);
+        this.pendingBefore = null;
+        if (!this.viewMode && this.currentTreeId) {
+            TreeManager.saveTreeData(this.currentTreeId, this.data);
+            CrossTree.invalidateCacheForTree(this.currentTreeId);
+        }
+    }
+
     // ==================== GETTERS ====================
 
     getData(): StromData {
@@ -745,6 +819,7 @@ class DataManagerClass {
     // ==================== PERSON CRUD ====================
 
     createPerson(personData: NewPersonData, isPlaceholder = false): Person {
+        this.beginMutation();
         const person: Person = {
             id: generatePersonId(),
             firstName: isPlaceholder ? '?' : personData.firstName,
@@ -761,7 +836,7 @@ class DataManagerClass {
         };
 
         this.data.persons[person.id] = person;
-        this.save();
+        this.commitMutation(strings.undo.addPerson(auditPersonName(person)));
         // Audit log
         if (isPlaceholder) {
             AuditLogManager.log(this.currentTreeId, 'person.create', strings.auditLog.createdPlaceholder(strings.gender[person.gender]));
@@ -779,13 +854,15 @@ class DataManagerClass {
         const person = this.data.persons[id];
         if (!person) return null;
 
+        this.beginMutation();
+
         // Allow toggling isLocked even when person is locked
         if (updates.isLocked !== undefined) {
             person.isLocked = updates.isLocked || undefined;
             // If only isLocked changed, save and return early
             const otherKeys = Object.keys(updates).filter(k => k !== 'isLocked');
             if (otherKeys.length === 0) {
-                this.save();
+                this.commitMutation(strings.undo.editPerson(auditPersonName(person)));
                 return person;
             }
         }
@@ -826,7 +903,7 @@ class DataManagerClass {
         if (updates.deathPlace !== undefined) person.deathPlace = updates.deathPlace || undefined;
         if (updates.notes !== undefined) person.notes = updates.notes || undefined;
 
-        this.save();
+        this.commitMutation(strings.undo.editPerson(auditPersonName(person)));
         // Audit log
         if (changedFields.length > 0) {
             AuditLogManager.log(this.currentTreeId, 'person.update', strings.auditLog.updatedPerson(auditPersonName(person), changedFields.join(', ')));
@@ -844,6 +921,8 @@ class DataManagerClass {
 
         // Block deletion of locked persons
         if (this.isPersonLocked(id)) return false;
+
+        this.beginMutation();
 
         // Capture name before deletion for audit log
         const deletedName = auditPersonName(person);
@@ -870,7 +949,7 @@ class DataManagerClass {
         }
 
         delete this.data.persons[id];
-        this.save();
+        this.commitMutation(strings.undo.deletePerson(deletedName));
         // Audit log
         AuditLogManager.log(this.currentTreeId, 'person.delete', strings.auditLog.deletedPerson(deletedName));
         // Invalidate cross-tree cache when person is deleted
@@ -894,6 +973,8 @@ class DataManagerClass {
         const existing = this.findPartnership(person1Id, person2Id);
         if (existing) return existing;
 
+        this.beginMutation();
+
         const partnership: Partnership = {
             id: generatePartnershipId(),
             person1Id,
@@ -906,7 +987,7 @@ class DataManagerClass {
         p1.partnerships.push(partnership.id);
         p2.partnerships.push(partnership.id);
 
-        this.save();
+        this.commitMutation(strings.undo.addPartnership(auditPersonName(p1), auditPersonName(p2)));
         // Audit log
         AuditLogManager.log(
             this.currentTreeId, 'partnership.create',
@@ -919,14 +1000,19 @@ class DataManagerClass {
         const partnership = this.data.partnerships[partnershipId];
         if (!partnership) return false;
 
+        this.beginMutation();
         partnership.status = status;
-        this.save();
+        const sp1 = this.data.persons[partnership.person1Id];
+        const sp2 = this.data.persons[partnership.person2Id];
+        this.commitMutation(strings.undo.editPartnership(auditPersonName(sp1), auditPersonName(sp2)));
         return true;
     }
 
     updatePartnership(partnershipId: PartnershipId, updates: PartnershipUpdates): Partnership | null {
         const partnership = this.data.partnerships[partnershipId];
         if (!partnership) return null;
+
+        this.beginMutation();
 
         // Track actual changes
         let changed = false;
@@ -939,10 +1025,10 @@ class DataManagerClass {
 
         if (!changed) return partnership;
 
-        this.save();
         // Audit log
         const up1 = this.data.persons[partnership.person1Id];
         const up2 = this.data.persons[partnership.person2Id];
+        this.commitMutation(strings.undo.editPartnership(auditPersonName(up1), auditPersonName(up2)));
         AuditLogManager.log(
             this.currentTreeId, 'partnership.update',
             strings.auditLog.updatedPartnership(auditPersonName(up1), auditPersonName(up2))
@@ -1015,6 +1101,8 @@ class DataManagerClass {
         // Block if either person is locked
         if (this.isPersonLocked(parentId) || this.isPersonLocked(childId)) return false;
 
+        this.beginMutation();
+
         // Add to parent's childIds if not already there
         if (!parent.childIds.includes(childId)) {
             parent.childIds.push(childId);
@@ -1033,7 +1121,7 @@ class DataManagerClass {
             }
         }
 
-        this.save();
+        this.commitMutation(strings.undo.addRelation(auditPersonName(parent), auditPersonName(child)));
         // Audit log
         AuditLogManager.log(
             this.currentTreeId, 'parentChild.add',
@@ -1049,6 +1137,8 @@ class DataManagerClass {
 
         // Block if either person is locked
         if (this.isPersonLocked(parentId) || this.isPersonLocked(childId)) return false;
+
+        this.beginMutation();
 
         // Capture names before modification for audit log
         const parentName = auditPersonName(parent);
@@ -1068,7 +1158,7 @@ class DataManagerClass {
             }
         }
 
-        this.save();
+        this.commitMutation(strings.undo.removeRelation(parentName, childName));
         // Audit log
         AuditLogManager.log(
             this.currentTreeId, 'parentChild.remove',
@@ -1083,6 +1173,8 @@ class DataManagerClass {
 
         // Block if either person is locked
         if (this.isPersonLocked(person1Id) || this.isPersonLocked(person2Id)) return false;
+
+        this.beginMutation();
 
         const p1 = this.data.persons[person1Id];
         const p2 = this.data.persons[person2Id];
@@ -1099,7 +1191,7 @@ class DataManagerClass {
         }
 
         delete this.data.partnerships[partnership.id];
-        this.save();
+        this.commitMutation(strings.undo.removePartnership(p1Name, p2Name));
         // Audit log
         AuditLogManager.log(
             this.currentTreeId, 'partnership.delete',
@@ -1628,6 +1720,8 @@ class DataManagerClass {
             return false;
         }
 
+        this.beginMutation();
+
         // Capture names and changes before merge for audit log
         const removedName = auditPersonName(removePerson);
         const keptName = auditPersonName(keepPerson);
@@ -1786,7 +1880,7 @@ class DataManagerClass {
         // 7. Delete the removed person
         delete this.data.persons[removeId];
 
-        this.save();
+        this.commitMutation(strings.undo.mergePersons(keptName));
         // Audit log
         AuditLogManager.log(
             this.currentTreeId, 'persons.merge',

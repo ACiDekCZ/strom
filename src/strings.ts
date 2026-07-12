@@ -811,7 +811,29 @@ const stringsEN = {
         // Tree merge
         treeMerge: (merged: number, added: number, source: string) => `Tree merge from "${source}": ${merged} merged, ${added} added`,
         // Auto-repair
-        repairedIssue: (desc: string) => `Auto-repair: ${desc}`
+        repairedIssue: (desc: string) => `Auto-repair: ${desc}`,
+        // Undo / redo
+        undoAction: (desc: string) => `Undo: ${desc}`,
+        redoAction: (desc: string) => `Redo: ${desc}`
+    },
+
+    // Undo / redo
+    undo: {
+        undo: 'Undo',
+        redo: 'Redo',
+        addPerson: (name: string) => `adding ${name}`,
+        editPerson: (name: string) => `editing ${name}`,
+        deletePerson: (name: string) => `deleting ${name}`,
+        addPartnership: (a: string, b: string) => `partnership ${a} & ${b}`,
+        editPartnership: (a: string, b: string) => `editing partnership ${a} & ${b}`,
+        removePartnership: (a: string, b: string) => `removing partnership ${a} & ${b}`,
+        addRelation: (parent: string, child: string) => `link ${parent} → ${child}`,
+        removeRelation: (parent: string, child: string) => `unlink ${parent} → ${child}`,
+        mergePersons: (name: string) => `merge into ${name}`,
+        undone: (desc: string) => `Undone: ${desc}`,
+        redone: (desc: string) => `Redone: ${desc}`,
+        nothingToUndo: 'Nothing to undo',
+        nothingToRedo: 'Nothing to redo'
     }
 };
 
@@ -1614,7 +1636,29 @@ const stringsCZ: StringsType = {
         // Tree merge
         treeMerge: (merged: number, added: number, source: string) => `Sloučení stromů z "${source}": ${merged} sloučeno, ${added} přidáno`,
         // Auto-repair
-        repairedIssue: (desc: string) => `Automatická oprava: ${desc}`
+        repairedIssue: (desc: string) => `Automatická oprava: ${desc}`,
+        // Undo / redo
+        undoAction: (desc: string) => `Zpět: ${desc}`,
+        redoAction: (desc: string) => `Znovu: ${desc}`
+    },
+
+    // Undo / redo
+    undo: {
+        undo: 'Zpět',
+        redo: 'Znovu',
+        addPerson: (name: string) => `přidání osoby ${name}`,
+        editPerson: (name: string) => `úprava osoby ${name}`,
+        deletePerson: (name: string) => `smazání osoby ${name}`,
+        addPartnership: (a: string, b: string) => `partnerství ${a} & ${b}`,
+        editPartnership: (a: string, b: string) => `úprava partnerství ${a} & ${b}`,
+        removePartnership: (a: string, b: string) => `odebrání partnerství ${a} & ${b}`,
+        addRelation: (parent: string, child: string) => `propojení ${parent} → ${child}`,
+        removeRelation: (parent: string, child: string) => `zrušení vazby ${parent} → ${child}`,
+        mergePersons: (name: string) => `sloučení do ${name}`,
+        undone: (desc: string) => `Vráceno: ${desc}`,
+        redone: (desc: string) => `Znovu provedeno: ${desc}`,
+        nothingToUndo: 'Není co vrátit',
+        nothingToRedo: 'Není co zopakovat'
     }
 };
 

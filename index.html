@@ -4799,6 +4799,8 @@
     <!-- Mobile menu overlay -->
     <div id="mobile-menu" class="mobile-menu">
         <button class="edit-only" onclick="window.Strom.UI.showAddPersonModal(); window.Strom.UI.closeMobileMenu()" data-i18n="mobileMenu.addPerson"></button>
+        <button class="edit-only" onclick="window.Strom.UI.performUndo(); window.Strom.UI.closeMobileMenu()">↶ <span data-i18n="undo.undo"></span></button>
+        <button class="edit-only" onclick="window.Strom.UI.performRedo(); window.Strom.UI.closeMobileMenu()">↷ <span data-i18n="undo.redo"></span></button>
         <button class="edit-only" onclick="window.Strom.UI.showTreeManagerDialog(); window.Strom.UI.closeMobileMenu()">🌳 <span data-i18n="treeManager.manageTreesTitle"></span></button>
         <button onclick="window.Strom.UI.showSettingsDialog(); window.Strom.UI.closeMobileMenu()">⚙ <span data-i18n="settings.title"></span></button>
     </div>

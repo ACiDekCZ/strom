@@ -398,6 +398,18 @@ export const miscMethods = uiModule({
             const activeEl = document.activeElement;
             if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) return;
 
+            // Ctrl/Cmd+Z: undo, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y: redo
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+                e.preventDefault();
+                if (e.shiftKey) this.performRedo(); else this.performUndo();
+                return;
+            }
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+                e.preventDefault();
+                this.performRedo();
+                return;
+            }
+
             // Delete: delete focused person (skip if locked)
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 const focusId = TreeRenderer.getFocusPersonId();
@@ -639,6 +651,26 @@ export const miscMethods = uiModule({
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 300);
         }, duration);
+    },
+
+    // ---- UNDO / REDO ----
+    /**
+     * Undo the last data mutation of the active tree and re-render. Shows a
+     * toast describing what was undone; silent when there is nothing to undo.
+     */
+    performUndo(): void {
+        const result = DataManager.undo();
+        if (!result) return;
+        void TreeRenderer.renderAsync();
+        this.showToast(strings.undo.undone(result.description));
+    },
+
+    /** Replay the last undone mutation. Symmetric to performUndo(). */
+    performRedo(): void {
+        const result = DataManager.redo();
+        if (!result) return;
+        void TreeRenderer.renderAsync();
+        this.showToast(strings.undo.redone(result.description));
     },
 
 });
