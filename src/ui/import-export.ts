@@ -99,7 +99,7 @@ export const importExportMethods = uiModule({
         this.closeExportDialog();
 
         this.showExportPasswordDialog(async (password: string | null) => {
-            await DataManager.exportTreeJSON(treeId, password);
+            await DataManager.exportTreeJSON(treeId, password, this.readExportPrivacyMode());
         });
     },
 
@@ -119,36 +119,42 @@ export const importExportMethods = uiModule({
         // Show export password dialog
         this.showExportPasswordDialog(async (password: string | null) => {
             const { AppExporter } = await import('../export.js');
-            await AppExporter.exportApp(treeId, password);
-        });
+            await AppExporter.exportApp(treeId, password, this.readExportPrivacyMode());
+        }, false, { defaultPrivacy: 'initials' });
     },
 
     /**
      * Export target tree as GEDCOM file
      */
     async exportTargetTreeGedcom(): Promise<void> {
-        const { exportToGedcom } = await import('../ged-exporter.js');
         const treeId = this.getExportTargetTreeId();
-        const data = treeId ? await TreeManager.getTreeData(treeId) : null;
-        const metadata = treeId ? TreeManager.getTreeMetadata(treeId) : null;
-
-        if (!data) {
+        if (!treeId) {
             this.closeExportDialog();
             return;
         }
-
-        const result = exportToGedcom(data, metadata?.name);
-
-        // Download file
-        const blob = new Blob([result.content], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${metadata?.name || 'family-tree'}.ged`;
-        a.click();
-        URL.revokeObjectURL(url);
-
         this.closeExportDialog();
+
+        // GEDCOM cannot be encrypted, so show the export dialog in passwordless
+        // mode purely to pick the living-privacy level.
+        this.showExportPasswordDialog(async () => {
+            const { exportToGedcom } = await import('../ged-exporter.js');
+            const { applyLivingPrivacy } = await import('../privacy.js');
+            const data = await TreeManager.getTreeData(treeId);
+            const metadata = TreeManager.getTreeMetadata(treeId);
+            if (!data) return;
+
+            const filtered = applyLivingPrivacy(data, this.readExportPrivacyMode());
+            const result = exportToGedcom(filtered, metadata?.name);
+
+            // Download file
+            const blob = new Blob([result.content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${metadata?.name || 'family-tree'}.ged`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }, false, { defaultPrivacy: 'initials', passwordless: true });
     },
 
     /**
@@ -160,8 +166,8 @@ export const importExportMethods = uiModule({
 
         this.showExportPasswordDialog(async (password: string | null) => {
             const { AppExporter } = await import('../export.js');
-            await AppExporter.exportApp(undefined, password);
-        });
+            await AppExporter.exportApp(undefined, password, this.readExportPrivacyMode());
+        }, false, { defaultPrivacy: 'initials' });
     },
 
     /**
@@ -174,8 +180,8 @@ export const importExportMethods = uiModule({
         this.showExportPasswordDialog(async (password: string | null) => {
             const includeAuditLog = (document.getElementById('export-audit-log-toggle') as HTMLInputElement)?.checked || false;
             const { AppExporter } = await import('../export.js');
-            await AppExporter.exportAllAsApp(password, includeAuditLog);
-        }, true);
+            await AppExporter.exportAllAsApp(password, includeAuditLog, this.readExportPrivacyMode());
+        }, true, { defaultPrivacy: 'initials' });
     },
 
     /**
@@ -186,7 +192,7 @@ export const importExportMethods = uiModule({
 
         this.showExportPasswordDialog(async (password: string | null) => {
             const visibleIds = TreeRenderer.getVisiblePersonIds();
-            await DataManager.exportFocusedJSON(visibleIds, password);
+            await DataManager.exportFocusedJSON(visibleIds, password, this.readExportPrivacyMode());
         });
     },
 
@@ -198,7 +204,7 @@ export const importExportMethods = uiModule({
 
         this.showExportPasswordDialog(async (password: string | null) => {
             const visibleIds = TreeRenderer.getVisiblePersonIds();
-            await DataManager.exportFocusedJSON(visibleIds, password);
+            await DataManager.exportFocusedJSON(visibleIds, password, this.readExportPrivacyMode());
         });
     },
 
@@ -808,8 +814,10 @@ export const importExportMethods = uiModule({
             return;
         }
 
-        await AppExporter.exportFocusAsApp(focusedData, 'strom-focus.html');
         this.closeExportFocusDialog();
+        this.showExportPasswordDialog(async (password: string | null) => {
+            await AppExporter.exportFocusAsApp(focusedData, 'strom-focus.html', password, this.readExportPrivacyMode());
+        }, false, { defaultPrivacy: 'initials' });
     },
 
     /**
@@ -821,6 +829,8 @@ export const importExportMethods = uiModule({
 
         this.showExportPasswordDialog(async (password: string | null) => {
             const includeAuditLog = (document.getElementById('export-audit-log-toggle') as HTMLInputElement)?.checked || false;
+            const privacyMode = this.readExportPrivacyMode();
+            const { applyLivingPrivacy } = await import('../privacy.js');
             const trees = TreeManager.getTrees();
             const allData: Record<string, { name: string; data: StromData; auditLog?: AuditLog }> = {};
 
@@ -829,7 +839,7 @@ export const importExportMethods = uiModule({
                 if (data) {
                     const entry: { name: string; data: StromData; auditLog?: AuditLog } = {
                         name: tree.name,
-                        data
+                        data: applyLivingPrivacy(data, privacyMode)
                     };
                     if (includeAuditLog) {
                         const log = await AuditLogManager.exportForTree(tree.id);

@@ -53,6 +53,12 @@ export interface Person {
     deathPlace?: string;
     notes?: string;
     isLocked?: boolean;
+    /**
+     * Explicit override of the "is this person alive?" heuristic used by the
+     * living-privacy export filter. true = deceased, false = definitely alive,
+     * undefined = fall back to the age heuristic.
+     */
+    isDeceased?: boolean;
 }
 
 export interface Partnership {

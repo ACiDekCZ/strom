@@ -22,6 +22,7 @@ import {
     LastFocusedMarker
 } from '../types.js';
 import { strings } from '../strings.js';
+import { isLivingPerson } from '../privacy.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -240,6 +241,10 @@ export const personModalMethods = uiModule({
         if (deathPlaceInput) deathPlaceInput.value = person.deathPlace || '';
         if (notesInput) notesInput.value = person.notes || '';
 
+        // "Deceased" checkbox reflects the current (heuristic or explicit) status.
+        const deceasedInput = document.getElementById('input-is-deceased') as HTMLInputElement;
+        if (deceasedInput) deceasedInput.checked = !isLivingPerson(person);
+
         // Snapshot original values for unsaved changes detection
         this.personModalSnapshot = {
             firstName: firstNameInput.value,
@@ -317,6 +322,9 @@ export const personModalMethods = uiModule({
         const deathDate = normalizeDateInput(deathDateInput?.value || '');
         const deathPlace = deathPlaceInput?.value.trim() || '';
         const notes = notesInput?.value.trim() || '';
+        // Explicit alive/deceased override; a death date already implies deceased.
+        const deceasedChecked = (document.getElementById('input-is-deceased') as HTMLInputElement)?.checked || false;
+        const isDeceased = deathDate ? undefined : deceasedChecked;
 
         if (birthDate === null || deathDate === null) {
             this.clearDialogStack();
@@ -342,7 +350,8 @@ export const personModalMethods = uiModule({
                 birthPlace,
                 deathDate,
                 deathPlace,
-                notes
+                notes,
+                isDeceased
             });
         } else {
             // Create new

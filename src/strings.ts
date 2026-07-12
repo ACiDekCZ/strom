@@ -82,6 +82,7 @@ const stringsEN = {
         birthPlace: 'Birth Place',
         deathDate: 'Death Date',
         deathPlace: 'Death Place',
+        deceased: 'Deceased',
         maidenName: 'Maiden Name',
         // Partnership dates - used based on status
         startDateMarried: 'Wedding Date',
@@ -835,6 +836,17 @@ const stringsEN = {
         redone: (desc: string) => `Redone: ${desc}`,
         nothingToUndo: 'Nothing to undo',
         nothingToRedo: 'Nothing to redo'
+    },
+
+    // Living-person privacy filter for exports
+    privacy: {
+        livingPerson: 'Living person',
+        label: 'Privacy of living persons',
+        tooltip: 'Hide details of people who are probably still alive when the tree leaves your family. The structure stays intact.',
+        modeFull: 'Full data',
+        modeInitials: 'Initials + birth year',
+        modeAnonymous: 'Hide names',
+        modeMinimal: 'Keep surname only'
     }
 };
 
@@ -908,6 +920,7 @@ const stringsCZ: StringsType = {
         birthPlace: 'Místo narození',
         deathDate: 'Datum úmrtí',
         deathPlace: 'Místo úmrtí',
+        deceased: 'Zemřel/a',
         maidenName: 'Rodné příjmení',
         // Partnership dates - used based on status
         startDateMarried: 'Datum sňatku',
@@ -1661,6 +1674,17 @@ const stringsCZ: StringsType = {
         redone: (desc: string) => `Znovu provedeno: ${desc}`,
         nothingToUndo: 'Není co vrátit',
         nothingToRedo: 'Není co zopakovat'
+    },
+
+    // Living-person privacy filter for exports
+    privacy: {
+        livingPerson: 'Žijící osoba',
+        label: 'Soukromí žijících osob',
+        tooltip: 'Skryje údaje o osobách, které pravděpodobně žijí, když strom opouští rodinu. Struktura zůstane zachována.',
+        modeFull: 'Plná data',
+        modeInitials: 'Iniciály + rok narození',
+        modeAnonymous: 'Skrýt jména',
+        modeMinimal: 'Ponechat jen příjmení'
     }
 };
 

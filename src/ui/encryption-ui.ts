@@ -22,6 +22,7 @@ import {
     LastFocusedMarker
 } from '../types.js';
 import { strings } from '../strings.js';
+import { PrivacyMode } from '../privacy.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -427,8 +428,33 @@ export const encryptionUiMethods = uiModule({
      * @param callback Called with password (or null for no password) when user confirms
      * @param includeAuditLogOption Show audit log checkbox (only for full backup / Export All)
      */
-    showExportPasswordDialog(callback: (password: string | null) => void, includeAuditLogOption = false): void {
+    /** Current value of the export dialog's privacy-mode selector. */
+    readExportPrivacyMode(): PrivacyMode {
+        const sel = document.getElementById('export-privacy-mode') as HTMLSelectElement | null;
+        const v = sel?.value;
+        return (v === 'initials' || v === 'anonymous' || v === 'minimal') ? v : 'full';
+    },
+
+    showExportPasswordDialog(
+        callback: (password: string | null) => void,
+        includeAuditLogOption = false,
+        options: { defaultPrivacy?: PrivacyMode; passwordless?: boolean } = {}
+    ): void {
         this.exportPasswordCallback = callback;
+
+        // Privacy mode selector: default per caller (share exports -> initials).
+        const privacySelect = document.getElementById('export-privacy-mode') as HTMLSelectElement | null;
+        if (privacySelect) privacySelect.value = options.defaultPrivacy ?? 'full';
+
+        // Passwordless mode (e.g. GEDCOM, which cannot be encrypted): hide the
+        // password inputs and the "export encrypted" button; only privacy applies.
+        const passwordless = options.passwordless ?? false;
+        const pwGroup = document.getElementById('export-password-group');
+        const pwConfirmGroup = document.getElementById('export-password-confirm-group');
+        const encryptedBtn = document.getElementById('export-with-password-btn');
+        if (pwGroup) pwGroup.style.display = passwordless ? 'none' : '';
+        if (pwConfirmGroup) pwConfirmGroup.style.display = passwordless ? 'none' : '';
+        if (encryptedBtn) encryptedBtn.style.display = passwordless ? 'none' : '';
 
         const modal = document.getElementById('export-password-modal');
         const input = document.getElementById('export-password-input') as HTMLInputElement;
