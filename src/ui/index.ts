@@ -56,6 +56,7 @@ import { treeStatsMethods } from './tree-stats.js';
 import { treeManagementMethods } from './tree-management.js';
 import { miscMethods } from './misc.js';
 import { appModeMethods } from './app-mode.js';
+import { kinshipUiMethods } from './kinship-ui.js';
 
 export class UIClass {
     currentId: PersonId | null = null;
@@ -128,6 +129,9 @@ export class UIClass {
 
     // Import-as-new-tree flag
     importToCurrentTree: boolean = false;
+
+    // Relationship calculator picker
+    kinshipPicker: PersonPicker | null = null;
 }
 
 // ---- Module composition ----
@@ -186,5 +190,9 @@ Object.assign(UIClass.prototype, miscMethods);
 type AppModeMethods = typeof appModeMethods;
 export interface UIClass extends AppModeMethods {}
 Object.assign(UIClass.prototype, appModeMethods);
+
+type KinshipUiMethods = typeof kinshipUiMethods;
+export interface UIClass extends KinshipUiMethods {}
+Object.assign(UIClass.prototype, kinshipUiMethods);
 
 export const UI = new UIClass();

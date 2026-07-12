@@ -1664,6 +1664,16 @@
             border-color: var(--primary);
         }
         /* Make empty date input placeholder very light */
+                /* Relationship calculator */
+        .kinship-modal { max-width: 480px; }
+        .kinship-result { margin: 12px 0; padding: 10px 12px; border-radius: 8px; background: rgba(127,127,127,0.08); }
+        .kinship-term { font-weight: 700; color: var(--accent-color, #4a90d9); }
+        .kinship-path { font-size: 0.85em; opacity: 0.75; margin-top: 6px; word-break: break-word; }
+        .kinship-from { margin: 4px 0 10px; }
+        #kinship-picker-container label { display: block; margin-bottom: 4px; font-size: 0.9em; }
+        .person-card.path-highlight { box-shadow: 0 0 0 3px #f5a623, 0 0 14px rgba(245,166,35,0.65); z-index: 5; }
+        .person-card.path-dimmed { opacity: 0.35; }
+        @media (max-width: 500px) { .kinship-modal { max-width: 94vw; } }
                 .modal input.flex-date.invalid,
         .partnership-start-date.invalid,
         .partnership-end-date.invalid {

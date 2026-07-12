@@ -112,10 +112,22 @@ const stringsEN = {
         flexDate: '5/15/1880 · 5/1880 · 1880 · about 1880'
     },
 
+    // Relationship calculator
+    kinship: {
+        title: 'Relationship',
+        fromLabel: 'From person',
+        pickLabel: 'Select the second person:',
+        isOf: 'is, relative to',
+        noRelation: 'No relationship found (within the tracked tree).',
+        highlight: 'Highlight in tree',
+        close: 'Close',
+    },
+
     // Context menu
     contextMenu: {
         edit: 'Edit',
         focus: 'Focus',
+        relationship: 'Find relationship…',
         addParent: 'Add Parent',
         addPartner: 'Add Partner',
         addChild: 'Add Child',
@@ -891,10 +903,22 @@ const stringsCZ: StringsType = {
         flexDate: '15.5.1880 · 5/1880 · 1880 · kolem 1880'
     },
 
+    // Relationship calculator
+    kinship: {
+        title: 'Příbuzenský vztah',
+        fromLabel: 'Výchozí osoba',
+        pickLabel: 'Vyberte druhou osobu:',
+        isOf: 'je vůči osobě',
+        noRelation: 'Žádný vztah nenalezen (v rámci evidovaného stromu).',
+        highlight: 'Zvýraznit ve stromu',
+        close: 'Zavřít',
+    },
+
     // Context menu
     contextMenu: {
         edit: 'Upravit',
         focus: 'Zaměřit',
+        relationship: 'Zjistit vztah…',
         addParent: 'Přidat rodiče',
         addPartner: 'Přidat partnera',
         addChild: 'Přidat dítě',

@@ -879,6 +879,32 @@ class TreeRendererClass {
         }
     }
 
+    /** True when the person is currently rendered on the canvas. */
+    isVisible(personId: PersonId): boolean {
+        return this.positions.has(personId);
+    }
+
+    /**
+     * Highlight a kinship path: cards on the path glow, the rest dim.
+     * Cleared automatically on the next render or by clicking the canvas.
+     */
+    highlightPath(personIds: PersonId[]): void {
+        const ids = new Set(personIds as string[]);
+        document.querySelectorAll('.person-card').forEach(card => {
+            const el = card as HTMLElement;
+            const onPath = el.dataset.id !== undefined && ids.has(el.dataset.id);
+            el.classList.toggle('path-highlight', onPath);
+            el.classList.toggle('path-dimmed', !onPath);
+        });
+        const clear = () => {
+            document.querySelectorAll('.person-card').forEach(card => {
+                card.classList.remove('path-highlight', 'path-dimmed');
+            });
+            document.removeEventListener('click', clear, true);
+        };
+        setTimeout(() => document.addEventListener('click', clear, true), 0);
+    }
+
     private renderLines(svg: SVGSVGElement): void {
         // In debug mode with step < 7, don't render lines (only boxes)
         const skipLines = this.debugOptions?.enabled && this.debugOptions.step < 7;
