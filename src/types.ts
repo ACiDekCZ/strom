@@ -385,6 +385,7 @@ export interface AppSettings {
     language: LanguageSetting;  // default: 'system'
     encryption: boolean;  // default: false - whether data encryption is enabled
     auditLog: boolean;  // default: false - whether audit log is enabled
+    suggestDuplicates?: boolean;  // default: true - hint similar persons on entry
 }
 
 // ==================== MULTI-TREE STORAGE ====================

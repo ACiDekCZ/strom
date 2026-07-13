@@ -122,6 +122,9 @@ export const personModalMethods = uiModule({
         modal.classList.add('active');
         firstNameInput.focus();
 
+        // Duplicate suggestions (new-person mode only).
+        this.initDuplicateSuggest('person');
+
         // Setup Enter as Tab for form fields
         this.setupEnterAsTab('person-modal', ['input-firstname', 'input-lastname', 'input-gender', 'input-birthdate', 'input-birthplace', 'input-deathdate', 'input-deathplace'], () => this.savePerson());
     },
@@ -328,6 +331,9 @@ export const personModalMethods = uiModule({
         const attachmentsSection = document.getElementById('attachments-section');
         if (attachmentsSection) attachmentsSection.style.display = '';
         this.renderAttachmentsList();
+
+        // Editing an existing person → no duplicate suggestions.
+        this.disableDuplicateSuggest('person');
 
         modal.classList.add('active');
         if (!DataManager.isPersonLocked(id)) firstNameInput.focus();

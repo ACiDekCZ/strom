@@ -43,6 +43,9 @@ the table honest.
 | Attachments: add image + reload + delete | `attachments.spec.ts` | covered | compressed in-browser, note persists, delete |
 | Attachments: oversized PDF rejected | `attachments.spec.ts` | covered | >2 MB PDF warned, not attached |
 | Parent relationship type (adoptive) | `parent-rel-type.spec.ts` | covered | select sets adoptive, child drop dashed, persists |
+| Duplicate suggestion in new-person modal | `duplicate-suggest.spec.ts` | covered | hint appears, "Go to person" focuses existing |
+| Duplicate "use existing" in add-relation | `duplicate-suggest.spec.ts` | covered | links existing person, no duplicate created |
+| Duplicate suggestions settings toggle | `duplicate-suggest.spec.ts` | covered | disabling hides the hint |
 | Flex date accepted/normalized/rejected | `edit-undo-lock.spec.ts` | covered | `about 1880` → `~1880`; nonsense rejected |
 | Delete person (context menu) + undo | `person-crud.spec.ts` | covered | confirm dialog, undo restores |
 | Delete person (Delete key) | `person-crud.spec.ts` | covered | deletes the focused person after confirm |

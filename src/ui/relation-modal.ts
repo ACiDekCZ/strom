@@ -225,6 +225,9 @@ export const relationModalMethods = uiModule({
 
         modal.classList.add('active');
 
+        // Duplicate suggestions while typing a new related person.
+        this.initDuplicateSuggest('relation');
+
         // Setup Enter as Tab for form fields (only when creating new person)
         this.setupEnterAsTab('relation-modal', ['rel-firstname', 'rel-lastname', 'rel-gender'], () => this.saveRelation());
     },

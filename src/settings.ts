@@ -73,6 +73,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Duplicate suggestions default ON (undefined = enabled). */
+    isSuggestDuplicatesEnabled(): boolean {
+        return this.settings.suggestDuplicates !== false;
+    }
+
+    setSuggestDuplicates(enabled: boolean): void {
+        this.settings.suggestDuplicates = enabled;
+        this.save();
+    }
+
     private applyTheme(): void {
         const html = document.documentElement;
         let isDark = false;

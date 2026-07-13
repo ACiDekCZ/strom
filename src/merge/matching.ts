@@ -1136,3 +1136,60 @@ export function reanalyzeMatches(state: MergeState): void {
         .filter(id => !state.incomingData.persons[id as PersonId].isPlaceholder)
         .map(id => id as PersonId);
 }
+
+// ==================== DUPLICATE SUGGESTIONS ====================
+
+/** A draft person being entered, matched against existing persons. */
+export interface SimilarPersonDraft {
+    firstName: string;
+    lastName: string;
+    gender: import('../types.js').Gender;
+    birthDate?: string;
+}
+
+export interface SimilarPersonResult {
+    person: Person;
+    score: number;
+}
+
+/**
+ * Minimum match score (0-100) for a person to be suggested as a possible
+ * duplicate. Same threshold the merge engine uses to accept a candidate, so
+ * suggestion and merge share one notion of "similar enough".
+ */
+export const SIMILAR_PERSON_THRESHOLD = 35;
+
+/**
+ * Find existing persons similar to a draft being entered (duplicate hint).
+ * Reuses the merge scoring so there is a single source of truth. Returns
+ * matches at/above SIMILAR_PERSON_THRESHOLD, highest score first.
+ */
+export function findSimilarPersons(
+    data: StromData,
+    draft: SimilarPersonDraft,
+    excludeId?: PersonId
+): SimilarPersonResult[] {
+    if (!draft.firstName.trim() && !draft.lastName.trim()) return [];
+
+    // Synthetic person so we can reuse calculateMatchScore unchanged.
+    const incoming: Person = {
+        id: '__draft__' as PersonId,
+        firstName: draft.firstName,
+        lastName: draft.lastName,
+        gender: draft.gender,
+        isPlaceholder: false,
+        partnerships: [],
+        parentIds: [],
+        childIds: [],
+        ...(draft.birthDate ? { birthDate: draft.birthDate } : {}),
+    };
+
+    const results: SimilarPersonResult[] = [];
+    for (const person of Object.values(data.persons)) {
+        if (person.id === excludeId || person.isPlaceholder) continue;
+        const { score } = calculateMatchScore(person, incoming, data, data);
+        if (score >= SIMILAR_PERSON_THRESHOLD) results.push({ person, score });
+    }
+    results.sort((a, b) => b.score - a.score);
+    return results;
+}

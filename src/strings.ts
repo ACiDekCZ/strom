@@ -143,6 +143,16 @@ const stringsEN = {
         readError: 'Could not read the file.',
     },
 
+    // Duplicate suggestions
+    duplicates: {
+        title: 'Similar persons already exist:',
+        goToPerson: 'Go to person',
+        useExisting: 'Use existing',
+        parentsLabel: (names: string) => `parents: ${names}`,
+        settingLabel: 'Duplicate suggestions',
+        settingHint: 'Suggest existing similar persons while entering a new one',
+    },
+
     // Zoom controls
     zoomControls: {
         zoomIn: 'Zoom In',
@@ -1123,6 +1133,16 @@ const stringsCZ: StringsType = {
         pdfTooLarge: 'PDF je příliš velké (max 2 MB).',
         unsupportedType: 'Nepodporovaný typ souboru. Použijte JPG, PNG nebo PDF.',
         readError: 'Soubor se nepodařilo načíst.',
+    },
+
+    // Duplicate suggestions
+    duplicates: {
+        title: 'Podobné osoby už existují:',
+        goToPerson: 'Přejít na osobu',
+        useExisting: 'Použít existující',
+        parentsLabel: (names: string) => `rodiče: ${names}`,
+        settingLabel: 'Našeptávání duplicit',
+        settingHint: 'Při zadávání nové osoby nabízet podobné existující',
     },
 
     // Zoom controls

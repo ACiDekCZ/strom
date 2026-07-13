@@ -557,6 +557,10 @@ export const appModeMethods = uiModule({
         }
     },
 
+    toggleSuggestDuplicates(enabled: boolean): void {
+        SettingsManager.setSuggestDuplicates(enabled);
+    },
+
     showAuditLogDialog(treeId?: TreeId | string, parentDialogId?: string): void {
         const modal = document.getElementById('audit-log-modal');
         if (!modal) return;

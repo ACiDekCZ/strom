@@ -245,6 +245,9 @@ export const miscMethods = uiModule({
                 : strings.auditLog.disabled;
         }
 
+        const suggestToggle = document.getElementById('suggest-duplicates-toggle') as HTMLInputElement | null;
+        if (suggestToggle) suggestToggle.checked = SettingsManager.isSuggestDuplicatesEnabled();
+
         modal.classList.add('active');
     },
 

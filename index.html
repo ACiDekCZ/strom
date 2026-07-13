@@ -4842,6 +4842,28 @@
         #attachment-overlay.active { display: flex; }
         #attachment-overlay img { max-width: 92vw; max-height: 92vh; box-shadow: 0 4px 32px rgba(0,0,0,0.5); }
 
+        /* Duplicate suggestions */
+        .duplicate-suggest {
+            margin: -4px 0 12px; padding: 8px 10px; border-radius: 6px;
+            background: var(--accent-soft, #fff8e1); border: 1px solid var(--border-color, #ecd9a0);
+            font-size: 13px;
+        }
+        .duplicate-suggest-title { font-weight: 600; margin-bottom: 6px; }
+        .duplicate-suggest-item {
+            display: flex; align-items: center; gap: 8px; padding: 4px 0;
+        }
+        .duplicate-suggest-item + .duplicate-suggest-item { border-top: 1px solid var(--border-color, #ecd9a0); }
+        .duplicate-suggest-main { flex: 1; min-width: 0; }
+        .duplicate-suggest-name { font-weight: 600; }
+        .duplicate-suggest-meta { color: var(--text-secondary, #777); font-size: 12px; }
+        .duplicate-suggest-item button {
+            flex-shrink: 0; border: 1px solid var(--border-color, #ccc); border-radius: 4px;
+            background: var(--card-bg, #fff); cursor: pointer; padding: 3px 8px; font-size: 12px;
+        }
+        .duplicate-suggest-item button:hover { background: var(--accent-soft, #e8f0fe); }
+        [data-theme="dark"] .duplicate-suggest { background: #33301f; border-color: #5a5230; }
+        [data-theme="dark"] .duplicate-suggest-item button { background: #2a2a2a; border-color: #555; }
+
         /* Card tooltip */
         .card-tooltip {
             display: none;
@@ -5051,6 +5073,7 @@
                 <label data-i18n="labels.birthDate"></label>
                 <input type="text" class="flex-date" id="input-birthdate" autocomplete="off" data-i18n-placeholder="placeholders.flexDate" inputmode="text">
             </div>
+            <div id="duplicate-suggest-person" class="duplicate-suggest" style="display:none;"></div>
             <div class="form-group">
                 <label data-i18n="labels.birthPlace"></label>
                 <input type="text" id="input-birthplace" autocomplete="off">
@@ -5251,6 +5274,7 @@
                         <option value="female" data-i18n="gender.female"></option>
                     </select>
                 </div>
+                <div id="duplicate-suggest-relation" class="duplicate-suggest" style="display:none;"></div>
                 <div class="form-group">
                     <label data-i18n="labels.birthDate"></label>
                     <input type="date" id="rel-birthdate">
@@ -5366,6 +5390,15 @@
                     <label class="settings-checkbox">
                         <input type="checkbox" id="audit-log-toggle" onchange="window.Strom.UI.toggleAuditLog(this.checked)">
                         <span id="audit-log-status"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="duplicates.settingLabel"></label>
+                <div class="settings-options">
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="suggest-duplicates-toggle" onchange="window.Strom.UI.toggleSuggestDuplicates(this.checked)">
+                        <span data-i18n="duplicates.settingHint"></span>
                     </label>
                 </div>
             </div>
