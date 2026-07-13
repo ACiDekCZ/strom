@@ -15,6 +15,8 @@ import {
     generatePersonId,
     generateLifeEventId,
     LifeEvent,
+    generateSourceId,
+    Source,
     generatePartnershipId,
     LAST_FOCUSED,
     LastFocusedMarker,
@@ -666,13 +668,19 @@ class DataManagerClass {
             }
         }
 
-        // v1 -> v2: Person.events was added. It is optional, so v1 data needs no
-        // transformation; the version is re-stamped to current on the next save.
+        // v1 -> v2: Person.events was added. v2 -> v3: the per-tree source
+        // catalog (sources) plus citation ids were added. All optional, so older
+        // data needs no transformation; the version is re-stamped on next save.
 
         const result: StromData = {
             persons: (d.persons || {}) as Record<PersonId, Person>,
             partnerships
         };
+
+        // Preserve the source catalog if present.
+        if (d.sources && typeof d.sources === 'object') {
+            result.sources = d.sources as StromData['sources'];
+        }
 
         // Preserve default person settings if present
         if (d.defaultPersonId !== undefined) {
@@ -976,6 +984,133 @@ class DataManagerClass {
         if (person.events.length === 0) delete person.events;
         this.commitMutation(strings.undo.removeEvent(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'event.remove', strings.auditLog.removedEvent(auditPersonName(person)));
+        return true;
+    }
+
+    // ==================== SOURCES / CITATIONS ====================
+
+    /** Add a source to the per-tree catalog. Title is required. Returns it or null. */
+    addSource(source: Omit<Source, 'id'>): Source | null {
+        if (this.isTreeLocked()) return null;
+        if (!source.title?.trim()) return null;
+
+        this.beginMutation();
+        const newSource: Source = { ...source, id: generateSourceId() };
+        if (!this.data.sources) this.data.sources = {};
+        this.data.sources[newSource.id] = newSource;
+        this.commitMutation(strings.undo.addSource(newSource.title));
+        AuditLogManager.log(this.currentTreeId, 'source.add', strings.auditLog.addedSource(newSource.title));
+        return newSource;
+    }
+
+    updateSource(sourceId: string, updates: Partial<Omit<Source, 'id'>>): boolean {
+        const src = this.data.sources?.[sourceId];
+        if (!src) return false;
+        if (this.isTreeLocked()) return false;
+        if (updates.title !== undefined && !updates.title.trim()) return false;
+
+        this.beginMutation();
+        Object.assign(src, updates);
+        this.commitMutation(strings.undo.editSource(src.title));
+        AuditLogManager.log(this.currentTreeId, 'source.update', strings.auditLog.updatedSource(src.title));
+        return true;
+    }
+
+    /** Remove a source and cascade-delete every citation of it (persons + events). */
+    removeSource(sourceId: string): boolean {
+        const src = this.data.sources?.[sourceId];
+        if (!src) return false;
+        if (this.isTreeLocked()) return false;
+
+        this.beginMutation();
+        delete this.data.sources![sourceId];
+        if (Object.keys(this.data.sources!).length === 0) delete this.data.sources;
+        for (const person of Object.values(this.data.persons)) {
+            if (person.sourceIds) {
+                person.sourceIds = person.sourceIds.filter(id => id !== sourceId);
+                if (person.sourceIds.length === 0) delete person.sourceIds;
+            }
+            for (const ev of person.events ?? []) {
+                if (ev.sourceIds) {
+                    ev.sourceIds = ev.sourceIds.filter(id => id !== sourceId);
+                    if (ev.sourceIds.length === 0) delete ev.sourceIds;
+                }
+            }
+        }
+        this.commitMutation(strings.undo.removeSource(src.title));
+        AuditLogManager.log(this.currentTreeId, 'source.remove', strings.auditLog.removedSource(src.title));
+        return true;
+    }
+
+    /** How many persons + events currently cite a source. */
+    countSourceCitations(sourceId: string): number {
+        let count = 0;
+        for (const person of Object.values(this.data.persons)) {
+            if (person.sourceIds?.includes(sourceId)) count++;
+            for (const ev of person.events ?? []) {
+                if (ev.sourceIds?.includes(sourceId)) count++;
+            }
+        }
+        return count;
+    }
+
+    /** Add a citation of `sourceId` on a person. */
+    citePerson(personId: PersonId, sourceId: string): boolean {
+        const person = this.data.persons[personId];
+        if (!person || !this.data.sources?.[sourceId]) return false;
+        if (this.isPersonLocked(personId)) return false;
+        if (person.sourceIds?.includes(sourceId)) return false;
+
+        this.beginMutation();
+        if (!person.sourceIds) person.sourceIds = [];
+        person.sourceIds.push(sourceId);
+        this.commitMutation(strings.undo.cite(auditPersonName(person)));
+        AuditLogManager.log(this.currentTreeId, 'source.cite', strings.auditLog.citedSource(auditPersonName(person)));
+        return true;
+    }
+
+    /** Remove a citation of `sourceId` from a person. */
+    uncitePerson(personId: PersonId, sourceId: string): boolean {
+        const person = this.data.persons[personId];
+        if (!person?.sourceIds?.includes(sourceId)) return false;
+        if (this.isPersonLocked(personId)) return false;
+
+        this.beginMutation();
+        person.sourceIds = person.sourceIds.filter(id => id !== sourceId);
+        if (person.sourceIds.length === 0) delete person.sourceIds;
+        this.commitMutation(strings.undo.uncite(auditPersonName(person)));
+        AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(auditPersonName(person)));
+        return true;
+    }
+
+    /** Add a citation of `sourceId` on a person's life event. */
+    citeEvent(personId: PersonId, eventId: string, sourceId: string): boolean {
+        const person = this.data.persons[personId];
+        const ev = person?.events?.find(e => e.id === eventId);
+        if (!person || !ev || !this.data.sources?.[sourceId]) return false;
+        if (this.isPersonLocked(personId)) return false;
+        if (ev.sourceIds?.includes(sourceId)) return false;
+
+        this.beginMutation();
+        if (!ev.sourceIds) ev.sourceIds = [];
+        ev.sourceIds.push(sourceId);
+        this.commitMutation(strings.undo.cite(auditPersonName(person)));
+        AuditLogManager.log(this.currentTreeId, 'source.cite', strings.auditLog.citedSource(auditPersonName(person)));
+        return true;
+    }
+
+    /** Remove a citation of `sourceId` from a person's life event. */
+    unciteEvent(personId: PersonId, eventId: string, sourceId: string): boolean {
+        const person = this.data.persons[personId];
+        const ev = person?.events?.find(e => e.id === eventId);
+        if (!person || !ev?.sourceIds?.includes(sourceId)) return false;
+        if (this.isPersonLocked(personId)) return false;
+
+        this.beginMutation();
+        ev.sourceIds = ev.sourceIds.filter(id => id !== sourceId);
+        if (ev.sourceIds.length === 0) delete ev.sourceIds;
+        this.commitMutation(strings.undo.uncite(auditPersonName(person)));
+        AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(auditPersonName(person)));
         return true;
     }
 
@@ -1945,6 +2080,19 @@ class DataManagerClass {
             if (parent) {
                 parent.childIds = parent.childIds.filter(cid => cid !== removeId);
             }
+        }
+
+        // 6b. Carry over the removed person's life events and source citations
+        // (union) so neither is lost in the merge.
+        if (removePerson.events && removePerson.events.length > 0) {
+            if (!keepPerson.events) keepPerson.events = [];
+            const seen = new Set(keepPerson.events.map(e => e.id));
+            for (const ev of removePerson.events) {
+                if (!seen.has(ev.id)) keepPerson.events.push(ev);
+            }
+        }
+        if (removePerson.sourceIds && removePerson.sourceIds.length > 0) {
+            keepPerson.sourceIds = [...new Set([...(keepPerson.sourceIds ?? []), ...removePerson.sourceIds])];
         }
 
         // 7. Delete the removed person

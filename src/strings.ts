@@ -101,6 +101,34 @@ const stringsEN = {
         }
     },
 
+    // Sources / citations
+    sources: {
+        menu: 'Sources',
+        title: 'Sources',
+        add: 'Add source',
+        addTitle: 'Add source',
+        editTitle: 'Edit source',
+        empty: 'No sources yet',
+        sectionTitle: 'Sources',
+        cite: 'Cite a source',
+        pickTitle: 'Cite a source',
+        searchPlaceholder: 'Search sources…',
+        createNew: 'New source…',
+        emptyPicker: 'No sources — create one',
+        edit: 'Edit',
+        delete: 'Delete',
+        remove: 'Remove citation',
+        fieldTitle: 'Title',
+        fieldRepository: 'Repository',
+        fieldReference: 'Reference',
+        fieldUrl: 'URL',
+        fieldNote: 'Note',
+        titleRequired: 'Enter a source title',
+        citations: (n: number) => `${n}×`,
+        deleteConfirm: (n: number) =>
+            n > 0 ? `Delete this source? It is cited in ${n} place(s); those citations will be removed.` : 'Delete this source?',
+    },
+
     // Zoom controls
     zoomControls: {
         zoomIn: 'Zoom In',
@@ -638,6 +666,8 @@ const stringsEN = {
         statsWithBirthPlace: 'With birth place',
         statsPhotos: 'Photos',
         statsEvents: 'Events',
+        statsSources: 'Sources',
+        statsSourceCoverage: 'Source coverage',
         statsSize: 'Storage',
         statsTreeSize: 'Tree size',
         // Anniversaries
@@ -861,6 +891,11 @@ const stringsEN = {
         addedEvent: (name: string) => `Added event to ${name}`,
         updatedEvent: (name: string) => `Updated event of ${name}`,
         removedEvent: (name: string) => `Removed event from ${name}`,
+        addedSource: (title: string) => `Added source "${title}"`,
+        updatedSource: (title: string) => `Updated source "${title}"`,
+        removedSource: (title: string) => `Removed source "${title}"`,
+        citedSource: (name: string) => `Cited a source on ${name}`,
+        uncitedSource: (name: string) => `Removed a citation from ${name}`,
         // Undo / redo
         undoAction: (desc: string) => `Undo: ${desc}`,
         redoAction: (desc: string) => `Redo: ${desc}`
@@ -882,6 +917,11 @@ const stringsEN = {
         addEvent: (name: string) => `event of ${name}`,
         editEvent: (name: string) => `editing event of ${name}`,
         removeEvent: (name: string) => `removing event of ${name}`,
+        addSource: (title: string) => `source "${title}"`,
+        editSource: (title: string) => `editing source "${title}"`,
+        removeSource: (title: string) => `removing source "${title}"`,
+        cite: (name: string) => `citation on ${name}`,
+        uncite: (name: string) => `removing citation from ${name}`,
         undone: (desc: string) => `Undone: ${desc}`,
         redone: (desc: string) => `Redone: ${desc}`,
         nothingToUndo: 'Nothing to undo',
@@ -1009,6 +1049,34 @@ const stringsCZ: StringsType = {
             education: 'Vzdělání',
             custom: 'Vlastní'
         }
+    },
+
+    // Sources / citations
+    sources: {
+        menu: 'Prameny',
+        title: 'Prameny',
+        add: 'Přidat pramen',
+        addTitle: 'Přidat pramen',
+        editTitle: 'Upravit pramen',
+        empty: 'Zatím žádné prameny',
+        sectionTitle: 'Prameny',
+        cite: 'Citovat pramen',
+        pickTitle: 'Citovat pramen',
+        searchPlaceholder: 'Hledat prameny…',
+        createNew: 'Nový pramen…',
+        emptyPicker: 'Žádné prameny — vytvořte pramen',
+        edit: 'Upravit',
+        delete: 'Smazat',
+        remove: 'Odebrat citaci',
+        fieldTitle: 'Název',
+        fieldRepository: 'Archiv / instituce',
+        fieldReference: 'Signatura / strana',
+        fieldUrl: 'URL',
+        fieldNote: 'Poznámka',
+        titleRequired: 'Zadejte název pramene',
+        citations: (n: number) => `${n}×`,
+        deleteConfirm: (n: number) =>
+            n > 0 ? `Smazat tento pramen? Je citován na ${n} místech; citace budou odebrány.` : 'Smazat tento pramen?',
     },
 
     // Zoom controls
@@ -1548,6 +1616,8 @@ const stringsCZ: StringsType = {
         statsWithBirthPlace: 'S místem narození',
         statsPhotos: 'Fotky',
         statsEvents: 'Události',
+        statsSources: 'Prameny',
+        statsSourceCoverage: 'Pokrytí prameny',
         statsSize: 'Úložiště',
         statsTreeSize: 'Velikost stromu',
         // Anniversaries
@@ -1771,6 +1841,11 @@ const stringsCZ: StringsType = {
         addedEvent: (name: string) => `Přidána událost k ${name}`,
         updatedEvent: (name: string) => `Upravena událost u ${name}`,
         removedEvent: (name: string) => `Odebrána událost u ${name}`,
+        addedSource: (title: string) => `Přidán pramen „${title}"`,
+        updatedSource: (title: string) => `Upraven pramen „${title}"`,
+        removedSource: (title: string) => `Odebrán pramen „${title}"`,
+        citedSource: (name: string) => `Přidána citace u ${name}`,
+        uncitedSource: (name: string) => `Odebrána citace u ${name}`,
         // Undo / redo
         undoAction: (desc: string) => `Zpět: ${desc}`,
         redoAction: (desc: string) => `Znovu: ${desc}`
@@ -1792,6 +1867,11 @@ const stringsCZ: StringsType = {
         addEvent: (name: string) => `událost u ${name}`,
         editEvent: (name: string) => `úprava události u ${name}`,
         removeEvent: (name: string) => `odebrání události u ${name}`,
+        addSource: (title: string) => `pramen „${title}"`,
+        editSource: (title: string) => `úprava pramene „${title}"`,
+        removeSource: (title: string) => `odebrání pramene „${title}"`,
+        cite: (name: string) => `citace u ${name}`,
+        uncite: (name: string) => `odebrání citace u ${name}`,
         undone: (desc: string) => `Vráceno: ${desc}`,
         redone: (desc: string) => `Znovu provedeno: ${desc}`,
         nothingToUndo: 'Není co vrátit',

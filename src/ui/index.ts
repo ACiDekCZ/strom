@@ -46,6 +46,7 @@ import { contextMenuMethods } from './context-menu.js';
 
 import { personModalMethods } from './person-modal.js';
 import { personEventsMethods } from './person-events.js';
+import { sourcesMethods } from './sources.js';
 import { relationModalMethods } from './relation-modal.js';
 import { dialogsMethods } from './dialogs.js';
 import { relationshipsPanelMethods } from './relationships-panel.js';
@@ -110,6 +111,13 @@ export class UIClass {
     // Life-events editor state: the event being edited, or null when adding.
     editingEventId: string | null = null;
 
+    // Sources/citations state.
+    editingSourceId: string | null = null;
+    /** What a citation applies to (person, or a specific event on that person). */
+    citationContext: { personId: PersonId; eventId?: string } | null = null;
+    /** When the source editor was opened from the picker, cite the new source. */
+    citeSourceAfterCreate = false;
+
     // Relationships panel state
     relationshipsPanelPersonId: PersonId | null = null;
     returnToEditPersonId: PersonId | null = null;  // Track if we should return to edit dialog
@@ -156,6 +164,10 @@ Object.assign(UIClass.prototype, personModalMethods);
 type PersonEventsMethods = typeof personEventsMethods;
 export interface UIClass extends PersonEventsMethods {}
 Object.assign(UIClass.prototype, personEventsMethods);
+
+type SourcesMethods = typeof sourcesMethods;
+export interface UIClass extends SourcesMethods {}
+Object.assign(UIClass.prototype, sourcesMethods);
 
 type RelationModalMethods = typeof relationModalMethods;
 export interface UIClass extends RelationModalMethods {}

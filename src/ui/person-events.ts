@@ -109,6 +109,9 @@ export const personEventsMethods = uiModule({
         this.editingEventId = null;
         this.populateEventTypeSelect();
         this.setEventEditorFields('baptism', '', '', '', '');
+        // Citations need a saved event id — hide the section while adding.
+        const src = document.getElementById('event-sources-section');
+        if (src) src.style.display = 'none';
         this.openEventEditor(strings.events.addTitle);
     },
 
@@ -122,6 +125,10 @@ export const personEventsMethods = uiModule({
         this.populateEventTypeSelect();
         this.setEventEditorFields(event.type, event.customLabel ?? '',
             event.date ?? '', event.place ?? '', event.note ?? '');
+        // Citations available for an existing event.
+        const src = document.getElementById('event-sources-section');
+        if (src) src.style.display = '';
+        this.renderEventSourcesChips();
         this.openEventEditor(strings.events.editTitle);
     },
 

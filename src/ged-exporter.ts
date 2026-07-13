@@ -123,6 +123,14 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
         familyCounter++;
     }
 
+    // Map all sources to GEDCOM IDs (@S1@ ...)
+    const sourceIdMap = new Map<string, string>();
+    let sourceCounter = 1;
+    for (const sourceId of Object.keys(data.sources ?? {})) {
+        sourceIdMap.set(sourceId, `@S${sourceCounter}@`);
+        sourceCounter++;
+    }
+
     // Get current date for header
     const now = new Date();
     const headerDate = `${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
@@ -212,6 +220,17 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
             if (event.note && event.type !== 'occupation') {
                 pushNote(lines, 2, event.note);
             }
+            // Source citations on the event (2 SOUR @Sx@).
+            for (const srcId of event.sourceIds ?? []) {
+                const ref = sourceIdMap.get(srcId);
+                if (ref) lines.push(`2 SOUR ${ref}`);
+            }
+        }
+
+        // Source citations on the person (1 SOUR @Sx@).
+        for (const srcId of person.sourceIds ?? []) {
+            const ref = sourceIdMap.get(srcId);
+            if (ref) lines.push(`1 SOUR ${ref}`);
         }
 
         // Family as spouse (FAMS) - partnerships where this person is a partner
@@ -296,6 +315,19 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
         if (partnership.note) {
             pushNote(lines, 1, partnership.note);
         }
+    }
+
+    // ==================== SOURCES ====================
+    // reference is written as PAGE and url as WWW to mirror the parser mapping.
+    for (const [sourceId, source] of Object.entries(data.sources ?? {})) {
+        const gedcomId = sourceIdMap.get(sourceId);
+        if (!gedcomId) continue;
+        lines.push(`0 ${gedcomId} SOUR`);
+        if (source.title) lines.push(`1 TITL ${escapeGedcomText(source.title)}`);
+        if (source.repository) lines.push(`1 REPO ${escapeGedcomText(source.repository)}`);
+        if (source.reference) lines.push(`1 PAGE ${escapeGedcomText(source.reference)}`);
+        if (source.url) lines.push(`1 WWW ${escapeGedcomText(source.url)}`);
+        if (source.note) pushNote(lines, 1, source.note);
     }
 
     // ==================== TRAILER ====================

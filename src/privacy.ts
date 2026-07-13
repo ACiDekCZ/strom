@@ -49,6 +49,8 @@ function stripDetails(person: Person): void {
     delete person.photoOriginalName;
     // Life events carry places and dates — drop them for living people.
     delete person.events;
+    // Source citations may point at sensitive references — drop them too.
+    delete person.sourceIds;
 }
 
 /**
@@ -62,6 +64,15 @@ export function applyLivingPrivacy(
 ): StromData {
     const copy = structuredClone(data);
     if (mode === 'full') return copy;
+
+    // The source catalog may hold sensitive references (e.g. registers of the
+    // living), so it is never exported under a privacy mode. Drop every citation
+    // too, so no person/event points at a source that is no longer present.
+    delete copy.sources;
+    for (const person of Object.values(copy.persons)) {
+        delete person.sourceIds;
+        for (const ev of person.events ?? []) delete ev.sourceIds;
+    }
 
     for (const person of Object.values(copy.persons)) {
         if (person.isPlaceholder) continue;

@@ -4761,6 +4761,49 @@
         .events-empty { color: var(--text-secondary, #999); font-size: 13px; font-style: italic; padding: 4px 0; }
         [data-theme="dark"] .event-row { border-color: #444; background: #2a2a2a; }
 
+        /* Sources / citations */
+        .sources-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; max-height: 50vh; overflow-y: auto; }
+        .source-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 10px; border: 1px solid var(--border-color, #ddd);
+            border-radius: 6px; background: var(--card-bg, #fafafa); font-size: 14px;
+        }
+        .source-row .source-main { flex: 1; min-width: 0; }
+        .source-title { font-weight: 600; }
+        .source-meta { color: var(--text-secondary, #777); font-size: 13px; }
+        .source-count { margin-left: 6px; color: var(--text-secondary, #999); font-size: 12px; }
+        .source-actions { display: flex; gap: 4px; flex-shrink: 0; }
+        .source-actions button {
+            border: none; background: none; cursor: pointer; padding: 2px 6px;
+            font-size: 15px; line-height: 1; color: var(--text-secondary, #777);
+        }
+        .source-actions button:hover { color: var(--text-primary, #222); }
+        .sources-empty { color: var(--text-secondary, #999); font-size: 13px; font-style: italic; padding: 4px 0; }
+        /* Citation chips */
+        .sources-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+        .source-chip {
+            display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+            padding: 3px 6px 3px 10px; border-radius: 12px; font-size: 13px;
+            background: var(--accent-soft, #e8f0fe); color: var(--text-primary, #222);
+        }
+        .source-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .source-chip-remove {
+            border: none; background: none; cursor: pointer; font-size: 16px; line-height: 1;
+            color: var(--text-secondary, #777); padding: 0 2px;
+        }
+        .source-chip-remove:hover { color: var(--danger, #c0392b); }
+        /* Source picker */
+        .source-picker-search { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+        .source-picker-list { display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow-y: auto; margin-bottom: 12px; }
+        .source-picker-item {
+            text-align: left; border: 1px solid var(--border-color, #ddd); border-radius: 6px;
+            background: var(--card-bg, #fafafa); padding: 8px 10px; cursor: pointer; font-size: 14px;
+        }
+        .source-picker-item:hover { background: var(--accent-soft, #e8f0fe); }
+        [data-theme="dark"] .source-row,
+        [data-theme="dark"] .source-picker-item { border-color: #444; background: #2a2a2a; }
+        [data-theme="dark"] .source-chip { background: #2d3a52; }
+
         /* Card tooltip */
         .card-tooltip {
             display: none;
@@ -4889,6 +4932,7 @@
         <button class="edit-only" onclick="window.Strom.UI.performUndo(); window.Strom.UI.closeMobileMenu()">↶ <span data-i18n="undo.undo"></span></button>
         <button class="edit-only" onclick="window.Strom.UI.performRedo(); window.Strom.UI.closeMobileMenu()">↷ <span data-i18n="undo.redo"></span></button>
         <button class="edit-only" onclick="window.Strom.UI.showTreeManagerDialog(); window.Strom.UI.closeMobileMenu()">🌳 <span data-i18n="treeManager.manageTreesTitle"></span></button>
+        <button class="edit-only" onclick="window.Strom.UI.showSourcesDialog(); window.Strom.UI.closeMobileMenu()">📚 <span data-i18n="sources.menu"></span></button>
         <button onclick="window.Strom.UI.showPosterDialog()">🖼️ <span data-i18n="poster.menu"></span></button>
         <button onclick="window.Strom.UI.showSettingsDialog(); window.Strom.UI.closeMobileMenu()">⚙ <span data-i18n="settings.title"></span></button>
     </div>
@@ -4996,6 +5040,11 @@
                     <div id="events-list" class="events-list"></div>
                     <button type="button" class="secondary" id="btn-add-event" onclick="window.Strom.UI.showAddEventModal()" data-i18n="events.add"></button>
                 </div>
+                <div class="form-group" id="person-sources-section">
+                    <label data-i18n="sources.sectionTitle"></label>
+                    <div id="person-sources-chips" class="sources-chips"></div>
+                    <button type="button" class="secondary" id="btn-cite-person" onclick="window.Strom.UI.showSourcePickerForPerson()" data-i18n="sources.cite"></button>
+                </div>
                 <div class="form-group" id="input-deceased-group">
                     <label class="settings-checkbox">
                         <input type="checkbox" id="input-is-deceased">
@@ -5053,9 +5102,77 @@
                 <label data-i18n="events.note"></label>
                 <textarea id="input-event-note" rows="2" autocomplete="off"></textarea>
             </div>
+            <div class="form-group" id="event-sources-section">
+                <label data-i18n="sources.sectionTitle"></label>
+                <div id="event-sources-chips" class="sources-chips"></div>
+                <button type="button" class="secondary" id="btn-cite-event" onclick="window.Strom.UI.showSourcePickerForEvent()" data-i18n="sources.cite"></button>
+            </div>
             <div class="buttons">
                 <button class="secondary" onclick="window.Strom.UI.closeEventEditor()" data-i18n="buttons.cancel"></button>
                 <button class="primary" onclick="window.Strom.UI.saveEventFromModal()" data-i18n="buttons.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sources Manager Modal -->
+    <div class="modal-overlay" id="sources-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 data-i18n="sources.title"></h2>
+                <button class="close-btn" onclick="window.Strom.UI.closeSourcesDialog()">&times;</button>
+            </div>
+            <div id="sources-list" class="sources-list"></div>
+            <div class="buttons">
+                <button class="primary" onclick="window.Strom.UI.showAddSourceModal()" data-i18n="sources.add"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Source Editor Modal -->
+    <div class="modal-overlay" id="source-editor-modal">
+        <div class="modal">
+            <h2 id="source-editor-title" data-i18n="sources.addTitle"></h2>
+            <div class="form-group">
+                <label data-i18n="sources.fieldTitle"></label>
+                <input type="text" id="input-source-title" autocomplete="off">
+            </div>
+            <div class="form-row">
+                <div class="form-group half">
+                    <label data-i18n="sources.fieldRepository"></label>
+                    <input type="text" id="input-source-repository" autocomplete="off">
+                </div>
+                <div class="form-group half">
+                    <label data-i18n="sources.fieldReference"></label>
+                    <input type="text" id="input-source-reference" autocomplete="off">
+                </div>
+            </div>
+            <div class="form-group">
+                <label data-i18n="sources.fieldUrl"></label>
+                <input type="text" id="input-source-url" autocomplete="off" inputmode="url">
+            </div>
+            <div class="form-group">
+                <label data-i18n="sources.fieldNote"></label>
+                <textarea id="input-source-note" rows="2" autocomplete="off"></textarea>
+            </div>
+            <div class="buttons">
+                <button class="secondary" onclick="window.Strom.UI.closeSourceEditor()" data-i18n="buttons.cancel"></button>
+                <button class="primary" onclick="window.Strom.UI.saveSourceFromModal()" data-i18n="buttons.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Source Picker Modal (cite an existing source or create a new one) -->
+    <div class="modal-overlay" id="source-picker-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 data-i18n="sources.pickTitle"></h2>
+                <button class="close-btn" onclick="window.Strom.UI.closeSourcePicker()">&times;</button>
+            </div>
+            <input type="text" id="source-picker-search" class="source-picker-search" data-i18n-placeholder="sources.searchPlaceholder" autocomplete="off">
+            <div id="source-picker-list" class="source-picker-list"></div>
+            <div class="buttons">
+                <button class="secondary" onclick="window.Strom.UI.closeSourcePicker()" data-i18n="buttons.cancel"></button>
+                <button class="primary" onclick="window.Strom.UI.createSourceFromPicker()" data-i18n="sources.createNew"></button>
             </div>
         </div>
     </div>

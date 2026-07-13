@@ -120,6 +120,12 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         // Clone existing data
         const mergedData = deepCloneStromData(state.existingData);
 
+        // Union the source catalogs (ids are unique per tree). Incoming persons'
+        // sourceIds keep resolving because their catalog entries come along.
+        if (state.incomingData.sources) {
+            mergedData.sources = { ...(mergedData.sources ?? {}), ...structuredClone(state.incomingData.sources) };
+        }
+
         // Clear focus settings - new tree should start fresh
         delete mergedData.lastFocusPersonId;
         delete mergedData.lastFocusDepthUp;
@@ -309,7 +315,8 @@ function deepCloneStromData(data: StromData): StromData {
             partnerships: [...person.partnerships],
             parentIds: [...person.parentIds],
             childIds: [...person.childIds],
-            ...(person.events ? { events: person.events.map(e => ({ ...e })) } : {})
+            ...(person.events ? { events: person.events.map(e => ({ ...e, ...(e.sourceIds ? { sourceIds: [...e.sourceIds] } : {}) })) } : {}),
+            ...(person.sourceIds ? { sourceIds: [...person.sourceIds] } : {})
         };
     }
 
@@ -320,7 +327,9 @@ function deepCloneStromData(data: StromData): StromData {
         };
     }
 
-    return { persons: clonedPersons, partnerships: clonedPartnerships };
+    const cloned: StromData = { persons: clonedPersons, partnerships: clonedPartnerships };
+    if (data.sources) cloned.sources = structuredClone(data.sources);
+    return cloned;
 }
 
 /**
@@ -374,10 +383,16 @@ function mergePersonData(existing: Person, incoming: Person, conflicts: FieldCon
         const seen = new Set(existing.events.map(e => e.id));
         for (const event of incoming.events) {
             if (!seen.has(event.id)) {
-                existing.events.push({ ...event });
+                existing.events.push({ ...event, ...(event.sourceIds ? { sourceIds: [...event.sourceIds] } : {}) });
                 seen.add(event.id);
             }
         }
+    }
+
+    // Merge source citations: union of source ids.
+    if (incoming.sourceIds && incoming.sourceIds.length > 0) {
+        const merged = new Set([...(existing.sourceIds ?? []), ...incoming.sourceIds]);
+        existing.sourceIds = [...merged];
     }
 
     // Update placeholder status

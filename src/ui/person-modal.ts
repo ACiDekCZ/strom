@@ -111,9 +111,11 @@ export const personModalMethods = uiModule({
         const linkRelBtn = document.getElementById('link-relationships');
         if (linkRelBtn) linkRelBtn.style.display = 'none';
 
-        // Events need a saved person (own undoable actions) — hide until then.
+        // Events and citations need a saved person (own undoable actions) — hide.
         const eventsSection = document.getElementById('events-section');
         if (eventsSection) eventsSection.style.display = 'none';
+        const sourcesSection = document.getElementById('person-sources-section');
+        if (sourcesSection) sourcesSection.style.display = 'none';
 
         modal.classList.add('active');
         firstNameInput.focus();
@@ -274,7 +276,7 @@ export const personModalMethods = uiModule({
         this.setupDateInputs();
 
         // Setup expand button - expand if there's death data, notes or a photo
-        const hasExtendedData = !!(person.deathDate || person.deathPlace || person.notes || person.photo || (person.events && person.events.length > 0));
+        const hasExtendedData = !!(person.deathDate || person.deathPlace || person.notes || person.photo || (person.events && person.events.length > 0) || (person.sourceIds && person.sourceIds.length > 0));
         this.setupExpandButton(hasExtendedData);
 
         // Show link-relationships button
@@ -312,6 +314,13 @@ export const personModalMethods = uiModule({
         const eventsSection = document.getElementById('events-section');
         if (eventsSection) eventsSection.style.display = '';
         this.renderEventsList();
+
+        // Sources/citations section (same lifecycle as events).
+        const sourcesSection = document.getElementById('person-sources-section');
+        if (sourcesSection) sourcesSection.style.display = '';
+        const citeBtn = document.getElementById('btn-cite-person');
+        if (citeBtn) citeBtn.style.display = DataManager.isPersonLocked(id) ? 'none' : '';
+        this.renderPersonSourcesChips();
 
         modal.classList.add('active');
         if (!DataManager.isPersonLocked(id)) firstNameInput.focus();

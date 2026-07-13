@@ -9,9 +9,12 @@
  * married/divorced status with marriage date+place, divorce date, and note.
  *
  * Life events map both ways: BAPM/BURI/OCCU/RESI/EMIG/IMMI/EDUC <-> LifeEvent
- * (OCCU value <-> event note). Partnership statuses 'partners'/'separated' and
- * the isPrimary flag, and the 'military'/'custom' event types, have no GEDCOM
- * equivalent (known-unsupported) and are dropped on export.
+ * (OCCU value <-> event note). Sources map both ways: 0 @Sx@ SOUR records
+ * (TITL/REPO/PAGE->reference/WWW->url/NOTE) with 1 SOUR refs on individuals and
+ * 2 SOUR refs on events <-> the per-tree source catalog + sourceIds. Partnership
+ * statuses 'partners'/'separated' and the isPrimary flag, and the
+ * 'military'/'custom' event types, have no GEDCOM equivalent (known-unsupported)
+ * and are dropped on export.
  */
 
 import {
@@ -22,9 +25,11 @@ import {
     StromData,
     LifeEvent,
     LifeEventType,
+    Source,
     toPersonId,
     toPartnershipId,
-    generateLifeEventId
+    generateLifeEventId,
+    generateSourceId
 } from './types';
 
 /** GEDCOM event tag <-> LifeEvent type. */
@@ -38,6 +43,18 @@ interface RawEvent {
     date?: string;
     place?: string;
     note?: string;
+    /** GEDCOM ids (@Sx@) of sources cited on this event. */
+    sourceRefs?: string[];
+}
+
+/** Raw GEDCOM source record (0 @Sx@ SOUR). */
+interface RawSource {
+    id: string;
+    title: string;
+    repository: string;
+    reference: string;
+    url: string;
+    note: string;
 }
 
 // ==================== TYPES ====================
@@ -56,6 +73,8 @@ interface GedcomIndividual {
     notes: string;
     /** Life events (BAPM/BURI/OCCU/RESI/EMIG/IMMI/EDUC). */
     events: RawEvent[];
+    /** GEDCOM ids (@Sx@) of sources cited on this individual. */
+    sourceRefs: string[];
     fams: string[];  // Families as spouse
     famc: string | null;  // Family as child
 }
@@ -76,6 +95,7 @@ interface GedcomFamily {
 export interface ParsedGedcom {
     individuals: Map<string, GedcomIndividual>;
     families: Map<string, GedcomFamily>;
+    sources: Map<string, RawSource>;
 }
 
 /** Result of GEDCOM to Strom conversion */
@@ -186,11 +206,13 @@ export function parseGedcom(content: string): ParsedGedcom {
     const lines = content.split(/\r?\n/);
     const individuals = new Map<string, GedcomIndividual>();
     const families = new Map<string, GedcomFamily>();
+    const sources = new Map<string, RawSource>();
 
     let currentRecord: GedcomIndividual | GedcomFamily | null = null;
-    let currentType: 'INDI' | 'FAM' | null = null;
+    let currentType: 'INDI' | 'FAM' | 'SOUR' | null = null;
     let currentSubTag: string | null = null;
     let currentEvent: RawEvent | null = null;
+    let currentSource: RawSource | null = null;
 
     for (const line of lines) {
         const match = line.match(/^(\d+)\s+(@\w+@|\w+)\s*(.*)?$/);
@@ -215,11 +237,20 @@ export function parseGedcom(content: string): ParsedGedcom {
                     deathPlace: '',
                     notes: '',
                     events: [],
+                    sourceRefs: [],
                     fams: [],
                     famc: null
                 };
                 currentType = 'INDI';
+                currentSource = null;
                 individuals.set(tag, currentRecord as GedcomIndividual);
+            } else if (tag.startsWith('@S') && value === 'SOUR') {
+                currentSource = {
+                    id: tag, title: '', repository: '', reference: '', url: '', note: ''
+                };
+                currentRecord = null;
+                currentType = 'SOUR';
+                sources.set(tag, currentSource);
             } else if (tag.startsWith('@F') && value === 'FAM') {
                 currentRecord = {
                     id: tag,
@@ -232,13 +263,34 @@ export function parseGedcom(content: string): ParsedGedcom {
                     note: ''
                 };
                 currentType = 'FAM';
+                currentSource = null;
                 families.set(tag, currentRecord as GedcomFamily);
             } else {
                 currentRecord = null;
                 currentType = null;
+                currentSource = null;
             }
             currentSubTag = null;
             currentEvent = null;
+        } else if (currentType === 'SOUR' && currentSource) {
+            // Source record sub-lines. reference <- PAGE (spec mapping).
+            if (level === 1) {
+                currentSubTag = tag;
+                if (tag === 'TITL') currentSource.title = value;
+                else if (tag === 'REPO') currentSource.repository = value;
+                else if (tag === 'PAGE') currentSource.reference = value;
+                else if (tag === 'WWW' || tag === 'URL') currentSource.url = value;
+                else if (tag === 'NOTE') currentSource.note = value;
+            } else if (level === 2) {
+                // Multi-line continuations for title / note.
+                if (currentSubTag === 'TITL') {
+                    if (tag === 'CONT') currentSource.title += '\n' + value;
+                    else if (tag === 'CONC') currentSource.title += value;
+                } else if (currentSubTag === 'NOTE') {
+                    if (tag === 'CONT') currentSource.note += '\n' + value;
+                    else if (tag === 'CONC') currentSource.note += value;
+                }
+            }
         } else if (currentRecord) {
             if (level === 1) {
                 currentSubTag = tag;
@@ -265,6 +317,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                             break;
                         case 'NOTE':
                             indi.notes = value;
+                            break;
+                        case 'SOUR':
+                            // Level-1 SOUR on INDI is a citation reference (@Sx@).
+                            if (value) indi.sourceRefs.push(value);
                             break;
                         default: {
                             const evType = EVENT_TAG_TO_TYPE[tag];
@@ -312,7 +368,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                     } else if (currentEvent) {
                         if (tag === 'DATE') currentEvent.date = parseGedcomDate(value);
                         else if (tag === 'PLAC') currentEvent.place = value;
-                        else if (tag === 'NOTE') {
+                        else if (tag === 'SOUR' && value) {
+                            (currentEvent.sourceRefs ??= []).push(value);
+                        } else if (tag === 'NOTE') {
                             currentEvent.note = currentEvent.note
                                 ? `${currentEvent.note}\n${value}` : value;
                         }
@@ -333,7 +391,7 @@ export function parseGedcom(content: string): ParsedGedcom {
         }
     }
 
-    return { individuals, families };
+    return { individuals, families, sources };
 }
 
 // ==================== CONVERTER ====================
@@ -342,7 +400,24 @@ export function parseGedcom(content: string): ParsedGedcom {
  * Convert parsed GEDCOM data to Strom data format
  */
 export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
-    const { individuals, families } = gedcom;
+    const { individuals, families, sources: gedSources } = gedcom;
+
+    // Build the source catalog and a GEDCOM-id -> new-id map for citations.
+    const sourceIdMap = new Map<string, string>();
+    const sources: Record<string, Source> = {};
+    for (const [gedId, raw] of gedSources) {
+        const newId = generateSourceId();
+        sourceIdMap.set(gedId, newId);
+        const src: Source = { id: newId, title: raw.title || '?' };
+        if (raw.repository) src.repository = raw.repository;
+        if (raw.reference) src.reference = raw.reference;
+        if (raw.url) src.url = raw.url;
+        if (raw.note) src.note = raw.note;
+        sources[newId] = src;
+    }
+    /** Map raw @Sx@ refs to catalog ids, dropping any that don't resolve. */
+    const mapRefs = (refs?: string[]): string[] =>
+        (refs ?? []).map(r => sourceIdMap.get(r)).filter((id): id is string => !!id);
 
     // Keep ALL individuals. Nameless ones (unknown ancestors) become
     // placeholders instead of being dropped, so relationships stay intact.
@@ -392,9 +467,13 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 if (ev.date) out.date = ev.date;
                 if (ev.place) out.place = ev.place;
                 if (ev.note) out.note = ev.note;
+                const evRefs = mapRefs(ev.sourceRefs);
+                if (evRefs.length > 0) out.sourceIds = evRefs;
                 return out;
             });
         }
+        const personRefs = mapRefs(indi.sourceRefs);
+        if (personRefs.length > 0) person.sourceIds = personRefs;
 
         persons[personId] = person;
     }
@@ -558,7 +637,8 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     return {
         data: {
             persons,
-            partnerships
+            partnerships,
+            ...(Object.keys(sources).length > 0 ? { sources } : {})
         },
         stats: {
             totalPersons: Object.keys(persons).length,

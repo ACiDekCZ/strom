@@ -389,6 +389,11 @@ export const treeStatsMethods = uiModule({
         const withPhoto = persons.filter(p => p.photo).length;
         const photoKb = Math.round(totalPhotoBytes(treeData) / 1024);
         const totalEvents = persons.reduce((sum, p) => sum + (p.events?.length ?? 0), 0);
+        const totalSources = Object.keys(treeData.sources ?? {}).length;
+        // A person is "cited" if it or any of its events references a source.
+        const personsCited = persons.filter(p =>
+            (p.sourceIds?.length ?? 0) > 0 || (p.events ?? []).some(e => (e.sourceIds?.length ?? 0) > 0)
+        ).length;
 
         const s = strings.treeManager;
 
@@ -396,6 +401,7 @@ export const treeStatsMethods = uiModule({
         const birthDatePct = totalPersons > 0 ? Math.round(withBirthDate / totalPersons * 100) : 0;
         const deathDatePct = totalPersons > 0 ? Math.round(withDeathDate / totalPersons * 100) : 0;
         const birthPlacePct = totalPersons > 0 ? Math.round(withBirthPlace / totalPersons * 100) : 0;
+        const sourceCoveragePct = totalPersons > 0 ? Math.round(personsCited / totalPersons * 100) : 0;
 
         return `
             <div class="tree-stats-header">
@@ -473,6 +479,15 @@ export const treeStatsMethods = uiModule({
                 <div class="tree-stats-row">
                     <span class="label">${s.statsEvents}</span>
                     <span class="value">${totalEvents}</span>
+                </div>` : ''}
+                ${totalSources > 0 ? `
+                <div class="tree-stats-row">
+                    <span class="label">${s.statsSources}</span>
+                    <span class="value">${totalSources}</span>
+                </div>
+                <div class="tree-stats-row">
+                    <span class="label">${s.statsSourceCoverage}</span>
+                    <span class="value">${personsCited}/${totalPersons} (${sourceCoveragePct}%)</span>
                 </div>` : ''}
             </div>
 

@@ -27,8 +27,12 @@ function exportGed(data: StromData): string {
 function normalize(data: StromData): StromData {
     const pIds = Object.keys(data.persons) as PersonId[];
     const uIds = Object.keys(data.partnerships) as PartnershipId[];
+    const sIds = Object.keys(data.sources ?? {});
     const p = new Map(pIds.map((id, i) => [id, `P${i}` as PersonId]));
     const u = new Map(uIds.map((id, i) => [id, `U${i}` as PartnershipId]));
+    // Source ids are generated fresh on every import — re-key positionally.
+    const s = new Map(sIds.map((id, i) => [id, `S${i}`]));
+    const mapSrc = (ids?: string[]) => ids?.map(x => s.get(x)!);
 
     const persons: StromData['persons'] = {};
     for (const id of pIds) {
@@ -40,7 +44,8 @@ function normalize(data: StromData): StromData {
             parentIds: person.parentIds.map(x => p.get(x)!),
             childIds: person.childIds.map(x => p.get(x)!),
             // Event ids are generated fresh on every import — re-key positionally.
-            ...(person.events ? { events: person.events.map((e, i) => ({ ...e, id: `E${i}` })) } : {}),
+            ...(person.events ? { events: person.events.map((e, i) => ({ ...e, id: `E${i}`, ...(e.sourceIds ? { sourceIds: mapSrc(e.sourceIds) } : {}) })) } : {}),
+            ...(person.sourceIds ? { sourceIds: mapSrc(person.sourceIds) } : {}),
         };
     }
     const partnerships: StromData['partnerships'] = {};
@@ -54,7 +59,12 @@ function normalize(data: StromData): StromData {
             childIds: part.childIds.map(x => p.get(x)!),
         };
     }
-    return { persons, partnerships };
+    const result: StromData = { persons, partnerships };
+    if (data.sources) {
+        result.sources = {};
+        for (const id of sIds) result.sources[s.get(id)!] = { ...data.sources![id], id: s.get(id)! };
+    }
+    return result;
 }
 
 /** Drop lines that legitimately vary (the generated header date). */
@@ -137,6 +147,19 @@ const FIXTURES: Record<string, string> = {
         '1 BURI', '2 DATE 1975', '2 PLAC Kladno',
         '0 @I2@ INDI', '1 NAME Ida /Vesela/', '1 SEX F', '1 IMMI', '2 DATE 1931',
         '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@',
+        '0 TRLR',
+    ].join('\n'),
+
+    'sources': [
+        '0 HEAD', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Josef /Novak/', '1 SEX M',
+        '1 BIRT', '2 DATE 1880',
+        '1 SOUR @S1@',
+        '1 BAPM', '2 DATE 1880', '2 SOUR @S2@',
+        '0 @I2@ INDI', '1 NAME Marie /Novakova/', '1 SEX F', '1 SOUR @S1@',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@',
+        '0 @S1@ SOUR', '1 TITL Census of 1880', '1 REPO National Archive', '1 PAGE fol. 12',
+        '0 @S2@ SOUR', '1 TITL Parish baptism register', '1 WWW https://example.org/reg',
         '0 TRLR',
     ].join('\n'),
 

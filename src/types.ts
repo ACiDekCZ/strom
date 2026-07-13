@@ -36,6 +36,11 @@ export function generateLifeEventId(): string {
     return `ev_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** Generate unique Source id */
+export function generateSourceId(): string {
+    return `src_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
 // ==================== CORE ENTITIES ====================
 
 export type Gender = 'male' | 'female';
@@ -61,6 +66,24 @@ export interface LifeEvent {
     /** Flex date (see src/dates.ts): [~|<|>]YYYY[-MM[-DD]]. */
     date?: string;
     place?: string;
+    note?: string;
+    /** Ids of Source entries (StromData.sources) citing this event. */
+    sourceIds?: string[];
+}
+
+/**
+ * A source/citation entry (parish register, archive, URL...). Sources are a
+ * per-tree catalog (StromData.sources); persons and events reference them by id
+ * via sourceIds, so one source can be cited many times.
+ */
+export interface Source {
+    id: string;
+    title: string;
+    /** Archive / institution holding the source. */
+    repository?: string;
+    /** Signature / inventory number / page. */
+    reference?: string;
+    url?: string;
     note?: string;
 }
 
@@ -92,6 +115,8 @@ export interface Person {
     photoOriginalName?: string;
     /** Life events other than birth/death (see LifeEvent). */
     events?: LifeEvent[];
+    /** Ids of Source entries (StromData.sources) citing this person. */
+    sourceIds?: string[];
 }
 
 export interface Partnership {
@@ -120,11 +145,13 @@ export type LastFocusedMarker = typeof LAST_FOCUSED;
 
 /**
  * Current StromData format version.
- * v2 (2026-07): added optional Person.events (life events). The field is
- * additive/backward-compatible for reading, but the bump makes an older app
- * warn ("newer version") before it silently drops events on re-save.
+ * v2 (2026-07): added optional Person.events (life events).
+ * v3 (2026-07): added the per-tree source catalog (StromData.sources) and
+ * citation ids (Person.sourceIds, LifeEvent.sourceIds). All additive/backward-
+ * compatible for reading; the bump makes an older app warn ("newer version")
+ * before it silently drops the new fields on re-save.
  */
-export const STROM_DATA_VERSION = 2;
+export const STROM_DATA_VERSION = 3;
 
 export interface StromData {
     /** Data format version for migration support */
@@ -132,6 +159,9 @@ export interface StromData {
 
     persons: Record<PersonId, Person>;
     partnerships: Record<PartnershipId, Partnership>;
+
+    /** Per-tree catalog of sources/citations, keyed by Source id. */
+    sources?: Record<string, Source>;
 
     // Default person settings (exports with tree)
     defaultPersonId?: PersonId | LastFocusedMarker;  // undefined = first person, LAST_FOCUSED = where user left off, PersonId = specific
@@ -231,6 +261,11 @@ export type AuditAction =
     | 'event.add'
     | 'event.update'
     | 'event.remove'
+    | 'source.add'
+    | 'source.update'
+    | 'source.remove'
+    | 'source.cite'
+    | 'source.uncite'
     | 'undo'
     | 'redo';
 

@@ -38,6 +38,8 @@ the table honest.
 | Create first person | `smoke.spec.ts`, `cs.spec.ts` | covered | empty state → card |
 | Edit every person field + reload | `person-crud.spec.ts` | covered | names, gender, dates, places, notes, deceased |
 | Life events: add event + reload | `life-events.spec.ts` | covered | add via event editor, survives reload |
+| Sources: cite a new source + reload | `sources.spec.ts` | covered | create+cite via picker, chip survives reload |
+| Sources manager + citation count | `sources.spec.ts` | covered | add via manager, cite, count shown |
 | Flex date accepted/normalized/rejected | `edit-undo-lock.spec.ts` | covered | `about 1880` → `~1880`; nonsense rejected |
 | Delete person (context menu) + undo | `person-crud.spec.ts` | covered | confirm dialog, undo restores |
 | Delete person (Delete key) | `person-crud.spec.ts` | covered | deletes the focused person after confirm |
