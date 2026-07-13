@@ -1,0 +1,59 @@
+import { test, expect } from '@playwright/test';
+import { readFileSync } from 'fs';
+import { openApp, createFirstPerson } from './helpers.js';
+
+test('export dialog: privacy select applies; JSON download hides living names with initials', async ({ page }) => {
+    await openApp(page);
+    // A clearly-living person (recent birth) plus a clearly-deceased one.
+    await createFirstPerson(page, 'Alice', 'Living', { gender: 'female', birthDate: '1990' });
+
+    await page.evaluate(() => window.Strom.UI.showExportDialog());
+    const exportModal = page.locator('#export-modal');
+    await expect(exportModal).toBeVisible();
+    await exportModal.locator('.menu-option', { hasText: 'Export JSON' }).click();
+
+    const pwd = page.locator('#export-password-modal');
+    await expect(pwd).toBeVisible();
+    const privacy = pwd.locator('#export-privacy-mode');
+    await expect(privacy).toBeVisible();
+    await privacy.selectOption('initials');
+
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        pwd.getByRole('button', { name: 'Export without encryption' }).click(),
+    ]);
+    const content = readFileSync(await download.path(), 'utf-8');
+    const data = JSON.parse(content);
+    const names = Object.values(data.persons).map((p: { firstName: string }) => p.firstName);
+
+    // Living person's full first name is hidden; reduced to an initial.
+    expect(names).not.toContain('Alice');
+    expect(names).toContain('A.');
+});
+
+test('poster dialog opens above the export dialog; SVG download is valid XML', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    await page.evaluate(() => window.Strom.UI.showExportDialog());
+    const exportModal = page.locator('#export-modal');
+    await expect(exportModal).toBeVisible();
+    await exportModal.locator('.menu-option', { hasText: 'Export as poster' }).click();
+
+    const poster = page.locator('#poster-modal');
+    await expect(poster).toBeVisible();
+    // Stacking fix: the export dialog is closed, so the poster is not hidden behind it.
+    await expect(exportModal).toBeHidden();
+    // Format / orientation options are offered (print is not exercised).
+    await expect(poster.locator('#poster-format')).toBeVisible();
+    await expect(poster.locator('#poster-orientation')).toBeVisible();
+
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        poster.locator('.menu-option', { hasText: 'SVG' }).click(),
+    ]);
+    const svg = readFileSync(await download.path(), 'utf-8');
+    expect(svg.trimStart().startsWith('<svg')).toBe(true);
+    expect(svg).toContain('</svg>');
+    expect(svg).toContain('Jan');
+});

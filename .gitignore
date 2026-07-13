@@ -9,3 +9,9 @@ test/failures-*.txt
 test/real-large.json
 test.ged
 /*.jpg
+
+# Playwright e2e
+test-results/
+playwright-report/
+/blob-report/
+.playwright/

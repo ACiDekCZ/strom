@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:real": "npx tsx scripts/test-real-data.ts",
-    "gen:etalon": "tsx scripts/generate-etalon.ts"
+    "gen:etalon": "tsx scripts/generate-etalon.ts",
+    "test:e2e": "npm run build && playwright test"
   },
   "keywords": [
     "family-tree",
@@ -22,6 +23,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "^25.0.10",
     "esbuild": "^0.27.2",
     "tsx": "^4.23.0",
