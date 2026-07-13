@@ -23,6 +23,15 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Unit tests
+        run: npx vitest run
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: npx playwright test
+
       - name: Get version info
         id: version
         run: |
