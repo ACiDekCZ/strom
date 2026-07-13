@@ -941,6 +941,36 @@ const stringsEN = {
         hiddenLabel: '(hidden)'
     },
 
+    // Collaboration: send to a relative
+    share: {
+        menuItem: '📩 Send to a relative',
+        menuDesc: 'One file by e-mail — they open it, add what they know, and send it back',
+        passwordLabel: 'Password (optional)',
+        dialogTitle: 'Send to a relative',
+        dialogIntro: 'Creates a single file you can e-mail. The recipient just opens it — no installation, no account.',
+        scopeLabel: 'What to send',
+        scopeWhole: 'The whole tree',
+        scopeBranch: 'The current view (visible branch)',
+        senderNameLabel: 'Your name (shown to the recipient)',
+        messageLabel: 'Message for the recipient',
+        messagePlaceholder: 'Hi! Could you fill in what you know about your branch?',
+        createFile: 'Create file to send',
+        welcomeTitle: (sender: string) => `${sender} sent you a family tree`,
+        welcomeCounts: (tree: string, persons: number) => `“${tree}” · ${persons} people`,
+        welcomeView: 'Just look around',
+        welcomeEdit: 'Add what I know',
+        collabBar: (sender: string) => `You are filling in a tree for ${sender}.`,
+        collabSend: 'Send the file back',
+        collabHide: 'Hide',
+        collabBadgeTitle: 'Collaboration in progress',
+        replyTitle: (sender: string) => `${sender} returned your tree`,
+        replyIntro: (tree: string) => `This file replies to your shared tree “${tree}”. Merge their additions into it?`,
+        replyMerge: 'Review and merge',
+        replyView: 'Just look first',
+        replyImport: 'Import as a new tree',
+        unknownSender: 'A relative'
+    },
+
     // View Mode (embedded data)
     viewMode: {
         banner: 'View mode (read-only)',
@@ -2091,6 +2121,36 @@ const stringsCZ: StringsType = {
         showTreeHint: 'Zobrazit strom',
         hideTreeHint: 'Skrýt strom',
         hiddenLabel: '(skrytý)'
+    },
+
+    // Collaboration: send to a relative
+    share: {
+        menuItem: '📩 Poslat příbuznému',
+        menuDesc: 'Jeden soubor e-mailem — příjemce ho otevře, doplní a pošle zpět',
+        passwordLabel: 'Heslo (volitelné)',
+        dialogTitle: 'Poslat příbuznému',
+        dialogIntro: 'Vytvoří jeden soubor, který pošleš e-mailem. Příjemce ho jen otevře — bez instalace a bez účtu.',
+        scopeLabel: 'Co poslat',
+        scopeWhole: 'Celý strom',
+        scopeBranch: 'Aktuální pohled (viditelná větev)',
+        senderNameLabel: 'Tvoje jméno (uvidí ho příjemce)',
+        messageLabel: 'Vzkaz pro příjemce',
+        messagePlaceholder: 'Ahoj! Doplníš prosím, co víš o vaší větvi?',
+        createFile: 'Vytvořit soubor k poslání',
+        welcomeTitle: (sender: string) => `${sender} ti poslal(a) rodinný strom`,
+        welcomeCounts: (tree: string, persons: number) => `„${tree}“ · ${persons} osob`,
+        welcomeView: 'Jen se podívat',
+        welcomeEdit: 'Doplnit, co vím',
+        collabBar: (sender: string) => `Doplňuješ strom pro: ${sender}.`,
+        collabSend: 'Poslat soubor zpět',
+        collabHide: 'Skrýt',
+        collabBadgeTitle: 'Probíhá spolupráce',
+        replyTitle: (sender: string) => `${sender} vrací tvůj strom`,
+        replyIntro: (tree: string) => `Tento soubor odpovídá na tvůj sdílený strom „${tree}“. Sloučit doplněné údaje?`,
+        replyMerge: 'Prohlédnout a sloučit',
+        replyView: 'Nejdřív se podívat',
+        replyImport: 'Importovat jako nový strom',
+        unknownSender: 'Příbuzný'
     },
 
     // View Mode (embedded data)

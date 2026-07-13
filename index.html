@@ -2861,6 +2861,42 @@
         [data-theme="dark"] .view-mode-segment { border-color: #444; }
         [data-theme="dark"] .view-mode-segment button { background: #2a2a2a; color: #ddd; }
         /* Descendants badge bar */
+        .collab-bar {
+            position: fixed; top: 58px; left: 50%; transform: translateX(-50%); z-index: 95;
+        }
+        /* Below the standalone-file banner when it is shown (embedded copies). */
+        body:has(#embedded-mode-banner.visible) .collab-bar { top: 118px; }
+        body:has(#embedded-mode-banner.visible) .collab-badge { top: 118px; }
+        .collab-bar {
+            display: flex; align-items: center; gap: 10px;
+            background: var(--color-forest, #1a5a2f); background: #2d6a4f; color: #fff;
+            padding: 8px 12px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+            font-size: 13px; max-width: min(92vw, 640px);
+        }
+        .collab-bar #collab-bar-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .collab-bar button { border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 12.5px; }
+        .collab-bar .collab-send { background: #fff; color: #2d6a4f; font-weight: 600; }
+        .collab-bar .collab-hide { background: rgba(255,255,255,0.18); color: #fff; }
+        .collab-badge {
+            position: fixed; top: 58px; right: 12px; z-index: 95;
+            width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
+            background: #2d6a4f; color: #fff; font-size: 17px; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        }
+        .share-welcome { text-align: center; }
+        .share-welcome h2 { margin: 8px 0 4px; }
+        .share-welcome-icon { font-size: 40px; }
+        .share-welcome-counts { color: var(--text-secondary, #777); font-size: 13.5px; margin-bottom: 8px; }
+        .share-message {
+            margin: 10px auto 4px; padding: 10px 14px; max-width: 420px;
+            background: var(--hover-bg, #f4f1ea); border-left: 3px solid var(--primary, #4a90d9);
+            border-radius: 6px; font-style: italic; font-size: 14px; text-align: left; white-space: pre-wrap;
+        }
+        [data-theme="dark"] .share-message { background: #2f2f2f; }
+        .share-welcome-buttons { justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+        @media (max-width: 500px) {
+            .collab-bar { flex-wrap: wrap; justify-content: center; top: auto; bottom: 70px; }
+        }
+
         .descendants-badge {
             position: fixed; top: 58px; left: 50%; transform: translateX(-50%); z-index: 90;
             display: flex; align-items: center; gap: 10px;
@@ -5481,6 +5517,13 @@
     </div>
 
     <!-- Descendants view badge bar -->
+    <div id="collab-bar" class="collab-bar" style="display:none;">
+        <span id="collab-bar-text"></span>
+        <button type="button" class="collab-send" onclick="window.Strom.UI.shareBack()" data-i18n="share.collabSend"></button>
+        <button type="button" class="collab-hide" onclick="window.Strom.UI.hideCollabBar()" data-i18n="share.collabHide"></button>
+    </div>
+    <button id="collab-badge" class="collab-badge" style="display:none;" onclick="window.Strom.UI.showCollabBarFromBadge()">📩</button>
+
     <div id="descendants-badge" class="descendants-badge" style="display:none;">
         <span id="descendants-badge-text"></span>
         <button type="button" onclick="window.Strom.UI.exitDescendantsView()" data-i18n-title="viewModeSwitch.back">&times;</button>
@@ -6042,6 +6085,13 @@
                 <button class="close-btn" onclick="window.Strom.UI.closeExportDialog()">&times;</button>
             </div>
             <div class="menu-options">
+                <button class="menu-option" onclick="window.Strom.UI.closeExportDialog(); window.Strom.UI.showShareDialog()">
+                    <span class="option-icon">📩</span>
+                    <span class="option-text">
+                        <span class="option-title" data-i18n="share.dialogTitle"></span>
+                        <span class="option-desc" data-i18n="share.menuDesc"></span>
+                    </span>
+                </button>
                 <button class="menu-option" onclick="window.Strom.UI.exportTargetTreeJSON()">
                     <span class="option-icon">💾</span>
                     <span class="option-text">
@@ -7060,6 +7110,78 @@
     </div>
 
     <!-- Existing Export Dialog -->
+    <!-- Share (send to a relative) dialog -->
+    <div class="modal-overlay" id="share-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 data-i18n="share.dialogTitle"></h2>
+                <button class="close-btn" onclick="window.Strom.UI.closeShareDialog()">&times;</button>
+            </div>
+            <p class="modal-description" data-i18n="share.dialogIntro"></p>
+            <div class="form-group">
+                <label data-i18n="share.scopeLabel"></label>
+                <select id="share-scope">
+                    <option value="whole" data-i18n="share.scopeWhole"></option>
+                    <option value="branch" data-i18n="share.scopeBranch"></option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label data-i18n="share.senderNameLabel"></label>
+                <input type="text" id="share-sender-name" autocomplete="name" maxlength="60">
+            </div>
+            <div class="form-group">
+                <label data-i18n="share.messageLabel"></label>
+                <textarea id="share-message" rows="3" maxlength="500" data-i18n-placeholder="share.messagePlaceholder"></textarea>
+            </div>
+            <div class="form-group">
+                <label data-i18n="privacy.label"></label>
+                <select id="share-privacy-mode">
+                    <option value="full" data-i18n="privacy.modeFull"></option>
+                    <option value="initials" data-i18n="privacy.modeInitials"></option>
+                    <option value="anonymous" data-i18n="privacy.modeAnonymous"></option>
+                    <option value="minimal" data-i18n="privacy.modeMinimal"></option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label data-i18n="share.passwordLabel"></label>
+                <input type="password" id="share-password" autocomplete="new-password">
+            </div>
+            <div class="buttons">
+                <button type="button" class="secondary" onclick="window.Strom.UI.closeShareDialog()" data-i18n="buttons.cancel"></button>
+                <button type="button" class="primary" onclick="window.Strom.UI.submitShareDialog()" data-i18n="share.createFile"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recipient welcome (opened shared file) -->
+    <div class="modal-overlay" id="share-welcome-modal">
+        <div class="modal share-welcome">
+            <div class="share-welcome-icon">🌳</div>
+            <h2 id="share-welcome-title"></h2>
+            <div id="share-welcome-counts" class="share-welcome-counts"></div>
+            <blockquote id="share-welcome-message" class="share-message"></blockquote>
+            <div class="buttons share-welcome-buttons">
+                <button type="button" class="secondary" onclick="window.Strom.UI.closeShareWelcome()" data-i18n="share.welcomeView"></button>
+                <button type="button" class="primary" onclick="window.Strom.UI.shareWelcomeEdit()" data-i18n="share.welcomeEdit"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sender: a relative returned the tree -->
+    <div class="modal-overlay" id="share-reply-modal">
+        <div class="modal share-welcome">
+            <div class="share-welcome-icon">📩</div>
+            <h2 id="share-reply-title"></h2>
+            <p id="share-reply-intro" class="modal-description"></p>
+            <blockquote id="share-reply-message" class="share-message"></blockquote>
+            <div class="buttons share-welcome-buttons">
+                <button type="button" class="secondary" onclick="window.Strom.UI.closeShareReplyDialog()" data-i18n="share.replyView"></button>
+                <button type="button" class="secondary" onclick="window.Strom.UI.shareReplyImport()" data-i18n="share.replyImport"></button>
+                <button type="button" class="primary" onclick="window.Strom.UI.shareReplyMerge()" data-i18n="share.replyMerge"></button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="existing-export-modal">
         <div class="modal">
             <div class="modal-header">

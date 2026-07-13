@@ -103,6 +103,18 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Collaboration: sender name shown to relatives in shared files. */
+    getSenderName(): string {
+        return this.settings.senderName ?? '';
+    }
+
+    setSenderName(name: string): void {
+        const trimmed = name.trim();
+        if (trimmed) this.settings.senderName = trimmed;
+        else delete this.settings.senderName;
+        this.save();
+    }
+
     private applyTheme(): void {
         const html = document.documentElement;
         let isDark = false;

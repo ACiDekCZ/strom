@@ -258,8 +258,13 @@ export const appModeMethods = uiModule({
                 this.showViewModeBanner();
                 // Update tree switcher to show embedded trees
                 this.updateTreeSwitcher();
+                // Collaboration surfaces (reply-merge offer / welcome screen)
+                // sit on top of the regular view-mode banner.
+                this.maybeShowShareSurface();
             }
         }
+        // Local trees saved from a shared file show the collaboration bar.
+        this.updateCollabBar();
     },
 
     // ---- VERSION COMPATIBILITY ----

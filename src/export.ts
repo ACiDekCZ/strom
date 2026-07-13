@@ -50,6 +50,13 @@ function cleanDynamicMarkup(html: string): string {
     return result;
 }
 
+/** Collaboration fields carried into the export envelope ("send to a relative"). */
+export interface ShareOptions {
+    senderMessage?: string;
+    senderName?: string;
+    replyToExportId?: string;
+}
+
 class AppExporterClass {
     /**
      * Check if we're running from a built version (strom.html with inlined JS)
@@ -62,10 +69,22 @@ class AppExporterClass {
     }
 
     /**
-     * Get clean HTML for export (only works from built version)
+     * Get clean HTML for export (only works from built version).
+     * When exporting FROM an embedded copy (a relative re-shares the file),
+     * the page snapshot already contains the ORIGINAL embedded-data script —
+     * strip it, otherwise the file carries two envelopes and importers that
+     * read the first one get stale data.
      */
     private getExportHtml(): string {
-        return cleanDynamicState(document.documentElement.outerHTML);
+        // DOM-based removal, NOT a regex over the HTML: the bundle's own code
+        // contains the literal '<script>window.STROM_EMBEDDED_DATA =' inside a
+        // template string, and a regex sweep would eat the rest of the bundle.
+        const clone = document.documentElement.cloneNode(true) as HTMLElement;
+        clone.querySelectorAll('script').forEach(s => {
+            const t = s.textContent?.trimStart() ?? '';
+            if (t.startsWith('window.STROM_EMBEDDED_')) s.remove();
+        });
+        return cleanDynamicState(clone.outerHTML);
     }
 
     /**
@@ -74,7 +93,7 @@ class AppExporterClass {
      * @param treeId Optional tree ID to export (defaults to active tree)
      * @param password Optional password to encrypt the exported data
      */
-    async exportApp(treeId?: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', dropMedia = false): Promise<void> {
+    async exportApp(treeId?: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', dropMedia = false, share?: ShareOptions): Promise<void> {
         // Export only works from built version (strom.html)
         if (!this.isBuiltVersion()) {
             UI.showAlert(strings.export.devModeNotSupported, 'warning');
@@ -120,7 +139,10 @@ class AppExporterClass {
                 exportedAt: new Date().toISOString(),
                 appVersion: APP_VERSION,
                 treeName,
-                data: embedDataContent
+                data: embedDataContent,
+                ...(share?.senderMessage ? { senderMessage: share.senderMessage } : {}),
+                ...(share?.senderName ? { senderName: share.senderName } : {}),
+                ...(share?.replyToExportId ? { replyToExportId: share.replyToExportId } : {})
             };
 
             // Track last export ID in the source tree
@@ -233,7 +255,7 @@ class AppExporterClass {
      * @param filename The filename for the export
      * @param password Optional password to encrypt the exported data
      */
-    async exportFocusAsApp(focusedData: StromData, filename: string, password?: string | null, privacyMode: PrivacyMode = 'full', dropMedia = false): Promise<void> {
+    async exportFocusAsApp(focusedData: StromData, filename: string, password?: string | null, privacyMode: PrivacyMode = 'full', dropMedia = false, share?: ShareOptions & { treeName?: string; trackTreeId?: TreeId }): Promise<void> {
         // Export only works from built version (strom.html)
         if (!this.isBuiltVersion()) {
             UI.showAlert(strings.export.devModeNotSupported, 'warning');
@@ -260,9 +282,16 @@ class AppExporterClass {
                 exportId,
                 exportedAt: new Date().toISOString(),
                 appVersion: APP_VERSION,
-                treeName: 'Focused Export',
-                data: embedDataContent
+                treeName: share?.treeName || 'Focused Export',
+                data: embedDataContent,
+                ...(share?.senderMessage ? { senderMessage: share.senderMessage } : {}),
+                ...(share?.senderName ? { senderName: share.senderName } : {}),
+                ...(share?.replyToExportId ? { replyToExportId: share.replyToExportId } : {})
             };
+
+            // A shared branch must be traceable for the reply flow — track the
+            // export id on the source tree like the full-tree export does.
+            if (share?.trackTreeId) TreeManager.setLastExportId(share.trackTreeId, exportId);
 
             // Create embedded data script with focused data
             const dataScript = `<script>window.STROM_EMBEDDED_DATA = ${JSON.stringify(envelope)};<\/script>`;

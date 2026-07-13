@@ -19,7 +19,8 @@ import {
     StromData,
     TreeId,
     LAST_FOCUSED,
-    LastFocusedMarker
+    LastFocusedMarker,
+    EmbeddedDataEnvelope
 } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { getDemoTree, getDemoFocus } from '../demo-trees.js';
@@ -631,6 +632,15 @@ export const importExportMethods = uiModule({
         const reader = new FileReader();
         reader.onload = (e) => {
             const htmlContent = e.target?.result as string;
+
+            // Collaboration: a file replying to one of my shared trees gets the
+            // merge offer instead of the plain import flow.
+            const envelope = this.extractEnvelopeFromHtml(htmlContent);
+            if (envelope && this.handleImportedShareEnvelope(envelope)) {
+                input.value = '';
+                return;
+            }
+
             const data = this.extractDataFromHtml(htmlContent);
 
             if (!data) {
@@ -644,6 +654,18 @@ export const importExportMethods = uiModule({
         };
         reader.readAsText(file);
         input.value = '';
+    },
+
+    /**
+     * Extract the full embedded envelope (single-tree exports) from Strom HTML.
+     * Takes the LAST match: files re-exported from an embedded copy by older
+     * builds may carry a stale first envelope (the runtime uses the last one).
+     */
+    extractEnvelopeFromHtml(html: string): EmbeddedDataEnvelope | null {
+        const matches = [...html.matchAll(/window\.STROM_EMBEDDED_DATA\s*=\s*(\{[\s\S]*?\});?\s*<\/script>/g)];
+        const m = matches[matches.length - 1];
+        if (!m) return null;
+        try { return JSON.parse(m[1]) as EmbeddedDataEnvelope; } catch { return null; }
     },
 
     /**

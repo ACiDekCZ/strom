@@ -345,6 +345,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Listen for tree switches
     window.addEventListener('strom:tree-switched', () => {
         UI.updateTreeSwitcher();
+        UI.updateCollabBar();
     });
 
     // PWA: offline indicator always; register the service worker only on the

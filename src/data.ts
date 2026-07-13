@@ -610,6 +610,12 @@ class DataManagerClass {
      * @param treeId The tree to switch to
      * @returns true if successful
      */
+    /** Collaboration: leave embedded view mode and open a local tree (reply-merge flow). */
+    async leaveViewModeToTree(treeId: TreeId): Promise<boolean> {
+        this.viewMode = false;
+        return this.switchTree(treeId);
+    }
+
     async switchTree(treeId: TreeId): Promise<boolean> {
         // Flush pending writes before switching (ensure current tree data is persisted)
         await StorageManager.flush();

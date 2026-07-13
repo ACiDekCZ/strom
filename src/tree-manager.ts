@@ -615,6 +615,16 @@ class TreeManagerClass {
         }
     }
 
+    /** Collaboration: remember which shared file this tree was saved from. */
+    setReceivedInfo(treeId: TreeId, exportId: string, from?: string): void {
+        const tree = this.index.trees.find(t => t.id === treeId);
+        if (tree) {
+            tree.receivedExportId = exportId;
+            if (from) tree.receivedFrom = from;
+            this.saveIndex();
+        }
+    }
+
     updateTreeFromImport(treeId: TreeId, data: StromData): void {
         this.saveTreeData(treeId, data);
     }

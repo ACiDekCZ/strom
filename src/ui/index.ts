@@ -68,6 +68,7 @@ import { bookUiMethods } from './book-ui.js';
 import { snapshotsUiMethods } from './snapshots-ui.js';
 import { minimapMethods, MinimapTransform, WorldBox } from './minimap.js';
 import { anniversariesUiMethods } from './anniversaries-ui.js';
+import { shareUiMethods } from './share-ui.js';
 import { familyWizardMethods } from './family-wizard.js';
 import { pwaUiMethods } from './pwa-ui.js';
 
@@ -279,6 +280,10 @@ Object.assign(UIClass.prototype, anniversariesUiMethods);
 type FamilyWizardMethods = typeof familyWizardMethods;
 export interface UIClass extends FamilyWizardMethods {}
 Object.assign(UIClass.prototype, familyWizardMethods);
+
+type ShareUiMethods = typeof shareUiMethods;
+export interface UIClass extends ShareUiMethods {}
+Object.assign(UIClass.prototype, shareUiMethods);
 
 type PwaUiMethods = typeof pwaUiMethods;
 export interface UIClass extends PwaUiMethods {}

@@ -372,6 +372,13 @@ export interface EmbeddedDataEnvelope {
     data: StromData | EncryptedDataRef;
     /** Optional audit log */
     auditLog?: AuditLog;
+    // ---- collaboration ("send to a relative") ----
+    /** Personal message from the sender (plain text — MUST be escaped on display). */
+    senderMessage?: string;
+    /** Sender's display name (from settings). */
+    senderName?: string;
+    /** exportId of the ORIGINAL export this file replies to (lineage). */
+    replyToExportId?: string;
 }
 
 /** Reference to encrypted data type (actual type in crypto.ts) */
@@ -411,6 +418,7 @@ export interface AppSettings {
     suggestDuplicates?: boolean;  // default: true - hint similar persons on entry
     minimap?: boolean;  // default: true - overview minimap for large trees
     onThisDay?: boolean;  // default: true - daily "on this day" reminder
+    senderName?: string;   // collaboration: name shown to relatives in shared files
 }
 
 // ==================== MULTI-TREE STORAGE ====================
@@ -445,6 +453,10 @@ export interface TreeMetadata {
     isHidden?: boolean;
     /** Whether tree is locked (all persons read-only) */
     isLocked?: boolean;
+    /** Collaboration: exportId of the file this tree was saved from. */
+    receivedExportId?: string;
+    /** Collaboration: sender name of the file this tree was saved from. */
+    receivedFrom?: string;
 }
 
 /** Index of all trees */
