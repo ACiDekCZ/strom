@@ -313,9 +313,15 @@ class TreeRendererClass {
 
     /** Switch the display view mode and re-render. Persisted per tree. */
     setViewMode(mode: 'family' | 'descendants'): void {
+        if (this.viewMode === mode) return;
         this.viewMode = mode;
         this.persistViewMode();
         this.render();
+        // The two modes lay the tree out in different coordinate frames — the
+        // pan/zoom state from the previous mode can leave every card outside
+        // the viewport (reported on a live tree: switching to descendants
+        // showed an empty canvas).
+        ZoomPan.centerOnFocusWithContext();
     }
 
     private viewModeStorageKey(): string | null {

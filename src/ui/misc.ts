@@ -317,6 +317,12 @@ export const miscMethods = uiModule({
     initKeyboard(): void {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                // Search filter panel closes first (it is not a modal)
+                const searchFilters = document.getElementById('search-filters');
+                if (searchFilters && searchFilters.style.display !== 'none') {
+                    this.toggleSearchFilters();
+                    return;
+                }
                 // Check if merge modal is open - it handles its own escape
                 const mergeModal = document.getElementById('merge-modal');
                 if (mergeModal?.classList.contains('active')) {

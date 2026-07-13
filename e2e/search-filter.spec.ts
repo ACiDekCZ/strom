@@ -45,3 +45,25 @@ test('filter by birth-year range highlights only in-range persons', async ({ pag
     await expect(card(page, 'Old')).toHaveClass(/search-hit/);
     await expect(card(page, 'Young')).toHaveClass(/search-dim/);
 });
+
+test('filter panel opens fully on screen below the toolbar and Escape closes it', async ({ page }) => {
+    await page.setViewportSize({ width: 1000, height: 556 });
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    await page.locator('#search-filter-toggle').click();
+    const panel = page.locator('#search-filters');
+    await expect(panel).toBeVisible();
+
+    // Regression: the panel used to grow the search container in-flow; the
+    // fixed-height toolbar then centered it half above the screen (y < 0).
+    const box = (await panel.boundingBox())!;
+    const searchRow = (await page.locator('#toolbar-search-picker').boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(0);                       // fully on screen
+    expect(box.y).toBeGreaterThan(searchRow.y + searchRow.height); // below the search row
+    expect(box.y + box.height).toBeLessThanOrEqual(556);
+
+    // Escape closes the panel (it is reachable even without the toggle).
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+});

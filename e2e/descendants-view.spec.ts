@@ -42,3 +42,34 @@ test('descendants view: context-menu "Show descendants" enters the mode', async 
     await expect(page.locator('#descendants-badge')).toBeVisible();
     await expect(page.locator('#view-mode-descendants')).toHaveClass(/active/);
 });
+
+test('descendants view recenters — cards stay visible after prior pan/zoom', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
+    await cardAction(page, 'Jan', 'focus');
+
+    // Pan far away and zoom — the old view-mode switch kept this transform,
+    // leaving the smaller descendants layout entirely off-screen.
+    const box = (await page.locator('#tree-container').boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 40, box.y + box.height - 40, { steps: 5 });
+    await page.mouse.up();
+    await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
+
+    await page.locator('#view-mode-descendants').click();
+    await expect(page.locator('#descendants-badge')).toBeVisible();
+    // At least the root card must be inside the viewport.
+    await expect.poll(async () => {
+        return page.evaluate(() => {
+            const cont = document.getElementById('tree-container')!.getBoundingClientRect();
+            let visible = 0;
+            document.querySelectorAll('.person-card').forEach(el => {
+                const r = el.getBoundingClientRect();
+                if (r.right > cont.left && r.left < cont.right && r.bottom > cont.top && r.top < cont.bottom) visible++;
+            });
+            return visible;
+        });
+    }).toBeGreaterThan(0);
+});

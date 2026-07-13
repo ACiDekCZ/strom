@@ -90,3 +90,5 @@ the table honest.
 | Debug panels / `__*_DEBUG` flags | developer-only, not user-facing |
 | Cross-tree presence badge navigation | requires a specific multi-tree layout; low data-loss risk |
 | Mobile-only controls (`.add-person-round`) | responsive; the suite runs at desktop width |
+| Search filter panel position + Escape close | `search-filter.spec.ts` | covered | regression: panel used to overflow above the viewport |
+| Descendants view recenters after pan/zoom | `descendants-view.spec.ts` | covered | regression: empty canvas after mode switch |
