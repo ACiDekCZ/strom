@@ -69,4 +69,5 @@ test('locking a person makes the edit form read-only', async ({ page }) => {
     await expect(modal.locator('#input-firstname')).toHaveJSProperty('readOnly', true);
     await expect(modal.locator('#input-lastname')).toHaveJSProperty('readOnly', true);
     await expect(modal.locator('#input-gender')).toBeDisabled();
+    await expect(modal.locator('#btn-save')).toBeHidden();
 });

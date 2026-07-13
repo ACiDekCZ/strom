@@ -15,7 +15,7 @@ import { AuditLogManager } from './audit-log.js';
 import { TreePreview, TreeCompare } from './tree-preview.js';
 import { DebugOptions, DebugStep, DebugPhase } from './layout/pipeline/debug-types.js';
 import { decrypt, CryptoSession } from './crypto.js';
-import { StromData, AppMode, PWA_HOSTNAME } from './types.js';
+import { StromData, AppMode, PWA_HOSTNAME, APP_VERSION } from './types.js';
 import { StorageManager } from './storage.js';
 
 // Make modules available globally for HTML event handlers
@@ -343,5 +343,5 @@ document.addEventListener('DOMContentLoaded', async () => {
         UI.updateTreeSwitcher();
     });
 
-    console.log('Strom v1.0 initialized');
+    console.log(`Strom v${APP_VERSION} initialized`);
 });
