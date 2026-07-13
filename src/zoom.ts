@@ -352,6 +352,11 @@ class ZoomPanClass {
     }
 
     reset(): void {
+        // A pending zoom animation would overwrite the reset on its next frame
+        if (this.animationFrame) {
+            cancelAnimationFrame(this.animationFrame);
+            this.animationFrame = null;
+        }
         this.scale = 1;
         this.tx = 0;
         this.ty = 0;

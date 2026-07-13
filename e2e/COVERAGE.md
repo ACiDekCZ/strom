@@ -20,7 +20,7 @@ the table honest.
 | Focus/branch export | `data-import-export.spec.ts` | covered | only the focused component is written |
 | Standalone-HTML app export → open in view mode | `export-app-viewmode.spec.ts` | covered | opened via `file://`; read-only (edit controls hidden) |
 | Encrypted export → open, wrong vs right password | `export-app-viewmode.spec.ts` | covered | encrypted HTML-app open flow (supports retry) |
-| Encrypted JSON import password prompt | — | n-a | wrong-password retry is broken in the app (see Deník bug 1); covered via the HTML-app flow instead |
+| Encrypted JSON import, wrong password → retry | `data-import-export.spec.ts` | covered | retry bug fixed in review; error shown, same prompt accepts the right password |
 | Tree merge (two trees, shared person) | `merge.spec.ts` | partial | target-picker + wizard opens + shared match detected + shown in review list; the multi-step execute is not driven through the UI (unstable to script) |
 | Person merge (within a tree) | `merge.spec.ts` | covered | two persons → one, undo restores; relations unified |
 | PNG poster export | `export-poster.spec.ts` | covered | PNG magic number + non-trivial size |

@@ -156,3 +156,41 @@ test('demo tree can be exported and re-imported with the same person count', asy
     await importJsonAsNewTree(page, jsonPath, 'Demo Copy');
     expect(await personCount(page)).toBe(demoCount);
 });
+
+test('encrypted JSON import: wrong password shows an error, retry with the right one imports', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Tajny', 'Novak');
+
+    // Export the tree as an encrypted JSON.
+    await page.evaluate(() => window.Strom.UI.showExportDialog());
+    await page.evaluate(() => window.Strom.UI.exportTargetTreeJSON());
+    const pwd = page.locator('#export-password-modal');
+    await expect(pwd).toBeVisible();
+    await pwd.locator('#export-password-input').fill('correct-horse');
+    await pwd.locator('#export-password-confirm').fill('correct-horse');
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        pwd.locator('#export-with-password-btn').click(),
+    ]);
+    const filePath = await download.path();
+
+    // Importing it prompts for the password.
+    await page.locator('#file-input').setInputFiles(filePath);
+    const prompt = page.locator('#password-prompt-modal');
+    await expect(prompt).toBeVisible();
+
+    // Wrong password: an error appears and the prompt stays alive for a retry.
+    await prompt.locator('#password-prompt-input').fill('nope');
+    await prompt.locator('button[type="submit"]').click();
+    await expect(prompt.locator('#password-prompt-error')).toBeVisible();
+
+    // Right password on the SAME prompt completes the import.
+    await prompt.locator('#password-prompt-input').fill('correct-horse');
+    await prompt.locator('button[type="submit"]').click();
+    const dialog = page.locator('#import-tree-modal');
+    await expect(dialog).toBeVisible();
+    await dialog.locator('#import-tree-name').fill('Decrypted');
+    await dialog.getByRole('button', { name: 'Import' }).click();
+    await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Decrypted');
+    await expect(card(page, 'Tajny')).toBeVisible();
+});

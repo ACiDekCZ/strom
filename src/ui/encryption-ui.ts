@@ -379,10 +379,14 @@ export const encryptionUiMethods = uiModule({
                 input.select();
             }
         } else if (this.passwordPromptCallbackManagesDialog) {
-            // Callback handles validation and closing
-            const callback = this.passwordPromptCallback;
-            this.passwordPromptCallback = null;
-            await callback(password);
+            // Callback handles validation and closing. On success it clears
+            // the managing flag (and closes the dialog); on a wrong password
+            // it keeps the dialog open — the callback must survive for the
+            // retry, so only drop it once the flag went false.
+            await this.passwordPromptCallback(password);
+            if (!this.passwordPromptCallbackManagesDialog) {
+                this.passwordPromptCallback = null;
+            }
         } else {
             // No validation data - just pass password through
             document.getElementById('password-prompt-modal')?.classList.remove('active');

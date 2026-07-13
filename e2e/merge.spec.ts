@@ -27,8 +27,7 @@ test('merging two persons collapses them into one and undo restores both', async
     await expect(confirmBtn).toBeEnabled();
     await confirmBtn.click();
     await expect(mergeModal).toBeHidden();
-    // The underlying edit modal can linger once the merge dialog closes.
-    await page.keyboard.press('Escape');
+    // The underlying edit modal closes together with the merge dialog.
     await expect(page.locator('#person-modal')).toBeHidden();
 
     // Pavel is gone; Petr (and the rest of the family) remain.

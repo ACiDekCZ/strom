@@ -565,6 +565,9 @@ export const mergeUiMethods = uiModule({
         if (success) {
             this.showToast(strings.personMerge.mergeComplete);
             this.closePersonMergeDialog();
+            // The merge was started from the person edit modal — close it
+            // too, its form still shows the pre-merge state
+            this.closeModal();
             TreeRenderer.render();
         } else {
             this.showAlert('Merge failed', 'error');
