@@ -4,7 +4,9 @@
  *
  * Known unsupported: person attachments (inline document/image data URLs) are
  * NOT exported — binary payloads do not belong in a GEDCOM text file. They are
- * preserved only in JSON / standalone-HTML exports.
+ * preserved only in JSON / standalone-HTML exports. Parent→child relationship
+ * types map to FAMC PEDI (adoptive→adopted, foster→foster); 'step' has no GEDCOM
+ * equivalent and is exported without PEDI.
  */
 
 import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType } from './types.js';
@@ -251,6 +253,14 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
                 const famId = partnershipIdMap.get(partnershipId);
                 if (famId) {
                     lines.push(`1 FAMC ${famId}`);
+                    // PEDI reflects the child's relationship to this family. GEDCOM
+                    // has adopted/foster but no 'step' — step links export without
+                    // PEDI (known-unsupported, see header).
+                    const rels = person.parentRelTypes ?? {};
+                    const famRels = [partnership.person1Id, partnership.person2Id].map(pid => rels[pid]);
+                    const pedi = famRels.includes('adoptive') ? 'adopted'
+                        : famRels.includes('foster') ? 'foster' : null;
+                    if (pedi) lines.push(`2 PEDI ${pedi}`);
                 }
             }
         }

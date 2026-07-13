@@ -25,6 +25,7 @@ import {
     StromData,
     LifeEvent,
     LifeEventType,
+    ParentChildRelType,
     Source,
     toPersonId,
     toPartnershipId,
@@ -77,6 +78,7 @@ interface GedcomIndividual {
     sourceRefs: string[];
     fams: string[];  // Families as spouse
     famc: string | null;  // Family as child
+    famcPedi: string;  // PEDI value under FAMC (adopted/foster/birth/…)
 }
 
 /** Raw GEDCOM family record */
@@ -239,7 +241,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     events: [],
                     sourceRefs: [],
                     fams: [],
-                    famc: null
+                    famc: null,
+                    famcPedi: ''
                 };
                 currentType = 'INDI';
                 currentSource = null;
@@ -361,6 +364,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                     } else if (currentSubTag === 'DEAT') {
                         if (tag === 'DATE') indi.deathDate = parseGedcomDate(value);
                         if (tag === 'PLAC') indi.deathPlace = value;
+                    } else if (currentSubTag === 'FAMC') {
+                        // Pedigree type of the child→family link (adopted/foster).
+                        if (tag === 'PEDI') indi.famcPedi = value.toLowerCase();
                     } else if (currentSubTag === 'NOTE') {
                         // Multi-line notes: CONT = new line, CONC = continuation.
                         if (tag === 'CONT') indi.notes += '\n' + value;
@@ -539,6 +545,18 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             }
             if (!persons[childId].parentIds.includes(person2Id)) {
                 persons[childId].parentIds.push(person2Id);
+            }
+
+            // Pedigree type (PEDI) applies to the child's link to this family →
+            // set both parents' relationship type accordingly.
+            const pedi = individuals.get(childGedId)?.famcPedi;
+            const relType: ParentChildRelType | null =
+                pedi === 'adopted' ? 'adoptive' : pedi === 'foster' ? 'foster' : null;
+            if (relType) {
+                const child = persons[childId];
+                if (!child.parentRelTypes) child.parentRelTypes = {};
+                child.parentRelTypes[person1Id] = relType;
+                child.parentRelTypes[person2Id] = relType;
             }
 
             // Add child to parents' childIds

@@ -52,6 +52,9 @@ export type Gender = 'male' | 'female';
 
 export type PartnershipStatus = 'married' | 'partners' | 'divorced' | 'separated';
 
+/** Kind of a parent→child relationship. Missing = 'biological' (no migration). */
+export type ParentChildRelType = 'biological' | 'adoptive' | 'step' | 'foster';
+
 /** Kinds of life event that can be recorded on a person. */
 export type LifeEventType =
     | 'birth' | 'death' | 'baptism' | 'burial' | 'occupation'
@@ -142,6 +145,11 @@ export interface Person {
     sourceIds?: string[];
     /** Attached documents (scans, certificates, letters…). */
     attachments?: Attachment[];
+    /**
+     * Per-parent relationship type, keyed by parent PersonId. A missing entry
+     * (or 'biological') is the default, so existing data needs no migration.
+     */
+    parentRelTypes?: Record<PersonId, ParentChildRelType>;
 }
 
 export interface Partnership {
@@ -173,11 +181,12 @@ export type LastFocusedMarker = typeof LAST_FOCUSED;
  * v2 (2026-07): added optional Person.events (life events).
  * v3 (2026-07): added the per-tree source catalog (StromData.sources) and
  * citation ids (Person.sourceIds, LifeEvent.sourceIds).
- * v4 (2026-07): added Person.attachments (inline documents). All additive/
- * backward-compatible for reading; the bump makes an older app warn ("newer
- * version") before it silently drops the new fields on re-save.
+ * v4 (2026-07): added Person.attachments (inline documents).
+ * v5 (2026-07): added Person.parentRelTypes (adoptive/step/foster links).
+ * All additive/backward-compatible for reading; the bump makes an older app
+ * warn ("newer version") before it silently drops the new fields on re-save.
  */
-export const STROM_DATA_VERSION = 4;
+export const STROM_DATA_VERSION = 5;
 
 export interface StromData {
     /** Data format version for migration support */
@@ -295,6 +304,7 @@ export type AuditAction =
     | 'attachment.add'
     | 'attachment.remove'
     | 'attachment.update'
+    | 'parentRel.update'
     | 'undo'
     | 'redo';
 

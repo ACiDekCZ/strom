@@ -19,6 +19,7 @@ import {
     Source,
     generateAttachmentId,
     Attachment,
+    ParentChildRelType,
     generatePartnershipId,
     LAST_FOCUSED,
     LastFocusedMarker,
@@ -1160,6 +1161,34 @@ class DataManagerClass {
         return true;
     }
 
+    // ==================== PARENT-CHILD RELATIONSHIP TYPE ====================
+
+    /**
+     * Set the relationship type of a parent→child edge. 'biological' clears the
+     * record (it is the default). The parent must already be a parent of child.
+     */
+    setParentRelType(childId: PersonId, parentId: PersonId, type: ParentChildRelType): boolean {
+        const child = this.data.persons[childId];
+        if (!child || !child.parentIds.includes(parentId)) return false;
+        if (this.isPersonLocked(childId) || this.isPersonLocked(parentId)) return false;
+
+        this.beginMutation();
+        if (type === 'biological') {
+            if (child.parentRelTypes) {
+                delete child.parentRelTypes[parentId];
+                if (Object.keys(child.parentRelTypes).length === 0) delete child.parentRelTypes;
+            }
+        } else {
+            if (!child.parentRelTypes) child.parentRelTypes = {};
+            child.parentRelTypes[parentId] = type;
+        }
+        const parent = this.data.persons[parentId];
+        this.commitMutation(strings.undo.setParentRelType(auditPersonName(child)));
+        AuditLogManager.log(this.currentTreeId, 'parentRel.update',
+            strings.auditLog.setParentRelType(parent ? auditPersonName(parent) : '?', auditPersonName(child)));
+        return true;
+    }
+
     deletePerson(id: PersonId): boolean {
         const person = this.data.persons[id];
         if (!person) return false;
@@ -1394,6 +1423,12 @@ class DataManagerClass {
 
         // Remove from child's parentIds
         child.parentIds = child.parentIds.filter(id => id !== parentId);
+
+        // Clean up any parent-relationship-type record for this pair.
+        if (child.parentRelTypes && child.parentRelTypes[parentId]) {
+            delete child.parentRelTypes[parentId];
+            if (Object.keys(child.parentRelTypes).length === 0) delete child.parentRelTypes;
+        }
 
         // Also remove from any partnership's childIds
         for (const partnership of Object.values(this.data.partnerships)) {

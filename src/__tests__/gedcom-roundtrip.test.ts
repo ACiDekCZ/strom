@@ -46,6 +46,12 @@ function normalize(data: StromData): StromData {
             // Event ids are generated fresh on every import — re-key positionally.
             ...(person.events ? { events: person.events.map((e, i) => ({ ...e, id: `E${i}`, ...(e.sourceIds ? { sourceIds: mapSrc(e.sourceIds) } : {}) })) } : {}),
             ...(person.sourceIds ? { sourceIds: mapSrc(person.sourceIds) } : {}),
+            // parentRelTypes is keyed by parent PersonId — re-key the keys too.
+            ...(person.parentRelTypes ? {
+                parentRelTypes: Object.fromEntries(
+                    Object.entries(person.parentRelTypes).map(([pid, t]) => [p.get(pid as PersonId)!, t])
+                ),
+            } : {}),
         };
     }
     const partnerships: StromData['partnerships'] = {};
@@ -150,6 +156,16 @@ const FIXTURES: Record<string, string> = {
         '0 TRLR',
     ].join('\n'),
 
+    'adoptive pedigree': [
+        '0 HEAD', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Otec /Rodic/', '1 SEX M',
+        '0 @I2@ INDI', '1 NAME Matka /Rodic/', '1 SEX F',
+        '0 @I3@ INDI', '1 NAME Adopt /Rodic/', '1 SEX M', '1 FAMC @F1@', '2 PEDI adopted',
+        '0 @I4@ INDI', '1 NAME Pest /Rodic/', '1 SEX F', '1 FAMC @F1@', '2 PEDI foster',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 CHIL @I3@', '1 CHIL @I4@',
+        '0 TRLR',
+    ].join('\n'),
+
     'sources': [
         '0 HEAD', '1 CHAR UTF-8',
         '0 @I1@ INDI', '1 NAME Josef /Novak/', '1 SEX M',
@@ -233,5 +249,14 @@ describe('GEDCOM round-trip', () => {
         expect(part.startDate).toBe('1925');
         expect(part.startPlace).toBe('Brno');
         expect(part.note).toBe('Married in a small church');
+    });
+
+    it('maps FAMC PEDI to parent relationship types (adopted/foster)', () => {
+        const data = importGed(FIXTURES['adoptive pedigree']);
+        const byName = (n: string) => Object.values(data.persons).find(p => p.firstName === n);
+        const adopt = byName('Adopt');
+        const foster = byName('Pest');
+        expect(adopt?.parentRelTypes && Object.values(adopt.parentRelTypes)).toEqual(['adoptive', 'adoptive']);
+        expect(foster?.parentRelTypes && Object.values(foster.parentRelTypes)).toEqual(['foster', 'foster']);
     });
 });

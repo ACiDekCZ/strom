@@ -1016,9 +1016,11 @@ class TreeRendererClass {
             // Horizontal bus (branch) - only over children
             this.drawLine(svg, conn.branchLeftX, conn.branchY, conn.branchRightX, conn.branchY);
 
-            // Drops to each child - simple vertical lines from bus
+            // Drops to each child - simple vertical lines from bus. The stroke
+            // style reflects the parent→child relationship type (adoptive/step/
+            // foster); geometry is unchanged.
             for (const drop of conn.drops) {
-                this.drawLine(svg, drop.x, conn.branchY, drop.x, drop.bottomY);
+                this.drawLine(svg, drop.x, conn.branchY, drop.x, drop.bottomY, this.getParentRelDropStyle(drop.personId));
             }
         }
     }
@@ -1114,7 +1116,7 @@ class TreeRendererClass {
         }
     }
 
-    private drawLine(svg: SVGSVGElement, x1: number, y1: number, x2: number, y2: number, style?: { dashArray?: string; color?: string }): void {
+    private drawLine(svg: SVGSVGElement, x1: number, y1: number, x2: number, y2: number, style?: { dashArray?: string; color?: string; className?: string; title?: string }): void {
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         line.setAttribute('x1', String(x1));
         line.setAttribute('y1', String(y1));
@@ -1126,7 +1128,33 @@ class TreeRendererClass {
         if (style?.color) {
             line.setAttribute('stroke', style.color);
         }
+        if (style?.className) {
+            line.setAttribute('class', style.className);
+        }
+        if (style?.title) {
+            const t = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+            t.textContent = style.title;
+            line.appendChild(t);
+        }
         svg.appendChild(line);
+    }
+
+    /**
+     * Line style for the vertical drop to a child, based on the child's
+     * parent→child relationship type. Adoptive = dashed, step/foster = dotted;
+     * colour unchanged. Only the drop's stroke changes — never its geometry.
+     */
+    private getParentRelDropStyle(childId: PersonId): { dashArray?: string; className: string; title?: string } {
+        const child = DataManager.getPerson(childId);
+        const types = child?.parentRelTypes ? Object.values(child.parentRelTypes) : [];
+        if (types.includes('adoptive')) {
+            return { dashArray: '6,4', className: 'child-drop', title: strings.parentRelType.adoptive };
+        }
+        if (types.includes('step') || types.includes('foster')) {
+            const t = types.includes('foster') ? strings.parentRelType.foster : strings.parentRelType.step;
+            return { dashArray: '2,3', className: 'child-drop', title: t };
+        }
+        return { className: 'child-drop' };
     }
 
     private updateSVGSize(svg: SVGSVGElement): void {

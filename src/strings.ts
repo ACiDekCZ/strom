@@ -341,6 +341,14 @@ const stringsEN = {
         separated: 'Separated'
     },
 
+    // Parent→child relationship type
+    parentRelType: {
+        biological: 'Biological',
+        adoptive: 'Adoptive',
+        step: 'Step',
+        foster: 'Foster',
+    },
+
     // Export
     export: {
         failed: 'Export failed. Please try again.',
@@ -915,6 +923,7 @@ const stringsEN = {
         addedAttachment: (name: string) => `Added attachment to ${name}`,
         removedAttachment: (name: string) => `Removed attachment from ${name}`,
         updatedAttachment: (name: string) => `Updated attachment of ${name}`,
+        setParentRelType: (parent: string, child: string) => `Set relationship type ${parent} → ${child}`,
         // Undo / redo
         undoAction: (desc: string) => `Undo: ${desc}`,
         redoAction: (desc: string) => `Redo: ${desc}`
@@ -944,6 +953,7 @@ const stringsEN = {
         addAttachment: (name: string) => `attachment of ${name}`,
         removeAttachment: (name: string) => `removing attachment from ${name}`,
         editAttachment: (name: string) => `editing attachment of ${name}`,
+        setParentRelType: (child: string) => `relationship type of ${child}`,
         undone: (desc: string) => `Undone: ${desc}`,
         redone: (desc: string) => `Redone: ${desc}`,
         nothingToUndo: 'Nothing to undo',
@@ -1311,6 +1321,14 @@ const stringsCZ: StringsType = {
         partners: 'Partneři',
         divorced: 'Rozvedení',
         separated: 'Odloučení'
+    },
+
+    // Parent→child relationship type
+    parentRelType: {
+        biological: 'Biologický',
+        adoptive: 'Adoptivní',
+        step: 'Nevlastní',
+        foster: 'Pěstounský',
     },
 
     // Export
@@ -1887,6 +1905,7 @@ const stringsCZ: StringsType = {
         addedAttachment: (name: string) => `Přidána příloha k ${name}`,
         removedAttachment: (name: string) => `Odebrána příloha u ${name}`,
         updatedAttachment: (name: string) => `Upravena příloha u ${name}`,
+        setParentRelType: (parent: string, child: string) => `Nastaven typ vztahu ${parent} → ${child}`,
         // Undo / redo
         undoAction: (desc: string) => `Zpět: ${desc}`,
         redoAction: (desc: string) => `Znovu: ${desc}`
@@ -1916,6 +1935,7 @@ const stringsCZ: StringsType = {
         addAttachment: (name: string) => `příloha u ${name}`,
         removeAttachment: (name: string) => `odebrání přílohy u ${name}`,
         editAttachment: (name: string) => `úprava přílohy u ${name}`,
+        setParentRelType: (child: string) => `typ vztahu u ${child}`,
         undone: (desc: string) => `Vráceno: ${desc}`,
         redone: (desc: string) => `Znovu provedeno: ${desc}`,
         nothingToUndo: 'Není co vrátit',

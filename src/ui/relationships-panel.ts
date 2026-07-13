@@ -13,6 +13,7 @@ import {
     PersonId,
     PartnershipId,
     PartnershipStatus,
+    ParentChildRelType,
     Gender,
     RelationType,
     RelationContext,
@@ -123,6 +124,17 @@ export const relationshipsPanelMethods = uiModule({
                 const partnershipId = target.dataset.partnershipId as PartnershipId;
                 const status = target.value as PartnershipStatus;
                 this.setPendingPartnershipChange(partnershipId, { status });
+            });
+        });
+
+        // Parent→child relationship type (applied immediately — own undo action).
+        content.querySelectorAll('.parent-rel-type-select').forEach(select => {
+            select.addEventListener('change', (e) => {
+                const target = e.target as HTMLSelectElement;
+                const childId = target.dataset.relChild as PersonId;
+                const parentId = target.dataset.relParent as PersonId;
+                DataManager.setParentRelType(childId, parentId, target.value as ParentChildRelType);
+                TreeRenderer.render();
             });
         });
 
@@ -246,6 +258,23 @@ export const relationshipsPanelMethods = uiModule({
         const items = persons.map(p => {
             let statusHtml = '';
             let partnershipDetailsHtml = '';
+            // Parent→child relationship type select (parents/children sections).
+            let relTypeHtml = '';
+            if ((type === 'parents' || type === 'children') && !isLocked) {
+                const childId = type === 'parents' ? currentPersonId : p.id;
+                const parentId = type === 'parents' ? p.id : currentPersonId;
+                const childPerson = DataManager.getPerson(childId);
+                const current = childPerson?.parentRelTypes?.[parentId] ?? 'biological';
+                const opt = (v: string, label: string) => `<option value="${v}" ${current === v ? 'selected' : ''}>${label}</option>`;
+                relTypeHtml = `
+                    <select class="parent-rel-type-select" data-rel-child="${childId}" data-rel-parent="${parentId}">
+                        ${opt('biological', strings.parentRelType.biological)}
+                        ${opt('adoptive', strings.parentRelType.adoptive)}
+                        ${opt('step', strings.parentRelType.step)}
+                        ${opt('foster', strings.parentRelType.foster)}
+                    </select>
+                `;
+            }
             if (type === 'partners') {
                 const partnership = DataManager.getPartnershipBetween(currentPersonId, p.id);
                 if (partnership) {
@@ -303,6 +332,7 @@ export const relationshipsPanelMethods = uiModule({
                         ${p.firstName} ${p.lastName}
                     </span>
                     ${statusHtml}
+                    ${relTypeHtml}
                     ${!isLocked ? `<button class="rel-remove-btn" data-rel-type="${relType[type]}" data-rel-id="${p.id}">
                         ${strings.relationships.remove}
                     </button>` : ''}
