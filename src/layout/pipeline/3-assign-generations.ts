@@ -93,30 +93,40 @@ export function assignGenerations(input: AssignGenInput): GenerationalModel {
         }
     }
 
-    // Assign generations to chain unions BEFORE the fallback loop
-    // so that edge-based propagation can reach chain union children.
-    // Chain unions share the same generation as their shared person.
-    for (const [, chain] of model.partnerChains) {
-        const sharedGen = personGen.get(chain.sharedPersonId);
-        if (sharedGen === undefined) continue;
-        for (const chainUnionId of chain.unionIds) {
-            if (!unionGen.has(chainUnionId)) {
-                unionGen.set(chainUnionId, sharedGen);
-            }
-            // Also set generation for chain union partners
-            const union = model.unions.get(chainUnionId);
-            if (union) {
-                if (!personGen.has(union.partnerA)) {
-                    personGen.set(union.partnerA, sharedGen);
-                    visited.add(union.partnerA);
+    // Assign generations to chain unions so that edge-based propagation can
+    // reach chain union children. Chain unions share the same generation as
+    // their shared person. Returns true if anything new was assigned — the
+    // shared person of a deep chain may itself only get its generation from
+    // edge propagation below, so this must also re-run inside that loop.
+    const propagateChainGens = (): boolean => {
+        let assigned = false;
+        for (const [, chain] of model.partnerChains) {
+            const sharedGen = personGen.get(chain.sharedPersonId);
+            if (sharedGen === undefined) continue;
+            for (const chainUnionId of chain.unionIds) {
+                if (!unionGen.has(chainUnionId)) {
+                    unionGen.set(chainUnionId, sharedGen);
+                    assigned = true;
                 }
-                if (union.partnerB && !personGen.has(union.partnerB)) {
-                    personGen.set(union.partnerB, sharedGen);
-                    visited.add(union.partnerB);
+                // Also set generation for chain union partners
+                const union = model.unions.get(chainUnionId);
+                if (union) {
+                    if (!personGen.has(union.partnerA)) {
+                        personGen.set(union.partnerA, sharedGen);
+                        visited.add(union.partnerA);
+                        assigned = true;
+                    }
+                    if (union.partnerB && !personGen.has(union.partnerB)) {
+                        personGen.set(union.partnerB, sharedGen);
+                        visited.add(union.partnerB);
+                        assigned = true;
+                    }
                 }
             }
         }
-    }
+        return assigned;
+    };
+    propagateChainGens();
 
     // Handle any remaining persons not reached by BFS
     // These are typically spouse ancestors or disconnected branches
@@ -124,6 +134,8 @@ export function assignGenerations(input: AssignGenInput): GenerationalModel {
     let changed = true;
     while (changed) {
         changed = false;
+
+        if (propagateChainGens()) changed = true;
 
         // Use edges to propagate generations
         for (const edge of model.edges) {

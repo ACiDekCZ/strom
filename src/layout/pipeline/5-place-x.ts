@@ -278,12 +278,16 @@ function placeChainChildrenPerUnion(
                 anchorX = parentBlock.xCenter;
             }
         } else {
-            // Secondary union: children center under extra partner
+            // Secondary union: children center in the extra partner's SLOT
+            // (the card itself gravitates toward the primary couple, so the
+            // slot center — not the card center — marks the subtree area)
             const union = model.unions.get(unionId);
             if (!union) continue;
             const extraPartner = findChainExtraPartner(union, parentBlock.chainInfo!, model);
             if (extraPartner) {
-                anchorX = parentBlock.chainInfo.personPositions.get(extraPartner) ?? parentBlock.xCenter;
+                anchorX = parentBlock.chainInfo.personSlotCenters.get(extraPartner)
+                    ?? parentBlock.chainInfo.personPositions.get(extraPartner)
+                    ?? parentBlock.xCenter;
             } else {
                 anchorX = parentBlock.xCenter;
             }
@@ -607,8 +611,11 @@ function placeAncestorChainBlockChildren(
     if (ancestorUnion) {
         const extraPartner = findChainExtraPartner(ancestorUnion, block.chainInfo, model);
         if (extraPartner) {
-            // Secondary union → center extra partner over children
-            coupleOffset = block.chainInfo.personPositions.get(extraPartner) ?? 0;
+            // Secondary union → center the extra partner's SLOT over children
+            // (the card gravitates toward the primary couple within the slot)
+            coupleOffset = block.chainInfo.personSlotCenters.get(extraPartner)
+                ?? block.chainInfo.personPositions.get(extraPartner)
+                ?? 0;
         } else {
             // Primary union → center couple midpoint over children
             if (ancestorUnion.partnerB) {
@@ -626,13 +633,20 @@ function placeAncestorChainBlockChildren(
     // Position block so couple center aligns with children center
     setBlockPosition(block, childrenSpanCenter - coupleOffset, config);
 
-    // === PASS 3: Place secondary unions' children under their extra partners ===
-    // Track the X span already occupied by placed children (the ancestor union's
-    // children + earlier secondary groups). Secondary groups prefer to center
-    // under their extra partner, but must stay OUTSIDE the occupied span so
-    // sibling sets of different unions never interleave.
-    let spanLeft = minChildX;
-    let spanRight = maxChildX;
+    // === PASS 3: Place secondary unions' children under their slots ===
+    // Each union's children group prefers its slot center (slots are sized to
+    // fit the children, so slot-centered groups are disjoint by construction).
+    // The direct-line union's children span is a fixed pivot; groups sweep
+    // outward from it — nearest anchor first — and shift outward only when
+    // they actually collide with the frontier (e.g. the direct-line child is
+    // wider than its slot).
+    interface SecondaryGroup {
+        unplacedIds: FamilyBlockId[];
+        anchorX: number;
+        groupWidth: number;
+        left: number;
+    }
+    const secondaryGroups: SecondaryGroup[] = [];
 
     for (const [unionId, childBlockIds] of unionChildBlockIds) {
         if (unionId === ancestorUnionId) continue; // already handled
@@ -640,15 +654,23 @@ function placeAncestorChainBlockChildren(
         const unplacedIds = childBlockIds.filter(id => !placedBlocks.has(id));
         if (unplacedIds.length === 0) continue;
 
-        // Get extra partner position for this union
+        // Get anchor for this union's children
         const su = model.unions.get(unionId);
         if (!su) continue;
         const extraPartner = findChainExtraPartner(su, block.chainInfo, model);
-        const uAnchorX = extraPartner
-            ? (block.chainInfo.personPositions.get(extraPartner) ?? block.xCenter)
-            : block.xCenter;
+        let uAnchorX: number;
+        if (extraPartner) {
+            uAnchorX = block.chainInfo.personSlotCenters.get(extraPartner)
+                ?? block.chainInfo.personPositions.get(extraPartner)
+                ?? block.xCenter;
+        } else {
+            // Primary union: anchor at the primary couple's card midpoint
+            // (block.xCenter is the whole chain's center — wrong for wide chains)
+            const aX = block.chainInfo.personPositions.get(su.partnerA);
+            const bX = su.partnerB ? block.chainInfo.personPositions.get(su.partnerB) : undefined;
+            uAnchorX = (aX !== undefined && bX !== undefined) ? (aX + bX) / 2 : (aX ?? block.xCenter);
+        }
 
-        // Center children under the extra partner
         let groupWidth = 0;
         for (const cbId of unplacedIds) {
             const cb = blocks.get(cbId);
@@ -656,20 +678,40 @@ function placeAncestorChainBlockChildren(
         }
         groupWidth += (unplacedIds.length - 1) * config.horizontalGap;
 
-        let x = uAnchorX - groupWidth / 2;
-        if (spanLeft < spanRight) {
-            if (uAnchorX <= childrenSpanCenter) {
-                // Extra partner on the left side: group must end before the span
-                x = Math.min(x, spanLeft - config.horizontalGap - groupWidth);
-            } else {
-                // Extra partner on the right side: group must start after the span
-                x = Math.max(x, spanRight + config.horizontalGap);
-            }
-        }
-        spanLeft = Math.min(spanLeft, x);
-        spanRight = Math.max(spanRight, x + groupWidth);
+        secondaryGroups.push({
+            unplacedIds,
+            anchorX: uAnchorX,
+            groupWidth,
+            left: uAnchorX - groupWidth / 2
+        });
+    }
 
-        for (const cbId of unplacedIds) {
+    const hasPivot = minChildX < Infinity;
+    const leftGroups = secondaryGroups
+        .filter(g => g.anchorX <= childrenSpanCenter)
+        .sort((a, b) => b.anchorX - a.anchorX); // nearest to pivot first
+    const rightGroups = secondaryGroups
+        .filter(g => g.anchorX > childrenSpanCenter)
+        .sort((a, b) => a.anchorX - b.anchorX);
+
+    let frontierLeft = hasPivot ? minChildX : Infinity;
+    for (const g of leftGroups) {
+        if (g.left + g.groupWidth > frontierLeft - config.horizontalGap) {
+            g.left = frontierLeft - config.horizontalGap - g.groupWidth;
+        }
+        frontierLeft = Math.min(frontierLeft, g.left);
+    }
+    let frontierRight = hasPivot ? maxChildX : -Infinity;
+    for (const g of rightGroups) {
+        if (g.left < frontierRight + config.horizontalGap) {
+            g.left = frontierRight + config.horizontalGap;
+        }
+        frontierRight = Math.max(frontierRight, g.left + g.groupWidth);
+    }
+
+    for (const g of secondaryGroups) {
+        let x = g.left;
+        for (const cbId of g.unplacedIds) {
             const cb = blocks.get(cbId);
             if (!cb) continue;
             const childCenter = x + cb.envelopeWidth / 2;
@@ -998,22 +1040,66 @@ function setBlockPosition(block: FamilyBlock, centerX: number, config: LayoutCon
 
         const primaryAreaCenter = (primaryAreaLeft + primaryAreaRight) / 2;
 
-        for (let i = 0; i < personCount; i++) {
-            const pid = personOrder[i];
-            const slotWidth = block.chainInfo.personSlotWidths.get(pid) ?? config.cardWidth;
-            let personCenterX: number;
-            const primaryIdx = primaryPersonsInOrder.indexOf(pid);
-            if (primaryIdx >= 0 && isFinite(primaryAreaCenter) && primaryPersonsInOrder.length === 2) {
-                // Primary couple: cards adjacent around the area center
-                personCenterX = primaryIdx === 0
-                    ? primaryAreaCenter - config.partnerGap / 2 - config.cardWidth / 2
-                    : primaryAreaCenter + config.partnerGap / 2 + config.cardWidth / 2;
-            } else if (primaryIdx >= 0 && isFinite(primaryAreaCenter)) {
-                personCenterX = primaryAreaCenter;
-            } else {
-                personCenterX = (slotLefts.get(pid) ?? centerX) + slotWidth / 2;
+        // Record slot centers — these are the CHILDREN anchors per person.
+        // Cards may gravitate toward the primary couple within/out of their
+        // slot, but each union's children stay centered in the slot.
+        for (const [pid, left] of slotLefts) {
+            const w = block.chainInfo.personSlotWidths.get(pid) ?? config.cardWidth;
+            block.chainInfo.personSlotCenters.set(pid, left + w / 2);
+        }
+
+        const positions = block.chainInfo.personPositions;
+        const firstPrimaryIdx = personOrder.findIndex(p => primaryCouple.includes(p));
+
+        if (firstPrimaryIdx < 0 || !isFinite(primaryAreaCenter)) {
+            // No primary couple resolved — fall back to slot centers
+            for (const pid of personOrder) {
+                const slotWidth = block.chainInfo.personSlotWidths.get(pid) ?? config.cardWidth;
+                positions.set(pid, (slotLefts.get(pid) ?? centerX) + slotWidth / 2);
             }
-            block.chainInfo.personPositions.set(pid, personCenterX);
+        } else {
+            const lastPrimaryIdx = firstPrimaryIdx + primaryPersonsInOrder.length - 1;
+
+            // Primary couple: cards adjacent around the area center
+            for (let i = firstPrimaryIdx; i <= lastPrimaryIdx; i++) {
+                const primaryIdx = i - firstPrimaryIdx;
+                positions.set(personOrder[i], primaryPersonsInOrder.length === 2
+                    ? (primaryIdx === 0
+                        ? primaryAreaCenter - config.partnerGap / 2 - config.cardWidth / 2
+                        : primaryAreaCenter + config.partnerGap / 2 + config.cardWidth / 2)
+                    : primaryAreaCenter);
+            }
+
+            // Extra partners gravitate toward the primary couple: a childless
+            // partner stacks directly adjacent to the previous card; a partner
+            // with children moves at most to the inner edge of its own slot
+            // (its stem must stay above its children span).
+            // Sweep LEFT side outward from the primary couple:
+            let nextRightEdge = (positions.get(personOrder[firstPrimaryIdx]) ?? primaryAreaCenter)
+                - config.cardWidth / 2 - config.partnerGap;
+            for (let i = firstPrimaryIdx - 1; i >= 0; i--) {
+                const pid = personOrder[i];
+                const slotWidth = block.chainInfo.personSlotWidths.get(pid) ?? config.cardWidth;
+                const slotLeft = slotLefts.get(pid) ?? (centerX - slotWidth / 2);
+                const cardRight = block.chainInfo.personsWithChildren.has(pid)
+                    ? Math.min(nextRightEdge, slotLeft + slotWidth)
+                    : nextRightEdge;
+                positions.set(pid, cardRight - config.cardWidth / 2);
+                nextRightEdge = cardRight - config.cardWidth - config.partnerGap;
+            }
+
+            // Sweep RIGHT side outward from the primary couple:
+            let nextLeftEdge = (positions.get(personOrder[lastPrimaryIdx]) ?? primaryAreaCenter)
+                + config.cardWidth / 2 + config.partnerGap;
+            for (let i = lastPrimaryIdx + 1; i < personCount; i++) {
+                const pid = personOrder[i];
+                const slotLeft = slotLefts.get(pid) ?? (centerX - config.cardWidth / 2);
+                const cardLeft = block.chainInfo.personsWithChildren.has(pid)
+                    ? Math.max(nextLeftEdge, slotLeft)
+                    : nextLeftEdge;
+                positions.set(pid, cardLeft + config.cardWidth / 2);
+                nextLeftEdge = cardLeft + config.cardWidth + config.partnerGap;
+            }
         }
 
         // Husband anchor = first person center, wife anchor = last person center
@@ -1059,6 +1145,9 @@ function shiftSubtree(
         if (block.chainInfo) {
             for (const [pid, x] of block.chainInfo.personPositions) {
                 block.chainInfo.personPositions.set(pid, x + deltaX);
+            }
+            for (const [pid, x] of block.chainInfo.personSlotCenters) {
+                block.chainInfo.personSlotCenters.set(pid, x + deltaX);
             }
         }
 

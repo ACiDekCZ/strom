@@ -218,7 +218,9 @@ function buildBlockRecursive(
             unionIds: [...chain.unionIds],
             personOrder,
             personPositions: new Map(),
+            personSlotCenters: new Map(),
             unionChildBlockIds: new Map(),
+            personsWithChildren: new Set(),
             personSlotWidths: new Map(),
             primaryCouple: getChainPrimaryCouple(chain, model)
         };
@@ -293,6 +295,11 @@ function buildBlockRecursive(
             }
             if (perUnionChildBlocks.length > 0) {
                 chainInfo.unionChildBlockIds.set(chainUnionId, perUnionChildBlocks);
+                const cu = model.unions.get(chainUnionId);
+                if (cu) {
+                    chainInfo.personsWithChildren.add(cu.partnerA);
+                    if (cu.partnerB) chainInfo.personsWithChildren.add(cu.partnerB);
+                }
             }
         }
     } else {
@@ -510,7 +517,9 @@ function buildAncestorBlocks(
             unionIds: [...chain.unionIds],
             personOrder,
             personPositions: new Map(),
+            personSlotCenters: new Map(),
             unionChildBlockIds: new Map(),
+            personsWithChildren: new Set(),
             personSlotWidths: new Map(),
             primaryCouple: getChainPrimaryCouple(chain, model)
         };
@@ -612,6 +621,13 @@ function buildAncestorBlocks(
                 }
             }
             chainInfo.unionChildBlockIds.set(chainUnionId, perUnionChildBlocks);
+            if (perUnionChildBlocks.length > 0) {
+                const cu = model.unions.get(chainUnionId);
+                if (cu) {
+                    chainInfo.personsWithChildren.add(cu.partnerA);
+                    if (cu.partnerB) chainInfo.personsWithChildren.add(cu.partnerB);
+                }
+            }
         }
     } else {
         // Standard: build child blocks from this union only

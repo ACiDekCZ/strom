@@ -221,9 +221,14 @@ export function buildLayoutModel(input: BuildModelInput): LayoutModel {
     // Step 4: Expand partner chains for expanded display mode
     const partnerChains = new Map<PersonId, PartnerChain>();
 
-    if (displayPolicy.mode === 'expanded' && displayPolicy.expandedPersonIds && displayPolicy.expandedPersonIds.size > 0) {
+    // Appendage persons (deep ancestors) form chains too — their extra
+    // spouse card inlines next to them via the same chain mechanism
+    const chainPersonIds = new Set(displayPolicy.expandedPersonIds ?? []);
+    for (const id of displayPolicy.appendagePersonIds ?? []) chainPersonIds.add(id);
+
+    if (displayPolicy.mode === 'expanded' && chainPersonIds.size > 0) {
         expandPartnerChains(
-            displayPolicy.expandedPersonIds,
+            chainPersonIds,
             data,
             selection,
             unions,

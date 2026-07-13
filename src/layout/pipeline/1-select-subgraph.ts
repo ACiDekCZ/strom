@@ -345,9 +345,9 @@ export function expandSelectionForDisplay(
     selection: GraphSelection,
     displayPolicy: DisplayPolicy
 ): void {
-    if (displayPolicy.mode !== 'expanded' || !displayPolicy.expandedPersonIds) return;
+    if (displayPolicy.mode !== 'expanded') return;
 
-    for (const personId of displayPolicy.expandedPersonIds) {
+    for (const personId of displayPolicy.expandedPersonIds ?? []) {
         const person = data.persons[personId];
         if (!person || !selection.persons.has(personId)) continue;
 
@@ -366,6 +366,22 @@ export function expandSelectionForDisplay(
                 // Also add the child's partners
                 addPartners(data, childId, selection.persons, selection.partnerships);
             }
+        }
+    }
+
+    // Appendage expansion (deep ancestors): inline the extra spouse card
+    // only — partner + partnership, WITHOUT the union's children. Pulling
+    // the children in would attach whole new branches to the ancestor row.
+    for (const personId of displayPolicy.appendagePersonIds ?? []) {
+        const person = data.persons[personId];
+        if (!person || !selection.persons.has(personId)) continue;
+
+        for (const partnershipId of person.partnerships) {
+            const partnership = data.partnerships[partnershipId];
+            if (!partnership) continue;
+            selection.persons.add(partnership.person1Id);
+            selection.persons.add(partnership.person2Id);
+            selection.partnerships.add(partnershipId);
         }
     }
 }

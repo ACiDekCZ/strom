@@ -374,18 +374,28 @@ function buildAncestorTree(
  */
 function computeAncestorTreeWidth(
     node: AncestorNode | null,
-    config: LayoutConfig
+    config: LayoutConfig,
+    blocks?: Map<FamilyBlockId, FamilyBlock>,
+    unionToBlock?: Map<UnionId, FamilyBlockId>
 ): number {
     if (!node) return 0;
 
-    // Couple width: 2 cards + gap for couple, 1 card for single
-    node.coupleWidth = node.wifeId
-        ? config.cardWidth * 2 + config.partnerGap
-        : config.cardWidth;
+    // Couple width: 2 cards + gap for couple, 1 card for single.
+    // A chain block (couple + appendage extra spouses) is wider — use its
+    // actual coupleWidth so neighbors reserve enough space.
+    const blockId = unionToBlock?.get(node.unionId);
+    const block = blockId ? blocks?.get(blockId) : undefined;
+    if (block?.chainInfo) {
+        node.coupleWidth = block.coupleWidth;
+    } else {
+        node.coupleWidth = node.wifeId
+            ? config.cardWidth * 2 + config.partnerGap
+            : config.cardWidth;
+    }
 
     // Recursively compute subtree widths
-    const hWidth = computeAncestorTreeWidth(node.hSubtree, config);
-    const wWidth = computeAncestorTreeWidth(node.wSubtree, config);
+    const hWidth = computeAncestorTreeWidth(node.hSubtree, config, blocks, unionToBlock);
+    const wWidth = computeAncestorTreeWidth(node.wSubtree, config, blocks, unionToBlock);
 
     // Ancestors width: sum of subtrees + gap between them (if both exist)
     const ancestorsWidth = hWidth + wWidth +
@@ -644,26 +654,32 @@ function transferAncestorTreeToBlocks(
         if (block) {
             claimed?.add(blockId);
             transferred?.add(blockId);
-            // Update block positions from tree node
-            const oldCenter = block.xCenter;
-            const deltaX = node.xCenter - oldCenter;
-
-            block.xCenter = node.xCenter;
-            block.xLeft = node.xCenter - block.width / 2;
-            block.xRight = node.xCenter + block.width / 2;
-            block.coupleCenterX = node.xCenter;
-
-            // Update anchors
-            if (node.wifeId) {
-                block.husbandAnchorX = node.xCenter - config.partnerGap / 2 - config.cardWidth / 2;
-                block.wifeAnchorX = node.xCenter + config.partnerGap / 2 + config.cardWidth / 2;
+            if (block.chainInfo) {
+                // Chain block: rigid shift keeps the internal chain geometry
+                // (per-person card positions, slot centers) intact
+                shiftBlock(block, node.xCenter - block.xCenter);
             } else {
-                block.husbandAnchorX = node.xCenter;
-                block.wifeAnchorX = node.xCenter;
-            }
+                // Update block positions from tree node
+                const oldCenter = block.xCenter;
+                const deltaX = node.xCenter - oldCenter;
 
-            // Update childrenCenterX
-            block.childrenCenterX += deltaX;
+                block.xCenter = node.xCenter;
+                block.xLeft = node.xCenter - block.width / 2;
+                block.xRight = node.xCenter + block.width / 2;
+                block.coupleCenterX = node.xCenter;
+
+                // Update anchors
+                if (node.wifeId) {
+                    block.husbandAnchorX = node.xCenter - config.partnerGap / 2 - config.cardWidth / 2;
+                    block.wifeAnchorX = node.xCenter + config.partnerGap / 2 + config.cardWidth / 2;
+                } else {
+                    block.husbandAnchorX = node.xCenter;
+                    block.wifeAnchorX = node.xCenter;
+                }
+
+                // Update childrenCenterX
+                block.childrenCenterX += deltaX;
+            }
         }
     }
 
@@ -902,8 +918,8 @@ function runPhaseBIndependentTrees(
         if (!hTree && !wTree) continue;
 
         // Compute widths (bottom-up)
-        const hWidth = computeAncestorTreeWidth(hTree, config);
-        const wWidth = computeAncestorTreeWidth(wTree, config);
+        const hWidth = computeAncestorTreeWidth(hTree, config, blocks, unionToBlock);
+        const wWidth = computeAncestorTreeWidth(wTree, config, blocks, unionToBlock);
 
         // Compute card edges (not centers) - boundaries for tree placement
         const husbandRightEdge = husbandCenterX + config.cardWidth / 2;
@@ -1772,6 +1788,9 @@ function shiftBlockSubtree(
             for (const [pid, x] of block.chainInfo.personPositions) {
                 block.chainInfo.personPositions.set(pid, x + deltaX);
             }
+            for (const [pid, x] of block.chainInfo.personSlotCenters) {
+                block.chainInfo.personSlotCenters.set(pid, x + deltaX);
+            }
         }
 
         for (const childId of block.childBlockIds) {
@@ -2485,6 +2504,9 @@ function shiftBranch(
         if (block.chainInfo) {
             for (const [pid, x] of block.chainInfo.personPositions) {
                 block.chainInfo.personPositions.set(pid, x + deltaX);
+            }
+            for (const [pid, x] of block.chainInfo.personSlotCenters) {
+                block.chainInfo.personSlotCenters.set(pid, x + deltaX);
             }
         }
     }
@@ -4180,6 +4202,9 @@ function shiftBlock(block: FamilyBlock, deltaX: number): void {
     if (block.chainInfo) {
         for (const [pid, x] of block.chainInfo.personPositions) {
             block.chainInfo.personPositions.set(pid, x + deltaX);
+        }
+        for (const [pid, x] of block.chainInfo.personSlotCenters) {
+            block.chainInfo.personSlotCenters.set(pid, x + deltaX);
         }
     }
 }

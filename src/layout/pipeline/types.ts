@@ -12,7 +12,13 @@ export interface DisplayPolicy {
     mode: 'standard' | 'expanded';
     /** Person IDs whose all partnerships should be shown inline as a PartnerChain */
     expandedPersonIds?: Set<PersonId>;
-    /** Auto-expand all partnerships for gen >= -1 persons (default: true) */
+    /**
+     * Deep-ancestor person IDs whose extra partnerships are shown inline as
+     * APPENDAGE cards: the partner and partnership are added to the
+     * selection, but the extra union's children are NOT pulled in.
+     */
+    appendagePersonIds?: Set<PersonId>;
+    /** Auto-expand all partnerships for direct-line persons at every generation (default: true) */
     autoExpand?: boolean;
 }
 
@@ -244,8 +250,15 @@ export interface FamilyBlock {
         chainPersonId: PersonId;         // Shared person in the chain
         unionIds: UnionId[];             // Ordered union IDs in this chain
         personOrder: PersonId[];         // All unique persons left-to-right
-        personPositions: Map<PersonId, number>;  // X center for each person in chain
-        unionChildBlockIds: Map<UnionId, FamilyBlockId[]>;  // Child blocks per chain union
+        personPositions: Map<PersonId, number>;  // CARD X center for each person in chain
+        // Slot midpoints — anchor for each union's children (a card may
+        // gravitate toward the spouse within its slot, so card centers and
+        // children anchors differ)
+        personSlotCenters: Map<PersonId, number>;
+        unionChildBlockIds: Map<UnionId, FamilyBlockId[]>;
+        // Persons whose chain union has child blocks — their card must stay
+        // within its own slot (stem above children) during gravitation
+        personsWithChildren: Set<PersonId>;  // Child blocks per chain union
         personSlotWidths: Map<PersonId, number>;  // Slot width per person (>= cardWidth)
         // Primary union partners: they share ONE combined slot area (cards stay
         // adjacent at its center) sized for the primary union's children, so

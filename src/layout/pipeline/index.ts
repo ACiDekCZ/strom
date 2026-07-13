@@ -69,6 +69,7 @@ import { computeDebugGeometry } from './debug-geometry.js';
  * - Gen -1: biological parents of focus person + parents' partners
  * - Gen  0: focus person + their partners + siblings + siblings' partners
  * - Gen 1+: descendants of all gen-0 members + descendants' partners
+ * - Gen <= -2: all direct-line ancestors of scope members + their partners
  *
  * All persons in scope who have multiple partnerships get auto-expanded.
  */
@@ -224,6 +225,87 @@ export function findAutoExpandPersonIds(
 }
 
 /**
+ * Find DIRECT-LINE ancestors beyond gen -1 whose extra spouses should render
+ * inline next to them as APPENDAGE cards (partner + partnership only — the
+ * extra union's children are NOT pulled into the selection).
+ *
+ * Walks parentIds up from the focus person and the focus's partners.
+ * Deliberately NOT seeded from in-laws or siblings' spouses — their ancestor
+ * chains would need to span children anchored above unrelated gen-0
+ * families, producing tree-wide buses.
+ *
+ * A deep ancestor qualifies only when at most ONE of their partnerships has
+ * children in the selection: the extra spouses are then childless appendage
+ * cards with no structural impact. Ancestors with several child-bearing
+ * unions in the selection keep the standard rendering — their gen -1
+ * children carry whole sibling-family branches that the chain layout cannot
+ * claim (they anchor above other families).
+ */
+export function findAppendageAncestorIds(
+    data: StromData,
+    focusPersonId: PersonId,
+    selection: GraphSelection
+): Set<PersonId> {
+    const result = new Set<PersonId>();
+
+    const focusPerson = data.persons[focusPersonId];
+    if (!focusPerson) return result;
+
+    const hasAtMostOneFertileUnion = (personId: PersonId): boolean => {
+        const person = data.persons[personId];
+        if (!person) return false;
+        let fertile = 0;
+        for (const pid of person.partnerships) {
+            const p = data.partnerships[pid];
+            if (!p) continue;
+            if (p.childIds.some(cid => selection.persons.has(cid))) fertile++;
+        }
+        return fertile <= 1;
+    };
+
+    const upQueue: PersonId[] = [focusPersonId];
+    for (const pid of focusPerson.partnerships) {
+        const p = data.partnerships[pid];
+        if (!p) continue;
+        const partnerId = p.person1Id === focusPersonId ? p.person2Id : p.person1Id;
+        if (partnerId && selection.persons.has(partnerId)) upQueue.push(partnerId);
+    }
+
+    const upVisited = new Set<PersonId>(upQueue);
+    while (upQueue.length > 0) {
+        const currentId = upQueue.pop()!;
+        const current = data.persons[currentId];
+        if (!current) continue;
+        for (const ancestorId of current.parentIds) {
+            if (upVisited.has(ancestorId)) continue;
+            upVisited.add(ancestorId);
+            if (!selection.persons.has(ancestorId)) continue;
+            upQueue.push(ancestorId);
+            const ancestor = data.persons[ancestorId];
+            if (!ancestor) continue;
+            if (ancestor.partnerships.length > 1 && hasAtMostOneFertileUnion(ancestorId)) {
+                result.add(ancestorId);
+            }
+            // Partners of the ancestor with their own extra partnerships
+            for (const apid of ancestor.partnerships) {
+                if (!selection.partnerships.has(apid)) continue;
+                const ap = data.partnerships[apid];
+                if (!ap) continue;
+                const aPartnerId = ap.person1Id === ancestorId ? ap.person2Id : ap.person1Id;
+                if (!aPartnerId || !selection.persons.has(aPartnerId)) continue;
+                const aPartner = data.persons[aPartnerId];
+                if (aPartner && aPartner.partnerships.length > 1
+                    && hasAtMostOneFertileUnion(aPartnerId)) {
+                    result.add(aPartnerId);
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+/**
  * Run the complete layout pipeline.
  */
 export function runLayoutPipeline(input: PipelineInput): LayoutResult {
@@ -257,16 +339,24 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
         return emptyResult();
     }
 
-    // Auto-expand: find persons at gen >= -1 with multiple partnerships
+    // Auto-expand: find persons at gen >= -1 with multiple partnerships,
+    // plus deep direct-line ancestors whose extra spouses render as appendages
     let effectivePolicy = displayPolicy;
     if (displayPolicy.autoExpand !== false) {
         const autoExpandIds = findAutoExpandPersonIds(data, focusPersonId, selection);
-        if (autoExpandIds.size > 0) {
+        const appendageIds = findAppendageAncestorIds(data, focusPersonId, selection);
+        for (const id of autoExpandIds) appendageIds.delete(id);
+        if (autoExpandIds.size > 0 || appendageIds.size > 0) {
             const merged = new Set(autoExpandIds);
             if (displayPolicy.expandedPersonIds) {
                 for (const id of displayPolicy.expandedPersonIds) merged.add(id);
             }
-            effectivePolicy = { mode: 'expanded', expandedPersonIds: merged, autoExpand: true };
+            effectivePolicy = {
+                mode: 'expanded',
+                expandedPersonIds: merged,
+                appendagePersonIds: appendageIds,
+                autoExpand: true
+            };
         }
     }
 
@@ -419,16 +509,24 @@ export function runLayoutPipelineWithDebug(
         includeParentSiblingDescendants
     });
 
-    // Auto-expand: find persons at gen >= -1 with multiple partnerships
+    // Auto-expand: find persons at gen >= -1 with multiple partnerships,
+    // plus deep direct-line ancestors whose extra spouses render as appendages
     let effectivePolicyDebug = displayPolicy;
     if (displayPolicy.autoExpand !== false) {
         const autoExpandIdsDebug = findAutoExpandPersonIds(data, focusPersonId, selection);
-        if (autoExpandIdsDebug.size > 0) {
+        const appendageIdsDebug = findAppendageAncestorIds(data, focusPersonId, selection);
+        for (const id of autoExpandIdsDebug) appendageIdsDebug.delete(id);
+        if (autoExpandIdsDebug.size > 0 || appendageIdsDebug.size > 0) {
             const merged = new Set(autoExpandIdsDebug);
             if (displayPolicy.expandedPersonIds) {
                 for (const id of displayPolicy.expandedPersonIds) merged.add(id);
             }
-            effectivePolicyDebug = { mode: 'expanded', expandedPersonIds: merged, autoExpand: true };
+            effectivePolicyDebug = {
+                mode: 'expanded',
+                expandedPersonIds: merged,
+                appendagePersonIds: appendageIdsDebug,
+                autoExpand: true
+            };
         }
     }
 
