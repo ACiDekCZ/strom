@@ -142,8 +142,13 @@ export const treeManagementMethods = uiModule({
         }
 
         // Divider and actions
+        const annBadge = this.anniversaryBadgeCount();
         html += `
             <div class="tree-switcher-divider"></div>
+            <div class="tree-switcher-action" onclick="window.Strom.UI.showAnniversariesDialog()">
+                <span>🎂</span> ${strings.anniversaries.menu}
+                ${annBadge > 0 ? `<span class="tree-switcher-badge">${annBadge}</span>` : ''}
+            </div>
             <div class="tree-switcher-action" onclick="window.Strom.UI.showTreeManagerDialog()">
                 <span>⚙</span> ${strings.treeManager.manageTreesTitle}...
             </div>

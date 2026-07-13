@@ -254,6 +254,20 @@
         .tree-switcher-action:last-child {
             border-radius: 0 0 10px 10px;
         }
+        .tree-switcher-badge {
+            margin-left: auto;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 5px;
+            border-radius: 9px;
+            background: var(--primary);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
 
         /* ==================== SEARCH ==================== */
         .search-container {
@@ -2364,6 +2378,59 @@
         /* Mobile: never shown (JS also guards), but hide defensively. */
         @media (max-width: 500px) {
             .minimap-panel { display: none !important; }
+        }
+
+        /* Anniversaries panel */
+        .anniversaries-list { display: flex; flex-direction: column; gap: 4px; }
+        .anniversary-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.12s;
+        }
+        .anniversary-row:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); }
+        .anniversary-icon { font-size: 18px; flex-shrink: 0; }
+        .anniversary-text { flex: 1; font-size: 14px; color: var(--text-color); }
+        .anniversary-when { font-size: 12px; color: var(--text-light); white-space: nowrap; }
+        .anniversaries-empty { padding: 16px 8px; color: var(--text-light); font-style: italic; text-align: center; }
+
+        /* "On this day" card (bottom-left, non-blocking) */
+        .otd-card {
+            position: fixed;
+            left: 24px;
+            bottom: 24px;
+            max-width: 340px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color, rgba(0,0,0,0.1));
+            border-radius: 12px;
+            box-shadow: 0 4px 16px var(--shadow);
+            z-index: 200;
+            animation: otd-in 0.25s ease;
+        }
+        .otd-card.active { display: flex; }
+        .otd-emoji { font-size: 22px; flex-shrink: 0; }
+        .otd-text { font-size: 14px; color: var(--text-color); cursor: pointer; line-height: 1.35; }
+        .otd-text:hover { color: var(--primary); }
+        .otd-close {
+            flex-shrink: 0;
+            border: none;
+            background: none;
+            font-size: 20px;
+            line-height: 1;
+            color: var(--text-light);
+            cursor: pointer;
+            padding: 0 2px;
+        }
+        @keyframes otd-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        @media (max-width: 500px) {
+            .otd-card { left: 12px; right: 12px; bottom: 12px; max-width: none; }
         }
 
         /* ==================== FOCUS MODE ==================== */
@@ -5667,6 +5734,15 @@
                 </div>
             </div>
             <div class="settings-section">
+                <label class="settings-label" data-i18n="anniversaries.settingLabel"></label>
+                <div class="settings-options">
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="on-this-day-toggle" onchange="window.Strom.UI.toggleOnThisDay(this.checked)">
+                        <span data-i18n="anniversaries.settingHint"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
                 <label class="settings-label" data-i18n="settings.language"></label>
                 <div class="settings-options">
                     <label class="settings-radio">
@@ -5720,6 +5796,24 @@
                 <button class="primary" onclick="window.Strom.UI.createManualSnapshot()" data-i18n="snapshots.createNow"></button>
             </div>
         </div>
+    </div>
+
+    <!-- Upcoming anniversaries -->
+    <div class="modal-overlay" id="anniversaries-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 data-i18n="anniversaries.title"></h2>
+                <button class="close-btn" onclick="window.Strom.UI.closeAnniversariesDialog()">&times;</button>
+            </div>
+            <div id="anniversaries-list" class="anniversaries-list"></div>
+        </div>
+    </div>
+
+    <!-- "On this day" card (shown once per tree per day) -->
+    <div id="otd-card" class="otd-card">
+        <span class="otd-emoji">📅</span>
+        <span id="otd-text" class="otd-text" onclick="window.Strom.UI.focusOnThisDay()"></span>
+        <button class="otd-close" onclick="window.Strom.UI.dismissOnThisDay()" aria-label="Close">&times;</button>
     </div>
 
     <div class="modal-overlay" id="audit-log-modal">

@@ -67,6 +67,7 @@ import { exportImageMethods } from './export-image-ui.js';
 import { bookUiMethods } from './book-ui.js';
 import { snapshotsUiMethods } from './snapshots-ui.js';
 import { minimapMethods, MinimapTransform, WorldBox } from './minimap.js';
+import { anniversariesUiMethods } from './anniversaries-ui.js';
 
 export class UIClass {
     currentId: PersonId | null = null;
@@ -265,5 +266,9 @@ Object.assign(UIClass.prototype, snapshotsUiMethods);
 type MinimapMethods = typeof minimapMethods;
 export interface UIClass extends MinimapMethods {}
 Object.assign(UIClass.prototype, minimapMethods);
+
+type AnniversariesUiMethods = typeof anniversariesUiMethods;
+export interface UIClass extends AnniversariesUiMethods {}
+Object.assign(UIClass.prototype, anniversariesUiMethods);
 
 export const UI = new UIClass();

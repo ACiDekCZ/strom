@@ -251,6 +251,9 @@ export const miscMethods = uiModule({
         const minimapToggle = document.getElementById('minimap-toggle') as HTMLInputElement | null;
         if (minimapToggle) minimapToggle.checked = SettingsManager.isMinimapEnabled();
 
+        const otdToggle = document.getElementById('on-this-day-toggle') as HTMLInputElement | null;
+        if (otdToggle) otdToggle.checked = SettingsManager.isOnThisDayEnabled();
+
         modal.classList.add('active');
     },
 

@@ -93,6 +93,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** "On this day" reminder default ON (undefined = enabled). */
+    isOnThisDayEnabled(): boolean {
+        return this.settings.onThisDay !== false;
+    }
+
+    setOnThisDay(enabled: boolean): void {
+        this.settings.onThisDay = enabled;
+        this.save();
+    }
+
     private applyTheme(): void {
         const html = document.documentElement;
         let isDark = false;

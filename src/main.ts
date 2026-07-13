@@ -346,5 +346,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         UI.updateTreeSwitcher();
     });
 
+    // "On this day" reminder — after the first render, off the critical path.
+    const showOtd = () => UI.maybeShowOnThisDay();
+    if ('requestIdleCallback' in window) {
+        (window as unknown as { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback(showOtd);
+    } else {
+        setTimeout(showOtd, 800);
+    }
+
     console.log(`Strom v${APP_VERSION} initialized`);
 });

@@ -387,6 +387,7 @@ export interface AppSettings {
     auditLog: boolean;  // default: false - whether audit log is enabled
     suggestDuplicates?: boolean;  // default: true - hint similar persons on entry
     minimap?: boolean;  // default: true - overview minimap for large trees
+    onThisDay?: boolean;  // default: true - daily "on this day" reminder
 }
 
 // ==================== MULTI-TREE STORAGE ====================

@@ -225,6 +225,27 @@ const stringsEN = {
         months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
     },
 
+    // Anniversaries + "on this day"
+    anniversaries: {
+        menu: 'Anniversaries',
+        title: 'Upcoming anniversaries',
+        empty: 'No anniversaries in the next 30 days',
+        today: 'today',
+        tomorrow: 'tomorrow',
+        inDays: (n: number) => `in ${n} days`,
+        yearsAgo: (n: number) => `${n} ${n === 1 ? 'year' : 'years'} ago`,
+        birthday: (name: string, years: number) => `${name} turns ${years}`,
+        wedding: (a: string, b: string, years: number) => `${a} & ${b} — ${years} years married`,
+        birthMilestone: (name: string, years: number) => `${name} — ${years} years since birth`,
+        deathMilestone: (name: string, years: number) => `${name} — ${years} years since death`,
+        otdTitle: 'On this day',
+        otdBirth: (name: string, ago: string, _female: boolean) => `${ago}, ${name} was born`,
+        otdDeath: (name: string, ago: string, _female: boolean) => `${ago}, ${name} died`,
+        otdWedding: (a: string, b: string, ago: string) => `${ago}, ${a} & ${b} were married`,
+        settingLabel: 'On this day',
+        settingHint: 'Show a daily "on this day" reminder when opening a tree',
+    },
+
     // Zoom controls
     zoomControls: {
         zoomIn: 'Zoom In',
@@ -1314,6 +1335,27 @@ const stringsCZ: StringsType = {
         sampleN: (n: number) => `n = ${n}`,
         notEnough: 'Zatím málo dat',
         months: ['Led', 'Úno', 'Bře', 'Dub', 'Kvě', 'Čer', 'Čvc', 'Srp', 'Zář', 'Říj', 'Lis', 'Pro'],
+    },
+
+    // Anniversaries + "on this day"
+    anniversaries: {
+        menu: 'Výročí',
+        title: 'Nadcházející výročí',
+        empty: 'Žádná výročí v příštích 30 dnech',
+        today: 'dnes',
+        tomorrow: 'zítra',
+        inDays: (n: number) => `za ${n} ${n < 5 ? 'dny' : 'dní'}`,
+        yearsAgo: (n: number) => n === 1 ? 'před 1 rokem' : `před ${n} lety`,
+        birthday: (name: string, years: number) => `${name} slaví ${years}. narozeniny`,
+        wedding: (a: string, b: string, years: number) => `${a} a ${b} — ${years}. výročí svatby`,
+        birthMilestone: (name: string, years: number) => `${name} — ${years} let od narození`,
+        deathMilestone: (name: string, years: number) => `${name} — ${years} let od úmrtí`,
+        otdTitle: 'V tento den',
+        otdBirth: (name: string, ago: string, female: boolean) => `${ago} se narodil${female ? 'a' : ''} ${name}`,
+        otdDeath: (name: string, ago: string, female: boolean) => `${ago} zemřel${female ? 'a' : ''} ${name}`,
+        otdWedding: (a: string, b: string, ago: string) => `${ago} se vzali ${a} a ${b}`,
+        settingLabel: 'V tento den',
+        settingHint: 'Při otevření stromu ukázat denní připomínku „v tento den"',
     },
 
     // Zoom controls
