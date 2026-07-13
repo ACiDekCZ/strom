@@ -561,6 +561,11 @@ export const appModeMethods = uiModule({
         SettingsManager.setSuggestDuplicates(enabled);
     },
 
+    toggleMinimap(enabled: boolean): void {
+        SettingsManager.setMinimap(enabled);
+        this.updateMinimap();
+    },
+
     showAuditLogDialog(treeId?: TreeId | string, parentDialogId?: string): void {
         const modal = document.getElementById('audit-log-modal');
         if (!modal) return;

@@ -83,6 +83,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Overview minimap default ON (undefined = enabled). */
+    isMinimapEnabled(): boolean {
+        return this.settings.minimap !== false;
+    }
+
+    setMinimap(enabled: boolean): void {
+        this.settings.minimap = enabled;
+        this.save();
+    }
+
     private applyTheme(): void {
         const html = document.documentElement;
         let isDark = false;

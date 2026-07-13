@@ -248,6 +248,9 @@ export const miscMethods = uiModule({
         const suggestToggle = document.getElementById('suggest-duplicates-toggle') as HTMLInputElement | null;
         if (suggestToggle) suggestToggle.checked = SettingsManager.isSuggestDuplicatesEnabled();
 
+        const minimapToggle = document.getElementById('minimap-toggle') as HTMLInputElement | null;
+        if (minimapToggle) minimapToggle.checked = SettingsManager.isMinimapEnabled();
+
         modal.classList.add('active');
     },
 

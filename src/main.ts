@@ -187,6 +187,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize zoom/pan
     ZoomPan.init();
 
+    // Overview minimap (wires ZoomPan.onChange + canvas handlers)
+    UI.initMinimap();
+
     // Set up TreeRenderer getter for ZoomPan (for centering on reset)
     setTreeRendererGetter(() => TreeRenderer);
 

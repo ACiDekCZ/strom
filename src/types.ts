@@ -386,6 +386,7 @@ export interface AppSettings {
     encryption: boolean;  // default: false - whether data encryption is enabled
     auditLog: boolean;  // default: false - whether audit log is enabled
     suggestDuplicates?: boolean;  // default: true - hint similar persons on entry
+    minimap?: boolean;  // default: true - overview minimap for large trees
 }
 
 // ==================== MULTI-TREE STORAGE ====================
