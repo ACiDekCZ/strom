@@ -4741,6 +4741,26 @@
         /* Notes textarea */
         #input-notes { width: 100%; resize: vertical; max-height: 120px; box-sizing: border-box; }
 
+        /* Life events list */
+        .events-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+        .event-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 10px; border: 1px solid var(--border-color, #ddd);
+            border-radius: 6px; background: var(--card-bg, #fafafa); font-size: 14px;
+        }
+        .event-row .event-main { flex: 1; min-width: 0; }
+        .event-row .event-type { font-weight: 600; }
+        .event-row .event-meta { color: var(--text-secondary, #777); font-size: 13px; }
+        .event-row.readonly { opacity: 0.75; }
+        .event-row .event-actions { display: flex; gap: 4px; flex-shrink: 0; }
+        .event-row .event-actions button {
+            border: none; background: none; cursor: pointer; padding: 2px 6px;
+            font-size: 15px; line-height: 1; color: var(--text-secondary, #777);
+        }
+        .event-row .event-actions button:hover { color: var(--text-primary, #222); }
+        .events-empty { color: var(--text-secondary, #999); font-size: 13px; font-style: italic; padding: 4px 0; }
+        [data-theme="dark"] .event-row { border-color: #444; background: #2a2a2a; }
+
         /* Card tooltip */
         .card-tooltip {
             display: none;
@@ -4971,6 +4991,11 @@
                     <label data-i18n="labels.notes"></label>
                     <textarea id="input-notes" rows="3" autocomplete="off"></textarea>
                 </div>
+                <div class="form-group" id="events-section">
+                    <label data-i18n="events.title"></label>
+                    <div id="events-list" class="events-list"></div>
+                    <button type="button" class="secondary" id="btn-add-event" onclick="window.Strom.UI.showAddEventModal()" data-i18n="events.add"></button>
+                </div>
                 <div class="form-group" id="input-deceased-group">
                     <label class="settings-checkbox">
                         <input type="checkbox" id="input-is-deceased">
@@ -4998,6 +5023,39 @@
                 <button class="secondary" id="btn-merge" style="display:none;" onclick="window.Strom.UI.mergePersonFromModal()">&#128279; <span data-i18n="personMerge.mergeWith"></span>...</button>
                 <button class="secondary" onclick="window.Strom.UI.closeModal()" data-i18n="buttons.cancel"></button>
                 <button class="primary" id="btn-save" onclick="window.Strom.UI.savePerson()" data-i18n="buttons.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Event Editor Modal -->
+    <div class="modal-overlay" id="event-editor-modal">
+        <div class="modal">
+            <h2 id="event-editor-title" data-i18n="events.addTitle"></h2>
+            <div class="form-group">
+                <label data-i18n="events.type"></label>
+                <select id="input-event-type"></select>
+            </div>
+            <div class="form-group" id="event-custom-label-group" style="display:none;">
+                <label data-i18n="events.customLabel"></label>
+                <input type="text" id="input-event-custom-label" autocomplete="off">
+            </div>
+            <div class="form-row">
+                <div class="form-group half">
+                    <label data-i18n="events.date"></label>
+                    <input type="text" class="flex-date" id="input-event-date" data-i18n-placeholder="placeholders.flexDate" inputmode="text" autocomplete="off">
+                </div>
+                <div class="form-group half">
+                    <label data-i18n="events.place"></label>
+                    <input type="text" id="input-event-place" autocomplete="off">
+                </div>
+            </div>
+            <div class="form-group">
+                <label data-i18n="events.note"></label>
+                <textarea id="input-event-note" rows="2" autocomplete="off"></textarea>
+            </div>
+            <div class="buttons">
+                <button class="secondary" onclick="window.Strom.UI.closeEventEditor()" data-i18n="buttons.cancel"></button>
+                <button class="primary" onclick="window.Strom.UI.saveEventFromModal()" data-i18n="buttons.save"></button>
             </div>
         </div>
     </div>

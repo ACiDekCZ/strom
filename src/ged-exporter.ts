@@ -3,7 +3,16 @@
  * Standard genealogy interchange format for Ancestry, FamilySearch, Gramps, etc.
  */
 
-import { StromData, Person, Partnership, PersonId, PartnershipId } from './types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType } from './types.js';
+
+/**
+ * LifeEvent type -> GEDCOM tag. Types with no GEDCOM equivalent ('military',
+ * 'custom') are absent and their events are dropped on export (known-unsupported).
+ */
+const EVENT_TYPE_TO_TAG: Partial<Record<LifeEventType, string>> = {
+    baptism: 'BAPM', burial: 'BURI', occupation: 'OCCU', residence: 'RESI',
+    emigration: 'EMIG', immigration: 'IMMI', education: 'EDUC',
+};
 
 export interface GedcomExportResult {
     content: string;
@@ -181,6 +190,28 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
         // Note
         if (person.notes) {
             pushNote(lines, 1, person.notes);
+        }
+
+        // Life events. OCCU carries its detail as the tag value; the rest use
+        // level-2 DATE/PLAC/NOTE. 'military'/'custom' have no tag and are dropped.
+        for (const event of person.events ?? []) {
+            const tag = EVENT_TYPE_TO_TAG[event.type];
+            if (!tag) continue;
+            if (event.type === 'occupation' && event.note) {
+                lines.push(`1 OCCU ${escapeGedcomText(event.note)}`);
+            } else {
+                lines.push(`1 ${tag}`);
+            }
+            if (event.date) {
+                const date = formatGedcomDate(event.date);
+                if (date) lines.push(`2 DATE ${date}`);
+            }
+            if (event.place) {
+                lines.push(`2 PLAC ${escapeGedcomText(event.place)}`);
+            }
+            if (event.note && event.type !== 'occupation') {
+                pushNote(lines, 2, event.note);
+            }
         }
 
         // Family as spouse (FAMS) - partnerships where this person is a partner

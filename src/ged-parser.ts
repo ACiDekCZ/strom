@@ -8,10 +8,10 @@
  * families (a placeholder partner fills the missing spouse), and partnership
  * married/divorced status with marriage date+place, divorce date, and note.
  *
- * Known unsupported (counted in stats.unsupportedTags, not representable in the
- * model, so intentionally dropped): OCCU (no occupation field). Partnership
- * statuses 'partners'/'separated' and the isPrimary flag have no GEDCOM
- * equivalent and normalize to 'married' / unset on round-trip.
+ * Life events map both ways: BAPM/BURI/OCCU/RESI/EMIG/IMMI/EDUC <-> LifeEvent
+ * (OCCU value <-> event note). Partnership statuses 'partners'/'separated' and
+ * the isPrimary flag, and the 'military'/'custom' event types, have no GEDCOM
+ * equivalent (known-unsupported) and are dropped on export.
  */
 
 import {
@@ -20,9 +20,25 @@ import {
     Person,
     Partnership,
     StromData,
+    LifeEvent,
+    LifeEventType,
     toPersonId,
-    toPartnershipId
+    toPartnershipId,
+    generateLifeEventId
 } from './types';
+
+/** GEDCOM event tag <-> LifeEvent type. */
+const EVENT_TAG_TO_TYPE: Record<string, LifeEventType> = {
+    BAPM: 'baptism', BURI: 'burial', OCCU: 'occupation', RESI: 'residence',
+    EMIG: 'emigration', IMMI: 'immigration', EDUC: 'education',
+};
+
+interface RawEvent {
+    type: LifeEventType;
+    date?: string;
+    place?: string;
+    note?: string;
+}
 
 // ==================== TYPES ====================
 
@@ -38,8 +54,8 @@ interface GedcomIndividual {
     deathDate: string;
     deathPlace: string;
     notes: string;
-    /** OCCU has no field in our model; kept only to count as unsupported. */
-    occupation: string;
+    /** Life events (BAPM/BURI/OCCU/RESI/EMIG/IMMI/EDUC). */
+    events: RawEvent[];
     fams: string[];  // Families as spouse
     famc: string | null;  // Family as child
 }
@@ -174,6 +190,7 @@ export function parseGedcom(content: string): ParsedGedcom {
     let currentRecord: GedcomIndividual | GedcomFamily | null = null;
     let currentType: 'INDI' | 'FAM' | null = null;
     let currentSubTag: string | null = null;
+    let currentEvent: RawEvent | null = null;
 
     for (const line of lines) {
         const match = line.match(/^(\d+)\s+(@\w+@|\w+)\s*(.*)?$/);
@@ -197,7 +214,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     deathDate: '',
                     deathPlace: '',
                     notes: '',
-                    occupation: '',
+                    events: [],
                     fams: [],
                     famc: null
                 };
@@ -221,9 +238,11 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentType = null;
             }
             currentSubTag = null;
+            currentEvent = null;
         } else if (currentRecord) {
             if (level === 1) {
                 currentSubTag = tag;
+                currentEvent = null;
 
                 if (currentType === 'INDI') {
                     const indi = currentRecord as GedcomIndividual;
@@ -247,9 +266,18 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case 'NOTE':
                             indi.notes = value;
                             break;
-                        case 'OCCU':
-                            indi.occupation = value;
+                        default: {
+                            const evType = EVENT_TAG_TO_TYPE[tag];
+                            if (evType) {
+                                // OCCU carries the occupation as its value; other
+                                // events carry date/place on level-2 sub-lines.
+                                const ev: RawEvent = { type: evType };
+                                if (tag === 'OCCU' && value) ev.note = value;
+                                indi.events.push(ev);
+                                currentEvent = ev;
+                            }
                             break;
+                        }
                     }
                 } else if (currentType === 'FAM') {
                     const fam = currentRecord as GedcomFamily;
@@ -281,6 +309,13 @@ export function parseGedcom(content: string): ParsedGedcom {
                         // Multi-line notes: CONT = new line, CONC = continuation.
                         if (tag === 'CONT') indi.notes += '\n' + value;
                         else if (tag === 'CONC') indi.notes += value;
+                    } else if (currentEvent) {
+                        if (tag === 'DATE') currentEvent.date = parseGedcomDate(value);
+                        else if (tag === 'PLAC') currentEvent.place = value;
+                        else if (tag === 'NOTE') {
+                            currentEvent.note = currentEvent.note
+                                ? `${currentEvent.note}\n${value}` : value;
+                        }
                     }
                 } else if (currentType === 'FAM') {
                     const fam = currentRecord as GedcomFamily;
@@ -316,7 +351,6 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     let unsupportedTags = 0;
     for (const indi of individuals.values()) {
         if (!indi.firstName && !indi.lastName) placeholderPersons++;
-        if (indi.occupation) unsupportedTags++;
     }
 
     // Create ID mappings (only for valid individuals)
@@ -352,6 +386,15 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (indi.deathDate) person.deathDate = indi.deathDate;
         if (indi.deathPlace) person.deathPlace = indi.deathPlace;
         if (indi.notes) person.notes = indi.notes;
+        if (indi.events.length > 0) {
+            person.events = indi.events.map((ev): LifeEvent => {
+                const out: LifeEvent = { id: generateLifeEventId(), type: ev.type };
+                if (ev.date) out.date = ev.date;
+                if (ev.place) out.place = ev.place;
+                if (ev.note) out.note = ev.note;
+                return out;
+            });
+        }
 
         persons[personId] = person;
     }

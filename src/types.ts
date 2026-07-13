@@ -31,11 +31,38 @@ export function generatePartnershipId(): PartnershipId {
     return `u_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` as PartnershipId;
 }
 
+/** Generate unique LifeEvent id */
+export function generateLifeEventId(): string {
+    return `ev_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
 // ==================== CORE ENTITIES ====================
 
 export type Gender = 'male' | 'female';
 
 export type PartnershipStatus = 'married' | 'partners' | 'divorced' | 'separated';
+
+/** Kinds of life event that can be recorded on a person. */
+export type LifeEventType =
+    | 'birth' | 'death' | 'baptism' | 'burial' | 'occupation'
+    | 'residence' | 'military' | 'emigration' | 'immigration'
+    | 'education' | 'custom';
+
+/**
+ * A single life event. birth/death are represented by the first-class
+ * birthDate/deathDate fields and are not stored here (only synthesized read-only
+ * in the UI); every other kind lives in Person.events.
+ */
+export interface LifeEvent {
+    id: string;
+    type: LifeEventType;
+    /** Label for type === 'custom'. */
+    customLabel?: string;
+    /** Flex date (see src/dates.ts): [~|<|>]YYYY[-MM[-DD]]. */
+    date?: string;
+    place?: string;
+    note?: string;
+}
 
 export interface Person {
     id: PersonId;
@@ -63,6 +90,8 @@ export interface Person {
     photo?: string;
     /** Original file name of the uploaded photo (UX only). */
     photoOriginalName?: string;
+    /** Life events other than birth/death (see LifeEvent). */
+    events?: LifeEvent[];
 }
 
 export interface Partnership {
@@ -89,8 +118,13 @@ export interface Partnership {
 export const LAST_FOCUSED = "__last_focused__" as const;
 export type LastFocusedMarker = typeof LAST_FOCUSED;
 
-/** Current StromData format version */
-export const STROM_DATA_VERSION = 1;
+/**
+ * Current StromData format version.
+ * v2 (2026-07): added optional Person.events (life events). The field is
+ * additive/backward-compatible for reading, but the bump makes an older app
+ * warn ("newer version") before it silently drops events on re-save.
+ */
+export const STROM_DATA_VERSION = 2;
 
 export interface StromData {
     /** Data format version for migration support */
@@ -194,6 +228,9 @@ export type AuditAction =
     | 'data.load'
     | 'data.import'
     | 'data.repair'
+    | 'event.add'
+    | 'event.update'
+    | 'event.remove'
     | 'undo'
     | 'redo';
 

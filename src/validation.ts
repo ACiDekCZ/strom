@@ -4,6 +4,7 @@
  */
 
 import { StromData, Person, Partnership, PersonId, PartnershipId } from './types.js';
+import { parseFlexDate } from './dates.js';
 
 // ==================== ISSUE TYPES ====================
 
@@ -65,6 +66,7 @@ export function validateTreeData(data: StromData): ValidationResult {
     checkAgePlausibility(data, addIssue);
     checkGenerationConsistency(data, addIssue);
     checkCrossbranchAnomalies(data, addIssue);
+    checkLifeEvents(data, addIssue);
 
     const stats = {
         errors: issues.filter(i => i.severity === 'error').length,
@@ -84,6 +86,28 @@ export function validateTreeData(data: StromData): ValidationResult {
 /**
  * Detect ancestor cycles (person is their own ancestor)
  */
+function checkLifeEvents(
+    data: StromData,
+    addIssue: (s: IssueSeverity, t: string, m: string, p?: PersonId[], pp?: PartnershipId[]) => void
+): void {
+    for (const person of Object.values(data.persons)) {
+        if (!person.events) continue;
+        const name = `${person.firstName} ${person.lastName}`.trim() || person.id;
+        for (const ev of person.events) {
+            if (ev.type === 'birth' || ev.type === 'death') {
+                addIssue('error', 'event-birth-death',
+                    `${name}: birth/death belong to the dedicated date fields, not the events list`, [person.id]);
+            }
+            if (ev.type === 'custom' && !ev.customLabel?.trim()) {
+                addIssue('warning', 'event-no-label', `${name}: a custom event has no label`, [person.id]);
+            }
+            if (ev.date && !parseFlexDate(ev.date)) {
+                addIssue('warning', 'event-bad-date', `${name}: an event has an invalid date "${ev.date}"`, [person.id]);
+            }
+        }
+    }
+}
+
 function checkCycles(
     data: StromData,
     addIssue: (s: IssueSeverity, t: string, m: string, p?: PersonId[], pp?: PartnershipId[]) => void

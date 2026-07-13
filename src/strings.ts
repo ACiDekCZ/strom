@@ -71,6 +71,36 @@ const stringsEN = {
         hint: 'Click a card to see actions. This is an ordinary tree — you can delete it in the tree manager.'
     },
 
+    events: {
+        title: 'Events',
+        add: 'Add event',
+        addTitle: 'Add event',
+        editTitle: 'Edit event',
+        empty: 'No events yet',
+        edit: 'Edit',
+        delete: 'Delete',
+        type: 'Type',
+        date: 'Date',
+        place: 'Place',
+        note: 'Note',
+        customLabel: 'Label',
+        customLabelRequired: 'Enter a label for the custom event',
+        deleteConfirm: 'Delete this event?',
+        types: {
+            birth: 'Birth',
+            death: 'Death',
+            baptism: 'Baptism',
+            burial: 'Burial',
+            occupation: 'Occupation',
+            residence: 'Residence',
+            military: 'Military service',
+            emigration: 'Emigration',
+            immigration: 'Immigration',
+            education: 'Education',
+            custom: 'Custom'
+        }
+    },
+
     // Zoom controls
     zoomControls: {
         zoomIn: 'Zoom In',
@@ -607,6 +637,7 @@ const stringsEN = {
         statsWithDeathDate: 'With death date',
         statsWithBirthPlace: 'With birth place',
         statsPhotos: 'Photos',
+        statsEvents: 'Events',
         statsSize: 'Storage',
         statsTreeSize: 'Tree size',
         // Anniversaries
@@ -826,6 +857,10 @@ const stringsEN = {
         treeMerge: (merged: number, added: number, source: string) => `Tree merge from "${source}": ${merged} merged, ${added} added`,
         // Auto-repair
         repairedIssue: (desc: string) => `Auto-repair: ${desc}`,
+        // Life events
+        addedEvent: (name: string) => `Added event to ${name}`,
+        updatedEvent: (name: string) => `Updated event of ${name}`,
+        removedEvent: (name: string) => `Removed event from ${name}`,
         // Undo / redo
         undoAction: (desc: string) => `Undo: ${desc}`,
         redoAction: (desc: string) => `Redo: ${desc}`
@@ -844,6 +879,9 @@ const stringsEN = {
         addRelation: (parent: string, child: string) => `link ${parent} → ${child}`,
         removeRelation: (parent: string, child: string) => `unlink ${parent} → ${child}`,
         mergePersons: (name: string) => `merge into ${name}`,
+        addEvent: (name: string) => `event of ${name}`,
+        editEvent: (name: string) => `editing event of ${name}`,
+        removeEvent: (name: string) => `removing event of ${name}`,
         undone: (desc: string) => `Undone: ${desc}`,
         redone: (desc: string) => `Redone: ${desc}`,
         nothingToUndo: 'Nothing to undo',
@@ -941,6 +979,36 @@ const stringsCZ: StringsType = {
         tryDemoDesc: 'Prohlédni si hotový historický rodokmen',
         treeName: 'Ukázka: Přemyslovci',
         hint: 'Klikni na kartu pro akce. Je to běžný strom — můžeš ho smazat ve správci stromů.'
+    },
+
+    events: {
+        title: 'Události',
+        add: 'Přidat událost',
+        addTitle: 'Přidat událost',
+        editTitle: 'Upravit událost',
+        empty: 'Zatím žádné události',
+        edit: 'Upravit',
+        delete: 'Smazat',
+        type: 'Typ',
+        date: 'Datum',
+        place: 'Místo',
+        note: 'Poznámka',
+        customLabel: 'Popis',
+        customLabelRequired: 'Zadejte popis vlastní události',
+        deleteConfirm: 'Smazat tuto událost?',
+        types: {
+            birth: 'Narození',
+            death: 'Úmrtí',
+            baptism: 'Křest',
+            burial: 'Pohřeb',
+            occupation: 'Povolání',
+            residence: 'Bydliště',
+            military: 'Vojenská služba',
+            emigration: 'Emigrace',
+            immigration: 'Imigrace',
+            education: 'Vzdělání',
+            custom: 'Vlastní'
+        }
     },
 
     // Zoom controls
@@ -1479,6 +1547,7 @@ const stringsCZ: StringsType = {
         statsWithDeathDate: 'S datem úmrtí',
         statsWithBirthPlace: 'S místem narození',
         statsPhotos: 'Fotky',
+        statsEvents: 'Události',
         statsSize: 'Úložiště',
         statsTreeSize: 'Velikost stromu',
         // Anniversaries
@@ -1698,6 +1767,10 @@ const stringsCZ: StringsType = {
         treeMerge: (merged: number, added: number, source: string) => `Sloučení stromů z "${source}": ${merged} sloučeno, ${added} přidáno`,
         // Auto-repair
         repairedIssue: (desc: string) => `Automatická oprava: ${desc}`,
+        // Life events
+        addedEvent: (name: string) => `Přidána událost k ${name}`,
+        updatedEvent: (name: string) => `Upravena událost u ${name}`,
+        removedEvent: (name: string) => `Odebrána událost u ${name}`,
         // Undo / redo
         undoAction: (desc: string) => `Zpět: ${desc}`,
         redoAction: (desc: string) => `Znovu: ${desc}`
@@ -1716,6 +1789,9 @@ const stringsCZ: StringsType = {
         addRelation: (parent: string, child: string) => `propojení ${parent} → ${child}`,
         removeRelation: (parent: string, child: string) => `zrušení vazby ${parent} → ${child}`,
         mergePersons: (name: string) => `sloučení do ${name}`,
+        addEvent: (name: string) => `událost u ${name}`,
+        editEvent: (name: string) => `úprava události u ${name}`,
+        removeEvent: (name: string) => `odebrání události u ${name}`,
         undone: (desc: string) => `Vráceno: ${desc}`,
         redone: (desc: string) => `Znovu provedeno: ${desc}`,
         nothingToUndo: 'Není co vrátit',

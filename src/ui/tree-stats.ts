@@ -388,6 +388,7 @@ export const treeStatsMethods = uiModule({
         const withBirthPlace = persons.filter(p => p.birthPlace).length;
         const withPhoto = persons.filter(p => p.photo).length;
         const photoKb = Math.round(totalPhotoBytes(treeData) / 1024);
+        const totalEvents = persons.reduce((sum, p) => sum + (p.events?.length ?? 0), 0);
 
         const s = strings.treeManager;
 
@@ -467,6 +468,11 @@ export const treeStatsMethods = uiModule({
                 <div class="tree-stats-row">
                     <span class="label">${s.statsPhotos}</span>
                     <span class="value">${withPhoto} (${photoKb} kB)</span>
+                </div>` : ''}
+                ${totalEvents > 0 ? `
+                <div class="tree-stats-row">
+                    <span class="label">${s.statsEvents}</span>
+                    <span class="value">${totalEvents}</span>
                 </div>` : ''}
             </div>
 

@@ -13,6 +13,8 @@ import {
     NewPersonData,
     TreeId,
     generatePersonId,
+    generateLifeEventId,
+    LifeEvent,
     generatePartnershipId,
     LAST_FOCUSED,
     LastFocusedMarker,
@@ -664,6 +666,9 @@ class DataManagerClass {
             }
         }
 
+        // v1 -> v2: Person.events was added. It is optional, so v1 data needs no
+        // transformation; the version is re-stamped to current on the next save.
+
         const result: StromData = {
             persons: (d.persons || {}) as Record<PersonId, Person>,
             partnerships
@@ -918,6 +923,60 @@ class DataManagerClass {
             CrossTree.invalidateCacheForTree(this.currentTreeId);
         }
         return person;
+    }
+
+    // ==================== LIFE EVENTS ====================
+
+    /**
+     * Add a life event to a person. birth/death are represented by first-class
+     * fields and are rejected here. Returns the created event, or null.
+     */
+    addLifeEvent(personId: PersonId, event: Omit<LifeEvent, 'id'>): LifeEvent | null {
+        const person = this.data.persons[personId];
+        if (!person) return null;
+        if (this.isPersonLocked(personId)) return null;
+        if (event.type === 'birth' || event.type === 'death') return null;
+        if (event.type === 'custom' && !event.customLabel?.trim()) return null;
+
+        this.beginMutation();
+        const newEvent: LifeEvent = { ...event, id: generateLifeEventId() };
+        if (!person.events) person.events = [];
+        person.events.push(newEvent);
+        this.commitMutation(strings.undo.addEvent(auditPersonName(person)));
+        AuditLogManager.log(this.currentTreeId, 'event.add', strings.auditLog.addedEvent(auditPersonName(person)));
+        return newEvent;
+    }
+
+    updateLifeEvent(personId: PersonId, eventId: string, updates: Partial<Omit<LifeEvent, 'id'>>): boolean {
+        const person = this.data.persons[personId];
+        if (!person?.events) return false;
+        if (this.isPersonLocked(personId)) return false;
+        const ev = person.events.find(e => e.id === eventId);
+        if (!ev) return false;
+        const nextType = updates.type ?? ev.type;
+        if (nextType === 'birth' || nextType === 'death') return false;
+        const nextLabel = updates.customLabel ?? ev.customLabel;
+        if (nextType === 'custom' && !nextLabel?.trim()) return false;
+
+        this.beginMutation();
+        Object.assign(ev, updates);
+        this.commitMutation(strings.undo.editEvent(auditPersonName(person)));
+        AuditLogManager.log(this.currentTreeId, 'event.update', strings.auditLog.updatedEvent(auditPersonName(person)));
+        return true;
+    }
+
+    removeLifeEvent(personId: PersonId, eventId: string): boolean {
+        const person = this.data.persons[personId];
+        if (!person?.events) return false;
+        if (this.isPersonLocked(personId)) return false;
+        if (!person.events.some(e => e.id === eventId)) return false;
+
+        this.beginMutation();
+        person.events = person.events.filter(e => e.id !== eventId);
+        if (person.events.length === 0) delete person.events;
+        this.commitMutation(strings.undo.removeEvent(auditPersonName(person)));
+        AuditLogManager.log(this.currentTreeId, 'event.remove', strings.auditLog.removedEvent(auditPersonName(person)));
+        return true;
     }
 
     deletePerson(id: PersonId): boolean {

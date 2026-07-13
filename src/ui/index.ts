@@ -45,6 +45,7 @@ import { AuditLogManager } from '../audit-log.js';
 import { contextMenuMethods } from './context-menu.js';
 
 import { personModalMethods } from './person-modal.js';
+import { personEventsMethods } from './person-events.js';
 import { relationModalMethods } from './relation-modal.js';
 import { dialogsMethods } from './dialogs.js';
 import { relationshipsPanelMethods } from './relationships-panel.js';
@@ -106,6 +107,9 @@ export class UIClass {
         notes: string;
     } | null = null;
 
+    // Life-events editor state: the event being edited, or null when adding.
+    editingEventId: string | null = null;
+
     // Relationships panel state
     relationshipsPanelPersonId: PersonId | null = null;
     returnToEditPersonId: PersonId | null = null;  // Track if we should return to edit dialog
@@ -148,6 +152,10 @@ Object.assign(UIClass.prototype, contextMenuMethods);
 type PersonModalMethods = typeof personModalMethods;
 export interface UIClass extends PersonModalMethods {}
 Object.assign(UIClass.prototype, personModalMethods);
+
+type PersonEventsMethods = typeof personEventsMethods;
+export interface UIClass extends PersonEventsMethods {}
+Object.assign(UIClass.prototype, personEventsMethods);
 
 type RelationModalMethods = typeof relationModalMethods;
 export interface UIClass extends RelationModalMethods {}

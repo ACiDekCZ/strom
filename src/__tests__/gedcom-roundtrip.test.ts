@@ -39,6 +39,8 @@ function normalize(data: StromData): StromData {
             partnerships: person.partnerships.map(x => u.get(x)!),
             parentIds: person.parentIds.map(x => p.get(x)!),
             childIds: person.childIds.map(x => p.get(x)!),
+            // Event ids are generated fresh on every import — re-key positionally.
+            ...(person.events ? { events: person.events.map((e, i) => ({ ...e, id: `E${i}` })) } : {}),
         };
     }
     const partnerships: StromData['partnerships'] = {};
@@ -120,6 +122,21 @@ const FIXTURES: Record<string, string> = {
         '0 @I2@ INDI', '1 NAME Year /Only/', '1 SEX F', '1 BIRT', '2 DATE 1800',
         '0 @I3@ INDI', '1 NAME Month /Known/', '1 SEX M', '1 BIRT', '2 DATE MAR 1820',
         '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 CHIL @I3@', '1 MARR', '2 DATE AFT 1799',
+        '0 TRLR',
+    ].join('\n'),
+
+    'life events': [
+        '0 HEAD', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Emil /Vesely/', '1 SEX M',
+        '1 BIRT', '2 DATE 1900',
+        '1 BAPM', '2 DATE 15 JAN 1900', '2 PLAC Praha',
+        '1 OCCU Blacksmith', '2 DATE 1925',
+        '1 RESI', '2 PLAC Kladno',
+        '1 EMIG', '2 DATE 1930', '2 PLAC Hamburg',
+        '1 EDUC', '2 NOTE Studied at Charles University',
+        '1 BURI', '2 DATE 1975', '2 PLAC Kladno',
+        '0 @I2@ INDI', '1 NAME Ida /Vesela/', '1 SEX F', '1 IMMI', '2 DATE 1931',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@',
         '0 TRLR',
     ].join('\n'),
 

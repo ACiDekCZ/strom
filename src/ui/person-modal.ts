@@ -111,6 +111,10 @@ export const personModalMethods = uiModule({
         const linkRelBtn = document.getElementById('link-relationships');
         if (linkRelBtn) linkRelBtn.style.display = 'none';
 
+        // Events need a saved person (own undoable actions) — hide until then.
+        const eventsSection = document.getElementById('events-section');
+        if (eventsSection) eventsSection.style.display = 'none';
+
         modal.classList.add('active');
         firstNameInput.focus();
 
@@ -270,7 +274,7 @@ export const personModalMethods = uiModule({
         this.setupDateInputs();
 
         // Setup expand button - expand if there's death data, notes or a photo
-        const hasExtendedData = !!(person.deathDate || person.deathPlace || person.notes || person.photo);
+        const hasExtendedData = !!(person.deathDate || person.deathPlace || person.notes || person.photo || (person.events && person.events.length > 0));
         this.setupExpandButton(hasExtendedData);
 
         // Show link-relationships button
@@ -303,6 +307,11 @@ export const personModalMethods = uiModule({
             if (mergeBtn) mergeBtn.style.display = 'none';
             if (linkRelBtn) linkRelBtn.style.display = 'none';
         }
+
+        // Life events section: visible for existing persons, list rendered fresh.
+        const eventsSection = document.getElementById('events-section');
+        if (eventsSection) eventsSection.style.display = '';
+        this.renderEventsList();
 
         modal.classList.add('active');
         if (!DataManager.isPersonLocked(id)) firstNameInput.focus();

@@ -308,7 +308,8 @@ function deepCloneStromData(data: StromData): StromData {
             ...person,
             partnerships: [...person.partnerships],
             parentIds: [...person.parentIds],
-            childIds: [...person.childIds]
+            childIds: [...person.childIds],
+            ...(person.events ? { events: person.events.map(e => ({ ...e })) } : {})
         };
     }
 
@@ -365,6 +366,18 @@ function mergePersonData(existing: Person, incoming: Person, conflicts: FieldCon
             }
         }
         // 'keep_existing' - do nothing
+    }
+
+    // Merge life events: union by id, keeping the existing event on id clash.
+    if (incoming.events && incoming.events.length > 0) {
+        if (!existing.events) existing.events = [];
+        const seen = new Set(existing.events.map(e => e.id));
+        for (const event of incoming.events) {
+            if (!seen.has(event.id)) {
+                existing.events.push({ ...event });
+                seen.add(event.id);
+            }
+        }
     }
 
     // Update placeholder status
