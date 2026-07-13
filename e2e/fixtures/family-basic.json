@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "persons": {
+    "p_jan": {
+      "id": "p_jan",
+      "firstName": "Jan",
+      "lastName": "Fixture",
+      "gender": "male",
+      "birthDate": "1940",
+      "isPlaceholder": false,
+      "partnerships": ["u_jan_eva"],
+      "parentIds": [],
+      "childIds": ["p_petr"]
+    },
+    "p_eva": {
+      "id": "p_eva",
+      "firstName": "Eva",
+      "lastName": "Fixture",
+      "gender": "female",
+      "birthDate": "1945",
+      "isPlaceholder": false,
+      "partnerships": ["u_jan_eva"],
+      "parentIds": [],
+      "childIds": ["p_petr"]
+    },
+    "p_petr": {
+      "id": "p_petr",
+      "firstName": "Petr",
+      "lastName": "Fixture",
+      "gender": "male",
+      "birthDate": "1970",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["p_jan", "p_eva"],
+      "childIds": []
+    }
+  },
+  "partnerships": {
+    "u_jan_eva": {
+      "id": "u_jan_eva",
+      "person1Id": "p_jan",
+      "person2Id": "p_eva",
+      "status": "married",
+      "childIds": ["p_petr"]
+    }
+  }
+}

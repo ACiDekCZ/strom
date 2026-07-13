@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "persons": {
+    "a_jan": {
+      "id": "a_jan",
+      "firstName": "Jan",
+      "lastName": "Merge",
+      "gender": "male",
+      "birthDate": "1940",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["a_karel"],
+      "childIds": []
+    },
+    "a_karel": {
+      "id": "a_karel",
+      "firstName": "Karel",
+      "lastName": "Merge",
+      "gender": "male",
+      "birthDate": "1910",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": ["a_jan"]
+    }
+  },
+  "partnerships": {}
+}

@@ -57,3 +57,22 @@ test('poster dialog opens above the export dialog; SVG download is valid XML', a
     expect(svg).toContain('</svg>');
     expect(svg).toContain('Jan');
 });
+
+test('poster PNG export downloads a non-empty PNG image', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    await page.evaluate(() => window.Strom.UI.showExportDialog());
+    await page.locator('#export-modal').locator('.menu-option', { hasText: 'Export as poster' }).click();
+    const poster = page.locator('#poster-modal');
+    await expect(poster).toBeVisible();
+
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        poster.locator('.menu-option', { hasText: 'PNG' }).click(),
+    ]);
+    const bytes = readFileSync(await download.path());
+    // PNG magic number, and a non-trivial payload.
+    expect(bytes.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    expect(bytes.length).toBeGreaterThan(1000);
+});

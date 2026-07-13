@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "persons": {
+    "b_jan": {
+      "id": "b_jan",
+      "firstName": "Jan",
+      "lastName": "Merge",
+      "gender": "male",
+      "birthDate": "1940",
+      "isPlaceholder": false,
+      "partnerships": ["b_union"],
+      "parentIds": [],
+      "childIds": ["b_lucie"]
+    },
+    "b_marta": {
+      "id": "b_marta",
+      "firstName": "Marta",
+      "lastName": "Merge",
+      "gender": "female",
+      "birthDate": "1944",
+      "isPlaceholder": false,
+      "partnerships": ["b_union"],
+      "parentIds": [],
+      "childIds": ["b_lucie"]
+    },
+    "b_lucie": {
+      "id": "b_lucie",
+      "firstName": "Lucie",
+      "lastName": "Merge",
+      "gender": "female",
+      "birthDate": "1972",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": ["b_jan", "b_marta"],
+      "childIds": []
+    }
+  },
+  "partnerships": {
+    "b_union": {
+      "id": "b_union",
+      "person1Id": "b_jan",
+      "person2Id": "b_marta",
+      "status": "married",
+      "childIds": ["b_lucie"]
+    }
+  }
+}
