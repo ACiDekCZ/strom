@@ -973,45 +973,50 @@ class DataManagerClass {
         this.beginBatch();
         AuditLogManager.beginBatch();
 
-        const fatherId = resolve(spec.father);
-        const motherId = resolve(spec.mother);
-        // Parents' partnership (so anchor + siblings share the same couple).
-        let parentUnion: PartnershipId | undefined;
-        if (fatherId && motherId) {
-            const u = this.createPartnership(fatherId, motherId);
-            parentUnion = u?.id;
-        }
-        for (const pid of [fatherId, motherId]) {
-            if (pid) this.addParentChild(pid, spec.anchorId, parentUnion);
-        }
-
-        // Siblings share the anchor's parents.
-        for (const s of spec.siblings) {
-            const sid = resolve(s);
-            if (!sid) continue;
-            for (const pid of [fatherId, motherId]) {
-                if (pid) this.addParentChild(pid, sid, parentUnion);
+        // A throw with batchActive left set would silently disable every later
+        // begin/commitMutation (no undo entries, no saves) until reload — the
+        // batch MUST close on every path.
+        try {
+            const fatherId = resolve(spec.father);
+            const motherId = resolve(spec.mother);
+            // Parents' partnership (so anchor + siblings share the same couple).
+            let parentUnion: PartnershipId | undefined;
+            if (fatherId && motherId) {
+                const u = this.createPartnership(fatherId, motherId);
+                parentUnion = u?.id;
             }
-        }
+            for (const pid of [fatherId, motherId]) {
+                if (pid) this.addParentChild(pid, spec.anchorId, parentUnion);
+            }
 
-        // Partner + shared children.
-        const partnerId = resolve(spec.partner);
-        let coupleUnion: PartnershipId | undefined;
-        if (partnerId) {
-            const u = this.createPartnership(spec.anchorId, partnerId);
-            coupleUnion = u?.id;
-            if (u && spec.partner?.weddingDate) u.startDate = spec.partner.weddingDate;
-        }
-        for (const c of spec.children) {
-            const cid = resolve(c);
-            if (!cid) continue;
-            this.addParentChild(spec.anchorId, cid, coupleUnion);
-            if (partnerId) this.addParentChild(partnerId, cid, coupleUnion);
-        }
+            // Siblings share the anchor's parents.
+            for (const s of spec.siblings) {
+                const sid = resolve(s);
+                if (!sid) continue;
+                for (const pid of [fatherId, motherId]) {
+                    if (pid) this.addParentChild(pid, sid, parentUnion);
+                }
+            }
 
-        this.commitBatch(strings.undo.addFamily(auditPersonName(anchor)));
-        AuditLogManager.endBatch(this.currentTreeId, 'person.create',
-            strings.auditLog.addedFamily(auditPersonName(anchor), created));
+            // Partner + shared children.
+            const partnerId = resolve(spec.partner);
+            let coupleUnion: PartnershipId | undefined;
+            if (partnerId) {
+                const u = this.createPartnership(spec.anchorId, partnerId);
+                coupleUnion = u?.id;
+                if (u && spec.partner?.weddingDate) u.startDate = spec.partner.weddingDate;
+            }
+            for (const c of spec.children) {
+                const cid = resolve(c);
+                if (!cid) continue;
+                this.addParentChild(spec.anchorId, cid, coupleUnion);
+                if (partnerId) this.addParentChild(partnerId, cid, coupleUnion);
+            }
+        } finally {
+            this.commitBatch(strings.undo.addFamily(auditPersonName(anchor)));
+            AuditLogManager.endBatch(this.currentTreeId, 'person.create',
+                strings.auditLog.addedFamily(auditPersonName(anchor), created));
+        }
         if (this.currentTreeId) CrossTree.invalidateCacheForTree(this.currentTreeId);
         return created;
     }

@@ -12,6 +12,7 @@ import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import { PersonId, Gender, FamilyWizardMember, FamilyWizardSpec } from '../types.js';
 import { findSimilarPersons } from '../merge/matching.js';
+import { normalizeDateInput } from '../dates.js';
 import { uiModule } from './module.js';
 
 type RowKind = 'father' | 'mother' | 'partner' | 'sibling' | 'child';
@@ -100,13 +101,16 @@ export const familyWizardMethods = uiModule({
     readWizardRow(row: HTMLElement): FamilyWizardMember & { weddingDate?: string } {
         const val = (sel: string) => (row.querySelector(sel) as HTMLInputElement | null)?.value.trim() ?? '';
         const existingId = row.dataset.existingId as PersonId | undefined;
-        const wedding = val('.wiz-wedding');
+        // Normalize flex dates the same way the person modal does — raw input
+        // like "5.6.1980" must not land in the data unparsed.
+        const birth = normalizeDateInput(val('.wiz-birth'));
+        const wedding = normalizeDateInput(val('.wiz-wedding'));
         return {
             ...(existingId ? { existingId } : {}),
             firstName: val('.wiz-first'),
             lastName: val('.wiz-last'),
             gender: ((row.querySelector('.wiz-gender') as HTMLSelectElement | null)?.value as Gender) ?? 'male',
-            ...(val('.wiz-birth') ? { birthDate: val('.wiz-birth') } : {}),
+            ...(birth ? { birthDate: birth } : {}),
             ...(wedding ? { weddingDate: wedding } : {}),
         };
     },

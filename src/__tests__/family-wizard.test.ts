@@ -99,3 +99,29 @@ describe('DataManager.addFamily', () => {
         expect(DataManager.getPerson(anchor.id)!.parentIds).toEqual([existingDad.id]);
     });
 });
+
+it('a throw inside the batch still closes it — later mutations keep saving/undoing', () => {
+    const anchor = DataManager.createPerson({ firstName: 'Anchor', lastName: 'X', gender: 'male' });
+    // Force a throw mid-batch: an existingId pointing at a person that
+    // disappears between checks is hard to fake, so stub createPartnership.
+    const orig = DataManager.createPartnership.bind(DataManager);
+    (DataManager as unknown as { createPartnership: () => never }).createPartnership = () => {
+        throw new Error('boom');
+    };
+    try {
+        expect(() => DataManager.addFamily({
+            anchorId: anchor.id,
+            father: { firstName: 'F', lastName: 'X', gender: 'male' },
+            mother: { firstName: 'M', lastName: 'X', gender: 'female' },
+            siblings: [], children: [],
+        })).toThrow('boom');
+    } finally {
+        (DataManager as unknown as { createPartnership: typeof orig }).createPartnership = orig;
+    }
+    // The batch must be closed: a normal mutation still produces an undo step.
+    const p = DataManager.createPerson({ firstName: 'After', lastName: 'X', gender: 'male' });
+    expect(DataManager.getPerson(p.id)).not.toBeNull();
+    expect(DataManager.canUndo()).toBe(true);
+    DataManager.undo();
+    expect(DataManager.getPerson(p.id)).toBeNull();
+});
