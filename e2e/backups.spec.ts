@@ -66,3 +66,24 @@ test.describe('Backups', () => {
         await expect(card(page, 'Beta')).toHaveCount(0);
     });
 });
+
+test('Escape in the backups dialog returns to the tree manager (dialog stack)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    const manager = page.locator('#tree-manager-modal');
+    await expect(manager).toBeVisible();
+    await page.evaluate(() => {
+        const treeId = window.Strom.DataManager.getCurrentTreeId();
+        return window.Strom.UI.showSnapshotsDialog(treeId, 'tree-manager-modal');
+    });
+    const snapshots = page.locator('#snapshots-modal');
+    await expect(snapshots).toBeVisible();
+    await expect(manager).toBeHidden();
+
+    // Escape closes the sub-dialog and RETURNS to the tree manager.
+    await page.keyboard.press('Escape');
+    await expect(snapshots).toBeHidden();
+    await expect(manager).toBeVisible();
+});

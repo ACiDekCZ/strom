@@ -20,11 +20,19 @@ function formatBytes(bytes: number): string {
 }
 
 export const snapshotsUiMethods = uiModule({
-    async showSnapshotsDialog(treeId?: string): Promise<void> {
+    async showSnapshotsDialog(treeId?: string, parentDialogId?: string): Promise<void> {
         this.closeMobileMenu?.();
         this.snapshotsTreeId = (treeId as TreeId) || DataManager.getCurrentTreeId();
         if (!this.snapshotsTreeId) return;
-        document.getElementById('tree-manager-modal')?.classList.remove('active');
+        // Dialog stack: Escape returns to the parent (e.g. the tree manager).
+        this.clearDialogStack();
+        if (parentDialogId) {
+            this.pushDialog(parentDialogId);
+            this.closeDialogById(parentDialogId);
+        } else {
+            document.getElementById('tree-manager-modal')?.classList.remove('active');
+        }
+        this.pushDialog('snapshots-modal');
         document.getElementById('snapshots-modal')?.classList.add('active');
         await this.renderSnapshotsList();
     },

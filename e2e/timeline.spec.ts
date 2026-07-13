@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp, card } from './helpers.js';
+import { openApp, card, createFirstPerson } from './helpers.js';
 
 /**
  * Timeline view: a third display mode showing people as life-bars on a year
@@ -28,4 +28,16 @@ test('timeline view shows life-bars and switches back to the family tree', async
     await page.locator('#view-mode-family').click();
     await expect(container).toBeHidden();
     await expect(card(page, 'Henry VIII')).toBeVisible();
+});
+
+test('timeline hides the floating zoom controls (it scrolls natively)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1950' });
+    await expect(page.locator('.zoom-controls')).toBeVisible();
+
+    await page.locator('#view-mode-timeline').click();
+    await expect(page.locator('.zoom-controls')).toBeHidden();
+
+    await page.locator('#view-mode-family').click();
+    await expect(page.locator('.zoom-controls')).toBeVisible();
 });

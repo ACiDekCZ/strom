@@ -297,6 +297,11 @@ export const miscMethods = uiModule({
         } else if (badge) {
             badge.style.display = 'none';
         }
+
+        // The floating zoom/pan controls act on the tree canvas — in the
+        // timeline (its own scroll container) they do nothing, so hide them.
+        const zoomControls = document.querySelector('.zoom-controls') as HTMLElement | null;
+        if (zoomControls) zoomControls.style.display = mode === 'timeline' ? 'none' : '';
     },
 
     setLanguage(language: LanguageSetting): void {
