@@ -71,6 +71,30 @@ const stringsEN = {
         hint: 'Click a card to see actions. This is an ordinary tree — you can delete it in the tree manager.'
     },
 
+    // Family book
+    book: {
+        menu: 'Family book',
+        title: 'Family Book',
+        dialogTitle: 'Family book',
+        subtitle: 'The book of the family',
+        families: 'Families',
+        children: 'Children',
+        index: 'Person Index',
+        tree: 'Family tree',
+        treeHint: 'A full, legible tree is available as a separate poster (Export → Poster).',
+        sources: 'Sources',
+        chapterShort: 'ch.',
+        born: 'b.',
+        died: 'd.',
+        persons: 'persons',
+        generations: 'generations',
+        generate: 'Open book',
+        optName: 'Title',
+        optMaxGen: 'Max generations (optional)',
+        compiled: (date: string) => `compiled ${date}`,
+        empty: 'The tree is empty.',
+    },
+
     events: {
         title: 'Events',
         add: 'Add event',
@@ -1088,6 +1112,30 @@ const stringsCZ: StringsType = {
         hint: 'Klikni na kartu pro akce. Je to běžný strom — můžeš ho smazat ve správci stromů.'
     },
 
+    // Family book
+    book: {
+        menu: 'Kniha rodu',
+        title: 'Kniha rodu',
+        dialogTitle: 'Kniha rodu',
+        subtitle: 'Kniha rodu',
+        families: 'Rodiny',
+        children: 'Děti',
+        index: 'Rejstřík osob',
+        tree: 'Rodokmen',
+        treeHint: 'Úplný strom v čitelné velikosti je přiložen jako samostatný plakát (Export → Plakát).',
+        sources: 'Prameny',
+        chapterShort: 'kap.',
+        born: 'nar.',
+        died: 'zem.',
+        persons: 'osob',
+        generations: 'generací',
+        generate: 'Otevřít knihu',
+        optName: 'Název',
+        optMaxGen: 'Max generací (nepovinné)',
+        compiled: (date: string) => `sestaveno ${date}`,
+        empty: 'Strom je prázdný.',
+    },
+
     events: {
         title: 'Události',
         add: 'Přidat událost',
@@ -2051,6 +2099,11 @@ const languagePacks: Record<Language, StringsType> = {
     en: stringsEN,
     cs: stringsCZ
 };
+
+/** Get the full string pack for a specific language (used by the family book). */
+export function getStringsForLang(lang: 'cs' | 'en'): StringsType {
+    return languagePacks[lang];
+}
 
 // Current active strings (mutable)
 export let strings: StringsType = stringsEN;

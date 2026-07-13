@@ -5659,6 +5659,50 @@
                         <span class="option-desc" data-i18n="poster.description"></span>
                     </span>
                 </button>
+                <button class="menu-option" onclick="window.Strom.UI.showBookDialog()">
+                    <span class="option-icon">📖</span>
+                    <span class="option-text">
+                        <span class="option-title" data-i18n="book.title"></span>
+                        <span class="option-desc" data-i18n="book.subtitle"></span>
+                    </span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Family Book Dialog -->
+    <div class="modal-overlay" id="book-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 data-i18n="book.dialogTitle"></h2>
+                <button class="close-btn" onclick="window.Strom.UI.closeBookDialog()">&times;</button>
+            </div>
+            <div class="form-group">
+                <label data-i18n="book.optName"></label>
+                <input type="text" id="book-title" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label data-i18n="privacy.label"></label>
+                <select id="book-privacy-mode">
+                    <option value="full" data-i18n="privacy.modeFull"></option>
+                    <option value="initials" data-i18n="privacy.modeInitials"></option>
+                    <option value="minimal" data-i18n="privacy.modeMinimal"></option>
+                    <option value="anonymous" data-i18n="privacy.modeAnonymous"></option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label data-i18n="book.optMaxGen"></label>
+                <input type="number" id="book-max-gen" min="1" inputmode="numeric" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label class="settings-checkbox">
+                    <input type="checkbox" id="book-drop-media">
+                    <span data-i18n="privacy.stripPhotos"></span>
+                </label>
+            </div>
+            <div class="buttons">
+                <button class="secondary" onclick="window.Strom.UI.closeBookDialog()" data-i18n="buttons.cancel"></button>
+                <button class="primary" onclick="window.Strom.UI.generateFamilyBook()" data-i18n="book.generate"></button>
             </div>
         </div>
     </div>

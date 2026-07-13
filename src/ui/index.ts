@@ -64,6 +64,7 @@ import { appModeMethods } from './app-mode.js';
 import { kinshipUiMethods } from './kinship-ui.js';
 import { archivesUiMethods } from './archives-ui.js';
 import { exportImageMethods } from './export-image-ui.js';
+import { bookUiMethods } from './book-ui.js';
 
 export class UIClass {
     currentId: PersonId | null = null;
@@ -243,5 +244,9 @@ Object.assign(UIClass.prototype, archivesUiMethods);
 type ExportImageMethods = typeof exportImageMethods;
 export interface UIClass extends ExportImageMethods {}
 Object.assign(UIClass.prototype, exportImageMethods);
+
+type BookUiMethods = typeof bookUiMethods;
+export interface UIClass extends BookUiMethods {}
+Object.assign(UIClass.prototype, bookUiMethods);
 
 export const UI = new UIClass();
