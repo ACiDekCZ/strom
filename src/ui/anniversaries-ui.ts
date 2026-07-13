@@ -48,7 +48,8 @@ export const anniversariesUiMethods = uiModule({
                 const label = this.anniversaryLabel(item, names);
                 const when = item.daysUntil === 0 ? a.today
                     : item.daysUntil === 1 ? a.tomorrow : a.inDays(item.daysUntil);
-                const onclick = `window.Strom.UI.focusPersonFromAnniversary('${item.personIds[0]}')`;
+                // Person ids come from data files (JSON import) — escape them too.
+                const onclick = `window.Strom.UI.focusPersonFromAnniversary('${this.escapeHtml(item.personIds[0])}')`;
                 return `<div class="anniversary-row" onclick="${onclick}">
                     <span class="anniversary-icon">${ANNIVERSARY_ICON[item.type]}</span>
                     <span class="anniversary-text">${this.escapeHtml(label)}</span>
