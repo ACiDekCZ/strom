@@ -6,37 +6,47 @@ Family tree application that runs entirely in your browser. No server required, 
 
 ## Features
 
-**People & Relationships**
-- Add, edit, delete persons
-- Multiple marriages, divorces, step-siblings
-- Birth/death dates and places
-- Placeholders for unknown persons
+**People & Records**
+- Add, edit, delete persons; multiple marriages, divorces, step-siblings
+- Adoptive, step and foster parent-child relationships (drawn distinctly)
+- Flexible dates ("around 1880", "before 1900", year only)
+- Photos, life events (baptism, occupation, residence…), notes
+- Sources & citations with a per-tree catalog; document attachments (scans, PDFs)
+- Duplicate hints while typing; family wizard (add a whole family in one form)
+- Undo/redo for every change
 
 **Visualization**
-- Interactive tree with generation rows
-- Zoom (scroll/pinch) and pan (drag/swipe)
-- Focus mode - show subset of tree around selected person
-- Responsive design (desktop, tablet, mobile)
+- Interactive tree with generation rows; zoom (scroll/pinch) and pan (drag/swipe)
+- Family, descendants-only and timeline view modes
+- Overview minimap for large trees; advanced search filters with in-tree highlighting
+- Relationship calculator ("second cousin once removed")
+- Family statistics charts; anniversaries panel and "on this day" reminders
+- Responsive design (desktop, tablet, mobile — long-press action sheet on touch)
 - Light/dark theme
 
+**Family Collaboration (no cloud)**
+- "Send to a relative": e-mail a single file with a personal note
+- The recipient opens it, fills in their branch, and sends it back with one click
+- Strom recognises the returned file and offers a side-by-side merge
+
 **Tree Management**
-- Multiple trees in one app
-- Rename, duplicate, delete trees
-- Smart merge with conflict resolution
-- Tree validation (detect issues)
-- Tree statistics (counts, age ranges, anniversaries)
-- Set default person/tree for startup
+- Multiple trees in one app; rename, duplicate, delete
+- Smart merge with conflict resolution; validation; statistics
+- Automatic versioned backups with one-click restore (time capsules)
+- Person and tree locking
 
-**Import/Export**
-- GEDCOM 5.5.1 import (compatible with Ancestry, FamilySearch, Gramps)
-- JSON export/import
-- HTML file import (extract data from exported Strom files)
-- Export as standalone HTML file (works offline)
-- Export only focused subset
+**Import / Export / Print**
+- GEDCOM import & export (Ancestry, FamilySearch, Gramps; events, sources, PEDI)
+- JSON export/import; HTML file import; branch-only export
+- Standalone HTML file export (the whole app + data, works offline)
+- Printable family book (chapters, sources as footnotes, person index)
+- Poster export (SVG / PNG / tiled print)
+- Living-person privacy filter for every export (initials / anonymous / minimal)
 
-**Encryption**
-- Optional AES-256 data encryption
-- Password-protected exports
+**Privacy & Offline**
+- No server, no accounts, no tracking — data stays in your browser
+- Optional AES-256 encryption; password-protected exports
+- Installable PWA with full offline mode
 
 **Two Ways to Use**
 
