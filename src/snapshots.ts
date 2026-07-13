@@ -83,6 +83,13 @@ export async function createSnapshot(
 
     const stored: StoredSnapshot = { meta: { id, treeId, createdAt: now, personCount, sizeBytes: 0, reason } };
     let sizeBytes: number;
+    if (SettingsManager.isEncryptionEnabled() && !CryptoSession.isUnlocked()) {
+        // Defense in depth: with encryption on but the session locked, the
+        // else-branch would write a PLAINTEXT copy of encrypted-tree data
+        // into IndexedDB. Refuse instead (auto snapshots are best-effort
+        // and swallow this; manual creation surfaces the error).
+        throw new Error('Encryption enabled but session locked — refusing to write an unencrypted snapshot');
+    }
     if (SettingsManager.isEncryptionEnabled() && CryptoSession.isUnlocked()) {
         stored.encrypted = await CryptoSession.encrypt(json);
         sizeBytes = JSON.stringify(stored.encrypted).length;

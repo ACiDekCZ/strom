@@ -753,6 +753,10 @@ class DataManagerClass {
 
     private maybeAutoSnapshot(before: StromData): void {
         if (this.viewMode || !this.currentTreeId) return;
+        // An empty pre-state has nothing worth restoring — don't create a
+        // useless "0 people" backup, and don't consume the daily slot either
+        // (the first MEANINGFUL mutation of the day should still snapshot).
+        if (!Object.values(before.persons).some(p => !p.isPlaceholder)) return;
         const treeId = this.currentTreeId;
         const today = new Date().toISOString().slice(0, 10);
         if (this.lastAutoSnapshotDay.get(treeId) === today) return;
