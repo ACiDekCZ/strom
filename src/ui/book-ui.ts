@@ -10,7 +10,8 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { PrivacyMode } from '../privacy.js';
+import { PrivacyMode, applyLivingPrivacy } from '../privacy.js';
+import { stripMedia } from '../attachments.js';
 import { buildFamilyBook } from '../book.js';
 import { buildTreeSvg } from '../export-image.js';
 import { uiModule } from './module.js';
@@ -56,7 +57,11 @@ export const bookUiMethods = uiModule({
         let treeSvg: string | undefined;
         const layout = TreeRenderer.getPosterLayout();
         if (layout.positions.size > 0) {
-            treeSvg = buildTreeSvg(data, layout, {
+            // The overview SVG must honour the same privacy/media choices as
+            // the book body — otherwise the tree page leaks living names.
+            let svgData = applyLivingPrivacy(data, privacyMode);
+            if (dropMedia) svgData = stripMedia(svgData);
+            treeSvg = buildTreeSvg(svgData, layout, {
                 treeName: TreeManager.getActiveTreeMetadata()?.name,
                 dateLabel: new Date().toLocaleDateString(),
             });
