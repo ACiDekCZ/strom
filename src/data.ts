@@ -2140,6 +2140,13 @@ class DataManagerClass {
         if (removePerson.sourceIds && removePerson.sourceIds.length > 0) {
             keepPerson.sourceIds = [...new Set([...(keepPerson.sourceIds ?? []), ...removePerson.sourceIds])];
         }
+        if (removePerson.attachments && removePerson.attachments.length > 0) {
+            if (!keepPerson.attachments) keepPerson.attachments = [];
+            const seenAtt = new Set(keepPerson.attachments.map(a => a.id));
+            for (const att of removePerson.attachments) {
+                if (!seenAtt.has(att.id)) keepPerson.attachments.push(att);
+            }
+        }
 
         // 7. Delete the removed person
         delete this.data.persons[removeId];

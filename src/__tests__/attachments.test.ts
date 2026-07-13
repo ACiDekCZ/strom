@@ -124,3 +124,17 @@ describe('privacy strips attachments', () => {
         expect(out.persons['p1' as PersonId].attachments).toHaveLength(1);
     });
 });
+
+describe('merge keeps attachments', () => {
+    it('person merge carries the removed person\'s attachments to the kept one', () => {
+        const keep = DataManager.createPerson(personData('Keep'));
+        const remove = DataManager.createPerson(personData('Remove'));
+        DataManager.addAttachment(keep.id, fakeAttachment());
+        DataManager.addAttachment(remove.id, fakeAttachment());
+
+        const ok = DataManager.mergePersons(keep.id, remove.id, {}, new Map());
+        expect(ok).toBe(true);
+        expect(DataManager.getPerson(keep.id)?.attachments).toHaveLength(2);
+        expect(DataManager.getPerson(remove.id)).toBeNull();
+    });
+});

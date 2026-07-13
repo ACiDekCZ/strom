@@ -316,7 +316,8 @@ function deepCloneStromData(data: StromData): StromData {
             parentIds: [...person.parentIds],
             childIds: [...person.childIds],
             ...(person.events ? { events: person.events.map(e => ({ ...e, ...(e.sourceIds ? { sourceIds: [...e.sourceIds] } : {}) })) } : {}),
-            ...(person.sourceIds ? { sourceIds: [...person.sourceIds] } : {})
+            ...(person.sourceIds ? { sourceIds: [...person.sourceIds] } : {}),
+            ...(person.attachments ? { attachments: person.attachments.map(a => ({ ...a })) } : {})
         };
     }
 
@@ -393,6 +394,18 @@ function mergePersonData(existing: Person, incoming: Person, conflicts: FieldCon
     if (incoming.sourceIds && incoming.sourceIds.length > 0) {
         const merged = new Set([...(existing.sourceIds ?? []), ...incoming.sourceIds]);
         existing.sourceIds = [...merged];
+    }
+
+    // Merge attachments: union by id, keeping the existing one on id clash.
+    if (incoming.attachments && incoming.attachments.length > 0) {
+        if (!existing.attachments) existing.attachments = [];
+        const seenAtt = new Set(existing.attachments.map(a => a.id));
+        for (const att of incoming.attachments) {
+            if (!seenAtt.has(att.id)) {
+                existing.attachments.push({ ...att });
+                seenAtt.add(att.id);
+            }
+        }
     }
 
     // Update placeholder status
