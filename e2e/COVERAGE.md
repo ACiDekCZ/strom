@@ -72,6 +72,7 @@ the table honest.
 | Hidden-relatives "+N" badge / collapse (−) | — | n-a | focus depth auto-expands to the whole connected tree, so badges do not appear in normal-size trees; expansion is focus-driven, there is no separate collapse control |
 | Runtime language switch (CS ↔ EN) | `settings-lock.spec.ts`, `cs.spec.ts` | covered | settings radios; about labels switch without reload |
 | Tree stats dialog | `settings-lock.spec.ts` | covered | shows the person count |
+| Family statistics (visual charts) | `stats.spec.ts` | covered | collapsible section renders inline-SVG bar charts |
 | Audit log | `settings-lock.spec.ts` | covered | records a mutation when enabled |
 | Search focuses a person | `search-kinship-archives.spec.ts` | covered | toolbar search picker |
 | Relationship (kinship) calculator | `search-kinship-archives.spec.ts` | covered | shows a kinship term |

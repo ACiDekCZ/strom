@@ -208,6 +208,23 @@ const stringsEN = {
         settingHint: 'Show an overview minimap for large trees',
     },
 
+    // Visual family statistics (tree-stats dialog)
+    stats: {
+        section: 'Family statistics',
+        topMaleNames: 'Most common male names',
+        topFemaleNames: 'Most common female names',
+        lifespanByGen: 'Average lifespan by generation',
+        childrenByGen: 'Children per couple by generation',
+        birthsByMonth: 'Births by month',
+        oldest: 'Longest-lived person',
+        longestMarriage: 'Longest marriage',
+        years: 'yrs',
+        generation: (n: number) => `Gen ${n}`,
+        sampleN: (n: number) => `n = ${n}`,
+        notEnough: 'Not enough data yet',
+        months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    },
+
     // Zoom controls
     zoomControls: {
         zoomIn: 'Zoom In',
@@ -1280,6 +1297,23 @@ const stringsCZ: StringsType = {
         title: 'Přehledová minimapa',
         settingLabel: 'Minimapa',
         settingHint: 'Zobrazovat přehledovou minimapu u velkých stromů',
+    },
+
+    // Visual family statistics (tree-stats dialog)
+    stats: {
+        section: 'Statistiky rodu',
+        topMaleNames: 'Nejčastější mužská jména',
+        topFemaleNames: 'Nejčastější ženská jména',
+        lifespanByGen: 'Průměrné dožití podle generací',
+        childrenByGen: 'Počet dětí na pár podle generací',
+        birthsByMonth: 'Narození podle měsíců',
+        oldest: 'Nejdéle žijící osoba',
+        longestMarriage: 'Nejdelší manželství',
+        years: 'let',
+        generation: (n: number) => `Gen. ${n}`,
+        sampleN: (n: number) => `n = ${n}`,
+        notEnough: 'Zatím málo dat',
+        months: ['Led', 'Úno', 'Bře', 'Dub', 'Kvě', 'Čer', 'Čvc', 'Srp', 'Zář', 'Říj', 'Lis', 'Pro'],
     },
 
     // Zoom controls

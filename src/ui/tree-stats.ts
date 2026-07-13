@@ -44,6 +44,35 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { yearOf, parseFlexDate, formatFlexDate } from '../dates.js';
+import { computeFamilyStats } from '../stats.js';
+
+/** Escape text for safe inclusion in SVG/HTML (names come from user data). */
+function escXml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+/**
+ * Responsive inline-SVG horizontal bar chart (no library). Internal coordinate
+ * system is fixed; the SVG scales to the container via width:100% + viewBox.
+ * Labels are escaped; values are numbers.
+ */
+function svgBarChart(rows: { label: string; value: number; display?: string }[]): string {
+    if (rows.length === 0) return '';
+    const W = 320, rowH = 24, labelW = 104, barX = labelW + 8, barW = W - barX - 34;
+    const H = rows.length * rowH;
+    const max = Math.max(1, ...rows.map(r => r.value));
+    const bars = rows.map((r, i) => {
+        const y = i * rowH;
+        const w = Math.max(r.value > 0 ? 2 : 0, (r.value / max) * barW);
+        const shown = r.display ?? String(r.value);
+        return `
+            <text x="0" y="${y + 16}" class="stats-bar-label">${escXml(r.label)}</text>
+            <rect x="${barX}" y="${y + 5}" width="${w.toFixed(1)}" height="14" rx="2" class="stats-bar-rect"></rect>
+            <text x="${W}" y="${y + 16}" text-anchor="end" class="stats-bar-value">${escXml(shown)}</text>`;
+    }).join('');
+    return `<svg class="stats-bar-chart" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img">${bars}</svg>`;
+}
 
 
 /**
@@ -510,7 +539,69 @@ export const treeStatsMethods = uiModule({
                     ${this.generateAnniversariesHtml(treeData)}
                 </div>
             </div>
+
+            <details class="tree-stats-section tree-stats-family">
+                <summary class="tree-stats-family-summary">${strings.stats.section}</summary>
+                ${this.generateFamilyStatsHtml(treeData)}
+            </details>
         `;
+    },
+
+    /** Visual family statistics (charts) for the collapsible dialog section. */
+    generateFamilyStatsHtml(treeData: StromData): string {
+        const st = strings.stats;
+        const stats = computeFamilyStats(treeData);
+        const blocks: string[] = [];
+
+        const chartBlock = (title: string, body: string): string =>
+            `<div class="stats-chart-block"><div class="stats-chart-title">${title}</div>${body}</div>`;
+        const notEnough = `<div class="stats-empty">${st.notEnough}</div>`;
+
+        // Most common first names (males / females).
+        if (stats.topMaleNames.length) {
+            blocks.push(chartBlock(st.topMaleNames,
+                svgBarChart(stats.topMaleNames.map(n => ({ label: n.name, value: n.count })))));
+        }
+        if (stats.topFemaleNames.length) {
+            blocks.push(chartBlock(st.topFemaleNames,
+                svgBarChart(stats.topFemaleNames.map(n => ({ label: n.name, value: n.count })))));
+        }
+
+        // Average lifespan by generation (needs a meaningful sample).
+        const lifespanN = stats.lifespanByGen.reduce((sum, g) => sum + g.n, 0);
+        blocks.push(chartBlock(st.lifespanByGen, lifespanN >= 5
+            ? svgBarChart(stats.lifespanByGen.map(g => ({
+                label: st.generation(g.generation), value: g.avgYears,
+                display: `${g.avgYears} ${st.years} (${st.sampleN(g.n)})`,
+            })))
+            : notEnough));
+
+        // Children per couple by generation.
+        blocks.push(chartBlock(st.childrenByGen, stats.childrenByGen.length
+            ? svgBarChart(stats.childrenByGen.map(g => ({
+                label: st.generation(g.generation), value: g.avgChildren,
+                display: `${g.avgChildren} (${st.sampleN(g.n)})`,
+            })))
+            : notEnough));
+
+        // Births by month.
+        blocks.push(chartBlock(st.birthsByMonth, stats.birthsByMonthN >= 5
+            ? svgBarChart(stats.birthsByMonth.map(m => ({ label: st.months[m.month - 1], value: m.count })))
+            : notEnough));
+
+        // Records.
+        const records: string[] = [];
+        if (stats.oldest) {
+            records.push(`<div class="tree-stats-row"><span class="label">${st.oldest}</span>`
+                + `<span class="value">${escXml(stats.oldest.name)} · ${stats.oldest.years} ${st.years}</span></div>`);
+        }
+        if (stats.longestMarriage) {
+            records.push(`<div class="tree-stats-row"><span class="label">${st.longestMarriage}</span>`
+                + `<span class="value">${escXml(stats.longestMarriage.names)} · ${stats.longestMarriage.years} ${st.years}</span></div>`);
+        }
+        if (records.length) blocks.push(`<div class="stats-chart-block">${records.join('')}</div>`);
+
+        return blocks.join('');
     },
 
     /**

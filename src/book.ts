@@ -14,6 +14,7 @@ import { applyLivingPrivacy, PrivacyMode } from './privacy.js';
 import { stripMedia } from './attachments.js';
 import { formatFlexDate, yearOf } from './dates.js';
 import { sortLifeEvents } from './events.js';
+import { assignGenerations } from './generations.js';
 import { getStringsForLang } from './strings.js';
 
 export interface BookOptions {
@@ -64,20 +65,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     };
 
     // ---- generation assignment (longest ancestor path, memoized DAG walk) ----
-    const gen = new Map<string, number>();
-    const genOf = (id: string, seen = new Set<string>()): number => {
-        if (gen.has(id)) return gen.get(id)!;
-        if (seen.has(id)) return 0; // cycle guard
-        seen.add(id);
-        const p = persons[id as PersonId];
-        let g = 0;
-        if (p && p.parentIds.length > 0) {
-            g = Math.max(...p.parentIds.map(pid => genOf(pid, seen))) + 1;
-        }
-        gen.set(id, g);
-        return g;
-    };
-    for (const id of Object.keys(persons)) genOf(id);
+    const gen = assignGenerations(tree);
     const personGen = (id: string) => gen.get(id) ?? 0;
 
     // ---- chapters: one per partnership WITH children, oldest generation first ----

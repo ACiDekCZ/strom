@@ -3464,6 +3464,47 @@
         [data-theme="dark"] .tree-stats-section-title {
             border-bottom-color: #444;
         }
+        /* Visual family statistics (collapsible) */
+        .tree-stats-family-summary {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            color: var(--text-light);
+            cursor: pointer;
+            padding: 6px 0;
+            user-select: none;
+        }
+        .tree-stats-family[open] .tree-stats-family-summary {
+            border-bottom: 1px solid #e0e0e0;
+            margin-bottom: 8px;
+        }
+        [data-theme="dark"] .tree-stats-family[open] .tree-stats-family-summary {
+            border-bottom-color: #444;
+        }
+        .stats-chart-block { margin-bottom: 14px; }
+        .stats-chart-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 4px;
+        }
+        .stats-bar-chart { display: block; max-width: 100%; height: auto; overflow: visible; }
+        .stats-bar-chart .stats-bar-label {
+            font-size: 12px;
+            fill: var(--text-color);
+        }
+        .stats-bar-chart .stats-bar-value {
+            font-size: 11px;
+            fill: var(--text-light);
+        }
+        .stats-bar-chart .stats-bar-rect { fill: var(--primary); }
+        .stats-empty {
+            font-size: 12px;
+            font-style: italic;
+            color: var(--text-light);
+            padding: 4px 0;
+        }
         .tree-stats-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
