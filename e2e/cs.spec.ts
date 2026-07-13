@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'fs';
+
+const APP_VERSION = JSON.parse(readFileSync('package.json', 'utf-8')).version;
 
 // A couple of flows with the UI forced to Czech (system language = cs-CZ).
 test.use({ locale: 'cs-CZ' });
@@ -26,6 +29,6 @@ test('Czech UI: about dialog shows the version and Czech labels', async ({ page 
     await page.locator('.app-logo').click();
     const about = page.locator('#about-modal');
     await expect(about).toBeVisible();
-    await expect(about.locator('#about-version')).toHaveText('1.2.0');
+    await expect(about.locator('#about-version')).toHaveText(APP_VERSION);
     await expect(about).toContainText('Vytvořil');
 });

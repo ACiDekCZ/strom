@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'fs';
 import { openApp, createFirstPerson, card } from './helpers.js';
+
+const APP_VERSION = JSON.parse(readFileSync('package.json', 'utf-8')).version;
 
 test('empty state shows and the first person can be created', async ({ page }) => {
     await openApp(page);
@@ -16,5 +19,5 @@ test('about dialog shows the package.json version', async ({ page }) => {
     await page.locator('.app-logo').click();
     const about = page.locator('#about-modal');
     await expect(about).toBeVisible();
-    await expect(about.locator('#about-version')).toHaveText('1.2.0');
+    await expect(about.locator('#about-version')).toHaveText(APP_VERSION);
 });
