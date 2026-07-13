@@ -33,6 +33,7 @@ import { isEncrypted, EncryptedData } from './crypto.js';
 import * as CrossTree from './cross-tree.js';
 import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
+import { createSnapshot, getSnapshotJson, SnapshotReason } from './snapshots.js';
 import { ValidationIssue } from './validation.js';
 import { UndoManager } from './undo.js';
 import { applyLivingPrivacy, PrivacyMode } from './privacy.js';
@@ -737,10 +738,52 @@ class DataManagerClass {
     private commitMutation(description: string): void {
         UndoManager.setActiveTree(this.currentTreeId);
         if (this.pendingBefore) {
+            // Auto-backup the FIRST mutation of the day (state before it).
+            this.maybeAutoSnapshot(this.pendingBefore);
             UndoManager.push({ data: this.pendingBefore, description });
             this.pendingBefore = null;
         }
         this.save();
+    }
+
+    // ==================== VERSIONED BACKUPS (snapshots) ====================
+
+    /** In-session guard so only the first mutation of a day auto-snapshots. */
+    private lastAutoSnapshotDay = new Map<TreeId, string>();
+
+    private maybeAutoSnapshot(before: StromData): void {
+        if (this.viewMode || !this.currentTreeId) return;
+        const treeId = this.currentTreeId;
+        const today = new Date().toISOString().slice(0, 10);
+        if (this.lastAutoSnapshotDay.get(treeId) === today) return;
+        this.lastAutoSnapshotDay.set(treeId, today);
+        // Fire-and-forget; backups are best-effort (storage may be unavailable).
+        void createSnapshot(treeId, before, 'auto', Date.now()).catch(() => {});
+    }
+
+    /** Take a snapshot of the current tree now (manual / pre-import / pre-merge). */
+    async snapshotNow(reason: SnapshotReason): Promise<void> {
+        if (this.viewMode || !this.currentTreeId) return;
+        await createSnapshot(this.currentTreeId, this.data, reason, Date.now());
+    }
+
+    /**
+     * Restore a snapshot into the current tree. Goes through migrateData (a
+     * snapshot may be from an older data version) and the undo path, so Ctrl+Z
+     * reverts the restore. Returns true on success.
+     */
+    async restoreSnapshot(snapshotId: string): Promise<boolean> {
+        if (this.viewMode || !this.currentTreeId) return false;
+        const json = await getSnapshotJson(snapshotId);
+        if (!json) return false;
+        const migrated = this.migrateData(JSON.parse(json));
+
+        this.beginMutation();
+        this.data = migrated;
+        this.commitMutation(strings.undo.restoreBackup);
+        AuditLogManager.log(this.currentTreeId, 'data.load', strings.auditLog.restoredBackup);
+        if (this.currentTreeId) CrossTree.invalidateCacheForTree(this.currentTreeId);
+        return true;
     }
 
     canUndo(): boolean {

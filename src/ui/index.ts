@@ -65,6 +65,7 @@ import { kinshipUiMethods } from './kinship-ui.js';
 import { archivesUiMethods } from './archives-ui.js';
 import { exportImageMethods } from './export-image-ui.js';
 import { bookUiMethods } from './book-ui.js';
+import { snapshotsUiMethods } from './snapshots-ui.js';
 
 export class UIClass {
     currentId: PersonId | null = null;
@@ -86,6 +87,7 @@ export class UIClass {
     importTreeData: StromData | null = null;
     exportTargetTreeId: TreeId | null = null;
     defaultPersonTreeId: TreeId | null = null;
+    snapshotsTreeId: TreeId | null = null;
     defaultPersonPicker: PersonPicker | null = null;
 
     // Encryption state
@@ -248,5 +250,9 @@ Object.assign(UIClass.prototype, exportImageMethods);
 type BookUiMethods = typeof bookUiMethods;
 export interface UIClass extends BookUiMethods {}
 Object.assign(UIClass.prototype, bookUiMethods);
+
+type SnapshotsUiMethods = typeof snapshotsUiMethods;
+export interface UIClass extends SnapshotsUiMethods {}
+Object.assign(UIClass.prototype, snapshotsUiMethods);
 
 export const UI = new UIClass();

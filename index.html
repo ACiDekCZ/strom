@@ -4923,6 +4923,26 @@
         [data-theme="dark"] .source-picker-item { border-color: #444; background: #2a2a2a; }
         [data-theme="dark"] .source-chip { background: #2d3a52; }
 
+        /* Backups / snapshots */
+        .snapshots-total { color: var(--text-secondary, #777); font-size: 12px; margin-bottom: 8px; }
+        .snapshots-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; max-height: 55vh; overflow-y: auto; }
+        .snapshot-row {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 10px; border: 1px solid var(--border-color, #ddd);
+            border-radius: 6px; background: var(--card-bg, #fafafa); font-size: 13px;
+        }
+        .snapshot-main { flex: 1; min-width: 0; }
+        .snapshot-date { font-weight: 600; }
+        .snapshot-meta { color: var(--text-secondary, #777); font-size: 12px; }
+        .snapshot-actions { display: flex; gap: 6px; flex-shrink: 0; }
+        .snapshot-actions button {
+            border: 1px solid var(--border-color, #ccc); border-radius: 4px; background: var(--card-bg, #fff);
+            cursor: pointer; padding: 4px 8px; font-size: 12px;
+        }
+        .snapshot-actions button:hover { background: var(--accent-soft, #e8f0fe); }
+        .snapshots-empty { color: var(--text-secondary, #999); font-size: 13px; font-style: italic; padding: 8px 0; }
+        [data-theme="dark"] .snapshot-row { border-color: #444; background: #2a2a2a; }
+
         /* Attachments */
         .attachments-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
         .attachment-row {
@@ -5602,6 +5622,21 @@
     </div>
 
     <!-- Audit Log Dialog -->
+    <!-- Backups / snapshots -->
+    <div class="modal-overlay" id="snapshots-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 data-i18n="snapshots.title"></h2>
+                <button class="close-btn" onclick="window.Strom.UI.closeSnapshotsDialog()">&times;</button>
+            </div>
+            <div id="snapshots-total" class="snapshots-total"></div>
+            <div id="snapshots-list" class="snapshots-list"></div>
+            <div class="buttons">
+                <button class="primary" onclick="window.Strom.UI.createManualSnapshot()" data-i18n="snapshots.createNow"></button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="audit-log-modal">
         <div class="modal audit-log-modal">
             <div class="modal-header">
