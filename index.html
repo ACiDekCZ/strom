@@ -1371,15 +1371,20 @@
         .rel-remove-btn:hover {
             background: #ffcdd2;
         }
-        .rel-status-select {
+        .rel-status-select,
+        .modal select.parent-rel-type-select {
+            width: auto;
+            flex: 0 0 auto;
+            max-width: 45%;
             padding: 4px 8px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-color, #ddd);
             border-radius: 4px;
-            background: white;
+            background: var(--input-bg, #fff);
             font-size: 12px;
             cursor: pointer;
             margin-right: 8px;
         }
+        .rel-item-name { min-width: 0; }
         .rel-status-select:focus {
             outline: none;
             border-color: var(--primary);
