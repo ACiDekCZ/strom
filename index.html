@@ -3693,6 +3693,26 @@
         .tree-manager-footer .btn-text {
             display: inline;
         }
+        /* CSS tooltips for action buttons: native title tooltips do not show
+           in standalone PWA windows on some platforms, so draw our own. */
+        [data-tip] { position: relative; }
+        [data-tip]:hover::after {
+            content: attr(data-tip);
+            position: absolute;
+            bottom: calc(100% + 6px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(20, 20, 20, 0.92);
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 5px;
+            font-size: 11.5px;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 300;
+        }
+        @media (pointer: coarse) { [data-tip]:hover::after { display: none; } }
+
         .tree-manager-item-actions .btn-icon {
             display: inline;
             font-size: 16px;
@@ -5906,7 +5926,7 @@
             <button class="close-btn" onclick="window.Strom.UI.closeAboutDialog()">&times;</button>
             <div class="about-header">
                 <span class="about-logo">🌳</span>
-                <span class="about-title">Strom <span id="about-version">1.6.0</span></span>
+                <span class="about-title">Strom <span id="about-version">1.6.1</span></span>
             </div>
             <p class="about-description" data-i18n="about.description"></p>
             <p class="about-author"><span data-i18n="about.createdBy"></span> <strong data-i18n="about.authorName"></strong></p>

@@ -318,18 +318,18 @@ export const treeManagementMethods = uiModule({
                         <span class="tree-manager-item-size">${treeSizeFormatted}</span>
                     </div>
                     <div class="tree-manager-item-actions">
-                        <button onclick="window.Strom.UI.showTreeStatsDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.stats}"><span class="btn-icon">📊</span><span class="btn-text">${strings.treeManager.stats}</span></button>
-                        <button onclick="window.Strom.UI.showTreeValidationDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.validate}"><span class="btn-icon">✅</span><span class="btn-text">${strings.treeManager.validate}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.toggleTreeVisibility('${tree.id}')" title="${visibilityHint}"><span class="btn-icon">${visibilityIcon}</span><span class="btn-text">${visibilityLabel}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.toggleTreeLock('${tree.id}')" title="${lockLabel}"><span class="btn-icon">${lockIcon}</span><span class="btn-text">${lockLabel}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.showRenameTreeDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.rename}"><span class="btn-icon">✏️</span><span class="btn-text">${strings.treeManager.rename}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.showDefaultPersonDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.defaultPerson}"><span class="btn-icon">⭐</span><span class="btn-text">${strings.treeManager.defaultPerson}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.duplicateTree('${tree.id}')" title="${strings.treeManager.duplicate}"><span class="btn-icon">⧉</span><span class="btn-text">${strings.treeManager.duplicate}</span></button>
-                        <button onclick="window.Strom.UI.showExportDialogFromManager('${tree.id}')" title="${strings.treeManager.export}"><span class="btn-icon">💾</span><span class="btn-text">${strings.treeManager.export}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.showMergeTreesDialog('${tree.id}', 'tree-manager-modal')" title="${strings.treeManager.mergeInto}"><span class="btn-icon">🔀</span><span class="btn-text">${strings.treeManager.mergeInto}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.showSnapshotsDialog('${tree.id}', 'tree-manager-modal')" title="${strings.snapshots.menu}"><span class="btn-icon">🕑</span><span class="btn-text">${strings.snapshots.menu}</span></button>
-                        ${AuditLogManager.isEnabled() || await AuditLogManager.hasEntries(tree.id) ? `<button onclick="window.Strom.UI.showAuditLogDialog('${tree.id}', 'tree-manager-modal')" title="${strings.auditLog.viewLog}"><span class="btn-icon">📋</span><span class="btn-text">${strings.auditLog.viewLog}</span></button>` : ''}
-                        <button class="danger edit-only" onclick="window.Strom.UI.confirmDeleteTree('${tree.id}')" title="${strings.treeManager.delete}"><span class="btn-icon">❌</span><span class="btn-text">${strings.treeManager.delete}</span></button>
+                        <button onclick="window.Strom.UI.showTreeStatsDialog('${tree.id}', 'tree-manager-modal')" data-tip="${strings.treeManager.stats}"><span class="btn-icon">📊</span><span class="btn-text">${strings.treeManager.stats}</span></button>
+                        <button onclick="window.Strom.UI.showTreeValidationDialog('${tree.id}', 'tree-manager-modal')" data-tip="${strings.treeManager.validate}"><span class="btn-icon">✅</span><span class="btn-text">${strings.treeManager.validate}</span></button>
+                        <button class="edit-only" onclick="window.Strom.UI.toggleTreeVisibility('${tree.id}')" data-tip="${visibilityHint}"><span class="btn-icon">${visibilityIcon}</span><span class="btn-text">${visibilityLabel}</span></button>
+                        <button class="edit-only" onclick="window.Strom.UI.toggleTreeLock('${tree.id}')" data-tip="${lockLabel}"><span class="btn-icon">${lockIcon}</span><span class="btn-text">${lockLabel}</span></button>
+                        <button class="edit-only" onclick="window.Strom.UI.showRenameTreeDialog('${tree.id}', 'tree-manager-modal')" data-tip="${strings.treeManager.rename}"><span class="btn-icon">✏️</span><span class="btn-text">${strings.treeManager.rename}</span></button>
+                        <button class="edit-only" onclick="window.Strom.UI.showDefaultPersonDialog('${tree.id}', 'tree-manager-modal')" data-tip="${strings.treeManager.defaultPerson}"><span class="btn-icon">⭐</span><span class="btn-text">${strings.treeManager.defaultPerson}</span></button>
+                        <button class="edit-only" onclick="window.Strom.UI.duplicateTree('${tree.id}')" data-tip="${strings.treeManager.duplicate}"><span class="btn-icon">⧉</span><span class="btn-text">${strings.treeManager.duplicate}</span></button>
+                        <button onclick="window.Strom.UI.showExportDialogFromManager('${tree.id}')" data-tip="${strings.treeManager.export}"><span class="btn-icon">💾</span><span class="btn-text">${strings.treeManager.export}</span></button>
+                        <button class="edit-only" onclick="window.Strom.UI.showMergeTreesDialog('${tree.id}', 'tree-manager-modal')" data-tip="${strings.treeManager.mergeInto}"><span class="btn-icon">🔀</span><span class="btn-text">${strings.treeManager.mergeInto}</span></button>
+                        <button class="edit-only" onclick="window.Strom.UI.showSnapshotsDialog('${tree.id}', 'tree-manager-modal')" data-tip="${strings.snapshots.menu}"><span class="btn-icon">🕑</span><span class="btn-text">${strings.snapshots.menu}</span></button>
+                        ${AuditLogManager.isEnabled() || await AuditLogManager.hasEntries(tree.id) ? `<button onclick="window.Strom.UI.showAuditLogDialog('${tree.id}', 'tree-manager-modal')" data-tip="${strings.auditLog.viewLog}"><span class="btn-icon">📋</span><span class="btn-text">${strings.auditLog.viewLog}</span></button>` : ''}
+                        <button class="danger edit-only" onclick="window.Strom.UI.confirmDeleteTree('${tree.id}')" data-tip="${strings.treeManager.delete}"><span class="btn-icon">❌</span><span class="btn-text">${strings.treeManager.delete}</span></button>
                     </div>
                 </div>
             `;
@@ -366,9 +366,9 @@ export const treeManagementMethods = uiModule({
                         <span class="tree-manager-item-size">${date}</span>
                     </div>
                     <div class="tree-manager-item-actions">
-                        <button class="edit-only" onclick="window.Strom.UI.resumePendingMergeFromManager('${session.id}')" title="${strings.merge.resume}"><span class="btn-icon">▶️</span><span class="btn-text">${strings.merge.resume}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.renamePendingMergeFromManager('${session.id}', '${escapedName}')" title="${strings.treeManager.rename}"><span class="btn-icon">✏️</span><span class="btn-text">${strings.treeManager.rename}</span></button>
-                        <button class="danger edit-only" onclick="window.Strom.UI.discardPendingMergeFromManager('${session.id}', '${escapedName}')" title="${strings.merge.discard}"><span class="btn-icon">❌</span><span class="btn-text">${strings.merge.discard}</span></button>
+                        <button class="edit-only" onclick="window.Strom.UI.resumePendingMergeFromManager('${session.id}')" data-tip="${strings.merge.resume}"><span class="btn-icon">▶️</span><span class="btn-text">${strings.merge.resume}</span></button>
+                        <button class="edit-only" onclick="window.Strom.UI.renamePendingMergeFromManager('${session.id}', '${escapedName}')" data-tip="${strings.treeManager.rename}"><span class="btn-icon">✏️</span><span class="btn-text">${strings.treeManager.rename}</span></button>
+                        <button class="danger edit-only" onclick="window.Strom.UI.discardPendingMergeFromManager('${session.id}', '${escapedName}')" data-tip="${strings.merge.discard}"><span class="btn-icon">❌</span><span class="btn-text">${strings.merge.discard}</span></button>
                     </div>
                 </div>
             `;

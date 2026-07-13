@@ -17,7 +17,7 @@ import {
 } from '../anniversaries.js';
 import { uiModule } from './module.js';
 
-const ANNIVERSARY_ICON: Record<Anniversary['type'], string> = {
+export const ANNIVERSARY_ICON: Record<Anniversary['type'], string> = {
     'birthday': '🎂',
     'wedding': '💍',
     'birth-milestone': '🌟',

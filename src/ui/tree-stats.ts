@@ -4,6 +4,8 @@
  */
 
 import { DataManager, auditPersonName } from '../data.js';
+import { upcomingAnniversaries } from '../anniversaries.js';
+import { ANNIVERSARY_ICON } from './anniversaries-ui.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -59,7 +61,12 @@ function escXml(s: string): string {
  */
 function svgBarChart(rows: { label: string; value: number; display?: string }[]): string {
     if (rows.length === 0) return '';
-    const W = 320, rowH = 24, labelW = 104, barX = labelW + 8, barW = W - barX - 34;
+    const W = 320, rowH = 24, labelW = 104, barX = labelW + 8;
+    // Reserve room for the widest value text ("60.5 let (n = 10)") so a
+    // full-length bar never paints over it.
+    const maxShownLen = Math.max(...rows.map(r => (r.display ?? String(r.value)).length));
+    const valueW = Math.min(150, Math.max(34, maxShownLen * 6.5 + 10));
+    const barW = W - barX - valueW;
     const H = rows.length * rowH;
     const max = Math.max(1, ...rows.map(r => r.value));
     const bars = rows.map((r, i) => {
@@ -404,13 +411,14 @@ export const treeStatsMethods = uiModule({
             : '0';
         const maxChildren = childCounts.length > 0 ? Math.max(...childCounts) : 0;
 
-        // Date stats
-        const birthDates = persons
-            .map(p => p.birthDate)
-            .filter((d): d is string => !!d)
-            .sort();
-        const oldestBirth = birthDates[0] || '-';
-        const newestBirth = birthDates[birthDates.length - 1] || '-';
+        // Date stats — sort by parsed YEAR, not as strings (flex qualifiers
+        // like "~852" would otherwise sort after "1031").
+        const datedBirths = persons
+            .map(p => ({ d: p.birthDate, y: yearOf(p.birthDate) }))
+            .filter((x): x is { d: string; y: number } => !!x.d && x.y !== null)
+            .sort((a, b) => a.y - b.y);
+        const oldestBirth = datedBirths[0]?.d || '-';
+        const newestBirth = datedBirths[datedBirths.length - 1]?.d || '-';
 
         // Data completeness
         const withBirthDate = persons.filter(p => p.birthDate).length;
@@ -608,157 +616,32 @@ export const treeStatsMethods = uiModule({
      * Generate HTML for upcoming anniversaries
      */
     generateAnniversariesHtml(treeData: StromData): string {
-        const s = strings.treeManager;
-        const today = new Date();
-        const todayMonth = today.getMonth();
-        const todayDay = today.getDate();
-        const todayYear = today.getFullYear();
-
-        interface Anniversary {
-            date: Date;
-            daysUntil: number;
-            icon: string;
-            name: string;
-            detail: string;
-            isToday: boolean;
+        // ONE source of truth with the anniversaries panel in the menu: the
+        // shared module decides what counts (living birthdays, living couples'
+        // weddings, round milestones of the deceased) — the two lists must
+        // never disagree.
+        const items = upcomingAnniversaries(treeData, new Date()).slice(0, 10);
+        if (items.length === 0) {
+            return `<div class="tree-stats-none">${strings.treeManager.statsAnniversariesNone}</div>`;
         }
-
-        const anniversaries: Anniversary[] = [];
-
-        const MAX_AGE = 120; // Same rule as in renderer.ts
-
-        // Helper to check if person is presumed deceased (death date OR age > 120)
-        const isPresumedDeceased = (person: { birthDate?: string; deathDate?: string }): boolean => {
-            if (person.deathDate) return true;
-            if (person.birthDate) {
-                const birthYear = yearOf(person.birthDate);
-                if (birthYear !== null && (todayYear - birthYear) > MAX_AGE) {
-                    return true;
-                }
-            }
-            return false;
-        };
-
-        // Helper to calculate days until anniversary this year
-        const getDaysUntil = (month: number, day: number): number => {
-            const thisYear = new Date(todayYear, month, day);
-            const nextYear = new Date(todayYear + 1, month, day);
-
-            const diffThis = Math.ceil((thisYear.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-            if (diffThis >= 0) return diffThis;
-
-            return Math.ceil((nextYear.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        };
-
-        // Process persons for birthdays and death anniversaries
-        for (const person of Object.values(treeData.persons)) {
-            const name = `${person.firstName} ${person.lastName}`.trim();
-            const isDeceased = isPresumedDeceased(person);
-
-            // Birthday / Birth anniversary
-            if (person.birthDate) {
-                const [year, month, day] = flexDateParts(person.birthDate);
-                if (month && day) {
-                    const daysUntil = getDaysUntil(month - 1, day);
-                    if (daysUntil <= 30) {
-                        const age = todayYear - year + (daysUntil === 0 ? 0 : (daysUntil > 0 && month - 1 < todayMonth ? 1 : 0));
-                        const actualAge = todayYear - year + (daysUntil <= 0 ? 0 : 0);
-                        const yearsOld = todayYear - year + (daysUntil === 0 ? 0 : (month - 1 > todayMonth || (month - 1 === todayMonth && day > todayDay) ? 0 : 1));
-
-                        if (isDeceased) {
-                            anniversaries.push({
-                                date: new Date(todayYear, month - 1, day),
-                                daysUntil,
-                                icon: '✱',
-                                name,
-                                detail: `${s.statsBirthAnniversary} ${yearsOld} ${s.statsYears}`,
-                                isToday: daysUntil === 0
-                            });
-                        } else {
-                            anniversaries.push({
-                                date: new Date(todayYear, month - 1, day),
-                                daysUntil,
-                                icon: '🎂',
-                                name,
-                                detail: `${yearsOld} ${s.statsYears}`,
-                                isToday: daysUntil === 0
-                            });
-                        }
-                    }
-                }
-            }
-
-            // Death memorial
-            if (person.deathDate) {
-                const [year, month, day] = flexDateParts(person.deathDate);
-                if (month && day) {
-                    const daysUntil = getDaysUntil(month - 1, day);
-                    if (daysUntil <= 30) {
-                        const yearsSince = todayYear - year + (daysUntil === 0 ? 0 : (month - 1 > todayMonth || (month - 1 === todayMonth && day > todayDay) ? 0 : 1));
-                        anniversaries.push({
-                            date: new Date(todayYear, month - 1, day),
-                            daysUntil,
-                            icon: '🕯',
-                            name,
-                            detail: `${s.statsMemorial} ${yearsSince} ${s.statsYears}`,
-                            isToday: daysUntil === 0
-                        });
-                    }
-                }
-            }
-        }
-
-        // Process partnerships for wedding/relationship anniversaries
-        for (const partnership of Object.values(treeData.partnerships)) {
-            if (partnership.startDate) {
-                const [year, month, day] = flexDateParts(partnership.startDate);
-                if (month && day) {
-                    const daysUntil = getDaysUntil(month - 1, day);
-                    if (daysUntil <= 30) {
-                        const partner1 = treeData.persons[partnership.person1Id];
-                        const partner2 = treeData.persons[partnership.person2Id];
-                        if (partner1 && partner2) {
-                            const name = `${partner1.firstName} & ${partner2.firstName}`;
-                            const yearsSince = todayYear - year + (daysUntil === 0 ? 0 : (month - 1 > todayMonth || (month - 1 === todayMonth && day > todayDay) ? 0 : 1));
-                            anniversaries.push({
-                                date: new Date(todayYear, month - 1, day),
-                                daysUntil,
-                                icon: '💍',
-                                name,
-                                detail: `${s.statsWeddingAnniversary} ${yearsSince} ${s.statsYears}`,
-                                isToday: daysUntil === 0
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        // Sort by days until
-        anniversaries.sort((a, b) => a.daysUntil - b.daysUntil);
-
-        // Limit to 10 items
-        const limited = anniversaries.slice(0, 10);
-
-        if (limited.length === 0) {
-            return `<div class="tree-stats-none">${s.statsAnniversariesNone}</div>`;
-        }
-
-        return limited.map(ann => {
-            const dateStr = `${ann.date.getDate()}.${ann.date.getMonth() + 1}.`;
-            const todayClass = ann.isToday ? ' tree-stats-anniversary-today' : '';
-            const dateLabel = ann.isToday ? s.statsToday : dateStr;
-
+        const a = strings.anniversaries;
+        return items.map(item => {
+            const names = item.personIds.map(id => {
+                const p = treeData.persons[id as PersonId];
+                return p ? `${p.firstName} ${p.lastName}`.trim() : '';
+            });
+            const label = this.anniversaryLabel(item, names);
+            const when = item.daysUntil === 0 ? a.today
+                : item.daysUntil === 1 ? a.tomorrow : a.inDays(item.daysUntil);
+            const todayClass = item.daysUntil === 0 ? ' tree-stats-anniversary-today' : '';
             return `
                 <div class="tree-stats-anniversary${todayClass}">
-                    <span class="tree-stats-anniversary-icon">${ann.icon}</span>
+                    <span class="tree-stats-anniversary-icon">${ANNIVERSARY_ICON[item.type]}</span>
                     <div class="tree-stats-anniversary-info">
-                        <div class="tree-stats-anniversary-name">${this.escapeHtml(ann.name)}</div>
-                        <div class="tree-stats-anniversary-detail">${ann.detail}</div>
+                        <div class="tree-stats-anniversary-name">${this.escapeHtml(label)}</div>
                     </div>
-                    <span class="tree-stats-anniversary-date">${dateLabel}</span>
-                </div>
-            `;
+                    <span class="tree-stats-anniversary-date">${this.escapeHtml(when)}</span>
+                </div>`;
         }).join('');
     },
 
