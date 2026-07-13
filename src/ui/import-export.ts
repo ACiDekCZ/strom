@@ -21,7 +21,8 @@ import {
     LAST_FOCUSED,
     LastFocusedMarker
 } from '../types.js';
-import { strings } from '../strings.js';
+import { strings, getCurrentLanguage } from '../strings.js';
+import { getDemoTree, getDemoFocus } from '../demo-trees.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -747,6 +748,29 @@ export const importExportMethods = uiModule({
         this.refreshSearch();
         // Update URL to reflect new tree
         this.updateUrlTreeParam(newTreeId);
+    },
+
+    /**
+     * Load a bundled demo tree (Přemyslids in Czech, House of Tudor otherwise)
+     * as a new tree, focus an interesting person and show a hint toast.
+     */
+    async loadDemoTree(): Promise<void> {
+        // Read-only viewers must not create trees
+        if (DataManager.isViewMode()) return;
+        this.closeMobileMenu();
+        this.closeNewTreeMenu();
+        const lang = getCurrentLanguage() === 'cs' ? 'cs' : 'en';
+        const data = getDemoTree(lang);
+        const focusId = getDemoFocus(lang);
+
+        const newTreeId = await DataManager.importAsNewTree(data, strings.demo.treeName);
+
+        this.updateTreeSwitcher();
+        this.updateTreeManagerList();
+        TreeRenderer.setFocus(focusId);
+        this.refreshSearch();
+        this.updateUrlTreeParam(newTreeId);
+        this.showToast(strings.demo.hint);
     },
 
     // ---- EXPORT ALL DIALOG ----

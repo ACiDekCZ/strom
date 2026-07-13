@@ -64,6 +64,13 @@ const stringsEN = {
         importFromFile: 'Import from File'
     },
 
+    demo: {
+        tryDemo: 'Try a sample tree',
+        tryDemoDesc: 'Explore a ready-made historical family tree',
+        treeName: 'Sample: House of Tudor',
+        hint: 'Click a card to see actions. This is an ordinary tree — you can delete it in the tree manager.'
+    },
+
     // Zoom controls
     zoomControls: {
         zoomIn: 'Zoom In',
@@ -927,6 +934,13 @@ const stringsCZ: StringsType = {
         subtitle: 'Začněte tvořit svůj rodokmen',
         addFirst: 'Přidat první osobu',
         importFromFile: 'Importovat ze souboru'
+    },
+
+    demo: {
+        tryDemo: 'Vyzkoušet ukázkový strom',
+        tryDemoDesc: 'Prohlédni si hotový historický rodokmen',
+        treeName: 'Ukázka: Přemyslovci',
+        hint: 'Klikni na kartu pro akce. Je to běžný strom — můžeš ho smazat ve správci stromů.'
     },
 
     // Zoom controls

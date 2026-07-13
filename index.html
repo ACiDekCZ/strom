@@ -4882,6 +4882,7 @@
             <p data-i18n="emptyState.subtitle"></p>
             <button onclick="window.Strom.UI.showAddPersonModal()" data-i18n="emptyState.addFirst"></button>
             <button class="secondary" onclick="window.Strom.UI.showImportFileDialog()" data-i18n="emptyState.importFromFile"></button>
+            <button class="secondary" onclick="window.Strom.UI.loadDemoTree()" data-i18n="demo.tryDemo"></button>
         </div>
     </div>
 
@@ -5865,6 +5866,13 @@
                     <span class="option-text">
                         <span class="option-title" data-i18n="treeManager.fromJson"></span>
                         <span class="option-desc" data-i18n="treeManager.fromJsonDesc"></span>
+                    </span>
+                </button>
+                <button class="menu-option" onclick="window.Strom.UI.loadDemoTree()">
+                    <span class="option-icon">🏰</span>
+                    <span class="option-text">
+                        <span class="option-title" data-i18n="demo.tryDemo"></span>
+                        <span class="option-desc" data-i18n="demo.tryDemoDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.startGedcomImportFromManager()">
