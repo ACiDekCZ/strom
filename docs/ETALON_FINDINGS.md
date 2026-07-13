@@ -5,12 +5,13 @@ when run through the full-pipeline invariant harness
 (`src/layout/__tests__/allPersonsFull.test.ts`, both `standard` and `expanded`
 modes, every person as focus).
 
-These are **not fixed** — the etalon's purpose is to *find* them. None are swept
-into known-limitations (the single exception, scenario K, reproduces the
-pre-existing in-law-column knot and is documented at the bottom). Each finding
-below cites the fixture, a representative focus + mode, the violation type taken
-verbatim from `test/failures-full-<fixture>.txt`, and a rendered SVG in
-`docs/etalon-findings/`.
+All findings below have since been **RESOLVED** (2026-07-11) — either fixed in
+the layout engine or proven topologically inherent; each entry carries its
+resolution note. The single exception, scenario K, reproduces the pre-existing
+in-law-column knot and is documented at the bottom as a known limitation.
+Each finding cites the fixture, a representative focus + mode, the violation
+type taken verbatim from `test/failures-full-<fixture>.txt`, and a rendered
+SVG in `docs/etalon-findings/`.
 
 Regenerate the SVGs with `npx tsx scripts/render-etalon-findings.ts`.
 

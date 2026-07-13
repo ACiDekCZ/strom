@@ -43,6 +43,13 @@ Selects a subset of persons from the database based on:
 - `includeParentSiblings` — siblings of parents (aunts/uncles)
 - `includeParentSiblingDescendants` — cousins
 
+In expanded display mode the selection is then widened by
+`expandSelectionForDisplay` (same module): for every person in
+`DisplayPolicy.expandedPersonIds` ALL their partnerships, partners and those
+unions' children are added; for `DisplayPolicy.appendagePersonIds` (deep
+direct-line ancestors) only the partner + partnership are added — the extra
+union's children are deliberately NOT pulled in (see Partner Chains below).
+
 ---
 
 ### Step 2: buildLayoutModel
@@ -70,6 +77,13 @@ Key maps:
 
 Focus person = gen 0. Parents = gen -1. Children = gen +1.
 Unions receive generation based on partners (both assigned same generation).
+
+The main BFS descends only through each person's PRIMARY union
+(`personToUnion`), so branches hanging under a secondary marriage receive
+generations from the edge-propagation fallback loop. A chain-union pass
+(shared person's generation → all chain unions and partners) runs both before
+and INSIDE that loop — a childless extra spouse of a deep chain person would
+otherwise miss a generation and fall to the gen-0 fallback row.
 
 ---
 
@@ -443,7 +457,95 @@ Post-processing:
 
 ---
 
-## 8. Testing
+## 8. Partner Chains (Expanded Display Mode)
+
+A **PartnerChain** inlines all marriages of one person into a single horizontal
+row: the shared person sits at their gender-side end (male = LEFT), all
+partners on the opposite side. Chains merge transitively when both partners of
+a couple have multiple marriages. The chain lives in one **chain block**
+(`FamilyBlock.chainInfo`) that is atomic for collision resolution.
+
+### Who gets expanded
+
+`findAutoExpandPersonIds` (pipeline orchestrator) collects multi-partnership
+persons on the direct line: gen -1 family cluster (parents, their partners and
+siblings + spouses), gen 0 cluster (focus, partners, siblings + spouses) and
+all descendants + their partners. These get FULL expansion (extra unions'
+children are shown).
+
+`findAppendageAncestorIds` extends this to direct-line ancestors beyond
+gen -1 with APPENDAGE semantics: the extra spouse card is inlined next to the
+ancestor, but the extra union's children are NOT added to the selection.
+Two gates keep this safe: the walk is seeded only from the focus person and
+the focus's partners (never from in-laws — their chains would need buses
+spanning children anchored above unrelated families), and an ancestor
+qualifies only when at most ONE of their unions has children in the selection.
+
+### Slot model and card gravitation
+
+Measure (step 4) gives every chain person a **slot** (`personSlotWidths`)
+sized for that union's children subtree. Placement (step 5,
+`setBlockPosition`) then distinguishes two coordinate sets:
+
+- `personSlotCenters` — slot midpoints; each union's CHILDREN are centered
+  here, and secondary-union buses sit here.
+- `personPositions` — actual CARD centers. The primary couple's two cards sit
+  adjacent at the primary-area center. Extra partners GRAVITATE toward the
+  primary couple: a childless partner stacks directly adjacent to the previous
+  card (MyHeritage style); a partner with children (`personsWithChildren`)
+  stops at the inner edge of its own slot so its stem stays above its
+  children span. Route-edges bridges card → bus with a connector.
+
+### Chain child placement
+
+- Descendant chains (`placeChainChildrenPerUnion`): per-union groups, primary
+  children under the couple midpoint, secondary groups at slot centers,
+  disjoint-interval sweep outward from the primary group.
+- Ancestor chains (`placeAncestorChainBlockChildren`): the block is positioned
+  so the direct-line union's slot sits over the already-placed direct-line
+  child; remaining unions' child groups sweep outward from that pivot
+  (nearest anchor first), shifting only on actual frontier collision.
+
+### Phase B interplay
+
+Chain blocks at gen <= -2 participate in Phase B trees as regular couples,
+with two adaptations: `computeAncestorTreeWidth` uses the chain block's real
+`coupleWidth` (3+ cards) so neighbor trees reserve enough space, and
+`transferAncestorTreeToBlocks` moves chain blocks with a rigid `shiftBlock`
+(field-by-field assignment would desynchronize `personPositions`).
+
+### Known limitations (documented follow-ups)
+
+- Sibling couples can stand between a chain person's far wives when the
+  siblings and the wives share the parents' bus row (Tudor/Henry VIII
+  constellation) — spouse lines then run across foreign cards' row space.
+- Long single-child dynasty lines drift diagonally ("staircase") because each
+  couple centers over its one child.
+
+---
+
+## 9. Testing
+
+### Active suites (29 vitest files, 2556 tests + 17 Playwright e2e)
+
+**Core harness** — `allPersonsFull.test.ts`: runs `runLayoutPipeline` with
+EVERY person of every fixture as focus, in standard + expanded modes, checking
+card overlaps, position validity, built-in validation and the strict geometry
+audit (`helpers/geometryAudit.ts`: crossings, collinear merges, T-touches,
+lines through cards). `KNOWN_LINE_KNOTS` lists the only tolerated
+constellation class; `inherent-crossing` marks topologically forced crossings
+between cross-married unions.
+
+**Fixtures** — `comprehensive.json` (53 persons), targeted `edge-*.json`,
+generated `etalon-*.json` scenarios A–N (`npm run gen:etalon`), plus a local
+gitignored real-data fixture (skipped gracefully when absent).
+
+**Pipeline unit tests** — per-step tests (`buildModel`, `assignGenerations`,
+`measureSubtrees`, `routeEdges`, `selectSubgraph`, `pipeline`) plus feature
+suites (dates, kinship, GEDCOM round-trip, privacy, undo, merge, demo trees).
+
+**E2E** — Playwright suite (`npm run test:e2e`, 17 tests) drives the built
+`strom.html`; it gates CI deploys together with the unit suite.
 
 ### Active Tests (14 files, 529 tests)
 
@@ -459,7 +561,7 @@ Post-processing:
 
 ---
 
-## 9. Visual Representation
+## 10. Visual Representation
 
 ```
                 [Great-grandparents H]  [Great-grandparents W]

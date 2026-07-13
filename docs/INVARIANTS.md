@@ -2,12 +2,12 @@
 
 This document describes the invariants enforced by the Strom layout algorithm.
 
-**Last updated:** 2026-01 — **addendum 2026-07-11:** invariants are now
-machine-enforced by the all-persons harness + strict geometry audit (see
-"Testing" in `CLAUDE.md`). Two documented relaxations: `inherent-crossing`
-(one clean perpendicular crossing between cross-married unions is
-topologically unavoidable — proof in `docs/ETALON_FINDINGS.md`) and the
-`KNOWN_LINE_KNOTS` class (in-law column inside a sibling bus span).
+**Last updated:** 2026-07-13 — invariants are machine-enforced by the
+all-persons harness + strict geometry audit (see "Testing" in `CLAUDE.md`).
+Two documented relaxations: `inherent-crossing` (one clean perpendicular
+crossing between cross-married unions is topologically unavoidable — proof in
+`docs/ETALON_FINDINGS.md`) and the `KNOWN_LINE_KNOTS` class (in-law column
+inside a sibling bus span). Partner-chain invariants added 2026-07-13.
 
 ---
 
@@ -142,6 +142,37 @@ H-tree.maxX + gap <= W-tree.minX
 
 ---
 
+## Partner Chain Invariants (expanded display mode)
+
+### 12. Chain Block Atomicity
+
+**Rule:** A chain block (one person's marriages laid out inline) moves only as
+a whole; internal card order (`personOrder`) is stable and never reshuffled by
+collision resolution.
+
+### 13. Children Stay in Their Slot
+
+**Rule:** Each chain union's children are centered on that union's SLOT center
+(`personSlotCenters`), and sibling groups of different chain unions occupy
+disjoint X intervals.
+
+### 14. Card Gravitation Bounds
+
+**Rule:** Extra-partner cards gravitate toward the primary couple but never
+reorder, never overlap, and — when the partner has children — never leave
+their own slot (the stem must stay above the children span). Childless extra
+partners (including deep-ancestor appendage spouses) stack directly adjacent
+to the previous card.
+
+### 15. Appendage Selection Purity
+
+**Rule:** Appendage expansion of a deep ancestor adds only the partner card
+and the partnership — never the extra union's children. Ancestors with two or
+more child-bearing unions in the selection are not chain-expanded at all
+(their gen -1 children carry sibling-family branches anchored elsewhere).
+
+---
+
 ## Invariant Hierarchy
 
 For H-side ancestor blocks (from strictest to loosest):
@@ -201,10 +232,10 @@ For H-side ancestor blocks (from strictest to loosest):
 
 ## Test Coverage
 
-| Test File | Tests | Description |
-|-----------|-------|-------------|
-| `allPersonsPhaseA.test.ts` | 190 | Phase A invariants for all 189 persons |
-| `allPersonsPhaseB.test.ts` | 190 | Phase B invariants for all 189 persons |
-| `lockedPositions.test.ts` | 20 | Verifies Phase B doesn't modify gen >= -1 |
+The primary enforcement is `allPersonsFull.test.ts`: the full pipeline runs
+with every person of every fixture as focus, in standard and expanded modes,
+against the built-in validation plus the strict geometry audit
+(`helpers/geometryAudit.ts`). Per-step unit tests cover the individual
+pipeline stages.
 
-**Total: 14 test files, 529 tests, 0 failures**
+**Total: 29 test files, 2556 tests, 0 failures (plus 17 Playwright e2e).**
