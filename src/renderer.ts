@@ -32,6 +32,7 @@ import {
 import { renderDebugOverlay, clearDebugOverlay } from './debug-overlay.js';
 import { debugPanel } from './debug-panel.js';
 import { yearOf, displayYear, formatFlexDate } from './dates.js';
+import { computeTimelineModel, yearToFraction, axisTicks, TimelineRow, TimelineEvent } from './timeline.js';
 
 class TreeRendererClass {
     private config = DEFAULT_LAYOUT_CONFIG;
@@ -63,10 +64,11 @@ class TreeRendererClass {
     /**
      * Display view mode. 'family' is the default focus-centric view (ancestors +
      * descendants + relatives). 'descendants' shows only the focus person's
-     * descendants and their partners (a classic descendants chart). Persisted
-     * per tree in localStorage.
+     * descendants and their partners (a classic descendants chart). 'timeline'
+     * shows the same selection as a set of life-bars on a year axis (no layout
+     * pipeline). Persisted per tree in localStorage.
      */
-    private viewMode: 'family' | 'descendants' = 'family';
+    private viewMode: 'family' | 'descendants' | 'timeline' = 'family';
 
     /**
      * Set debug options for pipeline visualization.
@@ -177,6 +179,21 @@ class TreeRendererClass {
         this.positions = result.positions;
         this.connections = result.connections;
         this.spouseLines = result.spouseLines;
+
+        // Timeline uses the same person selection but its own SVG layout (the
+        // pipeline above only served to pick which persons are visible).
+        const timelineContainer = document.getElementById('timeline-container');
+        if (this.viewMode === 'timeline' && timelineContainer) {
+            canvas.style.display = 'none';
+            timelineContainer.style.display = 'block';
+            this.renderTimeline(timelineContainer);
+            this.updateFocusUI();
+            UI.updateViewModeUI?.();
+            UI.updateMinimap?.();  // hides the minimap in timeline mode
+            return;
+        }
+        canvas.style.display = '';
+        if (timelineContainer) timelineContainer.style.display = 'none';
 
         await this.renderCards(canvas);
         this.renderLines(svg);
@@ -309,21 +326,21 @@ class TreeRendererClass {
 
     // ==================== DISPLAY VIEW MODE (family / descendants) ====================
 
-    getViewMode(): 'family' | 'descendants' {
+    getViewMode(): 'family' | 'descendants' | 'timeline' {
         return this.viewMode;
     }
 
     /** Switch the display view mode and re-render. Persisted per tree. */
-    setViewMode(mode: 'family' | 'descendants'): void {
+    setViewMode(mode: 'family' | 'descendants' | 'timeline'): void {
         if (this.viewMode === mode) return;
         this.viewMode = mode;
         this.persistViewMode();
         this.render();
-        // The two modes lay the tree out in different coordinate frames — the
+        // The modes lay the tree out in different coordinate frames — the
         // pan/zoom state from the previous mode can leave every card outside
         // the viewport (reported on a live tree: switching to descendants
-        // showed an empty canvas).
-        ZoomPan.centerOnFocusWithContext();
+        // showed an empty canvas). Timeline has its own scroll container.
+        if (mode !== 'timeline') ZoomPan.centerOnFocusWithContext();
     }
 
     private viewModeStorageKey(): string | null {
@@ -343,7 +360,7 @@ class TreeRendererClass {
         const key = this.viewModeStorageKey();
         let stored: string | null = null;
         try { stored = key ? localStorage.getItem(key) : null; } catch { /* ignore */ }
-        this.viewMode = stored === 'descendants' ? 'descendants' : 'family';
+        this.viewMode = (stored === 'descendants' || stored === 'timeline') ? stored : 'family';
     }
 
     /** Number of visible (non-placeholder) persons — used by the descendants badge. */
@@ -368,6 +385,14 @@ class TreeRendererClass {
             if (!this.highlightIds || card.classList.contains('placeholder')) return;
             const id = card.dataset.id as PersonId | undefined;
             if (id) card.classList.add(this.highlightIds.has(id) ? 'search-hit' : 'search-dim');
+        });
+        // Timeline bars mirror the same highlight classes.
+        document.querySelectorAll('.timeline-bar').forEach(el => {
+            const bar = el as SVGElement;
+            bar.classList.remove('search-hit', 'search-dim');
+            if (!this.highlightIds) return;
+            const id = bar.getAttribute('data-person-id') as PersonId | null;
+            if (id) bar.classList.add(this.highlightIds.has(id) ? 'search-hit' : 'search-dim');
         });
     }
 
@@ -1308,6 +1333,98 @@ class TreeRendererClass {
             age--;
         }
         return age >= 0 ? age : null;
+    }
+
+    // ==================== TIMELINE VIEW ====================
+
+    /** Render the timeline (life-bars on a year axis) into its own container. */
+    private renderTimeline(container: HTMLElement): void {
+        // Delegate bar clicks once (safe against odd person ids in JSON imports).
+        if (!container.dataset.wired) {
+            container.dataset.wired = '1';
+            container.addEventListener('click', (e) => {
+                const g = (e.target as Element).closest('[data-person-id]') as HTMLElement | null;
+                if (g?.dataset.personId) this.setFocus(g.dataset.personId as PersonId);
+            });
+        }
+
+        const ids = [...this.positions.keys()] as unknown as string[];
+        const todayYear = new Date().getFullYear();
+        const model = computeTimelineModel(DataManager.getData(), ids, todayYear);
+        const S = strings.timeline;
+
+        const isMobile = window.innerWidth < 500;
+        const ROW_H = isMobile ? 28 : 30;
+        const LABEL_W = isMobile ? 96 : 160;
+        const TOP = 40;
+        const PAD_R = 16;
+        const W = Math.max(320, container.clientWidth || 800);
+        const plotX0 = LABEL_W;
+        const plotW = Math.max(40, W - LABEL_W - PAD_R);
+        const H = TOP + model.rows.length * ROW_H + 12;
+        const xOf = (year: number) => plotX0 + yearToFraction(year, model.axis) * plotW;
+
+        const grid = axisTicks(model.axis).map(yr => {
+            const x = xOf(yr).toFixed(1);
+            return `<line x1="${x}" y1="${TOP - 6}" x2="${x}" y2="${H}" class="tl-grid"/>`
+                + `<text x="${x}" y="${TOP - 14}" text-anchor="middle" class="tl-tick">${yr}</text>`;
+        }).join('');
+
+        const rows = model.rows
+            .map((r, i) => this.timelineRowSvg(r, i, TOP, ROW_H, LABEL_W, W, xOf, S))
+            .join('');
+
+        const omitted = model.omittedCount > 0
+            ? `<div class="tl-omitted">${this.escapeHtml(S.omitted(model.omittedCount))}</div>` : '';
+        const empty = model.rows.length === 0
+            ? `<div class="tl-omitted">${this.escapeHtml(S.empty)}</div>` : '';
+
+        container.innerHTML = `${omitted}${empty}`
+            + `<svg class="timeline-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img">`
+            + `${grid}${rows}</svg>`;
+    }
+
+    /** SVG for one timeline row (label + life-bar + event dots). */
+    private timelineRowSvg(
+        r: TimelineRow, i: number, top: number, rowH: number, labelW: number,
+        rowWidth: number, xOf: (y: number) => number, S: typeof strings.timeline
+    ): string {
+        const y = top + i * rowH;
+        const barY = y + (rowH - 14) / 2;
+        const x1 = xOf(r.startYear), x2 = xOf(r.endYear);
+        const w = Math.max(2, x2 - x1);
+        const color = r.gender === 'female' ? '#e8a0bf' : '#8fb8de';
+        const focused = r.personId === this.focusPersonId ? ' focused' : '';
+        const highlight = this.highlightIds
+            ? (this.highlightIds.has(r.personId as PersonId) ? ' search-hit' : ' search-dim') : '';
+
+        const nameEsc = this.escapeHtml(r.name);
+        const yearsEsc = this.escapeHtml(`${r.startYear}–${r.isLiving ? '' : r.endYear}`);
+        const cy = (barY + 7).toFixed(1);
+        const dots = r.events.map(ev => {
+            const ex = xOf(ev.year).toFixed(1);
+            const label = this.escapeHtml(`${this.timelineEventLabel(ev, S)} (${ev.year})`);
+            const cls = ev.type === 'wedding' ? 'tl-dot tl-dot-wedding' : 'tl-dot';
+            const rad = ev.type === 'wedding' ? 4.5 : 3;
+            return `<circle cx="${ex}" cy="${cy}" r="${rad}" class="${cls}"><title>${label}</title></circle>`;
+        }).join('');
+        const arrow = r.isLiving
+            ? `<polygon points="${x2.toFixed(1)},${barY} ${(x2 + 7).toFixed(1)},${(barY + 7).toFixed(1)} ${x2.toFixed(1)},${(barY + 14)}" class="tl-arrow"/>`
+            : '';
+
+        return `<g class="timeline-bar${focused}${highlight}" data-person-id="${this.escapeHtml(r.personId)}">`
+            + `<rect x="0" y="${y}" width="${rowWidth}" height="${rowH}" class="tl-rowhit" fill="transparent"/>`
+            + `<foreignObject x="2" y="${y}" width="${labelW - 6}" height="${rowH}">`
+            + `<div xmlns="http://www.w3.org/1999/xhtml" class="tl-name" title="${nameEsc}">`
+            + `<span class="tl-nm">${nameEsc}</span> <span class="tl-yr">${yearsEsc}</span></div></foreignObject>`
+            + `<rect x="${x1.toFixed(1)}" y="${barY}" width="${w.toFixed(1)}" height="14" rx="3" fill="${color}" class="tl-bar-rect"/>`
+            + `${arrow}${dots}</g>`;
+    }
+
+    private timelineEventLabel(ev: TimelineEvent, S: typeof strings.timeline): string {
+        if (ev.type === 'wedding') return S.wedding;
+        if (ev.type === 'custom' && ev.customLabel) return ev.customLabel;
+        return strings.events.types[ev.type as keyof typeof strings.events.types] ?? String(ev.type);
     }
 
     private escapeHtml(text: string): string {

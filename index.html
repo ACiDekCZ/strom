@@ -2433,6 +2433,48 @@
             .otd-card { left: 12px; right: 12px; bottom: 12px; max-width: none; }
         }
 
+        /* ==================== TIMELINE VIEW ==================== */
+        .timeline-container {
+            display: none;
+            position: absolute;
+            inset: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            background: var(--bg-color, #fff);
+            padding: 8px 0 24px;
+        }
+        .timeline-svg { display: block; width: 100%; }
+        .tl-grid { stroke: var(--border-color, #e2e2e2); stroke-width: 1; }
+        .tl-tick { fill: var(--text-light, #888); font-size: 11px; }
+        .tl-name {
+            font-size: 12px;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--text-color, #222);
+            padding-right: 4px;
+            box-sizing: border-box;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .tl-nm { overflow: hidden; text-overflow: ellipsis; }
+        .tl-yr { color: var(--text-light, #999); font-size: 11px; flex-shrink: 0; }
+        .timeline-bar { cursor: pointer; }
+        .timeline-bar:hover .tl-bar-rect { filter: brightness(0.92); }
+        .timeline-bar.focused .tl-bar-rect { stroke: var(--primary, #4a90d9); stroke-width: 2.5; }
+        .timeline-bar.focused .tl-name { font-weight: 700; }
+        .timeline-bar.search-dim { opacity: 0.28; }
+        .timeline-bar.search-hit .tl-bar-rect { stroke: #f5a623; stroke-width: 2.5; }
+        .tl-dot { fill: var(--text-color, #444); }
+        .tl-dot-wedding { fill: #fff; stroke: #d4a017; stroke-width: 2; }
+        .tl-arrow { fill: var(--text-light, #aaa); }
+        .tl-omitted { font-size: 12px; color: var(--text-light, #888); padding: 4px 12px; font-style: italic; }
+        [data-theme="dark"] .timeline-container { background: #1e1e1e; }
+        [data-theme="dark"] .tl-dot { fill: #ddd; }
+
         /* ==================== FOCUS MODE ==================== */
         .person-card.focused {
             box-shadow: 0 0 0 4px var(--primary), 0 4px 12px var(--shadow);
@@ -5287,6 +5329,7 @@
         <div class="view-mode-segment desktop-only" id="view-mode-segment">
             <button id="view-mode-family" class="active" onclick="window.Strom.UI.setDisplayViewMode('family')" data-i18n="viewModeSwitch.family"></button>
             <button id="view-mode-descendants" onclick="window.Strom.UI.setDisplayViewMode('descendants')" data-i18n="viewModeSwitch.descendants"></button>
+            <button id="view-mode-timeline" onclick="window.Strom.UI.setDisplayViewMode('timeline')" data-i18n="viewModeSwitch.timeline"></button>
         </div>
 
         <!-- Settings button (desktop) -->
@@ -5318,6 +5361,7 @@
         <div id="tree-canvas">
             <svg id="tree-lines"></svg>
         </div>
+        <div id="timeline-container" class="timeline-container"></div>
         <div class="empty-state" id="empty-state">
             <h2 data-i18n="emptyState.title"></h2>
             <p data-i18n="emptyState.subtitle"></p>

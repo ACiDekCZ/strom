@@ -338,9 +338,18 @@ const stringsEN = {
     viewModeSwitch: {
         family: 'Family',
         descendants: 'Descendants',
+        timeline: 'Timeline',
         toggle: 'Family / descendants view',
         back: 'Back to family view',
         badge: (name: string, count: number) => `Descendants: ${name} (${count})`,
+    },
+
+    // Timeline view
+    timeline: {
+        segment: 'Timeline',
+        wedding: 'Marriage',
+        empty: 'No people with a known birth year',
+        omitted: (n: number) => `${n} ${n === 1 ? 'person' : 'people'} without a birth year not shown`,
     },
 
     // Person modal
@@ -1450,9 +1459,18 @@ const stringsCZ: StringsType = {
     viewModeSwitch: {
         family: 'Rodina',
         descendants: 'Potomci',
+        timeline: 'Časová osa',
         toggle: 'Pohled rodina / potomci',
         back: 'Zpět na rodinný pohled',
         badge: (name: string, count: number) => `Potomci: ${name} (${count})`,
+    },
+
+    // Timeline view
+    timeline: {
+        segment: 'Časová osa',
+        wedding: 'Sňatek',
+        empty: 'Žádné osoby se známým rokem narození',
+        omitted: (n: number) => `${n} ${n === 1 ? 'osoba' : (n < 5 ? 'osoby' : 'osob')} bez roku narození není zobrazena`,
     },
 
     // Person modal

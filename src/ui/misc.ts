@@ -267,7 +267,7 @@ export const miscMethods = uiModule({
 
     // ==================== DISPLAY VIEW MODE (family / descendants) ====================
 
-    setDisplayViewMode(mode: 'family' | 'descendants'): void {
+    setDisplayViewMode(mode: 'family' | 'descendants' | 'timeline'): void {
         TreeRenderer.setViewMode(mode); // re-renders + calls updateViewModeUI
     },
 
@@ -284,6 +284,7 @@ export const miscMethods = uiModule({
         const mode = TreeRenderer.getViewMode();
         document.getElementById('view-mode-family')?.classList.toggle('active', mode === 'family');
         document.getElementById('view-mode-descendants')?.classList.toggle('active', mode === 'descendants');
+        document.getElementById('view-mode-timeline')?.classList.toggle('active', mode === 'timeline');
 
         const badge = document.getElementById('descendants-badge');
         const text = document.getElementById('descendants-badge-text');

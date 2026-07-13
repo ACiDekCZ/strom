@@ -52,6 +52,7 @@ the table honest.
 | Mobile pinch zoom | `mobile.spec.ts` | covered | two-finger pinch changes zoom level |
 | Descendants view (toolbar + badge) | `descendants-view.spec.ts` | covered | ancestors hidden, badge, ✕ returns to family |
 | Descendants via context menu | `descendants-view.spec.ts` | covered | "Show descendants" enters the mode |
+| Timeline view (third mode) | `timeline.spec.ts` | covered | segment switches to life-bars on a year axis; back restores the tree |
 | Family book generation | `book.spec.ts` | covered | dialog → new window with chapters + index |
 | Flex date accepted/normalized/rejected | `edit-undo-lock.spec.ts` | covered | `about 1880` → `~1880`; nonsense rejected |
 | Delete person (context menu) + undo | `person-crud.spec.ts` | covered | confirm dialog, undo restores |

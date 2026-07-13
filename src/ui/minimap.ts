@@ -116,7 +116,9 @@ export const minimapMethods = uiModule({
         const { cardWidth, cardHeight } = DEFAULT_LAYOUT_CONFIG;
         const box = worldBoundingBox(positions, cardWidth, cardHeight);
 
-        if (!SettingsManager.isMinimapEnabled() || isMobile || !box) {
+        // Timeline mode has its own scroll container — no minimap there.
+        if (!SettingsManager.isMinimapEnabled() || isMobile || !box
+            || TreeRenderer.getViewMode() === 'timeline') {
             panel.style.display = 'none';
             this.minimapTransform = null;
             return;
