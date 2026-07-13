@@ -2390,6 +2390,7 @@
         #new-tree-menu-modal,
         #new-tree-modal,
         #merge-modal,
+        #poster-modal,
         #pending-merge-modal {
             z-index: 300;  /* Above tree-manager (200), below confirmation (500) */
         }
@@ -5097,7 +5098,7 @@
             <button class="close-btn" onclick="window.Strom.UI.closeAboutDialog()">&times;</button>
             <div class="about-header">
                 <span class="about-logo">🌳</span>
-                <span class="about-title">Strom <span id="about-version">1.0</span></span>
+                <span class="about-title">Strom <span id="about-version">1.2.0</span></span>
             </div>
             <p class="about-description" data-i18n="about.description"></p>
             <p class="about-author"><span data-i18n="about.createdBy"></span> <strong data-i18n="about.authorName"></strong></p>
@@ -5237,7 +5238,7 @@
                         <span class="option-desc" data-i18n="menu.exportGedcomDesc"></span>
                     </span>
                 </button>
-                <button class="menu-option" onclick="window.Strom.UI.closeExportDialog(); window.Strom.UI.showPosterDialog()">
+                <button class="menu-option" onclick="window.Strom.UI.showPosterDialog()">
                     <span class="option-icon">🖼️</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="poster.title"></span>

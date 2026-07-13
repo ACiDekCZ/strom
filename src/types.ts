@@ -215,8 +215,14 @@ export interface AuditLog {
 
 // ==================== EMBEDDED DATA ENVELOPE ====================
 
-/** Current app version for exports */
-export const APP_VERSION = '1.1';
+/**
+ * Current app version, shown in the About dialog and stamped into exports.
+ * Injected from package.json at build time (see scripts/bundle.js); the literal
+ * fallback is used only for dev builds and tests where no define is set and
+ * should be kept in sync with package.json.
+ */
+declare const __APP_VERSION__: string | undefined;
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.2.0';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {

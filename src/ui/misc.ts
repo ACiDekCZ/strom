@@ -35,7 +35,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, APP_VERSION } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
@@ -49,10 +49,10 @@ export const miscMethods = uiModule({
         const modal = document.getElementById('about-modal');
         if (!modal) return;
 
-        // Set version
+        // Set version (from package.json via APP_VERSION)
         const versionEl = document.getElementById('about-version');
         if (versionEl) {
-            versionEl.textContent = '1.0';
+            versionEl.textContent = APP_VERSION;
         }
 
         // Calculate and display stats

@@ -5,9 +5,12 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-// Build the TypeScript bundle first
+// Build the TypeScript bundle first. Inject the app version from package.json
+// so the About dialog and export metadata always match the released version.
 console.log('Building TypeScript...');
-execSync('npx esbuild src/main.ts --bundle --minify --outfile=dist/bundle.js', { stdio: 'inherit' });
+const pkgVersion = JSON.parse(readFileSync('package.json', 'utf-8')).version;
+const versionDefine = `--define:__APP_VERSION__='${JSON.stringify(pkgVersion)}'`;
+execSync(`npx esbuild src/main.ts --bundle --minify ${versionDefine} --outfile=dist/bundle.js`, { stdio: 'inherit' });
 
 // Read the HTML template and JS bundle
 const html = readFileSync('index.html', 'utf-8');

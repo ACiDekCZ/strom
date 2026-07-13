@@ -61,11 +61,17 @@ export const exportImageMethods = uiModule({
             this.showAlert(strings.poster.empty, 'warning');
             return;
         }
+        // Close the launching export dialog and take over the dialog stack, so a
+        // parent dialog can't be reopened on top of the poster (z-index bug).
+        document.getElementById('export-modal')?.classList.remove('active');
+        this.clearDialogStack();
+        this.pushDialog('poster-modal');
         document.getElementById('poster-modal')?.classList.add('active');
     },
 
     closePosterDialog(): void {
         document.getElementById('poster-modal')?.classList.remove('active');
+        this.clearDialogStack();
     },
 
     /** Download the current tree as a self-contained SVG. */
