@@ -41,6 +41,11 @@ export function generateSourceId(): string {
     return `src_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** Generate unique Attachment id */
+export function generateAttachmentId(): string {
+    return `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
 // ==================== CORE ENTITIES ====================
 
 export type Gender = 'male' | 'female';
@@ -87,6 +92,24 @@ export interface Source {
     note?: string;
 }
 
+/**
+ * A document attached to a person (register scan, marriage certificate,
+ * letter…). Images are compressed to a bounded JPEG; PDFs are kept as-is up to
+ * a size cap. The payload lives inline so it travels with the single-file export.
+ */
+export interface Attachment {
+    id: string;
+    /** Original file name (UX). */
+    name: string;
+    mimeType: string;           // image/jpeg | image/png | application/pdf
+    /** base64 data URL. */
+    dataUrl: string;
+    sizeBytes: number;
+    note?: string;
+    /** Optional link to a Source (StromData.sources). */
+    sourceId?: string;
+}
+
 export interface Person {
     id: PersonId;
     firstName: string;
@@ -117,6 +140,8 @@ export interface Person {
     events?: LifeEvent[];
     /** Ids of Source entries (StromData.sources) citing this person. */
     sourceIds?: string[];
+    /** Attached documents (scans, certificates, letters…). */
+    attachments?: Attachment[];
 }
 
 export interface Partnership {
@@ -147,11 +172,12 @@ export type LastFocusedMarker = typeof LAST_FOCUSED;
  * Current StromData format version.
  * v2 (2026-07): added optional Person.events (life events).
  * v3 (2026-07): added the per-tree source catalog (StromData.sources) and
- * citation ids (Person.sourceIds, LifeEvent.sourceIds). All additive/backward-
- * compatible for reading; the bump makes an older app warn ("newer version")
- * before it silently drops the new fields on re-save.
+ * citation ids (Person.sourceIds, LifeEvent.sourceIds).
+ * v4 (2026-07): added Person.attachments (inline documents). All additive/
+ * backward-compatible for reading; the bump makes an older app warn ("newer
+ * version") before it silently drops the new fields on re-save.
  */
-export const STROM_DATA_VERSION = 3;
+export const STROM_DATA_VERSION = 4;
 
 export interface StromData {
     /** Data format version for migration support */
@@ -266,6 +292,9 @@ export type AuditAction =
     | 'source.remove'
     | 'source.cite'
     | 'source.uncite'
+    | 'attachment.add'
+    | 'attachment.remove'
+    | 'attachment.update'
     | 'undo'
     | 'redo';
 

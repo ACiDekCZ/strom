@@ -9,7 +9,7 @@ import { TreeId, StromData, EmbeddedDataEnvelope, APP_VERSION, generateExportId 
 import { encrypt, EncryptedData } from './crypto.js';
 import { AuditLogManager } from './audit-log.js';
 import { applyLivingPrivacy, PrivacyMode } from './privacy.js';
-import { stripPhotos } from './photo.js';
+import { stripMedia } from './attachments.js';
 
 class AppExporterClass {
     /**
@@ -61,7 +61,7 @@ class AppExporterClass {
      * @param treeId Optional tree ID to export (defaults to active tree)
      * @param password Optional password to encrypt the exported data
      */
-    async exportApp(treeId?: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', dropPhotos = false): Promise<void> {
+    async exportApp(treeId?: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', dropMedia = false): Promise<void> {
         // Export only works from built version (strom.html)
         if (!this.isBuiltVersion()) {
             UI.showAlert(strings.export.devModeNotSupported, 'warning');
@@ -86,7 +86,7 @@ class AppExporterClass {
                 return;
             }
             let data = applyLivingPrivacy(rawData, privacyMode);
-            if (dropPhotos) data = stripPhotos(data);
+            if (dropMedia) data = stripMedia(data);
 
             // Get tree metadata
             const treeMetadata = TreeManager.getTreeMetadata(targetTreeId);
@@ -136,7 +136,7 @@ class AppExporterClass {
      * @param password Optional password to encrypt the exported data
      * @param includeAuditLog Whether to include audit logs for all trees
      */
-    async exportAllAsApp(password?: string | null, includeAuditLog = false, privacyMode: PrivacyMode = 'full', dropPhotos = false): Promise<void> {
+    async exportAllAsApp(password?: string | null, includeAuditLog = false, privacyMode: PrivacyMode = 'full', dropMedia = false): Promise<void> {
         // Export only works from built version (strom.html)
         if (!this.isBuiltVersion()) {
             UI.showAlert(strings.export.devModeNotSupported, 'warning');
@@ -155,7 +155,7 @@ class AppExporterClass {
                 const data = await TreeManager.getTreeData(tree.id);
                 if (data) {
                     let treeExport = applyLivingPrivacy(data, privacyMode);
-                    if (dropPhotos) treeExport = stripPhotos(treeExport);
+                    if (dropMedia) treeExport = stripMedia(treeExport);
                     allTreesData[tree.id] = {
                         name: tree.name,
                         data: treeExport,
@@ -169,7 +169,7 @@ class AppExporterClass {
             const activeTreeId = TreeManager.getActiveTreeId();
             const rawActiveData = activeTreeId ? await TreeManager.getTreeData(activeTreeId) : null;
             let activeData = rawActiveData ? applyLivingPrivacy(rawActiveData, privacyMode) : null;
-            if (activeData && dropPhotos) activeData = stripPhotos(activeData);
+            if (activeData && dropMedia) activeData = stripMedia(activeData);
             const activeTreeMeta = activeTreeId ? TreeManager.getTreeMetadata(activeTreeId) : null;
 
             // Generate export ID for the main tree
@@ -220,7 +220,7 @@ class AppExporterClass {
      * @param filename The filename for the export
      * @param password Optional password to encrypt the exported data
      */
-    async exportFocusAsApp(focusedData: StromData, filename: string, password?: string | null, privacyMode: PrivacyMode = 'full', dropPhotos = false): Promise<void> {
+    async exportFocusAsApp(focusedData: StromData, filename: string, password?: string | null, privacyMode: PrivacyMode = 'full', dropMedia = false): Promise<void> {
         // Export only works from built version (strom.html)
         if (!this.isBuiltVersion()) {
             UI.showAlert(strings.export.devModeNotSupported, 'warning');
@@ -236,7 +236,7 @@ class AppExporterClass {
 
             // Prepare data for embedding (privacy filter, then optional encryption)
             let filteredData = applyLivingPrivacy(focusedData, privacyMode);
-            if (dropPhotos) filteredData = stripPhotos(filteredData);
+            if (dropMedia) filteredData = stripMedia(filteredData);
             let embedDataContent: StromData | EncryptedData = filteredData;
             if (password) {
                 embedDataContent = await encrypt(JSON.stringify(filteredData), password);

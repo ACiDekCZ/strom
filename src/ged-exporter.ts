@@ -1,6 +1,10 @@
 /**
  * GEDCOM Exporter - Export family tree to GEDCOM 5.5.1 format
  * Standard genealogy interchange format for Ancestry, FamilySearch, Gramps, etc.
+ *
+ * Known unsupported: person attachments (inline document/image data URLs) are
+ * NOT exported — binary payloads do not belong in a GEDCOM text file. They are
+ * preserved only in JSON / standalone-HTML exports.
  */
 
 import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType } from './types.js';

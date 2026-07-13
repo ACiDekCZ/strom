@@ -129,6 +129,20 @@ const stringsEN = {
             n > 0 ? `Delete this source? It is cited in ${n} place(s); those citations will be removed.` : 'Delete this source?',
     },
 
+    // Attachments
+    attachments: {
+        title: 'Attachments',
+        add: 'Add attachment',
+        empty: 'No attachments yet',
+        delete: 'Delete',
+        deleteConfirm: 'Delete this attachment?',
+        notePlaceholder: 'Note (optional)',
+        total: (count: number, size: string) => `${count} attachment(s), ${size} total`,
+        pdfTooLarge: 'PDF is too large (max 2 MB).',
+        unsupportedType: 'Unsupported file type. Use JPG, PNG or PDF.',
+        readError: 'Could not read the file.',
+    },
+
     // Zoom controls
     zoomControls: {
         zoomIn: 'Zoom In',
@@ -668,6 +682,8 @@ const stringsEN = {
         statsEvents: 'Events',
         statsSources: 'Sources',
         statsSourceCoverage: 'Source coverage',
+        statsAttachments: 'Attachments',
+        statsMediaWarning: 'Over 10 MB of media — the file may be too big to email',
         statsSize: 'Storage',
         statsTreeSize: 'Tree size',
         // Anniversaries
@@ -896,6 +912,9 @@ const stringsEN = {
         removedSource: (title: string) => `Removed source "${title}"`,
         citedSource: (name: string) => `Cited a source on ${name}`,
         uncitedSource: (name: string) => `Removed a citation from ${name}`,
+        addedAttachment: (name: string) => `Added attachment to ${name}`,
+        removedAttachment: (name: string) => `Removed attachment from ${name}`,
+        updatedAttachment: (name: string) => `Updated attachment of ${name}`,
         // Undo / redo
         undoAction: (desc: string) => `Undo: ${desc}`,
         redoAction: (desc: string) => `Redo: ${desc}`
@@ -922,6 +941,9 @@ const stringsEN = {
         removeSource: (title: string) => `removing source "${title}"`,
         cite: (name: string) => `citation on ${name}`,
         uncite: (name: string) => `removing citation from ${name}`,
+        addAttachment: (name: string) => `attachment of ${name}`,
+        removeAttachment: (name: string) => `removing attachment from ${name}`,
+        editAttachment: (name: string) => `editing attachment of ${name}`,
         undone: (desc: string) => `Undone: ${desc}`,
         redone: (desc: string) => `Redone: ${desc}`,
         nothingToUndo: 'Nothing to undo',
@@ -937,7 +959,7 @@ const stringsEN = {
         modeInitials: 'Initials + birth year',
         modeAnonymous: 'Hide names',
         modeMinimal: 'Keep surname only',
-        stripPhotos: 'Export without photos'
+        stripPhotos: 'Export without photos & attachments'
     },
 
     // Poster export (SVG / PNG / tiled PDF)
@@ -1077,6 +1099,20 @@ const stringsCZ: StringsType = {
         citations: (n: number) => `${n}×`,
         deleteConfirm: (n: number) =>
             n > 0 ? `Smazat tento pramen? Je citován na ${n} místech; citace budou odebrány.` : 'Smazat tento pramen?',
+    },
+
+    // Attachments
+    attachments: {
+        title: 'Přílohy',
+        add: 'Přidat přílohu',
+        empty: 'Zatím žádné přílohy',
+        delete: 'Smazat',
+        deleteConfirm: 'Smazat tuto přílohu?',
+        notePlaceholder: 'Poznámka (nepovinné)',
+        total: (count: number, size: string) => `${count} příloh, celkem ${size}`,
+        pdfTooLarge: 'PDF je příliš velké (max 2 MB).',
+        unsupportedType: 'Nepodporovaný typ souboru. Použijte JPG, PNG nebo PDF.',
+        readError: 'Soubor se nepodařilo načíst.',
     },
 
     // Zoom controls
@@ -1618,6 +1654,8 @@ const stringsCZ: StringsType = {
         statsEvents: 'Události',
         statsSources: 'Prameny',
         statsSourceCoverage: 'Pokrytí prameny',
+        statsAttachments: 'Přílohy',
+        statsMediaWarning: 'Přes 10 MB médií — soubor už nemusí projít e-mailem',
         statsSize: 'Úložiště',
         statsTreeSize: 'Velikost stromu',
         // Anniversaries
@@ -1846,6 +1884,9 @@ const stringsCZ: StringsType = {
         removedSource: (title: string) => `Odebrán pramen „${title}"`,
         citedSource: (name: string) => `Přidána citace u ${name}`,
         uncitedSource: (name: string) => `Odebrána citace u ${name}`,
+        addedAttachment: (name: string) => `Přidána příloha k ${name}`,
+        removedAttachment: (name: string) => `Odebrána příloha u ${name}`,
+        updatedAttachment: (name: string) => `Upravena příloha u ${name}`,
         // Undo / redo
         undoAction: (desc: string) => `Zpět: ${desc}`,
         redoAction: (desc: string) => `Znovu: ${desc}`
@@ -1872,6 +1913,9 @@ const stringsCZ: StringsType = {
         removeSource: (title: string) => `odebrání pramene „${title}"`,
         cite: (name: string) => `citace u ${name}`,
         uncite: (name: string) => `odebrání citace u ${name}`,
+        addAttachment: (name: string) => `příloha u ${name}`,
+        removeAttachment: (name: string) => `odebrání přílohy u ${name}`,
+        editAttachment: (name: string) => `úprava přílohy u ${name}`,
         undone: (desc: string) => `Vráceno: ${desc}`,
         redone: (desc: string) => `Znovu provedeno: ${desc}`,
         nothingToUndo: 'Není co vrátit',
@@ -1887,7 +1931,7 @@ const stringsCZ: StringsType = {
         modeInitials: 'Iniciály + rok narození',
         modeAnonymous: 'Skrýt jména',
         modeMinimal: 'Ponechat jen příjmení',
-        stripPhotos: 'Exportovat bez fotek'
+        stripPhotos: 'Exportovat bez fotek a příloh'
     },
 
     // Poster export (SVG / PNG / tiled PDF)

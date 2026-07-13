@@ -111,11 +111,13 @@ export const personModalMethods = uiModule({
         const linkRelBtn = document.getElementById('link-relationships');
         if (linkRelBtn) linkRelBtn.style.display = 'none';
 
-        // Events and citations need a saved person (own undoable actions) — hide.
+        // Events, citations and attachments need a saved person — hide.
         const eventsSection = document.getElementById('events-section');
         if (eventsSection) eventsSection.style.display = 'none';
         const sourcesSection = document.getElementById('person-sources-section');
         if (sourcesSection) sourcesSection.style.display = 'none';
+        const attachmentsSection = document.getElementById('attachments-section');
+        if (attachmentsSection) attachmentsSection.style.display = 'none';
 
         modal.classList.add('active');
         firstNameInput.focus();
@@ -276,7 +278,7 @@ export const personModalMethods = uiModule({
         this.setupDateInputs();
 
         // Setup expand button - expand if there's death data, notes or a photo
-        const hasExtendedData = !!(person.deathDate || person.deathPlace || person.notes || person.photo || (person.events && person.events.length > 0) || (person.sourceIds && person.sourceIds.length > 0));
+        const hasExtendedData = !!(person.deathDate || person.deathPlace || person.notes || person.photo || (person.events && person.events.length > 0) || (person.sourceIds && person.sourceIds.length > 0) || (person.attachments && person.attachments.length > 0));
         this.setupExpandButton(hasExtendedData);
 
         // Show link-relationships button
@@ -321,6 +323,11 @@ export const personModalMethods = uiModule({
         const citeBtn = document.getElementById('btn-cite-person');
         if (citeBtn) citeBtn.style.display = DataManager.isPersonLocked(id) ? 'none' : '';
         this.renderPersonSourcesChips();
+
+        // Attachments section (same lifecycle as events/sources).
+        const attachmentsSection = document.getElementById('attachments-section');
+        if (attachmentsSection) attachmentsSection.style.display = '';
+        this.renderAttachmentsList();
 
         modal.classList.add('active');
         if (!DataManager.isPersonLocked(id)) firstNameInput.focus();

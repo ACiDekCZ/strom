@@ -854,9 +854,9 @@ export const importExportMethods = uiModule({
         this.showExportPasswordDialog(async (password: string | null) => {
             const includeAuditLog = (document.getElementById('export-audit-log-toggle') as HTMLInputElement)?.checked || false;
             const privacyMode = this.readExportPrivacyMode();
-            const dropPhotos = this.readExportStripPhotos();
+            const dropMedia = this.readExportStripPhotos();
             const { applyLivingPrivacy } = await import('../privacy.js');
-            const { stripPhotos } = await import('../photo.js');
+            const { stripMedia } = await import('../attachments.js');
             const trees = TreeManager.getTrees();
             const allData: Record<string, { name: string; data: StromData; auditLog?: AuditLog }> = {};
 
@@ -864,7 +864,7 @@ export const importExportMethods = uiModule({
                 const data = await TreeManager.getTreeData(tree.id);
                 if (data) {
                     let treeExport = applyLivingPrivacy(data, privacyMode);
-                    if (dropPhotos) treeExport = stripPhotos(treeExport);
+                    if (dropMedia) treeExport = stripMedia(treeExport);
                     const entry: { name: string; data: StromData; auditLog?: AuditLog } = {
                         name: tree.name,
                         data: treeExport

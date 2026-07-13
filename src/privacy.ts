@@ -51,6 +51,8 @@ function stripDetails(person: Person): void {
     delete person.events;
     // Source citations may point at sensitive references — drop them too.
     delete person.sourceIds;
+    // Attachments (scans, letters) are private documents — always drop.
+    delete person.attachments;
 }
 
 /**
@@ -71,6 +73,7 @@ export function applyLivingPrivacy(
     delete copy.sources;
     for (const person of Object.values(copy.persons)) {
         delete person.sourceIds;
+        delete person.attachments;
         for (const ev of person.events ?? []) delete ev.sourceIds;
     }
 

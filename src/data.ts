@@ -17,6 +17,8 @@ import {
     LifeEvent,
     generateSourceId,
     Source,
+    generateAttachmentId,
+    Attachment,
     generatePartnershipId,
     LAST_FOCUSED,
     LastFocusedMarker,
@@ -33,7 +35,7 @@ import { StorageManager } from './storage.js';
 import { ValidationIssue } from './validation.js';
 import { UndoManager } from './undo.js';
 import { applyLivingPrivacy, PrivacyMode } from './privacy.js';
-import { stripPhotos } from './photo.js';
+import { stripMedia } from './attachments.js';
 
 /** Extended updates for Partnership */
 type PartnershipUpdates = Partial<Pick<Partnership, 'status' | 'startDate' | 'startPlace' | 'endDate' | 'note' | 'isPrimary'>>;
@@ -1114,6 +1116,50 @@ class DataManagerClass {
         return true;
     }
 
+    // ==================== ATTACHMENTS ====================
+
+    /** Attach a document to a person. Returns the created attachment, or null. */
+    addAttachment(personId: PersonId, attachment: Omit<Attachment, 'id'>): Attachment | null {
+        const person = this.data.persons[personId];
+        if (!person) return null;
+        if (this.isPersonLocked(personId)) return null;
+
+        this.beginMutation();
+        const newAttachment: Attachment = { ...attachment, id: generateAttachmentId() };
+        if (!person.attachments) person.attachments = [];
+        person.attachments.push(newAttachment);
+        this.commitMutation(strings.undo.addAttachment(auditPersonName(person)));
+        AuditLogManager.log(this.currentTreeId, 'attachment.add', strings.auditLog.addedAttachment(auditPersonName(person)));
+        return newAttachment;
+    }
+
+    removeAttachment(personId: PersonId, attachmentId: string): boolean {
+        const person = this.data.persons[personId];
+        if (!person?.attachments?.some(a => a.id === attachmentId)) return false;
+        if (this.isPersonLocked(personId)) return false;
+
+        this.beginMutation();
+        person.attachments = person.attachments.filter(a => a.id !== attachmentId);
+        if (person.attachments.length === 0) delete person.attachments;
+        this.commitMutation(strings.undo.removeAttachment(auditPersonName(person)));
+        AuditLogManager.log(this.currentTreeId, 'attachment.remove', strings.auditLog.removedAttachment(auditPersonName(person)));
+        return true;
+    }
+
+    updateAttachmentNote(personId: PersonId, attachmentId: string, note: string): boolean {
+        const person = this.data.persons[personId];
+        const att = person?.attachments?.find(a => a.id === attachmentId);
+        if (!person || !att) return false;
+        if (this.isPersonLocked(personId)) return false;
+
+        this.beginMutation();
+        if (note.trim()) att.note = note.trim();
+        else delete att.note;
+        this.commitMutation(strings.undo.editAttachment(auditPersonName(person)));
+        AuditLogManager.log(this.currentTreeId, 'attachment.update', strings.auditLog.updatedAttachment(auditPersonName(person)));
+        return true;
+    }
+
     deletePerson(id: PersonId): boolean {
         const person = this.data.persons[id];
         if (!person) return false;
@@ -1813,9 +1859,9 @@ class DataManagerClass {
 
     // ==================== EXPORT/IMPORT ====================
 
-    exportJSON(privacyMode: PrivacyMode = 'full', dropPhotos = false): void {
+    exportJSON(privacyMode: PrivacyMode = 'full', dropMedia = false): void {
         let out = applyLivingPrivacy(this.data, privacyMode);
-        if (dropPhotos) out = stripPhotos(out);
+        if (dropMedia) out = stripMedia(out);
         const dataStr = JSON.stringify(out, null, 2);
         const blob = new Blob([dataStr], { type: 'application/json' });
         const a = document.createElement('a');
@@ -1830,12 +1876,12 @@ class DataManagerClass {
      * @param treeId The tree to export
      * @param password Optional password for encryption
      */
-    async exportTreeJSON(treeId: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', dropPhotos = false): Promise<void> {
+    async exportTreeJSON(treeId: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', dropMedia = false): Promise<void> {
         const rawTreeData = await TreeManager.getTreeData(treeId);
         if (!rawTreeData) return;
 
-        const treeData = dropPhotos
-            ? stripPhotos(applyLivingPrivacy(rawTreeData, privacyMode))
+        const treeData = dropMedia
+            ? stripMedia(applyLivingPrivacy(rawTreeData, privacyMode))
             : applyLivingPrivacy(rawTreeData, privacyMode);
         // Ensure version is set
         treeData.version = STROM_DATA_VERSION;
@@ -1861,7 +1907,7 @@ class DataManagerClass {
         URL.revokeObjectURL(a.href);
     }
 
-    async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full', dropPhotos = false): Promise<void> {
+    async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full', dropMedia = false): Promise<void> {
         // Filter persons - only visible ones
         const filteredPersons: Record<PersonId, Person> = {} as Record<PersonId, Person>;
         for (const id of visiblePersonIds) {
@@ -1885,7 +1931,7 @@ class DataManagerClass {
             persons: filteredPersons,
             partnerships: filteredPartnerships
         }, privacyMode);
-        if (dropPhotos) focusedData = stripPhotos(focusedData);
+        if (dropMedia) focusedData = stripMedia(focusedData);
 
         let dataStr: string;
         if (password) {

@@ -47,6 +47,7 @@ import { contextMenuMethods } from './context-menu.js';
 import { personModalMethods } from './person-modal.js';
 import { personEventsMethods } from './person-events.js';
 import { sourcesMethods } from './sources.js';
+import { attachmentsMethods } from './attachments-ui.js';
 import { relationModalMethods } from './relation-modal.js';
 import { dialogsMethods } from './dialogs.js';
 import { relationshipsPanelMethods } from './relationships-panel.js';
@@ -168,6 +169,10 @@ Object.assign(UIClass.prototype, personEventsMethods);
 type SourcesMethods = typeof sourcesMethods;
 export interface UIClass extends SourcesMethods {}
 Object.assign(UIClass.prototype, sourcesMethods);
+
+type AttachmentsMethods = typeof attachmentsMethods;
+export interface UIClass extends AttachmentsMethods {}
+Object.assign(UIClass.prototype, attachmentsMethods);
 
 type RelationModalMethods = typeof relationModalMethods;
 export interface UIClass extends RelationModalMethods {}

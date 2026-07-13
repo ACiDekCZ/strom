@@ -23,6 +23,7 @@ import {
 } from '../types.js';
 import { strings } from '../strings.js';
 import { totalPhotoBytes } from '../photo.js';
+import { totalAttachmentBytes, ATTACHMENT_WARN_BYTES } from '../attachments.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -394,6 +395,9 @@ export const treeStatsMethods = uiModule({
         const personsCited = persons.filter(p =>
             (p.sourceIds?.length ?? 0) > 0 || (p.events ?? []).some(e => (e.sourceIds?.length ?? 0) > 0)
         ).length;
+        const totalAttachments = persons.reduce((sum, p) => sum + (p.attachments?.length ?? 0), 0);
+        const attachmentBytes = totalAttachmentBytes(treeData);
+        const mediaWarn = (totalPhotoBytes(treeData) + attachmentBytes) > ATTACHMENT_WARN_BYTES;
 
         const s = strings.treeManager;
 
@@ -488,6 +492,15 @@ export const treeStatsMethods = uiModule({
                 <div class="tree-stats-row">
                     <span class="label">${s.statsSourceCoverage}</span>
                     <span class="value">${personsCited}/${totalPersons} (${sourceCoveragePct}%)</span>
+                </div>` : ''}
+                ${totalAttachments > 0 ? `
+                <div class="tree-stats-row">
+                    <span class="label">${s.statsAttachments}</span>
+                    <span class="value">${totalAttachments} (${Math.round(attachmentBytes / 1024)} kB)</span>
+                </div>` : ''}
+                ${mediaWarn ? `
+                <div class="tree-stats-row tree-stats-warning">
+                    <span class="label">⚠️ ${s.statsMediaWarning}</span>
                 </div>` : ''}
             </div>
 
