@@ -2433,6 +2433,51 @@
             .otd-card { left: 12px; right: 12px; bottom: 12px; max-width: none; }
         }
 
+        /* Offline indicator (PWA) */
+        .offline-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            margin-left: 8px;
+            border-radius: 10px;
+            background: var(--warning-bg, #f0ad4e);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .offline-indicator::before { content: '⚡'; }
+
+        /* PWA update prompt (non-blocking, same shape as the family offer) */
+        .pwa-update {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(10px);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px 10px 16px;
+            background: var(--card-bg, #fff);
+            border: 1px solid var(--border-color, rgba(0,0,0,0.1));
+            border-radius: 10px;
+            box-shadow: 0 4px 16px var(--shadow);
+            z-index: 250;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.2s;
+        }
+        .pwa-update.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .pwa-update-btn {
+            border: none; background: var(--primary, #4a90d9); color: #fff;
+            border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+        }
+        .pwa-update-close {
+            border: none; background: none; font-size: 18px; line-height: 1;
+            color: var(--text-light); cursor: pointer; padding: 0 2px;
+        }
+
         /* Family wizard offer (non-blocking action toast) */
         .family-offer {
             position: fixed;
@@ -5333,6 +5378,7 @@
 <body>
     <div class="toolbar">
         <h1><span class="app-logo" onclick="window.Strom.UI.showAboutDialog()" title="About Strom">🌳</span> <span class="toolbar-title" data-i18n="toolbar.title"></span></h1>
+        <span id="offline-indicator" class="offline-indicator" style="display:none;" data-i18n="pwa.offline"></span>
         <div class="search-container">
             <div class="search-row">
                 <div id="toolbar-search-picker"></div>
