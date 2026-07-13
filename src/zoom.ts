@@ -49,6 +49,9 @@ class ZoomPanClass {
     // Animation
     private animationFrame: number | null = null;
 
+    // Listeners notified after every transform change (minimap viewport sync).
+    private changeListeners: Array<() => void> = [];
+
     init(): void {
         const container = document.getElementById('tree-container');
         if (!container) return;
@@ -503,12 +506,39 @@ class ZoomPanClass {
         return this.scale;
     }
 
+    /** Current transform (world→container: containerPt = worldPt * scale + t). */
+    getTransform(): { scale: number; tx: number; ty: number } {
+        return { scale: this.scale, tx: this.tx, ty: this.ty };
+    }
+
+    /** Size of the pannable viewport (the tree container), in CSS pixels. */
+    getViewportSize(): { width: number; height: number } {
+        const container = document.getElementById('tree-container');
+        if (!container) return { width: 0, height: 0 };
+        const rect = container.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+    }
+
+    /** Register a listener fired after every transform change. */
+    onChange(cb: () => void): void {
+        this.changeListeners.push(cb);
+    }
+
+    /** Center the viewport on a world-space point, keeping the current scale. */
+    centerOnWorldPoint(worldX: number, worldY: number): void {
+        const { width, height } = this.getViewportSize();
+        this.tx = width / 2 - worldX * this.scale;
+        this.ty = height / 2 - worldY * this.scale;
+        this.apply();
+    }
+
     private apply(): void {
         const canvas = document.getElementById('tree-canvas');
         if (canvas) {
             canvas.style.transform = `translate(${this.tx}px, ${this.ty}px) scale(${this.scale})`;
             // Fonts scale naturally with CSS transform - no counter-scaling needed
         }
+        for (const cb of this.changeListeners) cb();
     }
 }
 

@@ -2336,6 +2336,36 @@
             color: white;
         }
 
+        /* Overview minimap (sits above the zoom controls, bottom-right) */
+        .minimap-panel {
+            position: fixed;
+            bottom: 24px;
+            right: 84px;
+            width: 180px;
+            height: 120px;
+            border-radius: 10px;
+            overflow: hidden;
+            background: color-mix(in srgb, var(--card-bg) 82%, transparent);
+            box-shadow: 0 2px 8px var(--shadow);
+            border: 1px solid var(--border-color, rgba(0,0,0,0.1));
+            z-index: 99;
+        }
+        .minimap-panel canvas {
+            display: block;
+            width: 180px;
+            height: 120px;
+            cursor: pointer;
+            touch-action: none;
+        }
+        /* Tablet: keep it but tuck it into the corner above the controls. */
+        @media (max-width: 900px) {
+            .minimap-panel { bottom: 84px; right: 24px; }
+        }
+        /* Mobile: never shown (JS also guards), but hide defensively. */
+        @media (max-width: 500px) {
+            .minimap-panel { display: none !important; }
+        }
+
         /* ==================== FOCUS MODE ==================== */
         .person-card.focused {
             box-shadow: 0 0 0 4px var(--primary), 0 4px 12px var(--shadow);
@@ -5196,6 +5226,11 @@
         <button onclick="window.Strom.ZoomPan.fitToScreen()" data-i18n-title="zoomControls.fitToScreen">⛶</button>
     </div>
 
+    <!-- Overview minimap (shown only for trees that overflow the viewport) -->
+    <div id="minimap-panel" class="minimap-panel" style="display:none;" data-i18n-title="minimap.title">
+        <canvas id="minimap-canvas" width="180" height="120"></canvas>
+    </div>
+
     <!-- Focus Mode Controls -->
     <div id="focus-controls" class="focus-controls hidden">
         <div class="focus-info">
@@ -5578,6 +5613,15 @@
                     <label class="settings-checkbox">
                         <input type="checkbox" id="suggest-duplicates-toggle" onchange="window.Strom.UI.toggleSuggestDuplicates(this.checked)">
                         <span data-i18n="duplicates.settingHint"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="minimap.settingLabel"></label>
+                <div class="settings-options">
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="minimap-toggle" onchange="window.Strom.UI.toggleMinimap(this.checked)">
+                        <span data-i18n="minimap.settingHint"></span>
                     </label>
                 </div>
             </div>

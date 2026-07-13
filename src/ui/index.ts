@@ -66,6 +66,7 @@ import { archivesUiMethods } from './archives-ui.js';
 import { exportImageMethods } from './export-image-ui.js';
 import { bookUiMethods } from './book-ui.js';
 import { snapshotsUiMethods } from './snapshots-ui.js';
+import { minimapMethods, MinimapTransform, WorldBox } from './minimap.js';
 
 export class UIClass {
     currentId: PersonId | null = null;
@@ -156,6 +157,12 @@ export class UIClass {
 
     // Relationship calculator picker
     kinshipPicker: PersonPicker | null = null;
+
+    // Minimap state (world→minimap transform, current world box, drag + throttle)
+    minimapTransform: MinimapTransform | null = null;
+    minimapBox: WorldBox | null = null;
+    minimapDragging = false;
+    minimapViewportTimer: ReturnType<typeof setTimeout> | null = null;
 }
 
 // ---- Module composition ----
@@ -254,5 +261,9 @@ Object.assign(UIClass.prototype, bookUiMethods);
 type SnapshotsUiMethods = typeof snapshotsUiMethods;
 export interface UIClass extends SnapshotsUiMethods {}
 Object.assign(UIClass.prototype, snapshotsUiMethods);
+
+type MinimapMethods = typeof minimapMethods;
+export interface UIClass extends MinimapMethods {}
+Object.assign(UIClass.prototype, minimapMethods);
 
 export const UI = new UIClass();

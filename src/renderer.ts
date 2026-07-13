@@ -186,6 +186,8 @@ class TreeRendererClass {
         this.updateFocusUI();
         // Keep the view-mode segment + descendants badge in sync.
         UI.updateViewModeUI?.();
+        // Refresh the overview minimap for the new layout.
+        UI.updateMinimap?.();
     }
 
     // ============= Focus Mode Methods =============

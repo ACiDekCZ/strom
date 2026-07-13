@@ -201,6 +201,13 @@ const stringsEN = {
         settingHint: 'Suggest existing similar persons while entering a new one',
     },
 
+    // Overview minimap
+    minimap: {
+        title: 'Overview minimap',
+        settingLabel: 'Minimap',
+        settingHint: 'Show an overview minimap for large trees',
+    },
+
     // Zoom controls
     zoomControls: {
         zoomIn: 'Zoom In',
@@ -1266,6 +1273,13 @@ const stringsCZ: StringsType = {
         parentsLabel: (names: string) => `rodiče: ${names}`,
         settingLabel: 'Našeptávání duplicit',
         settingHint: 'Při zadávání nové osoby nabízet podobné existující',
+    },
+
+    // Overview minimap
+    minimap: {
+        title: 'Přehledová minimapa',
+        settingLabel: 'Minimapa',
+        settingHint: 'Zobrazovat přehledovou minimapu u velkých stromů',
     },
 
     // Zoom controls
