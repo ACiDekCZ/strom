@@ -25,6 +25,8 @@ export interface TimelineRow {
     startYear: number;
     endYear: number;
     isLiving: boolean;
+    /** False for a deceased person without a recorded death date. */
+    endKnown: boolean;
     events: TimelineEvent[];
 }
 
@@ -69,7 +71,10 @@ export function computeTimelineModel(
 
         const deathYear = yearOf(p.deathDate);
         const living = isLivingPerson(p, todayYear);
-        const endYear = deathYear ?? todayYear;
+        // A living person's bar runs to today. A deceased person without a
+        // recorded death has an UNKNOWN end — draw a stub at the birth year
+        // instead of inventing a bar to the present.
+        const endYear = living ? todayYear : (deathYear ?? startYear);
 
         const events: TimelineEvent[] = [];
         for (const ev of p.events ?? []) {
@@ -89,6 +94,7 @@ export function computeTimelineModel(
             startYear,
             endYear: Math.max(endYear, startYear),
             isLiving: living,
+            endKnown: living || deathYear !== null,
             events,
         });
     }

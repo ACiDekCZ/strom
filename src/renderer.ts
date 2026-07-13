@@ -1399,7 +1399,8 @@ class TreeRendererClass {
             ? (this.highlightIds.has(r.personId as PersonId) ? ' search-hit' : ' search-dim') : '';
 
         const nameEsc = this.escapeHtml(r.name);
-        const yearsEsc = this.escapeHtml(`${r.startYear}–${r.isLiving ? '' : r.endYear}`);
+        const yearsEsc = this.escapeHtml(
+            r.isLiving ? `${r.startYear}–` : r.endKnown ? `${r.startYear}–${r.endYear}` : `${r.startYear}–?`);
         const cy = (barY + 7).toFixed(1);
         const dots = r.events.map(ev => {
             const ex = xOf(ev.year).toFixed(1);

@@ -93,3 +93,12 @@ describe('yearToFraction / axisTicks', () => {
         expect(axisTicks(axis)).toEqual([1900, 1910, 1920, 1930, 1940, 1950, 1960, 1970, 1980, 1990, 2000]);
     });
 });
+
+it('a deceased person without a death date gets a stub, not a bar to today', () => {
+    const d = data([person('p1', 'Biagota', 'female', { birthDate: '920' })]);
+    const model = computeTimelineModel(d, ['p1'], TODAY_YEAR);
+    expect(model.rows).toHaveLength(1);
+    expect(model.rows[0].isLiving).toBe(false);
+    expect(model.rows[0].endKnown).toBe(false);
+    expect(model.rows[0].endYear).toBe(920); // stub at birth year, no invented span
+});
