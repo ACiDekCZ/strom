@@ -45,6 +45,8 @@ class TreeRendererClass {
 
     // Focus mode state
     private focusPersonId: PersonId | null = null;
+    /** Search highlight: hits get 'search-hit', everyone else 'search-dim'. */
+    private highlightIds: Set<PersonId> | null = null;
     private focusDepthUp: number = 3;
     private focusDepthDown: number = 3;
 
@@ -285,6 +287,22 @@ class TreeRendererClass {
 
     getFocusPersonId(): PersonId | null {
         return this.focusPersonId;
+    }
+
+    /**
+     * Highlight a set of persons in the tree (search results): matched cards get
+     * 'search-hit', all others 'search-dim'. Pass null to clear. Pure DOM class
+     * toggling — the layout is never recomputed.
+     */
+    setHighlight(ids: Set<PersonId> | null): void {
+        this.highlightIds = ids && ids.size > 0 ? ids : null;
+        document.querySelectorAll('.person-card').forEach(el => {
+            const card = el as HTMLElement;
+            card.classList.remove('search-hit', 'search-dim');
+            if (!this.highlightIds || card.classList.contains('placeholder')) return;
+            const id = card.dataset.id as PersonId | undefined;
+            if (id) card.classList.add(this.highlightIds.has(id) ? 'search-hit' : 'search-dim');
+        });
     }
 
     private updateFocusUI(): void {
@@ -590,6 +608,10 @@ class TreeRendererClass {
             // Add locked class if person is locked
             if (DataManager.isPersonLocked(id)) {
                 classes += ' locked';
+            }
+            // Search highlight (re-applied on every render so it survives one).
+            if (this.highlightIds && !person.isPlaceholder) {
+                classes += this.highlightIds.has(id) ? ' search-hit' : ' search-dim';
             }
             card.className = classes;
             card.style.left = pos.x + 'px';

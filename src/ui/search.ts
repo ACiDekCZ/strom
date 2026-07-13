@@ -35,6 +35,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
+import { filterPersons, hasSearchCriteria, SearchCriteria } from '../search-filter.js';
 import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
@@ -64,6 +65,10 @@ export const searchMethods = uiModule({
             placeholder: strings.search.placeholder,
             filter: (p) => !p.isPlaceholder
         });
+
+        // Live-highlight matches in the tree as the name query changes.
+        const input = container.querySelector('.person-picker-input') as HTMLInputElement | null;
+        if (input) input.addEventListener('input', () => this.scheduleSearchFilter());
     },
 
     /**
@@ -71,6 +76,64 @@ export const searchMethods = uiModule({
      */
     refreshSearch(): void {
         this.initSearch();
+    },
+
+    // ==================== SEARCH FILTERS + HIGHLIGHT ====================
+
+    toggleSearchFilters(): void {
+        const panel = document.getElementById('search-filters');
+        const toggle = document.getElementById('search-filter-toggle');
+        if (!panel) return;
+        const show = panel.style.display === 'none';
+        panel.style.display = show ? '' : 'none';
+        toggle?.classList.toggle('active', show);
+    },
+
+    /** Debounced (150 ms) re-application of the search filter + highlight. */
+    scheduleSearchFilter(): void {
+        if (this.searchFilterTimer) clearTimeout(this.searchFilterTimer);
+        this.searchFilterTimer = setTimeout(() => this.applySearchFilter(), 150);
+    },
+
+    /** Read the current criteria from the search box + filter fields. */
+    readSearchCriteria(): SearchCriteria {
+        const val = (id: string) => (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value.trim() ?? '';
+        const num = (id: string) => { const v = val(id); return v ? parseInt(v, 10) : undefined; };
+        const query = (document.querySelector('#toolbar-search-picker .person-picker-input') as HTMLInputElement | null)?.value.trim() ?? '';
+        const living = val('filter-living');
+        return {
+            query: query || undefined,
+            lastName: val('filter-lastname') || undefined,
+            place: val('filter-place') || undefined,
+            birthFrom: num('filter-year-from'),
+            birthTo: num('filter-year-to'),
+            gender: (val('filter-gender') || undefined) as SearchCriteria['gender'],
+            living: (living || undefined) as SearchCriteria['living'],
+        };
+    },
+
+    applySearchFilter(): void {
+        const criteria = this.readSearchCriteria();
+        const countEl = document.getElementById('search-result-count');
+        if (!hasSearchCriteria(criteria)) {
+            TreeRenderer.setHighlight(null);
+            if (countEl) countEl.textContent = '';
+            return;
+        }
+        const ids = filterPersons(DataManager.getData(), criteria);
+        TreeRenderer.setHighlight(new Set(ids));
+        if (countEl) countEl.textContent = strings.searchFilters.resultCount(ids.length);
+    },
+
+    clearSearchFilters(): void {
+        for (const id of ['filter-lastname', 'filter-place', 'filter-year-from', 'filter-year-to', 'filter-gender', 'filter-living']) {
+            const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+            if (el) el.value = '';
+        }
+        this.toolbarSearchPicker?.clear();
+        TreeRenderer.setHighlight(null);
+        const countEl = document.getElementById('search-result-count');
+        if (countEl) countEl.textContent = '';
     },
 
     /**

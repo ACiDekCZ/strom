@@ -399,6 +399,21 @@ const stringsEN = {
         selectPerson: 'Select person'
     },
 
+    // Search filters
+    searchFilters: {
+        toggle: 'Filters',
+        lastName: 'Last name',
+        place: 'Place',
+        yearFrom: 'Year from',
+        yearTo: 'Year to',
+        anyGender: 'Any gender',
+        anyStatus: 'Living or deceased',
+        living: 'Living only',
+        deceased: 'Deceased only',
+        clear: 'Clear',
+        resultCount: (n: number) => `${n} result(s)`,
+    },
+
     // Person picker
     personPicker: {
         placeholder: 'Search person...',
@@ -1389,6 +1404,21 @@ const stringsCZ: StringsType = {
         noResults: 'Nic nenalezeno',
         multipleResults: 'Nalezeno více výsledků',
         selectPerson: 'Vyberte osobu'
+    },
+
+    // Search filters
+    searchFilters: {
+        toggle: 'Filtry',
+        lastName: 'Příjmení',
+        place: 'Místo',
+        yearFrom: 'Rok od',
+        yearTo: 'Rok do',
+        anyGender: 'Libovolné pohlaví',
+        anyStatus: 'Žijící i zemřelí',
+        living: 'Jen žijící',
+        deceased: 'Jen zemřelí',
+        clear: 'Vymazat',
+        resultCount: (n: number) => `${n} výsledků`,
     },
 
     // Person picker

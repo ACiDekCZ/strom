@@ -110,6 +110,9 @@ export class UIClass {
         notes: string;
     } | null = null;
 
+    // Debounce timer for the live search filter/highlight.
+    searchFilterTimer: ReturnType<typeof setTimeout> | null = null;
+
     // Life-events editor state: the event being edited, or null when adding.
     editingEventId: string | null = null;
 

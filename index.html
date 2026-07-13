@@ -266,6 +266,37 @@
             padding: 8px 32px 8px 12px;
             font-size: 13px;
         }
+        /* Search filters */
+        .search-row { display: flex; align-items: stretch; gap: 6px; }
+        .search-row #toolbar-search-picker { flex: 1; min-width: 0; }
+        .search-filter-toggle {
+            flex-shrink: 0; border: 1px solid var(--border-color, #ccc); border-radius: 6px;
+            background: var(--card-bg, #fff); cursor: pointer; padding: 0 10px; font-size: 15px;
+            color: var(--text-light);
+        }
+        .search-filter-toggle.active { background: var(--primary, #4a90d9); color: #fff; border-color: var(--primary, #4a90d9); }
+        .search-filters {
+            margin-top: 6px; padding: 10px; border: 1px solid var(--border-color, #ddd);
+            border-radius: 8px; background: var(--card-bg, #fff); box-shadow: 0 4px 16px var(--shadow, rgba(0,0,0,0.15));
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .search-filters input, .search-filters select {
+            width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 13px;
+            border: 1px solid var(--border-color, #ccc); border-radius: 4px; background: var(--input-bg, #fff);
+        }
+        .search-filters-row { display: flex; gap: 6px; }
+        .search-filters-row > * { flex: 1; min-width: 0; }
+        .search-filters-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
+        .search-result-count { font-size: 12px; color: var(--text-secondary, #777); }
+        [data-theme="dark"] .search-filters,
+        [data-theme="dark"] .search-filter-toggle { background: #2a2a2a; border-color: #444; }
+        /* Mobile: filters as a bottom sheet */
+        @media (max-width: 500px) {
+            .search-filters {
+                position: fixed; left: 0; right: 0; bottom: 0; margin: 0; z-index: 1500;
+                border-radius: 12px 12px 0 0; box-shadow: 0 -4px 24px rgba(0,0,0,0.3);
+            }
+        }
         .toolbar #toolbar-search-picker .person-picker-toggle {
             font-size: 10px;
             background: transparent;
@@ -2258,6 +2289,15 @@
         }
         .person-card.focused:hover {
             transform: scale(1.07);
+        }
+
+        /* Search highlight: hits glow, everyone else dims. Class-only, no relayout. */
+        .person-card.search-hit {
+            box-shadow: 0 0 0 3px #f5a623, 0 0 12px 2px rgba(245,166,35,0.6);
+            z-index: 5;
+        }
+        .person-card.search-dim {
+            opacity: 0.4;
         }
 
         .focus-controls {
@@ -4932,7 +4972,34 @@
     <div class="toolbar">
         <h1><span class="app-logo" onclick="window.Strom.UI.showAboutDialog()" title="About Strom">🌳</span> <span class="toolbar-title" data-i18n="toolbar.title"></span></h1>
         <div class="search-container">
-            <div id="toolbar-search-picker"></div>
+            <div class="search-row">
+                <div id="toolbar-search-picker"></div>
+                <button type="button" id="search-filter-toggle" class="search-filter-toggle" onclick="window.Strom.UI.toggleSearchFilters()" data-i18n-title="searchFilters.toggle">⚗</button>
+            </div>
+            <div id="search-filters" class="search-filters" style="display:none;">
+                <input type="text" id="filter-lastname" autocomplete="off" data-i18n-placeholder="searchFilters.lastName" oninput="window.Strom.UI.scheduleSearchFilter()">
+                <input type="text" id="filter-place" autocomplete="off" data-i18n-placeholder="searchFilters.place" oninput="window.Strom.UI.scheduleSearchFilter()">
+                <div class="search-filters-row">
+                    <input type="number" id="filter-year-from" inputmode="numeric" data-i18n-placeholder="searchFilters.yearFrom" oninput="window.Strom.UI.scheduleSearchFilter()">
+                    <input type="number" id="filter-year-to" inputmode="numeric" data-i18n-placeholder="searchFilters.yearTo" oninput="window.Strom.UI.scheduleSearchFilter()">
+                </div>
+                <div class="search-filters-row">
+                    <select id="filter-gender" onchange="window.Strom.UI.scheduleSearchFilter()">
+                        <option value="" data-i18n="searchFilters.anyGender"></option>
+                        <option value="male" data-i18n="gender.male"></option>
+                        <option value="female" data-i18n="gender.female"></option>
+                    </select>
+                    <select id="filter-living" onchange="window.Strom.UI.scheduleSearchFilter()">
+                        <option value="" data-i18n="searchFilters.anyStatus"></option>
+                        <option value="living" data-i18n="searchFilters.living"></option>
+                        <option value="deceased" data-i18n="searchFilters.deceased"></option>
+                    </select>
+                </div>
+                <div class="search-filters-footer">
+                    <span id="search-result-count" class="search-result-count"></span>
+                    <button type="button" class="secondary" onclick="window.Strom.UI.clearSearchFilters()" data-i18n="searchFilters.clear"></button>
+                </div>
+            </div>
         </div>
 
         <!-- Toolbar Focus Info (tablet landscape) -->
