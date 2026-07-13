@@ -61,6 +61,14 @@ class TreeRendererClass {
     private showAllPartnerships = true;
 
     /**
+     * Display view mode. 'family' is the default focus-centric view (ancestors +
+     * descendants + relatives). 'descendants' shows only the focus person's
+     * descendants and their partners (a classic descendants chart). Persisted
+     * per tree in localStorage.
+     */
+    private viewMode: 'family' | 'descendants' = 'family';
+
+    /**
      * Set debug options for pipeline visualization.
      */
     setDebugOptions(options: DebugOptions): void {
@@ -107,14 +115,17 @@ class TreeRendererClass {
 
         // Compute layout using the new layout engine
         // Auto-expand for gen >= -1 persons is handled by the pipeline
+        // Descendants view: no ancestors, no aunts/uncles/cousins — only the
+        // focus person's descendants and their partners.
+        const descendantsOnly = this.viewMode === 'descendants';
         const request: LayoutRequest = {
             data: DataManager.getData(),
             focusPersonId: this.focusPersonId,
             policy: {
-                ancestorDepth: this.focusDepthUp,
+                ancestorDepth: descendantsOnly ? 0 : this.focusDepthUp,
                 descendantDepth: this.focusDepthDown,
-                includeAuntsUncles: true,
-                includeCousins: true
+                includeAuntsUncles: !descendantsOnly,
+                includeCousins: !descendantsOnly
             },
             config: this.config,
             displayPolicy: {
@@ -173,6 +184,8 @@ class TreeRendererClass {
 
         // Update focus UI (shows panel with focused person name, generation controls)
         this.updateFocusUI();
+        // Keep the view-mode segment + descendants badge in sync.
+        UI.updateViewModeUI?.();
     }
 
     // ============= Focus Mode Methods =============
@@ -201,6 +214,9 @@ class TreeRendererClass {
      * Called during initialization and after tree switch to restore user's position
      */
     restoreFromSession(): void {
+        // Restore the per-tree display view mode on tree switch / startup.
+        this.loadViewModeForCurrentTree();
+
         const persons = DataManager.getAllPersons();
 
         if (persons.length === 0) {
@@ -287,6 +303,48 @@ class TreeRendererClass {
 
     getFocusPersonId(): PersonId | null {
         return this.focusPersonId;
+    }
+
+    // ==================== DISPLAY VIEW MODE (family / descendants) ====================
+
+    getViewMode(): 'family' | 'descendants' {
+        return this.viewMode;
+    }
+
+    /** Switch the display view mode and re-render. Persisted per tree. */
+    setViewMode(mode: 'family' | 'descendants'): void {
+        this.viewMode = mode;
+        this.persistViewMode();
+        this.render();
+    }
+
+    private viewModeStorageKey(): string | null {
+        const treeId = DataManager.getCurrentTreeId();
+        return treeId ? `strom-viewmode-${treeId}` : null;
+    }
+
+    private persistViewMode(): void {
+        const key = this.viewModeStorageKey();
+        try {
+            if (key) localStorage.setItem(key, this.viewMode);
+        } catch { /* ignore storage errors */ }
+    }
+
+    /** Load the per-tree view mode (called on tree switch / session restore). */
+    loadViewModeForCurrentTree(): void {
+        const key = this.viewModeStorageKey();
+        let stored: string | null = null;
+        try { stored = key ? localStorage.getItem(key) : null; } catch { /* ignore */ }
+        this.viewMode = stored === 'descendants' ? 'descendants' : 'family';
+    }
+
+    /** Number of visible (non-placeholder) persons — used by the descendants badge. */
+    getVisiblePersonCount(): number {
+        let count = 0;
+        for (const id of this.positions.keys()) {
+            if (!DataManager.getPerson(id)?.isPlaceholder) count++;
+        }
+        return count;
     }
 
     /**

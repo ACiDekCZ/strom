@@ -259,6 +259,39 @@ export const miscMethods = uiModule({
         SettingsManager.setTheme(theme);
     },
 
+    // ==================== DISPLAY VIEW MODE (family / descendants) ====================
+
+    setDisplayViewMode(mode: 'family' | 'descendants'): void {
+        TreeRenderer.setViewMode(mode); // re-renders + calls updateViewModeUI
+    },
+
+    toggleDisplayViewMode(): void {
+        this.setDisplayViewMode(TreeRenderer.getViewMode() === 'descendants' ? 'family' : 'descendants');
+    },
+
+    exitDescendantsView(): void {
+        this.setDisplayViewMode('family');
+    },
+
+    /** Sync the toolbar segment + descendants badge with the renderer's view mode. */
+    updateViewModeUI(): void {
+        const mode = TreeRenderer.getViewMode();
+        document.getElementById('view-mode-family')?.classList.toggle('active', mode === 'family');
+        document.getElementById('view-mode-descendants')?.classList.toggle('active', mode === 'descendants');
+
+        const badge = document.getElementById('descendants-badge');
+        const text = document.getElementById('descendants-badge-text');
+        if (mode === 'descendants') {
+            const focusId = TreeRenderer.getFocusPersonId();
+            const person = focusId ? DataManager.getPerson(focusId) : null;
+            const name = person ? `${person.firstName} ${person.lastName}`.trim() : '';
+            if (text) text.textContent = strings.viewModeSwitch.badge(name, TreeRenderer.getVisiblePersonCount());
+            if (badge) badge.style.display = 'flex';
+        } else if (badge) {
+            badge.style.display = 'none';
+        }
+    },
+
     setLanguage(language: LanguageSetting): void {
         SettingsManager.setLanguage(language);
         // Refresh UI to update all strings

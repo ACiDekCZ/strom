@@ -231,6 +231,7 @@ const stringsEN = {
     contextMenu: {
         edit: 'Edit',
         focus: 'Focus',
+        showDescendants: 'Show descendants',
         relationship: 'Find relationship…',
         archives: 'Search in archives…',
         addParent: 'Add Parent',
@@ -238,6 +239,15 @@ const stringsEN = {
         addChild: 'Add Child',
         addSibling: 'Add Sibling',
         delete: 'Delete'
+    },
+
+    // Family / descendants view switch
+    viewModeSwitch: {
+        family: 'Family',
+        descendants: 'Descendants',
+        toggle: 'Family / descendants view',
+        back: 'Back to family view',
+        badge: (name: string, count: number) => `Descendants: ${name} (${count})`,
     },
 
     // Person modal
@@ -1238,6 +1248,7 @@ const stringsCZ: StringsType = {
     contextMenu: {
         edit: 'Upravit',
         focus: 'Zaměřit',
+        showDescendants: 'Zobrazit potomky',
         relationship: 'Zjistit vztah…',
         archives: 'Hledat v archivech…',
         addParent: 'Přidat rodiče',
@@ -1245,6 +1256,15 @@ const stringsCZ: StringsType = {
         addChild: 'Přidat dítě',
         addSibling: 'Přidat sourozence',
         delete: 'Smazat'
+    },
+
+    // Family / descendants view switch
+    viewModeSwitch: {
+        family: 'Rodina',
+        descendants: 'Potomci',
+        toggle: 'Pohled rodina / potomci',
+        back: 'Zpět na rodinný pohled',
+        badge: (name: string, count: number) => `Potomci: ${name} (${count})`,
     },
 
     // Person modal

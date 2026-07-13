@@ -52,6 +52,7 @@ export const contextMenuMethods = uiModule({
         const items: PersonMenuAction[] = [
             { action: 'edit', icon: '\u{270E}', label: strings.contextMenu.edit },
             { action: 'focus', icon: '\u{1F3AF}', label: strings.contextMenu.focus },
+            { action: 'descendants', icon: '\u{1F333}', label: strings.contextMenu.showDescendants },
             { action: 'relationship', icon: '\u{1F91D}', label: strings.contextMenu.relationship },
             { action: 'archives', icon: '\u{1F4DA}', label: strings.contextMenu.archives },
         ];
@@ -76,7 +77,16 @@ export const contextMenuMethods = uiModule({
                 this.showEditPersonModal(personId);
                 break;
             case 'focus':
+                // "Focus" always returns to the family view so the user is not
+                // stranded inside the descendants chart.
+                if (TreeRenderer.getViewMode() === 'descendants') {
+                    TreeRenderer.setViewMode('family');
+                }
                 TreeRenderer.setFocus(personId);
+                break;
+            case 'descendants':
+                TreeRenderer.setFocus(personId);
+                TreeRenderer.setViewMode('descendants');
                 break;
             case 'relationship':
                 this.showRelationshipCalculator(personId);

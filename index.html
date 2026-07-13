@@ -2579,6 +2579,31 @@
         .desktop-only { display: flex; }
         .mobile-only { display: none !important; }
 
+        /* Family / Descendants view segment */
+        .view-mode-segment { display: inline-flex; border: 1px solid var(--border-color, #ccc); border-radius: 6px; overflow: hidden; }
+        .view-mode-segment button {
+            border: none; background: var(--card-bg, #fff); color: var(--text, #333);
+            padding: 6px 10px; font-size: 12px; cursor: pointer;
+        }
+        .view-mode-segment button + button { border-left: 1px solid var(--border-color, #ccc); }
+        .view-mode-segment button.active { background: var(--primary, #4a90d9); color: #fff; }
+        [data-theme="dark"] .view-mode-segment { border-color: #444; }
+        [data-theme="dark"] .view-mode-segment button { background: #2a2a2a; color: #ddd; }
+        /* Descendants badge bar */
+        .descendants-badge {
+            position: fixed; top: 58px; left: 50%; transform: translateX(-50%); z-index: 90;
+            display: flex; align-items: center; gap: 10px;
+            background: var(--primary, #4a90d9); color: #fff;
+            padding: 6px 8px 6px 14px; border-radius: 20px; box-shadow: 0 2px 8px var(--shadow, rgba(0,0,0,0.2));
+            font-size: 13px; max-width: 90vw;
+        }
+        .descendants-badge #descendants-badge-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .descendants-badge button {
+            border: none; background: rgba(255,255,255,0.25); color: #fff; cursor: pointer;
+            width: 26px; height: 26px; border-radius: 50%; font-size: 16px; line-height: 1; flex-shrink: 0;
+        }
+        .descendants-badge button:hover { background: rgba(255,255,255,0.4); }
+
         /* Hamburger button */
         .toolbar .hamburger-btn {
             width: 44px;
@@ -5096,6 +5121,12 @@
         <!-- Tablet add person (round +) -->
         <button class="add-person-round" onclick="window.Strom.UI.showAddPersonModal()" title="Add Person" data-i18n-title="toolbar.addPerson">+</button>
 
+        <!-- Family / Descendants view segment (desktop) -->
+        <div class="view-mode-segment desktop-only" id="view-mode-segment">
+            <button id="view-mode-family" class="active" onclick="window.Strom.UI.setDisplayViewMode('family')" data-i18n="viewModeSwitch.family"></button>
+            <button id="view-mode-descendants" onclick="window.Strom.UI.setDisplayViewMode('descendants')" data-i18n="viewModeSwitch.descendants"></button>
+        </div>
+
         <!-- Settings button (desktop) -->
         <button class="secondary desktop-only" onclick="window.Strom.UI.showSettingsDialog()" data-i18n-title="settings.title">⚙</button>
 
@@ -5110,8 +5141,15 @@
         <button class="edit-only" onclick="window.Strom.UI.performRedo(); window.Strom.UI.closeMobileMenu()">↷ <span data-i18n="undo.redo"></span></button>
         <button class="edit-only" onclick="window.Strom.UI.showTreeManagerDialog(); window.Strom.UI.closeMobileMenu()">🌳 <span data-i18n="treeManager.manageTreesTitle"></span></button>
         <button class="edit-only" onclick="window.Strom.UI.showSourcesDialog(); window.Strom.UI.closeMobileMenu()">📚 <span data-i18n="sources.menu"></span></button>
+        <button onclick="window.Strom.UI.toggleDisplayViewMode(); window.Strom.UI.closeMobileMenu()">👪 <span data-i18n="viewModeSwitch.toggle"></span></button>
         <button onclick="window.Strom.UI.showPosterDialog()">🖼️ <span data-i18n="poster.menu"></span></button>
         <button onclick="window.Strom.UI.showSettingsDialog(); window.Strom.UI.closeMobileMenu()">⚙ <span data-i18n="settings.title"></span></button>
+    </div>
+
+    <!-- Descendants view badge bar -->
+    <div id="descendants-badge" class="descendants-badge" style="display:none;">
+        <span id="descendants-badge-text"></span>
+        <button type="button" onclick="window.Strom.UI.exitDescendantsView()" data-i18n-title="viewModeSwitch.back">&times;</button>
     </div>
 
     <div id="tree-container">
