@@ -82,7 +82,13 @@ export const duplicateSuggestMethods = uiModule({
 
         if (!first && !last) { this.clearDuplicateSuggest(context); return; }
 
-        const results = findSimilarPersons(DataManager.getData(), { firstName: first, lastName: last, gender, birthDate });
+        // In the relation modal, never suggest the anchor person themself —
+        // "use existing" would link the person to themselves (the link-existing
+        // picker excludes self the same way).
+        const excludeId = context === 'relation'
+            ? (this.relationContext as RelationContext | null)?.personId
+            : undefined;
+        const results = findSimilarPersons(DataManager.getData(), { firstName: first, lastName: last, gender, birthDate }, excludeId);
         this.renderDuplicateSuggest(context, results.slice(0, MAX_SUGGESTIONS));
     },
 
@@ -129,6 +135,7 @@ export const duplicateSuggestMethods = uiModule({
     useSuggestedPerson(personId: string): void {
         const ctx = this.relationContext as RelationContext | null;
         if (!ctx) return;
+        if (personId === ctx.personId) return; // never link a person to themself
         this.createRelationship(ctx.personId, personId as PersonId, ctx.relationType);
         this.closeRelationModal();
         TreeRenderer.render();

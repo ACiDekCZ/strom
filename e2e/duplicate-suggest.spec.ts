@@ -76,3 +76,21 @@ test('duplicate suggestions can be turned off in settings', async ({ page }) => 
     await modal.locator('#input-lastname').fill('Novak');
     await expect(page.locator('#duplicate-suggest-person')).toBeHidden();
 });
+
+test('add-relation never suggests the anchor person themself', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
+
+    // Add a child to Jan with the exact same name — the only similar person is
+    // Jan himself, and he must NOT be offered (self-link).
+    await cardAction(page, 'Jan', 'child');
+    const modal = page.locator('#relation-modal');
+    await expect(modal).toBeVisible();
+    await modal.locator('#rel-firstname').fill('Jan');
+    await modal.locator('#rel-lastname').fill('Novak');
+
+    const panel = page.locator('#duplicate-suggest-relation');
+    // Debounce is 300 ms — give the check time to run, then assert it stayed empty.
+    await page.waitForTimeout(500);
+    await expect(panel).toBeHidden();
+});
