@@ -268,6 +268,13 @@ const stringsEN = {
         continueYes: 'Add family',
     },
 
+    // Progressive web app (offline + updates)
+    pwa: {
+        offline: 'Offline',
+        updateReady: 'A new version is available.',
+        refresh: 'Refresh',
+    },
+
     // Zoom controls
     zoomControls: {
         zoomIn: 'Zoom In',
@@ -1411,6 +1418,13 @@ const stringsCZ: StringsType = {
         added: (n: number) => n === 1 ? 'Přidána 1 osoba' : `Přidáno ${n} ${n < 5 ? 'osoby' : 'osob'}`,
         continuePrompt: 'Pokračovat zbytkem rodiny?',
         continueYes: 'Přidat rodinu',
+    },
+
+    // Progressive web app (offline + updates)
+    pwa: {
+        offline: 'Offline',
+        updateReady: 'Je k dispozici nová verze.',
+        refresh: 'Obnovit',
     },
 
     // Zoom controls

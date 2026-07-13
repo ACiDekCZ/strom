@@ -17,6 +17,7 @@ import { DebugOptions, DebugStep, DebugPhase } from './layout/pipeline/debug-typ
 import { decrypt, CryptoSession } from './crypto.js';
 import { StromData, AppMode, PWA_HOSTNAME, APP_VERSION } from './types.js';
 import { StorageManager } from './storage.js';
+import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest } from './pwa.js';
 
 // Make modules available globally for HTML event handlers
 declare global {
@@ -345,6 +346,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('strom:tree-switched', () => {
         UI.updateTreeSwitcher();
     });
+
+    // PWA: offline indicator always; register the service worker only on the
+    // hosted PWA (never in embedded/file:// exports or dev).
+    UI.initOnlineIndicator();
+    if (shouldRegisterServiceWorker(APP_MODE)) {
+        linkManifest();
+        registerServiceWorker(() => UI.showUpdateAvailable());
+    }
 
     // "On this day" reminder — after the first render, off the critical path.
     const showOtd = () => UI.maybeShowOnThisDay();

@@ -86,6 +86,8 @@ the table honest.
 | Demo tree loads | `demo.spec.ts` | covered | focus + hint toast |
 | Backups: create / restore / undo restore | `backups.spec.ts` | covered | manual snapshot survives a delete; restore is undoable |
 | About dialog version | `smoke.spec.ts`, `cs.spec.ts` | covered | matches `package.json` |
+| PWA offline indicator | `pwa.spec.ts` | covered | toolbar badge toggles with `context.setOffline` |
+| PWA service-worker registration | — (`pwa.test.ts` unit) | partial | registration gate is unit-tested per AppMode; the SW is only served on the PWA host (`stromapp.info/run/`), which the localhost e2e server cannot emulate, so live register/offline-serve is not driven end-to-end |
 
 ## Deliberately not covered (`n-a`)
 

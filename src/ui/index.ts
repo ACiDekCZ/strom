@@ -69,6 +69,7 @@ import { snapshotsUiMethods } from './snapshots-ui.js';
 import { minimapMethods, MinimapTransform, WorldBox } from './minimap.js';
 import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { familyWizardMethods } from './family-wizard.js';
+import { pwaUiMethods } from './pwa-ui.js';
 
 export class UIClass {
     currentId: PersonId | null = null;
@@ -278,5 +279,9 @@ Object.assign(UIClass.prototype, anniversariesUiMethods);
 type FamilyWizardMethods = typeof familyWizardMethods;
 export interface UIClass extends FamilyWizardMethods {}
 Object.assign(UIClass.prototype, familyWizardMethods);
+
+type PwaUiMethods = typeof pwaUiMethods;
+export interface UIClass extends PwaUiMethods {}
+Object.assign(UIClass.prototype, pwaUiMethods);
 
 export const UI = new UIClass();
