@@ -11,6 +11,45 @@ import { AuditLogManager } from './audit-log.js';
 import { applyLivingPrivacy, PrivacyMode } from './privacy.js';
 import { stripMedia } from './attachments.js';
 
+/**
+ * Clean dynamic UI state from HTML before export: drop 'active' from specific
+ * UI elements (modals, menus, dropdowns) and hide the context menu.
+ * Does NOT touch merge-step / merge-tab (they need active as default state).
+ *
+ * The cleanup must NEVER run over <script> contents — the inlined bundle can
+ * legitimately contain these class names inside string literals (e.g. menu
+ * markup templates), and rewriting them corrupts the exported app's code.
+ * The HTML is therefore split on script blocks and only markup outside them
+ * is cleaned. Exported for tests.
+ */
+export function cleanDynamicState(html: string): string {
+    return html
+        .split(/(<script[\s\S]*?<\/script>)/g)
+        .map(part => part.startsWith('<script') ? part : cleanDynamicMarkup(part))
+        .join('');
+}
+
+function cleanDynamicMarkup(html: string): string {
+    const elementsToClean = ['modal-overlay', 'mobile-menu', 'tree-switcher-dropdown'];
+
+    let result = html;
+    for (const element of elementsToClean) {
+        const regex = new RegExp(`(class="[^"]*\\b${element}\\b[^"]*)"`, 'g');
+        result = result.replace(regex, (match) => {
+            return match
+                .replace(/\bactive\b/g, '')
+                .replace(/\s+/g, ' ')
+                .replace(/" $/, '"')
+                .replace(/=" /g, '="');
+        });
+    }
+
+    // Hide context menu
+    result = result.replace(/(class="context-menu[^"]*")([^>]*?)>/g, '$1 style="display:none">');
+
+    return result;
+}
+
 class AppExporterClass {
     /**
      * Check if we're running from a built version (strom.html with inlined JS)
@@ -23,36 +62,10 @@ class AppExporterClass {
     }
 
     /**
-     * Clean dynamic UI state from HTML before export
-     * Removes active classes only from specific UI elements (modals, menus, dropdowns)
-     * Does NOT remove from: merge-step, merge-tab (they need active as default state)
-     */
-    private cleanDynamicState(html: string): string {
-        const elementsToClean = ['modal-overlay', 'mobile-menu', 'tree-switcher-dropdown'];
-
-        let result = html;
-        for (const element of elementsToClean) {
-            const regex = new RegExp(`(class="[^"]*\\b${element}\\b[^"]*)"`, 'g');
-            result = result.replace(regex, (match) => {
-                return match
-                    .replace(/\bactive\b/g, '')
-                    .replace(/\s+/g, ' ')
-                    .replace(/" $/, '"')
-                    .replace(/=" /g, '="');
-            });
-        }
-
-        // Hide context menu
-        result = result.replace(/(class="context-menu[^"]*")([^>]*?)>/g, '$1 style="display:none">');
-
-        return result;
-    }
-
-    /**
      * Get clean HTML for export (only works from built version)
      */
     private getExportHtml(): string {
-        return this.cleanDynamicState(document.documentElement.outerHTML);
+        return cleanDynamicState(document.documentElement.outerHTML);
     }
 
     /**
