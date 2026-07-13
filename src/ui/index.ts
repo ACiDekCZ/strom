@@ -43,6 +43,7 @@ import { AuditLogManager } from '../audit-log.js';
 
 // Extracted method modules (composed onto UIClass at the bottom of this file).
 import { contextMenuMethods } from './context-menu.js';
+import { bottomSheetMethods } from './bottom-sheet.js';
 
 import { personModalMethods } from './person-modal.js';
 import { personEventsMethods } from './person-events.js';
@@ -69,6 +70,7 @@ export class UIClass {
     relationContext: RelationContext | null = null;
     contextMenu: HTMLElement | null = null;
     contextMenuCloseHandler: ((e: Event) => void) | null = null;
+    bottomSheet: HTMLElement | null = null;
     linkMode = false;
     gedcomResult: GedcomConversionResult | null = null;
     saveCurrentCallback: (() => void) | null = null;
@@ -161,6 +163,10 @@ export class UIClass {
 type ContextMenuMethods = typeof contextMenuMethods;
 export interface UIClass extends ContextMenuMethods {}
 Object.assign(UIClass.prototype, contextMenuMethods);
+
+type BottomSheetMethods = typeof bottomSheetMethods;
+export interface UIClass extends BottomSheetMethods {}
+Object.assign(UIClass.prototype, bottomSheetMethods);
 
 type PersonModalMethods = typeof personModalMethods;
 export interface UIClass extends PersonModalMethods {}

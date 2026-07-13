@@ -1,5 +1,7 @@
 /**
- * Context menu shown when clicking a person card.
+ * Context menu shown when clicking a person card, plus the shared per-person
+ * action model (also used by the mobile bottom sheet — see bottom-sheet.ts).
+ * The action LIST and the DISPATCH are shared; only the markup differs.
  * Split from the original UIClass; see src/ui/module.ts for the pattern.
  */
 
@@ -9,151 +11,135 @@ import { strings } from '../strings.js';
 import { PersonId, RelationType } from '../types.js';
 import { uiModule } from './module.js';
 
+/** One entry in the person action menu (context menu / bottom sheet). */
+export interface PersonMenuAction {
+    action: string;
+    icon: string;
+    label: string;
+    danger?: boolean;
+    /** Render a divider before this item. */
+    divider?: boolean;
+}
+
 export const contextMenuMethods = uiModule({
-    showContextMenu(personId: PersonId, event: MouseEvent): void {
-        event.preventDefault();
-        event.stopPropagation();
-
-        // Remove existing menu
-        this.hideContextMenu();
-
+    /**
+     * The per-person actions, depending on view/lock state. Both the desktop
+     * context menu and the mobile bottom sheet build their markup from this.
+     */
+    getPersonMenuActions(personId: PersonId): PersonMenuAction[] {
         const person = DataManager.getPerson(personId);
-        if (!person) return;
-
-        // Check if in view mode (read-only)
+        if (!person) return [];
         const isViewMode = DataManager.isViewMode();
         const isPersonLocked = DataManager.isPersonLocked(personId);
         const isTreeLocked = DataManager.isTreeLocked();
 
-        // Create context menu - show only non-editing actions in view mode
+        if (isViewMode) {
+            return [
+                { action: 'focus', icon: '\u{1F3AF}', label: strings.contextMenu.focus },
+                { action: 'relationship', icon: '\u{1F91D}', label: strings.contextMenu.relationship },
+                { action: 'archives', icon: '\u{1F4DA}', label: strings.contextMenu.archives },
+            ];
+        }
+        if (isPersonLocked) {
+            const items: PersonMenuAction[] = [
+                { action: 'focus', icon: '\u{1F3AF}', label: strings.contextMenu.focus },
+            ];
+            if (!isTreeLocked) {
+                items.push({ action: 'toggle-lock', icon: '\u{1F513}', label: strings.lock.unlockPerson, divider: true });
+            }
+            return items;
+        }
+        const items: PersonMenuAction[] = [
+            { action: 'edit', icon: '\u{270E}', label: strings.contextMenu.edit },
+            { action: 'focus', icon: '\u{1F3AF}', label: strings.contextMenu.focus },
+            { action: 'relationship', icon: '\u{1F91D}', label: strings.contextMenu.relationship },
+            { action: 'archives', icon: '\u{1F4DA}', label: strings.contextMenu.archives },
+        ];
+        if (person.parentIds.length < 2) {
+            items.push({ action: 'parent', icon: '↑', label: strings.contextMenu.addParent, divider: true });
+        }
+        items.push({ action: 'partner', icon: '↔', label: strings.contextMenu.addPartner, divider: person.parentIds.length >= 2 });
+        items.push({ action: 'child', icon: '↓', label: strings.contextMenu.addChild });
+        items.push({ action: 'sibling', icon: '↔', label: strings.contextMenu.addSibling });
+        items.push({ action: 'toggle-lock', icon: '\u{1F512}', label: strings.lock.lockPerson, divider: true });
+        items.push({ action: 'merge', icon: '\u{1F517}', label: `${strings.personMerge.mergeWith}...` });
+        items.push({ action: 'delete', icon: '\u{1F5D1}', label: strings.contextMenu.delete, danger: true });
+        return items;
+    },
+
+    /** Run a person menu action (shared by context menu + bottom sheet). */
+    runPersonMenuAction(personId: PersonId, action: string): void {
+        switch (action) {
+            case 'edit':
+                this.clearDialogStack();
+                this.pushDialog('person-modal');
+                this.showEditPersonModal(personId);
+                break;
+            case 'focus':
+                TreeRenderer.setFocus(personId);
+                break;
+            case 'relationship':
+                this.showRelationshipCalculator(personId);
+                break;
+            case 'archives':
+                this.showArchiveSearch(personId);
+                break;
+            case 'parent':
+            case 'partner':
+            case 'child':
+            case 'sibling':
+                this.clearDialogStack();
+                this.pushDialog('relation-modal');
+                this.addRelation(personId, action as RelationType);
+                break;
+            case 'toggle-lock': {
+                const p = DataManager.getPerson(personId);
+                if (p) {
+                    DataManager.updatePerson(personId, { isLocked: !p.isLocked });
+                    TreeRenderer.render();
+                }
+                break;
+            }
+            case 'merge':
+                this.clearDialogStack();
+                this.pushDialog('person-merge-modal');
+                this.showPersonMergeDialog(personId);
+                break;
+            case 'delete':
+                this.confirmDelete(personId);
+                break;
+        }
+    },
+
+    showContextMenu(personId: PersonId, event: MouseEvent): void {
+        event.preventDefault();
+        event.stopPropagation();
+
+        this.hideContextMenu();
+        const actions = this.getPersonMenuActions(personId);
+        if (actions.length === 0) return;
+
         const menu = document.createElement('div');
         menu.className = 'context-menu';
+        // NB: keep the class value out of the attribute as a whole variable —
+        // interpolating a `${... ? ... : ...}` directly inside class="context-menu…"
+        // confuses the self-export HTML cleaner's regex once minified.
+        menu.innerHTML = actions.map(a => {
+            const cls = a.danger ? 'context-menu-item danger' : 'context-menu-item';
+            const divider = a.divider ? '<div class="context-menu-divider"></div>' : '';
+            return `${divider}<div class="${cls}" data-action="${a.action}"><span class="icon">${a.icon}</span> ${a.label}</div>`;
+        }).join('');
 
-        if (isViewMode) {
-            // View mode: only Focus action
-            menu.innerHTML = `
-                <div class="context-menu-item" data-action="focus">
-                    <span class="icon">&#127919;</span> ${strings.contextMenu.focus}
-                </div>
-                <div class="context-menu-item" data-action="relationship">
-                    <span class="icon">&#129309;</span> ${strings.contextMenu.relationship}
-                </div>
-                <div class="context-menu-item" data-action="archives">
-                    <span class="icon">&#128218;</span> ${strings.contextMenu.archives}
-                </div>
-            `;
-        } else if (isPersonLocked) {
-            // Locked person: Focus + optional unlock (if tree is not locked)
-            menu.innerHTML = `
-                <div class="context-menu-item" data-action="focus">
-                    <span class="icon">&#127919;</span> ${strings.contextMenu.focus}
-                </div>
-                ${!isTreeLocked ? `
-                <div class="context-menu-divider"></div>
-                <div class="context-menu-item" data-action="toggle-lock">
-                    <span class="icon">&#128275;</span> ${strings.lock.unlockPerson}
-                </div>
-                ` : ''}
-            `;
-        } else {
-            // Normal mode: all actions + lock
-            menu.innerHTML = `
-                <div class="context-menu-item" data-action="edit">
-                    <span class="icon">&#9998;</span> ${strings.contextMenu.edit}
-                </div>
-                <div class="context-menu-item" data-action="focus">
-                    <span class="icon">&#127919;</span> ${strings.contextMenu.focus}
-                </div>
-                <div class="context-menu-item" data-action="relationship">
-                    <span class="icon">&#129309;</span> ${strings.contextMenu.relationship}
-                </div>
-                <div class="context-menu-item" data-action="archives">
-                    <span class="icon">&#128218;</span> ${strings.contextMenu.archives}
-                </div>
-                <div class="context-menu-divider"></div>
-                ${person.parentIds.length < 2 ? `
-                <div class="context-menu-item" data-action="parent">
-                    <span class="icon">&uarr;</span> ${strings.contextMenu.addParent}
-                </div>
-                ` : ''}
-                <div class="context-menu-item" data-action="partner">
-                    <span class="icon">&harr;</span> ${strings.contextMenu.addPartner}
-                </div>
-                <div class="context-menu-item" data-action="child">
-                    <span class="icon">&darr;</span> ${strings.contextMenu.addChild}
-                </div>
-                <div class="context-menu-item" data-action="sibling">
-                    <span class="icon">&#8596;</span> ${strings.contextMenu.addSibling}
-                </div>
-                <div class="context-menu-divider"></div>
-                <div class="context-menu-item" data-action="toggle-lock">
-                    <span class="icon">&#128274;</span> ${strings.lock.lockPerson}
-                </div>
-                <div class="context-menu-item" data-action="merge">
-                    <span class="icon">&#128279;</span> ${strings.personMerge.mergeWith}...
-                </div>
-                <div class="context-menu-item danger" data-action="delete">
-                    <span class="icon">&#128465;</span> ${strings.contextMenu.delete}
-                </div>
-            `;
-        }
-
-        // Position menu near click (will be adjusted after DOM insert)
+        // Position menu near click (adjusted after DOM insert)
         const rect = (event.target as HTMLElement).closest('.person-card')?.getBoundingClientRect();
-        let menuX = rect ? rect.right + 10 : event.clientX;
-        let menuY = rect ? rect.top : event.clientY;
-        menu.style.left = `${menuX}px`;
-        menu.style.top = `${menuY}px`;
+        menu.style.left = `${rect ? rect.right + 10 : event.clientX}px`;
+        menu.style.top = `${rect ? rect.top : event.clientY}px`;
 
-        // Add event listeners
         menu.querySelectorAll('.context-menu-item').forEach(item => {
             item.addEventListener('click', () => {
                 const action = (item as HTMLElement).dataset.action;
                 this.hideContextMenu();
-
-                switch (action) {
-                    case 'edit':
-                        // Setup stack for ESC handling
-                        this.clearDialogStack();
-                        this.pushDialog('person-modal');
-                        this.showEditPersonModal(personId);
-                        break;
-                    case 'focus':
-                        TreeRenderer.setFocus(personId);
-                        break;
-                    case 'relationship':
-                        this.showRelationshipCalculator(personId);
-                        break;
-                    case 'archives':
-                        this.showArchiveSearch(personId);
-                        break;
-                    case 'parent':
-                    case 'partner':
-                    case 'child':
-                    case 'sibling':
-                        // Setup stack for ESC handling
-                        this.clearDialogStack();
-                        this.pushDialog('relation-modal');
-                        this.addRelation(personId, action as RelationType);
-                        break;
-                    case 'toggle-lock': {
-                        const p = DataManager.getPerson(personId);
-                        if (p) {
-                            DataManager.updatePerson(personId, { isLocked: !p.isLocked });
-                            TreeRenderer.render();
-                        }
-                        break;
-                    }
-                    case 'merge':
-                        // Setup stack for ESC handling
-                        this.clearDialogStack();
-                        this.pushDialog('person-merge-modal');
-                        this.showPersonMergeDialog(personId);
-                        break;
-                    case 'delete':
-                        this.confirmDelete(personId);
-                        break;
-                }
+                if (action) this.runPersonMenuAction(personId, action);
             });
         });
 
@@ -170,29 +156,12 @@ export const contextMenuMethods = uiModule({
             let newLeft = parseFloat(menu.style.left);
             let newTop = parseFloat(menu.style.top);
 
-            // Check right edge - if menu overflows, position to left of card or screen edge
             if (menuRect.right > viewportWidth - padding) {
-                if (rect) {
-                    newLeft = rect.left - menuRect.width - 10;
-                } else {
-                    newLeft = viewportWidth - menuRect.width - padding;
-                }
+                newLeft = rect ? rect.left - menuRect.width - 10 : viewportWidth - menuRect.width - padding;
             }
-
-            // Check left edge - ensure menu doesn't go off left side
-            if (newLeft < padding) {
-                newLeft = padding;
-            }
-
-            // Check bottom edge
-            if (menuRect.bottom > viewportHeight - padding) {
-                newTop = viewportHeight - menuRect.height - padding;
-            }
-
-            // Check top edge
-            if (newTop < padding) {
-                newTop = padding;
-            }
+            if (newLeft < padding) newLeft = padding;
+            if (menuRect.bottom > viewportHeight - padding) newTop = viewportHeight - menuRect.height - padding;
+            if (newTop < padding) newTop = padding;
 
             menu.style.left = `${newLeft}px`;
             menu.style.top = `${newTop}px`;
@@ -201,28 +170,22 @@ export const contextMenuMethods = uiModule({
         // Close menu when clicking/touching outside
         this.contextMenuCloseHandler = (e: Event) => {
             const target = e.target as Node;
-            // Don't close if clicking inside the menu
             if (this.contextMenu && this.contextMenu.contains(target)) return;
-            // Don't close if clicking on a person card (will open new menu)
             if ((target as Element).closest?.('.person-card')) return;
             this.hideContextMenu();
         };
-
         setTimeout(() => {
-            // Capture phase ensures we get the event before other handlers
             document.addEventListener('mousedown', this.contextMenuCloseHandler!, true);
             document.addEventListener('touchstart', this.contextMenuCloseHandler!, true);
         }, 10);
     },
 
     hideContextMenu(): void {
-        // Remove event listeners
         if (this.contextMenuCloseHandler) {
             document.removeEventListener('mousedown', this.contextMenuCloseHandler, true);
             document.removeEventListener('touchstart', this.contextMenuCloseHandler, true);
             this.contextMenuCloseHandler = null;
         }
-        // Remove menu element
         if (this.contextMenu) {
             this.contextMenu.remove();
             this.contextMenu = null;

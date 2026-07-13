@@ -619,12 +619,17 @@ class TreeRendererClass {
             card.dataset.id = id;
 
             card.onclick = (e) => {
+                // A long-press just opened the bottom sheet — swallow this click.
+                if (card.dataset.suppressClick) { delete card.dataset.suppressClick; return; }
                 const target = e.target as HTMLElement;
                 if (target.classList.contains('add-btn') || target.classList.contains('branch-tab')) return;
                 // Don't open context menu when clicking on badge buttons or their children
                 if (target.closest('.hidden-partners-btn') || target.closest('.hidden-families-btn')) return;
                 UI.showContextMenu(id, e);
             };
+
+            // Touch: long-press opens the mobile bottom sheet (coarse pointer only).
+            UI.attachCardLongPress(card, id);
 
             const displayName = person.firstName || '?';
             const isDeceased = presumedDeceased.has(id);

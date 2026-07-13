@@ -325,6 +325,9 @@
             top: 50px; left: 0; right: 0; bottom: 0;
             overflow: hidden;
             cursor: grab;
+            /* Our JS drives pan/pinch — stop the browser from panning/zooming
+               the page (rubber-banding) on touch. */
+            touch-action: none;
         }
         #tree-container:active { cursor: grabbing; }
 
@@ -552,6 +555,15 @@
             max-height: 90vh;
             overflow-y: auto;
             box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+        }
+        /* On phones: near full-width dialogs with a sticky action bar so Save is
+           always reachable in long forms (person modal, export dialogs). */
+        @media (max-width: 500px) {
+            .modal { min-width: 0; width: 100%; max-width: 100vw; max-height: 94vh; padding: 16px; }
+            .modal .buttons, .modal .export-buttons {
+                position: sticky; bottom: -16px; z-index: 3;
+                background: var(--card-bg); padding: 10px 0; margin-bottom: -16px;
+            }
         }
         .modal h2 {
             font-size: 17px;
@@ -1025,6 +1037,36 @@
         [data-theme="dark"] .context-menu-item:hover {
             background: #3a3a3a;
         }
+
+        /* Mobile bottom sheet (touch context menu) */
+        .bottom-sheet-overlay {
+            position: fixed; inset: 0; z-index: 2500;
+            background: rgba(0,0,0,0.35); display: flex; align-items: flex-end;
+            opacity: 0; transition: opacity 0.18s ease;
+        }
+        .bottom-sheet-overlay.active { opacity: 1; }
+        .bottom-sheet {
+            width: 100%; box-sizing: border-box;
+            background: var(--card-bg, #fff); color: var(--text, #222);
+            border-radius: 16px 16px 0 0; padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+            box-shadow: 0 -4px 24px rgba(0,0,0,0.3);
+            transform: translateY(100%); transition: transform 0.22s ease;
+            max-height: 80vh; overflow-y: auto;
+        }
+        .bottom-sheet-overlay.active .bottom-sheet { transform: translateY(0); }
+        .bottom-sheet-handle {
+            width: 40px; height: 4px; border-radius: 2px; background: var(--border-color, #ccc);
+            margin: 6px auto 10px;
+        }
+        .bottom-sheet-item {
+            display: flex; align-items: center; gap: 12px; width: 100%;
+            min-height: 52px; padding: 10px 16px; border: none; background: none;
+            font-size: 16px; text-align: left; cursor: pointer; color: inherit; border-radius: 8px;
+        }
+        .bottom-sheet-item:active { background: rgba(128,128,128,0.15); }
+        .bottom-sheet-item.danger { color: var(--danger, #c0392b); }
+        .bottom-sheet-icon { font-size: 20px; width: 24px; text-align: center; flex-shrink: 0; }
+        [data-theme="dark"] .bottom-sheet { background: #262626; }
         [data-theme="dark"] .context-menu .danger:hover,
         [data-theme="dark"] .context-menu-item.danger:hover {
             background: #4a2a2a;
@@ -1231,6 +1273,14 @@
             cursor: pointer;
             color: var(--text-light);
             transition: color 0.2s;
+        }
+        /* Bigger touch targets on touch / small screens (visual desktop unchanged). */
+        @media (pointer: coarse), (max-width: 900px) {
+            .close-btn { width: 44px; height: 44px; }
+            .modal .buttons button,
+            .modal .export-buttons button,
+            .menu-option { min-height: 44px; }
+            .search-filter-toggle { min-width: 44px; }
         }
         .close-btn:hover {
             color: var(--text);
