@@ -95,6 +95,30 @@ const stringsEN = {
         empty: 'The tree is empty.',
     },
 
+    // Versioned backups
+    snapshots: {
+        menu: 'Backups',
+        title: 'Backup history',
+        empty: 'No backups yet',
+        createNow: 'Create backup now',
+        restore: 'Restore',
+        download: 'Download',
+        restored: 'Backup restored',
+        created: 'Backup created',
+        restoreConfirm: 'Restore this backup? It overwrites the current tree — the current state is saved as a backup first.',
+        total: (count: number, size: string) => `${count} backups · ${size}`,
+        colDate: 'Date',
+        colReason: 'Reason',
+        colPersons: 'People',
+        colSize: 'Size',
+        reasons: {
+            auto: 'Automatic',
+            manual: 'Manual',
+            'pre-import': 'Before import',
+            'pre-merge': 'Before merge',
+        },
+    },
+
     events: {
         title: 'Events',
         add: 'Add event',
@@ -970,6 +994,7 @@ const stringsEN = {
         treeMerge: (merged: number, added: number, source: string) => `Tree merge from "${source}": ${merged} merged, ${added} added`,
         // Auto-repair
         repairedIssue: (desc: string) => `Auto-repair: ${desc}`,
+        restoredBackup: 'Restored a backup',
         // Life events
         addedEvent: (name: string) => `Added event to ${name}`,
         updatedEvent: (name: string) => `Updated event of ${name}`,
@@ -1004,6 +1029,7 @@ const stringsEN = {
         addEvent: (name: string) => `event of ${name}`,
         editEvent: (name: string) => `editing event of ${name}`,
         removeEvent: (name: string) => `removing event of ${name}`,
+        restoreBackup: 'restoring backup',
         addSource: (title: string) => `source "${title}"`,
         editSource: (title: string) => `editing source "${title}"`,
         removeSource: (title: string) => `removing source "${title}"`,
@@ -1134,6 +1160,30 @@ const stringsCZ: StringsType = {
         optMaxGen: 'Max generací (nepovinné)',
         compiled: (date: string) => `sestaveno ${date}`,
         empty: 'Strom je prázdný.',
+    },
+
+    // Versioned backups
+    snapshots: {
+        menu: 'Zálohy',
+        title: 'Historie záloh',
+        empty: 'Zatím žádné zálohy',
+        createNow: 'Vytvořit zálohu teď',
+        restore: 'Obnovit',
+        download: 'Stáhnout',
+        restored: 'Záloha obnovena',
+        created: 'Záloha vytvořena',
+        restoreConfirm: 'Obnovit tuto zálohu? Přepíše aktuální strom — aktuální stav se před obnovou uloží jako záloha.',
+        total: (count: number, size: string) => `${count} záloh · ${size}`,
+        colDate: 'Datum',
+        colReason: 'Důvod',
+        colPersons: 'Osob',
+        colSize: 'Velikost',
+        reasons: {
+            auto: 'Automatická',
+            manual: 'Ruční',
+            'pre-import': 'Před importem',
+            'pre-merge': 'Před sloučením',
+        },
     },
 
     events: {
@@ -2011,6 +2061,7 @@ const stringsCZ: StringsType = {
         treeMerge: (merged: number, added: number, source: string) => `Sloučení stromů z "${source}": ${merged} sloučeno, ${added} přidáno`,
         // Auto-repair
         repairedIssue: (desc: string) => `Automatická oprava: ${desc}`,
+        restoredBackup: 'Obnovena záloha',
         // Life events
         addedEvent: (name: string) => `Přidána událost k ${name}`,
         updatedEvent: (name: string) => `Upravena událost u ${name}`,
@@ -2045,6 +2096,7 @@ const stringsCZ: StringsType = {
         addEvent: (name: string) => `událost u ${name}`,
         editEvent: (name: string) => `úprava události u ${name}`,
         removeEvent: (name: string) => `odebrání události u ${name}`,
+        restoreBackup: 'obnovení zálohy',
         addSource: (title: string) => `pramen „${title}"`,
         editSource: (title: string) => `úprava pramene „${title}"`,
         removeSource: (title: string) => `odebrání pramene „${title}"`,

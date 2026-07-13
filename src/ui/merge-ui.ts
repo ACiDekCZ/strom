@@ -673,6 +673,9 @@ export const mergeUiMethods = uiModule({
         // Update URL to reflect target tree
         this.updateUrlTreeParam(this.mergeTargetTreeId);
 
+        // Back up the target tree before merging into it.
+        await DataManager.snapshotNow('pre-merge');
+
         // Start merge with source data (fromTreeManager = true)
         MergerUI.startMerge(sourceData, this.mergeSourceTreeId, true);
 

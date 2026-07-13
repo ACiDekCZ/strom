@@ -418,6 +418,8 @@ export const importExportMethods = uiModule({
         if (this.importToCurrentTree) {
             this.importToCurrentTree = false;
             this.closeImportDialog();
+            // Back up the current state before overwriting it.
+            void DataManager.snapshotNow('pre-import');
             // Load data directly into current tree
             DataManager.loadStromData(data);
             TreeRenderer.render();

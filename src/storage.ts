@@ -10,9 +10,11 @@
  */
 
 const DB_NAME = 'strom-db';
-const DB_VERSION = 1;
+// v2: added the 'snapshots' store (versioned backups). onupgradeneeded creates
+// any missing store, so existing databases gain it on the next open.
+const DB_VERSION = 2;
 
-const STORES = ['trees', 'audit', 'merge'] as const;
+const STORES = ['trees', 'audit', 'merge', 'snapshots'] as const;
 export type StoreName = typeof STORES[number];
 
 class StorageManagerClass {
@@ -112,6 +114,20 @@ class StorageManagerClass {
             const tx = this.db!.transaction(store, 'readonly');
             const req = tx.objectStore(store).getAllKeys();
             req.onsuccess = () => resolve(req.result.map(k => String(k)));
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    /**
+     * Get all values in an object store.
+     */
+    async getAll<T>(store: StoreName): Promise<T[]> {
+        if (!this.db) throw new Error('StorageManager not initialized');
+
+        return new Promise<T[]>((resolve, reject) => {
+            const tx = this.db!.transaction(store, 'readonly');
+            const req = tx.objectStore(store).getAll();
+            req.onsuccess = () => resolve(req.result as T[]);
             req.onerror = () => reject(req.error);
         });
     }
