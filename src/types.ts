@@ -152,6 +152,29 @@ export interface Person {
     parentRelTypes?: Record<PersonId, ParentChildRelType>;
 }
 
+/**
+ * One person in the family wizard: either a reference to an existing person
+ * (link, no duplicate) or the fields to create a new one. Empty rows (no name,
+ * no existingId) are ignored by the wizard.
+ */
+export interface FamilyWizardMember {
+    existingId?: PersonId;
+    firstName: string;
+    lastName: string;
+    gender: Gender;
+    birthDate?: string;
+}
+
+/** A whole family added around an anchor person in one undo batch. */
+export interface FamilyWizardSpec {
+    anchorId: PersonId;
+    father?: FamilyWizardMember;
+    mother?: FamilyWizardMember;
+    partner?: FamilyWizardMember & { weddingDate?: string };
+    siblings: FamilyWizardMember[];
+    children: FamilyWizardMember[];
+}
+
 export interface Partnership {
     id: PartnershipId;
     person1Id: PersonId;

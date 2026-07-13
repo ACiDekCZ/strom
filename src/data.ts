@@ -25,7 +25,9 @@ import {
     LastFocusedMarker,
     STROM_DATA_VERSION,
     EmbeddedDataEnvelope,
-    isEmbeddedEnvelope
+    isEmbeddedEnvelope,
+    FamilyWizardSpec,
+    FamilyWizardMember
 } from './types.js';
 import { strings } from './strings.js';
 import { TreeManager } from './tree-manager.js';
@@ -76,6 +78,8 @@ class DataManagerClass {
 
     // Undo/redo: deep copy of the data taken at the start of the current mutation.
     private pendingBefore: StromData | null = null;
+    /** True while a batch (multiple mutations → one undo step) is in progress. */
+    private batchActive = false;
 
     // Pending encrypted embedded data (requires password to unlock)
     private pendingEncryptedEmbedded: EncryptedData | null = null;
@@ -727,15 +731,19 @@ class DataManagerClass {
      */
     private beginMutation(): void {
         if (this.viewMode) return;
+        // Inside a batch the pre-state was captured once by beginBatch; the inner
+        // mutations must not re-snapshot (that would split the batch into steps).
+        if (this.batchActive) return;
         this.pendingBefore = structuredClone(this.data);
     }
 
     /**
      * Finish an undoable mutation: push the pre-mutation snapshot onto the undo
      * stack with a description, then persist. Replaces this.save() at the end of
-     * mutation methods.
+     * mutation methods. During a batch this defers to commitBatch (no push/save).
      */
     private commitMutation(description: string): void {
+        if (this.batchActive) return;
         UndoManager.setActiveTree(this.currentTreeId);
         if (this.pendingBefore) {
             // Auto-backup the FIRST mutation of the day (state before it).
@@ -744,6 +752,26 @@ class DataManagerClass {
             this.pendingBefore = null;
         }
         this.save();
+    }
+
+    /**
+     * Batch mode: record a whole series of mutations as ONE undo step. Wrap a
+     * group of createPerson/addParentChild/createPartnership calls in
+     * beginBatch() … commitBatch(desc); the inner methods' own begin/commit
+     * become no-ops, so a single Ctrl+Z reverts the whole group (used by the
+     * family wizard). Non-invasive: no mutation method needs to change.
+     */
+    beginBatch(): void {
+        if (this.viewMode || this.batchActive) return;
+        this.beginMutation();      // one pre-state snapshot for the whole batch
+        this.batchActive = true;
+    }
+
+    /** Commit the batch as a single undo entry, then persist. */
+    commitBatch(description: string): void {
+        if (!this.batchActive) return;
+        this.batchActive = false;
+        this.commitMutation(description);
     }
 
     // ==================== VERSIONED BACKUPS (snapshots) ====================
@@ -913,6 +941,79 @@ class DataManagerClass {
             CrossTree.invalidateCacheForTree(this.currentTreeId);
         }
         return person;
+    }
+
+    /**
+     * Add a whole family around an anchor person in ONE undo step (family
+     * wizard). Empty members are skipped; a member with `existingId` links to
+     * that person instead of creating a duplicate. Returns the number of NEW
+     * persons created. All the inner mutations run inside a batch, so a single
+     * Ctrl+Z reverts the entire family.
+     */
+    addFamily(spec: FamilyWizardSpec): number {
+        const anchor = this.data.persons[spec.anchorId];
+        if (this.viewMode || !anchor) return 0;
+
+        let created = 0;
+        // Resolve a member to a person id: link existing, create new, or skip.
+        const resolve = (m?: FamilyWizardMember): PersonId | null => {
+            if (!m) return null;
+            if (m.existingId && this.data.persons[m.existingId]) return m.existingId;
+            if (!m.firstName.trim() && !m.lastName.trim()) return null;
+            const p = this.createPerson({
+                firstName: m.firstName.trim(),
+                lastName: m.lastName.trim(),
+                gender: m.gender,
+                ...(m.birthDate ? { birthDate: m.birthDate } : {}),
+            });
+            created++;
+            return p.id;
+        };
+
+        this.beginBatch();
+        AuditLogManager.beginBatch();
+
+        const fatherId = resolve(spec.father);
+        const motherId = resolve(spec.mother);
+        // Parents' partnership (so anchor + siblings share the same couple).
+        let parentUnion: PartnershipId | undefined;
+        if (fatherId && motherId) {
+            const u = this.createPartnership(fatherId, motherId);
+            parentUnion = u?.id;
+        }
+        for (const pid of [fatherId, motherId]) {
+            if (pid) this.addParentChild(pid, spec.anchorId, parentUnion);
+        }
+
+        // Siblings share the anchor's parents.
+        for (const s of spec.siblings) {
+            const sid = resolve(s);
+            if (!sid) continue;
+            for (const pid of [fatherId, motherId]) {
+                if (pid) this.addParentChild(pid, sid, parentUnion);
+            }
+        }
+
+        // Partner + shared children.
+        const partnerId = resolve(spec.partner);
+        let coupleUnion: PartnershipId | undefined;
+        if (partnerId) {
+            const u = this.createPartnership(spec.anchorId, partnerId);
+            coupleUnion = u?.id;
+            if (u && spec.partner?.weddingDate) u.startDate = spec.partner.weddingDate;
+        }
+        for (const c of spec.children) {
+            const cid = resolve(c);
+            if (!cid) continue;
+            this.addParentChild(spec.anchorId, cid, coupleUnion);
+            if (partnerId) this.addParentChild(partnerId, cid, coupleUnion);
+        }
+
+        this.commitBatch(strings.undo.addFamily(auditPersonName(anchor)));
+        AuditLogManager.endBatch(this.currentTreeId, 'person.create',
+            strings.auditLog.addedFamily(auditPersonName(anchor), created));
+        if (this.currentTreeId) CrossTree.invalidateCacheForTree(this.currentTreeId);
+        return created;
     }
 
     updatePerson(id: PersonId, updates: Partial<Person>): Person | null {

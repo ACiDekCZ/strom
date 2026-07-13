@@ -68,6 +68,7 @@ import { bookUiMethods } from './book-ui.js';
 import { snapshotsUiMethods } from './snapshots-ui.js';
 import { minimapMethods, MinimapTransform, WorldBox } from './minimap.js';
 import { anniversariesUiMethods } from './anniversaries-ui.js';
+import { familyWizardMethods } from './family-wizard.js';
 
 export class UIClass {
     currentId: PersonId | null = null;
@@ -158,6 +159,9 @@ export class UIClass {
 
     // Relationship calculator picker
     kinshipPicker: PersonPicker | null = null;
+
+    // Family wizard: the anchor person the new family is added around.
+    wizardAnchorId: PersonId | null = null;
 
     // Minimap state (world→minimap transform, current world box, drag + throttle)
     minimapTransform: MinimapTransform | null = null;
@@ -270,5 +274,9 @@ Object.assign(UIClass.prototype, minimapMethods);
 type AnniversariesUiMethods = typeof anniversariesUiMethods;
 export interface UIClass extends AnniversariesUiMethods {}
 Object.assign(UIClass.prototype, anniversariesUiMethods);
+
+type FamilyWizardMethods = typeof familyWizardMethods;
+export interface UIClass extends FamilyWizardMethods {}
+Object.assign(UIClass.prototype, familyWizardMethods);
 
 export const UI = new UIClass();

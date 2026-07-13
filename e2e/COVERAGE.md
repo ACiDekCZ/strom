@@ -60,6 +60,7 @@ the table honest.
 | Delete last person → empty state | `person-crud.spec.ts` | covered | empty state returns |
 | Add partner / child / parent | `relations.spec.ts` | covered | cards render |
 | Add sibling | `relations-extra.spec.ts` | covered | new sibling card renders |
+| Family wizard (batch add + single undo) | `family-wizard.spec.ts` | covered | parents+partner+children in one form; one Ctrl+Z removes the whole family |
 | Link existing person (no duplicate) | `relations-extra.spec.ts` | covered | relation modal "link existing" via person picker |
 | Partnership status / note change + remove | `relations-extra.spec.ts` | covered | relationships panel; divorced + note persist; removal |
 | Undo / redo (Ctrl+Z / Ctrl+Shift+Z) | `edit-undo-lock.spec.ts` | covered | delete → restore → delete again |

@@ -412,6 +412,8 @@ export const personModalMethods = uiModule({
             return;
         }
 
+        let createdFirstId: PersonId | null = null;
+
         if (this.currentId) {
             // Update existing
             DataManager.updatePerson(this.currentId, {
@@ -440,10 +442,18 @@ export const personModalMethods = uiModule({
                     photo
                 });
             }
+            // First person in a brand-new tree: offer to add the rest of the family.
+            if (DataManager.getAllPersons().length === 1) {
+                createdFirstId = newPerson.id;
+            }
         }
 
         this.forceCloseModal();
         TreeRenderer.render();
+
+        // After the very first person, offer to add the rest of the family — as
+        // a non-blocking action toast, so it never interrupts other flows.
+        if (createdFirstId) this.showFamilyOffer(createdFirstId);
     },
 
     async confirmDelete(personId: PersonId, parentDialogId?: string): Promise<void> {

@@ -62,6 +62,7 @@ export const contextMenuMethods = uiModule({
         items.push({ action: 'partner', icon: '↔', label: strings.contextMenu.addPartner, divider: person.parentIds.length >= 2 });
         items.push({ action: 'child', icon: '↓', label: strings.contextMenu.addChild });
         items.push({ action: 'sibling', icon: '↔', label: strings.contextMenu.addSibling });
+        items.push({ action: 'add-family', icon: '\u{1F46A}', label: strings.familyWizard.menu });
         items.push({ action: 'toggle-lock', icon: '\u{1F512}', label: strings.lock.lockPerson, divider: true });
         items.push({ action: 'merge', icon: '\u{1F517}', label: `${strings.personMerge.mergeWith}...` });
         items.push({ action: 'delete', icon: '\u{1F5D1}', label: strings.contextMenu.delete, danger: true });
@@ -101,6 +102,9 @@ export const contextMenuMethods = uiModule({
                 this.clearDialogStack();
                 this.pushDialog('relation-modal');
                 this.addRelation(personId, action as RelationType);
+                break;
+            case 'add-family':
+                this.showFamilyWizard(personId);
                 break;
             case 'toggle-lock': {
                 const p = DataManager.getPerson(personId);

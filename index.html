@@ -2433,6 +2433,89 @@
             .otd-card { left: 12px; right: 12px; bottom: 12px; max-width: none; }
         }
 
+        /* Family wizard offer (non-blocking action toast) */
+        .family-offer {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(10px);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px 10px 16px;
+            background: var(--card-bg, #fff);
+            border: 1px solid var(--border-color, rgba(0,0,0,0.1));
+            border-radius: 10px;
+            box-shadow: 0 4px 16px var(--shadow);
+            z-index: 250;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.2s;
+            /* Never intercept canvas drags/clicks — only the buttons are active. */
+            pointer-events: none;
+        }
+        .family-offer.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .family-offer button { pointer-events: auto; }
+        .family-offer-btn {
+            border: none; background: var(--primary, #4a90d9); color: #fff;
+            border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+        }
+        .family-offer-close {
+            border: none; background: none; font-size: 18px; line-height: 1;
+            color: var(--text-light); cursor: pointer; padding: 0 2px;
+        }
+
+        /* Family wizard */
+        .family-wizard-modal { max-width: 640px; width: 100%; }
+        .wiz-anchor { color: var(--text-light, #888); font-size: 13px; margin-bottom: 12px; }
+        .wiz-section { margin-bottom: 14px; }
+        .wiz-section-title {
+            font-size: 11px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.3px; color: var(--text-light); margin-bottom: 6px;
+        }
+        .wiz-row {
+            display: grid;
+            grid-template-columns: 70px 1fr 1fr 88px 90px 28px;
+            gap: 6px;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .wiz-row .wiz-role { font-size: 12px; color: var(--text-light); }
+        .wiz-row input, .wiz-row select {
+            padding: 7px 8px; border: 1px solid var(--border-color, #ccc);
+            border-radius: 6px; font-size: 13px; background: var(--card-bg, #fff);
+            color: var(--text-color); min-width: 0;
+        }
+        .wiz-row .wiz-wedding { grid-column: 5; }
+        .wiz-remove {
+            border: none; background: none; cursor: pointer; font-size: 18px;
+            color: var(--text-light); line-height: 1;
+        }
+        .wiz-remove:hover { color: #d33; }
+        .wiz-spacer { display: inline-block; }
+        .wiz-hint { grid-column: 1 / -1; font-size: 12px; display: flex; align-items: center; gap: 8px; min-height: 0; }
+        .wiz-hint:empty { display: none; }
+        .wiz-hint-text, .wiz-linked-label { color: var(--text-light); }
+        .wiz-use, .wiz-unlink {
+            border: 1px solid var(--primary, #4a90d9); color: var(--primary, #4a90d9);
+            background: none; border-radius: 4px; padding: 2px 8px; font-size: 12px; cursor: pointer;
+        }
+        .wiz-use:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); }
+        .wiz-row.wiz-linked input, .wiz-row.wiz-linked select { background: color-mix(in srgb, var(--primary) 8%, var(--card-bg, #fff)); }
+        .wiz-add {
+            border: 1px dashed var(--border-color, #bbb); background: none; color: var(--text-light);
+            border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; margin-top: 2px;
+        }
+        .wiz-add:hover { border-color: var(--primary); color: var(--primary); }
+        .wiz-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; position: sticky; bottom: 0; }
+        @media (max-width: 640px) {
+            .wiz-row { grid-template-columns: 60px 1fr 1fr; grid-auto-rows: auto; }
+            .wiz-row .wiz-gender { grid-column: 2; }
+            .wiz-row .wiz-birth { grid-column: 3; }
+            .wiz-row .wiz-wedding { grid-column: 2 / 4; }
+            .wiz-remove { grid-column: 3; justify-self: end; }
+        }
+
         /* ==================== TIMELINE VIEW ==================== */
         .timeline-container {
             display: none;
@@ -5850,6 +5933,33 @@
                 <button class="close-btn" onclick="window.Strom.UI.closeAnniversariesDialog()">&times;</button>
             </div>
             <div id="anniversaries-list" class="anniversaries-list"></div>
+        </div>
+    </div>
+
+    <!-- Family wizard: add a whole family in one step -->
+    <div class="modal-overlay" id="family-wizard-modal">
+        <div class="modal family-wizard-modal">
+            <div class="modal-header">
+                <h2 data-i18n="familyWizard.title"></h2>
+                <button class="close-btn" onclick="window.Strom.UI.closeFamilyWizard()">&times;</button>
+            </div>
+            <div id="family-wizard-anchor" class="wiz-anchor"></div>
+            <div class="wiz-section"><div class="wiz-section-title" data-i18n="familyWizard.roles.father"></div><div id="wiz-parents"></div></div>
+            <div class="wiz-section"><div class="wiz-section-title" data-i18n="familyWizard.roles.partner"></div><div id="wiz-partner"></div></div>
+            <div class="wiz-section">
+                <div class="wiz-section-title" data-i18n="familyWizard.roles.sibling"></div>
+                <div id="wiz-siblings"></div>
+                <button class="wiz-add" type="button" onclick="window.Strom.UI.wizardAddRow('sibling')" data-i18n="familyWizard.addSibling"></button>
+            </div>
+            <div class="wiz-section">
+                <div class="wiz-section-title" data-i18n="familyWizard.roles.child"></div>
+                <div id="wiz-children"></div>
+                <button class="wiz-add" type="button" onclick="window.Strom.UI.wizardAddRow('child')" data-i18n="familyWizard.addChild"></button>
+            </div>
+            <div class="wiz-actions">
+                <button class="secondary" onclick="window.Strom.UI.closeFamilyWizard()" data-i18n="buttons.cancel"></button>
+                <button class="primary" onclick="window.Strom.UI.saveFamilyWizard()" data-i18n="familyWizard.save"></button>
+            </div>
         </div>
     </div>
 
