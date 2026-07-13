@@ -2061,6 +2061,18 @@ class DataManagerClass {
                         child.parentIds.splice(removeIdx, 1);
                     }
                 }
+                // parentRelTypes is keyed by parent id — re-key removeId → keepId
+                // (an existing keepId entry wins)
+                const relType = child.parentRelTypes?.[removeId];
+                if (relType !== undefined) {
+                    delete child.parentRelTypes![removeId];
+                    if (!(keepId in child.parentRelTypes!)) {
+                        child.parentRelTypes![keepId] = relType;
+                    }
+                    if (Object.keys(child.parentRelTypes!).length === 0) {
+                        delete child.parentRelTypes;
+                    }
+                }
             }
         }
 
@@ -2180,6 +2192,16 @@ class DataManagerClass {
             const seenAtt = new Set(keepPerson.attachments.map(a => a.id));
             for (const att of removePerson.attachments) {
                 if (!seenAtt.has(att.id)) keepPerson.attachments.push(att);
+            }
+        }
+        // Carry the removed person's own parent relationship types for parents
+        // the kept person actually ended up with (keep's own entry wins).
+        if (removePerson.parentRelTypes) {
+            for (const [pid, type] of Object.entries(removePerson.parentRelTypes)) {
+                if (!keepPerson.parentIds.includes(pid as PersonId)) continue;
+                if (keepPerson.parentRelTypes?.[pid as PersonId] !== undefined) continue;
+                if (!keepPerson.parentRelTypes) keepPerson.parentRelTypes = {};
+                keepPerson.parentRelTypes[pid as PersonId] = type;
             }
         }
 

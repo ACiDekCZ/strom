@@ -72,3 +72,31 @@ describe('setParentRelType', () => {
         expect(DataManager.getPerson(childId)?.parentRelTypes).toBeUndefined();
     });
 });
+
+describe('person merge keeps parent relationship types', () => {
+    it('re-keys a child\'s parentRelTypes when their parent is merged away', () => {
+        const { parentId, childId } = parentChild();
+        const keepParent = DataManager.createPerson(personData('KeptParent'));
+        DataManager.setParentRelType(childId, parentId, 'adoptive');
+        expect(DataManager.getPerson(childId)?.parentRelTypes?.[parentId]).toBe('adoptive');
+
+        const ok = DataManager.mergePersons(keepParent.id, parentId, {}, new Map());
+        expect(ok).toBe(true);
+        const child = DataManager.getPerson(childId)!;
+        expect(child.parentIds).toContain(keepParent.id);
+        expect(child.parentRelTypes?.[keepParent.id]).toBe('adoptive');
+        expect(child.parentRelTypes?.[parentId]).toBeUndefined();
+    });
+
+    it('carries the removed person\'s own parent rel types when parents transfer', () => {
+        const { parentId, childId } = parentChild();
+        DataManager.setParentRelType(childId, parentId, 'foster');
+        const keepChild = DataManager.createPerson(personData('KeptChild'));
+
+        const ok = DataManager.mergePersons(keepChild.id, childId, {}, new Map());
+        expect(ok).toBe(true);
+        const kept = DataManager.getPerson(keepChild.id)!;
+        expect(kept.parentIds).toContain(parentId);
+        expect(kept.parentRelTypes?.[parentId]).toBe('foster');
+    });
+});

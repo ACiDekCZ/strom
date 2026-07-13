@@ -7,6 +7,7 @@ import {
     PersonId,
     PartnershipId,
     Person,
+    ParentChildRelType,
     Partnership,
     StromData,
     generatePersonId,
@@ -143,13 +144,13 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 const existingPerson = mergedData.persons[match.existingId];
                 if (existingPerson) {
                     // Merge data according to conflict resolutions
-                    mergePersonData(existingPerson, match.incomingPerson, match.conflicts);
+                    mergePersonData(existingPerson, match.incomingPerson, match.conflicts, mapping.persons);
                     mergedCount++;
                 }
             } else if (decision.type === 'manual_match') {
                 const existingPerson = mergedData.persons[decision.targetId];
                 if (existingPerson) {
-                    mergePersonData(existingPerson, match.incomingPerson, match.conflicts);
+                    mergePersonData(existingPerson, match.incomingPerson, match.conflicts, mapping.persons);
                     mergedCount++;
                 }
             }
@@ -190,6 +191,13 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                     .map(cid => mapping.persons.get(cid))
                     .filter((cid): cid is PersonId => cid !== undefined)
             };
+            // parentRelTypes is keyed by parent id — remap the keys too
+            // (the plain spread above would carry the incoming tree's ids)
+            const remappedRel = incoming.parentRelTypes
+                ? remapParentRelTypes(incoming.parentRelTypes, mapping.persons)
+                : undefined;
+            if (remappedRel) newPerson.parentRelTypes = remappedRel;
+            else delete newPerson.parentRelTypes;
 
             mergedData.persons[newId] = newPerson;
             addedCount++;
@@ -221,6 +229,11 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                             .map(childId => mapping.persons.get(childId))
                             .filter((childId): childId is PersonId => childId !== undefined)
                     };
+                    const remappedPhRel = person.parentRelTypes
+                        ? remapParentRelTypes(person.parentRelTypes, mapping.persons)
+                        : undefined;
+                    if (remappedPhRel) newPerson.parentRelTypes = remappedPhRel;
+                    else delete newPerson.parentRelTypes;
                     mergedData.persons[newId] = newPerson;
                 }
             }
@@ -303,6 +316,22 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
 // ==================== HELPER FUNCTIONS ====================
 
 /**
+ * Remap parentRelTypes keys (parent ids) through an id mapping. Keys whose
+ * parent did not come along are dropped. Returns undefined when empty.
+ */
+function remapParentRelTypes(
+    rel: Record<PersonId, ParentChildRelType>,
+    idMap: Map<PersonId, PersonId>
+): Record<PersonId, ParentChildRelType> | undefined {
+    const out: Record<PersonId, ParentChildRelType> = {};
+    for (const [pid, type] of Object.entries(rel)) {
+        const mapped = idMap.get(pid as PersonId);
+        if (mapped) out[mapped] = type;
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
  * Deep clone StromData
  */
 function deepCloneStromData(data: StromData): StromData {
@@ -317,7 +346,8 @@ function deepCloneStromData(data: StromData): StromData {
             childIds: [...person.childIds],
             ...(person.events ? { events: person.events.map(e => ({ ...e, ...(e.sourceIds ? { sourceIds: [...e.sourceIds] } : {}) })) } : {}),
             ...(person.sourceIds ? { sourceIds: [...person.sourceIds] } : {}),
-            ...(person.attachments ? { attachments: person.attachments.map(a => ({ ...a })) } : {})
+            ...(person.attachments ? { attachments: person.attachments.map(a => ({ ...a })) } : {}),
+            ...(person.parentRelTypes ? { parentRelTypes: { ...person.parentRelTypes } } : {})
         };
     }
 
@@ -336,7 +366,12 @@ function deepCloneStromData(data: StromData): StromData {
 /**
  * Merge person data according to conflict resolutions
  */
-function mergePersonData(existing: Person, incoming: Person, conflicts: FieldConflict[]): void {
+function mergePersonData(
+    existing: Person,
+    incoming: Person,
+    conflicts: FieldConflict[],
+    personIdMap?: Map<PersonId, PersonId>
+): void {
     // Merge non-conflicting data (fill in missing values)
     if (!existing.birthDate && incoming.birthDate) {
         existing.birthDate = incoming.birthDate;
@@ -394,6 +429,22 @@ function mergePersonData(existing: Person, incoming: Person, conflicts: FieldCon
     if (incoming.sourceIds && incoming.sourceIds.length > 0) {
         const merged = new Set([...(existing.sourceIds ?? []), ...incoming.sourceIds]);
         existing.sourceIds = [...merged];
+    }
+
+    // Merge parent relationship types: keys are parent ids from the INCOMING
+    // tree — remap them; the existing person's own value wins on clash.
+    if (incoming.parentRelTypes) {
+        const remapped = personIdMap
+            ? remapParentRelTypes(incoming.parentRelTypes, personIdMap)
+            : { ...incoming.parentRelTypes };
+        if (remapped) {
+            if (!existing.parentRelTypes) existing.parentRelTypes = {};
+            for (const [pid, type] of Object.entries(remapped)) {
+                if (!(pid in existing.parentRelTypes)) {
+                    existing.parentRelTypes[pid as PersonId] = type;
+                }
+            }
+        }
     }
 
     // Merge attachments: union by id, keeping the existing one on id clash.
