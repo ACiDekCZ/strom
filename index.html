@@ -23,6 +23,17 @@
             --text-light: #666;
             --shadow: rgba(0,0,0,0.1);
             --line-color: #888;
+            /* Aliases: newer features referenced these names — keep them
+               mapped to the theme system so dark mode covers them too. */
+            --text-color: var(--text);
+            --text-primary: var(--text);
+            --text-secondary: var(--text-light);
+            --bg-color: var(--bg);
+            --border-color: #ddd;
+            --input-bg: var(--card-bg);
+            --hover-bg: #f1f1ee;
+            --danger: #c0392b;
+            --accent-soft: #f4f7ff;
         }
 
         [data-theme="dark"] {
@@ -40,6 +51,10 @@
             --text-light: #999;
             --shadow: rgba(0,0,0,0.3);
             --line-color: #666;
+            --border-color: #454545;
+            --hover-bg: #353535;
+            --danger: #e57373;
+            --accent-soft: #2c3440;
         }
 
         body {
