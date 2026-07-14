@@ -631,6 +631,7 @@ const stringsEN = {
 
     // Errors
     errors: {
+        saveFailed: 'Saving failed — your latest changes may not be stored! Free up space or unlock encryption, then edit again.',
         parseStoredData: 'Failed to parse stored data',
         invalidJson: 'Invalid JSON file'
     },
@@ -1927,6 +1928,7 @@ const stringsCZ: StringsType = {
 
     // Errors
     errors: {
+        saveFailed: 'Uložení selhalo — poslední změny nemusí být zapsané! Uvolni místo nebo odemkni šifrování a uprav znovu.',
         parseStoredData: 'Nepodařilo se načíst uložená data',
         invalidJson: 'Neplatný JSON soubor'
     },

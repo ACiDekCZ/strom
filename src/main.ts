@@ -246,6 +246,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    // Reconcile the encryption FLAG (localStorage) with what actually sits
+    // on disk (IndexedDB): browsers can evict them independently, and a lost
+    // flag used to skip the password prompt, load the tree as silently EMPTY
+    // and let a subsequent save overwrite the ciphertext (audit K4).
+    if (!SettingsManager.isEncryptionEnabled() && await TreeManager.hasEncryptedTrees()) {
+        SettingsManager.setEncryption(true);
+    }
+
     // Check for encrypted localStorage data that needs password
     if (SettingsManager.isEncryptionEnabled() && await TreeManager.hasEncryptedTrees()) {
         const encryptedData = await TreeManager.getFirstEncryptedData();
@@ -347,6 +355,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         UI.updateTreeSwitcher();
         UI.updateCollabBar();
         void UI.updateFileIndicator();
+    });
+
+    // Persistence failures (quota, locked session) must reach the user —
+    // they used to be swallowed rejections with memory/disk divergence.
+    window.addEventListener('strom:save-failed', () => {
+        UI.showToast(UI.getString('errors.saveFailed'), 6000);
     });
 
     // PWA: offline indicator always; register the service worker only on the

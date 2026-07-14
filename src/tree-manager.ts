@@ -366,30 +366,47 @@ class TreeManagerClass {
         return (await this.getFirstEncryptedData()) !== null;
     }
 
+    /** Per-tree write queue: keeps saves ordered (see saveTreeData). */
+    private saveQueues = new Map<TreeId, Promise<void>>();
+
     /**
-     * Save tree data (fire-and-forget)
-     * Handles encryption if enabled.
+     * Save tree data. Still fire-and-forget for callers, but internally each
+     * tree's writes are SERIALIZED on a queue — the encrypted path used to
+     * launch independent async encrypt+write jobs, so two rapid saves could
+     * land out of order and an older state could overwrite a newer one
+     * (audit K5). Failures now surface as a strom:save-failed event instead
+     * of a swallowed rejection.
      */
     saveTreeData(id: TreeId, data: StromData): void {
         // Ensure version is set
         data.version = STROM_DATA_VERSION;
+        // Snapshot NOW: the caller keeps mutating the live object.
+        const plainText = JSON.stringify(data);
 
-        // Determine what to persist
-        if (SettingsManager.isEncryptionEnabled() && CryptoSession.isUnlocked()) {
-            // Encrypt then write (async, fire-and-forget)
-            void (async () => {
-                const plainText = JSON.stringify(data);
+        const prev = this.saveQueues.get(id) ?? Promise.resolve();
+        const next = prev.then(async () => {
+            if (SettingsManager.isEncryptionEnabled()) {
+                if (!CryptoSession.isUnlocked()) throw new Error('locked');
                 const encrypted = await CryptoSession.encrypt(plainText);
                 const sizeBytes = new Blob([JSON.stringify(encrypted)]).size;
-                void StorageManager.set('trees', id, encrypted);
+                await StorageManager.set('trees', id, encrypted);
                 this.updateMetadata(id, data, sizeBytes);
-            })();
-        } else {
-            const dataStr = JSON.stringify(data);
-            const sizeBytes = new Blob([dataStr]).size;
-            void StorageManager.set('trees', id, data);
-            this.updateMetadata(id, data, sizeBytes);
-        }
+            } else {
+                const sizeBytes = new Blob([plainText]).size;
+                await StorageManager.set('trees', id, JSON.parse(plainText) as StromData);
+                this.updateMetadata(id, data, sizeBytes);
+            }
+        }).catch((err) => {
+            // Surface instead of swallowing: quota/lock failures used to be
+            // completely silent, leaving memory and disk divergent.
+            console.error('saveTreeData failed', id, err);
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('strom:save-failed', {
+                    detail: { treeId: id, reason: err instanceof Error ? err.message : String(err) },
+                }));
+            }
+        });
+        this.saveQueues.set(id, next);
     }
 
     /** Update in-memory metadata after save */
