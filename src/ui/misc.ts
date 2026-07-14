@@ -325,6 +325,8 @@ export const miscMethods = uiModule({
         // Toolbar "Add family" shortcut (opt-in setting).
         const familyBtn = document.getElementById('toolbar-family-btn');
         if (familyBtn) familyBtn.style.display = SettingsManager.isFamilyButtonEnabled() ? '' : 'none';
+        const mmFamilyBtn = document.getElementById('mm-family-btn');
+        if (mmFamilyBtn) mmFamilyBtn.style.display = SettingsManager.isFamilyButtonEnabled() ? '' : 'none';
 
         // Branch-colour legend: only when the setting is on and cards are
         // actually shown (family/descendants — not timeline, not fan).

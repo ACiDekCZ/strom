@@ -69,6 +69,11 @@ test.describe('mobile', () => {
         for (const m of ['family', 'descendants', 'timeline', 'fan']) {
             await expect(page.locator(`#mm-view-${m}`)).toBeVisible();
         }
+        // Export entry opens the export dialog (book/GEDCOM/CSV live there).
+        await page.locator('#mobile-menu button', { hasText: 'Export' }).first().click();
+        await expect(page.locator('#export-modal')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.closeExportDialog());
+        await page.locator('.hamburger-btn').click();
         await page.locator('#mm-view-fan').click();
         await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
         // The menu marks the active view on reopen.
