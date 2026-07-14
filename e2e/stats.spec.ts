@@ -2,24 +2,33 @@ import { test, expect } from '@playwright/test';
 import { openApp, card } from './helpers.js';
 
 /**
- * Visual family statistics: the tree-stats dialog has a collapsible "Family
- * statistics" section that renders inline-SVG bar charts.
+ * Visual family statistics: hero tiles, split bars, completeness progress,
+ * inline SVG charts and record cards — everything visible without expanding.
  */
-test('family statistics section renders SVG charts', async ({ page }) => {
+test('tree statistics render charts, split bars and record cards inline', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Henry VIII')).toBeVisible();
 
-    // Open the tree-stats dialog and expand the family-statistics section.
     await page.evaluate(() => window.Strom.UI.showActiveTreeStats());
     const modal = page.locator('#tree-stats-modal');
     await expect(modal).toBeVisible();
 
-    const summary = modal.locator('.tree-stats-family-summary');
-    await expect(summary).toHaveText('Family statistics');
-    await summary.click();
+    // Hero: four tiles including generations and the year span.
+    await expect(modal.locator('.tree-stats-header-item')).toHaveCount(4);
+    await expect(modal.locator('.tree-stats-header')).toContainText('Generations');
 
-    // At least one bar chart (e.g. most common names) is drawn.
+    // Proportional split bars (men/women, living/deceased).
+    await expect(modal.locator('.stats-split-bar')).toHaveCount(2);
+
+    // Completeness progress bars.
+    expect(await modal.locator('.stats-progress').count()).toBeGreaterThan(0);
+
+    // Charts are visible directly — no collapsible section anymore.
+    await expect(modal.locator('details')).toHaveCount(0);
     await expect(modal.locator('svg.stats-bar-chart').first()).toBeVisible();
     expect(await modal.locator('svg.stats-bar-chart .stats-bar-rect').count()).toBeGreaterThan(0);
+
+    // Record cards (longest-lived, largest family, ...).
+    expect(await modal.locator('.stats-record-card').count()).toBeGreaterThanOrEqual(2);
 });

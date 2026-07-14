@@ -32,6 +32,10 @@ export interface FamilyStats {
     oldest: { name: string; years: number } | null;
     /** Longest documented marriage (partnership start+end). */
     longestMarriage: { names: string; years: number } | null;
+    /** Couple with the most children. */
+    largestFamily: { names: string; count: number } | null;
+    /** Number of generation rows the tree spans. */
+    generations: number;
 }
 
 function fullName(p: Person): string {
@@ -98,6 +102,22 @@ export function computeFamilyStats(data: StromData): FamilyStats {
     }
     const birthsByMonth: MonthCount[] = monthCounts.map((count, i) => ({ month: i + 1, count }));
 
+    // ---- largest family (couple with most children) ----
+    let largestFamily: { names: string; count: number } | null = null;
+    for (const u of Object.values(data.partnerships)) {
+        if (u.childIds.length === 0) continue;
+        if (!largestFamily || u.childIds.length > largestFamily.count) {
+            const p1 = data.persons[u.person1Id], p2 = data.persons[u.person2Id];
+            const names = [p1, p2].filter(Boolean).map(p => fullName(p!)).join(' & ');
+            largestFamily = { names, count: u.childIds.length };
+        }
+    }
+
+    // ---- generation span ----
+    const genValues = new Set<number>();
+    for (const p of persons) genValues.add(gen.get(p.id) ?? 0);
+    const generations = genValues.size;
+
     // ---- longest marriage (both start and end documented) ----
     let longestMarriage: { names: string; years: number } | null = null;
     for (const u of Object.values(data.partnerships)) {
@@ -118,6 +138,8 @@ export function computeFamilyStats(data: StromData): FamilyStats {
         birthsByMonth,
         birthsByMonthN,
         oldest,
+        largestFamily,
+        generations,
         longestMarriage,
     };
 }

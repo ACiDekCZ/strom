@@ -4123,6 +4123,55 @@
             font-size: 11px;
             opacity: 0.9;
         }
+        .tree-stats-header-value.tree-stats-header-span { font-size: 20px; padding-top: 8px; }
+
+        /* Proportional split bars (men/women, living/deceased). */
+        .stats-split { padding: 6px 0; }
+        .stats-split-labels {
+            display: flex; justify-content: space-between;
+            font-size: 12px; color: var(--text-secondary, #666); margin-bottom: 4px;
+        }
+        .stats-split-labels b { color: var(--text, #333); }
+        .stats-split-bar {
+            display: flex; height: 14px; border-radius: 7px; overflow: hidden;
+            background: rgba(128,128,128,0.18);
+        }
+        .stats-split-bar span { height: 100%; flex: 1; }
+        .stats-split-bar span:first-child { flex: none; }
+        .stats-split-male { background: #5b8def; }
+        .stats-split-female { background: #e08bb0; }
+        .stats-split-living { background: var(--primary, #4a7c59); }
+        .stats-split-deceased { background: #9aa0a6; }
+
+        /* Completeness progress bars. */
+        .stats-progress { display: flex; align-items: center; gap: 10px; padding: 4px 0; font-size: 13px; }
+        .stats-progress .label { flex: 1; color: var(--text-secondary, #666); }
+        .stats-progress-track {
+            flex: 1.1; height: 8px; border-radius: 4px;
+            background: rgba(128,128,128,0.18); overflow: hidden;
+        }
+        .stats-progress-fill { display: block; height: 100%; border-radius: 4px; background: var(--primary, #4a7c59); }
+        .stats-progress .pct { width: 42px; text-align: right; font-weight: 600; font-size: 12px; }
+
+        /* Family records as highlight cards. */
+        .stats-record-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+        .stats-record-card {
+            display: flex; align-items: center; gap: 10px;
+            background: rgba(128,128,128,0.09); border-radius: 8px; padding: 8px 10px;
+            min-width: 0;
+        }
+        .stats-record-icon { font-size: 18px; flex-shrink: 0; }
+        .stats-record-text { min-width: 0; }
+        .stats-record-label {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px;
+            color: var(--text-secondary, #888);
+        }
+        .stats-record-value { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+        @media (max-width: 500px) {
+            .stats-record-cards { grid-template-columns: 1fr; }
+            .tree-stats-header { flex-wrap: wrap; row-gap: 10px; }
+            .tree-stats-header-item { flex-basis: 45%; }
+        }
         .tree-stats-section {
             background: #f8f8f8;
             border-radius: 8px;

@@ -46,7 +46,7 @@ import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
-import { yearOf, parseFlexDate, formatFlexDate } from '../dates.js';
+import { yearOf, parseFlexDate } from '../dates.js';
 import { computeFamilyStats } from '../stats.js';
 
 /** Escape text for safe inclusion in SVG/HTML (names come from user data). */
@@ -454,6 +454,39 @@ export const treeStatsMethods = uiModule({
         const birthPlacePct = totalPersons > 0 ? Math.round(withBirthPlace / totalPersons * 100) : 0;
         const sourceCoveragePct = totalPersons > 0 ? Math.round(personsCited / totalPersons * 100) : 0;
 
+        // Year span for the hero tile ("1430–1542"); single year shown alone.
+        const firstYear = datedBirths[0]?.y;
+        const lastYear = datedBirths[datedBirths.length - 1]?.y;
+        const yearSpan = firstYear === undefined ? '–'
+            : firstYear === lastYear ? String(firstYear) : `${firstYear}–${lastYear}`;
+        const familyStats = computeFamilyStats(treeData);
+
+        // Proportional two-color split bar with counted labels above it.
+        const splitBar = (leftLabel: string, leftN: number, leftCls: string,
+            rightLabel: string, rightN: number, rightCls: string): string => {
+            const total = leftN + rightN;
+            if (total === 0) return '';
+            const leftPct = (leftN / total * 100).toFixed(1);
+            return `
+                <div class="stats-split">
+                    <div class="stats-split-labels">
+                        <span>${leftLabel} <b>${leftN}</b></span>
+                        <span><b>${rightN}</b> ${rightLabel}</span>
+                    </div>
+                    <div class="stats-split-bar">
+                        <span class="${leftCls}" style="width:${leftPct}%"></span>
+                        <span class="${rightCls}"></span>
+                    </div>
+                </div>`;
+        };
+
+        const progress = (label: string, pct: number): string => `
+            <div class="stats-progress">
+                <span class="label">${label}</span>
+                <span class="stats-progress-track"><span class="stats-progress-fill" style="width:${pct}%"></span></span>
+                <span class="pct">${pct}%</span>
+            </div>`;
+
         return `
             <div class="tree-stats-header">
                 <div class="tree-stats-header-item">
@@ -464,63 +497,27 @@ export const treeStatsMethods = uiModule({
                     <div class="tree-stats-header-value">${totalFamilies}</div>
                     <div class="tree-stats-header-label">${s.statsFamilies}</div>
                 </div>
-            </div>
-
-            <div class="tree-stats-section">
-                <div class="tree-stats-grid">
-                    <div class="tree-stats-row">
-                        <span class="label">${s.statsMales}</span>
-                        <span class="value">${males}</span>
-                    </div>
-                    <div class="tree-stats-row">
-                        <span class="label">${s.statsFemales}</span>
-                        <span class="value">${females}</span>
-                    </div>
-                    <div class="tree-stats-row">
-                        <span class="label">${s.statsLiving}</span>
-                        <span class="value">${living}</span>
-                    </div>
-                    <div class="tree-stats-row">
-                        <span class="label">${s.statsDeceased}</span>
-                        <span class="value">${deceased}</span>
-                    </div>
-                    <div class="tree-stats-row">
-                        <span class="label">${s.statsAvgChildren}</span>
-                        <span class="value">${avgChildren}</span>
-                    </div>
-                    <div class="tree-stats-row">
-                        <span class="label">${s.statsMaxChildren}</span>
-                        <span class="value">${maxChildren}</span>
-                    </div>
+                <div class="tree-stats-header-item">
+                    <div class="tree-stats-header-value">${familyStats.generations}</div>
+                    <div class="tree-stats-header-label">${s.statsGenerations}</div>
+                </div>
+                <div class="tree-stats-header-item">
+                    <div class="tree-stats-header-value tree-stats-header-span">${yearSpan}</div>
+                    <div class="tree-stats-header-label">${s.statsYearSpan}</div>
                 </div>
             </div>
 
             <div class="tree-stats-section">
-                <div class="tree-stats-section-title">${s.statsDates}</div>
-                <div class="tree-stats-row">
-                    <span class="label">${s.statsOldestBirth}</span>
-                    <span class="value">${this.formatDateShort(oldestBirth)}</span>
-                </div>
-                <div class="tree-stats-row">
-                    <span class="label">${s.statsNewestBirth}</span>
-                    <span class="value">${this.formatDateShort(newestBirth)}</span>
-                </div>
+                ${splitBar(s.statsMales, males, 'stats-split-male', s.statsFemales, females, 'stats-split-female')}
+                ${splitBar(s.statsLiving, living, 'stats-split-living', s.statsDeceased, deceased, 'stats-split-deceased')}
             </div>
 
             <div class="tree-stats-section">
                 <div class="tree-stats-section-title">${s.statsData}</div>
-                <div class="tree-stats-row">
-                    <span class="label">${s.statsWithBirthDate}</span>
-                    <span class="value">${birthDatePct}%</span>
-                </div>
-                <div class="tree-stats-row">
-                    <span class="label">${s.statsWithDeathDate}</span>
-                    <span class="value">${deathDatePct}%</span>
-                </div>
-                <div class="tree-stats-row">
-                    <span class="label">${s.statsWithBirthPlace}</span>
-                    <span class="value">${birthPlacePct}%</span>
-                </div>
+                ${progress(s.statsWithBirthDate, birthDatePct)}
+                ${progress(s.statsWithDeathDate, deathDatePct)}
+                ${progress(s.statsWithBirthPlace, birthPlacePct)}
+                ${totalSources > 0 ? progress(s.statsSourceCoverage, sourceCoveragePct) : ''}
                 ${withPhoto > 0 ? `
                 <div class="tree-stats-row">
                     <span class="label">${s.statsPhotos}</span>
@@ -535,10 +532,6 @@ export const treeStatsMethods = uiModule({
                 <div class="tree-stats-row">
                     <span class="label">${s.statsSources}</span>
                     <span class="value">${totalSources}</span>
-                </div>
-                <div class="tree-stats-row">
-                    <span class="label">${s.statsSourceCoverage}</span>
-                    <span class="value">${personsCited}/${totalPersons} (${sourceCoveragePct}%)</span>
                 </div>` : ''}
                 ${totalAttachments > 0 ? `
                 <div class="tree-stats-row">
@@ -558,17 +551,16 @@ export const treeStatsMethods = uiModule({
                 </div>
             </div>
 
-            <details class="tree-stats-section tree-stats-family">
-                <summary class="tree-stats-family-summary">${strings.stats.section}</summary>
-                ${this.generateFamilyStatsHtml(treeData)}
-            </details>
+            <div class="tree-stats-section">
+                <div class="tree-stats-section-title">${strings.stats.section}</div>
+                ${this.generateFamilyStatsHtml(treeData, familyStats, avgChildren)}
+            </div>
         `;
     },
 
-    /** Visual family statistics (charts) for the collapsible dialog section. */
-    generateFamilyStatsHtml(treeData: StromData): string {
+    /** Visual family statistics (charts + record cards) for the dialog. */
+    generateFamilyStatsHtml(treeData: StromData, stats: ReturnType<typeof computeFamilyStats>, avgChildren: string): string {
         const st = strings.stats;
-        const stats = computeFamilyStats(treeData);
         const blocks: string[] = [];
 
         const chartBlock = (title: string, body: string): string =>
@@ -607,17 +599,27 @@ export const treeStatsMethods = uiModule({
             ? svgBarChart(stats.birthsByMonth.map(m => ({ label: st.months[m.month - 1], value: m.count })))
             : notEnough));
 
-        // Records.
-        const records: string[] = [];
+        // Records as highlight cards.
+        const card = (icon: string, label: string, value: string): string => `
+            <div class="stats-record-card">
+                <span class="stats-record-icon">${icon}</span>
+                <div class="stats-record-text">
+                    <div class="stats-record-label">${label}</div>
+                    <div class="stats-record-value">${value}</div>
+                </div>
+            </div>`;
+        const cards: string[] = [];
         if (stats.oldest) {
-            records.push(`<div class="tree-stats-row"><span class="label">${st.oldest}</span>`
-                + `<span class="value">${escXml(stats.oldest.name)} · ${stats.oldest.years} ${st.years}</span></div>`);
+            cards.push(card('\u{1F3C6}', st.oldest, `${escXml(stats.oldest.name)} · ${stats.oldest.years} ${st.years}`));
         }
         if (stats.longestMarriage) {
-            records.push(`<div class="tree-stats-row"><span class="label">${st.longestMarriage}</span>`
-                + `<span class="value">${escXml(stats.longestMarriage.names)} · ${stats.longestMarriage.years} ${st.years}</span></div>`);
+            cards.push(card('\u{1F48D}', st.longestMarriage, `${escXml(stats.longestMarriage.names)} · ${stats.longestMarriage.years} ${st.years}`));
         }
-        if (records.length) blocks.push(`<div class="stats-chart-block">${records.join('')}</div>`);
+        if (stats.largestFamily) {
+            cards.push(card('\u{1F46A}', st.largestFamily, `${escXml(stats.largestFamily.names)} · ${st.childrenCount(stats.largestFamily.count)}`));
+        }
+        cards.push(card('\u{1F4CA}', strings.treeManager.statsAvgChildren, avgChildren));
+        blocks.push(`<div class="stats-record-cards">${cards.join('')}</div>`);
 
         return blocks.join('');
     },
@@ -653,14 +655,6 @@ export const treeStatsMethods = uiModule({
                     <span class="tree-stats-anniversary-date">${this.escapeHtml(when)}</span>
                 </div>`;
         }).join('');
-    },
-
-    /**
-     * Format date for display (short format)
-     */
-    formatDateShort(dateStr: string): string {
-        if (!dateStr || dateStr === '-') return '-';
-        return formatFlexDate(dateStr);
     },
 
     /**
