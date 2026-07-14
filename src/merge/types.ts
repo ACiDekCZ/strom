@@ -54,6 +54,11 @@ export interface FieldConflict {
     incomingValue: string | undefined;
     resolution: 'keep_existing' | 'use_incoming' | 'manual';
     resolvedValue?: string;
+    /**
+     * Why the pre-selected resolution was suggested (heuristics in
+     * suggestResolution). Absent = plain keep-existing default, no opinion.
+     */
+    suggestedReason?: 'more_precise_date' | 'more_complete';
 }
 
 // ==================== MERGE DECISIONS ====================

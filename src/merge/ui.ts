@@ -1061,6 +1061,17 @@ class MergerUIClass {
 
         if (!dialog || !content) return;
 
+        // Gender values display localized; everything else raw.
+        const displayVal = (field: string, v?: string): string => {
+            if (field === 'gender' && (v === 'male' || v === 'female')) return strings.gender[v];
+            return v || '—';
+        };
+        const suggestedLabel = (c: typeof match.conflicts[number]): string => {
+            if (!c.suggestedReason) return '';
+            const text = c.suggestedReason === 'more_precise_date'
+                ? strings.merge.suggestedPrecise : strings.merge.suggestedComplete;
+            return `<span class="conflict-suggested">✦ ${text}</span>`;
+        };
         content.innerHTML = match.conflicts.map(conflict => `
             <div class="conflict-row" data-field="${conflict.field}">
                 <div class="conflict-label">
@@ -1070,14 +1081,16 @@ class MergerUIClass {
                     <label class="conflict-option">
                         <input type="radio" name="conflict-${conflict.field}" value="keep_existing"
                             ${conflict.resolution === 'keep_existing' ? 'checked' : ''}>
-                        <span class="conflict-value existing">${this.escapeHtml(conflict.existingValue || '—')}</span>
+                        <span class="conflict-value existing">${this.escapeHtml(displayVal(conflict.field, conflict.existingValue))}</span>
                         <span class="conflict-badge">${strings.merge.keepExisting}</span>
+                        ${conflict.resolution === 'keep_existing' ? suggestedLabel(conflict) : ''}
                     </label>
                     <label class="conflict-option">
                         <input type="radio" name="conflict-${conflict.field}" value="use_incoming"
                             ${conflict.resolution === 'use_incoming' ? 'checked' : ''}>
-                        <span class="conflict-value incoming">${this.escapeHtml(conflict.incomingValue || '—')}</span>
+                        <span class="conflict-value incoming">${this.escapeHtml(displayVal(conflict.field, conflict.incomingValue))}</span>
                         <span class="conflict-badge">${strings.merge.useImport}</span>
+                        ${conflict.resolution === 'use_incoming' ? suggestedLabel(conflict) : ''}
                     </label>
                 </div>
             </div>

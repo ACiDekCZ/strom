@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { findMatches } from '../merge/matching.js';
-import { buildIdMapping, isEffectivelyConfirmed, AUTO_CONFIRM_SCORE } from '../merge/executor.js';
+import { findMatches, detectConflicts, suggestResolution } from '../merge/matching.js';
+import { buildIdMapping, isEffectivelyConfirmed, AUTO_CONFIRM_SCORE, mergePersonData } from '../merge/executor.js';
 import { MergeState } from '../merge/types.js';
 import { StromData, Person, PersonId, Gender } from '../types.js';
 
@@ -147,5 +147,53 @@ describe('smart matching (flex dates + transitive propagation)', () => {
         expect(byIncoming.get('chI' as PersonId)?.existingId).toBe('chE');
         expect(byIncoming.get('paI' as PersonId)?.existingId).toBe('paE');
         expect(byIncoming.get('gpI' as PersonId)?.existingId).toBe('gpE');
+    });
+});
+
+describe('conflict suggestions (suggestResolution + detectConflicts)', () => {
+    it('prefers the more precise date within the same year — either direction', () => {
+        expect(suggestResolution('birthDate', '1880', '1880-05-15'))
+            .toEqual({ resolution: 'use_incoming', reason: 'more_precise_date' });
+        expect(suggestResolution('birthDate', '1880-05-15', '~1880'))
+            .toEqual({ resolution: 'keep_existing', reason: 'more_precise_date' });
+        // Same precision, one unqualified — prefer the certain one.
+        expect(suggestResolution('birthDate', '~1880', '1880'))
+            .toEqual({ resolution: 'use_incoming', reason: 'more_precise_date' });
+    });
+
+    it('leaves contradicting dates to a human (no suggestion)', () => {
+        expect(suggestResolution('birthDate', '1880-05-15', '1880-06-01'))
+            .toEqual({ resolution: 'keep_existing' });
+        expect(suggestResolution('birthDate', '1880', '1881'))
+            .toEqual({ resolution: 'keep_existing' });
+    });
+
+    it('prefers the more complete name/place (normalized containment)', () => {
+        expect(suggestResolution('birthPlace', 'Praha', 'Praha, Žižkov'))
+            .toEqual({ resolution: 'use_incoming', reason: 'more_complete' });
+        expect(suggestResolution('firstName', 'Jan Nepomuk', 'Jan'))
+            .toEqual({ resolution: 'keep_existing', reason: 'more_complete' });
+        expect(suggestResolution('birthPlace', 'Brno', 'Ostrava'))
+            .toEqual({ resolution: 'keep_existing' });
+    });
+
+    it('never auto-flips gender, but the conflict is now detected', () => {
+        const conflicts = detectConflicts(
+            person('e1', 'Alex', 'Novák'),
+            person('i1', 'Alex', 'Novák', { gender: 'female' })
+        );
+        const g = conflicts.find(c => c.field === 'gender');
+        expect(g).toBeDefined();
+        expect(g!.resolution).toBe('keep_existing');
+        expect(g!.suggestedReason).toBeUndefined();
+    });
+
+    it('a suggested resolution is what the merge applies by default', () => {
+        const existing = person('e1', 'Jan', 'Novák', { birthDate: '1880' });
+        const incoming = person('i1', 'Jan', 'Novák', { birthDate: '1880-05-15' });
+        const conflicts = detectConflicts(existing, incoming);
+        expect(conflicts[0].resolution).toBe('use_incoming');
+        mergePersonData(existing, incoming, conflicts);
+        expect(existing.birthDate).toBe('1880-05-15');
     });
 });

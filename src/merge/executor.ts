@@ -380,7 +380,7 @@ function deepCloneStromData(data: StromData): StromData {
 /**
  * Merge person data according to conflict resolutions
  */
-function mergePersonData(
+export function mergePersonData(
     existing: Person,
     incoming: Person,
     conflicts: FieldConflict[],
@@ -421,6 +421,9 @@ function mergePersonData(
                     break;
                 case 'deathPlace':
                     existing.deathPlace = incoming.deathPlace;
+                    break;
+                case 'gender':
+                    existing.gender = incoming.gender;
                     break;
             }
         }

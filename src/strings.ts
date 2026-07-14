@@ -836,6 +836,8 @@ const stringsEN = {
         // New tree name prompt
         newTreeNamePrompt: 'Enter name for the merged tree:',
         pendingGate: (n: number) => `${n} uncertain match${n === 1 ? '' : 'es'} left undecided — those people will be imported as SEPARATE persons (you can merge them later). Continue?`,
+        suggestedPrecise: 'suggested — more precise date',
+        suggestedComplete: 'suggested — more complete value',
 
         // Manual match dialog
         incomingPerson: 'Incoming person:',
@@ -2127,6 +2129,8 @@ const stringsCZ: StringsType = {
         // New tree name prompt
         newTreeNamePrompt: 'Zadejte název pro sloučený strom:',
         pendingGate: (n: number) => `${n} ${n === 1 ? 'nejistá shoda zůstala nerozhodnutá' : n < 5 ? 'nejisté shody zůstaly nerozhodnuté' : 'nejistých shod zůstalo nerozhodnutých'} — tito lidé se naimportují jako SAMOSTATNÉ osoby (sloučit je můžeš i později). Pokračovat?`,
+        suggestedPrecise: 'navrženo — přesnější datum',
+        suggestedComplete: 'navrženo — úplnější hodnota',
 
         // Manual match dialog
         incomingPerson: 'Příchozí osoba:',

@@ -915,11 +915,54 @@ function calculatePartnerMatchScore(
 /**
  * Detect conflicting fields between two persons
  */
+/**
+ * Suggest which side of a conflict is objectively MORE INFORMATIVE, so the
+ * default resolution is not a blind keep-existing:
+ * - dates: same year, but one side has more precision (day > month > year) or
+ *   no ~/</> qualifier — prefer it; contradicting components stay for a human;
+ * - names/places: one normalized value contains the other ("Praha" vs
+ *   "Praha, Žižkov") — prefer the more complete one.
+ * Anything genuinely contradictory keeps the existing value with no opinion.
+ */
+export function suggestResolution(
+    field: keyof Person,
+    existingValue: string,
+    incomingValue: string
+): { resolution: 'keep_existing' | 'use_incoming'; reason?: FieldConflict['suggestedReason'] } {
+    if (field === 'birthDate' || field === 'deathDate') {
+        const a = parseFlexDate(existingValue);
+        const b = parseFlexDate(incomingValue);
+        if (a && b && a.year === b.year) {
+            const contradicts =
+                (a.month !== undefined && b.month !== undefined && a.month !== b.month) ||
+                (a.day !== undefined && b.day !== undefined && a.day !== b.day);
+            if (!contradicts) {
+                const rank = (d: NonNullable<ReturnType<typeof parseFlexDate>>) =>
+                    (d.day !== undefined ? 3 : d.month !== undefined ? 2 : 1) * 2
+                    + (d.qualifier === '' ? 1 : 0);
+                if (rank(b) > rank(a)) return { resolution: 'use_incoming', reason: 'more_precise_date' };
+                if (rank(a) > rank(b)) return { resolution: 'keep_existing', reason: 'more_precise_date' };
+            }
+        }
+        return { resolution: 'keep_existing' };
+    }
+    if (field === 'gender') return { resolution: 'keep_existing' };   // never auto-flip
+
+    const na = normalizeName(existingValue);
+    const nb = normalizeName(incomingValue);
+    if (na && nb && na !== nb) {
+        if (nb.includes(na)) return { resolution: 'use_incoming', reason: 'more_complete' };
+        if (na.includes(nb)) return { resolution: 'keep_existing', reason: 'more_complete' };
+    }
+    return { resolution: 'keep_existing' };
+}
+
 export function detectConflicts(existing: Person, incoming: Person): FieldConflict[] {
     const conflicts: FieldConflict[] = [];
     const fieldsToCheck: (keyof Person)[] = [
         'firstName',
         'lastName',
+        'gender',
         'birthDate',
         'birthPlace',
         'deathDate',
@@ -935,11 +978,13 @@ export function detectConflicts(existing: Person, incoming: Person): FieldConfli
 
         // Conflict if both have values and they differ
         if (existingValue && incomingValue && existingValue !== incomingValue) {
+            const suggestion = suggestResolution(field, existingValue, incomingValue);
             conflicts.push({
                 field,
                 existingValue,
                 incomingValue,
-                resolution: 'keep_existing' // Default
+                resolution: suggestion.resolution,
+                ...(suggestion.reason ? { suggestedReason: suggestion.reason } : {})
             });
         }
         // Not a conflict if only one has value (can be merged)
