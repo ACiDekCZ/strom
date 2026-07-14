@@ -6070,42 +6070,8 @@
                 <h2 data-i18n="settings.title"></h2>
                 <button class="close-btn" onclick="window.Strom.UI.closeSettingsDialog()">&times;</button>
             </div>
-            <!-- Everyday appearance/behaviour first; data-safety switches
-                 (encryption, audit log) at the end of the list. -->
-            <div class="settings-section">
-                <label class="settings-label" data-i18n="settings.language"></label>
-                <div class="settings-options">
-                    <label class="settings-radio">
-                        <input type="radio" name="language" value="system" onchange="window.Strom.UI.setLanguage('system')">
-                        <span data-i18n="settings.languageSystem"></span>
-                    </label>
-                    <label class="settings-radio">
-                        <input type="radio" name="language" value="en" onchange="window.Strom.UI.setLanguage('en')">
-                        <span>English</span>
-                    </label>
-                    <label class="settings-radio">
-                        <input type="radio" name="language" value="cs" onchange="window.Strom.UI.setLanguage('cs')">
-                        <span>Čeština</span>
-                    </label>
-                </div>
-            </div>
-            <div class="settings-section">
-                <label class="settings-label" data-i18n="settings.theme"></label>
-                <div class="settings-options">
-                    <label class="settings-radio">
-                        <input type="radio" name="theme" value="system" onchange="window.Strom.UI.setTheme('system')">
-                        <span data-i18n="settings.themeSystem"></span>
-                    </label>
-                    <label class="settings-radio">
-                        <input type="radio" name="theme" value="light" onchange="window.Strom.UI.setTheme('light')">
-                        <span data-i18n="settings.themeLight"></span>
-                    </label>
-                    <label class="settings-radio">
-                        <input type="radio" name="theme" value="dark" onchange="window.Strom.UI.setTheme('dark')">
-                        <span data-i18n="settings.themeDark"></span>
-                    </label>
-                </div>
-            </div>
+            <!-- Everyday feature toggles first; system-level settings
+                 (language, theme, encryption, audit log) at the end. -->
             <div class="settings-section">
                 <label class="settings-label" data-i18n="duplicates.settingLabel"></label>
                 <div class="settings-options">
@@ -6139,6 +6105,40 @@
                     <label class="settings-checkbox">
                         <input type="checkbox" id="on-this-day-toggle" onchange="window.Strom.UI.toggleOnThisDay(this.checked)">
                         <span data-i18n="anniversaries.settingHint"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="settings.language"></label>
+                <div class="settings-options">
+                    <label class="settings-radio">
+                        <input type="radio" name="language" value="system" onchange="window.Strom.UI.setLanguage('system')">
+                        <span data-i18n="settings.languageSystem"></span>
+                    </label>
+                    <label class="settings-radio">
+                        <input type="radio" name="language" value="en" onchange="window.Strom.UI.setLanguage('en')">
+                        <span>English</span>
+                    </label>
+                    <label class="settings-radio">
+                        <input type="radio" name="language" value="cs" onchange="window.Strom.UI.setLanguage('cs')">
+                        <span>Čeština</span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="settings.theme"></label>
+                <div class="settings-options">
+                    <label class="settings-radio">
+                        <input type="radio" name="theme" value="system" onchange="window.Strom.UI.setTheme('system')">
+                        <span data-i18n="settings.themeSystem"></span>
+                    </label>
+                    <label class="settings-radio">
+                        <input type="radio" name="theme" value="light" onchange="window.Strom.UI.setTheme('light')">
+                        <span data-i18n="settings.themeLight"></span>
+                    </label>
+                    <label class="settings-radio">
+                        <input type="radio" name="theme" value="dark" onchange="window.Strom.UI.setTheme('dark')">
+                        <span data-i18n="settings.themeDark"></span>
                     </label>
                 </div>
             </div>
