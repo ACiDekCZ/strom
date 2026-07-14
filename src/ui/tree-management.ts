@@ -265,11 +265,25 @@ export const treeManagementMethods = uiModule({
         const list = document.getElementById('tree-manager-list');
         if (!list) return;
 
-        const trees = TreeManager.getTrees();
         const activeId = TreeManager.getActiveTreeId();
+        // Active tree first, then alphabetically — storage order means nothing
+        // to the user and made long lists hard to scan.
+        const trees = [...TreeManager.getTrees()].sort((a, b) => {
+            if (a.id === activeId) return -1;
+            if (b.id === activeId) return 1;
+            return a.name.localeCompare(b.name);
+        });
+
+        // Search box: only worth the space once the list is long.
+        const searchRow = document.getElementById('tree-manager-search-row');
+        const searchInput = document.getElementById('tree-manager-search') as HTMLInputElement | null;
+        const searchable = trees.length >= 6;
+        if (searchRow) searchRow.style.display = searchable ? '' : 'none';
+        const filter = (searchable ? (searchInput?.value ?? '') : '').trim().toLowerCase();
+        const visibleTrees = filter ? trees.filter(t => t.name.toLowerCase().includes(filter)) : trees;
 
         let html = '';
-        for (const tree of trees) {
+        for (const tree of visibleTrees) {
             const isActive = tree.id === activeId;
 
             // Get tree data for additional stats
@@ -294,49 +308,70 @@ export const treeManagementMethods = uiModule({
             }
             // If undefined, don't show anything (first person is implicit default)
 
-            // Visibility toggle button - icon shows current state, text shows action
-            const visibilityIcon = tree.isHidden ? '🚫' : '👁';
-            const visibilityLabel = tree.isHidden ? strings.treeManager.showTree : strings.treeManager.hideTree;
-            const visibilityHint = tree.isHidden ? strings.treeManager.showTreeHint : strings.treeManager.hideTreeHint;
-
-            // Lock toggle button
-            const lockIcon = tree.isLocked ? '🔒' : '🔓';
+            const s = strings.treeManager;
+            const visibilityLabel = tree.isHidden ? s.showTree : s.hideTree;
             const lockLabel = tree.isLocked ? strings.lock.unlockTree : strings.lock.lockTree;
 
-            const hiddenLabel = tree.isHidden ? ` <span style="color:var(--text-light);font-weight:normal">${strings.treeManager.hiddenLabel}</span>` : '';
-            const lockedLabel = tree.isLocked ? ' 🔒' : '';
+            // Status as explicit badges — an icon glued to the name was easy to
+            // miss and its meaning unclear.
+            const badges =
+                (isActive ? `<span class="tree-badge active-badge">${s.activeBadge}</span>` : '') +
+                (tree.isLocked ? `<span class="tree-badge">🔒 ${s.lockedBadge}</span>` : '') +
+                (tree.isHidden ? `<span class="tree-badge">🙈 ${s.hiddenBadge}</span>` : '');
+
+            const menuItem = (onclick: string, icon: string, label: string, cls = '') =>
+                `<button class="tree-row-menu-item ${cls}" onclick="${onclick}"><span class="btn-icon">${icon}</span>${label}</button>`;
+
+            const auditItem = (AuditLogManager.isEnabled() || await AuditLogManager.hasEntries(tree.id))
+                ? menuItem(`window.Strom.UI.showAuditLogDialog('${tree.id}', 'tree-manager-modal')`, '📋', strings.auditLog.viewLog)
+                : '';
 
             html += `
                 <div class="tree-manager-item ${isActive ? 'active' : ''} ${tree.isHidden ? 'hidden-tree' : ''}">
                     <div class="tree-manager-item-header">
                         <span class="tree-manager-item-indicator"></span>
-                        <span class="tree-manager-item-name">${this.escapeHtml(tree.name)}${hiddenLabel}${lockedLabel}</span>
-                        <span class="tree-manager-item-stats">
-                            ${tree.personCount} ${strings.treeManager.persons} • ${familyCount} ${strings.treeManager.families}
-                            ${defaultPersonDisplay ? ` • ${this.escapeHtml(defaultPersonDisplay)}` : ''}
-                        </span>
+                        <span class="tree-manager-item-name${isActive ? '' : ' clickable'}"${isActive ? '' : ` onclick="window.Strom.UI.openTreeFromManager('${tree.id}')"`}>${this.escapeHtml(tree.name)}</span>
+                        ${badges}
                         <span class="tree-manager-item-size">${treeSizeFormatted}</span>
                     </div>
+                    <div class="tree-manager-item-stats-row">
+                        ${tree.personCount} ${s.persons} • ${familyCount} ${s.families}
+                        ${defaultPersonDisplay ? ` • ${this.escapeHtml(defaultPersonDisplay)}` : ''}
+                    </div>
                     <div class="tree-manager-item-actions">
-                        <button onclick="window.Strom.UI.showTreeStatsDialog('${tree.id}', 'tree-manager-modal')" data-tip="${strings.treeManager.stats}"><span class="btn-icon">📊</span><span class="btn-text">${strings.treeManager.stats}</span></button>
-                        <button onclick="window.Strom.UI.showTreeValidationDialog('${tree.id}', 'tree-manager-modal')" data-tip="${strings.treeManager.validate}"><span class="btn-icon">✅</span><span class="btn-text">${strings.treeManager.validate}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.toggleTreeVisibility('${tree.id}')" data-tip="${visibilityHint}"><span class="btn-icon">${visibilityIcon}</span><span class="btn-text">${visibilityLabel}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.toggleTreeLock('${tree.id}')" data-tip="${lockLabel}"><span class="btn-icon">${lockIcon}</span><span class="btn-text">${lockLabel}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.showRenameTreeDialog('${tree.id}', 'tree-manager-modal')" data-tip="${strings.treeManager.rename}"><span class="btn-icon">✏️</span><span class="btn-text">${strings.treeManager.rename}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.showDefaultPersonDialog('${tree.id}', 'tree-manager-modal')" data-tip="${strings.treeManager.defaultPerson}"><span class="btn-icon">⭐</span><span class="btn-text">${strings.treeManager.defaultPerson}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.duplicateTree('${tree.id}')" data-tip="${strings.treeManager.duplicate}"><span class="btn-icon">⧉</span><span class="btn-text">${strings.treeManager.duplicate}</span></button>
-                        <button onclick="window.Strom.UI.showExportDialogFromManager('${tree.id}')" data-tip="${strings.treeManager.export}"><span class="btn-icon">💾</span><span class="btn-text">${strings.treeManager.export}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.showMergeTreesDialog('${tree.id}', 'tree-manager-modal')" data-tip="${strings.treeManager.mergeInto}"><span class="btn-icon">🔀</span><span class="btn-text">${strings.treeManager.mergeInto}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.showSnapshotsDialog('${tree.id}', 'tree-manager-modal')" data-tip="${strings.snapshots.menu}"><span class="btn-icon">🕑</span><span class="btn-text">${strings.snapshots.menu}</span></button>
-                        ${AuditLogManager.isEnabled() || await AuditLogManager.hasEntries(tree.id) ? `<button onclick="window.Strom.UI.showAuditLogDialog('${tree.id}', 'tree-manager-modal')" data-tip="${strings.auditLog.viewLog}"><span class="btn-icon">📋</span><span class="btn-text">${strings.auditLog.viewLog}</span></button>` : ''}
-                        <button class="danger edit-only" onclick="window.Strom.UI.confirmDeleteTree('${tree.id}')" data-tip="${strings.treeManager.delete}"><span class="btn-icon">❌</span><span class="btn-text">${strings.treeManager.delete}</span></button>
+                        ${isActive ? '' : `<button class="tree-open-btn" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${s.open}</button>`}
+                        <button onclick="window.Strom.UI.showTreeStatsDialog('${tree.id}', 'tree-manager-modal')" data-tip="${s.stats}"><span class="btn-icon">📊</span><span class="btn-text">${s.stats}</span></button>
+                        <button onclick="window.Strom.UI.showTreeValidationDialog('${tree.id}', 'tree-manager-modal')" data-tip="${s.validate}"><span class="btn-icon">🩺</span><span class="btn-text">${s.validate}</span></button>
+                        <button onclick="window.Strom.UI.showExportDialogFromManager('${tree.id}')" data-tip="${s.export}"><span class="btn-icon">💾</span><span class="btn-text">${s.export}</span></button>
+                        <div class="tree-row-menu-wrap">
+                            <button class="tree-row-menu-btn" data-tip="${s.moreActions}">⋯</button>
+                            <div class="tree-row-menu">
+                                ${menuItem(`window.Strom.UI.showRenameTreeDialog('${tree.id}', 'tree-manager-modal')`, '✏️', s.rename, 'edit-only')}
+                                ${menuItem(`window.Strom.UI.showDefaultPersonDialog('${tree.id}', 'tree-manager-modal')`, '⭐', s.defaultPerson, 'edit-only')}
+                                ${menuItem(`window.Strom.UI.showSnapshotsDialog('${tree.id}', 'tree-manager-modal')`, '🕑', strings.snapshots.menu, 'edit-only')}
+                                ${auditItem}
+                                ${menuItem(`window.Strom.UI.duplicateTree('${tree.id}')`, '⧉', s.duplicate, 'edit-only')}
+                                ${menuItem(`window.Strom.UI.showMergeTreesDialog('${tree.id}', 'tree-manager-modal')`, '🔀', s.mergeInto, 'edit-only')}
+                                ${menuItem(`window.Strom.UI.toggleTreeVisibility('${tree.id}')`, tree.isHidden ? '👁' : '🙈', visibilityLabel, 'edit-only')}
+                                ${menuItem(`window.Strom.UI.toggleTreeLock('${tree.id}')`, tree.isLocked ? '🔓' : '🔒', lockLabel, 'edit-only')}
+                                ${menuItem(`window.Strom.UI.confirmDeleteTree('${tree.id}')`, '🗑', s.delete, 'danger edit-only')}
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
         }
 
-        // Add pending merge sessions
+        if (filter && visibleTrees.length === 0) {
+            html += `<p class="tree-manager-empty">${strings.merge.noItems}</p>`;
+        }
+
+        // Pending merge sessions get their own labelled section — mixed into
+        // the tree list they read as "some broken tree".
         const pendingMerges = await listMergeSessionsInfo();
+        if (pendingMerges.length > 0) {
+            html += `<div class="tree-manager-section">${strings.treeManager.pendingSection}</div>`;
+        }
         for (const session of pendingMerges) {
             const date = new Date(session.savedAt).toLocaleString();
 
@@ -374,7 +409,41 @@ export const treeManagementMethods = uiModule({
             `;
         }
 
-        list.innerHTML = html || `<p style="text-align:center;color:var(--text-light);">${strings.merge.noItems}</p>`;
+        list.innerHTML = html || `<p class="tree-manager-empty">${strings.merge.noItems}</p>`;
+        this.wireTreeRowMenus(list);
+    },
+
+    /** Per-row "⋯" menus: one open at a time, outside click closes. Wired once. */
+    wireTreeRowMenus(list: HTMLElement): void {
+        const closeAll = () =>
+            list.querySelectorAll('.tree-row-menu.open').forEach(m => m.classList.remove('open'));
+
+        if (!list.dataset.menuWired) {
+            list.dataset.menuWired = '1';
+            list.addEventListener('click', (e) => {
+                const target = e.target as HTMLElement;
+                const btn = target.closest('.tree-row-menu-btn');
+                if (btn) {
+                    const menu = btn.parentElement?.querySelector('.tree-row-menu');
+                    const wasOpen = menu?.classList.contains('open');
+                    closeAll();
+                    if (menu && !wasOpen) menu.classList.add('open');
+                    e.stopPropagation();
+                    return;
+                }
+                // A menu item runs its inline action; close the menu around it.
+                if (target.closest('.tree-row-menu-item')) closeAll();
+            });
+            document.addEventListener('click', (e) => {
+                if (!(e.target as HTMLElement).closest('.tree-row-menu-wrap')) closeAll();
+            });
+        }
+    },
+
+    /** Switch to a tree from the manager and close the dialog to show it. */
+    async openTreeFromManager(treeId: string): Promise<void> {
+        this.closeTreeManagerDialog();
+        await this.switchToTree(treeId);
     },
 
     // ---- NEW TREE MENU ----

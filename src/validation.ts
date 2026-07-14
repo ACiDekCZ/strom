@@ -4,7 +4,7 @@
  */
 
 import { StromData, Person, Partnership, PersonId, PartnershipId } from './types.js';
-import { parseFlexDate } from './dates.js';
+import { parseFlexDate, FlexDate } from './dates.js';
 
 // ==================== ISSUE TYPES ====================
 
@@ -17,6 +17,8 @@ export interface ValidationIssue {
     message: string;
     personIds?: PersonId[];
     partnershipIds?: PartnershipId[];
+    /** Language-neutral specifics (years, labels) shown under the localized message. */
+    detail?: string;
 }
 
 export interface ValidationResult {
@@ -43,7 +45,8 @@ export function validateTreeData(data: StromData): ValidationResult {
         type: string,
         message: string,
         personIds?: PersonId[],
-        partnershipIds?: PartnershipId[]
+        partnershipIds?: PartnershipId[],
+        detail?: string
     ) => {
         issues.push({
             id: `issue_${++issueId}`,
@@ -51,7 +54,8 @@ export function validateTreeData(data: StromData): ValidationResult {
             type,
             message,
             personIds,
-            partnershipIds
+            partnershipIds,
+            ...(detail ? { detail } : {})
         });
     };
 
@@ -67,6 +71,8 @@ export function validateTreeData(data: StromData): ValidationResult {
     checkGenerationConsistency(data, addIssue);
     checkCrossbranchAnomalies(data, addIssue);
     checkLifeEvents(data, addIssue);
+    checkDateConsistency(data, addIssue);
+    checkSourceIntegrity(data, addIssue);
 
     const stats = {
         errors: issues.filter(i => i.severity === 'error').length,
@@ -607,6 +613,189 @@ function checkCrossbranchAnomalies(
                     `${getPersonName(person)} has ${getPersonName(sibling)} as both sibling and child`,
                     [personId, siblingId]
                 );
+            }
+        }
+    }
+}
+
+// ==================== CHECK: DATE CONSISTENCY ====================
+
+type AddIssue = (
+    s: IssueSeverity, t: string, m: string,
+    p?: PersonId[], pp?: PartnershipId[], detail?: string
+) => void;
+
+/**
+ * Month-scale interval [min,max] a flex date can cover, including slack for
+ * its qualifier (~ about, < before, > after) and missing month precision.
+ * All certainty comparisons work on these intervals so approximate dates
+ * never produce false positives.
+ */
+function monthRange(d: FlexDate): { min: number; max: number } {
+    let min = d.year * 12 + ((d.month ?? 1) - 1);
+    let max = d.year * 12 + ((d.month ?? 12) - 1);
+    if (d.qualifier === '~') { min -= 24; max += 24; }
+    if (d.qualifier === '<') min -= 240;
+    if (d.qualifier === '>') max += 240;
+    return { min, max };
+}
+
+/** True when `a` is CERTAINLY at least `gapMonths` before `b`, even reading both dates as loosely as their precision allows. */
+function certainlyBefore(a: FlexDate | null, b: FlexDate | null, gapMonths = 0): boolean {
+    if (!a || !b) return false;
+    return monthRange(a).max + gapMonths < monthRange(b).min;
+}
+
+/**
+ * Checks over dated facts: events vs the person's lifespan, weddings vs both
+ * partners' lifespans (incl. child marriages), children born after a parent's
+ * death, death before birth, implausible lifespans and extreme partner age
+ * gaps. Only CERTAIN violations are reported (see monthRange).
+ */
+function checkDateConsistency(data: StromData, addIssue: AddIssue): void {
+    const MAX_LIFESPAN_YEARS = 115;
+    const CHILD_MARRIAGE_YEARS = 14;
+    const PARTNER_AGE_GAP_YEARS = 40;
+    const POSTHUMOUS_FATHER_MONTHS = 10; // conception before death + gestation
+
+    for (const [personId, person] of Object.entries(data.persons) as [PersonId, Person][]) {
+        const name = getPersonName(person);
+        const birth = parseFlexDate(person.birthDate);
+        const death = parseFlexDate(person.deathDate);
+
+        if (certainlyBefore(death, birth)) {
+            addIssue('error', 'deathBeforeBirth', `${name}: death date is before birth date`,
+                [personId], undefined, `† ${person.deathDate} < * ${person.birthDate}`);
+        } else if (birth && death) {
+            const certainYears = (monthRange(death).min - monthRange(birth).max) / 12;
+            if (certainYears > MAX_LIFESPAN_YEARS) {
+                addIssue('warning', 'implausibleLifespan', `${name}: lifespan over ${MAX_LIFESPAN_YEARS} years`,
+                    [personId], undefined, `* ${person.birthDate} – † ${person.deathDate}`);
+            }
+        }
+
+        for (const ev of person.events ?? []) {
+            const evDate = parseFlexDate(ev.date);
+            if (!evDate) continue;
+            const label = ev.type === 'custom' ? (ev.customLabel?.trim() || 'custom') : ev.type;
+            if (certainlyBefore(evDate, birth)) {
+                addIssue('warning', 'eventBeforeBirth', `${name}: event dated before birth`,
+                    [personId], undefined, `${label} ${ev.date} < * ${person.birthDate}`);
+            }
+            // Burial is naturally after death; everything else is suspicious.
+            if (ev.type !== 'burial' && certainlyBefore(death, evDate)) {
+                addIssue('warning', 'eventAfterDeath', `${name}: event dated after death`,
+                    [personId], undefined, `${label} ${ev.date} > † ${person.deathDate}`);
+            }
+        }
+
+        // Child born after a parent's death (biological parents only —
+        // adoptive/step/foster links have no biological timing constraint).
+        if (birth) {
+            for (const parentId of person.parentIds) {
+                const parent = data.persons[parentId];
+                if (!parent || !parent.deathDate) continue;
+                const relType = person.parentRelTypes?.[parentId] ?? 'biological';
+                if (relType !== 'biological') continue;
+                const parentDeath = parseFlexDate(parent.deathDate);
+                if (parent.gender === 'female') {
+                    // One month of slack for death in childbirth.
+                    if (certainlyBefore(parentDeath, birth, 1)) {
+                        addIssue('error', 'childAfterMotherDeath',
+                            `${name}: born after the death of mother ${getPersonName(parent)}`,
+                            [personId, parentId], undefined, `* ${person.birthDate} > † ${parent.deathDate}`);
+                    }
+                } else if (certainlyBefore(parentDeath, birth, POSTHUMOUS_FATHER_MONTHS)) {
+                    addIssue('warning', 'childAfterFatherDeath',
+                        `${name}: born more than ${POSTHUMOUS_FATHER_MONTHS} months after the death of father ${getPersonName(parent)}`,
+                        [personId, parentId], undefined, `* ${person.birthDate} > † ${parent.deathDate}`);
+                }
+            }
+        }
+    }
+
+    for (const [partnershipId, partnership] of Object.entries(data.partnerships) as [PartnershipId, Partnership][]) {
+        const p1 = data.persons[partnership.person1Id];
+        const p2 = data.persons[partnership.person2Id];
+        const wedding = parseFlexDate(partnership.startDate);
+
+        if (wedding) {
+            for (const p of [p1, p2]) {
+                if (!p) continue;
+                const birth = parseFlexDate(p.birthDate);
+                const death = parseFlexDate(p.deathDate);
+                if (certainlyBefore(wedding, birth)) {
+                    addIssue('error', 'weddingBeforeBirth',
+                        `${getPersonName(p)}: wedding dated before birth`,
+                        [p.id], [partnershipId], `⚭ ${partnership.startDate} < * ${p.birthDate}`);
+                } else if (birth) {
+                    const maxAgeYears = (monthRange(wedding).max - monthRange(birth).min) / 12;
+                    if (maxAgeYears < CHILD_MARRIAGE_YEARS) {
+                        addIssue('warning', 'childMarriage',
+                            `${getPersonName(p)}: married before the age of ${CHILD_MARRIAGE_YEARS}`,
+                            [p.id], [partnershipId], `⚭ ${partnership.startDate}, * ${p.birthDate}`);
+                    }
+                }
+                if (certainlyBefore(death, wedding)) {
+                    addIssue('warning', 'weddingAfterDeath',
+                        `${getPersonName(p)}: wedding dated after death`,
+                        [p.id], [partnershipId], `⚭ ${partnership.startDate} > † ${p.deathDate}`);
+                }
+            }
+        }
+
+        // Extreme age difference between partners (informational).
+        const b1 = p1 ? parseFlexDate(p1.birthDate) : null;
+        const b2 = p2 ? parseFlexDate(p2.birthDate) : null;
+        if (b1 && b2) {
+            const r1 = monthRange(b1), r2 = monthRange(b2);
+            const certainGapYears = Math.max(r1.min - r2.max, r2.min - r1.max) / 12;
+            if (certainGapYears >= PARTNER_AGE_GAP_YEARS) {
+                addIssue('info', 'partnerAgeGap',
+                    `${getPersonName(p1)} & ${getPersonName(p2)}: over ${PARTNER_AGE_GAP_YEARS} years apart`,
+                    [partnership.person1Id, partnership.person2Id], [partnershipId],
+                    `* ${p1!.birthDate} / * ${p2!.birthDate}`);
+            }
+        }
+    }
+}
+
+// ==================== CHECK: SOURCE & ATTACHMENT INTEGRITY ====================
+
+/**
+ * Citations must point to sources that exist in the per-tree catalog, and
+ * attachments must actually carry data (a broken import/merge can leave both).
+ */
+function checkSourceIntegrity(data: StromData, addIssue: AddIssue): void {
+    const sourceIds = new Set(Object.keys(data.sources ?? {}));
+    const missing = (ids?: string[]) => (ids ?? []).filter(id => !sourceIds.has(id));
+
+    for (const [personId, person] of Object.entries(data.persons) as [PersonId, Person][]) {
+        const name = getPersonName(person);
+
+        for (const id of missing(person.sourceIds)) {
+            addIssue('warning', 'citationMissingSource',
+                `${name}: citation points to a source that no longer exists`,
+                [personId], undefined, id);
+        }
+        for (const ev of person.events ?? []) {
+            const label = ev.type === 'custom' ? (ev.customLabel?.trim() || 'custom') : ev.type;
+            for (const id of missing(ev.sourceIds)) {
+                addIssue('warning', 'citationMissingSource',
+                    `${name}: event citation points to a source that no longer exists`,
+                    [personId], undefined, `${label}: ${id}`);
+            }
+        }
+        for (const att of person.attachments ?? []) {
+            if (att.sourceId && !sourceIds.has(att.sourceId)) {
+                addIssue('warning', 'citationMissingSource',
+                    `${name}: attachment links a source that no longer exists`,
+                    [personId], undefined, att.name);
+            }
+            if (!att.dataUrl || !att.dataUrl.startsWith('data:') || att.dataUrl.length < 32) {
+                addIssue('warning', 'attachmentNoData',
+                    `${name}: attachment "${att.name}" has no usable data`,
+                    [personId], undefined, att.name);
             }
         }
     }

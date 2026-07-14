@@ -307,6 +307,21 @@ export const treeStatsMethods = uiModule({
                 'partnerIsChild': 'valPartnerIsChild',
                 'siblingIsParent': 'valSiblingIsParent',
                 'siblingIsChild': 'valSiblingIsChild',
+                'event-birth-death': 'valEventBirthDeath',
+                'event-no-label': 'valEventNoLabel',
+                'event-bad-date': 'valEventBadDate',
+                'deathBeforeBirth': 'valDeathBeforeBirth',
+                'implausibleLifespan': 'valImplausibleLifespan',
+                'eventBeforeBirth': 'valEventBeforeBirth',
+                'eventAfterDeath': 'valEventAfterDeath',
+                'weddingBeforeBirth': 'valWeddingBeforeBirth',
+                'weddingAfterDeath': 'valWeddingAfterDeath',
+                'childMarriage': 'valChildMarriage',
+                'childAfterMotherDeath': 'valChildAfterMotherDeath',
+                'childAfterFatherDeath': 'valChildAfterFatherDeath',
+                'citationMissingSource': 'valCitationMissingSource',
+                'attachmentNoData': 'valAttachmentNoData',
+                'partnerAgeGap': 'valPartnerAgeGap',
             };
             const key = typeToKey[type];
             return key ? (s[key] as string) : type;
@@ -333,6 +348,7 @@ export const treeStatsMethods = uiModule({
                     <span class="validation-issue-icon">${icon}</span>
                     <div class="validation-issue-content">
                         <div class="validation-issue-message">${this.escapeHtml(translatedMessage)}</div>
+                        ${issue.detail ? `<div class="validation-issue-detail">${this.escapeHtml(issue.detail)}</div>` : ''}
                         ${personLinks ? `<div class="validation-issue-persons">${personLinks}</div>` : ''}
                     </div>
                     ${fixBtn}

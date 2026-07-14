@@ -302,7 +302,9 @@
             flex-shrink: 0; border: 1px solid var(--border-color, #ccc); border-radius: 6px;
             background: var(--card-bg, #fff); cursor: pointer; padding: 0 10px; font-size: 15px;
             color: var(--text-light);
+            display: flex; align-items: center; justify-content: center;
         }
+        .search-filter-toggle svg { display: block; }
         .search-filter-toggle.active { background: var(--primary, #4a90d9); color: #fff; border-color: var(--primary, #4a90d9); }
         .search-filters {
             /* Absolutely positioned dropdown: the panel must NOT grow the
@@ -3598,6 +3600,92 @@
             margin-bottom: 16px;
             overflow: visible;
         }
+        .tree-manager-search-row { margin-bottom: 10px; }
+        .tree-manager-search-row input {
+            width: 100%;
+            padding: 8px 10px;
+            font-size: 13px;
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 6px;
+            background: var(--input-bg, #fff);
+            color: var(--text);
+            box-sizing: border-box;
+        }
+        .tree-manager-section {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            color: var(--text-light);
+            margin: 14px 2px 6px;
+        }
+        .tree-manager-empty {
+            text-align: center;
+            color: var(--text-light);
+            font-size: 13px;
+            padding: 12px 0;
+        }
+        .tree-badge {
+            font-size: 11px;
+            padding: 1px 8px;
+            border-radius: 10px;
+            background: var(--hover-bg, #f1f1ee);
+            color: var(--text-light);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .tree-badge.active-badge {
+            background: var(--primary);
+            color: #fff;
+        }
+        .tree-manager-item-name.clickable { cursor: pointer; }
+        .tree-manager-item-name.clickable:hover { color: var(--primary); text-decoration: underline; }
+        .tree-manager-item-stats-row {
+            font-size: 12px;
+            color: var(--text-light);
+            margin: 2px 0 0 18px;
+        }
+        .tree-open-btn {
+            background: var(--primary) !important;
+            color: #fff !important;
+            border-color: var(--primary) !important;
+            font-weight: 600;
+            padding: 6px 14px !important;
+        }
+        .tree-open-btn:hover { filter: brightness(1.08); }
+        .tree-row-menu-wrap { position: relative; margin-left: auto; }
+        .tree-row-menu-btn { font-size: 16px; font-weight: 700; letter-spacing: 1px; }
+        .tree-row-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: calc(100% + 4px);
+            min-width: 190px;
+            background: var(--card-bg, #fff);
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 8px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+            padding: 4px;
+            z-index: 500;
+        }
+        .tree-row-menu.open { display: block; }
+        .tree-row-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 8px 10px;
+            border: none;
+            background: none;
+            border-radius: 6px;
+            font-size: 13px;
+            text-align: left;
+            cursor: pointer;
+            color: var(--text);
+        }
+        .tree-row-menu-item:hover { background: var(--hover-bg, #f1f1ee); }
+        .tree-row-menu-item.danger { color: var(--danger, #c0392b); }
+        .tree-row-menu-item .btn-icon { font-size: 14px; width: 18px; text-align: center; }
         .tree-manager-item {
             padding: 12px;
             margin-bottom: 8px;
@@ -3995,6 +4083,13 @@
         .validation-issue-message {
             font-size: 13px;
             line-height: 1.4;
+        }
+        .validation-issue-detail {
+            font-size: 11px;
+            color: var(--text-light);
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            margin-top: 2px;
+            overflow-wrap: anywhere;
         }
         .validation-issue-persons {
             font-size: 11px;
@@ -5471,7 +5566,7 @@
         <div class="search-container">
             <div class="search-row">
                 <div id="toolbar-search-picker"></div>
-                <button type="button" id="search-filter-toggle" class="search-filter-toggle" onclick="window.Strom.UI.toggleSearchFilters()" data-i18n-title="searchFilters.toggle">⚗</button>
+                <button type="button" id="search-filter-toggle" class="search-filter-toggle" onclick="window.Strom.UI.toggleSearchFilters()" data-i18n-title="searchFilters.toggle"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2.5v-8L3 5z"/></svg></button>
             </div>
             <div id="search-filters" class="search-filters" style="display:none;">
                 <input type="text" id="filter-lastname" autocomplete="off" data-i18n-placeholder="searchFilters.lastName" oninput="window.Strom.UI.scheduleSearchFilter()">
@@ -6616,6 +6711,10 @@
             <div class="modal-header">
                 <h2 data-i18n="treeManager.manageTreesTitle">Manage Trees</h2>
                 <button class="close-btn" onclick="window.Strom.UI.closeTreeManagerDialog()">&times;</button>
+            </div>
+            <div id="tree-manager-search-row" class="tree-manager-search-row" style="display:none;">
+                <input type="text" id="tree-manager-search" data-i18n-placeholder="treeManager.searchTrees"
+                       autocomplete="off" oninput="window.Strom.UI.updateTreeManagerList()">
             </div>
             <div id="tree-manager-list" class="tree-manager-list">
                 <!-- Tree list rendered dynamically -->

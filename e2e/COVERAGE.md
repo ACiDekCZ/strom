@@ -99,6 +99,9 @@ the table honest.
 | Mobile: single tap opens the bottom sheet | `mobile.spec.ts` | covered | first tap = person menu, no desktop context menu |
 | Timeline: wheel scrolls natively (no canvas zoom) | `timeline.spec.ts` | covered | wheel over the timeline leaves ZoomPan scale unchanged |
 | Timeline: unknown-death bar to last event + fade | — (`timeline.test.ts` unit) | partial | model extension unit-tested; the fade is SVG cosmetics |
+| Extended tree validation (dates, citations, attachments) | `tree.spec.ts` + `validation-dates.test.ts` (unit) | covered | death<birth, orphan citation shown with detail line; 13 unit tests for all new checks |
+| Tree manager: row ⋯ menu, Open button, active badge | `tree.spec.ts` | covered | menu opens, rename item works, Open switches tree and closes manager |
+| Tree manager: search box for long lists | — | partial | rendering gated at ≥6 trees; filtering is a trivial name includes() |
 
 ## Deliberately not covered (`n-a`)
 

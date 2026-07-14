@@ -125,11 +125,16 @@ function buildPremyslids(): { data: StromData; focus: PersonId } {
     const vladislav2 = b.person('vladislav2', 'Vladislav II.', 'Přemyslovec', 'male', { birthDate: '~1110', deathDate: '1174', notes: 'Druhý český král (1158), korunován Fridrichem Barbarossou.' });
     b.kids(uVladislav1, vladislav2);
 
+    // Vladislav II married twice: Gertruda (mother of Bedřich) and Judita of
+    // Thuringia (mother of Přemysl Otakar I. — Gertruda died before his birth).
     const gertruda = b.person('gertruda', 'Gertruda', 'Babenberská', 'female', { birthDate: '~1118', deathDate: '1150' });
     const uVladislav2 = b.marry(vladislav2, gertruda);
     const bedrich = b.person('bedrich', 'Bedřich', 'Přemyslovec', 'male', { birthDate: '~1142', deathDate: '1189' });
+    b.kids(uVladislav2, bedrich);
+    const juditaD = b.person('judita_d', 'Judita', 'Durynská', 'female', { birthDate: '~1135', deathDate: '~1174' });
+    const uVladislav2j = b.marry(vladislav2, juditaD);
     const otakar1 = b.person('otakar1', 'Přemysl Otakar I.', 'Přemyslovec', 'male', { birthDate: '~1155', deathDate: '1230', notes: 'Získal Zlatou bulou sicilskou (1212) dědičný královský titul.' });
-    b.kids(uVladislav2, bedrich, otakar1);
+    b.kids(uVladislav2j, otakar1);
 
     // Multiple marriages: Adléta (dissolved) then Constance of Hungary.
     const adleta = b.person('adleta', 'Adléta', 'Míšeňská', 'female', { birthDate: '~1160', deathDate: '1211' });
