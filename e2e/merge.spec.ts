@@ -85,4 +85,8 @@ test('tree merge wizard matches a shared person and merges without duplicates', 
     await expect(wizard.locator('#merge-stat-matches')).not.toHaveText('0');
     await expect(wizard.locator('#merge-match-list .merge-item').first()).toBeVisible();
     await expect(wizard.locator('#merge-match-list')).toContainText('Jan');
+
+    // Exactly ONE wizard step reads as current.
+    await expect(wizard.locator('.merge-step.active')).toHaveCount(1);
+    await expect(wizard.locator('.merge-step.active')).toHaveText(/Review matches/);
 });

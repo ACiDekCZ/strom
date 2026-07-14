@@ -462,27 +462,29 @@ class MergerUIClass {
         const itemsWithConflicts = stats.withConflicts;
         const resolvedConflicts = this.mergeState?.conflictResolutions.size || 0;
 
-        // Update step indicators
+        // Update step indicators: exactly ONE step reads as current (filled),
+        // finished steps get an outlined checkmark style, upcoming stay muted.
         const step1 = document.getElementById('merge-step-review');
         const step2 = document.getElementById('merge-step-resolve');
         const step3 = document.getElementById('merge-step-execute');
 
+        const step1Complete = reviewedItems >= totalItems * 0.5; // At least 50% reviewed
+        const hasConflicts = itemsWithConflicts > 0;
+        const step2Complete = !hasConflicts || resolvedConflicts >= itemsWithConflicts;
+        const current = !step1Complete ? 1 : (hasConflicts && !step2Complete) ? 2 : 3;
+
         if (step1) {
-            const isComplete = reviewedItems >= totalItems * 0.5; // At least 50% reviewed
-            step1.classList.toggle('complete', isComplete);
-            step1.classList.toggle('active', !isComplete);
+            step1.classList.toggle('active', current === 1);
+            step1.classList.toggle('complete', step1Complete && current !== 1);
         }
-
         if (step2) {
-            const hasConflicts = itemsWithConflicts > 0;
-            const allResolved = resolvedConflicts >= itemsWithConflicts;
-            step2.classList.toggle('complete', hasConflicts && allResolved);
-            step2.classList.toggle('active', hasConflicts && !allResolved);
             step2.style.display = hasConflicts ? '' : 'none';
+            step2.classList.toggle('active', current === 2);
+            step2.classList.toggle('complete', hasConflicts && step2Complete && current !== 2);
         }
-
         if (step3) {
-            step3.classList.add('active');
+            step3.classList.toggle('active', current === 3);
+            step3.classList.remove('complete');
         }
     }
 
@@ -1060,6 +1062,14 @@ class MergerUIClass {
         const content = document.getElementById('merge-conflict-content');
 
         if (!dialog || !content) return;
+
+        // Title says WHOSE conflicts these are.
+        const titleEl = dialog.querySelector('.modal-header h2');
+        if (titleEl) {
+            const p = this.mergeState.incomingData.persons[match.incomingId];
+            const name = p ? `${p.firstName} ${p.lastName}`.trim() : '';
+            titleEl.textContent = name ? `${strings.merge.conflicts}: ${name}` : strings.merge.conflicts;
+        }
 
         // Gender values display localized; everything else raw.
         const displayVal = (field: string, v?: string): string => {

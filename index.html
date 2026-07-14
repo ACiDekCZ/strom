@@ -3814,9 +3814,12 @@
             color: white;
         }
         .merge-step.complete {
-            background: #4caf50;
-            color: white;
+            background: transparent;
+            border: 1px solid #4caf50;
+            color: #4caf50;
+            padding: 5px 11px;
         }
+        .merge-step.complete::before { content: '✓ '; }
 
         /* Merge close confirmation */
         .merge-close-message {
