@@ -10,6 +10,7 @@ import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import { buildTreeSvg, computeBounds, PosterOptions, FOOTER_HEIGHT } from '../export-image.js';
 import { uiModule } from './module.js';
+import { DEFAULT_LAYOUT_CONFIG } from '../types.js';
 import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy.js';
 import { classifyBranches } from '../branch-colors.js';
 import { SettingsManager } from '../settings.js';
@@ -192,12 +193,82 @@ export const exportImageMethods = uiModule({
         const cols = Math.max(1, Math.ceil((posterWmm - PAGE_OVERLAP_MM) / stepX));
         const rows = Math.max(1, Math.ceil((posterHmm - PAGE_OVERLAP_MM) / stepY));
 
+        // Occupied rectangles in poster-mm space (cards + the footer strip at
+        // the bottom-left) — sheets that intersect NOTHING are skipped, so a
+        // sparse tree corner no longer prints near-blank paper.
+        const layout = TreeRenderer.getPosterLayout();
+        const bounds = computeBounds(layout);
+        const PAD_PX = 40;
+        const occupied: Array<{ x: number; y: number; w: number; h: number }> = [];
+        const cfg = DEFAULT_LAYOUT_CONFIG;
+        for (const pos of layout.positions.values()) {
+            occupied.push({
+                x: (pos.x - bounds.minX + PAD_PX) * MM_PER_PX,
+                y: (pos.y - bounds.minY + PAD_PX) * MM_PER_PX,
+                w: cfg.cardWidth * MM_PER_PX,
+                h: cfg.cardHeight * MM_PER_PX,
+            });
+        }
+        // Footer (title · date), bottom-left. Width is a generous estimate.
+        occupied.push({
+            x: PAD_PX * MM_PER_PX,
+            y: posterHmm - FOOTER_HEIGHT * MM_PER_PX,
+            w: 420 * MM_PER_PX,
+            h: FOOTER_HEIGHT * MM_PER_PX,
+        });
+        const tileHasContent = (offX: number, offY: number): boolean =>
+            occupied.some(o =>
+                o.x < offX + contentW && o.x + o.w > offX &&
+                o.y < offY + contentH && o.y + o.h > offY);
+
         const dataUrl = svgDataUrl(svg);
         const pages: string[] = [];
+
+        // Optional first page: the whole poster in miniature with the sheet
+        // grid + labels overlaid, so the person gluing knows what goes where.
+        let printedSheets = 0;
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                if (tileHasContent(c * stepX, r * stepY)) printedSheets++;
+            }
+        }
+
+        const wantGuide = (document.getElementById('poster-guide-page') as HTMLInputElement | null)?.checked ?? true;
+        if (wantGuide && rows * cols > 1) {
+            const gs = Math.min((contentW - 4) / posterWmm, (contentH - 30) / posterHmm);
+            const gw = posterWmm * gs;
+            const gh = posterHmm * gs;
+            const cells: string[] = [];
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    // Each sheet covers [off, off+content], clipped to the poster.
+                    const x = c * stepX * gs;
+                    const y = r * stepY * gs;
+                    const w = Math.min(contentW, posterWmm - c * stepX) * gs;
+                    const h = Math.min(contentH, posterHmm - r * stepY) * gs;
+                    const empty = !tileHasContent(c * stepX, r * stepY);
+                    const label = empty ? strings.poster.emptySheet : strings.poster.pageLabel(r + 1, c + 1);
+                    cells.push(`<div class="poster-guide-cell${empty ? ' skip' : ''}" style="left:${x.toFixed(2)}mm;top:${y.toFixed(2)}mm;width:${w.toFixed(2)}mm;height:${h.toFixed(2)}mm;"><span>${label}</span></div>`);
+                }
+            }
+            pages.push(`
+                <div class="poster-page poster-guide">
+                    <div class="poster-guide-head">
+                        <strong>${strings.poster.guideTitle}</strong>
+                        <span>${strings.poster.guideInfo(printedSheets, rows, cols, PAGE_OVERLAP_MM)}</span>
+                    </div>
+                    <div class="poster-guide-map" style="width:${gw.toFixed(2)}mm;height:${gh.toFixed(2)}mm;">
+                        <img src="${dataUrl}" style="width:${gw.toFixed(2)}mm;height:${gh.toFixed(2)}mm;">
+                        ${cells.join('')}
+                    </div>
+                </div>`);
+        }
+
         for (let r = 0; r < rows; r++) {
             for (let c = 0; c < cols; c++) {
                 const offX = c * stepX;
                 const offY = r * stepY;
+                if (!tileHasContent(offX, offY)) continue;   // blank sheet — skip
                 pages.push(`
                     <div class="poster-page">
                         <div class="poster-page-clip" style="width:${contentW}mm;height:${contentH}mm;">
@@ -224,6 +295,21 @@ export const exportImageMethods = uiModule({
             .poster-mark.bl { bottom: 0; left: 0; border-right: none; border-top: none; }
             .poster-mark.br { bottom: 0; right: 0; border-left: none; border-top: none; }
             .poster-page-label { position: absolute; bottom: 1mm; right: 2mm; font-size: 8pt; color: #666; }
+            .poster-guide-head { display: flex; flex-direction: column; gap: 1mm; margin-bottom: 4mm; font-size: 11pt; }
+            .poster-guide-head span { font-size: 9pt; color: #555; }
+            .poster-guide-map { position: relative; margin: 0 auto; border: 0.3mm solid #bbb; }
+            .poster-guide-map img { display: block; }
+            .poster-guide-cell {
+                position: absolute; box-sizing: border-box;
+                border: 0.3mm dashed #c0392b;
+                display: flex; align-items: center; justify-content: center;
+            }
+            .poster-guide-cell span {
+                font-size: 9pt; color: #c0392b; background: rgba(255,255,255,0.75);
+                padding: 0.5mm 1.5mm; border-radius: 1mm;
+            }
+            .poster-guide-cell.skip { border-color: #bbb; background: rgba(200,200,200,0.25); }
+            .poster-guide-cell.skip span { color: #888; }
         `;
 
         let container = document.getElementById('poster-print');

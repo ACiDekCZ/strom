@@ -1306,7 +1306,12 @@ const stringsEN = {
         empty: 'Nothing to export — open a tree first.',
         pngScaledDown: 'The image was scaled down to fit the size limit.',
         pngError: 'Could not create the image.',
-        pageLabel: (row: number, col: number) => `row ${row} · col ${col}`
+        pageLabel: (row: number, col: number) => `row ${row} · col ${col}`,
+        guideOption: 'Add an assembly-guide first page',
+        guideTitle: 'Assembly guide',
+        guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
+            `${pages} sheets (${rows} × ${cols}), ${overlap} mm overlap — glue by the grid below.`,
+        emptySheet: 'empty — not printed'
     }
 };
 
@@ -2604,7 +2609,12 @@ const stringsCZ: StringsType = {
         empty: 'Není co exportovat — nejdřív otevři strom.',
         pngScaledDown: 'Obrázek byl zmenšen kvůli limitu velikosti.',
         pngError: 'Obrázek se nepodařilo vytvořit.',
-        pageLabel: (row: number, col: number) => `řádek ${row} · sloupec ${col}`
+        pageLabel: (row: number, col: number) => `řádek ${row} · sloupec ${col}`,
+        guideOption: 'Přidat úvodní stranu s návodem na slepení',
+        guideTitle: 'Návod na slepení',
+        guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
+            `${pages} listů (${rows} × ${cols}), přesah ${overlap} mm — slepte podle mřížky níže.`,
+        emptySheet: 'prázdný — netiskne se'
     }
 };
 

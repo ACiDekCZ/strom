@@ -122,3 +122,27 @@ test('tiled print fires only after the tile image is decoded (empty-pages fix)',
     expect(state.pages).toBeGreaterThan(0);
     expect(state.imgComplete).toBe(true);   // print never fires on undecoded tiles
 });
+
+test('tiled print adds an assembly guide and skips blank sheets', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(page.locator('.person-card').first()).toBeVisible();
+    await page.evaluate(() => { (window as unknown as { print: () => void }).print = () => {}; });
+    await page.evaluate(() => window.Strom.UI.showPosterDialog());
+    await page.evaluate(() => window.Strom.UI.printPosterPdf());
+
+    await expect.poll(() => page.evaluate(() =>
+        document.querySelectorAll('#poster-print .poster-page').length)).toBeGreaterThan(0);
+    const state = await page.evaluate(() => {
+        const cells = document.querySelectorAll('#poster-print .poster-guide-cell').length;
+        const tiles = document.querySelectorAll('#poster-print .poster-page:not(.poster-guide)').length;
+        const clips = document.querySelectorAll('#poster-print .poster-page-clip').length;
+        return { cells, tiles, clips, guide: !!document.querySelector('#poster-print .poster-guide') };
+    });
+    expect(state.guide).toBe(true);
+    expect(state.cells).toBeGreaterThan(0);
+    // Every printed tile has content; blank sheets are skipped, so tile count
+    // never exceeds the guide's grid cells.
+    expect(state.tiles).toBe(state.clips);
+    expect(state.tiles).toBeLessThanOrEqual(state.cells);
+});

@@ -265,14 +265,16 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
 
     // --- Footer ---
     if (hasFooter) {
+        // Title and date TOGETHER on the left: a lone date in the far right
+        // corner used to force a nearly-empty last sheet in the tiled print.
         const fy = height - footer / 2;
         const title = options.treeName ? escapeXml(options.treeName) : '';
         const date = options.dateLabel ? escapeXml(options.dateLabel) : '';
-        if (title) {
-            out.push(`<text x="${PADDING}" y="${fy.toFixed(1)}" font-size="16" font-weight="600" fill="${COLORS.text}" dominant-baseline="middle">${title}</text>`);
-        }
-        if (date) {
-            out.push(`<text x="${(width - PADDING).toFixed(1)}" y="${fy.toFixed(1)}" font-size="12" text-anchor="end" fill="${COLORS.footer}" dominant-baseline="middle">${date}</text>`);
+        const parts: string[] = [];
+        if (title) parts.push(`<tspan font-size="16" font-weight="600" fill="${COLORS.text}">${title}</tspan>`);
+        if (date) parts.push(`<tspan font-size="12" fill="${COLORS.footer}">${title ? '  ·  ' : ''}${date}</tspan>`);
+        if (parts.length) {
+            out.push(`<text x="${PADDING}" y="${fy.toFixed(1)}" dominant-baseline="middle">${parts.join('')}</text>`);
         }
     }
 
