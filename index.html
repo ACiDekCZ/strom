@@ -5180,6 +5180,16 @@
                 gap: 10px;
                 z-index: 50;
             }
+            /* Descendants view: the badge carries the root name and exit,
+               so the focus bar would just sit underneath it — hide it and
+               let the badge use the full width. */
+            body.descendants-view .focus-controls {
+                display: none !important;
+            }
+            .descendants-badge {
+                top: 54px;
+                max-width: calc(100vw - 16px);
+            }
             .focus-controls.hidden {
                 display: none !important;
             }

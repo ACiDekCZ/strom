@@ -296,6 +296,8 @@ export const miscMethods = uiModule({
     /** Sync the toolbar segment + descendants badge with the renderer's view mode. */
     updateViewModeUI(): void {
         const mode = TreeRenderer.getViewMode();
+        // Mobile CSS hides the focus bar under the descendants badge.
+        document.body.classList.toggle('descendants-view', mode === 'descendants');
         document.getElementById('view-mode-family')?.classList.toggle('active', mode === 'family');
         document.getElementById('view-mode-descendants')?.classList.toggle('active', mode === 'descendants');
         document.getElementById('view-mode-timeline')?.classList.toggle('active', mode === 'timeline');

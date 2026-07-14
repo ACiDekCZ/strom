@@ -134,3 +134,23 @@ test('descendants view: step-relatives hidden by default, badge toggle shows the
     await page.locator('#descendants-families-toggle').click();
     await expect(card(page, 'Lucie')).toBeHidden();
 });
+
+test.describe('mobile', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test('descendants badge replaces the focus bar on mobile (no overlap)', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
+        await cardAction(page, 'Jan', 'focus');
+        await expect(page.locator('#focus-controls')).toBeVisible();
+
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('descendants'));
+        await expect(page.locator('#descendants-badge')).toBeVisible();
+        await expect(page.locator('#focus-controls')).toBeHidden();
+
+        // Exit restores the focus bar.
+        await page.locator('#descendants-badge button').last().click();
+        await expect(page.locator('#focus-controls')).toBeVisible();
+    });
+});
