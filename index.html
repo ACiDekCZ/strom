@@ -5789,6 +5789,18 @@
             /* Fan chart prints as-is (its container scrolls on screen only) */
             .fan-container { position: relative !important; overflow: visible !important; }
 
+            /* Timeline prints fully (not just the on-screen viewport slice),
+               and both extra views force light colours even from dark mode. */
+            .timeline-container {
+                position: relative !important;
+                overflow: visible !important;
+                background: white !important;
+            }
+            .fan-container { background: white !important; }
+            .tl-name { color: #222 !important; }
+            .tl-tick { fill: #666 !important; }
+            .tl-dot { fill: #444 !important; }
+
             #canvas { transform: none !important; position: relative !important; }
             #tree-container { overflow: visible !important; height: auto !important; }
             body { background: white !important; margin: 0; }

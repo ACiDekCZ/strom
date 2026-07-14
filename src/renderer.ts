@@ -34,6 +34,7 @@ import { debugPanel } from './debug-panel.js';
 import { yearOf, displayYear, formatFlexDate } from './dates.js';
 import { computeTimelineModel, yearToFraction, axisTicks, TimelineRow, TimelineEvent } from './timeline.js';
 import { classifyBranches, Branch } from './branch-colors.js';
+import { presumedDeceasedSet } from './privacy.js';
 import { SettingsManager } from './settings.js';
 import { buildFanModel, buildFanSvg } from './fan-chart.js';
 
@@ -653,42 +654,8 @@ class TreeRendererClass {
      * - Is an ancestor of someone who is presumed deceased
      */
     private computePresumedDeceased(): Set<PersonId> {
-        const presumedDeceased = new Set<PersonId>();
-        const currentYear = new Date().getFullYear();
-        const MAX_AGE = 120;
-
-        // First pass: mark persons with death date or age > 120
-        for (const person of DataManager.getAllPersons()) {
-            if (person.deathDate) {
-                presumedDeceased.add(person.id);
-            } else if (person.birthDate) {
-                const birthYear = yearOf(person.birthDate);
-                if (birthYear !== null && (currentYear - birthYear) > MAX_AGE) {
-                    presumedDeceased.add(person.id);
-                }
-            }
-        }
-
-        // Second pass: mark all ancestors of presumed deceased
-        const markAncestors = (personId: PersonId) => {
-            const person = DataManager.getPerson(personId);
-            if (!person) return;
-
-            for (const parentId of person.parentIds) {
-                if (!presumedDeceased.has(parentId)) {
-                    presumedDeceased.add(parentId);
-                    markAncestors(parentId);
-                }
-            }
-        };
-
-        // Copy initial set to iterate (can't modify while iterating)
-        const initialDeceased = Array.from(presumedDeceased);
-        for (const personId of initialDeceased) {
-            markAncestors(personId);
-        }
-
-        return presumedDeceased;
+        // Shared with the poster export (single source of the † rule).
+        return presumedDeceasedSet(DataManager.getData()) as Set<PersonId>;
     }
 
     /**

@@ -8,9 +8,11 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
-import { buildTreeSvg, computeBounds, PosterOptions } from '../export-image.js';
+import { buildTreeSvg, computeBounds, PosterOptions, FOOTER_HEIGHT } from '../export-image.js';
 import { uiModule } from './module.js';
-import { applyLivingPrivacy, PrivacyMode } from '../privacy.js';
+import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy.js';
+import { classifyBranches } from '../branch-colors.js';
+import { SettingsManager } from '../settings.js';
 
 /** Browsers cap canvas dimensions; keep well under the common ~16k limit. */
 const MAX_CANVAS_PX = 15000;
@@ -39,15 +41,30 @@ function posterPrivacyMode(): PrivacyMode {
 function currentPosterSvg(): string | null {
     const layout = TreeRenderer.getPosterLayout();
     if (layout.positions.size === 0) return null;
-    const options: PosterOptions = {
-        treeName: TreeManager.getActiveTreeMetadata()?.name,
-        dateLabel: new Date().toLocaleDateString(),
-    };
     // The poster leaves the house — the living-privacy filter applies here
     // exactly like in the book/GEDCOM exports (audit K2: it used to export
     // raw full names of living people with no option at all).
     const data = applyLivingPrivacy(DataManager.getData(), posterPrivacyMode());
+    // Draw-parity inputs shared with the on-screen renderer: branch colours
+    // (when the setting is on) and the presumed-deceased † markers.
+    const focusId = TreeRenderer.getFocusPersonId();
+    const branchMap = (SettingsManager.isBranchColorsEnabled() && focusId)
+        ? classifyBranches(data, focusId) as unknown as Map<string, string>
+        : null;
+    const options: PosterOptions = {
+        treeName: TreeManager.getActiveTreeMetadata()?.name,
+        dateLabel: new Date().toLocaleDateString(),
+        branchMap,
+        deceasedSet: presumedDeceasedSet(data),
+    };
     return buildTreeSvg(data, layout, options);
+}
+
+/** Exact pixel size of the poster SVG (must match buildTreeSvg's math). */
+function posterPixelSize(): { w: number; h: number } {
+    const bounds = computeBounds(TreeRenderer.getPosterLayout());
+    // 2×40 padding + footer (always present: dateLabel is always set).
+    return { w: bounds.width + 80, h: bounds.height + 80 + FOOTER_HEIGHT };
 }
 
 function downloadBlob(content: string, type: string, filename: string): void {
@@ -103,10 +120,7 @@ export const exportImageMethods = uiModule({
             this.showAlert(strings.poster.empty, 'warning');
             return;
         }
-        const layout = TreeRenderer.getPosterLayout();
-        const bounds = computeBounds(layout);
-        const baseW = bounds.width + 80;
-        const baseH = bounds.height + 80;
+        const { w: baseW, h: baseH } = posterPixelSize();
 
         let scale = 2;
         const maxScale = Math.min(MAX_CANVAS_PX / baseW, MAX_CANVAS_PX / baseH);
@@ -169,10 +183,9 @@ export const exportImageMethods = uiModule({
         const contentW = pageW - PAGE_MARGIN_MM * 2;
         const contentH = pageH - PAGE_MARGIN_MM * 2;
 
-        const layout = TreeRenderer.getPosterLayout();
-        const bounds = computeBounds(layout);
-        const posterWmm = (bounds.width + 80) * MM_PER_PX;
-        const posterHmm = (bounds.height + 80) * MM_PER_PX;
+        const { w: posterWpx, h: posterHpx } = posterPixelSize();
+        const posterWmm = posterWpx * MM_PER_PX;
+        const posterHmm = posterHpx * MM_PER_PX;
 
         const stepX = contentW - PAGE_OVERLAP_MM;
         const stepY = contentH - PAGE_OVERLAP_MM;

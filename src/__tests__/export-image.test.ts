@@ -85,10 +85,45 @@ describe('buildTreeSvg', () => {
         expect(buildTreeSvg(data, l)).not.toContain('My Family');
     });
 
-    it('draws spouse lines dashed and connection lines solid', () => {
+    it('spouse lines follow the partnership status (married solid, divorced dashed)', () => {
         const data = makeData(person('a'), person('b'));
+        // No partnership resolved (partnershipId null) → married default → SOLID.
         const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 }, b: { x: 200, y: 300 } }));
-        expect(svg).toContain('stroke-dasharray'); // spouse line
-        expect((svg.match(/<line /g) || []).length).toBeGreaterThan(1);
+        const spouseBlock = svg.split('class="spouse-lines"')[1].split('</g>')[0];
+        expect(spouseBlock).not.toContain('stroke-dasharray');
+
+        // Divorced partnership → dashed 8,4 (renderer parity).
+        const divorced = makeData(person('a'), person('b'));
+        divorced.partnerships = {
+            ['u1' as never]: {
+                id: 'u1', person1Id: 'a', person2Id: 'c', childIds: [], status: 'divorced',
+            } as never,
+        };
+        const l = layout({ a: { x: 0, y: 0 }, b: { x: 200, y: 300 } });
+        l.spouseLines[0].partnershipId = 'u1' as never;
+        const svg2 = buildTreeSvg(divorced, l);
+        const spouseBlock2 = svg2.split('class="spouse-lines"')[1].split('</g>')[0];
+        expect(spouseBlock2).toContain('stroke-dasharray="8,4"');
+    });
+
+    it('adoptive child drops are dashed; deceased marker and branch stripe render', () => {
+        const data = makeData(
+            person('a'), person('b', { parentRelTypes: { a: 'adoptive' } as never }));
+        const l = layout({ a: { x: 0, y: 0 }, b: { x: 200, y: 300 } });
+        const svg = buildTreeSvg(data, l, {
+            deceasedSet: new Set(['a']),
+            branchMap: new Map([['a', 'paternal']]),
+        });
+        const connBlock = svg.split('class="connections"')[1].split('</g>')[0];
+        expect(connBlock).toContain('stroke-dasharray="6,4"');   // adoptive drop
+        expect(svg).toContain('†');                               // deceased marker
+        expect(svg).toContain('#d08a5a');                         // paternal stripe
+    });
+
+    it('long names shrink and clamp instead of overflowing the card', () => {
+        const data = makeData(person('a', { firstName: 'Maximilian Alexander Wolfgang Amadeus' } as never));
+        const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 } }));
+        expect(svg).toContain('lengthAdjust="spacingAndGlyphs"');
+        expect(svg).not.toContain('font-size="14" font-weight="600" fill="#333333">Maximilian Alexander');
     });
 });

@@ -175,3 +175,31 @@ export function applyLivingPrivacy(
 
     return copy;
 }
+
+/**
+ * Presumed-deceased set for the † marker (renderer + poster export share this):
+ * a recorded death, isDeceased, or age beyond 120 seeds the set, and every
+ * ANCESTOR of a presumed-deceased person is presumed deceased too. Looser than
+ * the privacy heuristic above on purpose — it only drives a display marker.
+ */
+export function presumedDeceasedSet(data: StromData, currentYear: number = new Date().getFullYear()): Set<string> {
+    const MARKER_MAX_AGE = 120;
+    const out = new Set<string>();
+    for (const p of Object.values(data.persons)) {
+        if (p.deathDate || p.isDeceased === true) { out.add(p.id); continue; }
+        const birthYear = yearOf(p.birthDate);
+        if (birthYear !== null && currentYear - birthYear > MARKER_MAX_AGE) out.add(p.id);
+    }
+    const markAncestors = (id: string): void => {
+        const p = data.persons[id as keyof typeof data.persons];
+        if (!p) return;
+        for (const parentId of p.parentIds) {
+            if (!out.has(parentId)) {
+                out.add(parentId);
+                markAncestors(parentId);
+            }
+        }
+    };
+    for (const id of [...out]) markAncestors(id);
+    return out;
+}

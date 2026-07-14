@@ -6,7 +6,7 @@
  * It reads a LayoutResult but never touches the layout engine.
  */
 
-import { StromData, LayoutConfig, DEFAULT_LAYOUT_CONFIG } from './types.js';
+import { StromData, LayoutConfig, DEFAULT_LAYOUT_CONFIG, PartnershipStatus } from './types.js';
 import { LayoutResult } from './layout/pipeline/types.js';
 import { displayYear } from './dates.js';
 
@@ -28,7 +28,59 @@ const COLORS = {
 
 const FONT = "'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 const PADDING = 40;
-const FOOTER_HEIGHT = 44;
+export const FOOTER_HEIGHT = 44;
+
+/** Branch stripe colours (match the on-screen --branch-* variables). */
+const BRANCH_COLORS: Record<string, string> = {
+    paternal: '#d08a5a', maternal: '#5a8fc0', descendant: '#57a869',
+};
+
+/** Spouse-line dash per partnership status (mirror of the renderer). */
+function statusDash(status: PartnershipStatus | undefined): { dash?: string; color?: string } {
+    switch (status) {
+        case 'divorced': return { dash: '8,4', color: '#999999' };
+        case 'separated': return { dash: '4,4', color: '#999999' };
+        case 'partners': return { dash: '2,2' };
+        default: return {};
+    }
+}
+
+/** Child-drop dash per the child's parent-rel types (mirror of the renderer). */
+function relDash(data: StromData, childId: string): string | undefined {
+    const child = data.persons[childId as keyof typeof data.persons];
+    const types = child?.parentRelTypes ? Object.values(child.parentRelTypes) : [];
+    if (types.includes('adoptive')) return '6,4';
+    if (types.includes('step') || types.includes('foster')) return '2,3';
+    return undefined;
+}
+
+/**
+ * Estimated text width (px) for the export's font stack — close enough to
+ * pick a shrink step; textLength clamps whatever estimation misses.
+ */
+function estWidth(text: string, fontSize: number, bold: boolean): number {
+    return text.length * fontSize * (bold ? 0.62 : 0.58);
+}
+
+/**
+ * Text that FITS a max width like the on-screen cards do: shrink through the
+ * same steps the renderer uses, then hard-clamp with textLength so long names
+ * can never overflow the card (they used to run across neighbours).
+ */
+function fittedText(
+    text: string, x: number, y: number, maxW: number,
+    sizes: number[], bold: boolean, fill: string
+): string {
+    let fs = sizes[0];
+    for (const size of sizes) {
+        fs = size;
+        if (estWidth(text, size, bold) <= maxW) break;
+    }
+    const clamp = estWidth(text, fs, bold) > maxW
+        ? ` textLength="${maxW.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
+    const weight = bold ? ' font-weight="600"' : '';
+    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="${fs}"${weight} fill="${fill}"${clamp}>${escapeXml(text)}</text>`;
+}
 
 export interface SvgBounds {
     minX: number;
@@ -45,6 +97,10 @@ export interface PosterOptions {
     /** Footer date/subtitle. */
     dateLabel?: string;
     config?: LayoutConfig;
+    /** Branch classification (person id -> paternal|maternal|descendant). */
+    branchMap?: Map<string, string> | null;
+    /** Persons drawn with the † marker. */
+    deceasedSet?: Set<string>;
 }
 
 /** Bounding box of all cards (card top-left..bottom-right) in layout space. */
@@ -70,8 +126,8 @@ function escapeXml(str: string): string {
         .replace(/"/g, '&quot;');
 }
 
-function line(x1: number, y1: number, x2: number, y2: number, stroke: string, dash = false): string {
-    const d = dash ? ' stroke-dasharray="5,3"' : '';
+function line(x1: number, y1: number, x2: number, y2: number, stroke: string, dash?: string): string {
+    const d = dash ? ` stroke-dasharray="${dash}"` : '';
     return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${stroke}" stroke-width="1.5"${d}/>`;
 }
 
@@ -114,40 +170,89 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
         if (Math.abs(conn.branchRightX - conn.branchLeftX) > 0.5) {
             out.push(line(conn.branchLeftX, conn.branchY, conn.branchRightX, conn.branchY, COLORS.line));
         }
-        // Drops to each child
+        // Drops to each child (adoptive dashed, step/foster dotted — parity
+        // with the on-screen renderer)
         for (const drop of conn.drops) {
-            out.push(line(drop.x, drop.topY ?? conn.branchY, drop.x, drop.bottomY, COLORS.line));
+            out.push(line(drop.x, drop.topY ?? conn.branchY, drop.x, drop.bottomY, COLORS.line, relDash(data, drop.personId)));
         }
     }
     out.push('</g>');
 
-    // --- Spouse lines ---
+    // --- Spouse lines (status-styled, split around intervening cards in
+    //     partner chains — same algorithm as the renderer) ---
     out.push('<g class="spouse-lines">');
+    const cardGap = 4;
     for (const sl of result.spouseLines) {
-        if (Math.abs(sl.xMax - sl.xMin) > 0.5) {
-            out.push(line(sl.xMin, sl.y, sl.xMax, sl.y, COLORS.spouse, true));
+        if (Math.abs(sl.xMax - sl.xMin) <= 0.5) continue;
+        const partnership = sl.partnershipId ? data.partnerships[sl.partnershipId] : undefined;
+        const style = statusDash(partnership?.status);
+        const stroke = style.color ?? COLORS.spouse;
+
+        const gaps: { left: number; right: number }[] = [];
+        for (const [personId, pos] of result.positions) {
+            if (personId === sl.person1Id || personId === sl.person2Id) continue;
+            const cardLeft = pos.x;
+            const cardRight = pos.x + cw;
+            if (cardRight > sl.xMin && cardLeft < sl.xMax) {
+                const cardCenterY = pos.y + ch / 2;
+                if (Math.abs(cardCenterY - sl.y) < ch / 2 + 2) {
+                    gaps.push({ left: cardLeft - cardGap, right: cardRight + cardGap });
+                }
+            }
+        }
+        if (gaps.length === 0) {
+            out.push(line(sl.xMin, sl.y, sl.xMax, sl.y, stroke, style.dash));
+        } else {
+            gaps.sort((a, b) => a.left - b.left);
+            let currentX = sl.xMin;
+            for (const gap of gaps) {
+                if (gap.left > currentX) out.push(line(currentX, sl.y, gap.left, sl.y, stroke, style.dash));
+                currentX = Math.max(currentX, gap.right);
+            }
+            if (currentX < sl.xMax) out.push(line(currentX, sl.y, sl.xMax, sl.y, stroke, style.dash));
         }
     }
     out.push('</g>');
 
     // --- Cards (id order for deterministic output) ---
     out.push('<g class="cards">');
+    let clipCounter = 0;
     const entries = [...result.positions.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])));
     for (const [personId, pos] of entries) {
         const person = data.persons[personId];
         const isPlaceholder = person?.isPlaceholder;
         const palette = isPlaceholder ? COLORS.placeholder : (person?.gender === 'male' ? COLORS.male : COLORS.female);
-        const cx = pos.x + cw / 2;
 
         out.push(`<rect x="${pos.x.toFixed(1)}" y="${pos.y.toFixed(1)}" width="${cw}" height="${ch}" rx="8" fill="${palette.fill}" stroke="${palette.stroke}" stroke-width="1.5"/>`);
 
+        // Branch colour stripe (matches the on-screen ::before bar)
+        const branch = options.branchMap?.get(personId);
+        const stripeColor = branch ? BRANCH_COLORS[branch] : undefined;
+        if (stripeColor) {
+            out.push(`<rect x="${(pos.x + 1).toFixed(1)}" y="${(pos.y + 4).toFixed(1)}" width="4" height="${(ch - 8).toFixed(0)}" rx="2" fill="${stripeColor}"/>`);
+        }
+
         if (person) {
-            const firstName = person.firstName || '?';
+            // Photo avatar shifts the text right, like on screen.
+            const hasPhoto = !!person.photo;
+            if (hasPhoto) {
+                const cxAv = pos.x + 28;
+                const cyAv = pos.y + ch / 2;
+                const clipId = `av${clipCounter++}`;
+                out.push(`<clipPath id="${clipId}"><circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="20"/></clipPath>`);
+                out.push(`<image href="${escapeXml(person.photo!)}" x="${(cxAv - 20).toFixed(1)}" y="${(cyAv - 20).toFixed(1)}" width="40" height="40" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
+            }
+            const contentX = hasPhoto ? pos.x + 52 : pos.x + 12;
+            const contentW = hasPhoto ? cw - 52 - 12 : cw - 24;
+            const cx = contentX + contentW / 2;
+
+            const deceased = options.deceasedSet?.has(personId) ? ' †' : '';
+            const firstName = (person.firstName || '?') + deceased;
             const surname = person.lastName || '';
             const year = displayYear(person.birthDate);
-            out.push(`<text x="${cx.toFixed(1)}" y="${(pos.y + 24).toFixed(1)}" text-anchor="middle" font-size="14" font-weight="600" fill="${COLORS.text}">${escapeXml(firstName)}</text>`);
+            out.push(fittedText(firstName, cx, pos.y + 24, contentW, [14, 12, 10.5], true, COLORS.text));
             if (surname) {
-                out.push(`<text x="${cx.toFixed(1)}" y="${(pos.y + 40).toFixed(1)}" text-anchor="middle" font-size="12" fill="${COLORS.textLight}">${escapeXml(surname)}</text>`);
+                out.push(fittedText(surname, cx, pos.y + 40, contentW, [12, 10.5, 9.5], false, COLORS.textLight));
             }
             if (year) {
                 out.push(`<text x="${cx.toFixed(1)}" y="${(pos.y + 56).toFixed(1)}" text-anchor="middle" font-size="11" fill="${COLORS.textLight}">${escapeXml(year)}</text>`);
