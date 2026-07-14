@@ -293,8 +293,14 @@ class AppExporterClass {
             };
 
             // A shared branch must be traceable for the reply flow — track the
-            // export id on the source tree like the full-tree export does.
-            if (share?.trackTreeId) TreeManager.setLastExportId(share.trackTreeId, exportId);
+            // export id on the source tree like the full-tree export does, and
+            // keep the shared (filtered) branch as a baseline so a "changes
+            // only" reply from the recipient can be reconstructed here.
+            if (share?.trackTreeId) {
+                TreeManager.setLastExportId(share.trackTreeId, exportId);
+                const { saveBaseline } = await import('./share-baselines.js');
+                void saveBaseline(share.trackTreeId, exportId, filteredData, Date.now()).catch(() => {});
+            }
 
             // Create embedded data script with focused data
             const dataScript = `<script>window.STROM_EMBEDDED_DATA = ${JSON.stringify(envelope)};<\/script>`;
