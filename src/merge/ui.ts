@@ -24,7 +24,7 @@ import {
     updateConflictResolution,
     reanalyzeMatches
 } from './matching.js';
-import { executeMerge, deleteBackup } from './executor.js';
+import { executeMerge, deleteBackup, AUTO_CONFIRM_SCORE } from './executor.js';
 import { AuditLogManager } from '../audit-log.js';
 import { PersonPicker } from '../person-picker.js';
 import {
@@ -1138,6 +1138,16 @@ class MergerUIClass {
      */
     async executeMerge(): Promise<void> {
         if (!this.mergeState) return;
+
+        // Gate: matches the user has NOT decided and the score does not
+        // pre-confirm (the ✓/? bar in the list) are treated as separate
+        // persons, not silently merged — make that explicit before running.
+        const pending = this.mergeState.matches.filter(m =>
+            !this.mergeState!.decisions.has(m.incomingId) && m.score < AUTO_CONFIRM_SCORE);
+        if (pending.length > 0) {
+            const proceed = await UI.showConfirm(strings.merge.pendingGate(pending.length));
+            if (!proceed) return;
+        }
 
         // Generate default name for new tree
         const defaultName = this.targetTreeName && this.sourceTreeName

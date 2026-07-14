@@ -648,6 +648,14 @@ function calculateMatchScore(
     // Birth date matching
     if (datesMatch(existing.birthDate, incoming.birthDate)) {
         score += 35;
+        // A (near-)exact full name plus an identical full birth date is as
+        // certain as person matching gets — day-precision collisions between
+        // different people with the same name are vanishingly rare. Promote
+        // straight to the high-confidence band (name 40 + date 35 = 75 would
+        // otherwise land in 'medium' and demand a manual look every time).
+        if (fullNameSimilarity >= 0.95 && existing.birthDate!.length >= 10) {
+            score = Math.max(score, 85);
+        }
         if (!reasons.includes('exact_name_gender_birthdate')) {
             reasons.push('exact_name_gender_birthdate');
         }

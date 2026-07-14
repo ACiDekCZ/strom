@@ -54,6 +54,20 @@ export async function deleteBackup(key: string): Promise<void> {
  * - Rejected/unmatched: generate new ID
  * - Partnerships: always new ID
  */
+/**
+ * UNDECIDED matches auto-confirm only when the score clears the same bar the
+ * UI shows as pre-confirmed (✓, score >= 50). Anything weaker without an
+ * explicit user decision is treated as REJECTED — a duplicate person is
+ * recoverable (person merge exists), a silent wrong merge is not.
+ */
+export const AUTO_CONFIRM_SCORE = 50;
+
+export function isEffectivelyConfirmed(state: MergeState, match: { incomingId: PersonId; score: number }): boolean {
+    const decision = state.decisions.get(match.incomingId);
+    if (decision) return decision.type === 'confirm';
+    return match.score >= AUTO_CONFIRM_SCORE;
+}
+
 export function buildIdMapping(state: MergeState): IdMapping {
     const personMapping = new Map<PersonId, PersonId>();
     const partnershipMapping = new Map<PartnershipId, PartnershipId>();
@@ -62,10 +76,10 @@ export function buildIdMapping(state: MergeState): IdMapping {
     for (const match of state.matches) {
         const decision = state.decisions.get(match.incomingId);
 
-        if (!decision || decision.type === 'confirm') {
-            // Confirmed or default: use existing ID
+        if (isEffectivelyConfirmed(state, match)) {
+            // Confirmed (explicitly, or by a strong score): use existing ID
             personMapping.set(match.incomingId, match.existingId);
-        } else if (decision.type === 'manual_match') {
+        } else if (decision?.type === 'manual_match') {
             // Manual match: use target ID
             personMapping.set(match.incomingId, decision.targetId);
         } else {
@@ -140,14 +154,14 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         for (const match of state.matches) {
             const decision = state.decisions.get(match.incomingId);
 
-            if (!decision || decision.type === 'confirm') {
+            if (isEffectivelyConfirmed(state, match)) {
                 const existingPerson = mergedData.persons[match.existingId];
                 if (existingPerson) {
                     // Merge data according to conflict resolutions
                     mergePersonData(existingPerson, match.incomingPerson, match.conflicts, mapping.persons);
                     mergedCount++;
                 }
-            } else if (decision.type === 'manual_match') {
+            } else if (decision?.type === 'manual_match') {
                 const existingPerson = mergedData.persons[decision.targetId];
                 if (existingPerson) {
                     mergePersonData(existingPerson, match.incomingPerson, match.conflicts, mapping.persons);
