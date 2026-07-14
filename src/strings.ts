@@ -284,6 +284,21 @@ const stringsEN = {
         refresh: 'Refresh',
     },
 
+    // File System Access (work over a file on disk)
+    fileAccess: {
+        saveToFile: 'Save to file…',
+        openFromFile: 'Open from file…',
+        save: 'Save',
+        unlink: 'Detach file',
+        indicator: 'Linked to a file',
+        linkedTo: (name: string) => `Linked to ${name}`,
+        saved: (name: string) => `Saved to ${name}`,
+        linked: (name: string) => `Linked to ${name}`,
+        saveFailed: 'Could not save to the file',
+        permissionDenied: 'File access was denied — the link was removed',
+        lockedRefuse: 'Unlock encryption before saving to a file',
+    },
+
     // Zoom controls
     zoomControls: {
         zoomIn: 'Zoom In',
@@ -1503,6 +1518,21 @@ const stringsCZ: StringsType = {
         offline: 'Offline',
         updateReady: 'Je k dispozici nová verze.',
         refresh: 'Obnovit',
+    },
+
+    // File System Access (práce nad souborem na disku)
+    fileAccess: {
+        saveToFile: 'Uložit do souboru…',
+        openFromFile: 'Otevřít ze souboru…',
+        save: 'Uložit',
+        unlink: 'Odpojit soubor',
+        indicator: 'Propojeno se souborem',
+        linkedTo: (name: string) => `Propojeno se souborem ${name}`,
+        saved: (name: string) => `Uloženo do ${name}`,
+        linked: (name: string) => `Propojeno se souborem ${name}`,
+        saveFailed: 'Nepodařilo se uložit do souboru',
+        permissionDenied: 'Přístup k souboru byl odepřen — propojení zrušeno',
+        lockedRefuse: 'Před uložením do souboru odemkni šifrování',
     },
 
     // Zoom controls

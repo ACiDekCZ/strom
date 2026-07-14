@@ -2070,6 +2070,30 @@ class DataManagerClass {
      * @param treeId The tree to export
      * @param password Optional password for encryption
      */
+    /**
+     * Build the JSON text for a tree's ATTACHED working file (File System
+     * Access). This is the full tree (no privacy stripping — it is your own
+     * working copy), encrypted with the current session when encryption is on
+     * (mirrors saveTreeData / snapshots). Throws 'locked' when encryption is
+     * enabled but the session is locked. The unencrypted content is byte-for-byte
+     * the same as a full JSON download.
+     */
+    async buildAttachedFileJson(treeId: TreeId): Promise<string> {
+        const data = await TreeManager.getTreeData(treeId);
+        if (!data) throw new Error('no tree data');
+        data.version = STROM_DATA_VERSION;
+        const json = JSON.stringify(data, null, 2);
+
+        const { SettingsManager } = await import('./settings.js');
+        if (SettingsManager.isEncryptionEnabled()) {
+            const { CryptoSession } = await import('./crypto.js');
+            if (!CryptoSession.isUnlocked()) throw new Error('locked');
+            const encrypted = await CryptoSession.encrypt(json);
+            return JSON.stringify(encrypted, null, 2);
+        }
+        return json;
+    }
+
     async exportTreeJSON(treeId: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', dropMedia = false): Promise<void> {
         const rawTreeData = await TreeManager.getTreeData(treeId);
         if (!rawTreeData) return;

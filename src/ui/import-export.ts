@@ -370,48 +370,45 @@ export const importExportMethods = uiModule({
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = async (e) => {
-            const content = e.target?.result as string;
-
-            // Try to parse JSON first
-            let parsed: unknown;
-            try {
-                parsed = JSON.parse(content);
-            } catch {
-                this.showValidationDialog({ valid: false, errors: ['validation.invalidJson'], warnings: [] });
-                return;
-            }
-
-            // Check if data is encrypted
-            const { isEncrypted } = await import('../crypto.js');
-            if (isEncrypted(parsed)) {
-                // Store encrypted data and show password prompt
-                this.handleEncryptedJsonImport(parsed);
-                return;
-            }
-
-            // Not encrypted - validate normally
-            const result = validateJsonImport(content);
-
-            if (!result.valid) {
-                this.showValidationDialog(result);
-                return;
-            }
-
-            if (result.warnings.length > 0) {
-                // Show warnings with option to continue
-                this.showValidationDialog(result, () => {
-                    this.processJsonImport(result.data!);
-                });
-            } else {
-                // No issues, proceed
-                this.processJsonImport(result.data!);
-            }
+        reader.onload = (e) => {
+            void this.importJsonString(e.target?.result as string);
         };
         reader.readAsText(file);
 
         // Reset input
         input.value = '';
+    },
+
+    /**
+     * Validate and import a JSON string through the same path as a file upload
+     * (encrypted → password prompt, invalid → dialog, warnings → confirm). Shared
+     * by the file-input upload and the File System Access "open from file" flow.
+     */
+    async importJsonString(content: string): Promise<void> {
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(content);
+        } catch {
+            this.showValidationDialog({ valid: false, errors: ['validation.invalidJson'], warnings: [] });
+            return;
+        }
+
+        const { isEncrypted } = await import('../crypto.js');
+        if (isEncrypted(parsed)) {
+            this.handleEncryptedJsonImport(parsed);
+            return;
+        }
+
+        const result = validateJsonImport(content);
+        if (!result.valid) {
+            this.showValidationDialog(result);
+            return;
+        }
+        if (result.warnings.length > 0) {
+            this.showValidationDialog(result, () => this.processJsonImport(result.data!));
+        } else {
+            this.processJsonImport(result.data!);
+        }
     },
 
     processJsonImport(data: StromData): void {
@@ -772,6 +769,8 @@ export const importExportMethods = uiModule({
         this.refreshSearch();
         // Update URL to reflect new tree
         this.updateUrlTreeParam(newTreeId);
+        // If this import came from "open from file", attach that handle now.
+        void this.attachPendingFileHandle(newTreeId);
     },
 
     /**

@@ -346,6 +346,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('strom:tree-switched', () => {
         UI.updateTreeSwitcher();
         UI.updateCollabBar();
+        void UI.updateFileIndicator();
     });
 
     // PWA: offline indicator always; register the service worker only on the
@@ -355,6 +356,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         linkManifest();
         registerServiceWorker(() => UI.showUpdateAvailable());
     }
+
+    // File System Access (reveal controls if supported; sync the file indicator).
+    UI.initFileAccess();
 
     // "On this day" reminder — after the first render, off the critical path.
     const showOtd = () => UI.maybeShowOnThisDay();

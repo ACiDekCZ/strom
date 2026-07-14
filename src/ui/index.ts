@@ -71,6 +71,7 @@ import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { shareUiMethods } from './share-ui.js';
 import { familyWizardMethods } from './family-wizard.js';
 import { pwaUiMethods } from './pwa-ui.js';
+import { fileAccessMethods } from './file-access-ui.js';
 
 export class UIClass {
     currentId: PersonId | null = null;
@@ -164,6 +165,11 @@ export class UIClass {
 
     // Family wizard: the anchor person the new family is added around.
     wizardAnchorId: PersonId | null = null;
+
+    // File System Access: handle pending attach after an "open from file" import,
+    // and the linked file name for the active tree (for the Ctrl+S decision).
+    pendingOpenFileHandle: import('../file-access.js').FileSystemFileHandleLike | null = null;
+    activeFileHandleName: string | null = null;
 
     // Minimap state (world→minimap transform, current world box, drag + throttle)
     minimapTransform: MinimapTransform | null = null;
@@ -288,5 +294,9 @@ Object.assign(UIClass.prototype, shareUiMethods);
 type PwaUiMethods = typeof pwaUiMethods;
 export interface UIClass extends PwaUiMethods {}
 Object.assign(UIClass.prototype, pwaUiMethods);
+
+type FileAccessMethods = typeof fileAccessMethods;
+export interface UIClass extends FileAccessMethods {}
+Object.assign(UIClass.prototype, fileAccessMethods);
 
 export const UI = new UIClass();

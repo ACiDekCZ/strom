@@ -27,6 +27,7 @@ the table honest.
 | SVG poster export | `export-poster.spec.ts` | covered | valid XML, contains a name |
 | JSON export privacy (living persons) | `export-poster.spec.ts` | covered | `initials` mode hides full names |
 | Persistence across reload | `person-crud.spec.ts` | covered | reload after a deterministic IndexedDB flush wait |
+| Save to a file (File System Access) | `file-access.spec.ts` | partial | mocked handle: save writes tree JSON, indicator shows, Ctrl+S re-saves; unsupported context hides controls. Real picker/permission UI and cross-reload handle persistence can't be driven headlessly |
 | Invalid JSON import | `data-import-export.spec.ts` | covered | validation dialog, existing data intact |
 | Invalid/garbage GEDCOM import | `data-import-export.spec.ts` | covered | lenient parser → empty result dialog, app stays alive |
 | Demo → export → import | `data-import-export.spec.ts` | covered | person count matches |

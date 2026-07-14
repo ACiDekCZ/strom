@@ -480,6 +480,16 @@ export const miscMethods = uiModule({
                 return;
             }
 
+            // Ctrl/Cmd+S: save into the attached file (only when the tree is
+            // linked to one — otherwise leave the browser default).
+            if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+                if (this.activeFileHandleName) {
+                    e.preventDefault();
+                    void this.saveActiveTreeToFile();
+                }
+                return;
+            }
+
             // Skip shortcuts when focus is in input/textarea/select
             const activeEl = document.activeElement;
             if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) return;

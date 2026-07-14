@@ -2530,6 +2530,26 @@
         }
         .offline-indicator::before { content: '⚡'; }
 
+        /* File System Access: controls hidden unless the browser supports it.
+           !important so it wins over .menu-option's own display at equal specificity. */
+        .fsa-only { display: none !important; }
+        body.fsa-supported .fsa-only { display: flex !important; }
+        .file-link-indicator {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 8px;
+            width: 30px;
+            height: 30px;
+            border: 1px solid var(--border-color, #ccc);
+            border-radius: 6px;
+            background: var(--card-bg, #fff);
+            color: var(--primary, #4a90d9);
+            font-size: 15px;
+            cursor: pointer;
+        }
+        .file-link-indicator:hover { background: var(--accent-soft, #e8f0fe); }
+
         /* PWA update prompt (non-blocking, same shape as the family offer) */
         .pwa-update {
             position: fixed;
@@ -5714,6 +5734,7 @@
     <div class="toolbar">
         <h1><span class="app-logo" onclick="window.Strom.UI.showAboutDialog()" title="About Strom">🌳</span> <span class="toolbar-title" data-i18n="toolbar.title"></span></h1>
         <span id="offline-indicator" class="offline-indicator" style="display:none;" data-i18n="pwa.offline"></span>
+        <button id="file-link-indicator" class="file-link-indicator" style="display:none;" onclick="window.Strom.UI.saveActiveTreeToFile()">⤓</button>
         <div class="search-container">
             <div class="search-row">
                 <div id="toolbar-search-picker"></div>
@@ -6440,6 +6461,12 @@
                         <span class="option-desc" data-i18n="menu.exportJsonDesc"></span>
                     </span>
                 </button>
+                <button class="menu-option fsa-only" onclick="window.Strom.UI.attachSaveToFile()">
+                    <span class="option-icon">⤓</span>
+                    <span class="option-text">
+                        <span class="option-title" data-i18n="fileAccess.saveToFile"></span>
+                    </span>
+                </button>
                 <button class="menu-option" id="export-focus-btn" onclick="window.Strom.UI.exportFocusedJSON()">
                     <span class="option-icon">💾</span>
                     <span class="option-text">
@@ -6582,6 +6609,12 @@
                     <span class="option-text">
                         <span class="option-title" data-i18n="menu.importJson"></span>
                         <span class="option-desc" data-i18n="menu.importJsonDesc"></span>
+                    </span>
+                </button>
+                <button class="menu-option fsa-only" onclick="window.Strom.UI.closeImportDialog(); window.Strom.UI.openFromFile()">
+                    <span class="option-icon">⤒</span>
+                    <span class="option-text">
+                        <span class="option-title" data-i18n="fileAccess.openFromFile"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="document.getElementById('gedcom-input').click(); window.Strom.UI.closeImportDialog()">
