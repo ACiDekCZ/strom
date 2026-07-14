@@ -10,6 +10,7 @@ import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import { buildTreeSvg, computeBounds, PosterOptions } from '../export-image.js';
 import { uiModule } from './module.js';
+import { applyLivingPrivacy, PrivacyMode } from '../privacy.js';
 
 /** Browsers cap canvas dimensions; keep well under the common ~16k limit. */
 const MAX_CANVAS_PX = 15000;
@@ -29,6 +30,12 @@ function posterFilename(ext: string): string {
     return `${safe || 'family-tree'}.${ext}`;
 }
 
+function posterPrivacyMode(): PrivacyMode {
+    const sel = document.getElementById('poster-privacy-mode') as HTMLSelectElement | null;
+    const v = sel?.value;
+    return (v === 'initials' || v === 'anonymous' || v === 'minimal') ? v : 'full';
+}
+
 function currentPosterSvg(): string | null {
     const layout = TreeRenderer.getPosterLayout();
     if (layout.positions.size === 0) return null;
@@ -36,7 +43,11 @@ function currentPosterSvg(): string | null {
         treeName: TreeManager.getActiveTreeMetadata()?.name,
         dateLabel: new Date().toLocaleDateString(),
     };
-    return buildTreeSvg(DataManager.getData(), layout, options);
+    // The poster leaves the house — the living-privacy filter applies here
+    // exactly like in the book/GEDCOM exports (audit K2: it used to export
+    // raw full names of living people with no option at all).
+    const data = applyLivingPrivacy(DataManager.getData(), posterPrivacyMode());
+    return buildTreeSvg(data, layout, options);
 }
 
 function downloadBlob(content: string, type: string, filename: string): void {

@@ -12,6 +12,7 @@
 import { AuditAction, AuditEntry, AuditLog, TreeId } from './types.js';
 import { SettingsManager } from './settings.js';
 import { StorageManager } from './storage.js';
+import { CryptoSession, isEncrypted, EncryptedData } from './crypto.js';
 
 const MAX_ENTRIES = 500;
 const AUDIT_LOG_VERSION = 1;
@@ -23,6 +24,44 @@ function emptyLog(): AuditLog {
 class AuditLogManagerClass {
     private enabled = false;
     private batching = false;
+
+    /**
+     * Persist a log, encrypted with the session when encryption is on — the
+     * audit store used to be the ONLY path writing plaintext (person names,
+     * full action history) while everything else was encrypted (audit K1).
+     * With the session locked the write is skipped; the in-memory cache keeps
+     * the entries and the next write while unlocked flushes them.
+     */
+    private async persist(treeId: TreeId, log: AuditLog): Promise<void> {
+        if (SettingsManager.isEncryptionEnabled()) {
+            if (!CryptoSession.isUnlocked()) return;
+            const encrypted = await CryptoSession.encrypt(JSON.stringify(log));
+            await StorageManager.set('audit', treeId, encrypted);
+            return;
+        }
+        await StorageManager.set('audit', treeId, log);
+    }
+
+    /** Read a stored log, decrypting when needed. null = unreadable now (locked). */
+    private async readStored(treeId: TreeId): Promise<AuditLog | null> {
+        const stored = await StorageManager.get<AuditLog | EncryptedData>('audit', treeId);
+        if (!stored) return emptyLog();
+        if (isEncrypted(stored)) {
+            if (!CryptoSession.isUnlocked()) return null;
+            try {
+                return JSON.parse(await CryptoSession.decrypt(stored)) as AuditLog;
+            } catch {
+                return null;
+            }
+        }
+        const plain = stored as AuditLog;
+        if (!Array.isArray(plain.entries)) return emptyLog();
+        // Legacy plaintext log under enabled encryption: re-persist encrypted.
+        if (SettingsManager.isEncryptionEnabled() && CryptoSession.isUnlocked()) {
+            void this.persist(treeId, plain);
+        }
+        return plain;
+    }
 
     /** In-memory cache: treeId -> AuditLog */
     private cache = new Map<string, AuditLog>();
@@ -106,8 +145,8 @@ class AuditLogManagerClass {
             log.entries = log.entries.slice(log.entries.length - MAX_ENTRIES);
         }
 
-        // Fire-and-forget write to IDB
-        void StorageManager.set('audit', treeId, log);
+        // Fire-and-forget write to IDB (encrypted when encryption is on)
+        void this.persist(treeId, log);
     }
 
     /**
@@ -118,8 +157,9 @@ class AuditLogManagerClass {
         const cached = this.cache.get(treeId);
         if (cached) return cached;
 
-        const stored = await StorageManager.get<AuditLog>('audit', treeId);
-        if (stored && Array.isArray(stored.entries)) {
+        const stored = await this.readStored(treeId);
+        if (stored === null) return emptyLog();   // locked — do NOT cache empty
+        if (Array.isArray(stored.entries)) {
             this.cache.set(treeId, stored);
             return stored;
         }
@@ -131,7 +171,7 @@ class AuditLogManagerClass {
     async clear(treeId: TreeId): Promise<void> {
         const empty = emptyLog();
         this.cache.set(treeId, empty);
-        await StorageManager.set('audit', treeId, empty);
+        await StorageManager.set('audit', treeId, empty);   // plain empty is fine
     }
 
     async deleteForTree(treeId: TreeId): Promise<void> {
@@ -148,7 +188,7 @@ class AuditLogManagerClass {
     async importForTree(treeId: TreeId, log: AuditLog): Promise<void> {
         if (!log || !Array.isArray(log.entries)) return;
         this.cache.set(treeId, log);
-        await StorageManager.set('audit', treeId, log);
+        await this.persist(treeId, log);
     }
 
     async hasEntries(treeId: TreeId): Promise<boolean> {

@@ -76,3 +76,21 @@ test('poster PNG export downloads a non-empty PNG image', async ({ page }) => {
     expect(bytes.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
     expect(bytes.length).toBeGreaterThan(1000);
 });
+
+test('poster SVG applies the living-privacy filter', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Alice', 'Living', { gender: 'female', birthDate: '1990' });
+
+    await page.evaluate(() => window.Strom.UI.showPosterDialog());
+    const poster = page.locator('#poster-modal');
+    await expect(poster).toBeVisible();
+    await poster.locator('#poster-privacy-mode').selectOption('initials');
+
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        poster.getByRole('button', { name: /SVG/ }).click(),
+    ]);
+    const svg = readFileSync(await download.path(), 'utf-8');
+    expect(svg).not.toContain('Alice');
+    expect(svg).toContain('A.');
+});
