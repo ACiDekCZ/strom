@@ -463,11 +463,13 @@ class ZoomPanClass {
     }
 
     /**
-     * Center the whole tree horizontally and align its top edge near the top
-     * of the viewport — WITHOUT changing the current zoom level. Used by the
-     * descendants chart, where the focus sits at the top edge.
+     * Center the whole tree in the viewport WITHOUT changing the current zoom
+     * level. Used by the descendants chart. The usable area starts below any
+     * floating bar overlapping the top (the descendants badge); a chart
+     * shorter than the viewport is centered in the remaining space instead of
+     * being pinned under the bar.
      */
-    centerTreeTopKeepScale(topMargin = 40): void {
+    centerTreeTopKeepScale(): void {
         const container = document.getElementById('tree-container');
         const canvas = document.getElementById('tree-canvas');
         if (!container || !canvas) return;
@@ -475,18 +477,32 @@ class ZoomPanClass {
         const cards = canvas.querySelectorAll('.person-card') as NodeListOf<HTMLElement>;
         if (cards.length === 0) return;
 
-        let minX = Infinity, minY = Infinity, maxX = -Infinity;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         cards.forEach(card => {
             const left = parseFloat(card.style.left) || 0;
             const top = parseFloat(card.style.top) || 0;
             minX = Math.min(minX, left);
             minY = Math.min(minY, top);
             maxX = Math.max(maxX, left + card.offsetWidth);
+            maxY = Math.max(maxY, top + card.offsetHeight);
         });
+
+        const containerRect = container.getBoundingClientRect();
+        const MARGIN = 16;
+        let topLimit = MARGIN;
+        const badge = document.getElementById('descendants-badge');
+        if (badge) {
+            const br = badge.getBoundingClientRect();
+            if (br.height > 0) topLimit = Math.max(topLimit, br.bottom - containerRect.top + 12);
+        }
+
+        const treeH = (maxY - minY) * this.scale;
+        const availH = container.clientHeight - topLimit - MARGIN;
+        const top = treeH < availH ? topLimit + (availH - treeH) / 2 : topLimit;
 
         const treeCenterX = (minX + maxX) / 2;
         this.tx = container.clientWidth / 2 - treeCenterX * this.scale;
-        this.ty = topMargin - minY * this.scale;
+        this.ty = top - minY * this.scale;
         this.apply();
     }
 
