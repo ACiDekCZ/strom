@@ -93,14 +93,50 @@ function escapeGedcomText(text: string): string {
 }
 
 /**
- * Emit a NOTE structure, splitting embedded newlines into CONT lines so
- * multi-line notes survive the round-trip.
+ * GEDCOM 5.5.1 caps physical lines at 255 chars — long values must continue
+ * on CONC lines. Chunks are split MID-WORD on purpose: leading/trailing
+ * spaces on a continuation line are ambiguous (many parsers, including ours,
+ * trim them), and the spec itself recommends breaking within a word.
+ */
+const MAX_VALUE_LEN = 200;
+
+function chunkValue(text: string): string[] {
+    if (text.length <= MAX_VALUE_LEN) return [text];
+    const chunks: string[] = [];
+    let rest = text;
+    while (rest.length > MAX_VALUE_LEN) {
+        let cut = MAX_VALUE_LEN;
+        // Never split AT a space (either side of the cut) — shift left into a word.
+        while (cut > 1 && (rest[cut] === ' ' || rest[cut - 1] === ' ')) cut--;
+        chunks.push(rest.slice(0, cut));
+        rest = rest.slice(cut);
+    }
+    chunks.push(rest);
+    return chunks;
+}
+
+/** Emit `level TAG value` with CONC continuations for over-long values. */
+function pushWrapped(lines: string[], level: number, tag: string, text: string): void {
+    const chunks = chunkValue(escapeGedcomText(text));
+    lines.push(`${level} ${tag} ${chunks[0]}`);
+    for (let i = 1; i < chunks.length; i++) {
+        lines.push(`${level + 1} CONC ${chunks[i]}`);
+    }
+}
+
+/**
+ * Emit a NOTE structure: embedded newlines become CONT lines, over-long lines
+ * continue on CONC lines, so multi-line and long notes survive the round-trip.
  */
 function pushNote(lines: string[], level: number, text: string): void {
     const parts = text.split('\n');
-    lines.push(`${level} NOTE ${escapeGedcomText(parts[0])}`);
+    pushWrapped(lines, level, 'NOTE', parts[0]);
     for (let i = 1; i < parts.length; i++) {
-        lines.push(`${level + 1} CONT ${escapeGedcomText(parts[i])}`);
+        const chunks = chunkValue(escapeGedcomText(parts[i]));
+        lines.push(`${level + 1} CONT ${chunks[0]}`);
+        for (let j = 1; j < chunks.length; j++) {
+            lines.push(`${level + 1} CONC ${chunks[j]}`);
+        }
     }
 }
 
@@ -337,7 +373,7 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
         const gedcomId = sourceIdMap.get(sourceId);
         if (!gedcomId) continue;
         lines.push(`0 ${gedcomId} SOUR`);
-        if (source.title) lines.push(`1 TITL ${escapeGedcomText(source.title)}`);
+        if (source.title) pushWrapped(lines, 1, 'TITL', source.title);
         if (source.repository) lines.push(`1 REPO ${escapeGedcomText(source.repository)}`);
         if (source.reference) lines.push(`1 PAGE ${escapeGedcomText(source.reference)}`);
         if (source.url) lines.push(`1 WWW ${escapeGedcomText(source.url)}`);

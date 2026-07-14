@@ -687,7 +687,9 @@ const stringsEN = {
         mergeExistingDesc: 'Smart merge into current tree',
         insertToTree: 'Insert into Tree',
         insertToTreeDesc: 'Load converted data into current tree',
-        parseError: 'Failed to parse GEDCOM file'
+        parseError: 'Failed to parse GEDCOM file',
+        skippedTags: 'Skipped records',
+        unknownSex: (n: number) => `${n} person${n === 1 ? '' : 's'} with unknown sex (gender inferred from family role)`,
     },
 
     // Save current data dialog
@@ -1965,7 +1967,9 @@ const stringsCZ: StringsType = {
         mergeExistingDesc: 'Inteligentní sloučení do aktuálního stromu',
         insertToTree: 'Vložit do stromu',
         insertToTreeDesc: 'Načíst převedená data do aktuálního stromu',
-        parseError: 'Nepodařilo se zpracovat GEDCOM soubor'
+        parseError: 'Nepodařilo se zpracovat GEDCOM soubor',
+        skippedTags: 'Přeskočené záznamy',
+        unknownSex: (n: number) => `${n} ${n === 1 ? 'osoba' : n < 5 ? 'osoby' : 'osob'} s neznámým pohlavím (odvozeno z role v rodině)`,
     },
 
     // Save current data dialog

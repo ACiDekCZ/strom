@@ -260,3 +260,76 @@ describe('GEDCOM round-trip', () => {
         expect(foster?.parentRelTypes && Object.values(foster.parentRelTypes)).toEqual(['foster', 'foster']);
     });
 });
+
+describe('GEDCOM fidelity fixes (audit 2026-07)', () => {
+    const GED = (body: string) => `0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n${body}\n0 TRLR`;
+    const conv = (ged: string) => convertToStrom(parseGedcom(ged));
+
+    it('a bare DIV (divorce without a date) survives the round-trip', () => {
+        const ged = GED([
+            '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M', '1 FAMS @F1@',
+            '0 @I2@ INDI', '1 NAME Eva /Novakova/', '1 SEX F', '1 FAMS @F1@',
+            '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 MARR', '1 DIV',
+        ].join('\n'));
+        const first = conv(ged);
+        const u1 = Object.values(first.data.partnerships)[0];
+        expect(u1.status).toBe('divorced');
+        expect(u1.endDate).toBeUndefined();
+        // Export → re-import keeps divorced.
+        const again = conv(exportToGedcom(first.data).content);
+        expect(Object.values(again.data.partnerships)[0].status).toBe('divorced');
+    });
+
+    it('counts and summarizes dropped tags (dead counter fixed)', () => {
+        const ged = GED([
+            '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M',
+            '1 TITL Count of Nowhere', '1 NICK Honza', '1 TITL Duke',
+            '0 @N1@ NOTE some floating note',
+        ].join('\n'));
+        const r = conv(ged);
+        expect(r.stats.unsupportedTags).toBe(4);
+        expect(r.stats.droppedTagSummary).toContain('TITL ×2');
+        expect(r.stats.droppedTagSummary).toContain('NICK ×1');
+    });
+
+    it('infers gender from the family role for SEX U, and counts it', () => {
+        const ged = GED([
+            '0 @I1@ INDI', '1 NAME Alex /Smith/', '1 SEX U', '1 FAMS @F1@',
+            '0 @I2@ INDI', '1 NAME Kim /Smith/', '1 FAMS @F1@',
+            '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@',
+        ].join('\n'));
+        const r = conv(ged);
+        const persons = Object.values(r.data.persons);
+        expect(persons.find(p => p.firstName === 'Alex')?.gender).toBe('male');   // HUSB
+        expect(persons.find(p => p.firstName === 'Kim')?.gender).toBe('female');  // WIFE
+        expect(r.stats.unknownSexPersons).toBe(2);
+    });
+
+    it('multi-line event notes survive the round-trip (level-3 CONT)', () => {
+        const ged = GED([
+            '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M',
+            '1 RESI', '2 PLAC Praha', '2 NOTE First line', '3 CONT Second line',
+        ].join('\n'));
+        const first = conv(ged);
+        const ev = Object.values(first.data.persons)[0].events?.[0];
+        expect(ev?.note).toBe('First line\nSecond line');
+        const again = conv(exportToGedcom(first.data).content);
+        expect(Object.values(again.data.persons)[0].events?.[0]?.note).toBe('First line\nSecond line');
+    });
+
+    it('wraps long notes with CONC on export (255-char physical line limit)', () => {
+        const long = 'word '.repeat(120).trim();   // ~600 chars
+        const ged = GED(['0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M'].join('\n'));
+        const r = conv(ged);
+        const person = Object.values(r.data.persons)[0];
+        person.notes = long;
+        const out = exportToGedcom(r.data).content;
+        for (const line of out.split('\n')) {
+            expect(line.length).toBeLessThanOrEqual(255);
+        }
+        expect(out).toContain('CONC');
+        // And it round-trips byte-identically.
+        const again = conv(out);
+        expect(Object.values(again.data.persons)[0].notes).toBe(long);
+    });
+});

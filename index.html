@@ -3263,6 +3263,12 @@
         .option-desc { font-size: 12px; color: var(--text-light); }
 
         /* GEDCOM result dialog */
+        .gedcom-stat-detail {
+            font-size: 12px;
+            color: var(--text-light);
+            margin: -4px 0 10px;
+            overflow-wrap: anywhere;
+        }
         .gedcom-stats {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -6773,6 +6779,7 @@
                     <div class="label" data-i18n="gedcom.unsupported"></div>
                 </div>
             </div>
+            <p id="gedcom-stat-detail" class="gedcom-stat-detail" style="display:none;"></p>
             <div class="menu-options" id="gedcom-options">
                 <!-- Normal options (hidden when importing to current tree) -->
                 <button id="gedcom-new-tree-btn" class="menu-option" onclick="window.Strom.UI.importGedcomAsNewTree()">

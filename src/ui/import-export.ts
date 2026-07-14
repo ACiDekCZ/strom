@@ -267,6 +267,20 @@ export const importExportMethods = uiModule({
         if (placeholdersEl) placeholdersEl.textContent = String(this.gedcomResult.stats.placeholderPersons);
         if (unsupportedEl) unsupportedEl.textContent = String(this.gedcomResult.stats.unsupportedTags);
 
+        // What exactly was skipped (previously a dead counter — always 0).
+        const detailEl = document.getElementById('gedcom-stat-detail');
+        if (detailEl) {
+            const parts: string[] = [];
+            if (this.gedcomResult.stats.droppedTagSummary) {
+                parts.push(`${strings.gedcom.skippedTags}: ${this.gedcomResult.stats.droppedTagSummary}`);
+            }
+            if (this.gedcomResult.stats.unknownSexPersons > 0) {
+                parts.push(strings.gedcom.unknownSex(this.gedcomResult.stats.unknownSexPersons));
+            }
+            detailEl.textContent = parts.join(' · ');
+            detailEl.style.display = parts.length > 0 ? '' : 'none';
+        }
+
         // Show/hide buttons based on context
         const newTreeBtn = document.getElementById('gedcom-new-tree-btn');
         const mergeBtn = document.getElementById('gedcom-merge-btn');

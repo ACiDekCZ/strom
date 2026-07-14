@@ -90,6 +90,8 @@ interface GedcomFamily {
     marriageDate: string;
     marriagePlace: string;
     divorceDate: string;
+    /** A DIV tag was present, even without a date (divorce date unknown). */
+    divorced: boolean;
     note: string;
 }
 
@@ -98,6 +100,8 @@ export interface ParsedGedcom {
     individuals: Map<string, GedcomIndividual>;
     families: Map<string, GedcomFamily>;
     sources: Map<string, RawSource>;
+    /** Tags our data model cannot represent, with occurrence counts. */
+    droppedTags: Map<string, number>;
 }
 
 /** Result of GEDCOM to Strom conversion */
@@ -110,6 +114,10 @@ export interface GedcomConversionResult {
         placeholderPersons: number;
         /** Count of encountered tags our data model cannot represent (see header). */
         unsupportedTags: number;
+        /** Human-readable breakdown, e.g. "TITL ×3, CHR ×2". Empty when none. */
+        droppedTagSummary: string;
+        /** Individuals with SEX other than M/F (gender inferred from family role). */
+        unknownSexPersons: number;
         totalGedFamilies: number;
     };
 }
@@ -199,6 +207,14 @@ function generateId(prefix: string): string {
 /**
  * Parse GEDCOM file content into structured data
  */
+/** Level-1 INDI tags the parser understands (everything else is counted as dropped). */
+const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT',
+    ...Object.keys(EVENT_TAG_TO_TYPE)]);
+/** Level-1 FAM tags the parser understands. */
+const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV']);
+/** Level-0 record types (handled or structural). */
+const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'HEAD', 'TRLR', 'SUBM', 'SUBN']);
+
 export function parseGedcom(content: string): ParsedGedcom {
     // Strip BOM (Byte Order Mark) if present
     if (content.charCodeAt(0) === 0xFEFF) {
@@ -209,11 +225,15 @@ export function parseGedcom(content: string): ParsedGedcom {
     const individuals = new Map<string, GedcomIndividual>();
     const families = new Map<string, GedcomFamily>();
     const sources = new Map<string, RawSource>();
+    const droppedTags = new Map<string, number>();
+    const drop = (tag: string) => droppedTags.set(tag, (droppedTags.get(tag) ?? 0) + 1);
 
     let currentRecord: GedcomIndividual | GedcomFamily | null = null;
     let currentType: 'INDI' | 'FAM' | 'SOUR' | null = null;
     let currentSubTag: string | null = null;
     let currentEvent: RawEvent | null = null;
+    /** Level-2 tag inside the current event (for level-3 NOTE continuations). */
+    let currentEventSubTag: string | null = null;
     let currentSource: RawSource | null = null;
 
     for (const line of lines) {
@@ -263,6 +283,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     marriageDate: '',
                     marriagePlace: '',
                     divorceDate: '',
+                    divorced: false,
                     note: ''
                 };
                 currentType = 'FAM';
@@ -272,9 +293,11 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentRecord = null;
                 currentType = null;
                 currentSource = null;
+                if (!KNOWN_RECORD_TYPES.has(value) && value) drop(value);
             }
             currentSubTag = null;
             currentEvent = null;
+            currentEventSubTag = null;
         } else if (currentType === 'SOUR' && currentSource) {
             // Source record sub-lines. reference <- PAGE (spec mapping).
             if (level === 1) {
@@ -298,6 +321,7 @@ export function parseGedcom(content: string): ParsedGedcom {
             if (level === 1) {
                 currentSubTag = tag;
                 currentEvent = null;
+                currentEventSubTag = null;
 
                 if (currentType === 'INDI') {
                     const indi = currentRecord as GedcomIndividual;
@@ -334,6 +358,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 if (tag === 'OCCU' && value) ev.note = value;
                                 indi.events.push(ev);
                                 currentEvent = ev;
+                            } else if (!KNOWN_INDI_TAGS.has(tag) && tag !== 'BIRT' && tag !== 'DEAT') {
+                                drop(tag);
                             }
                             break;
                         }
@@ -352,6 +378,15 @@ export function parseGedcom(content: string): ParsedGedcom {
                             break;
                         case 'NOTE':
                             fam.note = value;
+                            break;
+                        case 'DIV':
+                            // A bare DIV (no date sub-record) still means divorced.
+                            fam.divorced = true;
+                            break;
+                        case 'MARR':
+                            break;
+                        default:
+                            if (!KNOWN_FAM_TAGS.has(tag)) drop(tag);
                             break;
                     }
                 }
@@ -372,6 +407,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         if (tag === 'CONT') indi.notes += '\n' + value;
                         else if (tag === 'CONC') indi.notes += value;
                     } else if (currentEvent) {
+                        currentEventSubTag = tag;
                         if (tag === 'DATE') currentEvent.date = parseGedcomDate(value);
                         else if (tag === 'PLAC') currentEvent.place = value;
                         else if (tag === 'SOUR' && value) {
@@ -393,11 +429,17 @@ export function parseGedcom(content: string): ParsedGedcom {
                         else if (tag === 'CONC') fam.note += value;
                     }
                 }
+            } else if (level === 3 && currentType === 'INDI' && currentEvent
+                && currentEventSubTag === 'NOTE') {
+                // Multi-line event notes: 3 CONT/CONC under 2 NOTE (previously
+                // dropped, which broke the round-trip of multi-line notes).
+                if (tag === 'CONT') currentEvent.note = (currentEvent.note ?? '') + '\n' + value;
+                else if (tag === 'CONC') currentEvent.note = (currentEvent.note ?? '') + value;
             }
         }
     }
 
-    return { individuals, families, sources };
+    return { individuals, families, sources, droppedTags };
 }
 
 // ==================== CONVERTER ====================
@@ -406,7 +448,18 @@ export function parseGedcom(content: string): ParsedGedcom {
  * Convert parsed GEDCOM data to Strom data format
  */
 export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
-    const { individuals, families, sources: gedSources } = gedcom;
+    const { individuals, families, sources: gedSources, droppedTags } = gedcom;
+
+    // Family roles disambiguate individuals with SEX U/missing: a HUSB is
+    // male, a WIFE female. Without any role we fall back to female (legacy
+    // behaviour) but COUNT it so the import summary can say so.
+    const husbIds = new Set<string>();
+    const wifeIds = new Set<string>();
+    for (const fam of families.values()) {
+        if (fam.husb) husbIds.add(fam.husb);
+        if (fam.wife) wifeIds.add(fam.wife);
+    }
+    let unknownSexPersons = 0;
 
     // Build the source catalog and a GEDCOM-id -> new-id map for citations.
     const sourceIdMap = new Map<string, string>();
@@ -429,7 +482,6 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     // placeholders instead of being dropped, so relationships stay intact.
     const validIndividuals = individuals;
     let placeholderPersons = 0;
-    let unsupportedTags = 0;
     for (const indi of individuals.values()) {
         if (!indi.firstName && !indi.lastName) placeholderPersons++;
     }
@@ -450,11 +502,18 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     const persons: Record<PersonId, Person> = {};
     for (const [gedId, indi] of validIndividuals) {
         const personId = personIdMap.get(gedId)!;
+        let gender: 'male' | 'female';
+        if (indi.sex === 'M') gender = 'male';
+        else if (indi.sex === 'F') gender = 'female';
+        else {
+            unknownSexPersons++;
+            gender = husbIds.has(gedId) ? 'male' : 'female';
+        }
         const person: Person = {
             id: personId,
             firstName: indi.firstName || '?',
             lastName: indi.lastName || '',
-            gender: indi.sex === 'M' ? 'male' : 'female',
+            gender,
             isPlaceholder: !indi.firstName || indi.firstName === '?' || indi.firstName === '//',
             partnerships: [],
             parentIds: [],
@@ -516,10 +575,8 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             partnership.note = fam.note;
         }
 
-        if (fam.divorceDate) {
-            partnership.endDate = fam.divorceDate;
-            partnership.status = 'divorced';
-        }
+        if (fam.divorceDate) partnership.endDate = fam.divorceDate;
+        if (fam.divorceDate || fam.divorced) partnership.status = 'divorced';
 
         partnerships[partnershipId] = partnership;
 
@@ -616,10 +673,8 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (fam.marriageDate) partnership.startDate = fam.marriageDate;
         if (fam.marriagePlace) partnership.startPlace = fam.marriagePlace;
         if (fam.note) partnership.note = fam.note;
-        if (fam.divorceDate) {
-            partnership.endDate = fam.divorceDate;
-            partnership.status = 'divorced';
-        }
+        if (fam.divorceDate) partnership.endDate = fam.divorceDate;
+        if (fam.divorceDate || fam.divorced) partnership.status = 'divorced';
         partnerships[partnershipId] = partnership;
 
         // Add partnership to both persons
@@ -662,7 +717,12 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             totalPersons: Object.keys(persons).length,
             totalPartnerships: Object.keys(partnerships).length,
             placeholderPersons,
-            unsupportedTags,
+            unsupportedTags: [...droppedTags.values()].reduce((a, b) => a + b, 0),
+            droppedTagSummary: [...droppedTags.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .map(([tag, n]) => `${tag} ×${n}`)
+                .join(', '),
+            unknownSexPersons,
             totalGedFamilies: families.size
         }
     };
