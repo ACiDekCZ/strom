@@ -1496,6 +1496,12 @@ class TreeRendererClass {
             editable: !DataManager.isViewMode() && !DataManager.isTreeLocked(),
             addParentLabel: strings.contextMenu.addParent,
         });
+
+        // Mobile: the fan keeps a minimum drawing width and overflows the
+        // container — start the view centered on the focus person.
+        if (container.scrollWidth > container.clientWidth) {
+            container.scrollLeft = (container.scrollWidth - container.clientWidth) / 2;
+        }
     }
 
     private renderTimeline(container: HTMLElement): void {

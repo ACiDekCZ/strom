@@ -2768,6 +2768,10 @@
         .timeline-bar:hover .tl-bar-rect { filter: brightness(0.92); }
         .timeline-bar.focused .tl-bar-rect { stroke: var(--primary, #4a90d9); stroke-width: 2.5; }
         .timeline-bar.focused .tl-name { font-weight: 700; }
+        @media (max-width: 500px) {
+            /* The narrow label column is for NAMES; the bar shows the era. */
+            .tl-name .tl-yr { display: none; }
+        }
         .timeline-bar.search-dim { opacity: 0.28; }
         .timeline-bar.search-hit .tl-bar-rect { stroke: #f5a623; stroke-width: 2.5; }
         .tl-dot { fill: var(--text-color, #444); }
@@ -2861,9 +2865,14 @@
             cursor: pointer;
         }
         [data-theme="dark"] .fan-container { background: #1e1e1e; }
-        @media (max-width: 500px) {
-            .fan-controls { padding: 8px 10px 0; }
+        @media (max-width: 600px) {
+            /* Clear the fixed focus bar overlaying the container top. */
+            .fan-controls { padding: 52px 10px 0; }
             .fan-chart { padding: 4px 6px 12px; }
+            /* Keep the fan readable: minimum drawing width, pan to explore
+               (the container scrolls; render centers the scroll). */
+            .fan-chart { justify-content: flex-start; }
+            .fan-svg { min-width: 640px; }
         }
         [data-theme="dark"] .tl-dot { fill: #ddd; }
 
@@ -4922,7 +4931,9 @@
             color: white;
             border-radius: 8px;
             font-size: 14px;
-            z-index: 1000;
+            /* Below dialog overlays (200): a toast must never cover a
+               modal's action buttons. */
+            z-index: 150;
             opacity: 0;
             transition: all 0.3s ease;
         }
@@ -5170,10 +5181,10 @@
             .tree-manager-footer .btn-icon {
                 display: inline !important;
             }
-            .tree-manager-item-actions .btn-text,
-            .tree-manager-footer .btn-text {
+            .tree-manager-item-actions .btn-text {
                 display: none !important;
             }
+            .tree-manager-footer { flex-wrap: wrap; gap: 8px; }
             .tree-manager-item-actions button {
                 padding: 6px 8px;
                 min-width: auto;
