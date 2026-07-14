@@ -2682,6 +2682,96 @@
         .tl-arrow { fill: var(--text-light, #aaa); }
         .tl-omitted { font-size: 12px; color: var(--text-light, #888); padding: 4px 12px; font-style: italic; }
         [data-theme="dark"] .timeline-container { background: #1e1e1e; }
+
+        /* Fan chart view */
+        .fan-container {
+            display: none;
+            position: absolute;
+            inset: 0;
+            overflow: auto;
+            background: var(--bg-color, #fff);
+            flex-direction: column;
+            align-items: center;
+        }
+        .fan-controls {
+            align-self: flex-end;
+            padding: 10px 16px 0;
+            font-size: 13px;
+            color: var(--text-light);
+        }
+        .fan-controls select {
+            margin-left: 6px;
+            padding: 3px 6px;
+            font-size: 13px;
+            border: 1px solid var(--border-color, #ccc);
+            border-radius: 5px;
+            background: var(--input-bg, #fff);
+            color: var(--text);
+        }
+        .fan-chart {
+            flex: 1 1 auto;
+            width: 100%;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 16px 20px;
+            box-sizing: border-box;
+        }
+        .fan-svg {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+        }
+        .fan-sector path {
+            stroke: var(--line-color, #b9b9b9);
+            stroke-width: 1;
+            cursor: pointer;
+        }
+        .fan-sector.male path { fill: var(--male); }
+        .fan-sector.female path { fill: var(--female); }
+        .fan-sector:hover path { filter: brightness(0.94); }
+        .fan-focus circle {
+            stroke: var(--primary, #4a90d9);
+            stroke-width: 2;
+            cursor: pointer;
+        }
+        .fan-focus.male circle { fill: var(--male); }
+        .fan-focus.female circle { fill: var(--female); }
+        .fan-name { fill: var(--text, #222); font-weight: 600; }
+        .fan-years { fill: var(--text-light, #777); font-weight: 400; }
+        .fan-name.g0 { font-size: 14px; }
+        .fan-years.g0 { font-size: 11px; }
+        .fan-name.g1 { font-size: 14px; }
+        .fan-years.g1 { font-size: 11px; }
+        .fan-name.g2 { font-size: 12.5px; }
+        .fan-years.g2 { font-size: 10.5px; }
+        .fan-name.g3 { font-size: 11px; }
+        .fan-name.g3 .fan-years, .fan-name.g4 .fan-years { font-size: 9.5px; }
+        .fan-name.g4 { font-size: 10.5px; }
+        .fan-name.g5 { font-size: 9.5px; }
+        .fan-name.g6 { font-size: 8.5px; }
+        .fan-name.g7 { font-size: 8px; }
+        .fan-name.g8 { font-size: 7.5px; }
+        .fan-empty path {
+            fill: transparent;
+            stroke-dasharray: 4 3;
+            cursor: pointer;
+        }
+        .fan-empty:hover path { fill: var(--hover-bg, #f1f1ee); }
+        .fan-plus {
+            fill: var(--text-light, #aaa);
+            font-size: 15px;
+            text-anchor: middle;
+            dominant-baseline: middle;
+            cursor: pointer;
+        }
+        [data-theme="dark"] .fan-container { background: #1e1e1e; }
+        @media (max-width: 500px) {
+            .fan-controls { padding: 8px 10px 0; }
+            .fan-chart { padding: 4px 6px 12px; }
+        }
         [data-theme="dark"] .tl-dot { fill: #ddd; }
 
         /* ==================== FOCUS MODE ==================== */
@@ -5589,8 +5679,11 @@
             .context-menu, .modal-overlay, .rel-link-icon,
             .hidden-partners-btn, .hidden-families-btn,
             .cross-tree-badge, .branch-tab, .badge-tooltip,
-            .card-tooltip, .collapse-chain-btn,
+            .card-tooltip, .collapse-chain-btn, .fan-controls,
             .tree-tabs, #empty-state { display: none !important; }
+
+            /* Fan chart prints as-is (its container scrolls on screen only) */
+            .fan-container { position: relative !important; overflow: visible !important; }
 
             #canvas { transform: none !important; position: relative !important; }
             #tree-container { overflow: visible !important; height: auto !important; }
@@ -5701,6 +5794,7 @@
             <button id="view-mode-family" class="active" onclick="window.Strom.UI.setDisplayViewMode('family')" data-i18n="viewModeSwitch.family"></button>
             <button id="view-mode-descendants" onclick="window.Strom.UI.setDisplayViewMode('descendants')" data-i18n="viewModeSwitch.descendants"></button>
             <button id="view-mode-timeline" onclick="window.Strom.UI.setDisplayViewMode('timeline')" data-i18n="viewModeSwitch.timeline"></button>
+            <button id="view-mode-fan" onclick="window.Strom.UI.setDisplayViewMode('fan')" data-i18n="viewModeSwitch.fan"></button>
         </div>
 
         <!-- Settings button (desktop) -->
@@ -5740,6 +5834,20 @@
             <svg id="tree-lines"></svg>
         </div>
         <div id="timeline-container" class="timeline-container"></div>
+        <div id="fan-container" class="fan-container">
+            <div class="fan-controls">
+                <label><span data-i18n="fan.generations"></span>
+                    <select id="fan-gen-select">
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                    </select>
+                </label>
+            </div>
+            <div id="fan-chart" class="fan-chart"></div>
+        </div>
         <div class="empty-state" id="empty-state">
             <h2 data-i18n="emptyState.title"></h2>
             <p data-i18n="emptyState.subtitle"></p>

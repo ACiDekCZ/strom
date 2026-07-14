@@ -118,7 +118,8 @@ export const minimapMethods = uiModule({
 
         // Timeline mode has its own scroll container — no minimap there.
         if (!SettingsManager.isMinimapEnabled() || isMobile || !box
-            || TreeRenderer.getViewMode() === 'timeline') {
+            || TreeRenderer.getViewMode() === 'timeline'
+            || TreeRenderer.getViewMode() === 'fan') {
             panel.style.display = 'none';
             this.minimapTransform = null;
             return;

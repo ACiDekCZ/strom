@@ -103,6 +103,7 @@ the table honest.
 | Extended tree validation (dates, citations, attachments) | `tree.spec.ts` + `validation-dates.test.ts` (unit) | covered | death<birth, orphan citation shown with detail line; 13 unit tests for all new checks |
 | Tree manager: row ⋯ menu, Open button, active badge | `tree.spec.ts` | covered | menu opens, rename item works, Open switches tree and closes manager |
 | Tree manager: search box for long lists | — | partial | rendering gated at ≥6 trees; filtering is a trivial name includes() |
+| Fan chart view (sectors, refocus, gen selector, add-parent slot) | `fan.spec.ts` + `fan-chart.test.ts` (unit) | covered | 4th view mode; ahnentafel model unit-tested incl. empty-slot rule |
 
 ## Deliberately not covered (`n-a`)
 

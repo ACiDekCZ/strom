@@ -273,7 +273,7 @@ export const miscMethods = uiModule({
 
     // ==================== DISPLAY VIEW MODE (family / descendants) ====================
 
-    setDisplayViewMode(mode: 'family' | 'descendants' | 'timeline'): void {
+    setDisplayViewMode(mode: 'family' | 'descendants' | 'timeline' | 'fan'): void {
         TreeRenderer.setViewMode(mode); // re-renders + calls updateViewModeUI
     },
 
@@ -291,6 +291,7 @@ export const miscMethods = uiModule({
         document.getElementById('view-mode-family')?.classList.toggle('active', mode === 'family');
         document.getElementById('view-mode-descendants')?.classList.toggle('active', mode === 'descendants');
         document.getElementById('view-mode-timeline')?.classList.toggle('active', mode === 'timeline');
+        document.getElementById('view-mode-fan')?.classList.toggle('active', mode === 'fan');
 
         const badge = document.getElementById('descendants-badge');
         const text = document.getElementById('descendants-badge-text');
@@ -305,18 +306,20 @@ export const miscMethods = uiModule({
         }
 
         // The floating zoom/pan controls act on the tree canvas — in the
-        // timeline (its own scroll container) they do nothing, so hide them.
-        // The user can also turn them off entirely in settings.
+        // timeline and fan views (own scroll containers) they do nothing, so
+        // hide them. The user can also turn them off entirely in settings.
         const zoomControls = document.querySelector('.zoom-controls') as HTMLElement | null;
         if (zoomControls) {
-            const hidden = mode === 'timeline' || !SettingsManager.isZoomControlsEnabled();
+            const hidden = mode === 'timeline' || mode === 'fan' || !SettingsManager.isZoomControlsEnabled();
             zoomControls.style.display = hidden ? 'none' : '';
         }
 
-        // Branch-colour legend: only when the setting is on and not in timeline.
+        // Branch-colour legend: only when the setting is on and cards are
+        // actually shown (family/descendants — not timeline, not fan).
         const legend = document.getElementById('branch-legend');
         if (legend) {
-            legend.style.display = (mode !== 'timeline' && SettingsManager.isBranchColorsEnabled()) ? 'flex' : 'none';
+            const cardsShown = mode === 'family' || mode === 'descendants';
+            legend.style.display = (cardsShown && SettingsManager.isBranchColorsEnabled()) ? 'flex' : 'none';
         }
     },
 

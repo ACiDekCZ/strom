@@ -379,9 +379,15 @@ const stringsEN = {
         family: 'Family',
         descendants: 'Descendants',
         timeline: 'Timeline',
+        fan: 'Fan',
         toggle: 'Family / descendants view',
         back: 'Back to family view',
         badge: (name: string, count: number) => `Descendants: ${name} (${count})`,
+    },
+
+    // Fan chart (ancestor semicircle)
+    fan: {
+        generations: 'Generations',
     },
 
     // Timeline view
@@ -1594,9 +1600,15 @@ const stringsCZ: StringsType = {
         family: 'Rodina',
         descendants: 'Potomci',
         timeline: 'Časová osa',
+        fan: 'Vějíř',
         toggle: 'Pohled rodina / potomci',
         back: 'Zpět na rodinný pohled',
         badge: (name: string, count: number) => `Potomci: ${name} (${count})`,
+    },
+
+    // Fan chart (ancestor semicircle)
+    fan: {
+        generations: 'Generace',
     },
 
     // Timeline view

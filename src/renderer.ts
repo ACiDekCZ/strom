@@ -35,6 +35,7 @@ import { yearOf, displayYear, formatFlexDate } from './dates.js';
 import { computeTimelineModel, yearToFraction, axisTicks, TimelineRow, TimelineEvent } from './timeline.js';
 import { classifyBranches, Branch } from './branch-colors.js';
 import { SettingsManager } from './settings.js';
+import { buildFanModel, buildFanSvg } from './fan-chart.js';
 
 class TreeRendererClass {
     private config = DEFAULT_LAYOUT_CONFIG;
@@ -68,9 +69,18 @@ class TreeRendererClass {
      * descendants + relatives). 'descendants' shows only the focus person's
      * descendants and their partners (a classic descendants chart). 'timeline'
      * shows the same selection as a set of life-bars on a year axis (no layout
-     * pipeline). Persisted per tree in localStorage.
+     * pipeline). 'fan' is the classic semicircular ancestor chart (own SVG,
+     * no layout pipeline). Persisted per tree in localStorage.
      */
-    private viewMode: 'family' | 'descendants' | 'timeline' = 'family';
+    private viewMode: 'family' | 'descendants' | 'timeline' | 'fan' = 'family';
+
+    /** Fan chart: how many ancestor rings to draw (4–8, persisted globally). */
+    private fanGenerations = ((): number => {
+        try {
+            const v = parseInt(localStorage.getItem('strom-fan-generations') ?? '', 10);
+            return v >= 4 && v <= 8 ? v : 5;
+        } catch { return 5; }
+    })();
 
     /**
      * Set debug options for pipeline visualization.
@@ -185,8 +195,10 @@ class TreeRendererClass {
         // Timeline uses the same person selection but its own SVG layout (the
         // pipeline above only served to pick which persons are visible).
         const timelineContainer = document.getElementById('timeline-container');
+        const fanContainer = document.getElementById('fan-container');
         if (this.viewMode === 'timeline' && timelineContainer) {
             canvas.style.display = 'none';
+            if (fanContainer) fanContainer.style.display = 'none';
             timelineContainer.style.display = 'block';
             this.renderTimeline(timelineContainer);
             this.updateFocusUI();
@@ -194,8 +206,20 @@ class TreeRendererClass {
             UI.updateMinimap?.();  // hides the minimap in timeline mode
             return;
         }
+        // Fan chart: ancestors-only semicircle, its own SVG (no pipeline).
+        if (this.viewMode === 'fan' && fanContainer) {
+            canvas.style.display = 'none';
+            if (timelineContainer) timelineContainer.style.display = 'none';
+            fanContainer.style.display = 'flex';
+            this.renderFan(fanContainer);
+            this.updateFocusUI();
+            UI.updateViewModeUI?.();
+            UI.updateMinimap?.();  // hidden in fan mode
+            return;
+        }
         canvas.style.display = '';
         if (timelineContainer) timelineContainer.style.display = 'none';
+        if (fanContainer) fanContainer.style.display = 'none';
 
         await this.renderCards(canvas);
         this.renderLines(svg);
@@ -329,9 +353,9 @@ class TreeRendererClass {
         return this.focusPersonId;
     }
 
-    // ==================== DISPLAY VIEW MODE (family / descendants) ====================
+    // ==================== DISPLAY VIEW MODE (family / descendants / timeline / fan) ====================
 
-    getViewMode(): 'family' | 'descendants' | 'timeline' {
+    getViewMode(): 'family' | 'descendants' | 'timeline' | 'fan' {
         return this.viewMode;
     }
 
@@ -339,14 +363,14 @@ class TreeRendererClass {
      * Set + persist the view mode WITHOUT rendering. For callers that follow
      * up with setFocus (which renders) — avoids two overlapping renders.
      */
-    presetViewMode(mode: 'family' | 'descendants' | 'timeline'): void {
+    presetViewMode(mode: 'family' | 'descendants' | 'timeline' | 'fan'): void {
         if (this.viewMode === mode) return;
         this.viewMode = mode;
         this.persistViewMode();
     }
 
     /** Switch the display view mode and re-render. Persisted per tree. */
-    setViewMode(mode: 'family' | 'descendants' | 'timeline'): void {
+    setViewMode(mode: 'family' | 'descendants' | 'timeline' | 'fan'): void {
         if (this.viewMode === mode) return;
         this.viewMode = mode;
         this.persistViewMode();
@@ -360,7 +384,7 @@ class TreeRendererClass {
 
     /** Re-center the viewport for the current view mode (after a render). */
     centerForViewMode(): void {
-        if (this.viewMode === 'timeline') return;
+        if (this.viewMode === 'timeline' || this.viewMode === 'fan') return;
         // The descendants chart is focus-at-top: center it and align its top
         // edge, but KEEP the user's current zoom level (user feedback —
         // fitting to screen kept re-zooming under their hands).
@@ -385,7 +409,7 @@ class TreeRendererClass {
         const key = this.viewModeStorageKey();
         let stored: string | null = null;
         try { stored = key ? localStorage.getItem(key) : null; } catch { /* ignore */ }
-        this.viewMode = (stored === 'descendants' || stored === 'timeline') ? stored : 'family';
+        this.viewMode = (stored === 'descendants' || stored === 'timeline' || stored === 'fan') ? stored : 'family';
     }
 
     /** Number of visible (non-placeholder) persons — used by the descendants badge. */
@@ -1396,6 +1420,52 @@ class TreeRendererClass {
     // ==================== TIMELINE VIEW ====================
 
     /** Render the timeline (life-bars on a year axis) into its own container. */
+    /** Fan chart: how many rings are drawn; setter re-renders + persists. */
+    getFanGenerations(): number {
+        return this.fanGenerations;
+    }
+
+    setFanGenerations(gens: number): void {
+        const v = Math.max(4, Math.min(8, Math.floor(gens)));
+        if (v === this.fanGenerations) return;
+        this.fanGenerations = v;
+        try { localStorage.setItem('strom-fan-generations', String(v)); } catch { /* ignore */ }
+        if (this.viewMode === 'fan') this.render();
+    }
+
+    /** Render the ancestor fan chart into its container (fan view mode). */
+    private renderFan(container: HTMLElement): void {
+        // Delegate clicks once: sectors refocus, empty slots add a parent.
+        if (!container.dataset.wired) {
+            container.dataset.wired = '1';
+            container.addEventListener('click', (e) => {
+                const el = (e.target as Element).closest('[data-fan-person], [data-fan-add]') as HTMLElement | null;
+                if (!el) return;
+                if (el.dataset.fanPerson) {
+                    this.setFocus(el.dataset.fanPerson as PersonId);
+                } else if (el.dataset.fanAdd && !DataManager.isViewMode()) {
+                    UI.addRelation(el.dataset.fanAdd as PersonId, 'parent');
+                }
+            });
+            const select = container.querySelector('#fan-gen-select') as HTMLSelectElement | null;
+            select?.addEventListener('change', () => this.setFanGenerations(parseInt(select.value, 10)));
+        }
+
+        const select = container.querySelector('#fan-gen-select') as HTMLSelectElement | null;
+        if (select) select.value = String(this.fanGenerations);
+
+        const chart = container.querySelector('#fan-chart') as HTMLElement | null;
+        if (!chart || !this.focusPersonId) return;
+
+        const model = buildFanModel(DataManager.getData(), this.focusPersonId, this.fanGenerations);
+        if (!model) { chart.innerHTML = ''; return; }
+        chart.innerHTML = buildFanSvg(model, {
+            esc: (t) => this.escapeHtml(t),
+            editable: !DataManager.isViewMode() && !DataManager.isTreeLocked(),
+            addParentLabel: strings.contextMenu.addParent,
+        });
+    }
+
     private renderTimeline(container: HTMLElement): void {
         // Delegate bar clicks once (safe against odd person ids in JSON imports).
         if (!container.dataset.wired) {
