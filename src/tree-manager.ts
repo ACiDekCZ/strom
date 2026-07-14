@@ -66,6 +66,8 @@ class TreeManagerClass {
         if (storedIndex) {
             this.index = storedIndex;
             this.initialized = true;
+            // Self-heal: an earlier bug could persist a hidden ACTIVE tree.
+            this.ensureActiveVisible();
             return;
         }
 
@@ -123,6 +125,39 @@ class TreeManagerClass {
      */
     getVisibleTrees(): TreeMetadata[] {
         return this.index.trees.filter(t => !t.isHidden);
+    }
+
+    /**
+     * First tree that may become active. Prefers visible trees; when EVERY
+     * tree is hidden, unhides the first one — the invariant is that the
+     * active tree is never hidden (reported live: a hidden tree opened as
+     * active via the trees[0] fallbacks).
+     */
+    private firstUsableTreeId(): TreeId | null {
+        const visible = this.getVisibleTrees();
+        if (visible.length > 0) return visible[0].id;
+        if (this.index.trees.length === 0) return null;
+        this.index.trees[0].isHidden = false;
+        this.saveIndex();
+        return this.index.trees[0].id;
+    }
+
+    /** True when the tree exists and is not hidden. */
+    private isUsable(id: TreeId | null | undefined): boolean {
+        if (!id) return false;
+        const t = this.index.trees.find(x => x.id === id);
+        return !!t && !t.isHidden;
+    }
+
+    /** Self-heal the never-active-and-hidden invariant (startup guard). */
+    ensureActiveVisible(): void {
+        if (this.index.activeTreeId && !this.isUsable(this.index.activeTreeId)) {
+            const next = this.firstUsableTreeId();
+            if (next) {
+                this.index.activeTreeId = next;
+                this.saveIndex();
+            }
+        }
     }
 
     /**
@@ -242,11 +277,10 @@ class TreeManagerClass {
         // Remove from index
         this.index.trees.splice(idx, 1);
 
-        // If this was the active tree, switch to another or null
+        // If this was the active tree, switch to another VISIBLE one (never
+        // land on a hidden tree) or null
         if (this.index.activeTreeId === id) {
-            this.index.activeTreeId = this.index.trees.length > 0
-                ? this.index.trees[0].id
-                : null;
+            this.index.activeTreeId = this.firstUsableTreeId();
         }
 
         this.saveIndex();
@@ -530,25 +564,20 @@ class TreeManagerClass {
     }
 
     getStartupTreeId(): TreeId | null {
+        // Every branch must respect visibility — a hidden tree never opens.
         const setting = this.index.defaultTreeId;
-
-        if (setting === undefined) {
-            return this.index.trees.length > 0 ? this.index.trees[0].id : null;
-        }
 
         if (setting === LAST_FOCUSED) {
             const lastId = this.index.lastTreeId;
-            if (lastId && this.index.trees.some(t => t.id === lastId)) {
-                return lastId;
-            }
-            return this.index.trees.length > 0 ? this.index.trees[0].id : null;
+            if (lastId && this.isUsable(lastId)) return lastId;
+            return this.firstUsableTreeId();
         }
 
-        if (this.index.trees.some(t => t.id === setting)) {
-            return setting;
+        if (setting !== undefined && this.isUsable(setting as TreeId)) {
+            return setting as TreeId;
         }
 
-        return this.index.trees.length > 0 ? this.index.trees[0].id : null;
+        return this.firstUsableTreeId();
     }
 
     // ==================== DEFAULT PERSON MANAGEMENT ====================

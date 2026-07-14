@@ -713,8 +713,26 @@ export const treeManagementMethods = uiModule({
     /**
      * Toggle tree visibility (hidden from switcher and cross-tree matching)
      */
-    toggleTreeVisibility(treeId: string): void {
+    async toggleTreeVisibility(treeId: string): Promise<void> {
         const id = treeId as TreeId;
+        const tree = TreeManager.getTrees().find(t => t.id === id);
+        if (!tree) return;
+
+        // Invariant: the active tree is never hidden. Hiding the active tree
+        // switches to another visible one first; with no other visible tree
+        // the action is refused with an explanation.
+        const hiding = !tree.isHidden;
+        if (hiding && TreeManager.getActiveTreeId() === id) {
+            const other = TreeManager.getVisibleTrees().find(t => t.id !== id);
+            if (!other) {
+                this.showToast(strings.treeManager.cannotHideLastVisible);
+                return;
+            }
+            TreeManager.toggleTreeVisibility(id);
+            await this.switchToTree(other.id);
+            this.updateTreeManagerList();
+            return;
+        }
 
         // Toggle visibility
         TreeManager.toggleTreeVisibility(id);

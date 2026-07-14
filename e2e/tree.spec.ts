@@ -120,3 +120,25 @@ test('tree validation flags date inconsistencies with details', async ({ page })
     await expect(modal.locator('.validation-issue-detail').first()).toContainText('1940');
     await expect(modal.locator('.validation-issue', { hasText: 'missing source' })).toBeVisible();
 });
+
+test('hiding the active tree switches to a visible one; the last visible cannot be hidden', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    const original = (await page.locator('.tree-switcher-btn .tree-name').textContent())?.trim() || '';
+    await createTree(page, 'Branch D');   // creates + switches, manager open
+    const manager = page.locator('#tree-manager-modal');
+    await expect(manager).toBeVisible();
+
+    // Hide the ACTIVE tree (Branch D): the app must switch to the other one.
+    const activeRow = manager.locator('.tree-manager-item', { hasText: 'Branch D' });
+    await activeRow.locator('.tree-row-menu-btn').click();
+    await activeRow.locator('.tree-row-menu-item', { hasText: 'Hide' }).click();
+    await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText(original);
+
+    // Now the original is the only visible tree — hiding it must be refused.
+    const lastRow = manager.locator('.tree-manager-item', { hasText: original });
+    await lastRow.locator('.tree-row-menu-btn').click();
+    await lastRow.locator('.tree-row-menu-item', { hasText: 'Hide' }).click();
+    await expect(page.locator('.toast')).toContainText('cannot be hidden');
+    await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText(original);
+});
