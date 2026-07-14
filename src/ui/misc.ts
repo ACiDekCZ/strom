@@ -348,6 +348,11 @@ export const miscMethods = uiModule({
     initKeyboard(): void {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                // The interactive tour takes precedence (it is not a modal).
+                if (this.tourActive) {
+                    this.endTour();
+                    return;
+                }
                 // Search filter panel closes first (it is not a modal)
                 const searchFilters = document.getElementById('search-filters');
                 if (searchFilters && searchFilters.style.display !== 'none') {

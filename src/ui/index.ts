@@ -72,6 +72,7 @@ import { shareUiMethods } from './share-ui.js';
 import { familyWizardMethods } from './family-wizard.js';
 import { pwaUiMethods } from './pwa-ui.js';
 import { fileAccessMethods } from './file-access-ui.js';
+import { tourMethods, TourStepDef } from './tour.js';
 
 export class UIClass {
     currentId: PersonId | null = null;
@@ -170,6 +171,12 @@ export class UIClass {
     // and the linked file name for the active tree (for the Ctrl+S decision).
     pendingOpenFileHandle: import('../file-access.js').FileSystemFileHandleLike | null = null;
     activeFileHandleName: string | null = null;
+
+    // Interactive tour state.
+    tourActive = false;
+    tourIndex = 0;
+    tourSteps: TourStepDef[] = [];
+    tourReposition: (() => void) | null = null;
 
     // Minimap state (world→minimap transform, current world box, drag + throttle)
     minimapTransform: MinimapTransform | null = null;
@@ -298,5 +305,9 @@ Object.assign(UIClass.prototype, pwaUiMethods);
 type FileAccessMethods = typeof fileAccessMethods;
 export interface UIClass extends FileAccessMethods {}
 Object.assign(UIClass.prototype, fileAccessMethods);
+
+type TourMethods = typeof tourMethods;
+export interface UIClass extends TourMethods {}
+Object.assign(UIClass.prototype, tourMethods);
 
 export const UI = new UIClass();

@@ -802,6 +802,8 @@ export const importExportMethods = uiModule({
         this.refreshSearch();
         this.updateUrlTreeParam(newTreeId);
         this.showToast(strings.demo.hint);
+        // Offer the interactive tour once (non-blocking).
+        this.offerTourAfterDemo();
     },
 
     // ---- EXPORT ALL DIALOG ----

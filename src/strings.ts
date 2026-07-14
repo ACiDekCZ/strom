@@ -217,6 +217,21 @@ const stringsEN = {
         legendDescendant: 'Descendants',
     },
 
+    // Interactive tour
+    tour: {
+        menu: 'Take a tour',
+        offer: 'New here? Take a quick tour.',
+        offerYes: 'Start tour',
+        next: 'Next',
+        skip: 'Skip',
+        done: 'Done',
+        step1: 'This is a person card. Click it to open actions — edit, add relatives, focus or delete.',
+        step2: 'Add people here: a parent, partner, child or sibling, or a whole family at once with the family wizard.',
+        step3: 'The focus panel sets who the tree centres on and how many generations show. Switch views: Family, Descendants, Timeline or Fan.',
+        step4: 'Search for anyone by name, and use the filter for surname, place, birth years, gender or living status.',
+        step5: 'Trees, export and sharing live here. Strom exports as a single self-contained file you can email to a relative.',
+    },
+
     // Visual family statistics (tree-stats dialog)
     stats: {
         section: 'Family statistics',
@@ -1452,6 +1467,21 @@ const stringsCZ: StringsType = {
         legendPaternal: 'Otcovská',
         legendMaternal: 'Mateřská',
         legendDescendant: 'Potomci',
+    },
+
+    // Interactive tour
+    tour: {
+        menu: 'Spustit průvodce',
+        offer: 'Poprvé tady? Projděte si rychlého průvodce.',
+        offerYes: 'Spustit průvodce',
+        next: 'Další',
+        skip: 'Přeskočit',
+        done: 'Hotovo',
+        step1: 'Tohle je karta osoby. Klikněte na ni pro akce — upravit, přidat příbuzné, zaměřit nebo smazat.',
+        step2: 'Tady přidáváte osoby: rodiče, partnera, dítě či sourozence — nebo celou rodinu najednou průvodcem rodiny.',
+        step3: 'Panel fokusu určuje, na koho je strom zaměřený a kolik generací se zobrazí. Přepínejte pohledy: Rodina, Potomci, Časová osa nebo Vějíř.',
+        step4: 'Vyhledejte kohokoli podle jména a použijte filtr na příjmení, místo, roky narození, pohlaví nebo žijící/zemřelí.',
+        step5: 'Stromy, export a sdílení jsou tady. Strom se exportuje jako jeden samostatný soubor, který pošlete příbuznému.',
     },
 
     // Visual family statistics (tree-stats dialog)

@@ -457,6 +457,66 @@
             .branch-legend { left: 12px; bottom: 12px; font-size: 11px; padding: 6px 8px; }
         }
         @media print { .branch-legend { display: none !important; } }
+
+        /* Interactive tour: dimmed spotlight overlay + bubble */
+        .tour-overlay { position: fixed; inset: 0; z-index: 5000; pointer-events: none; display: none; }
+        .tour-overlay.active { display: block; }
+        .tour-hole {
+            position: absolute;
+            border-radius: 10px;
+            box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.55);
+            transition: left 0.25s, top 0.25s, width 0.25s, height 0.25s;
+            pointer-events: none;
+        }
+        .tour-bubble {
+            position: absolute;
+            max-width: 280px;
+            width: max-content;
+            background: var(--card-bg, #fff);
+            color: var(--text-color, #222);
+            border-radius: 10px;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+            padding: 14px 16px;
+            pointer-events: auto;
+            transition: left 0.25s, top 0.25s;
+        }
+        .tour-text { font-size: 14px; line-height: 1.45; margin-bottom: 12px; }
+        .tour-controls { display: flex; align-items: center; gap: 8px; }
+        .tour-step { font-size: 12px; color: var(--text-light, #888); margin-right: auto; }
+        .tour-skip {
+            border: none; background: none; color: var(--text-light, #888);
+            cursor: pointer; font-size: 13px; padding: 6px 8px;
+        }
+        .tour-next {
+            border: none; background: var(--primary, #4a90d9); color: #fff;
+            border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer;
+        }
+        @media (max-width: 500px) {
+            .tour-bubble { max-width: calc(100vw - 24px); }
+        }
+
+        /* Tour offer (non-blocking, same shape as the family offer) */
+        .tour-offer {
+            position: fixed; bottom: 24px; left: 50%;
+            transform: translateX(-50%) translateY(10px);
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px 10px 16px;
+            background: var(--card-bg, #fff);
+            border: 1px solid var(--border-color, rgba(0,0,0,0.1));
+            border-radius: 10px; box-shadow: 0 4px 16px var(--shadow);
+            z-index: 250; font-size: 14px; opacity: 0;
+            transition: opacity 0.2s, transform 0.2s;
+        }
+        .tour-offer.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .tour-offer-btn {
+            border: none; background: var(--primary, #4a90d9); color: #fff;
+            border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+        }
+        .tour-offer-close {
+            border: none; background: none; font-size: 18px; line-height: 1;
+            color: var(--text-light); cursor: pointer; padding: 0 2px;
+        }
+        .about-actions { margin-top: 14px; display: flex; justify-content: center; }
         .person-card:active {
             transform: scale(0.98);
             box-shadow: 0 1px 4px var(--shadow);
@@ -5892,6 +5952,19 @@
         <canvas id="minimap-canvas" width="180" height="120"></canvas>
     </div>
 
+    <!-- Interactive tour overlay (spotlight + bubble) -->
+    <div id="tour-overlay" class="tour-overlay">
+        <div id="tour-hole" class="tour-hole"></div>
+        <div id="tour-bubble" class="tour-bubble">
+            <div id="tour-text" class="tour-text"></div>
+            <div class="tour-controls">
+                <span id="tour-step" class="tour-step"></span>
+                <button id="tour-skip" class="tour-skip" onclick="window.Strom.UI.endTour()" data-i18n="tour.skip"></button>
+                <button id="tour-next" class="tour-next primary" onclick="window.Strom.UI.nextTourStep()"></button>
+            </div>
+        </div>
+    </div>
+
     <!-- Branch colour legend (shown only when branch colours are enabled) -->
     <div id="branch-legend" class="branch-legend" style="display:none;">
         <span class="branch-legend-item"><span class="branch-swatch swatch-paternal"></span><span data-i18n="branchColors.legendPaternal"></span></span>
@@ -6238,6 +6311,9 @@
                 <a href="https://stromapp.info" target="_blank" rel="noopener">stromapp.info</a>
                 <span>•</span>
                 <span>MPL-2.0</span>
+            </div>
+            <div class="about-actions">
+                <button class="secondary" onclick="window.Strom.UI.startTour()" data-i18n="tour.menu"></button>
             </div>
             <div class="about-stats" id="about-stats">
                 <div class="about-tree-name" id="stat-tree-name">-</div>
