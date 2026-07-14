@@ -21,6 +21,14 @@ export interface CrossTreeMatch {
 // In-memory cache: key = `${treeId}:${personId}`, value = matches in other trees
 const matchCache = new Map<string, CrossTreeMatch[]>();
 
+/**
+ * Tree-data cache for matching: loading (and possibly decrypting) EVERY
+ * tree's full data on EVERY render was the single biggest render cost with
+ * multiple trees open. Entries are keyed by the tree's lastModifiedAt, so a
+ * save in any tree naturally refreshes just that entry.
+ */
+const treeDataCache = new Map<string, { stamp: string; name: string; data: import('./types.js').StromData }>();
+
 // Track current navigation index for cycling through matches
 const navigationIndex = new Map<string, number>();
 
@@ -30,6 +38,7 @@ const navigationIndex = new Map<string, number>();
  */
 export function invalidateCache(): void {
     matchCache.clear();
+    treeDataCache.clear();
     navigationIndex.clear();
 }
 
@@ -155,4 +164,32 @@ export function getMatchCount(
 ): number {
     const matches = findCrossTreeMatches(currentTreeId, person, allTrees);
     return matches.length;
+}
+
+/**
+ * All visible trees' data for cross-tree matching, served from the cache
+ * (refreshed per tree when its lastModifiedAt changes).
+ */
+export async function getTreesDataForMatching(
+    treeManager: {
+        getVisibleTrees(): Array<{ id: TreeId; name: string; lastModifiedAt: string }>;
+        getTreeData(id: TreeId): Promise<import('./types.js').StromData | null>;
+    }
+): Promise<Map<TreeId, { name: string; data: import('./types.js').StromData }> | null> {
+    const trees = treeManager.getVisibleTrees();
+    if (trees.length < 2) return null;
+
+    const result = new Map<TreeId, { name: string; data: import('./types.js').StromData }>();
+    for (const meta of trees) {
+        const cached = treeDataCache.get(meta.id);
+        if (cached && cached.stamp === meta.lastModifiedAt) {
+            result.set(meta.id, { name: cached.name, data: cached.data });
+            continue;
+        }
+        const data = await treeManager.getTreeData(meta.id);
+        if (!data) continue;
+        treeDataCache.set(meta.id, { stamp: meta.lastModifiedAt, name: meta.name, data });
+        result.set(meta.id, { name: meta.name, data });
+    }
+    return result;
 }

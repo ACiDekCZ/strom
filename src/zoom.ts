@@ -119,11 +119,18 @@ class ZoomPanClass {
         const target = e.target as HTMLElement;
 
         // Allow default behavior on person cards (for click/tap to work)
-        // and inside the timeline (native touch scrolling).
-        if (target.closest('.person-card') || target.closest('.context-menu')
-            || target.closest('.timeline-container')) {
+        // and inside the timeline (native touch scrolling). The card guard
+        // only applies to SINGLE-finger touches — a two-finger pinch that
+        // happens to start on cards must still zoom (on dense trees cards
+        // cover most of the screen and pinch otherwise never engages).
+        if (e.touches.length === 1
+            && (target.closest('.person-card') || target.closest('.context-menu')
+                || target.closest('.timeline-container'))) {
             // Don't interfere with person card interactions
             return;
+        }
+        if (e.touches.length > 1 && target.closest('.timeline-container')) {
+            return;   // timeline pinch stays native
         }
 
         if (e.touches.length === 1) {

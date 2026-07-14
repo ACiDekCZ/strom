@@ -103,3 +103,35 @@ describe('findRelationship — edge cases', () => {
         expect(a).toEqual(b);
     });
 });
+
+describe('audit fixes: EN great- offset and adoptive lines', () => {
+    it("grandparent's sibling is a granduncle/grandaunt, not GREAT-grand (EN)", () => {
+        // gp_h_h's sibling relative to focus = m=3, n=1 line.
+        const structured = structuredClone(data) as StromData;
+        // Build: focus -> father -> gp_h_h; give gp_h_h a brother.
+        const gp = structured.persons['gp_h_h' as PersonId];
+        const bro = {
+            ...gp, id: 'gp_brother' as PersonId, firstName: 'Bratr',
+            parentIds: [...gp.parentIds], childIds: [], partnerships: [],
+        };
+        structured.persons[bro.id] = bro;
+        for (const pid of bro.parentIds) {
+            structured.persons[pid]?.childIds.push(bro.id);
+        }
+        const r = findRelationship(structured, 'focus' as PersonId, 'gp_brother' as PersonId)!;
+        expect(r.term.cs).toBe('prastrýc');
+        expect(r.term.en).toBe('granduncle');   // was 'great-granduncle'
+    });
+
+    it('a blood term across an adoptive link is marked as adoptive line', () => {
+        const structured = structuredClone(data) as StromData;
+        const focus = structured.persons['focus' as PersonId];
+        focus.parentRelTypes = { ['father' as PersonId]: 'adoptive' };
+        const r = findRelationship(structured, 'focus' as PersonId, 'gp_h_h' as PersonId)!;
+        expect(r.term.cs).toContain('(adoptivní linie)');
+        expect(r.term.en).toContain('(adoptive line)');
+        // A path not crossing the adoptive link stays unmarked.
+        const clean = findRelationship(structured, 'focus' as PersonId, 'mother' as PersonId)!;
+        expect(clean.term.cs).not.toContain('adoptivní');
+    });
+});

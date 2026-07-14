@@ -700,21 +700,9 @@ class TreeRendererClass {
         // Don't do cross-tree matching in view mode
         if (DataManager.isViewMode()) return null;
 
-        // Use getVisibleTrees() to exclude hidden trees
-        const trees = TreeManager.getVisibleTrees();
-        // Only show cross-tree links if there are multiple visible trees
-        if (trees.length < 2) return null;
-
-        const result = new Map<TreeId, { name: string; data: StromData }>();
-
-        for (const treeMeta of trees) {
-            const data = await TreeManager.getTreeData(treeMeta.id);
-            if (data) {
-                result.set(treeMeta.id, { name: treeMeta.name, data });
-            }
-        }
-
-        return result;
+        // Cached per tree (stamped by lastModifiedAt): loading + decrypting
+        // every tree's data on every render was a real cost on big setups.
+        return CrossTree.getTreesDataForMatching(TreeManager);
     }
 
     private async renderCards(canvas: HTMLElement): Promise<void> {

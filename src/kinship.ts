@@ -84,16 +84,18 @@ function bloodTerm(m: number, n: number, bGender: Gender): { cs: string; en: str
     if (n === 1) {
         // B is a sibling of A's ancestor: uncle/aunt line (m >= 2)
         if (m === 2) return male ? { cs: 'strýc', en: 'uncle' } : { cs: 'teta', en: 'aunt' };
+        // EN: 'granduncle' already encodes one grand-level, so the great-
+        // prefix count is m-3 (grandparent's brother = granduncle, no great-).
         return male
-            ? { cs: `${pra(m - 2)}strýc`, en: `${great(m - 2)}granduncle` }
-            : { cs: `${pra(m - 2)}teta`, en: `${great(m - 2)}grandaunt` };
+            ? { cs: `${pra(m - 2)}strýc`, en: `${great(m - 3)}granduncle` }
+            : { cs: `${pra(m - 2)}teta`, en: `${great(m - 3)}grandaunt` };
     }
     if (m === 1) {
         // B is a descendant of A's sibling: nephew/niece line (n >= 2)
         if (n === 2) return male ? { cs: 'synovec', en: 'nephew' } : { cs: 'neteř', en: 'niece' };
         return male
-            ? { cs: `${pra(n - 2)}synovec`, en: `${great(n - 2)}grandnephew` }
-            : { cs: `${pra(n - 2)}neteř`, en: `${great(n - 2)}grandniece` };
+            ? { cs: `${pra(n - 2)}synovec`, en: `${great(n - 3)}grandnephew` }
+            : { cs: `${pra(n - 2)}neteř`, en: `${great(n - 3)}grandniece` };
     }
 
     // Cousins: both m, n >= 2
@@ -193,7 +195,32 @@ function findBloodRelation(data: StromData, aId: PersonId, bId: PersonId): Blood
 /**
  * Full kinship lookup. Returns null when no relation within limits is found.
  */
+/** True when any parent-child edge on the path is adoptive/step/foster. */
+function pathHasNonBiologicalLink(data: StromData, path: PersonId[]): boolean {
+    for (let i = 0; i + 1 < path.length; i++) {
+        const a = data.persons[path[i]];
+        const b = data.persons[path[i + 1]];
+        if (!a || !b) continue;
+        if (a.parentIds.includes(b.id) && (a.parentRelTypes?.[b.id] ?? 'biological') !== 'biological') return true;
+        if (b.parentIds.includes(a.id) && (b.parentRelTypes?.[a.id] ?? 'biological') !== 'biological') return true;
+    }
+    return false;
+}
+
 export function findRelationship(data: StromData, aId: PersonId, bId: PersonId): KinshipResult | null {
+    const result = findRelationshipCore(data, aId, bId);
+    // A blood term computed across an adoptive/step/foster link is not a
+    // blood relation — say so instead of silently reporting "grandfather".
+    if (result && pathHasNonBiologicalLink(data, result.path)) {
+        result.term = {
+            cs: `${result.term.cs} (adoptivní linie)`,
+            en: `${result.term.en} (adoptive line)`,
+        };
+    }
+    return result;
+}
+
+function findRelationshipCore(data: StromData, aId: PersonId, bId: PersonId): KinshipResult | null {
     if (aId === bId) return null;
     const b = data.persons[bId];
     if (!data.persons[aId] || !b) return null;

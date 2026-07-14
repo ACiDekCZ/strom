@@ -103,6 +103,7 @@ export class PersonPicker {
     private allPersons: Person[] = [];
     private selectedPersonId: PersonId | null = null;
     private isOpen: boolean = false;
+    private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
     private displayedCount: number = BATCH_SIZE;
 
     constructor(options: PersonPickerOptions) {
@@ -170,12 +171,15 @@ export class PersonPicker {
             }
         });
 
-        // Close on outside click
-        document.addEventListener('click', (e) => {
+        // Close on outside click. Keep the reference — destroy() must remove
+        // it, or every picker instance leaks a document-level handler (and
+        // retains its whole persons array) for the page lifetime.
+        this.outsideClickHandler = (e: MouseEvent) => {
             if (!this.container.contains(e.target as Node)) {
                 this.hide();
             }
-        });
+        };
+        document.addEventListener('click', this.outsideClickHandler);
     }
 
     /**
@@ -440,6 +444,10 @@ export class PersonPicker {
      * Destroy the picker
      */
     destroy(): void {
+        if (this.outsideClickHandler) {
+            document.removeEventListener('click', this.outsideClickHandler);
+            this.outsideClickHandler = null;
+        }
         this.container.innerHTML = '';
     }
 }
