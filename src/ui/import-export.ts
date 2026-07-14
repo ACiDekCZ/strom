@@ -371,6 +371,10 @@ export const importExportMethods = uiModule({
 
         const reader = new FileReader();
         reader.onload = (e) => {
+            // A stale handle from an earlier (failed/cancelled) "open from
+            // file" must never get attached to THIS unrelated import — Ctrl+S
+            // would then silently overwrite the wrong file on disk.
+            this.pendingOpenFileHandle = null;
             void this.importJsonString(e.target?.result as string);
         };
         reader.readAsText(file);
@@ -422,6 +426,10 @@ export const importExportMethods = uiModule({
             DataManager.loadStromData(data);
             TreeRenderer.render();
             this.showToast(strings.buttons.importComplete);
+            // "Open from file" into the current (empty) tree: the picked file
+            // belongs to this tree now.
+            const currentId = DataManager.getCurrentTreeId();
+            if (currentId) void this.attachPendingFileHandle(currentId);
             return;
         }
 

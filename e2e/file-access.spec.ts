@@ -59,4 +59,8 @@ test('mocked handle: save writes JSON, shows the indicator, Ctrl+S re-saves', as
     await page.locator('.family-offer-close').click({ timeout: 1500 }).catch(() => {});
     await page.keyboard.press('Control+s');
     await expect.poll(() => page.evaluate(() => (window as any).__written as string)).toContain('Bea');
+
+    // Detach: indicator disappears and Ctrl+S no longer intercepts.
+    await page.evaluate(() => window.Strom.UI.unlinkActiveTreeFile());
+    await expect(page.locator('#file-link-indicator')).toBeHidden();
 });

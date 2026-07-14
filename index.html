@@ -2534,6 +2534,8 @@
            !important so it wins over .menu-option's own display at equal specificity. */
         .fsa-only { display: none !important; }
         body.fsa-supported .fsa-only { display: flex !important; }
+        .fsa-linked-only { display: none !important; }
+        body.fsa-supported.file-linked .fsa-linked-only { display: flex !important; }
         .file-link-indicator {
             display: inline-flex;
             align-items: center;
@@ -6465,6 +6467,12 @@
                     <span class="option-icon">⤓</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="fileAccess.saveToFile"></span>
+                    </span>
+                </button>
+                <button class="menu-option fsa-linked-only" onclick="window.Strom.UI.closeExportDialog(); window.Strom.UI.unlinkActiveTreeFile()">
+                    <span class="option-icon">⛓️‍💥</span>
+                    <span class="option-text">
+                        <span class="option-title" data-i18n="fileAccess.unlink"></span>
                     </span>
                 </button>
                 <button class="menu-option" id="export-focus-btn" onclick="window.Strom.UI.exportFocusedJSON()">

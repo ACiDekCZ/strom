@@ -103,12 +103,13 @@ export const fileAccessMethods = uiModule({
         }
     },
 
-    /** Detach the active tree's file (menu action). */
+    /** Detach the active tree's file (export dialog action). */
     async unlinkActiveTreeFile(): Promise<void> {
         const treeId = DataManager.getCurrentTreeId();
         if (!treeId) return;
         await dropHandle(treeId);
         await this.updateFileIndicator();
+        this.showToast(strings.fileAccess.unlinked);
     },
 
     /**
@@ -121,6 +122,8 @@ export const fileAccessMethods = uiModule({
         const handle: FileSystemFileHandleLike | null =
             (treeId && !DataManager.isViewMode()) ? await loadHandle(treeId) : null;
         this.activeFileHandleName = handle?.name ?? null;
+        // Gates the "Detach file" option in the export dialog.
+        document.body.classList.toggle('file-linked', !!handle);
         if (!indicator) return;
         if (handle) {
             indicator.style.display = 'inline-flex';
