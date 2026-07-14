@@ -694,7 +694,7 @@ class MergerUIClass {
                     </span>
                     ${conflictIndicator}
                     <span class="merge-item-score confidence-${confidenceClass}" title="${confidenceTooltip}">
-                        [${match.score}%] ${confidenceLabel}
+                        ${match.score} % · ${confidenceLabel}
                     </span>
                 </div>
                 ${reasonsHtml}
@@ -1092,14 +1092,14 @@ class MergerUIClass {
                         <input type="radio" name="conflict-${conflict.field}" value="keep_existing"
                             ${conflict.resolution === 'keep_existing' ? 'checked' : ''}>
                         <span class="conflict-value existing">${this.escapeHtml(displayVal(conflict.field, conflict.existingValue))}</span>
-                        <span class="conflict-badge">${strings.merge.keepExisting}</span>
+                        <span class="conflict-badge existing">${strings.merge.keepExisting}</span>
                         ${conflict.resolution === 'keep_existing' ? suggestedLabel(conflict) : ''}
                     </label>
                     <label class="conflict-option">
                         <input type="radio" name="conflict-${conflict.field}" value="use_incoming"
                             ${conflict.resolution === 'use_incoming' ? 'checked' : ''}>
                         <span class="conflict-value incoming">${this.escapeHtml(displayVal(conflict.field, conflict.incomingValue))}</span>
-                        <span class="conflict-badge">${strings.merge.useImport}</span>
+                        <span class="conflict-badge incoming">${strings.merge.useImport}</span>
                         ${conflict.resolution === 'use_incoming' ? suggestedLabel(conflict) : ''}
                     </label>
                 </div>
