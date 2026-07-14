@@ -33,6 +33,8 @@ import { renderDebugOverlay, clearDebugOverlay } from './debug-overlay.js';
 import { debugPanel } from './debug-panel.js';
 import { yearOf, displayYear, formatFlexDate } from './dates.js';
 import { computeTimelineModel, yearToFraction, axisTicks, TimelineRow, TimelineEvent } from './timeline.js';
+import { classifyBranches, Branch } from './branch-colors.js';
+import { SettingsManager } from './settings.js';
 
 class TreeRendererClass {
     private config = DEFAULT_LAYOUT_CONFIG;
@@ -699,6 +701,12 @@ class TreeRendererClass {
         const allTrees = await this.getAllTreesForCrossTreeMatching();
         const currentTreeId = DataManager.getCurrentTreeId();
 
+        // Optional branch colouring: classify once per render (never in timeline).
+        const branchMap: Map<PersonId, Branch> | null =
+            (SettingsManager.isBranchColorsEnabled() && this.viewMode !== 'timeline' && this.focusPersonId)
+                ? classifyBranches(DataManager.getData(), this.focusPersonId)
+                : null;
+
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);
             if (!person) continue;
@@ -726,6 +734,11 @@ class TreeRendererClass {
             // Search highlight (re-applied on every render so it survives one).
             if (this.highlightIds && !person.isPlaceholder) {
                 classes += this.highlightIds.has(id) ? ' search-hit' : ' search-dim';
+            }
+            // Optional branch colour stripe (focus and placeholders never tagged).
+            if (branchMap && !person.isPlaceholder) {
+                const b = branchMap.get(id);
+                if (b) classes += ` branch-${b}`;
             }
             card.className = classes;
             card.style.left = pos.x + 'px';

@@ -70,6 +70,7 @@ the table honest.
 | Zoom controls + mouse wheel | `interaction.spec.ts` | covered | zoom level changes |
 | Pan (drag canvas) | `interaction.spec.ts` | covered | transform changes |
 | Overview minimap (show / navigate / settings toggle) | `minimap.spec.ts` | covered | appears when zoomed in past the viewport; click re-centers; setting hides it |
+| Branch colours (toggle + legend + dark) | `branch-colors.spec.ts` | covered | settings toggle adds stripe classes + legend; dark-mode smoke; off removes both |
 | Expanded mode (multi-marriage inline) | `interaction.spec.ts` | covered | all of Henry VIII's wives laid out; refocus re-lays-out |
 | Hidden-relatives "+N" badge / collapse (−) | — | n-a | focus depth auto-expands to the whole connected tree, so badges do not appear in normal-size trees; expansion is focus-driven, there is no separate collapse control |
 | Runtime language switch (CS ↔ EN) | `settings-lock.spec.ts`, `cs.spec.ts` | covered | settings radios; about labels switch without reload |

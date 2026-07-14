@@ -419,6 +419,7 @@ export interface AppSettings {
     minimap?: boolean;  // default: true - overview minimap for large trees
     zoomControls?: boolean;  // default: true - floating zoom buttons over the tree
     onThisDay?: boolean;  // default: true - daily "on this day" reminder
+    branchColors?: boolean;  // default: false - colour cards by branch vs focus
     senderName?: string;   // collaboration: name shown to relatives in shared files
 }
 

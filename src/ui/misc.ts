@@ -257,6 +257,9 @@ export const miscMethods = uiModule({
         const otdToggle = document.getElementById('on-this-day-toggle') as HTMLInputElement | null;
         if (otdToggle) otdToggle.checked = SettingsManager.isOnThisDayEnabled();
 
+        const branchColorsToggle = document.getElementById('branch-colors-toggle') as HTMLInputElement | null;
+        if (branchColorsToggle) branchColorsToggle.checked = SettingsManager.isBranchColorsEnabled();
+
         modal.classList.add('active');
     },
 
@@ -308,6 +311,12 @@ export const miscMethods = uiModule({
         if (zoomControls) {
             const hidden = mode === 'timeline' || !SettingsManager.isZoomControlsEnabled();
             zoomControls.style.display = hidden ? 'none' : '';
+        }
+
+        // Branch-colour legend: only when the setting is on and not in timeline.
+        const legend = document.getElementById('branch-legend');
+        if (legend) {
+            legend.style.display = (mode !== 'timeline' && SettingsManager.isBranchColorsEnabled()) ? 'flex' : 'none';
         }
     },
 

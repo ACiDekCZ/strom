@@ -409,6 +409,54 @@
             box-shadow: 0 4px 12px var(--shadow);
             z-index: 100;
         }
+        /* Branch colour stripe: an absolute bar so the card box never changes.
+           Colours are mid-tones chosen to read on both light and dark cards. */
+        :root {
+            --branch-paternal: #d08a5a;
+            --branch-maternal: #5a8fc0;
+            --branch-descendant: #57a869;
+        }
+        .person-card.branch-paternal::before,
+        .person-card.branch-maternal::before,
+        .person-card.branch-descendant::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            border-radius: 10px 0 0 10px;
+            pointer-events: none;
+        }
+        .person-card.branch-paternal::before { background: var(--branch-paternal); }
+        .person-card.branch-maternal::before { background: var(--branch-maternal); }
+        .person-card.branch-descendant::before { background: var(--branch-descendant); }
+
+        /* Branch legend (bottom-left, above the minimap when present) */
+        .branch-legend {
+            position: fixed;
+            left: 24px;
+            bottom: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            padding: 8px 10px;
+            background: color-mix(in srgb, var(--card-bg) 88%, transparent);
+            border: 1px solid var(--border-color, rgba(0,0,0,0.1));
+            border-radius: 8px;
+            box-shadow: 0 2px 8px var(--shadow);
+            font-size: 12px;
+            z-index: 90;
+        }
+        .branch-legend-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+        .branch-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+        .swatch-paternal { background: var(--branch-paternal); }
+        .swatch-maternal { background: var(--branch-maternal); }
+        .swatch-descendant { background: var(--branch-descendant); }
+        @media (max-width: 500px) {
+            .branch-legend { left: 12px; bottom: 12px; font-size: 11px; padding: 6px 8px; }
+        }
+        @media print { .branch-legend { display: none !important; } }
         .person-card:active {
             transform: scale(0.98);
             box-shadow: 0 1px 4px var(--shadow);
@@ -5713,6 +5761,13 @@
         <canvas id="minimap-canvas" width="180" height="120"></canvas>
     </div>
 
+    <!-- Branch colour legend (shown only when branch colours are enabled) -->
+    <div id="branch-legend" class="branch-legend" style="display:none;">
+        <span class="branch-legend-item"><span class="branch-swatch swatch-paternal"></span><span data-i18n="branchColors.legendPaternal"></span></span>
+        <span class="branch-legend-item"><span class="branch-swatch swatch-maternal"></span><span data-i18n="branchColors.legendMaternal"></span></span>
+        <span class="branch-legend-item"><span class="branch-swatch swatch-descendant"></span><span data-i18n="branchColors.legendDescendant"></span></span>
+    </div>
+
     <!-- Focus Mode Controls -->
     <div id="focus-controls" class="focus-controls hidden">
         <div class="focus-info">
@@ -6105,6 +6160,15 @@
                     <label class="settings-checkbox">
                         <input type="checkbox" id="on-this-day-toggle" onchange="window.Strom.UI.toggleOnThisDay(this.checked)">
                         <span data-i18n="anniversaries.settingHint"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="branchColors.settingLabel"></label>
+                <div class="settings-options">
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="branch-colors-toggle" onchange="window.Strom.UI.toggleBranchColors(this.checked)">
+                        <span data-i18n="branchColors.settingHint"></span>
                     </label>
                 </div>
             </div>

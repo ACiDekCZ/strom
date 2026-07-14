@@ -208,6 +208,15 @@ const stringsEN = {
         settingHint: 'Show an overview minimap for large trees',
     },
 
+    // Branch colour coding
+    branchColors: {
+        settingLabel: 'Branch colours',
+        settingHint: 'Colour cards by branch relative to the focus person',
+        legendPaternal: 'Paternal',
+        legendMaternal: 'Maternal',
+        legendDescendant: 'Descendants',
+    },
+
     // Visual family statistics (tree-stats dialog)
     stats: {
         section: 'Family statistics',
@@ -1412,6 +1421,15 @@ const stringsCZ: StringsType = {
         title: 'Přehledová minimapa',
         settingLabel: 'Minimapa',
         settingHint: 'Zobrazovat přehledovou minimapu u velkých stromů',
+    },
+
+    // Branch colour coding
+    branchColors: {
+        settingLabel: 'Barvy větví',
+        settingHint: 'Obarvit karty podle větve vzhledem k fokus osobě',
+        legendPaternal: 'Otcovská',
+        legendMaternal: 'Mateřská',
+        legendDescendant: 'Potomci',
     },
 
     // Visual family statistics (tree-stats dialog)

@@ -576,6 +576,12 @@ export const appModeMethods = uiModule({
         this.updateViewModeUI(); // owns the zoom-controls visibility
     },
 
+    toggleBranchColors(enabled: boolean): void {
+        SettingsManager.setBranchColors(enabled);
+        TreeRenderer.render();   // re-render to add/remove the stripes
+        this.updateViewModeUI(); // owns the legend visibility
+    },
+
     toggleOnThisDay(enabled: boolean): void {
         SettingsManager.setOnThisDay(enabled);
         if (!enabled) this.dismissOnThisDay();

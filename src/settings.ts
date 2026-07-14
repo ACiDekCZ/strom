@@ -113,6 +113,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Branch colour coding default OFF (undefined = disabled). */
+    isBranchColorsEnabled(): boolean {
+        return this.settings.branchColors === true;
+    }
+
+    setBranchColors(enabled: boolean): void {
+        this.settings.branchColors = enabled;
+        this.save();
+    }
+
     /** Collaboration: sender name shown to relatives in shared files. */
     getSenderName(): string {
         return this.settings.senderName ?? '';
