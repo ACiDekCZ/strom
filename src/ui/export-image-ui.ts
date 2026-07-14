@@ -235,6 +235,20 @@ export const exportImageMethods = uiModule({
         };
         window.addEventListener('afterprint', cleanup);
         this.closePosterDialog();
-        window.print();
+
+        // Print ONLY after the tile images are decoded: Chrome snapshots the
+        // page the moment print() is called, and firing it synchronously
+        // produced print previews full of EMPTY pages (the SVG data URLs had
+        // not finished decoding yet — reported live). All tiles share one
+        // src, so decoding the first is enough; a timeout guards pathological
+        // cases so the dialog always appears.
+        const firstImg = container.querySelector('img');
+        const ready = firstImg
+            ? Promise.race([
+                firstImg.decode().catch(() => undefined),
+                new Promise<void>(resolve => setTimeout(resolve, 3000)),
+            ])
+            : Promise.resolve();
+        void ready.then(() => window.print());
     },
 });

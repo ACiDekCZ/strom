@@ -94,3 +94,31 @@ test('poster SVG applies the living-privacy filter', async ({ page }) => {
     expect(svg).not.toContain('Alice');
     expect(svg).toContain('A.');
 });
+
+test('tiled print fires only after the tile image is decoded (empty-pages fix)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    // Capture the state at the moment print() is invoked.
+    await page.evaluate(() => {
+        (window as unknown as { __printState?: unknown }).__printState = null;
+        (window as unknown as { print: () => void }).print = () => {
+            const img = document.querySelector('#poster-print img') as HTMLImageElement | null;
+            (window as unknown as { __printState?: unknown }).__printState = {
+                called: true,
+                imgComplete: img?.complete ?? false,
+                pages: document.querySelectorAll('#poster-print .poster-page').length,
+            };
+        };
+    });
+    await page.evaluate(() => window.Strom.UI.showPosterDialog());
+    await page.evaluate(() => window.Strom.UI.printPosterPdf());
+
+    await expect.poll(() => page.evaluate(() =>
+        (window as unknown as { __printState?: { called?: boolean } }).__printState?.called ?? false
+    )).toBe(true);
+    const state = await page.evaluate(() =>
+        (window as unknown as { __printState?: { imgComplete: boolean; pages: number } }).__printState!);
+    expect(state.pages).toBeGreaterThan(0);
+    expect(state.imgComplete).toBe(true);   // print never fires on undecoded tiles
+});
