@@ -64,3 +64,14 @@ describe('classifyBranches', () => {
         expect(classifyBranches(d, pid('solo')).size).toBe(0);
     });
 });
+
+it('two same-gender parents both get a colour slot (declaration order)', () => {
+    const d = data(
+        person('F', 'male', { parentIds: ['A', 'B'] }),
+        person('A', 'male', { childIds: ['F'] }),
+        person('B', 'male', { childIds: ['F'] }),
+    );
+    const m = classifyBranches(d, pid('F'));
+    expect(m.get(pid('A'))).toBe('paternal');
+    expect(m.get(pid('B'))).toBe('maternal');
+});

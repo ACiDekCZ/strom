@@ -12,19 +12,22 @@ import { StromData, PersonId, Person } from './types.js';
 
 export type Branch = 'paternal' | 'maternal' | 'descendant';
 
-/** Split the focus person's parents into (father, mother) by gender. */
+/**
+ * Split the focus person's parents into the two colour slots. Gender picks the
+ * slot when it disambiguates; with two same-gender parents the second parent
+ * still gets the remaining slot (both sides deserve a colour).
+ */
 function identifyParents(focus: Person, data: StromData): [PersonId | null, PersonId | null] {
     const parents = focus.parentIds.map(id => data.persons[id]).filter(Boolean) as Person[];
+    if (parents.length === 0) return [null, null];
+    if (parents.length === 1) {
+        return parents[0].gender === 'female' ? [null, parents[0].id] : [parents[0].id, null];
+    }
     const father = parents.find(p => p.gender === 'male');
     const mother = parents.find(p => p.gender === 'female');
-    // Fall back to positional order when genders don't disambiguate.
-    if (father || mother) {
-        return [
-            father?.id ?? (mother ? null : parents[0]?.id ?? null),
-            mother?.id ?? (father ? null : parents[1]?.id ?? null),
-        ];
-    }
-    return [parents[0]?.id ?? null, parents[1]?.id ?? null];
+    if (father && mother && father !== mother) return [father.id, mother.id];
+    // Same-gender or unresolved: keep declaration order.
+    return [parents[0].id, parents[1].id];
 }
 
 /**
