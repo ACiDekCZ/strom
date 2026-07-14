@@ -141,6 +141,21 @@ function truncate(text: string, max: number): string {
     return text.length > max ? text.slice(0, Math.max(1, max - 1)) + '…' : text;
 }
 
+/** Base font size per generation (mirrors the .fan-name CSS classes). */
+const BASE_FS = [0, 14, 12.5, 11, 10.5, 9.5, 8.5, 8, 7.5];
+/** Average glyph width as a fraction of font size (sans, mixed case). */
+const GLYPH_W = 0.58;
+
+/**
+ * Pick a font size that fits `text` into `maxLen` px, shrinking from the
+ * generation's base size down to `minFs` before giving up (ellipsis then).
+ */
+function fitFont(text: string, baseFs: number, maxLen: number, minFs: number): number {
+    let fs = baseFs;
+    while (fs > minFs && text.length * fs * GLYPH_W > maxLen) fs -= 0.5;
+    return fs;
+}
+
 function yearsOf(p: Person): string {
     const b = displayYear(p.birthDate);
     const d = displayYear(p.deathDate);
@@ -189,29 +204,68 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
 
         if (s.generation <= 2) {
             // Wide sectors: curved text along two rails (name above years).
+            // Capacity comes from the actual ARC LENGTH at the rail radius
+            // (the old fixed character budgets clipped names that had room).
             const midR = (r1 + r2) / 2;
             const railName = `fan-rail-n-${s.ahnentafel}`;
             const railYear = `fan-rail-y-${s.ahnentafel}`;
             defs.push(`<path id="${railName}" d="${arcPath(cx, cy, midR + 6, a1, a2)}"/>`);
             defs.push(`<path id="${railYear}" d="${arcPath(cx, cy, midR - 14, a1, a2)}"/>`);
-            const maxChars = s.generation === 1 ? 26 : 20;
-            textSvg = `<text class="fan-name g${s.generation}"><textPath href="#${railName}" startOffset="50%" text-anchor="middle">${esc(truncate(name, maxChars))}</textPath></text>`
+            const arcLen = (span * Math.PI / 180) * (midR + 6) - 12;
+            const baseFs = BASE_FS[s.generation];
+            const fs = fitFont(name, baseFs, arcLen, baseFs - 3);
+            const maxChars = Math.max(6, Math.floor(arcLen / (fs * GLYPH_W)));
+            const fsAttr = fs < baseFs ? ` style="font-size:${fs}px"` : '';
+            textSvg = `<text class="fan-name g${s.generation}"${fsAttr}><textPath href="#${railName}" startOffset="50%" text-anchor="middle">${esc(truncate(name, maxChars))}</textPath></text>`
                 + (years ? `<text class="fan-years g${s.generation}"><textPath href="#${railYear}" startOffset="50%" text-anchor="middle">${esc(years)}</textPath></text>` : '');
         } else {
-            // Narrow sectors: radial text, flipped on the left half for legibility.
+            // Narrow sectors: radial text, flipped on the left half for
+            // legibility. First and last name go on SEPARATE lines — the
+            // tangential space (arc) fits several lines, while the radial
+            // ring width is the scarce direction; splitting the name is what
+            // lets "Antonín Krepčík" fit un-ellipsized. The font shrinks a
+            // little before the ellipsis ever kicks in.
             const midR = (r1 + r2) / 2;
             const [px, py] = pt(cx, cy, midR, mid);
             let rot = -mid;
             if (mid > 90) rot += 180;
-            const maxChars = Math.max(6, Math.floor((RING_W[s.generation] - 14) / (s.generation >= 5 ? 5.4 : 6.2)));
-            const showYears = s.generation <= 4 && years;
-            const line1 = truncate(name, maxChars);
-            textSvg = `<text class="fan-name g${s.generation}" x="${fmt(px)}" y="${fmt(py)}"`
+            const maxLen = RING_W[s.generation] - 14;
+            const baseFs = BASE_FS[s.generation];
+
+            // How many text lines the sector's arc can hold at base size.
+            const arcLen = (span * Math.PI / 180) * midR;
+            const maxLines = Math.max(1, Math.min(3, Math.floor(arcLen / (baseFs * 1.3))));
+
+            // Greedy word wrap of the full name into the available lines —
+            // "Johannes Jacobus Výsek" becomes three short lines instead of
+            // one ellipsized one.
+            const charCap = Math.max(4, Math.floor(maxLen / (baseFs * GLYPH_W)));
+            const tokens = name.split(/\s+/).filter(Boolean);
+            const lines: string[] = [];
+            for (const tok of tokens) {
+                const last = lines[lines.length - 1];
+                if (lines.length === 0) lines.push(tok);
+                else if (lines.length < maxLines && (last.length + 1 + tok.length) > charCap) lines.push(tok);
+                else lines[lines.length - 1] = `${last} ${tok}`;
+            }
+            const showYears = s.generation <= 4 && years && lines.length < maxLines;
+            if (showYears) lines.push(years);
+
+            // One shared font size: the longest line decides the shrink.
+            const longest = lines.reduce((a, b) => (b.length > a.length ? b : a), '');
+            const fs = fitFont(longest, baseFs, maxLen, Math.max(7, baseFs - 2.5));
+            const maxChars = Math.max(6, Math.floor(maxLen / (fs * GLYPH_W)));
+            const fsAttr = fs < baseFs ? ` style="font-size:${fs}px"` : '';
+
+            const startDy = -((lines.length - 1) / 2) * 1.15 + 0.35;
+            const tspans = lines.map((line, i) => {
+                const cls = line === years ? ' class="fan-years"' : '';
+                const dy = i === 0 ? `${startDy.toFixed(2)}em` : '1.15em';
+                return `<tspan x="${fmt(px)}" dy="${dy}"${cls}>${esc(truncate(line, maxChars))}</tspan>`;
+            }).join('');
+            textSvg = `<text class="fan-name g${s.generation}"${fsAttr} x="${fmt(px)}" y="${fmt(py)}"`
                 + ` transform="rotate(${fmt(rot)} ${fmt(px)} ${fmt(py)})" text-anchor="middle">`
-                + (showYears
-                    ? `<tspan x="${fmt(px)}" dy="-0.15em">${esc(line1)}</tspan><tspan x="${fmt(px)}" dy="1.15em" class="fan-years">${esc(years)}</tspan>`
-                    : `<tspan x="${fmt(px)}" dy="0.35em">${esc(line1)}</tspan>`)
-                + `</text>`;
+                + tspans + `</text>`;
         }
 
         parts.push(`<g class="fan-sector ${gcls}" data-fan-person="${esc(p.id)}">`

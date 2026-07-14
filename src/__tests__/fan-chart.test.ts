@@ -117,6 +117,37 @@ describe('buildFanSvg', () => {
         expect(svg).toContain('data-fan-person="f"');
     });
 
+    it('wraps long radial names onto separate lines instead of ellipsizing', () => {
+        const d = data([
+            person('me', 'male', ['f', 'm']),
+            person('f', 'male', ['gf', 'gm']),
+            person('m', 'female'),
+            person('gf', 'male', ['ggf'], {}),
+            person('gm', 'female'),
+            // gen 3 (radial text): a long multi-word name must word-wrap, not truncate
+            person('ggf', 'male', [], { firstName: 'Johannes Jacobus', lastName: 'Paroulek' }),
+        ]);
+        const model = buildFanModel(d, 'me' as PersonId, 4)!;
+        const svg = buildFanSvg(model, svgOpts);
+        expect(svg).toContain('>Johannes<');
+        expect(svg).toContain('>Jacobus<');
+        expect(svg).toContain('>Paroulek<');
+        expect(svg).not.toContain('Johannes Jaco…');
+    });
+
+    it('shrinks curved-rail font for long gen-1/2 names before truncating', () => {
+        const d = data([
+            person('me', 'male', ['f', 'm']),
+            person('f', 'male', [], { firstName: 'Maximilián Bartoloměj', lastName: 'Kratochvílovský' }),
+            person('m', 'female'),
+        ]);
+        const model = buildFanModel(d, 'me' as PersonId, 3)!;
+        const svg = buildFanSvg(model, svgOpts);
+        // The long name gets an inline shrunk font-size and stays whole.
+        expect(svg).toMatch(/fan-name g1" style="font-size:[\d.]+px"/);
+        expect(svg).toContain('Maximilián Bartoloměj Kratochvílovský');
+    });
+
     it('escapes person names', () => {
         const d = data([person('me', 'male', [], { firstName: '<Evil & "Q"' })]);
         const model = buildFanModel(d, 'me' as PersonId, 4)!;
