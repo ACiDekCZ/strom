@@ -96,3 +96,56 @@ describe('undecided matches at execution', () => {
         expect(buildIdMapping(rejected).persons.get('i1' as PersonId)).not.toBe('e1');
     });
 });
+
+describe('smart matching (flex dates + transitive propagation)', () => {
+    const uid = (s: string) => s as import('../types.js').PartnershipId;
+    const withUnion = (d: StromData, id: string, p1: string, p2: string): StromData => {
+        (d.partnerships as Record<string, unknown>)[id] = {
+            id: uid(id), person1Id: p1 as PersonId, person2Id: p2 as PersonId,
+            childIds: [], status: 'married',
+        };
+        d.persons[p1 as PersonId].partnerships.push(uid(id));
+        d.persons[p2 as PersonId].partnerships.push(uid(id));
+        return d;
+    };
+
+    it("an ABT-imported date ('~1880-05-15') matches the exact date", () => {
+        const existing = data(person('e1', 'Jan', 'Novák', { birthDate: '1880-05-15' }));
+        const incoming = data(person('i1', 'Jan', 'Novák', { birthDate: '~1880-05-15' }));
+        const matches = findMatches(existing, incoming);
+        expect(matches).toHaveLength(1);
+        expect(matches[0].confidence).toBe('high');
+    });
+
+    it("year-only vs full date still counts as the same year ('~1880' vs '1880-05-15')", () => {
+        const existing = data(person('e1', 'Jan', 'Novák', { birthDate: '1880-05-15' }));
+        const incoming = data(person('i1', 'Jan', 'Novák', { birthDate: '~1880' }));
+        const matches = findMatches(existing, incoming);
+        expect(matches).toHaveLength(1);
+        expect(matches[0].score).toBeGreaterThanOrEqual(AUTO_CONFIRM_SCORE);
+    });
+
+    it('propagation chains through generations (grandparent resolves via parent)', () => {
+        // Chain: anchor (strong match) -> partner -> partner's second union? Use
+        // parent chain: child matches strongly; parent has a weak name variant;
+        // grandparent even weaker — resolvable only once the parent matched.
+        const mkTree = (suffix: string, gpFirst: string): StromData => {
+            const gp = person('gp' + suffix, gpFirst, 'Dvorak', { childIds: ['pa' + suffix as PersonId] });
+            const pa = person('pa' + suffix, 'Karel', 'Dvorak', {
+                parentIds: ['gp' + suffix as PersonId], childIds: ['ch' + suffix as PersonId], birthDate: '1900',
+            });
+            const ch = person('ch' + suffix, 'Jan', 'Dvorak', {
+                parentIds: ['pa' + suffix as PersonId], birthDate: '1930-01-01',
+            });
+            return data(gp, pa, ch);
+        };
+        const existing = mkTree('E', 'Vaclav');
+        const incoming = mkTree('I', 'Vaclav');
+        // Fix ids inside relations to the incoming/existing variants
+        const matches = findMatches(existing, incoming);
+        const byIncoming = new Map(matches.map(m => [m.incomingId, m]));
+        expect(byIncoming.get('chI' as PersonId)?.existingId).toBe('chE');
+        expect(byIncoming.get('paI' as PersonId)?.existingId).toBe('paE');
+        expect(byIncoming.get('gpI' as PersonId)?.existingId).toBe('gpE');
+    });
+});

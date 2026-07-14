@@ -3,6 +3,7 @@
  * Smart algorithms for matching persons between existing and incoming data
  */
 
+import { parseFlexDate, yearOf } from '../dates.js';
 import { PersonId, Person, Partnership, StromData } from '../types.js';
 import {
     PersonMatch,
@@ -83,16 +84,24 @@ function levenshteinDistance(a: string, b: string): number {
  */
 function extractYear(dateStr: string | undefined): number | null {
     if (!dateStr) return null;
+    const y = yearOf(dateStr);   // flex-aware ('~1880', '<1905-06' …)
+    if (y !== null) return y;
     const match = dateStr.match(/(\d{4})/);
     return match ? parseInt(match[1]) : null;
 }
 
 /**
- * Check if two dates match exactly (YYYY-MM-DD)
+ * Two dates match "exactly" when their known components agree, ignoring the
+ * flex qualifier: '~1880-05-15' vs '1880-05-15' is the same day recorded with
+ * different certainty (GEDCOM imports are full of ABT dates). Unparseable
+ * values fall back to string equality.
  */
 function datesMatch(date1: string | undefined, date2: string | undefined): boolean {
     if (!date1 || !date2) return false;
-    return date1 === date2;
+    const a = parseFlexDate(date1);
+    const b = parseFlexDate(date2);
+    if (!a || !b) return date1 === date2;
+    return a.year === b.year && a.month === b.month && a.day === b.day;
 }
 
 /**
@@ -247,11 +256,21 @@ export function findMatches(
     const directMatches = findDirectMatches(existingData, incomingData, usedExisting, usedIncoming);
     matches.push(...directMatches);
 
-    // Phase 2: Propagate from confirmed matches (partner/family suggestions)
-    const propagatedMatches = propagateFromMatches(
-        existingData, incomingData, matches, usedExisting, usedIncoming
-    );
-    matches.push(...propagatedMatches);
+    // Phase 2: Propagate from confirmed matches (partner/family suggestions).
+    // Runs to a FIXPOINT: a freshly propagated match seeds the next round, so
+    // a chain grandparent->parent->child resolves even when only the first
+    // link matched directly. Bounded by persons count (each round must claim
+    // at least one new incoming person via usedIncoming).
+    let seeds = matches;
+    const maxRounds = Object.keys(incomingData.persons).length;
+    for (let round = 0; round < maxRounds; round++) {
+        const propagatedMatches = propagateFromMatches(
+            existingData, incomingData, seeds, usedExisting, usedIncoming
+        );
+        if (propagatedMatches.length === 0) break;
+        matches.push(...propagatedMatches);
+        seeds = propagatedMatches;
+    }
 
     // Phase 3: Find remaining matches with lower threshold
     const remainingMatches = findRemainingMatches(
