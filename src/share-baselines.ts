@@ -78,3 +78,10 @@ async function enforceRetention(treeId: string): Promise<void> {
         await StorageManager.delete('shareBaselines', b.exportId);
     }
 }
+
+/** Remove every baseline belonging to a deleted tree (cascade cleanup). */
+export async function deleteBaselinesForTree(treeId: string): Promise<void> {
+    for (const b of await allForTree(treeId)) {
+        await StorageManager.delete('shareBaselines', b.exportId);
+    }
+}

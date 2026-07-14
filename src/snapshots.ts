@@ -172,3 +172,11 @@ export async function hasAutoSnapshotOnDay(treeId: string, now: number): Promise
     const key = dayKey(now);
     return (await allForTree(treeId)).some(s => s.meta.reason === 'auto' && dayKey(s.meta.createdAt) === key);
 }
+
+/** Remove every snapshot belonging to a deleted tree (cascade cleanup). */
+export async function deleteSnapshotsForTree(treeId: string): Promise<void> {
+    const all = await StorageManager.getAll<{ id: string; treeId: string }>('snapshots');
+    for (const snap of all) {
+        if (snap?.treeId === treeId) await StorageManager.delete('snapshots', snap.id);
+    }
+}

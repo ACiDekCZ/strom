@@ -210,7 +210,7 @@ class DataManagerClass {
         this.handleEmbeddedData(decryptedData);
 
         // Notify UI of data change
-        window.dispatchEvent(new CustomEvent('strom:data-changed'));
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
     }
 
     // ==================== VIEW MODE ====================
@@ -297,7 +297,7 @@ class DataManagerClass {
         this.activeEmbeddedTreeId = treeId;
         this.data = this.migrateData(tree.data);
 
-        window.dispatchEvent(new CustomEvent('strom:data-changed'));
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
         return true;
     }
 
@@ -389,7 +389,7 @@ class DataManagerClass {
             await this.switchTree(lastTree.id);
         }
 
-        window.dispatchEvent(new CustomEvent('strom:data-changed'));
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
         window.dispatchEvent(new CustomEvent('strom:tree-switched'));
         window.dispatchEvent(new CustomEvent('strom:view-mode-exit'));
 
@@ -448,7 +448,7 @@ class DataManagerClass {
         this.embeddedEnvelope = null;
 
         // Notify UI
-        window.dispatchEvent(new CustomEvent('strom:data-changed'));
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
         window.dispatchEvent(new CustomEvent('strom:tree-switched'));
         window.dispatchEvent(new CustomEvent('strom:view-mode-exit'));
     }
@@ -520,7 +520,7 @@ class DataManagerClass {
         this.pendingNewerVersionInfo = null;
         this.newerVersionSource = null;
 
-        window.dispatchEvent(new CustomEvent('strom:data-changed'));
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
     }
 
     /**
@@ -638,7 +638,7 @@ class DataManagerClass {
         // Save last tree if setting is LAST_FOCUSED
         TreeManager.saveLastTree(treeId);
 
-        window.dispatchEvent(new CustomEvent('strom:data-changed'));
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
         return true;
     }
 
@@ -656,7 +656,7 @@ class DataManagerClass {
             this.data = this.createEmptyData();
         }
 
-        window.dispatchEvent(new CustomEvent('strom:data-changed'));
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
     }
 
     /**
@@ -1044,8 +1044,18 @@ class DataManagerClass {
             }
         }
 
-        // Block updates on locked persons (except isLocked which is handled above)
-        if (this.isPersonLocked(id)) return person;
+        // Block updates on locked persons (except isLocked which is handled
+        // above). If isLocked WAS just changed alongside other fields, that
+        // change must still be committed — the old early return left it in
+        // memory only (never saved, no undo entry).
+        if (this.isPersonLocked(id)) {
+            if (updates.isLocked !== undefined) {
+                this.commitMutation(strings.undo.editPerson(auditPersonName(person)));
+            } else {
+                this.pendingBefore = null;
+            }
+            return person;
+        }
 
         // Track changed fields with old→new values for audit log
         const changedFields: string[] = [];
@@ -1373,11 +1383,16 @@ class DataManagerClass {
             }
         }
 
-        // Remove from children's parentIds
+        // Remove from children's parentIds (and the per-parent relationship
+        // type keyed by the deleted id — it would dangle forever otherwise)
         for (const childId of person.childIds) {
             const child = this.data.persons[childId];
             if (child) {
                 child.parentIds = child.parentIds.filter(pid => pid !== id);
+                if (child.parentRelTypes && id in child.parentRelTypes) {
+                    delete child.parentRelTypes[id];
+                    if (Object.keys(child.parentRelTypes).length === 0) delete child.parentRelTypes;
+                }
             }
         }
 
@@ -1898,14 +1913,18 @@ class DataManagerClass {
         // Capture counts before clearing for audit log
         const personCount = Object.keys(this.data.persons).length;
         const partnershipCount = Object.keys(this.data.partnerships).length;
+        // Through the undo choke point: bypassing it used to leave a STALE
+        // undo stack (Ctrl+Z after "clear all" resurrected an old snapshot).
+        // As a bonus, clearing is now itself undoable.
+        this.beginMutation();
         this.data = this.createEmptyData();
-        this.save();
+        this.commitMutation(strings.undo.clearedData);
         // Audit log
         AuditLogManager.log(
             this.currentTreeId, 'data.clear',
             strings.auditLog.clearedData(personCount, partnershipCount)
         );
-        window.dispatchEvent(new CustomEvent('strom:data-changed'));
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
     }
 
     /**
@@ -1984,8 +2003,11 @@ class DataManagerClass {
      * Load new data, replacing existing data in current tree
      */
     loadStromData(newData: StromData): void {
+        // Undo choke point (see clearData) — an accidental import-over is
+        // now one Ctrl+Z away instead of silently corrupting the stack.
+        this.beginMutation();
         this.data = this.migrateData(newData);
-        this.save();
+        this.commitMutation(strings.undo.loadedData);
         // Audit log
         const personCount = Object.keys(this.data.persons).length;
         const partnershipCount = Object.keys(this.data.partnerships).length;
@@ -1995,7 +2017,7 @@ class DataManagerClass {
         );
         // Invalidate cross-tree cache when data is loaded
         CrossTree.invalidateCache();
-        window.dispatchEvent(new CustomEvent('strom:data-changed'));
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
     }
 
     /**
@@ -2013,7 +2035,7 @@ class DataManagerClass {
         await this.removeEmptyDefaultTree();
         // Invalidate cross-tree cache when new tree is imported
         CrossTree.invalidateCache();
-        window.dispatchEvent(new CustomEvent('strom:data-changed'));
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
         window.dispatchEvent(new CustomEvent('strom:tree-switched'));
         return treeId;
     }
@@ -2028,7 +2050,7 @@ class DataManagerClass {
         this.currentTreeId = treeId;
         TreeManager.setActiveTree(treeId);
         this.data = this.createEmptyData();
-        window.dispatchEvent(new CustomEvent('strom:data-changed'));
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
         window.dispatchEvent(new CustomEvent('strom:tree-switched'));
         return treeId;
     }
@@ -2428,9 +2450,10 @@ class DataManagerClass {
                                 return;
                             }
 
+                            this.beginMutation();
                             this.data = this.migrateData(data);
-                            this.save();
-                            window.dispatchEvent(new CustomEvent('strom:data-changed'));
+                            this.commitMutation(strings.undo.loadedData);
+                            if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
                         } catch {
                             window.Strom?.UI?.showAlert(strings.encryption.wrongPassword, 'error');
                         }
@@ -2443,10 +2466,11 @@ class DataManagerClass {
                     return;
                 }
 
+                this.beginMutation();
                 this.data = this.migrateData(imported);
-                this.save();
+                this.commitMutation(strings.undo.loadedData);
                 // Dispatch event for UI to re-render
-                window.dispatchEvent(new CustomEvent('strom:data-changed'));
+                if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
             } catch (error) {
                 // Use window.Strom.UI to avoid circular dependency
                 window.Strom?.UI?.showAlert(strings.errors.invalidJson, 'error');
@@ -2487,6 +2511,8 @@ class DataManagerClass {
      */
     repairValidationIssue(issue: ValidationIssue): boolean {
         let repaired = false;
+        // Undo choke point: repairs are real data mutations.
+        this.beginMutation();
 
         switch (issue.type) {
             case 'orphanedParentRef': {
@@ -2640,11 +2666,13 @@ class DataManagerClass {
         }
 
         if (repaired) {
-            this.save();
+            this.commitMutation(strings.undo.repairedIssue);
             AuditLogManager.log(
                 this.currentTreeId, 'data.repair',
                 strings.auditLog.repairedIssue(issue.message)
             );
+        } else {
+            this.pendingBefore = null;   // nothing changed — drop the snapshot
         }
 
         return repaired;

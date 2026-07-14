@@ -229,6 +229,16 @@ class TreeManagerClass {
         // Remove audit log for this tree
         await AuditLogManager.deleteForTree(id);
 
+        // Cascade the rest of the tree's storage footprint: versioned
+        // backups, the linked file handle and share baselines used to leak
+        // in IndexedDB forever after a delete.
+        const { deleteSnapshotsForTree } = await import('./snapshots.js');
+        await deleteSnapshotsForTree(id).catch(() => {});
+        const { dropHandle } = await import('./file-access.js');
+        await dropHandle(id).catch(() => {});
+        const { deleteBaselinesForTree } = await import('./share-baselines.js');
+        await deleteBaselinesForTree(id).catch(() => {});
+
         // Remove from index
         this.index.trees.splice(idx, 1);
 
