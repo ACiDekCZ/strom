@@ -58,3 +58,21 @@ test('fan view: empty ancestor slot offers adding a parent', async ({ page }) =>
     await addSlots.first().click();
     await expect(page.locator('#relation-modal')).toBeVisible();
 });
+
+test.describe('mobile', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test('all four views are reachable from the hamburger menu', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.locator('.hamburger-btn').click();
+        for (const m of ['family', 'descendants', 'timeline', 'fan']) {
+            await expect(page.locator(`#mm-view-${m}`)).toBeVisible();
+        }
+        await page.locator('#mm-view-fan').click();
+        await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
+        // The menu marks the active view on reopen.
+        await page.locator('.hamburger-btn').click();
+        await expect(page.locator('#mm-view-fan')).toHaveClass(/active/);
+    });
+});

@@ -285,10 +285,6 @@ export const miscMethods = uiModule({
         TreeRenderer.setViewMode(mode); // re-renders + calls updateViewModeUI
     },
 
-    toggleDisplayViewMode(): void {
-        this.setDisplayViewMode(TreeRenderer.getViewMode() === 'descendants' ? 'family' : 'descendants');
-    },
-
     exitDescendantsView(): void {
         this.setDisplayViewMode('family');
     },
@@ -298,10 +294,10 @@ export const miscMethods = uiModule({
         const mode = TreeRenderer.getViewMode();
         // Mobile CSS hides the focus bar under the descendants badge.
         document.body.classList.toggle('descendants-view', mode === 'descendants');
-        document.getElementById('view-mode-family')?.classList.toggle('active', mode === 'family');
-        document.getElementById('view-mode-descendants')?.classList.toggle('active', mode === 'descendants');
-        document.getElementById('view-mode-timeline')?.classList.toggle('active', mode === 'timeline');
-        document.getElementById('view-mode-fan')?.classList.toggle('active', mode === 'fan');
+        for (const m of ['family', 'descendants', 'timeline', 'fan']) {
+            document.getElementById(`view-mode-${m}`)?.classList.toggle('active', mode === m);
+            document.getElementById(`mm-view-${m}`)?.classList.toggle('active', mode === m);
+        }
 
         const badge = document.getElementById('descendants-badge');
         const text = document.getElementById('descendants-badge-text');

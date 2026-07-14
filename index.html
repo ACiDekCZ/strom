@@ -3226,6 +3226,15 @@
             color: var(--text);
         }
         .mobile-menu button:hover { background: #f0f0f0; }
+        /* View switcher row inside the mobile menu (segment is desktop-only). */
+        .mobile-menu .mobile-view-row { display: flex; gap: 6px; }
+        .mobile-menu .mobile-view-row button {
+            flex: 1; text-align: center; padding: 8px 4px; font-size: 13px;
+            border: 1px solid var(--border, #ddd); border-radius: 8px;
+        }
+        .mobile-menu .mobile-view-row button.active {
+            background: var(--primary, #4a7c59); color: #fff; border-color: var(--primary, #4a7c59);
+        }
 
         /* Menu modal (Export/Import dialog) */
         .menu-modal {
@@ -5946,7 +5955,12 @@
         <button class="edit-only" onclick="window.Strom.UI.performRedo(); window.Strom.UI.closeMobileMenu()">↷ <span data-i18n="undo.redo"></span></button>
         <button class="edit-only" onclick="window.Strom.UI.showTreeManagerDialog(); window.Strom.UI.closeMobileMenu()">🌳 <span data-i18n="treeManager.manageTreesTitle"></span></button>
         <button class="edit-only" onclick="window.Strom.UI.showSourcesDialog(); window.Strom.UI.closeMobileMenu()">📚 <span data-i18n="sources.menu"></span></button>
-        <button onclick="window.Strom.UI.toggleDisplayViewMode(); window.Strom.UI.closeMobileMenu()">👪 <span data-i18n="viewModeSwitch.toggle"></span></button>
+        <div class="mobile-view-row">
+            <button id="mm-view-family" onclick="window.Strom.UI.setDisplayViewMode('family'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.family"></button>
+            <button id="mm-view-descendants" onclick="window.Strom.UI.setDisplayViewMode('descendants'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.descendants"></button>
+            <button id="mm-view-timeline" onclick="window.Strom.UI.setDisplayViewMode('timeline'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.timeline"></button>
+            <button id="mm-view-fan" onclick="window.Strom.UI.setDisplayViewMode('fan'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.fan"></button>
+        </div>
         <button onclick="window.Strom.UI.showPosterDialog()">🖼️ <span data-i18n="poster.menu"></span></button>
         <button onclick="window.Strom.UI.showSettingsDialog(); window.Strom.UI.closeMobileMenu()">⚙ <span data-i18n="settings.title"></span></button>
     </div>
