@@ -121,3 +121,40 @@ describe('buildFamilyBook (synthetic)', () => {
         expect(html).toContain('SOA Litoměřice');
     });
 });
+
+describe('Register-style chapter ordering', () => {
+    it('a child family follows its parents, before an unrelated same-generation family', () => {
+        // Two root families A and B (same generation); A's child has a family.
+        const mk = (id: string, first: string, o: Record<string, unknown> = {}) => ({
+            id, firstName: first, lastName: 'X', gender: 'male', isPlaceholder: false,
+            partnerships: [], parentIds: [], childIds: [], ...o,
+        });
+        const d = {
+            persons: {
+                a1: mk('a1', 'AdamRoot', { birthDate: '1800', partnerships: ['uA'], childIds: ['ac'] }),
+                a2: mk('a2', 'Eva', { gender: 'female', birthDate: '1805', partnerships: ['uA'], childIds: ['ac'] }),
+                ac: mk('ac', 'AdamChild', { birthDate: '1830', parentIds: ['a1', 'a2'], partnerships: ['uAC'], childIds: ['acc'] }),
+                acw: mk('acw', 'Wife', { gender: 'female', partnerships: ['uAC'], childIds: ['acc'] }),
+                acc: mk('acc', 'Grandkid', { birthDate: '1860', parentIds: ['ac', 'acw'] }),
+                b1: mk('b1', 'BobRoot', { birthDate: '1810', partnerships: ['uB'], childIds: ['bc'] }),
+                b2: mk('b2', 'Bea', { gender: 'female', partnerships: ['uB'], childIds: ['bc'] }),
+                bc: mk('bc', 'BobChild', { birthDate: '1840', parentIds: ['b1', 'b2'] }),
+            },
+            partnerships: {
+                uA: { id: 'uA', person1Id: 'a1', person2Id: 'a2', childIds: ['ac'], status: 'married', startDate: '1825' },
+                uAC: { id: 'uAC', person1Id: 'ac', person2Id: 'acw', childIds: ['acc'], status: 'married', startDate: '1855' },
+                uB: { id: 'uB', person1Id: 'b1', person2Id: 'b2', childIds: ['bc'], status: 'married', startDate: '1835' },
+            },
+        } as unknown as StromData;
+
+        const html = buildFamilyBook(d, { lang: 'en', privacyMode: 'full' });
+        // Chapter headings carry the number span right before the name.
+        const posA = html.indexOf('</span> AdamRoot X');
+        const posAC = html.indexOf('</span> AdamChild X');
+        const posB = html.indexOf('</span> BobRoot X');
+        // Register order: Adam's family, then Adam's CHILD's family, then Bob.
+        expect(posA).toBeGreaterThan(-1);
+        expect(posAC).toBeGreaterThan(posA);
+        expect(posB).toBeGreaterThan(posAC);
+    });
+});

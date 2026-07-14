@@ -9,7 +9,7 @@
  * localization, privacy, media dropping and a max-generations limit.
  */
 
-import { StromData, Person, PersonId, Source, LifeEvent } from './types.js';
+import { StromData, Person, PersonId, Partnership, Source, LifeEvent } from './types.js';
 import { applyLivingPrivacy, PrivacyMode } from './privacy.js';
 import { stripMedia } from './attachments.js';
 import { formatFlexDate, yearOf } from './dates.js';
@@ -68,17 +68,64 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     const gen = assignGenerations(tree);
     const personGen = (id: string) => gen.get(id) ?? 0;
 
-    // ---- chapters: one per partnership WITH children, oldest generation first ----
-    let chapterUnions = Object.values(partnerships)
-        .filter(u => u.childIds.length > 0)
-        .sort((a, b) => {
-            const ga = Math.max(personGen(a.person1Id), personGen(a.person2Id));
-            const gb = Math.max(personGen(b.person1Id), personGen(b.person2Id));
-            if (ga !== gb) return ga - gb;
-            const ya = yearOf(persons[a.person1Id]?.birthDate) ?? 9999;
-            const yb = yearOf(persons[b.person1Id]?.birthDate) ?? 9999;
-            return ya - yb;
-        });
+    // ---- chapters: one per partnership WITH children, in REGISTER order ----
+    // Classic family-book (Register style) ordering: after a couple's chapter
+    // come the families of their children, depth-first, children in birth
+    // order — the book reads along the family line instead of sweeping whole
+    // generations. Root chapters (couples who are nobody's children within
+    // the book) are ordered oldest generation first, then by wedding year,
+    // then by the older partner's birth year, then by name (deterministic).
+    const withChildren = Object.values(partnerships).filter(u => u.childIds.length > 0);
+    const coupleKey = (u: Partnership): [number, number, number, string] => {
+        const g = Math.max(personGen(u.person1Id), personGen(u.person2Id));
+        const wed = yearOf(u.startDate) ?? 9999;
+        const born = Math.min(
+            yearOf(persons[u.person1Id]?.birthDate) ?? 9999,
+            yearOf(persons[u.person2Id]?.birthDate) ?? 9999);
+        const nm = `${persons[u.person1Id]?.lastName ?? ''} ${persons[u.person1Id]?.firstName ?? ''}`;
+        return [g, wed, born, nm];
+    };
+    const cmpCouples = (a: Partnership, b: Partnership): number => {
+        const ka = coupleKey(a), kb = coupleKey(b);
+        for (let i = 0; i < 3; i++) {
+            if (ka[i] !== kb[i]) return (ka[i] as number) - (kb[i] as number);
+        }
+        return (ka[3] as string).localeCompare(kb[3] as string);
+    };
+
+    // A root chapter: neither partner is a child of another chapter couple.
+    const chapterChildIds = new Set(withChildren.flatMap(u => u.childIds as string[]));
+    const roots = withChildren
+        .filter(u => !chapterChildIds.has(u.person1Id) && !chapterChildIds.has(u.person2Id))
+        .sort(cmpCouples);
+
+    const unionsOfParent = new Map<string, Partnership[]>();
+    for (const u of withChildren) {
+        for (const pid of [u.person1Id, u.person2Id]) {
+            const list = unionsOfParent.get(pid) ?? [];
+            list.push(u);
+            unionsOfParent.set(pid, list);
+        }
+    }
+
+    const byBirth = (a: PersonId, b: PersonId) =>
+        (yearOf(persons[a]?.birthDate) ?? 9999) - (yearOf(persons[b]?.birthDate) ?? 9999);
+
+    let chapterUnions: Partnership[] = [];
+    const visited = new Set<string>();
+    const visit = (u: Partnership): void => {
+        if (visited.has(u.id)) return;
+        visited.add(u.id);
+        chapterUnions.push(u);
+        for (const childId of [...u.childIds].sort(byBirth)) {
+            for (const childUnion of (unionsOfParent.get(childId) ?? []).sort(cmpCouples)) {
+                visit(childUnion);
+            }
+        }
+    };
+    for (const root of roots) visit(root);
+    // Anything unreachable (defensive: odd graphs) still gets a chapter.
+    for (const u of [...withChildren].sort(cmpCouples)) visit(u);
 
     // maxGenerations: keep chapters within N generations of the oldest.
     if (options.maxGenerations !== undefined) {
