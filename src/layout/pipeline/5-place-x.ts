@@ -574,13 +574,21 @@ function placeAncestorChainBlockChildren(
 
     const { unionChildBlockIds } = block.chainInfo;
 
+    // A block's footprint at its own row. The FOCUS block's envelopeWidth is
+    // inflated in measure to reserve the ancestor V above it — at the
+    // children's row only its real subtree width occupies space; using the
+    // envelope here would exile siblings and secondary-union children beyond
+    // the whole ancestor span.
+    const rowExtent = (cb: FamilyBlock): number =>
+        (cb.side === 'BOTH' && cb.generation === 0) ? cb.width : cb.envelopeWidth;
+
     // === PASS 1: Place ancestor union's unplaced children as siblings of the direct-line child ===
     const ancestorChildBlockIds = unionChildBlockIds.get(ancestorUnionId) ?? [];
     const unplacedSiblings = ancestorChildBlockIds.filter(id => !placedBlocks.has(id));
 
     if (unplacedSiblings.length > 0) {
         // Place unplaced siblings to the right of the direct-line child
-        let x = directLineChild.xCenter + directLineChild.envelopeWidth / 2 + config.horizontalGap;
+        let x = directLineChild.xCenter + rowExtent(directLineChild) / 2 + config.horizontalGap;
         for (const cbId of unplacedSiblings) {
             const cb = blocks.get(cbId);
             if (!cb) continue;
@@ -597,8 +605,8 @@ function placeAncestorChainBlockChildren(
     for (const cbId of ancestorChildBlockIds) {
         const cb = blocks.get(cbId);
         if (!cb) continue;
-        minChildX = Math.min(minChildX, cb.xCenter - cb.envelopeWidth / 2);
-        maxChildX = Math.max(maxChildX, cb.xCenter + cb.envelopeWidth / 2);
+        minChildX = Math.min(minChildX, cb.xCenter - rowExtent(cb) / 2);
+        maxChildX = Math.max(maxChildX, cb.xCenter + rowExtent(cb) / 2);
     }
     const childrenSpanCenter = minChildX < Infinity ? (minChildX + maxChildX) / 2 : anchorX;
 

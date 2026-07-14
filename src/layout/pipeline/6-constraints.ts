@@ -1969,12 +1969,31 @@ function enforceBranchClusterSeparation(
 ): boolean {
     let anyShift = false;
 
-    for (const [, union] of model.unions) {
+    // Children of one chain block share a row across ALL the chain's unions.
+    // Sweeping each union separately can push one union's children into a
+    // sibling union's group without moving that group along (half-siblings
+    // then interleave), so a chain's unions are separated as ONE merged set.
+    const chainUnionIds = new Set<UnionId>();
+    const siblingSets: Array<ReturnType<typeof collectSiblingExtents>> = [];
+    for (const [, block] of blocks) {
+        if (!block.chainInfo || block.chainInfo.unionIds.length < 2) continue;
+        const merged: ReturnType<typeof collectSiblingExtents> = [];
+        for (const uid of block.chainInfo.unionIds) {
+            chainUnionIds.add(uid);
+            const u = model.unions.get(uid);
+            if (!u) continue;
+            merged.push(...collectSiblingExtents(u, model, unionToBlock, blocks, config));
+        }
+        if (merged.length >= 2) siblingSets.push(merged);
+    }
+    for (const [unionId, union] of model.unions) {
+        if (chainUnionIds.has(unionId)) continue;
         if (union.childIds.length < 2) continue;
+        const set = collectSiblingExtents(union, model, unionToBlock, blocks, config);
+        if (set.length >= 2) siblingSets.push(set);
+    }
 
-        const siblings = collectSiblingExtents(union, model, unionToBlock, blocks, config);
-        if (siblings.length < 2) continue;
-
+    for (const siblings of siblingSets) {
         // Sort left-to-right
         siblings.sort((a, b) => a.xCenter - b.xCenter);
 
