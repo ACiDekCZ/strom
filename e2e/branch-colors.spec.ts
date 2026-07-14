@@ -37,3 +37,17 @@ test('branch colours toggle adds card classes and a legend', async ({ page }) =>
     await page.locator('#branch-colors-toggle').check();
     await expect(legend).toBeVisible();
 });
+
+test('the legend can be hidden separately while stripes stay on', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+
+    const legend = page.locator('#branch-legend');
+    await expect(legend).toBeVisible();
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    await page.locator('#branch-legend-toggle').uncheck();
+    await expect(legend).toBeHidden();
+    // Stripes stay.
+    await expect(page.locator('.person-card.branch-descendant').first()).toBeVisible();
+});

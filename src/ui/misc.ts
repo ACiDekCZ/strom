@@ -263,6 +263,9 @@ export const miscMethods = uiModule({
         const familyButtonToggle = document.getElementById('family-button-toggle') as HTMLInputElement | null;
         if (familyButtonToggle) familyButtonToggle.checked = SettingsManager.isFamilyButtonEnabled();
 
+        const branchLegendToggle = document.getElementById('branch-legend-toggle') as HTMLInputElement | null;
+        if (branchLegendToggle) branchLegendToggle.checked = SettingsManager.isBranchLegendEnabled();
+
         modal.classList.add('active');
     },
 
@@ -326,7 +329,8 @@ export const miscMethods = uiModule({
         const legend = document.getElementById('branch-legend');
         if (legend) {
             const cardsShown = mode === 'family' || mode === 'descendants';
-            legend.style.display = (cardsShown && SettingsManager.isBranchColorsEnabled()) ? 'flex' : 'none';
+            legend.style.display = (cardsShown && SettingsManager.isBranchColorsEnabled()
+                && SettingsManager.isBranchLegendEnabled()) ? 'flex' : 'none';
         }
     },
 

@@ -576,6 +576,11 @@ export const appModeMethods = uiModule({
         this.updateViewModeUI(); // owns the zoom-controls visibility
     },
 
+    toggleBranchLegend(enabled: boolean): void {
+        SettingsManager.setBranchLegend(enabled);
+        this.updateViewModeUI(); // owns the legend visibility
+    },
+
     toggleFamilyButton(enabled: boolean): void {
         SettingsManager.setFamilyButton(enabled);
         this.updateViewModeUI(); // owns the toolbar family-button visibility

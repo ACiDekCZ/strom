@@ -356,7 +356,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.7.0';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.8.0';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -420,6 +420,7 @@ export interface AppSettings {
     zoomControls?: boolean;  // default: true - floating zoom buttons over the tree
     onThisDay?: boolean;  // default: true - daily "on this day" reminder
     branchColors?: boolean;  // default: true - colour cards by branch vs focus
+    branchLegend?: boolean;  // default: true - show the branch-colour legend box
     familyButton?: boolean;  // default: false - toolbar shortcut to the family wizard
     senderName?: string;   // collaboration: name shown to relatives in shared files
 }

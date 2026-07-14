@@ -212,6 +212,8 @@ const stringsEN = {
     // Branch colour coding
     branchColors: {
         settingLabel: 'Branch colours',
+        legendLabel: 'Colour legend',
+        legendHint: 'Show the branch-colour legend over the tree',
         settingHint: 'Colour cards by branch relative to the focus person',
         legendPaternal: 'Paternal',
         legendMaternal: 'Maternal',
@@ -1488,6 +1490,8 @@ const stringsCZ: StringsType = {
     // Branch colour coding
     branchColors: {
         settingLabel: 'Barvy větví',
+        legendLabel: 'Legenda barev',
+        legendHint: 'Zobrazovat legendu barev větví nad stromem',
         settingHint: 'Obarvit karty podle větve vzhledem k fokus osobě',
         legendPaternal: 'Otcovská',
         legendMaternal: 'Mateřská',

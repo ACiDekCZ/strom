@@ -123,6 +123,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Branch-colour legend default ON (undefined = enabled). */
+    isBranchLegendEnabled(): boolean {
+        return this.settings.branchLegend !== false;
+    }
+
+    setBranchLegend(enabled: boolean): void {
+        this.settings.branchLegend = enabled;
+        this.save();
+    }
+
     /** Toolbar "Add family" button default OFF (opt-in). */
     isFamilyButtonEnabled(): boolean {
         return this.settings.familyButton === true;

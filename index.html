@@ -6315,7 +6315,7 @@
             <button class="close-btn" onclick="window.Strom.UI.closeAboutDialog()">&times;</button>
             <div class="about-header">
                 <span class="about-logo">🌳</span>
-                <span class="about-title">Strom <span id="about-version">1.7.0</span></span>
+                <span class="about-title">Strom <span id="about-version">1.8.0</span></span>
             </div>
             <p class="about-description" data-i18n="about.description"></p>
             <p class="about-author"><span data-i18n="about.createdBy"></span> <strong data-i18n="about.authorName"></strong></p>
@@ -6388,6 +6388,15 @@
                     <label class="settings-checkbox">
                         <input type="checkbox" id="branch-colors-toggle" onchange="window.Strom.UI.toggleBranchColors(this.checked)">
                         <span data-i18n="branchColors.settingHint"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="branchColors.legendLabel"></label>
+                <div class="settings-options">
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="branch-legend-toggle" onchange="window.Strom.UI.toggleBranchLegend(this.checked)">
+                        <span data-i18n="branchColors.legendHint"></span>
                     </label>
                 </div>
             </div>
