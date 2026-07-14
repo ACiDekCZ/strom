@@ -359,9 +359,10 @@ class TreeRendererClass {
     /** Re-center the viewport for the current view mode (after a render). */
     centerForViewMode(): void {
         if (this.viewMode === 'timeline') return;
-        // The descendants chart is focus-at-top — fitting the whole chart in
-        // the viewport reads much better than centering on the focus card.
-        if (this.viewMode === 'descendants') ZoomPan.fitToScreen();
+        // The descendants chart is focus-at-top: center it and align its top
+        // edge, but KEEP the user's current zoom level (user feedback —
+        // fitting to screen kept re-zooming under their hands).
+        if (this.viewMode === 'descendants') ZoomPan.centerTreeTopKeepScale();
         else ZoomPan.centerOnFocusWithContext();
     }
 

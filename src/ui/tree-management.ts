@@ -422,12 +422,15 @@ export const treeManagementMethods = uiModule({
             list.dataset.menuWired = '1';
             list.addEventListener('click', (e) => {
                 const target = e.target as HTMLElement;
-                const btn = target.closest('.tree-row-menu-btn');
+                const btn = target.closest('.tree-row-menu-btn') as HTMLElement | null;
                 if (btn) {
-                    const menu = btn.parentElement?.querySelector('.tree-row-menu');
+                    const menu = btn.parentElement?.querySelector('.tree-row-menu') as HTMLElement | null;
                     const wasOpen = menu?.classList.contains('open');
                     closeAll();
-                    if (menu && !wasOpen) menu.classList.add('open');
+                    if (menu && !wasOpen) {
+                        menu.classList.add('open');
+                        this.positionTreeRowMenu(btn, menu);
+                    }
                     e.stopPropagation();
                     return;
                 }
@@ -437,7 +440,26 @@ export const treeManagementMethods = uiModule({
             document.addEventListener('click', (e) => {
                 if (!(e.target as HTMLElement).closest('.tree-row-menu-wrap')) closeAll();
             });
+            // A fixed-position menu must not drift away from its button.
+            window.addEventListener('resize', closeAll);
+            document.addEventListener('scroll', closeAll, true);
         }
+    },
+
+    /**
+     * Place a row menu (position: fixed) next to its ⋯ button: right-aligned
+     * to the button, below it — or above when there is no room underneath.
+     */
+    positionTreeRowMenu(btn: HTMLElement, menu: HTMLElement): void {
+        const r = btn.getBoundingClientRect();
+        menu.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+        menu.style.top = '0px';
+        const h = menu.offsetHeight;
+        const below = r.bottom + 4;
+        const top = (below + h > window.innerHeight - 8)
+            ? Math.max(8, r.top - h - 4)
+            : below;
+        menu.style.top = `${top}px`;
     },
 
     /** Switch to a tree from the manager and close the dialog to show it. */

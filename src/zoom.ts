@@ -463,6 +463,34 @@ class ZoomPanClass {
     }
 
     /**
+     * Center the whole tree horizontally and align its top edge near the top
+     * of the viewport — WITHOUT changing the current zoom level. Used by the
+     * descendants chart, where the focus sits at the top edge.
+     */
+    centerTreeTopKeepScale(topMargin = 40): void {
+        const container = document.getElementById('tree-container');
+        const canvas = document.getElementById('tree-canvas');
+        if (!container || !canvas) return;
+
+        const cards = canvas.querySelectorAll('.person-card') as NodeListOf<HTMLElement>;
+        if (cards.length === 0) return;
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity;
+        cards.forEach(card => {
+            const left = parseFloat(card.style.left) || 0;
+            const top = parseFloat(card.style.top) || 0;
+            minX = Math.min(minX, left);
+            minY = Math.min(minY, top);
+            maxX = Math.max(maxX, left + card.offsetWidth);
+        });
+
+        const treeCenterX = (minX + maxX) / 2;
+        this.tx = container.clientWidth / 2 - treeCenterX * this.scale;
+        this.ty = topMargin - minY * this.scale;
+        this.apply();
+    }
+
+    /**
      * Center the view on a specific person card
      */
     centerOnPerson(personId: PersonId): void {

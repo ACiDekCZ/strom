@@ -3656,23 +3656,28 @@
         .tree-row-menu-wrap { position: relative; margin-left: auto; }
         .tree-row-menu-btn { font-size: 16px; font-weight: 700; letter-spacing: 1px; }
         .tree-row-menu {
+            /* Fixed overlay (top/right set by JS): the menu must float OVER the
+               dialog — positioned inside it, a short dialog has to be scrolled
+               to reveal the menu. The modal has no transform, so fixed
+               coordinates are viewport coordinates. */
             display: none;
-            position: absolute;
-            right: 0;
-            top: calc(100% + 4px);
-            min-width: 190px;
+            position: fixed;
+            min-width: 200px;
             background: var(--card-bg, #fff);
             border: 1px solid var(--border-color, #ddd);
             border-radius: 8px;
             box-shadow: 0 6px 20px rgba(0,0,0,0.18);
             padding: 4px;
-            z-index: 500;
+            z-index: 1300;
         }
         .tree-row-menu.open { display: block; }
         .tree-row-menu-item {
-            display: flex;
+            /* Icon column + label column: emoji have ragged widths, a grid
+               keeps every label starting at the same x. */
+            display: grid;
+            grid-template-columns: 22px 1fr;
             align-items: center;
-            gap: 8px;
+            column-gap: 8px;
             width: 100%;
             padding: 8px 10px;
             border: none;
@@ -3685,7 +3690,12 @@
         }
         .tree-row-menu-item:hover { background: var(--hover-bg, #f1f1ee); }
         .tree-row-menu-item.danger { color: var(--danger, #c0392b); }
-        .tree-row-menu-item .btn-icon { font-size: 14px; width: 18px; text-align: center; }
+        .tree-row-menu-item .btn-icon {
+            font-size: 14px;
+            justify-self: center;
+            text-align: center;
+            line-height: 1;
+        }
         .tree-manager-item {
             padding: 12px;
             margin-bottom: 8px;
@@ -6060,22 +6070,39 @@
                 <h2 data-i18n="settings.title"></h2>
                 <button class="close-btn" onclick="window.Strom.UI.closeSettingsDialog()">&times;</button>
             </div>
-            <div class="settings-section encryption-section">
-                <label class="settings-label" data-i18n="encryption.enable"></label>
+            <!-- Everyday appearance/behaviour first; data-safety switches
+                 (encryption, audit log) at the end of the list. -->
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="settings.language"></label>
                 <div class="settings-options">
-                    <label class="settings-checkbox">
-                        <input type="checkbox" id="encryption-toggle" onchange="window.Strom.UI.toggleEncryption(this.checked)">
-                        <span id="encryption-status"></span>
+                    <label class="settings-radio">
+                        <input type="radio" name="language" value="system" onchange="window.Strom.UI.setLanguage('system')">
+                        <span data-i18n="settings.languageSystem"></span>
+                    </label>
+                    <label class="settings-radio">
+                        <input type="radio" name="language" value="en" onchange="window.Strom.UI.setLanguage('en')">
+                        <span>English</span>
+                    </label>
+                    <label class="settings-radio">
+                        <input type="radio" name="language" value="cs" onchange="window.Strom.UI.setLanguage('cs')">
+                        <span>Čeština</span>
                     </label>
                 </div>
-                <p class="settings-hint" data-i18n="encryption.warning"></p>
             </div>
             <div class="settings-section">
-                <label class="settings-label" data-i18n="auditLog.enableSetting"></label>
+                <label class="settings-label" data-i18n="settings.theme"></label>
                 <div class="settings-options">
-                    <label class="settings-checkbox">
-                        <input type="checkbox" id="audit-log-toggle" onchange="window.Strom.UI.toggleAuditLog(this.checked)">
-                        <span id="audit-log-status"></span>
+                    <label class="settings-radio">
+                        <input type="radio" name="theme" value="system" onchange="window.Strom.UI.setTheme('system')">
+                        <span data-i18n="settings.themeSystem"></span>
+                    </label>
+                    <label class="settings-radio">
+                        <input type="radio" name="theme" value="light" onchange="window.Strom.UI.setTheme('light')">
+                        <span data-i18n="settings.themeLight"></span>
+                    </label>
+                    <label class="settings-radio">
+                        <input type="radio" name="theme" value="dark" onchange="window.Strom.UI.setTheme('dark')">
+                        <span data-i18n="settings.themeDark"></span>
                     </label>
                 </div>
             </div>
@@ -6115,37 +6142,22 @@
                     </label>
                 </div>
             </div>
-            <div class="settings-section">
-                <label class="settings-label" data-i18n="settings.language"></label>
+            <div class="settings-section encryption-section">
+                <label class="settings-label" data-i18n="encryption.enable"></label>
                 <div class="settings-options">
-                    <label class="settings-radio">
-                        <input type="radio" name="language" value="system" onchange="window.Strom.UI.setLanguage('system')">
-                        <span data-i18n="settings.languageSystem"></span>
-                    </label>
-                    <label class="settings-radio">
-                        <input type="radio" name="language" value="en" onchange="window.Strom.UI.setLanguage('en')">
-                        <span>English</span>
-                    </label>
-                    <label class="settings-radio">
-                        <input type="radio" name="language" value="cs" onchange="window.Strom.UI.setLanguage('cs')">
-                        <span>Čeština</span>
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="encryption-toggle" onchange="window.Strom.UI.toggleEncryption(this.checked)">
+                        <span id="encryption-status"></span>
                     </label>
                 </div>
+                <p class="settings-hint" data-i18n="encryption.warning"></p>
             </div>
             <div class="settings-section">
-                <label class="settings-label" data-i18n="settings.theme"></label>
+                <label class="settings-label" data-i18n="auditLog.enableSetting"></label>
                 <div class="settings-options">
-                    <label class="settings-radio">
-                        <input type="radio" name="theme" value="system" onchange="window.Strom.UI.setTheme('system')">
-                        <span data-i18n="settings.themeSystem"></span>
-                    </label>
-                    <label class="settings-radio">
-                        <input type="radio" name="theme" value="light" onchange="window.Strom.UI.setTheme('light')">
-                        <span data-i18n="settings.themeLight"></span>
-                    </label>
-                    <label class="settings-radio">
-                        <input type="radio" name="theme" value="dark" onchange="window.Strom.UI.setTheme('dark')">
-                        <span data-i18n="settings.themeDark"></span>
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="audit-log-toggle" onchange="window.Strom.UI.toggleAuditLog(this.checked)">
+                        <span id="audit-log-status"></span>
                     </label>
                 </div>
             </div>
