@@ -113,9 +113,9 @@ class SettingsManagerClass {
         this.save();
     }
 
-    /** Branch colour coding default OFF (undefined = disabled). */
+    /** Branch colour coding default ON (undefined = enabled). */
     isBranchColorsEnabled(): boolean {
-        return this.settings.branchColors === true;
+        return this.settings.branchColors !== false;
     }
 
     setBranchColors(enabled: boolean): void {

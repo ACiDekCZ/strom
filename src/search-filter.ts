@@ -6,7 +6,7 @@
 
 import { StromData, PersonId, Person, Gender } from './types.js';
 import { yearOf } from './dates.js';
-import { isLivingPerson } from './privacy.js';
+import { isLivingPerson, inferBirthUpperBounds } from './privacy.js';
 import { normalizeName } from './merge/matching.js';
 
 export interface SearchCriteria {
@@ -46,6 +46,8 @@ export function hasSearchCriteria(c: SearchCriteria): boolean {
  * With no criteria set, returns every non-placeholder person.
  */
 export function filterPersons(data: StromData, criteria: SearchCriteria, currentYear: number = new Date().getFullYear()): PersonId[] {
+    // Smart liveness shared with the privacy filter (indirect evidence).
+    const bounds = inferBirthUpperBounds(data);
     const q = criteria.query ? normalizeName(criteria.query) : '';
     const last = criteria.lastName ? normalizeName(criteria.lastName) : '';
     const place = criteria.place ? normalizeName(criteria.place) : '';
@@ -67,8 +69,8 @@ export function filterPersons(data: StromData, criteria: SearchCriteria, current
             if (criteria.birthTo !== undefined && year > criteria.birthTo) continue;
         }
 
-        if (criteria.living === 'living' && !isLivingPerson(person, currentYear)) continue;
-        if (criteria.living === 'deceased' && isLivingPerson(person, currentYear)) continue;
+        if (criteria.living === 'living' && !isLivingPerson(person, currentYear, bounds)) continue;
+        if (criteria.living === 'deceased' && isLivingPerson(person, currentYear, bounds)) continue;
 
         result.push(person.id);
     }

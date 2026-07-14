@@ -42,6 +42,7 @@ import { SettingsManager } from '../settings.js';
 import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
+import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
@@ -400,23 +401,16 @@ export const treeStatsMethods = uiModule({
         const persons = Object.values(treeData.persons);
         const partnerships = Object.values(treeData.partnerships);
         const currentYear = new Date().getFullYear();
-        const MAX_AGE = 120;
 
-        // Helper to check if person is presumed deceased (death date OR age > 120)
-        const isPresumedDeceased = (p: { birthDate?: string; deathDate?: string }): boolean => {
-            if (p.deathDate) return true;
-            if (p.birthDate) {
-                const birthYear = yearOf(p.birthDate);
-                if (birthYear !== null && (currentYear - birthYear) > MAX_AGE) return true;
-            }
-            return false;
-        };
+        // Shared smart liveness (same rules as the privacy filter/book):
+        // indirect evidence marks clearly-historical people as deceased.
+        const bounds = inferBirthUpperBounds(treeData);
 
         // Basic counts
         const totalPersons = persons.length;
         const males = persons.filter(p => p.gender === 'male').length;
         const females = persons.filter(p => p.gender === 'female').length;
-        const deceased = persons.filter(p => isPresumedDeceased(p)).length;
+        const deceased = persons.filter(p => !isLivingPerson(p, currentYear, bounds)).length;
         const living = totalPersons - deceased;
 
         // Family stats

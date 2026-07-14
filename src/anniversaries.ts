@@ -9,7 +9,7 @@
 
 import { StromData } from './types.js';
 import { parseFlexDate } from './dates.js';
-import { isLivingPerson } from './privacy.js';
+import { isLivingPerson, inferBirthUpperBounds } from './privacy.js';
 
 export type AnniversaryType = 'birthday' | 'wedding' | 'birth-milestone' | 'death-milestone';
 
@@ -79,11 +79,14 @@ export function upcomingAnniversaries(
         if (occ.daysUntil <= horizonDays) out.push({ ...occ, type, personIds, years, partnershipId });
     };
 
+    // Smart liveness shared with the privacy filter (indirect evidence).
+    const bounds = inferBirthUpperBounds(data);
+
     for (const p of Object.values(data.persons)) {
         if (p.isPlaceholder) continue;
         const md = monthDay(p.birthDate);
         const birthYear = fullYear(p.birthDate);
-        const living = isLivingPerson(p, currentYear);
+        const living = isLivingPerson(p, currentYear, bounds);
 
         if (md && birthYear !== null) {
             const occ = nextOccurrence(today, md.month, md.day);
@@ -112,7 +115,7 @@ export function upcomingAnniversaries(
         const p1 = data.persons[u.person1Id], p2 = data.persons[u.person2Id];
         if (!p1 || !p2) continue;
         // Living couples only (both partners presumed living).
-        if (!isLivingPerson(p1, currentYear) || !isLivingPerson(p2, currentYear)) continue;
+        if (!isLivingPerson(p1, currentYear, bounds) || !isLivingPerson(p2, currentYear, bounds)) continue;
         const occ = nextOccurrence(today, md.month, md.day);
         const years = occ.date.getFullYear() - weddingYear;
         if (years > 0) add('wedding', [u.person1Id, u.person2Id], years, occ, u.id);

@@ -22,7 +22,7 @@ import {
     LastFocusedMarker
 } from '../types.js';
 import { strings } from '../strings.js';
-import { isLivingPerson } from '../privacy.js';
+import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import { compressPhoto, dataUrlByteSize } from '../photo.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
@@ -258,7 +258,10 @@ export const personModalMethods = uiModule({
 
         // "Deceased" checkbox reflects the current (heuristic or explicit) status.
         const deceasedInput = document.getElementById('input-is-deceased') as HTMLInputElement;
-        if (deceasedInput) deceasedInput.checked = !isLivingPerson(person);
+        if (deceasedInput) {
+            deceasedInput.checked = !isLivingPerson(
+                person, new Date().getFullYear(), inferBirthUpperBounds(DataManager.getData()));
+        }
 
         // Photo preview
         this.setPhotoPreview(person.photo);

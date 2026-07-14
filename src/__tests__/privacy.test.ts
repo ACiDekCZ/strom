@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { applyLivingPrivacy, isLivingPerson } from '../privacy.js';
+import { applyLivingPrivacy, isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import { strings } from '../strings.js';
 import { StromData, Person, PersonId, PartnershipId } from '../types.js';
 
@@ -133,5 +133,85 @@ describe('applyLivingPrivacy', () => {
             expect(P(out)['parent'].childIds).toEqual(['child']);
             expect(P(out)['child'].parentIds).toEqual(['parent']);
         }
+    });
+});
+
+describe('inferBirthUpperBounds — indirect liveness evidence', () => {
+    const uid = (s: string) => s as PartnershipId;
+    const withUnions = (d: StromData, ...unions: Array<{ id: string; p1: string; p2: string; startDate?: string }>): StromData => {
+        for (const u of unions) {
+            (d.partnerships as Record<string, unknown>)[u.id] = {
+                id: uid(u.id), person1Id: u.p1 as PersonId, person2Id: u.p2 as PersonId,
+                childIds: [], status: 'married', ...(u.startDate ? { startDate: u.startDate } : {}),
+            };
+        }
+        return d;
+    };
+
+    it('a dateless person with a child born long ago is deceased in exports', () => {
+        const d = tree(
+            person('old', { childIds: ['kid' as PersonId] }),
+            person('kid', { parentIds: ['old' as PersonId], birthDate: '1880', deathDate: '1950' }),
+        );
+        const out = applyLivingPrivacy(d, 'initials', NOW);
+        expect(P(out)['old'].firstName).toBe('Jan');   // full name kept — not living
+    });
+
+    it('the inference propagates up through dateless generations', () => {
+        const d = tree(
+            person('great', { childIds: ['mid' as PersonId] }),
+            person('mid', { parentIds: ['great' as PersonId], childIds: ['leaf' as PersonId] }),   // no dates
+            person('leaf', { parentIds: ['mid' as PersonId], birthDate: '1900' }),
+        );
+        const bounds = inferBirthUpperBounds(d);
+        expect(bounds.get('mid')).toBe(1888);
+        expect(bounds.get('great')).toBe(1876);
+        const out = applyLivingPrivacy(d, 'initials', NOW);
+        expect(P(out)['great'].firstName).toBe('Jan');
+    });
+
+    it('an old wedding marks both dateless partners deceased', () => {
+        const d = withUnions(
+            tree(
+                person('h', { partnerships: [uid('u1')] }),
+                person('w', { gender: 'female', partnerships: [uid('u1')] }),
+            ),
+            { id: 'u1', p1: 'h', p2: 'w', startDate: '1890' },
+        );
+        const out = applyLivingPrivacy(d, 'initials', NOW);
+        expect(P(out)['h'].firstName).toBe('Jan');
+        expect(P(out)['w'].firstName).toBe('Jan');
+    });
+
+    it('a recent child keeps the dateless parent living (initials)', () => {
+        const d = tree(
+            person('mum', { gender: 'female', childIds: ['kid' as PersonId] }),
+            person('kid', { parentIds: ['mum' as PersonId], birthDate: '1990' }),
+        );
+        const out = applyLivingPrivacy(d, 'initials', NOW);
+        expect(P(out)['mum'].firstName).toBe('J.');
+        expect(P(out)['kid'].firstName).toBe('J.');
+    });
+
+    it('no evidence at all stays living (safe default)', () => {
+        const out = applyLivingPrivacy(tree(person('mystery')), 'initials', NOW);
+        expect(P(out)['mystery'].firstName).toBe('J.');
+    });
+
+    it('explicit isDeceased: false wins over indirect evidence', () => {
+        const d = tree(
+            person('tough', { isDeceased: false, childIds: ['kid' as PersonId] }),
+            person('kid', { parentIds: ['tough' as PersonId], birthDate: '1900' }),
+        );
+        const out = applyLivingPrivacy(d, 'initials', NOW);
+        expect(P(out)['tough'].firstName).toBe('J.');
+    });
+
+    it('survives a parent cycle in broken data', () => {
+        const d = tree(
+            person('a', { parentIds: ['b' as PersonId], childIds: ['b' as PersonId], birthDate: '1900' }),
+            person('b', { parentIds: ['a' as PersonId], childIds: ['a' as PersonId] }),
+        );
+        expect(() => inferBirthUpperBounds(d)).not.toThrow();
     });
 });
