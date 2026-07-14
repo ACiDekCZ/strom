@@ -42,7 +42,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
-import { normalizeDateInput } from '../dates.js';
+import { normalizeDateInput, formatDateForInput } from '../dates.js';
 
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
@@ -307,7 +307,7 @@ export const relationshipsPanelMethods = uiModule({
                             <input type="text" class="partnership-start-date flex-date" autocomplete="off"
                                 placeholder="${strings.placeholders.flexDate}"
                                 data-partnership-id="${partnership.id}"
-                                value="${partnership.startDate || ''}"
+                                value="${formatDateForInput(partnership.startDate)}"
                                 title="${startDateLabel}">
                             <input type="text" class="partnership-start-place"
                                 data-partnership-id="${partnership.id}"

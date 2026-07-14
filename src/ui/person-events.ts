@@ -11,7 +11,7 @@ import { DataManager } from '../data.js';
 import { LifeEvent, LifeEventType } from '../types.js';
 import { strings } from '../strings.js';
 import { SELECTABLE_EVENT_TYPES, sortLifeEvents } from '../events.js';
-import { formatFlexDate, normalizeDateInput } from '../dates.js';
+import { formatFlexDate, normalizeDateInput, formatDateForInput } from '../dates.js';
 import { uiModule } from './module.js';
 
 /** HTML-escape a user string for safe innerHTML insertion. */
@@ -124,7 +124,7 @@ export const personEventsMethods = uiModule({
         this.editingEventId = eventId;
         this.populateEventTypeSelect();
         this.setEventEditorFields(event.type, event.customLabel ?? '',
-            event.date ?? '', event.place ?? '', event.note ?? '');
+            formatDateForInput(event.date), event.place ?? '', event.note ?? '');
         // Citations available for an existing event.
         const src = document.getElementById('event-sources-section');
         if (src) src.style.display = '';

@@ -3,11 +3,13 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { initLanguage } from '../strings.js';
 import {
     parseFlexDate,
     toCanonical,
     normalizeDateInput,
     isValidDateInput,
+    formatDateForInput,
     displayYear,
     yearOf,
     dateSortKey,
@@ -195,5 +197,31 @@ describe('ageBetween', () => {
     it('returns null for missing/invalid birth or negative age', () => {
         expect(ageBetween(undefined, '1950')).toBeNull();
         expect(ageBetween('1950', '1880')).toBeNull();
+    });
+});
+
+describe('formatDateForInput', () => {
+    it('emits Czech input forms that parse back to the same canonical value', () => {
+        initLanguage('cs');
+        for (const canonical of ['1880', '~1880', '<1905', '1880-05', '1880-05-15', '>1900-12-03']) {
+            const shown = formatDateForInput(canonical);
+            expect(shown).not.toContain('-');           // no ISO in Czech inputs
+            expect(normalizeDateInput(shown)).toBe(canonical);
+        }
+        expect(formatDateForInput('1880-05-15')).toBe('15.5.1880');
+        expect(formatDateForInput('~1880')).toBe('~1880');
+        initLanguage('en');
+    });
+
+    it('keeps canonical ISO for English (day-first parsing would misread M/D)', () => {
+        initLanguage('en');
+        expect(formatDateForInput('1880-05-15')).toBe('1880-05-15');
+        expect(formatDateForInput('~1880')).toBe('~1880');
+    });
+
+    it('passes through empty and unparseable values', () => {
+        expect(formatDateForInput('')).toBe('');
+        expect(formatDateForInput(undefined)).toBe('');
+        expect(formatDateForInput('nonsense')).toBe('nonsense');
     });
 });

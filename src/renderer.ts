@@ -1080,18 +1080,29 @@ class TreeRendererClass {
             canvas.appendChild(card);
         }
 
-        this.fitCardNames(canvas);
+        // Fit names on the NEXT frame: measuring immediately can race a
+        // concurrent render or catch the canvas mid-layout, leaving some
+        // cards unshrunk (reported on a live tree: one card ellipsized at
+        // full size while its neighbours were fitted).
+        requestAnimationFrame(() => this.fitCardNames(canvas));
     }
 
     /**
      * Long names: shrink the font (two steps) before falling back to the CSS
      * ellipsis, so full names stay readable on the fixed-size cards. One pass
-     * after all cards are in the DOM (needs real text measurements).
+     * after all cards are in the DOM (needs real text measurements). When the
+     * canvas is not measurable yet (hidden / zero width), retry a few frames.
      */
-    private fitCardNames(canvas: HTMLElement): void {
+    private fitCardNames(canvas: HTMLElement, attempt = 0): void {
+        if (canvas.clientWidth === 0 && attempt < 5) {
+            requestAnimationFrame(() => this.fitCardNames(canvas, attempt + 1));
+            return;
+        }
         const texts = canvas.querySelectorAll<HTMLElement>(
             '.person-card .name-text, .person-card .surname');
         texts.forEach(el => {
+            if (el.clientWidth === 0) return;           // detached/hidden card
+            el.classList.remove('fit-tight', 'fit-tighter');
             if (el.scrollWidth <= el.clientWidth) return;
             el.classList.add('fit-tight');
             if (el.scrollWidth > el.clientWidth) el.classList.add('fit-tighter');

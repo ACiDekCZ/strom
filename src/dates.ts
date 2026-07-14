@@ -184,6 +184,23 @@ export function formatFlexDate(value?: string, lang?: 'cs' | 'en'): string {
 }
 
 /**
+ * Locale-aware form for EDIT INPUTS. Czech users see the Czech convention
+ * ('15.5.1880', '5.1880', '~1880') — every emitted form parses back through
+ * normalizeDateInput. English keeps the canonical ISO form: 'M/D/YYYY' would
+ * be ambiguous with the day-first parsing the inputs accept.
+ */
+export function formatDateForInput(value?: string): string {
+    if (!value) return '';
+    const d = parseFlexDate(value);
+    if (!d) return value;
+    if (getCurrentLanguage() !== 'cs') return value;
+    const q = d.qualifier;
+    if (d.day !== undefined && d.month !== undefined) return `${q}${d.day}.${d.month}.${d.year}`;
+    if (d.month !== undefined) return `${q}${d.month}.${d.year}`;
+    return `${q}${d.year}`;
+}
+
+/**
  * Age in years between two flex dates (end omitted = today).
  * `approx` is true when either side is qualified or lacks full precision.
  */

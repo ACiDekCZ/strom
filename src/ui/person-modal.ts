@@ -43,7 +43,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
-import { isValidDateInput, normalizeDateInput } from '../dates.js';
+import { isValidDateInput, normalizeDateInput, formatDateForInput } from '../dates.js';
 
 export const personModalMethods = uiModule({
     showAddPersonModal(): void {
@@ -249,10 +249,10 @@ export const personModalMethods = uiModule({
         lastNameInput.value = person.lastName;
         genderSelect.value = person.gender;
 
-        // Extended info
-        if (birthDateInput) birthDateInput.value = person.birthDate || '';
+        // Extended info (dates shown in the locale's input form, e.g. 15.5.1880)
+        if (birthDateInput) birthDateInput.value = formatDateForInput(person.birthDate);
         if (birthPlaceInput) birthPlaceInput.value = person.birthPlace || '';
-        if (deathDateInput) deathDateInput.value = person.deathDate || '';
+        if (deathDateInput) deathDateInput.value = formatDateForInput(person.deathDate);
         if (deathPlaceInput) deathPlaceInput.value = person.deathPlace || '';
         if (notesInput) notesInput.value = person.notes || '';
 
