@@ -51,8 +51,34 @@ export const shareUiMethods = uiModule({
         if (privacy) privacy.value = 'initials';
         const scope = document.getElementById('share-scope') as HTMLSelectElement | null;
         if (scope) scope.value = 'whole';
+        // Reveal "send only changes" only when a baseline exists for this tree.
+        void this.refreshShareScopeOption();
+        this.onShareScopeChange();
 
         modal.classList.add('active');
+    },
+
+    /** Show the "only changes" scope option when a usable baseline exists. */
+    async refreshShareScopeOption(): Promise<void> {
+        const opt = document.getElementById('share-scope-changes') as HTMLOptionElement | null;
+        if (!opt) return;
+        const treeId = TreeManager.getActiveTreeId();
+        const meta = treeId ? TreeManager.getTreeMetadata(treeId) : null;
+        let show = false;
+        if (meta?.receivedExportId) {
+            const { hasBaseline } = await import('../share-baselines.js');
+            show = await hasBaseline(meta.receivedExportId);
+        }
+        opt.style.display = show ? '' : 'none';
+    },
+
+    /** Change-packets carry no privacy/password — hide those inputs for it. */
+    onShareScopeChange(): void {
+        const isChanges = (document.getElementById('share-scope') as HTMLSelectElement | null)?.value === 'changes';
+        const priv = (document.getElementById('share-privacy-mode') as HTMLElement | null)?.closest('.form-group') as HTMLElement | null;
+        const pwd = (document.getElementById('share-password') as HTMLElement | null)?.closest('.form-group') as HTMLElement | null;
+        if (priv) priv.style.display = isChanges ? 'none' : '';
+        if (pwd) pwd.style.display = isChanges ? 'none' : '';
     },
 
     closeShareDialog(): void {
@@ -79,6 +105,11 @@ export const shareUiMethods = uiModule({
         };
 
         this.closeShareDialog();
+
+        if (scope === 'changes') {
+            await this.exportChangePacket(treeId, senderName, senderMessage);
+            return;
+        }
 
         if (scope === 'branch') {
             const focusedData = TreeRenderer.getFocusedData();
@@ -146,6 +177,9 @@ export const shareUiMethods = uiModule({
         if (envelope && treeId) {
             TreeManager.setReceivedInfo(treeId, envelope.exportId,
                 envelope.senderName || strings.share.unknownSender);
+            // Keep the received data as a baseline so B can later send only changes.
+            const { saveBaseline } = await import('../share-baselines.js');
+            void saveBaseline(treeId, envelope.exportId, DataManager.getData(), Date.now()).catch(() => {});
             try { localStorage.removeItem(COLLAB_HIDE_KEY(treeId)); } catch { /* ignore */ }
         }
         this.updateCollabBar();
@@ -184,6 +218,55 @@ export const shareUiMethods = uiModule({
         const treeId = DataManager.getCurrentTreeId();
         if (treeId) { try { localStorage.removeItem(COLLAB_HIDE_KEY(treeId)); } catch { /* ignore */ } }
         this.updateCollabBar();
+    },
+
+    /** Export a small change packet (current tree vs the shared baseline). */
+    async exportChangePacket(treeId: TreeId, senderName: string, senderMessage?: string): Promise<void> {
+        const meta = TreeManager.getTreeMetadata(treeId);
+        const baseId = meta?.receivedExportId;
+        if (!baseId) return;
+        const { loadBaseline } = await import('../share-baselines.js');
+        const base = await loadBaseline(baseId);
+        if (!base) { this.showAlert(strings.shareDiff.baselineMissing, 'warning'); return; }
+
+        const { buildChangePacket, isEmptyPacket } = await import('../share-diff.js');
+        const treeName = meta?.name;
+        const packet = buildChangePacket(base, DataManager.getData(), { baseExportId: baseId, senderName, ...(senderMessage ? { senderMessage } : {}), ...(treeName ? { treeName } : {}) });
+        if (isEmptyPacket(packet)) { this.showToast(strings.shareDiff.noChanges); return; }
+
+        const safe = (treeName || 'strom').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const blob = new Blob([JSON.stringify(packet, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${safe || 'strom'}.strom-changes.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        this.showToast(strings.shareDiff.packetSaved);
+    },
+
+    /**
+     * Import a change packet: find the tree it was based on, reconstruct the full
+     * incoming tree (baseline + packet) and hand it to the normal merge preview.
+     */
+    async importChangePacket(packet: import('../share-diff.js').ChangePacket): Promise<void> {
+        const { loadBaseline, getBaselineTreeId } = await import('../share-baselines.js');
+        // Primary: the tree whose lastExportId is the packet's base. Fallback: the
+        // tree recorded on the local baseline (survives a re-export since sharing).
+        let tree = TreeManager.findTreeByExportId(packet.baseExportId);
+        if (!tree) {
+            const treeId = await getBaselineTreeId(packet.baseExportId);
+            if (treeId) tree = TreeManager.getTreeMetadata(treeId as TreeId);
+        }
+        if (!tree) { this.showAlert(strings.shareDiff.treeNotFound, 'warning'); return; }
+        const base = await loadBaseline(packet.baseExportId);
+        if (!base) { this.showAlert(strings.shareDiff.baselineMissing, 'warning'); return; }
+
+        if (TreeManager.getActiveTreeId() !== tree.id) {
+            await DataManager.switchTree(tree.id);
+        }
+        const { applyChangePacket } = await import('../share-diff.js');
+        const incoming = applyChangePacket(base, packet);
+        MergerUI.startMerge(incoming, packet.senderName || strings.share.unknownSender);
     },
 
     /** Collaboration bar → reply export with the remembered lineage. */

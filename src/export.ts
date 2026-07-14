@@ -145,8 +145,11 @@ class AppExporterClass {
                 ...(share?.replyToExportId ? { replyToExportId: share.replyToExportId } : {})
             };
 
-            // Track last export ID in the source tree
+            // Track last export ID in the source tree, and keep a local baseline
+            // of exactly what was shared so a change packet can be reconstructed.
             TreeManager.setLastExportId(targetTreeId, exportId);
+            const { saveBaseline } = await import('./share-baselines.js');
+            void saveBaseline(targetTreeId, exportId, data, Date.now()).catch(() => {});
 
             // Create embedded data script
             const dataScript = `<script>window.STROM_EMBEDDED_DATA = ${JSON.stringify(envelope)};<\/script>`;

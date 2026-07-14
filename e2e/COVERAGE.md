@@ -94,6 +94,7 @@ the table honest.
 | Search filter panel position + Escape close | `search-filter.spec.ts` | covered | regression: panel used to overflow above the viewport |
 | Descendants view recenters after pan/zoom | `descendants-view.spec.ts` | covered | regression: empty canvas after mode switch |
 | Collaboration round-trip (share → welcome → collab bar → reply merge offer) | `share.spec.ts` | covered | full two-context flow incl. in-app HTML import of the reply |
+| Change packets (send only changes → merge) | `share-diff.spec.ts` | covered | two-context: recipient sends a small change packet, sender reconstructs against the baseline and the merge preview has the addition; orphan packet → clear message |
 | Plain export shows no collaboration surfaces | `share.spec.ts` | covered | backwards compatibility |
 | Archives + kinship dialogs: header X and Escape close | `search-kinship-archives.spec.ts` | covered | unified with the standard modal pattern (dialog stack) |
 | Floating zoom buttons setting (on/off) | `settings-lock.spec.ts` | covered | settings toggle hides/restores `.zoom-controls` |

@@ -397,6 +397,14 @@ export const importExportMethods = uiModule({
             return;
         }
 
+        // A change packet (collaboration diff) is reconstructed against a local
+        // baseline and handed to the merge preview — not a full-tree import.
+        const { isChangePacket } = await import('../share-diff.js');
+        if (isChangePacket(parsed)) {
+            await this.importChangePacket(parsed);
+            return;
+        }
+
         const { isEncrypted } = await import('../crypto.js');
         if (isEncrypted(parsed)) {
             this.handleEncryptedJsonImport(parsed);

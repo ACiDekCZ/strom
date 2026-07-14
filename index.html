@@ -7582,9 +7582,10 @@
             <p class="modal-description" data-i18n="share.dialogIntro"></p>
             <div class="form-group">
                 <label data-i18n="share.scopeLabel"></label>
-                <select id="share-scope">
+                <select id="share-scope" onchange="window.Strom.UI.onShareScopeChange()">
                     <option value="whole" data-i18n="share.scopeWhole"></option>
                     <option value="branch" data-i18n="share.scopeBranch"></option>
+                    <option id="share-scope-changes" value="changes" style="display:none;" data-i18n="shareDiff.scopeChanges"></option>
                 </select>
             </div>
             <div class="form-group">

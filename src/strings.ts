@@ -1041,6 +1041,15 @@ const stringsEN = {
         unknownSender: 'A relative'
     },
 
+    // Change packets (send only changes)
+    shareDiff: {
+        scopeChanges: 'Only the changes since the last share',
+        packetSaved: 'Change file saved',
+        noChanges: 'Nothing has changed since the last share',
+        baselineMissing: 'The baseline for these changes is missing — ask for the whole file instead',
+        treeNotFound: 'No matching tree for these changes — ask the sender for the whole file instead',
+    },
+
     // View Mode (embedded data)
     viewMode: {
         banner: 'View mode (read-only)',
@@ -2291,6 +2300,15 @@ const stringsCZ: StringsType = {
         replyView: 'Nejdřív se podívat',
         replyImport: 'Importovat jako nový strom',
         unknownSender: 'Příbuzný'
+    },
+
+    // Change packets (send only changes)
+    shareDiff: {
+        scopeChanges: 'Jen změny od posledního sdílení',
+        packetSaved: 'Soubor se změnami uložen',
+        noChanges: 'Od posledního sdílení se nic nezměnilo',
+        baselineMissing: 'Chybí baseline pro tyto změny — vyžádej si radši celý soubor',
+        treeNotFound: 'Žádný odpovídající strom pro tyto změny — vyžádej si od odesílatele celý soubor',
     },
 
     // View Mode (embedded data)

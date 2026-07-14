@@ -12,11 +12,12 @@
 const DB_NAME = 'strom-db';
 // v2: added the 'snapshots' store (versioned backups).
 // v3: added the 'fileHandles' store (File System Access handles per tree).
+// v4: added the 'shareBaselines' store (change-packet baselines per exportId).
 // onupgradeneeded creates any missing store, so existing databases gain it on
 // the next open.
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
-const STORES = ['trees', 'audit', 'merge', 'snapshots', 'fileHandles'] as const;
+const STORES = ['trees', 'audit', 'merge', 'snapshots', 'fileHandles', 'shareBaselines'] as const;
 export type StoreName = typeof STORES[number];
 
 class StorageManagerClass {
