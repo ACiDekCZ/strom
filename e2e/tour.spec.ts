@@ -28,7 +28,7 @@ test('tour is offered, walks through steps, and Escape ends it', async ({ page }
     await expect(page.locator('#tour-text')).not.toHaveText(firstText || '');
 
     // Finish the tour (click through until it closes).
-    for (let i = 0; i < 6 && await overlay.isVisible(); i++) {
+    for (let i = 0; i < 12 && await overlay.isVisible(); i++) {
         await page.locator('#tour-next').click();
     }
     await expect(overlay).toBeHidden();
@@ -62,4 +62,21 @@ test('mobile: the tour bubble fits within the viewport', async ({ page }) => {
     expect(box).not.toBeNull();
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(400);
+});
+
+test('tour reveals the hover-only card buttons during the card-buttons step', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.locator('.tour-offer .tour-offer-btn').click();
+    await expect(page.locator('#tour-overlay')).toHaveClass(/active/);
+
+    // Step 2 spotlights the card and force-shows its + buttons.
+    await page.locator('#tour-next').click();
+    const revealed = page.locator('.person-card.tour-reveal');
+    await expect(revealed).toHaveCount(1);
+    await expect(revealed.locator('.add-btn.right')).toBeVisible();
+
+    // Moving on hides them again.
+    await page.locator('#tour-next').click();
+    await expect(page.locator('.person-card.tour-reveal')).toHaveCount(0);
 });

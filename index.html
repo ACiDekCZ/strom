@@ -464,6 +464,9 @@
         /* Interactive tour: dimmed spotlight overlay + bubble */
         .tour-overlay { position: fixed; inset: 0; z-index: 5000; pointer-events: none; display: none; }
         .tour-overlay.active { display: block; }
+        /* The tour force-reveals the hover-only card buttons for its step. */
+        .person-card.tour-reveal .add-btn { display: flex !important; }
+        .person-card.tour-reveal .rel-link-icon { display: flex !important; }
         .tour-hole {
             position: absolute;
             border-radius: 10px;
@@ -5799,7 +5802,7 @@
     <div class="toolbar">
         <h1><span class="app-logo" onclick="window.Strom.UI.showAboutDialog()" data-i18n-title="about.title">🌳</span> <span class="toolbar-title" data-i18n="toolbar.title"></span></h1>
         <span id="offline-indicator" class="offline-indicator" style="display:none;" data-i18n="pwa.offline"></span>
-        <button id="file-link-indicator" class="file-link-indicator" style="display:none;" onclick="window.Strom.UI.saveActiveTreeToFile()">⤓</button>
+        <button id="file-link-indicator" class="file-link-indicator" style="display:none;" onclick="window.Strom.UI.saveActiveTreeToFile()">💾</button>
         <div class="search-container">
             <div class="search-row">
                 <div id="toolbar-search-picker"></div>
@@ -6543,7 +6546,7 @@
                     </span>
                 </button>
                 <button class="menu-option fsa-only" onclick="window.Strom.UI.attachSaveToFile()">
-                    <span class="option-icon">⤓</span>
+                    <span class="option-icon">💾</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="fileAccess.saveToFile"></span>
                         <span class="option-desc" data-i18n="fileAccess.saveToFileDesc"></span>

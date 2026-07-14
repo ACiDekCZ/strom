@@ -13,18 +13,34 @@ import { uiModule } from './module.js';
 
 const TOUR_OFFERED_KEY = 'strom-tour-offered';
 
-export interface TourStepDef { key: 'step1' | 'step2' | 'step3' | 'step4' | 'step5'; selectors: string[]; }
+export interface TourStepDef {
+    key: 'step1' | 'step2' | 'step3' | 'step4' | 'step5' | 'step6' | 'step7' | 'step8';
+    selectors: string[];
+    /** Force-reveal the hover-only card buttons while this step shows. */
+    reveal?: boolean;
+    /** Extra spotlight padding (the card's + buttons sit outside its box). */
+    pad?: number;
+    /** Skip on touch devices (hover-only affordances don't exist there). */
+    skipOnCoarse?: boolean;
+}
 
 // Each step lists candidate selectors; the first VISIBLE one is spotlighted.
 // Later candidates are the mobile equivalents (hamburger when a desktop-only
 // control is hidden).
 const TOUR_STEPS: TourStepDef[] = [
     { key: 'step1', selectors: ['.person-card.focused', '.person-card'] },
-    { key: 'step2', selectors: ['.toolbar-buttons button', '.add-person-round', '.hamburger-btn'] },
-    { key: 'step3', selectors: ['#view-mode-segment', '.hamburger-btn'] },
-    { key: 'step4', selectors: ['#toolbar-search-picker', '.hamburger-btn'] },
-    { key: 'step5', selectors: ['.tree-switcher-btn', '.hamburger-btn'] },
+    { key: 'step2', selectors: ['.person-card.focused', '.person-card'], reveal: true, pad: 18, skipOnCoarse: true },
+    { key: 'step3', selectors: ['.toolbar-buttons button', '.add-person-round', '.hamburger-btn'] },
+    { key: 'step4', selectors: ['#focus-controls', '#toolbar-focus-name'] },
+    { key: 'step5', selectors: ['#view-mode-segment', '.hamburger-btn'] },
+    { key: 'step6', selectors: ['.zoom-controls'] },
+    { key: 'step7', selectors: ['#toolbar-search-picker', '.hamburger-btn'] },
+    { key: 'step8', selectors: ['.tree-switcher-btn', '.hamburger-btn'] },
 ];
+
+function isCoarse(): boolean {
+    return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+}
 
 function firstVisible(selectors: string[]): HTMLElement | null {
     for (const sel of selectors) {
@@ -63,8 +79,10 @@ export const tourMethods = uiModule({
     startTour(): void {
         this.closeMobileMenu?.();
         document.getElementById('about-modal')?.classList.remove('active');
-        // Keep only the steps whose target is currently visible.
-        this.tourSteps = TOUR_STEPS.filter(s => firstVisible(s.selectors) !== null);
+        // Keep only the steps whose target is currently visible (and skip
+        // hover-affordance steps on touch devices).
+        this.tourSteps = TOUR_STEPS.filter(s =>
+            !(s.skipOnCoarse && isCoarse()) && firstVisible(s.selectors) !== null);
         if (this.tourSteps.length === 0) return;
         this.tourIndex = 0;
         this.tourActive = true;
@@ -80,6 +98,7 @@ export const tourMethods = uiModule({
 
     endTour(): void {
         this.tourActive = false;
+        document.querySelectorAll('.person-card.tour-reveal').forEach(c => c.classList.remove('tour-reveal'));
         document.getElementById('tour-overlay')?.classList.remove('active');
         if (this.tourReposition) {
             window.removeEventListener('resize', this.tourReposition);
@@ -118,8 +137,12 @@ export const tourMethods = uiModule({
         const bubble = document.getElementById('tour-bubble');
         if (!target || !hole || !bubble) { if (this.tourActive) this.nextTourStep(); return; }
 
+        // Hover-only card buttons: force-show them while their step is up.
+        document.querySelectorAll('.person-card.tour-reveal').forEach(c => c.classList.remove('tour-reveal'));
+        if (step.reveal) (target.closest('.person-card') ?? target).classList.add('tour-reveal');
+
         const r = target.getBoundingClientRect();
-        const pad = 6;
+        const pad = step.pad ?? 6;
         hole.style.left = `${r.left - pad}px`;
         hole.style.top = `${r.top - pad}px`;
         hole.style.width = `${r.width + pad * 2}px`;
