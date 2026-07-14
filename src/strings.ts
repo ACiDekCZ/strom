@@ -325,6 +325,16 @@ const stringsEN = {
         lockedRefuse: 'Unlock encryption before saving to a file',
     },
 
+    // CSV export (spreadsheet person table)
+    csv: {
+        menuTitle: 'Export CSV',
+        menuDesc: 'Person table for Excel / Google Sheets',
+        firstName: 'First name', lastName: 'Last name', gender: 'Gender',
+        birthDate: 'Born', birthPlace: 'Birth place',
+        deathDate: 'Died', deathPlace: 'Death place',
+        father: 'Father', mother: 'Mother', partners: 'Partners', notes: 'Notes',
+    },
+
     // Zoom controls
     zoomControls: {
         zoomIn: 'Zoom In',
@@ -1604,6 +1614,16 @@ const stringsCZ: StringsType = {
         saveFailed: 'Nepodařilo se uložit do souboru',
         permissionDenied: 'Přístup k souboru byl odepřen — propojení zrušeno',
         lockedRefuse: 'Před uložením do souboru odemkni šifrování',
+    },
+
+    // CSV export (spreadsheet person table)
+    csv: {
+        menuTitle: 'Export CSV',
+        menuDesc: 'Tabulka osob pro Excel / Google Sheets',
+        firstName: 'Jméno', lastName: 'Příjmení', gender: 'Pohlaví',
+        birthDate: 'Narození', birthPlace: 'Místo narození',
+        deathDate: 'Úmrtí', deathPlace: 'Místo úmrtí',
+        father: 'Otec', mother: 'Matka', partners: 'Partneři', notes: 'Poznámky',
     },
 
     // Zoom controls

@@ -160,6 +160,37 @@ export const importExportMethods = uiModule({
     },
 
     /**
+     * Export target tree as a CSV person table (passwordless; the privacy
+     * picker still applies so living people can be reduced/hidden).
+     */
+    async exportTargetTreeCsv(): Promise<void> {
+        const treeId = this.getExportTargetTreeId();
+        if (!treeId) {
+            this.closeExportDialog();
+            return;
+        }
+        this.closeExportDialog();
+
+        this.showExportPasswordDialog(async () => {
+            const { buildPersonsCsv } = await import('../csv-export.js');
+            const { applyLivingPrivacy } = await import('../privacy.js');
+            const data = await TreeManager.getTreeData(treeId);
+            const metadata = TreeManager.getTreeMetadata(treeId);
+            if (!data) return;
+
+            const filtered = applyLivingPrivacy(data, this.readExportPrivacyMode());
+            const csv = buildPersonsCsv(filtered);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${metadata?.name || 'family-tree'}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }, false, { defaultPrivacy: 'full', passwordless: true });
+    },
+
+    /**
      * Export current tree as App (from Save Current dialog)
      * Shows password dialog for optional encryption
      */

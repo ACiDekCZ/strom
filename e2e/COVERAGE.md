@@ -108,6 +108,12 @@ the table honest.
 | Tree manager: search box for long lists | — | partial | rendering gated at ≥6 trees; filtering is a trivial name includes() |
 | Fan chart view (sectors, refocus, gen selector, add-parent slot) | `fan.spec.ts` + `fan-chart.test.ts` (unit) | covered | 4th view mode; ahnentafel model unit-tested incl. empty-slot rule |
 | Toolbar Add-family button (opt-in setting) | `family-wizard.spec.ts` | covered | hidden by default; setting reveals; opens wizard on focus |
+| GEDCOM fidelity: divorce w/o date, dropped-tag summary, unknown sex, CONC wrap, multi-line event notes | — (`gedcom-roundtrip.test.ts` unit) | covered | 9 unit tests over the parser/exporter pair |
+| GEDCOM media (OBJE) + standard repositories/citation PAGE | — (`gedcom-roundtrip.test.ts` unit) | covered | photo/attachment round-trip, external files counted |
+| Merge safety: undecided weak match imports separately | — (`merge-scoring.test.ts` unit) | covered | executor gating + first scoring tests; UI gate dialog not e2e-driven |
+| Merge smart: flex dates + transitive propagation | — (`merge-scoring.test.ts` unit) | covered | ~dates match exact dates; chains resolve through generations |
+| CSV person-table export | `data-import-export.spec.ts` + `csv-export.test.ts` (unit) | covered | localized headers, escaping, BOM |
+| Locale date form in edit inputs | — (`dates.test.ts` unit) | covered | round-trip guaranteed by tests; visual form is cosmetic |
 
 ## Deliberately not covered (`n-a`)
 

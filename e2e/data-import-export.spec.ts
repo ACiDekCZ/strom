@@ -194,3 +194,23 @@ test('encrypted JSON import: wrong password shows an error, retry with the right
     await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Decrypted');
     await expect(card(page, 'Tajny')).toBeVisible();
 });
+
+test('CSV export downloads a localized person table', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1950' });
+
+    await page.evaluate(() => window.Strom.UI.showExportDialog());
+    await page.evaluate(() => window.Strom.UI.exportTargetTreeCsv());
+    const pwd = page.locator('#export-password-modal');
+    await expect(pwd).toBeVisible();
+    await pwd.locator('#export-privacy-mode').selectOption('full');
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        pwd.getByRole('button', { name: 'Export without encryption' }).click(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/\.csv$/);
+    const path = await download.path();
+    const text = readFileSync(path!, 'utf-8');
+    expect(text).toContain('First name;Last name');
+    expect(text).toContain('Jan;Novak');
+});
