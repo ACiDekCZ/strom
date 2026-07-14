@@ -27,6 +27,7 @@ import {
     LifeEventType,
     ParentChildRelType,
     Source,
+    Attachment,
     toPersonId,
     toPartnershipId,
     generateLifeEventId,
@@ -38,6 +39,15 @@ const EVENT_TAG_TO_TYPE: Record<string, LifeEventType> = {
     BAPM: 'baptism', BURI: 'burial', OCCU: 'occupation', RESI: 'residence',
     EMIG: 'emigration', IMMI: 'immigration', EDUC: 'education',
 };
+
+/** Raw OBJE media object under an individual. */
+interface RawMedia {
+    title: string;
+    form: string;
+    file: string;
+    /** Custom marker: 'photo' = the person's portrait (Strom extension). */
+    stromKind: string;
+}
 
 interface RawEvent {
     type: LifeEventType;
@@ -76,6 +86,8 @@ interface GedcomIndividual {
     events: RawEvent[];
     /** GEDCOM ids (@Sx@) of sources cited on this individual. */
     sourceRefs: string[];
+    /** OBJE media objects (photo / attachments). */
+    media: RawMedia[];
     fams: string[];  // Families as spouse
     famc: string | null;  // Family as child
     famcPedi: string;  // PEDI value under FAMC (adopted/foster/birth/…)
@@ -100,6 +112,8 @@ export interface ParsedGedcom {
     individuals: Map<string, GedcomIndividual>;
     families: Map<string, GedcomFamily>;
     sources: Map<string, RawSource>;
+    /** 0 @Rx@ REPO records: id -> repository name. */
+    repositories: Map<string, string>;
     /** Tags our data model cannot represent, with occurrence counts. */
     droppedTags: Map<string, number>;
 }
@@ -208,12 +222,12 @@ function generateId(prefix: string): string {
  * Parse GEDCOM file content into structured data
  */
 /** Level-1 INDI tags the parser understands (everything else is counted as dropped). */
-const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT',
+const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT', 'OBJE',
     ...Object.keys(EVENT_TAG_TO_TYPE)]);
 /** Level-1 FAM tags the parser understands. */
 const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV']);
 /** Level-0 record types (handled or structural). */
-const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'HEAD', 'TRLR', 'SUBM', 'SUBN']);
+const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'REPO', 'HEAD', 'TRLR', 'SUBM', 'SUBN']);
 
 export function parseGedcom(content: string): ParsedGedcom {
     // Strip BOM (Byte Order Mark) if present
@@ -225,6 +239,9 @@ export function parseGedcom(content: string): ParsedGedcom {
     const individuals = new Map<string, GedcomIndividual>();
     const families = new Map<string, GedcomFamily>();
     const sources = new Map<string, RawSource>();
+    const repositories = new Map<string, string>();
+    /** PAGE seen on a citation (2/3 PAGE under SOUR @Sx@) -> source reference. */
+    const citationPages = new Map<string, string>();
     const droppedTags = new Map<string, number>();
     const drop = (tag: string) => droppedTags.set(tag, (droppedTags.get(tag) ?? 0) + 1);
 
@@ -235,6 +252,13 @@ export function parseGedcom(content: string): ParsedGedcom {
     /** Level-2 tag inside the current event (for level-3 NOTE continuations). */
     let currentEventSubTag: string | null = null;
     let currentSource: RawSource | null = null;
+    let currentMedia: RawMedia | null = null;
+    /** Level-2 tag inside the current OBJE (for level-3 FILE continuations). */
+    let currentMediaSubTag: string | null = null;
+    /** @Sx@ of the most recent citation (PAGE lines attach to it). */
+    let currentCitationId: string | null = null;
+    /** 0 @Rx@ REPO record currently open. */
+    let currentRepoId: string | null = null;
 
     for (const line of lines) {
         const match = line.match(/^(\d+)\s+(@\w+@|\w+)\s*(.*)?$/);
@@ -260,6 +284,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     notes: '',
                     events: [],
                     sourceRefs: [],
+                    media: [],
                     fams: [],
                     famc: null,
                     famcPedi: ''
@@ -274,6 +299,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentRecord = null;
                 currentType = 'SOUR';
                 sources.set(tag, currentSource);
+            } else if (tag.startsWith('@R') && value === 'REPO') {
+                currentRepoId = tag;
+                repositories.set(tag, '');
+                currentRecord = null;
+                currentType = null;
+                currentSource = null;
             } else if (tag.startsWith('@F') && value === 'FAM') {
                 currentRecord = {
                     id: tag,
@@ -298,6 +329,12 @@ export function parseGedcom(content: string): ParsedGedcom {
             currentSubTag = null;
             currentEvent = null;
             currentEventSubTag = null;
+            currentMedia = null;
+            currentMediaSubTag = null;
+            currentCitationId = null;
+            if (!(tag.startsWith('@R') && value === 'REPO')) currentRepoId = null;
+        } else if (currentRepoId !== null && level === 1 && tag === 'NAME') {
+            repositories.set(currentRepoId, value);
         } else if (currentType === 'SOUR' && currentSource) {
             // Source record sub-lines. reference <- PAGE (spec mapping).
             if (level === 1) {
@@ -322,6 +359,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentSubTag = tag;
                 currentEvent = null;
                 currentEventSubTag = null;
+                if (tag !== 'OBJE') currentMedia = null;
+                currentMediaSubTag = null;
+                if (tag !== 'SOUR') currentCitationId = null;
 
                 if (currentType === 'INDI') {
                     const indi = currentRecord as GedcomIndividual;
@@ -347,8 +387,14 @@ export function parseGedcom(content: string): ParsedGedcom {
                             break;
                         case 'SOUR':
                             // Level-1 SOUR on INDI is a citation reference (@Sx@).
-                            if (value) indi.sourceRefs.push(value);
+                            if (value) { indi.sourceRefs.push(value); currentCitationId = value; }
                             break;
+                        case 'OBJE': {
+                            const media: RawMedia = { title: '', form: '', file: '', stromKind: '' };
+                            indi.media.push(media);
+                            currentMedia = media;
+                            break;
+                        }
                         default: {
                             const evType = EVENT_TAG_TO_TYPE[tag];
                             if (evType) {
@@ -406,12 +452,22 @@ export function parseGedcom(content: string): ParsedGedcom {
                         // Multi-line notes: CONT = new line, CONC = continuation.
                         if (tag === 'CONT') indi.notes += '\n' + value;
                         else if (tag === 'CONC') indi.notes += value;
+                    } else if (currentSubTag === 'OBJE' && currentMedia) {
+                        currentMediaSubTag = tag;
+                        if (tag === 'TITL') currentMedia.title = value;
+                        else if (tag === 'FORM') currentMedia.form = value;
+                        else if (tag === 'FILE') currentMedia.file = value;
+                        else if (tag === '_STROM_KIND') currentMedia.stromKind = value;
+                    } else if (currentSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
+                        // Citation page: standard place for a source reference.
+                        if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
                     } else if (currentEvent) {
                         currentEventSubTag = tag;
                         if (tag === 'DATE') currentEvent.date = parseGedcomDate(value);
                         else if (tag === 'PLAC') currentEvent.place = value;
                         else if (tag === 'SOUR' && value) {
                             (currentEvent.sourceRefs ??= []).push(value);
+                            currentCitationId = value;
                         } else if (tag === 'NOTE') {
                             currentEvent.note = currentEvent.note
                                 ? `${currentEvent.note}\n${value}` : value;
@@ -435,11 +491,27 @@ export function parseGedcom(content: string): ParsedGedcom {
                 // dropped, which broke the round-trip of multi-line notes).
                 if (tag === 'CONT') currentEvent.note = (currentEvent.note ?? '') + '\n' + value;
                 else if (tag === 'CONC') currentEvent.note = (currentEvent.note ?? '') + value;
+            } else if (level === 3 && currentMedia && currentMediaSubTag === 'FILE' && tag === 'CONC') {
+                // Data-URL payloads are CONC-wrapped (255-char physical lines).
+                currentMedia.file += value;
+            } else if (level === 3 && currentType === 'INDI' && currentEvent
+                && currentEventSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
+                if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
             }
         }
     }
 
-    return { individuals, families, sources, droppedTags };
+    // Resolve repository pointers (1 REPO @Rx@) to names, and citation PAGEs
+    // into the source's reference when the record itself carried none.
+    for (const src of sources.values()) {
+        const m = src.repository.match(/^@\w+@$/);
+        if (m) src.repository = repositories.get(src.repository) ?? '';
+        if (!src.reference && citationPages.has(src.id)) {
+            src.reference = citationPages.get(src.id)!;
+        }
+    }
+
+    return { individuals, families, sources, repositories, droppedTags };
 }
 
 // ==================== CONVERTER ====================
@@ -539,6 +611,29 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         }
         const personRefs = mapRefs(indi.sourceRefs);
         if (personRefs.length > 0) person.sourceIds = personRefs;
+
+        // OBJE media: a data-URL FILE is either the portrait (Strom marker)
+        // or an attachment. External file paths cannot be embedded — counted
+        // as dropped so the import summary mentions them.
+        for (const media of indi.media) {
+            if (media.file.startsWith('data:')) {
+                if (media.stromKind === 'photo' && media.file.startsWith('data:image')) {
+                    person.photo = media.file;
+                    if (media.title) person.photoOriginalName = media.title;
+                } else {
+                    const att: Attachment = {
+                        id: generateId('att'),
+                        name: media.title || 'attachment',
+                        mimeType: media.file.slice(5, media.file.indexOf(';')) || 'application/octet-stream',
+                        dataUrl: media.file,
+                        sizeBytes: Math.round((media.file.length - media.file.indexOf(',') - 1) * 0.75),
+                    };
+                    (person.attachments ??= []).push(att);
+                }
+            } else if (media.file) {
+                droppedTags.set('OBJE (external file)', (droppedTags.get('OBJE (external file)') ?? 0) + 1);
+            }
+        }
 
         persons[personId] = person;
     }

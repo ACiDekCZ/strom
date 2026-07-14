@@ -333,3 +333,72 @@ describe('GEDCOM fidelity fixes (audit 2026-07)', () => {
         expect(Object.values(again.data.persons)[0].notes).toBe(long);
     });
 });
+
+describe('GEDCOM media (OBJE) and standard sources', () => {
+    const GED = (body: string) => `0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n${body}\n0 TRLR`;
+    const conv = (ged: string) => convertToStrom(parseGedcom(ged));
+    const PNG = 'data:image/png;base64,' + 'QUJDREVGRw=='.repeat(40);
+
+    it('photo and attachment round-trip through OBJE data URLs', () => {
+        const ged = GED(['0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M'].join('\n'));
+        const r = conv(ged);
+        const person = Object.values(r.data.persons)[0];
+        person.photo = PNG;
+        person.photoOriginalName = 'grandpa.png';
+        person.attachments = [{
+            id: 'att1', name: 'oddaci-list.pdf', mimeType: 'application/pdf',
+            dataUrl: 'data:application/pdf;base64,' + 'UERGREFUQQ=='.repeat(60),
+            sizeBytes: 480,
+        }];
+        const out = exportToGedcom(r.data).content;
+        for (const line of out.split('\n')) expect(line.length).toBeLessThanOrEqual(255);
+
+        const again = conv(out);
+        const p2 = Object.values(again.data.persons)[0];
+        expect(p2.photo).toBe(PNG);
+        expect(p2.photoOriginalName).toBe('grandpa.png');
+        expect(p2.attachments).toHaveLength(1);
+        expect(p2.attachments![0].name).toBe('oddaci-list.pdf');
+        expect(p2.attachments![0].mimeType).toBe('application/pdf');
+        expect(p2.attachments![0].dataUrl).toBe(person.attachments[0].dataUrl);
+    });
+
+    it('external OBJE file paths are counted as dropped, not imported', () => {
+        const ged = GED([
+            '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M',
+            '1 OBJE', '2 FORM jpeg', '2 FILE C:\\photos\\jan.jpg',
+        ].join('\n'));
+        const r = conv(ged);
+        expect(Object.values(r.data.persons)[0].attachments).toBeUndefined();
+        expect(r.stats.droppedTagSummary).toContain('OBJE (external file)');
+    });
+
+    it('repositories export as @R@ records and resolve back on import', () => {
+        const ged = GED([
+            '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M', '1 SOUR @S1@',
+            '0 @S1@ SOUR', '1 TITL Matrika narozených', '1 PAGE fol. 12',
+        ].join('\n'));
+        const r = conv(ged);
+        const src = Object.values(r.data.sources!)[0];
+        src.repository = 'SOA Litoměřice';
+        const out = exportToGedcom(r.data).content;
+        expect(out).toMatch(/0 @R1@ REPO\n1 NAME SOA Litoměřice/);
+        expect(out).toContain('1 REPO @R1@');
+        expect(out).toMatch(/1 SOUR @S1@\n2 PAGE fol\. 12/);   // citation carries the page
+
+        const again = conv(out);
+        const src2 = Object.values(again.data.sources!)[0];
+        expect(src2.repository).toBe('SOA Litoměřice');
+        expect(src2.reference).toBe('fol. 12');
+    });
+
+    it('citation-level PAGE fills the source reference on import (other tools)', () => {
+        const ged = GED([
+            '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M',
+            '1 SOUR @S1@', '2 PAGE p. 44',
+            '0 @S1@ SOUR', '1 TITL Parish register',
+        ].join('\n'));
+        const r = conv(ged);
+        expect(Object.values(r.data.sources!)[0].reference).toBe('p. 44');
+    });
+});

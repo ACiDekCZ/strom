@@ -2,11 +2,13 @@
  * GEDCOM Exporter - Export family tree to GEDCOM 5.5.1 format
  * Standard genealogy interchange format for Ancestry, FamilySearch, Gramps, etc.
  *
- * Known unsupported: person attachments (inline document/image data URLs) are
- * NOT exported — binary payloads do not belong in a GEDCOM text file. They are
- * preserved only in JSON / standalone-HTML exports. Parent→child relationship
- * types map to FAMC PEDI (adoptive→adopted, foster→foster); 'step' has no GEDCOM
- * equivalent and is exported without PEDI.
+ * Media: photos and attachments export as OBJE structures with the data URL in
+ * FILE (CONC-wrapped). This round-trips within Strom; other tools will see an
+ * unresolvable FILE value and skip the media (strip photos in the export dialog
+ * to produce a lean file for them). Repositories export as standard 0 @Rx@ REPO
+ * records with pointers; the source reference is emitted as a citation PAGE.
+ * Parent→child relationship types map to FAMC PEDI (adoptive→adopted,
+ * foster→foster); 'step' has no GEDCOM equivalent and exports without PEDI.
  */
 
 import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType } from './types.js';
@@ -172,6 +174,23 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
         sourceIdMap.set(sourceId, `@S${sourceCounter}@`);
         sourceCounter++;
     }
+    // Unique repository names -> @Rx@ records (standard 5.5.1 structure).
+    const repoIdMap = new Map<string, string>();
+    let repoCounter = 1;
+    for (const source of Object.values(data.sources ?? {})) {
+        if (source.repository && !repoIdMap.has(source.repository)) {
+            repoIdMap.set(source.repository, `@R${repoCounter}@`);
+            repoCounter++;
+        }
+    }
+    /** Citation emitter: the source reference belongs on the citation as PAGE. */
+    const pushCitation = (level: number, srcId: string): void => {
+        const ref = sourceIdMap.get(srcId);
+        if (!ref) return;
+        lines.push(`${level} SOUR ${ref}`);
+        const reference = data.sources?.[srcId]?.reference;
+        if (reference) lines.push(`${level + 1} PAGE ${escapeGedcomText(reference)}`);
+    };
 
     // Get current date for header
     const now = new Date();
@@ -262,17 +281,33 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
             if (event.note && event.type !== 'occupation') {
                 pushNote(lines, 2, event.note);
             }
-            // Source citations on the event (2 SOUR @Sx@).
+            // Source citations on the event (2 SOUR @Sx@ + 3 PAGE).
             for (const srcId of event.sourceIds ?? []) {
-                const ref = sourceIdMap.get(srcId);
-                if (ref) lines.push(`2 SOUR ${ref}`);
+                pushCitation(2, srcId);
             }
         }
 
-        // Source citations on the person (1 SOUR @Sx@).
+        // Source citations on the person (1 SOUR @Sx@ + 2 PAGE).
         for (const srcId of person.sourceIds ?? []) {
-            const ref = sourceIdMap.get(srcId);
-            if (ref) lines.push(`1 SOUR ${ref}`);
+            pushCitation(1, srcId);
+        }
+
+        // Media: portrait first (marked), then attachments. Data URLs are
+        // CONC-wrapped to keep physical lines within the spec limit.
+        const pushMedia = (file: string, title: string, kind: 'photo' | ''): void => {
+            const mime = file.startsWith('data:') ? file.slice(5, file.indexOf(';')) : '';
+            const form = mime.includes('/') ? mime.split('/')[1] : 'jpeg';
+            lines.push('1 OBJE');
+            lines.push(`2 FORM ${form}`);
+            if (title) pushWrapped(lines, 2, 'TITL', title);
+            if (kind) lines.push(`2 _STROM_KIND ${kind}`);
+            pushWrapped(lines, 2, 'FILE', file);
+        };
+        if (person.photo) {
+            pushMedia(person.photo, person.photoOriginalName ?? '', 'photo');
+        }
+        for (const att of person.attachments ?? []) {
+            pushMedia(att.dataUrl, att.name, '');
         }
 
         // Family as spouse (FAMS) - partnerships where this person is a partner
@@ -368,16 +403,28 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
     }
 
     // ==================== SOURCES ====================
-    // reference is written as PAGE and url as WWW to mirror the parser mapping.
+    // Standard 5.5.1: repositories are separate @Rx@ records referenced by
+    // pointer; the reference/page lives on citations (see pushCitation). PAGE
+    // is still emitted on the record too, purely for our own round-trip of
+    // sources that are catalogued but not cited anywhere.
     for (const [sourceId, source] of Object.entries(data.sources ?? {})) {
         const gedcomId = sourceIdMap.get(sourceId);
         if (!gedcomId) continue;
         lines.push(`0 ${gedcomId} SOUR`);
         if (source.title) pushWrapped(lines, 1, 'TITL', source.title);
-        if (source.repository) lines.push(`1 REPO ${escapeGedcomText(source.repository)}`);
+        if (source.repository) {
+            const repoRef = repoIdMap.get(source.repository);
+            if (repoRef) lines.push(`1 REPO ${repoRef}`);
+        }
         if (source.reference) lines.push(`1 PAGE ${escapeGedcomText(source.reference)}`);
         if (source.url) lines.push(`1 WWW ${escapeGedcomText(source.url)}`);
         if (source.note) pushNote(lines, 1, source.note);
+    }
+
+    // ==================== REPOSITORIES ====================
+    for (const [name, repoId] of repoIdMap) {
+        lines.push(`0 ${repoId} REPO`);
+        lines.push(`1 NAME ${escapeGedcomText(name)}`);
     }
 
     // ==================== TRAILER ====================
