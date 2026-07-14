@@ -43,7 +43,7 @@ export const sourcesMethods = uiModule({
         if (!container) return;
         const sources = Object.values(DataManager.getData().sources ?? {});
         if (sources.length === 0) {
-            container.innerHTML = `<div class="sources-empty">${esc(strings.sources.empty)}</div>`;
+            container.innerHTML = `<div class="sources-empty sources-empty-block"><div class="sources-empty-icon">📚</div>${esc(strings.sources.empty)}</div>`;
             return;
         }
         sources.sort((a, b) => a.title.localeCompare(b.title));

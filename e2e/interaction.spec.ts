@@ -96,3 +96,19 @@ test('expanded mode: a multi-marriage person shows all partners inline', async (
     await focusViaSearch(page, 'Mary I');
     await expect(card(page, 'Mary I')).toHaveClass(/focused/);
 });
+
+test('Escape closes dialogs that are not on the dialog stack (book, sources)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await page.evaluate(() => window.Strom.UI.showBookDialog());
+    await expect(page.locator('#book-modal')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#book-modal')).toBeHidden();
+
+    await page.evaluate(() => window.Strom.UI.showSourcesDialog());
+    await expect(page.locator('#sources-modal')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#sources-modal')).toBeHidden();
+    // Nothing resurrected.
+    await expect(page.locator('.modal-overlay.active')).toHaveCount(0);
+});

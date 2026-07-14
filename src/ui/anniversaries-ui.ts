@@ -42,7 +42,7 @@ export const anniversariesUiMethods = uiModule({
         const a = strings.anniversaries;
 
         list.innerHTML = items.length === 0
-            ? `<div class="anniversaries-empty">${a.empty}</div>`
+            ? `<div class="anniversaries-empty"><div class="anniversaries-empty-icon">🎂</div>${a.empty}</div>`
             : items.map(item => {
                 const names = item.personIds.map(id => personName(data.persons[id as PersonId]));
                 const label = this.anniversaryLabel(item, names);

@@ -486,6 +486,15 @@ export const miscMethods = uiModule({
                 this.closePersonMergeDialog();
                 this.closeArchiveSearch();
                 this.closeRelationshipCalculator();
+                // Generic sweep: any remaining plain dialog (book, poster,
+                // sources, snapshots, stats, anniversaries, audit log, ...)
+                // closes too — new dialogs must not depend on being
+                // hand-listed above. Promise-managed prompts are skipped so
+                // their callbacks can't be left dangling.
+                const promiseManaged = new Set(['confirmation-modal', 'password-prompt-modal', 'export-password-modal', 'password-setup-modal']);
+                document.querySelectorAll('.modal-overlay.active').forEach(el => {
+                    if (!promiseManaged.has(el.id)) el.classList.remove('active');
+                });
             }
 
             // Skip remaining shortcuts if modal is open
