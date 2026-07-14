@@ -420,6 +420,7 @@ export interface AppSettings {
     zoomControls?: boolean;  // default: true - floating zoom buttons over the tree
     onThisDay?: boolean;  // default: true - daily "on this day" reminder
     branchColors?: boolean;  // default: false - colour cards by branch vs focus
+    familyButton?: boolean;  // default: false - toolbar shortcut to the family wizard
     senderName?: string;   // collaboration: name shown to relatives in shared files
 }
 

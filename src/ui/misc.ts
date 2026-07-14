@@ -260,6 +260,9 @@ export const miscMethods = uiModule({
         const branchColorsToggle = document.getElementById('branch-colors-toggle') as HTMLInputElement | null;
         if (branchColorsToggle) branchColorsToggle.checked = SettingsManager.isBranchColorsEnabled();
 
+        const familyButtonToggle = document.getElementById('family-button-toggle') as HTMLInputElement | null;
+        if (familyButtonToggle) familyButtonToggle.checked = SettingsManager.isFamilyButtonEnabled();
+
         modal.classList.add('active');
     },
 
@@ -313,6 +316,10 @@ export const miscMethods = uiModule({
             const hidden = mode === 'timeline' || mode === 'fan' || !SettingsManager.isZoomControlsEnabled();
             zoomControls.style.display = hidden ? 'none' : '';
         }
+
+        // Toolbar "Add family" shortcut (opt-in setting).
+        const familyBtn = document.getElementById('toolbar-family-btn');
+        if (familyBtn) familyBtn.style.display = SettingsManager.isFamilyButtonEnabled() ? '' : 'none';
 
         // Branch-colour legend: only when the setting is on and cards are
         // actually shown (family/descendants — not timeline, not fan).

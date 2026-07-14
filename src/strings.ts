@@ -278,6 +278,8 @@ const stringsEN = {
     familyWizard: {
         menu: 'Add family…',
         title: 'Add family',
+        settingLabel: 'Add-family button',
+        settingHint: 'Show an "Add family" button in the toolbar',
         aroundName: (name: string) => `Around ${name}`,
         roles: { father: 'Father', mother: 'Mother', partner: 'Partner', sibling: 'Sibling', child: 'Child' },
         firstName: 'First name',
@@ -1552,6 +1554,8 @@ const stringsCZ: StringsType = {
     familyWizard: {
         menu: 'Přidat rodinu…',
         title: 'Přidat rodinu',
+        settingLabel: 'Tlačítko Přidat rodinu',
+        settingHint: 'Zobrazovat v liště tlačítko „Přidat rodinu"',
         aroundName: (name: string) => `Kolem osoby ${name}`,
         roles: { father: 'Otec', mother: 'Matka', partner: 'Partner', sibling: 'Sourozenec', child: 'Dítě' },
         firstName: 'Jméno',

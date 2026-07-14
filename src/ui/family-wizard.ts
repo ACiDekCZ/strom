@@ -18,6 +18,20 @@ import { uiModule } from './module.js';
 type RowKind = 'father' | 'mother' | 'partner' | 'sibling' | 'child';
 
 export const familyWizardMethods = uiModule({
+    /**
+     * Toolbar "Add family" shortcut: the wizard needs an anchor person, so it
+     * opens around the current focus; on an empty tree it falls back to the
+     * plain add-person dialog.
+     */
+    startFamilyWizardFromToolbar(): void {
+        const focusId = TreeRenderer.getFocusPersonId();
+        if (!focusId || !DataManager.getPerson(focusId)) {
+            this.showAddPersonModal();
+            return;
+        }
+        this.showFamilyWizard(focusId);
+    },
+
     /** Open the wizard for the given anchor person. */
     showFamilyWizard(anchorId: PersonId): void {
         const anchor = DataManager.getPerson(anchorId);

@@ -576,6 +576,11 @@ export const appModeMethods = uiModule({
         this.updateViewModeUI(); // owns the zoom-controls visibility
     },
 
+    toggleFamilyButton(enabled: boolean): void {
+        SettingsManager.setFamilyButton(enabled);
+        this.updateViewModeUI(); // owns the toolbar family-button visibility
+    },
+
     toggleBranchColors(enabled: boolean): void {
         SettingsManager.setBranchColors(enabled);
         TreeRenderer.render();   // re-render to add/remove the stripes

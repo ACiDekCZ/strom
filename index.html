@@ -310,7 +310,10 @@
             /* Absolutely positioned dropdown: the panel must NOT grow the
                search container in-flow — the fixed-height toolbar centers its
                children, so a tall container overflows above the screen. */
-            position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 1200;
+            position: absolute; top: calc(100% + 6px); left: 0; z-index: 1200;
+            /* Wide enough for its content (the status selects overflowed a
+               narrow search box), but never wider than the viewport allows. */
+            min-width: 100%; width: max-content; max-width: min(92vw, 460px);
             padding: 10px; border: 1px solid var(--border-color, #ddd);
             border-radius: 8px; background: var(--card-bg, #fff); box-shadow: 0 4px 16px var(--shadow, rgba(0,0,0,0.15));
             display: flex; flex-direction: column; gap: 6px;
@@ -332,6 +335,7 @@
         @media (max-width: 500px) {
             .search-filters {
                 position: fixed; top: auto; left: 0; right: 0; bottom: 0; margin: 0; z-index: 1500;
+                min-width: 0; width: auto; max-width: none;
                 border-radius: 12px 12px 0 0; box-shadow: 0 -4px 24px rgba(0,0,0,0.3);
             }
         }
@@ -2443,7 +2447,8 @@
             pointer-events: none;
         }
         body.tree-locked .add-person-round { display: none !important; }
-        body.tree-locked .toolbar-buttons button[onclick*="showAddPersonModal"] { display: none !important; }
+        body.tree-locked .toolbar-buttons button[onclick*="showAddPersonModal"],
+        body.tree-locked #toolbar-family-btn { display: none !important; }
         body.tree-locked #mobile-menu button[data-i18n="mobileMenu.addPerson"] { display: none !important; }
 
         /* Existing export tree name */
@@ -5873,6 +5878,7 @@
         <!-- Desktop buttons -->
         <div class="toolbar-buttons desktop-only">
             <button onclick="window.Strom.UI.showAddPersonModal()" data-i18n="toolbar.addPerson"></button>
+            <button id="toolbar-family-btn" style="display:none;" onclick="window.Strom.UI.startFamilyWizardFromToolbar()" data-i18n="familyWizard.title"></button>
         </div>
 
         <!-- Tablet add person (round +) -->
@@ -6382,6 +6388,15 @@
                     <label class="settings-checkbox">
                         <input type="checkbox" id="branch-colors-toggle" onchange="window.Strom.UI.toggleBranchColors(this.checked)">
                         <span data-i18n="branchColors.settingHint"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="familyWizard.settingLabel"></label>
+                <div class="settings-options">
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="family-button-toggle" onchange="window.Strom.UI.toggleFamilyButton(this.checked)">
+                        <span data-i18n="familyWizard.settingHint"></span>
                     </label>
                 </div>
             </div>

@@ -123,6 +123,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Toolbar "Add family" button default OFF (opt-in). */
+    isFamilyButtonEnabled(): boolean {
+        return this.settings.familyButton === true;
+    }
+
+    setFamilyButton(enabled: boolean): void {
+        this.settings.familyButton = enabled;
+        this.save();
+    }
+
     /** Collaboration: sender name shown to relatives in shared files. */
     getSenderName(): string {
         return this.settings.senderName ?? '';

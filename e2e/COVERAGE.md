@@ -107,6 +107,7 @@ the table honest.
 | Tree manager: row ⋯ menu, Open button, active badge | `tree.spec.ts` | covered | menu opens, rename item works, Open switches tree and closes manager |
 | Tree manager: search box for long lists | — | partial | rendering gated at ≥6 trees; filtering is a trivial name includes() |
 | Fan chart view (sectors, refocus, gen selector, add-parent slot) | `fan.spec.ts` + `fan-chart.test.ts` (unit) | covered | 4th view mode; ahnentafel model unit-tested incl. empty-slot rule |
+| Toolbar Add-family button (opt-in setting) | `family-wizard.spec.ts` | covered | hidden by default; setting reveals; opens wizard on focus |
 
 ## Deliberately not covered (`n-a`)
 

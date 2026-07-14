@@ -42,3 +42,22 @@ test('add a whole family via the wizard and undo it in one step', async ({ page 
     }
     await expect(card(page, 'Ego')).toBeVisible();
 });
+
+test('optional toolbar Add-family button opens the wizard around the focus', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    // Hidden by default; the setting reveals it.
+    const btn = page.locator('#toolbar-family-btn');
+    await expect(btn).toBeHidden();
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    await page.locator('#family-button-toggle').check();
+    await page.keyboard.press('Escape');
+    await expect(btn).toBeVisible();
+
+    // Opens the wizard anchored to the focused person.
+    await btn.click();
+    const wizard = page.locator('#family-wizard-modal');
+    await expect(wizard).toBeVisible();
+    await expect(page.locator('#family-wizard-anchor')).toContainText('Jan');
+});
