@@ -26,7 +26,10 @@ export const kinshipUiMethods = uiModule({
         overlay.id = 'kinship-modal';
         overlay.innerHTML = `
             <div class="modal kinship-modal">
-                <h2>${strings.kinship.title}</h2>
+                <div class="modal-header">
+                    <h2>${strings.kinship.title}</h2>
+                    <button class="close-btn" id="kinship-close-x">&times;</button>
+                </div>
                 <p class="kinship-from">${strings.kinship.fromLabel}: <strong>${personName(fromId)}</strong></p>
                 <div id="kinship-picker-container">
                     <label>${strings.kinship.pickLabel}</label>
@@ -46,6 +49,10 @@ export const kinshipUiMethods = uiModule({
         const close = () => this.closeRelationshipCalculator();
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
         (overlay.querySelector('#kinship-close') as HTMLButtonElement).onclick = close;
+        (overlay.querySelector('#kinship-close-x') as HTMLButtonElement).onclick = close;
+        // ESC support via the shared dialog stack (see misc.ts keyboard handler).
+        this.clearDialogStack();
+        this.pushDialog('kinship-modal');
 
         const highlightBtn = overlay.querySelector('#kinship-highlight') as HTMLButtonElement;
         highlightBtn.onclick = () => {
@@ -93,5 +100,6 @@ export const kinshipUiMethods = uiModule({
             this.kinshipPicker = null;
         }
         document.getElementById('kinship-modal')?.remove();
+        this.dialogStack = this.dialogStack.filter(d => d !== 'kinship-modal');
     },
 });

@@ -508,6 +508,12 @@
             flex-shrink: 0;
             color: #666;
         }
+        /* Long-name fitting: the renderer shrinks overflowing names in two
+           steps before the ellipsis kicks in (see fitCardNames). */
+        .person-card .name .name-text.fit-tight { font-size: 12px; }
+        .person-card .name .name-text.fit-tighter { font-size: 10.5px; letter-spacing: -0.2px; }
+        .person-card .surname.fit-tight { font-size: 10.5px; }
+        .person-card .surname.fit-tighter { font-size: 9.5px; letter-spacing: -0.2px; }
         .person-card .surname {
             font-size: 12px;
             color: var(--text-light);
@@ -552,7 +558,12 @@
             line-height: 1;
             transition: transform 0.15s, background 0.15s;
         }
-        .person-card:hover .add-btn { display: flex; }
+        /* Hover-reveal only on devices with a real pointer. On touch, revealing
+           content on :hover would swallow the first tap (iOS), breaking the
+           "first tap opens the person menu" behavior. */
+        @media (hover: hover) {
+            .person-card:hover .add-btn { display: flex; }
+        }
         .add-btn:hover {
             background: var(--primary-dark);
             transform: scale(1.15);
@@ -1492,8 +1503,8 @@
             justify-content: center;
             transition: all 0.2s;
         }
-        .person-card:hover .rel-link-icon {
-            display: flex;
+        @media (hover: hover) {
+            .person-card:hover .rel-link-icon { display: flex; }
         }
         .rel-link-icon:hover {
             background: var(--primary);
@@ -5408,7 +5419,9 @@
             background: rgba(240,240,240,0.92);
             color: #1a1a1a;
         }
-        .person-card:hover .card-tooltip { display: block; }
+        @media (hover: hover) {
+            .person-card:hover .card-tooltip { display: block; }
+        }
         .person-card:has(button:hover) .card-tooltip,
         .person-card:has(.rel-link-icon:hover) .card-tooltip,
         .person-card:has(.cross-tree-badge:hover) .card-tooltip { display: none !important; }
@@ -5986,6 +5999,15 @@
                     <label class="settings-checkbox">
                         <input type="checkbox" id="minimap-toggle" onchange="window.Strom.UI.toggleMinimap(this.checked)">
                         <span data-i18n="minimap.settingHint"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="zoomControls.settingLabel"></label>
+                <div class="settings-options">
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="zoom-controls-toggle" onchange="window.Strom.UI.toggleZoomControls(this.checked)">
+                        <span data-i18n="zoomControls.settingHint"></span>
                     </label>
                 </div>
             </div>

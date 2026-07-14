@@ -107,3 +107,14 @@ test('deleting the last person returns the empty state', async ({ page }) => {
     await expect(page.locator('#empty-state')).toBeVisible();
     expect(await realPersonCount(page)).toBe(0);
 });
+
+test('a long first name shrinks to fit the card instead of truncating', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Johannes Jacobus', 'Habsburg');
+
+    const nameText = card(page, 'Johannes').locator('.name-text');
+    await expect(nameText).toHaveClass(/fit-tight/);
+    // The full name stays readable (not cut off): no horizontal overflow left.
+    const fits = await nameText.evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
+    expect(fits).toBe(true);
+});

@@ -9,7 +9,7 @@ import { PersonId } from '../types.js';
 import { uiModule } from './module.js';
 
 /** Coarse pointer = touch device; used to gate touch-only behaviour. */
-function isCoarsePointer(): boolean {
+export function isCoarsePointer(): boolean {
     return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 }
 

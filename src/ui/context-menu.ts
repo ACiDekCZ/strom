@@ -10,6 +10,7 @@ import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import { PersonId, RelationType } from '../types.js';
 import { uiModule } from './module.js';
+import { isCoarsePointer } from './bottom-sheet.js';
 
 /** One entry in the person action menu (context menu / bottom sheet). */
 export interface PersonMenuAction {
@@ -79,15 +80,18 @@ export const contextMenuMethods = uiModule({
                 break;
             case 'focus':
                 // "Focus" always returns to the family view so the user is not
-                // stranded inside the descendants chart.
+                // stranded inside the descendants chart. Mode first (no render),
+                // then the single setFocus render.
                 if (TreeRenderer.getViewMode() === 'descendants') {
-                    TreeRenderer.setViewMode('family');
+                    TreeRenderer.presetViewMode('family');
                 }
                 TreeRenderer.setFocus(personId);
                 break;
             case 'descendants':
+                // Set the mode first (no render), then let setFocus do the
+                // single render — it fits the descendants chart afterwards.
+                TreeRenderer.presetViewMode('descendants');
                 TreeRenderer.setFocus(personId);
-                TreeRenderer.setViewMode('descendants');
                 break;
             case 'relationship':
                 this.showRelationshipCalculator(personId);
@@ -128,6 +132,14 @@ export const contextMenuMethods = uiModule({
     showContextMenu(personId: PersonId, event: MouseEvent): void {
         event.preventDefault();
         event.stopPropagation();
+
+        // Touch devices: the first tap opens the person menu directly, same as
+        // a desktop click — but as the mobile bottom sheet (same action list).
+        if (isCoarsePointer()) {
+            this.hideContextMenu();
+            this.showPersonBottomSheet(personId);
+            return;
+        }
 
         this.hideContextMenu();
         const actions = this.getPersonMenuActions(personId);

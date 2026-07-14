@@ -68,7 +68,10 @@ export const archivesUiMethods = uiModule({
         overlay.id = 'archives-modal';
         overlay.innerHTML = `
             <div class="modal archives-modal">
-                <h2>${strings.archives.title}</h2>
+                <div class="modal-header">
+                    <h2>${strings.archives.title}</h2>
+                    <button class="close-btn" id="archives-close-x">&times;</button>
+                </div>
                 <p class="kinship-from"><strong>${name}</strong>${places.length ? ` · ${places.join(', ')}` : ''}</p>
                 <h3>${strings.archives.internationalSection}</h3>
                 ${link(familySearchUrl(person), 'FamilySearch', strings.archives.familySearchHint)}
@@ -80,11 +83,17 @@ export const archivesUiMethods = uiModule({
             </div>
         `;
         document.body.appendChild(overlay);
-        overlay.onclick = (e) => { if (e.target === overlay) this.closeArchiveSearch(); };
-        (overlay.querySelector('#archives-close') as HTMLButtonElement).onclick = () => this.closeArchiveSearch();
+        const close = () => this.closeArchiveSearch();
+        overlay.onclick = (e) => { if (e.target === overlay) close(); };
+        (overlay.querySelector('#archives-close') as HTMLButtonElement).onclick = close;
+        (overlay.querySelector('#archives-close-x') as HTMLButtonElement).onclick = close;
+        // ESC support via the shared dialog stack (see misc.ts keyboard handler).
+        this.clearDialogStack();
+        this.pushDialog('archives-modal');
     },
 
     closeArchiveSearch(): void {
         document.getElementById('archives-modal')?.remove();
+        this.dialogStack = this.dialogStack.filter(d => d !== 'archives-modal');
     },
 });

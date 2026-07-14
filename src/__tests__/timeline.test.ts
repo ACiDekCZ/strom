@@ -102,3 +102,17 @@ it('a deceased person without a death date gets a stub, not a bar to today', () 
     expect(model.rows[0].endKnown).toBe(false);
     expect(model.rows[0].endYear).toBe(920); // stub at birth year, no invented span
 });
+
+it('an unknown-death bar extends to the last known event (wedding)', () => {
+    const a = person('a', 'Boleslav', 'male', { birthDate: '915', partnerships: ['u1'] });
+    const b = person('b', 'Biagota', 'female', { birthDate: '920', partnerships: ['u1'] });
+    const u1: Partnership = {
+        id: 'u1' as PartnershipId, person1Id: 'a' as PersonId, person2Id: 'b' as PersonId,
+        childIds: [], status: 'married', startDate: '945',
+    };
+    const d = data([a, b], [u1]);
+    const model = computeTimelineModel(d, ids(d), TODAY_YEAR);
+    const rowB = model.rows.find(r => r.personId === 'b')!;
+    expect(rowB.endKnown).toBe(false);
+    expect(rowB.endYear).toBe(945); // wedding is the last trace of her life
+});

@@ -78,3 +78,26 @@ test('audit log records a mutation when enabled', async ({ page }) => {
     // At least one entry was recorded.
     await expect(modal.locator('#audit-log-list .audit-log-entry, #audit-log-list li').first()).toBeVisible();
 });
+
+test('floating zoom buttons can be turned off in settings', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    const zoomControls = page.locator('.zoom-controls');
+    await expect(zoomControls).toBeVisible();
+
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    const settings = page.locator('#settings-modal');
+    const toggle = settings.locator('#zoom-controls-toggle');
+    await expect(toggle).toBeChecked();
+    await toggle.uncheck();
+    await expect(zoomControls).toBeHidden();
+    await page.keyboard.press('Escape');
+    await expect(settings).toBeHidden();
+    await expect(zoomControls).toBeHidden();
+
+    // Turning it back on restores the buttons.
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    await toggle.check();
+    await expect(zoomControls).toBeVisible();
+});

@@ -294,11 +294,14 @@ class TreeRendererClass {
             }
         }
 
-        // Render async, then center on the focused person once cards are in DOM
+        // Render async, then center once cards are in DOM. The descendants
+        // chart fits the whole chart instead (focus sits at its top edge).
         const focusId = personId;
         void this.renderInternal().then(() => {
             this.updateFocusUI();
-            if (focusId) {
+            if (this.viewMode === 'descendants') {
+                this.centerForViewMode();
+            } else if (focusId) {
                 ZoomPan.centerOnPerson(focusId);
             }
         });
@@ -330,17 +333,36 @@ class TreeRendererClass {
         return this.viewMode;
     }
 
+    /**
+     * Set + persist the view mode WITHOUT rendering. For callers that follow
+     * up with setFocus (which renders) — avoids two overlapping renders.
+     */
+    presetViewMode(mode: 'family' | 'descendants' | 'timeline'): void {
+        if (this.viewMode === mode) return;
+        this.viewMode = mode;
+        this.persistViewMode();
+    }
+
     /** Switch the display view mode and re-render. Persisted per tree. */
     setViewMode(mode: 'family' | 'descendants' | 'timeline'): void {
         if (this.viewMode === mode) return;
         this.viewMode = mode;
         this.persistViewMode();
-        this.render();
         // The modes lay the tree out in different coordinate frames — the
         // pan/zoom state from the previous mode can leave every card outside
         // the viewport (reported on a live tree: switching to descendants
-        // showed an empty canvas). Timeline has its own scroll container.
-        if (mode !== 'timeline') ZoomPan.centerOnFocusWithContext();
+        // showed an empty canvas). Center AFTER the async render finishes so
+        // the new cards are measurable. Timeline has its own scroll container.
+        void this.renderInternal().then(() => this.centerForViewMode());
+    }
+
+    /** Re-center the viewport for the current view mode (after a render). */
+    centerForViewMode(): void {
+        if (this.viewMode === 'timeline') return;
+        // The descendants chart is focus-at-top — fitting the whole chart in
+        // the viewport reads much better than centering on the focus card.
+        if (this.viewMode === 'descendants') ZoomPan.fitToScreen();
+        else ZoomPan.centerOnFocusWithContext();
     }
 
     private viewModeStorageKey(): string | null {
@@ -788,8 +810,13 @@ class TreeRendererClass {
 
             let html = '';
 
+            // The descendants chart hides relatives BY DESIGN — "hidden relative"
+            // badges would be noise there, and their click action (re-focus)
+            // changes nothing inside the filtered view. Skip them entirely.
+            const showHiddenBadges = this.viewMode !== 'descendants';
+
             // Add branch tabs - separate button for each direction (displayed side by side)
-            if (hasHiddenParents || hasHiddenChildren || hasHiddenSiblings) {
+            if (showHiddenBadges && (hasHiddenParents || hasHiddenChildren || hasHiddenSiblings)) {
                 html += `<div class="branch-tabs">`;
                 if (hasHiddenParents) {
                     const hiddenParents = person.parentIds
@@ -829,7 +856,7 @@ class TreeRendererClass {
 
             // Add hidden relationship indicators (above card on left, mirror of branch tabs)
             // Gen >= -1 persons are auto-expanded, so badges only appear for ancestors (gen <= -2)
-            if (hiddenPartnersCount > 0 || hiddenFamiliesCount > 0) {
+            if (showHiddenBadges && (hiddenPartnersCount > 0 || hiddenFamiliesCount > 0)) {
                 html += `<div class="hidden-indicators">`;
                 if (hiddenPartnersCount > 0) {
                     // Build rich tooltip with list of hidden partners
@@ -1014,6 +1041,23 @@ class TreeRendererClass {
 
             canvas.appendChild(card);
         }
+
+        this.fitCardNames(canvas);
+    }
+
+    /**
+     * Long names: shrink the font (two steps) before falling back to the CSS
+     * ellipsis, so full names stay readable on the fixed-size cards. One pass
+     * after all cards are in the DOM (needs real text measurements).
+     */
+    private fitCardNames(canvas: HTMLElement): void {
+        const texts = canvas.querySelectorAll<HTMLElement>(
+            '.person-card .name-text, .person-card .surname');
+        texts.forEach(el => {
+            if (el.scrollWidth <= el.clientWidth) return;
+            el.classList.add('fit-tight');
+            if (el.scrollWidth > el.clientWidth) el.classList.add('fit-tighter');
+        });
     }
 
     /** True when the person is currently rendered on the canvas. */
@@ -1379,9 +1423,18 @@ class TreeRendererClass {
         const empty = model.rows.length === 0
             ? `<div class="tl-omitted">${this.escapeHtml(S.empty)}</div>` : '';
 
+        // Fade-out gradients for bars with an unknown end (deceased, no death date).
+        const fadeStops = (color: string) =>
+            `<stop offset="0" stop-color="${color}" stop-opacity="0.85"/>`
+            + `<stop offset="1" stop-color="${color}" stop-opacity="0"/>`;
+        const defs = `<defs>`
+            + `<linearGradient id="tl-fade-male" x1="0" y1="0" x2="1" y2="0">${fadeStops('#8fb8de')}</linearGradient>`
+            + `<linearGradient id="tl-fade-female" x1="0" y1="0" x2="1" y2="0">${fadeStops('#e8a0bf')}</linearGradient>`
+            + `</defs>`;
+
         container.innerHTML = `${omitted}${empty}`
             + `<svg class="timeline-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img">`
-            + `${grid}${rows}</svg>`;
+            + `${defs}${grid}${rows}</svg>`;
     }
 
     /** SVG for one timeline row (label + life-bar + event dots). */
@@ -1412,6 +1465,12 @@ class TreeRendererClass {
         const arrow = r.isLiving
             ? `<polygon points="${x2.toFixed(1)},${barY} ${(x2 + 7).toFixed(1)},${(barY + 7).toFixed(1)} ${x2.toFixed(1)},${(barY + 14)}" class="tl-arrow"/>`
             : '';
+        // Unknown end: fade the bar out to the right ("we don't know further").
+        const fadeW = Math.max(0, Math.min(26, rowWidth - x2 - 2));
+        const fade = !r.endKnown && fadeW > 4
+            ? `<rect x="${x2.toFixed(1)}" y="${barY}" width="${fadeW.toFixed(1)}" height="14"`
+              + ` fill="url(#tl-fade-${r.gender})"/>`
+            : '';
 
         return `<g class="timeline-bar${focused}${highlight}" data-person-id="${this.escapeHtml(r.personId)}">`
             + `<rect x="0" y="${y}" width="${rowWidth}" height="${rowH}" class="tl-rowhit" fill="transparent"/>`
@@ -1419,7 +1478,7 @@ class TreeRendererClass {
             + `<div xmlns="http://www.w3.org/1999/xhtml" class="tl-name" title="${nameEsc}">`
             + `<span class="tl-nm">${nameEsc}</span> <span class="tl-yr">${yearsEsc}</span></div></foreignObject>`
             + `<rect x="${x1.toFixed(1)}" y="${barY}" width="${w.toFixed(1)}" height="14" rx="3" fill="${color}" class="tl-bar-rect"/>`
-            + `${arrow}${dots}</g>`;
+            + `${fade}${arrow}${dots}</g>`;
     }
 
     private timelineEventLabel(ev: TimelineEvent, S: typeof strings.timeline): string {

@@ -71,10 +71,6 @@ export function computeTimelineModel(
 
         const deathYear = yearOf(p.deathDate);
         const living = isLivingPerson(p, todayYear);
-        // A living person's bar runs to today. A deceased person without a
-        // recorded death has an UNKNOWN end — draw a stub at the birth year
-        // instead of inventing a bar to the present.
-        const endYear = living ? todayYear : (deathYear ?? startYear);
 
         const events: TimelineEvent[] = [];
         for (const ev of p.events ?? []) {
@@ -86,6 +82,13 @@ export function computeTimelineModel(
             events.push({ year: wy, type: 'wedding' });
         }
         events.sort((a, b) => a.year - b.year);
+
+        // A living person's bar runs to today. A deceased person without a
+        // recorded death has an UNKNOWN end — the bar runs to the last known
+        // event (wedding, …) instead of inventing a span to the present; the
+        // renderer marks the open end with a fade-out.
+        const lastEventYear = events.length > 0 ? events[events.length - 1].year : startYear;
+        const endYear = living ? todayYear : (deathYear ?? Math.max(startYear, lastEventYear));
 
         rows.push({
             personId: id,

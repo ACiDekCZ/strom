@@ -93,6 +93,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Floating zoom buttons default ON (undefined = enabled). */
+    isZoomControlsEnabled(): boolean {
+        return this.settings.zoomControls !== false;
+    }
+
+    setZoomControls(enabled: boolean): void {
+        this.settings.zoomControls = enabled;
+        this.save();
+    }
+
     /** "On this day" reminder default ON (undefined = enabled). */
     isOnThisDayEnabled(): boolean {
         return this.settings.onThisDay !== false;

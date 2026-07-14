@@ -73,3 +73,23 @@ test('descendants view recenters — cards stay visible after prior pan/zoom', a
         });
     }).toBeGreaterThan(0);
 });
+
+test('descendants view: hidden-relative badges are not rendered', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
+    await cardAction(page, 'Jan', 'focus');
+    await addRelation(page, 'Jan', 'parent', 'Josef', 'Novak');
+    await cardAction(page, 'Jan', 'focus');
+
+    // In the descendants chart Jan's parent Josef is hidden by design —
+    // no ▲/◆/▼ branch tabs may appear (their action does nothing there).
+    await page.locator('#view-mode-descendants').click();
+    await expect(card(page, 'Jan')).toBeVisible();
+    await expect(page.locator('.person-card .branch-tab')).toHaveCount(0);
+    await expect(page.locator('.person-card .hidden-partners-btn')).toHaveCount(0);
+
+    // Back in family view the badges return where applicable.
+    await page.locator('#view-mode-family').click();
+    await expect(card(page, 'Josef')).toBeVisible();
+});

@@ -417,6 +417,7 @@ export interface AppSettings {
     auditLog: boolean;  // default: false - whether audit log is enabled
     suggestDuplicates?: boolean;  // default: true - hint similar persons on entry
     minimap?: boolean;  // default: true - overview minimap for large trees
+    zoomControls?: boolean;  // default: true - floating zoom buttons over the tree
     onThisDay?: boolean;  // default: true - daily "on this day" reminder
     senderName?: string;   // collaboration: name shown to relatives in shared files
 }

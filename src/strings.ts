@@ -280,7 +280,9 @@ const stringsEN = {
         zoomIn: 'Zoom In',
         zoomOut: 'Zoom Out',
         reset: 'Reset View',
-        fitToScreen: 'Fit to Screen'
+        fitToScreen: 'Fit to Screen',
+        settingLabel: 'Floating buttons',
+        settingHint: 'Show the floating zoom buttons over the tree',
     },
 
     // Labels
@@ -1462,7 +1464,9 @@ const stringsCZ: StringsType = {
         zoomIn: 'Přiblížit',
         zoomOut: 'Oddálit',
         reset: 'Obnovit pohled',
-        fitToScreen: 'Zobrazit vše'
+        fitToScreen: 'Zobrazit vše',
+        settingLabel: 'Plovoucí tlačítka',
+        settingHint: 'Zobrazovat plovoucí tlačítka přiblížení nad stromem',
     },
 
     // Labels

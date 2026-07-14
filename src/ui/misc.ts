@@ -251,6 +251,9 @@ export const miscMethods = uiModule({
         const minimapToggle = document.getElementById('minimap-toggle') as HTMLInputElement | null;
         if (minimapToggle) minimapToggle.checked = SettingsManager.isMinimapEnabled();
 
+        const zoomControlsToggle = document.getElementById('zoom-controls-toggle') as HTMLInputElement | null;
+        if (zoomControlsToggle) zoomControlsToggle.checked = SettingsManager.isZoomControlsEnabled();
+
         const otdToggle = document.getElementById('on-this-day-toggle') as HTMLInputElement | null;
         if (otdToggle) otdToggle.checked = SettingsManager.isOnThisDayEnabled();
 
@@ -300,8 +303,12 @@ export const miscMethods = uiModule({
 
         // The floating zoom/pan controls act on the tree canvas — in the
         // timeline (its own scroll container) they do nothing, so hide them.
+        // The user can also turn them off entirely in settings.
         const zoomControls = document.querySelector('.zoom-controls') as HTMLElement | null;
-        if (zoomControls) zoomControls.style.display = mode === 'timeline' ? 'none' : '';
+        if (zoomControls) {
+            const hidden = mode === 'timeline' || !SettingsManager.isZoomControlsEnabled();
+            zoomControls.style.display = hidden ? 'none' : '';
+        }
     },
 
     setLanguage(language: LanguageSetting): void {
@@ -365,6 +372,17 @@ export const miscMethods = uiModule({
                     // Special handling for relation-modal
                     if (currentDialog === 'relation-modal') {
                         this.closeRelationModal();
+                        return;
+                    }
+
+                    // Dynamic overlays (built per-open): full close removes the
+                    // element + its stack entry, not just the 'active' class.
+                    if (currentDialog === 'archives-modal') {
+                        this.closeArchiveSearch();
+                        return;
+                    }
+                    if (currentDialog === 'kinship-modal') {
+                        this.closeRelationshipCalculator();
                         return;
                     }
 
@@ -434,6 +452,8 @@ export const miscMethods = uiModule({
                 this.closeDefaultPersonDialog();
                 this.closeTreeManagerDialog();
                 this.closePersonMergeDialog();
+                this.closeArchiveSearch();
+                this.closeRelationshipCalculator();
             }
 
             // Skip remaining shortcuts if modal is open

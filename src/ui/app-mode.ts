@@ -571,6 +571,11 @@ export const appModeMethods = uiModule({
         this.updateMinimap();
     },
 
+    toggleZoomControls(enabled: boolean): void {
+        SettingsManager.setZoomControls(enabled);
+        this.updateViewModeUI(); // owns the zoom-controls visibility
+    },
+
     toggleOnThisDay(enabled: boolean): void {
         SettingsManager.setOnThisDay(enabled);
         if (!enabled) this.dismissOnThisDay();

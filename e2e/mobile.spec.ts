@@ -53,3 +53,15 @@ test('pinch changes the zoom level', async ({ page }) => {
 
     await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).not.toBe(before);
 });
+
+test('a single tap on a card opens the bottom sheet (first tap = person menu)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    await page.locator('.person-card.focused').tap();
+
+    const sheet = page.locator('.bottom-sheet');
+    await expect(sheet).toBeVisible();
+    // The desktop floating context menu must NOT appear on touch.
+    await expect(page.locator('.context-menu')).toHaveCount(0);
+});

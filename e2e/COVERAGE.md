@@ -88,6 +88,17 @@ the table honest.
 | About dialog version | `smoke.spec.ts`, `cs.spec.ts` | covered | matches `package.json` |
 | PWA offline indicator | `pwa.spec.ts` | covered | toolbar badge toggles with `context.setOffline` |
 | PWA service-worker registration | — (`pwa.test.ts` unit) | partial | registration gate is unit-tested per AppMode; the SW is only served on the PWA host (`stromapp.info/run/`), which the localhost e2e server cannot emulate, so live register/offline-serve is not driven end-to-end |
+| Search filter panel position + Escape close | `search-filter.spec.ts` | covered | regression: panel used to overflow above the viewport |
+| Descendants view recenters after pan/zoom | `descendants-view.spec.ts` | covered | regression: empty canvas after mode switch |
+| Collaboration round-trip (share → welcome → collab bar → reply merge offer) | `share.spec.ts` | covered | full two-context flow incl. in-app HTML import of the reply |
+| Plain export shows no collaboration surfaces | `share.spec.ts` | covered | backwards compatibility |
+| Archives + kinship dialogs: header X and Escape close | `search-kinship-archives.spec.ts` | covered | unified with the standard modal pattern (dialog stack) |
+| Floating zoom buttons setting (on/off) | `settings-lock.spec.ts` | covered | settings toggle hides/restores `.zoom-controls` |
+| Descendants view hides hidden-relative badges | `descendants-view.spec.ts` | covered | branch tabs / +N badges do nothing in the filtered chart |
+| Long names shrink to fit the card | `person-crud.spec.ts` | covered | two font steps before the ellipsis |
+| Mobile: single tap opens the bottom sheet | `mobile.spec.ts` | covered | first tap = person menu, no desktop context menu |
+| Timeline: wheel scrolls natively (no canvas zoom) | `timeline.spec.ts` | covered | wheel over the timeline leaves ZoomPan scale unchanged |
+| Timeline: unknown-death bar to last event + fade | — (`timeline.test.ts` unit) | partial | model extension unit-tested; the fade is SVG cosmetics |
 
 ## Deliberately not covered (`n-a`)
 
@@ -98,7 +109,3 @@ the table honest.
 | Debug panels / `__*_DEBUG` flags | developer-only, not user-facing |
 | Cross-tree presence badge navigation | requires a specific multi-tree layout; low data-loss risk |
 | Mobile-only controls (`.add-person-round`) | responsive; the suite runs at desktop width |
-| Search filter panel position + Escape close | `search-filter.spec.ts` | covered | regression: panel used to overflow above the viewport |
-| Descendants view recenters after pan/zoom | `descendants-view.spec.ts` | covered | regression: empty canvas after mode switch |
-| Collaboration round-trip (share → welcome → collab bar → reply merge offer) | `share.spec.ts` | covered | full two-context flow incl. in-app HTML import of the reply |
-| Plain export shows no collaboration surfaces | `share.spec.ts` | covered | backwards compatibility |

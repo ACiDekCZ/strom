@@ -94,6 +94,8 @@ class ZoomPanClass {
     }
 
     private onWheel(e: WheelEvent): void {
+        // Timeline view scrolls natively — never hijack its wheel events.
+        if ((e.target as HTMLElement).closest?.('.timeline-container')) return;
         e.preventDefault();
 
         const container = document.getElementById('tree-container');
@@ -117,7 +119,9 @@ class ZoomPanClass {
         const target = e.target as HTMLElement;
 
         // Allow default behavior on person cards (for click/tap to work)
-        if (target.closest('.person-card') || target.closest('.context-menu')) {
+        // and inside the timeline (native touch scrolling).
+        if (target.closest('.person-card') || target.closest('.context-menu')
+            || target.closest('.timeline-container')) {
             // Don't interfere with person card interactions
             return;
         }
@@ -148,6 +152,8 @@ class ZoomPanClass {
     }
 
     private onTouchMove(e: TouchEvent): void {
+        // Timeline view scrolls/zooms natively.
+        if ((e.target as HTMLElement).closest?.('.timeline-container')) return;
         if (e.touches.length === 1 && this.touchState) {
             const touch = e.touches[0];
             const dx = touch.clientX - this.touchState.startX;
@@ -239,6 +245,7 @@ class ZoomPanClass {
 
     private isInteractiveElement(target: HTMLElement): boolean {
         return !!(
+            target.closest('.timeline-container') ||
             target.closest('.person-card') ||
             target.closest('.context-menu') ||
             target.closest('.modal') ||

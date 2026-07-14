@@ -41,3 +41,17 @@ test('timeline hides the floating zoom controls (it scrolls natively)', async ({
     await page.locator('#view-mode-family').click();
     await expect(page.locator('.zoom-controls')).toBeVisible();
 });
+
+test('mouse wheel over the timeline scrolls it instead of zooming the tree', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.locator('#view-mode-timeline').click();
+    await expect(page.locator('#timeline-container')).toBeVisible();
+
+    const before = await page.evaluate(() => window.Strom.ZoomPan.getScale());
+    await page.locator('#timeline-container').hover();
+    await page.mouse.wheel(0, 240);
+    // The wheel must NOT be hijacked by the canvas zoom.
+    const after = await page.evaluate(() => window.Strom.ZoomPan.getScale());
+    expect(after).toBe(before);
+});

@@ -61,3 +61,34 @@ test('archive search gates Czech portals by place relevance (EN UI)', async ({ p
     await expect(modal).toBeVisible();
     await expect(modal).toContainText('Czech registers');
 });
+
+test('archives and kinship dialogs close via the header X and Escape', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    // Archives: header X closes.
+    await cardAction(page, 'Jan', 'archives');
+    const archives = page.locator('#archives-modal');
+    await expect(archives).toBeVisible();
+    await archives.locator('.close-btn').click();
+    await expect(archives).toBeHidden();
+
+    // Archives: Escape closes.
+    await cardAction(page, 'Jan', 'archives');
+    await expect(archives).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(archives).toBeHidden();
+
+    // Kinship: header X closes.
+    await cardAction(page, 'Jan', 'relationship');
+    const kinship = page.locator('#kinship-modal');
+    await expect(kinship).toBeVisible();
+    await kinship.locator('.close-btn').click();
+    await expect(kinship).toBeHidden();
+
+    // Kinship: Escape closes.
+    await cardAction(page, 'Jan', 'relationship');
+    await expect(kinship).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(kinship).toBeHidden();
+});
