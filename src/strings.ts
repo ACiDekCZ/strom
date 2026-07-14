@@ -74,6 +74,7 @@ const stringsEN = {
     // Family book
     book: {
         menu: 'Family book',
+        menuDesc: 'Printable book: chapters by family, photos, sources and a person index',
         title: 'Family Book',
         dialogTitle: 'Family book',
         subtitle: 'The book of the family',
@@ -302,7 +303,9 @@ const stringsEN = {
     // File System Access (work over a file on disk)
     fileAccess: {
         saveToFile: 'Save to file…',
+        saveToFileDesc: 'Link this tree to a file on disk — then just press Ctrl+S to save into it',
         openFromFile: 'Open from file…',
+        openFromFileDesc: 'Open a JSON file and keep it linked, so changes save back into it',
         save: 'Save',
         unlink: 'Detach file',
         indicator: 'Linked to a file',
@@ -630,6 +633,13 @@ const stringsEN = {
     },
 
     // About dialog
+    // Small UI tooltips wired via data-i18n-title
+    uiTips: {
+        centerOnFocus: 'Center on the focused person',
+        showStats: 'Show tree statistics',
+        embeddedInfo: 'Info',
+    },
+
     about: {
         title: 'About Strom',
         version: 'Version',
@@ -1335,6 +1345,7 @@ const stringsCZ: StringsType = {
     // Family book
     book: {
         menu: 'Kniha rodu',
+        menuDesc: 'Tisknutelná kniha: kapitoly po rodinách, fotky, prameny a rejstřík osob',
         title: 'Kniha rodu',
         dialogTitle: 'Kniha rodu',
         subtitle: 'Kniha rodu',
@@ -1563,7 +1574,9 @@ const stringsCZ: StringsType = {
     // File System Access (práce nad souborem na disku)
     fileAccess: {
         saveToFile: 'Uložit do souboru…',
+        saveToFileDesc: 'Propojí strom se souborem na disku — pak stačí ukládat klávesou Ctrl+S',
         openFromFile: 'Otevřít ze souboru…',
+        openFromFileDesc: 'Otevře JSON soubor a nechá ho propojený, změny se ukládají zpět do něj',
         save: 'Uložit',
         unlink: 'Odpojit soubor',
         indicator: 'Propojeno se souborem',
@@ -1891,6 +1904,13 @@ const stringsCZ: StringsType = {
     },
 
     // About dialog
+    // Small UI tooltips wired via data-i18n-title
+    uiTips: {
+        centerOnFocus: 'Vycentrovat na zaměřenou osobu',
+        showStats: 'Zobrazit statistiku stromu',
+        embeddedInfo: 'Informace',
+    },
+
     about: {
         title: 'O aplikaci Strom',
         version: 'Verze',

@@ -5794,7 +5794,7 @@
 </head>
 <body>
     <div class="toolbar">
-        <h1><span class="app-logo" onclick="window.Strom.UI.showAboutDialog()" title="About Strom">🌳</span> <span class="toolbar-title" data-i18n="toolbar.title"></span></h1>
+        <h1><span class="app-logo" onclick="window.Strom.UI.showAboutDialog()" data-i18n-title="about.title">🌳</span> <span class="toolbar-title" data-i18n="toolbar.title"></span></h1>
         <span id="offline-indicator" class="offline-indicator" style="display:none;" data-i18n="pwa.offline"></span>
         <button id="file-link-indicator" class="file-link-indicator" style="display:none;" onclick="window.Strom.UI.saveActiveTreeToFile()">⤓</button>
         <div class="search-container">
@@ -5830,8 +5830,8 @@
 
         <!-- Toolbar Focus Info (tablet landscape) -->
         <div class="toolbar-focus tablet-only">
-            <strong id="toolbar-focus-name" onclick="window.Strom.ZoomPan.centerOnFocusWithContext()" style="cursor:pointer;" title="Vycentrovat"></strong>
-            <span id="toolbar-focus-count" class="focus-count" onclick="window.Strom.UI.showActiveTreeStats()" style="cursor:pointer;" title="Zobrazit statistiku"></span>
+            <strong id="toolbar-focus-name" onclick="window.Strom.ZoomPan.centerOnFocusWithContext()" style="cursor:pointer;" data-i18n-title="uiTips.centerOnFocus"></strong>
+            <span id="toolbar-focus-count" class="focus-count" onclick="window.Strom.UI.showActiveTreeStats()" style="cursor:pointer;" data-i18n-title="uiTips.showStats"></span>
             <div class="focus-depth">
                 <span>↑</span>
                 <select id="toolbar-depth-up" onchange="window.Strom.TreeRenderer.setFocusDepth(parseInt(this.value), parseInt(document.getElementById('toolbar-depth-down').value))">
@@ -5975,8 +5975,8 @@
     <!-- Focus Mode Controls -->
     <div id="focus-controls" class="focus-controls hidden">
         <div class="focus-info">
-            <strong id="focus-name" onclick="window.Strom.ZoomPan.centerOnFocusWithContext()" style="cursor:pointer;" title="Vycentrovat"></strong>
-            <span id="focus-person-count" class="focus-count" onclick="window.Strom.UI.showActiveTreeStats()" style="cursor:pointer;" title="Zobrazit statistiku"></span>
+            <strong id="focus-name" onclick="window.Strom.ZoomPan.centerOnFocusWithContext()" style="cursor:pointer;" data-i18n-title="uiTips.centerOnFocus"></strong>
+            <span id="focus-person-count" class="focus-count" onclick="window.Strom.UI.showActiveTreeStats()" style="cursor:pointer;" data-i18n-title="uiTips.showStats"></span>
         </div>
         <div class="focus-depth">
             <label>
@@ -6543,6 +6543,7 @@
                     <span class="option-icon">⤓</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="fileAccess.saveToFile"></span>
+                        <span class="option-desc" data-i18n="fileAccess.saveToFileDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option fsa-linked-only" onclick="window.Strom.UI.closeExportDialog(); window.Strom.UI.unlinkActiveTreeFile()">
@@ -6583,7 +6584,7 @@
                     <span class="option-icon">📖</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="book.title"></span>
-                        <span class="option-desc" data-i18n="book.subtitle"></span>
+                        <span class="option-desc" data-i18n="book.menuDesc"></span>
                     </span>
                 </button>
             </div>
@@ -6699,6 +6700,7 @@
                     <span class="option-icon">⤒</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="fileAccess.openFromFile"></span>
+                        <span class="option-desc" data-i18n="fileAccess.openFromFileDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="document.getElementById('gedcom-input').click(); window.Strom.UI.closeImportDialog()">
@@ -6890,7 +6892,7 @@
             </div>
             <div class="buttons">
                 <button class="secondary" onclick="window.Strom.MergerUI.closeManualMatchDialog()" data-i18n="buttons.cancel">Cancel</button>
-                <button id="merge-manual-preview-btn" class="secondary merge-btn-preview-wide" onclick="window.Strom.MergerUI.previewManualMatch()" title="Preview">👁</button>
+                <button id="merge-manual-preview-btn" class="secondary merge-btn-preview-wide" onclick="window.Strom.MergerUI.previewManualMatch()" data-i18n-title="treePreview.preview">👁</button>
                 <button class="primary" onclick="window.Strom.MergerUI.confirmManualMatch()" data-i18n="buttons.save">Save</button>
             </div>
         </div>
@@ -6983,7 +6985,7 @@
             </div>
             <div class="buttons">
                 <button class="secondary" onclick="window.Strom.UI.closePersonMergeDialog()" data-i18n="buttons.cancel">Cancel</button>
-                <button class="secondary merge-btn-preview-wide" onclick="window.Strom.UI.previewPersonMerge()" title="Preview">👁</button>
+                <button class="secondary merge-btn-preview-wide" onclick="window.Strom.UI.previewPersonMerge()" data-i18n-title="treePreview.preview">👁</button>
                 <button class="primary" id="person-merge-btn" onclick="window.Strom.UI.executePersonMerge()" data-i18n="personMerge.confirmMerge" disabled>Merge persons</button>
             </div>
         </div>
@@ -7024,10 +7026,10 @@
                 <button class="primary edit-only" onclick="window.Strom.UI.showNewTreeMenu()">
                     <span class="btn-icon">🌳</span><span class="btn-text" data-i18n="treeManager.newTree">New Tree</span>
                 </button>
-                <button class="secondary edit-only" onclick="window.Strom.UI.showDefaultTreeDialog()" title="Default Tree">
+                <button class="secondary edit-only" onclick="window.Strom.UI.showDefaultTreeDialog()" data-i18n-title="treeManager.defaultTree">
                     <span class="btn-icon">⭐</span><span class="btn-text" data-i18n="treeManager.defaultTree">Default Tree</span>
                 </button>
-                <button class="secondary" onclick="window.Strom.UI.showExportAllDialog()" title="Export All">
+                <button class="secondary" onclick="window.Strom.UI.showExportAllDialog()" data-i18n-title="treeManager.exportAll">
                     <span class="btn-icon">💾</span><span class="btn-text" data-i18n="treeManager.exportAll">Export All</span>
                 </button>
             </div>
@@ -7539,7 +7541,7 @@
             <strong data-i18n="embeddedMode.banner">Standalone file</strong>
             <span class="embedded-mode-detail" data-i18n="embeddedMode.bannerDetail">This file has its own separate data storage.</span>
         </span>
-        <button class="embedded-mode-info" onclick="window.Strom.UI.showEmbeddedInfoDialog()" title="Info">ℹ️</button>
+        <button class="embedded-mode-info" onclick="window.Strom.UI.showEmbeddedInfoDialog()" data-i18n-title="uiTips.embeddedInfo">ℹ️</button>
         <a id="go-online-link" href="https://stromapp.info?import=from-file" target="_blank" class="embedded-mode-btn" data-i18n="embeddedMode.goOnline">stromapp.info</a>
         <button class="embedded-mode-close" onclick="window.Strom.UI.hideEmbeddedBanner()">&times;</button>
     </div>
