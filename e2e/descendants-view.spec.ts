@@ -26,8 +26,9 @@ test('descendants view: root stays, ancestors hidden, badge shows, ✕ returns',
     await expect(card(page, 'Petr')).toBeVisible();
     await expect(card(page, 'Josef')).toBeHidden();
 
-    // ✕ returns to the family view.
-    await badge.getByRole('button').click();
+    // ✕ returns to the family view (the badge also carries the
+    // whole-families toggle, so target the close button explicitly).
+    await badge.getByRole('button').last().click();
     await expect(badge).toBeHidden();
     await expect(card(page, 'Josef')).toBeVisible();
 });
@@ -92,4 +93,44 @@ test('descendants view: hidden-relative badges are not rendered', async ({ page 
     // Back in family view the badges return where applicable.
     await page.locator('#view-mode-family').click();
     await expect(card(page, 'Josef')).toBeVisible();
+});
+
+test('descendants view: step-relatives hidden by default, badge toggle shows them dimmed', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Emil', 'Visek');
+    await addRelation(page, 'Emil', 'child', 'Milan', 'Visek');
+    await cardAction(page, 'Emil', 'focus');
+    await addRelation(page, 'Milan', 'partner', 'Romana', 'Ditrichova');
+    // Romana's child from a previous marriage (not Emil's blood).
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const romana = dm.getAllPersons().find((p: { firstName: string }) => p.firstName === 'Romana')!;
+        const ex = dm.createPerson({ firstName: 'Martin', lastName: 'Matejka', gender: 'male' });
+        const union = dm.createPartnership(romana.id, ex.id);
+        const step = dm.createPerson({ firstName: 'Lucie', lastName: 'Matejkova', gender: 'female' });
+        dm.addParentChild(romana.id, step.id, union.id);
+        dm.addParentChild(ex.id, step.id, union.id);
+    });
+    await cardAction(page, 'Emil', 'focus');
+
+    await page.locator('#view-mode-descendants').click();
+    await expect(page.locator('#descendants-badge')).toBeVisible();
+
+    // Default: blood line + partners only; count = blood descendants (Milan).
+    await expect(card(page, 'Milan')).toBeVisible();
+    await expect(card(page, 'Romana')).toBeVisible();
+    await expect(card(page, 'Lucie')).toBeHidden();
+    await expect(page.locator('#descendants-badge-text')).toContainText('(1)');
+
+    // Badge toggle: whole families appear, step-relatives de-emphasized.
+    await page.locator('#descendants-families-toggle').click();
+    await expect(card(page, 'Lucie')).toBeVisible();
+    await expect(card(page, 'Lucie')).toHaveClass(/indirect/);
+    await expect(card(page, 'Martin')).toHaveClass(/indirect/);
+    await expect(card(page, 'Romana')).not.toHaveClass(/indirect/);
+    await expect(page.locator('#descendants-badge-text')).toContainText('(1)');
+
+    // Toggle back hides them again.
+    await page.locator('#descendants-families-toggle').click();
+    await expect(card(page, 'Lucie')).toBeHidden();
 });

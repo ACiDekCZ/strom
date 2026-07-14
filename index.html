@@ -3174,6 +3174,13 @@
             width: 26px; height: 26px; border-radius: 50%; font-size: 16px; line-height: 1; flex-shrink: 0;
         }
         .descendants-badge button:hover { background: rgba(255,255,255,0.4); }
+        .descendants-badge #descendants-families-toggle { opacity: 0.55; font-size: 14px; }
+        .descendants-badge #descendants-families-toggle.active { opacity: 1; background: rgba(255,255,255,0.45); }
+
+        /* Descendants view: step-relatives (partner's other families) are
+           shown de-emphasized so the blood line stays dominant. */
+        .person-card.indirect { opacity: 0.5; }
+        .person-card.indirect:hover { opacity: 1; }
 
         /* Hamburger button */
         .toolbar .hamburger-btn {
@@ -5944,6 +5951,7 @@
 
     <div id="descendants-badge" class="descendants-badge" style="display:none;">
         <span id="descendants-badge-text"></span>
+        <button type="button" id="descendants-families-toggle" onclick="window.Strom.UI.toggleDescendantsFullFamilies()" data-i18n-title="viewModeSwitch.fullFamilies">👪</button>
         <button type="button" onclick="window.Strom.UI.exitDescendantsView()" data-i18n-title="viewModeSwitch.back">&times;</button>
     </div>
 
@@ -6411,6 +6419,15 @@
                     <label class="settings-checkbox">
                         <input type="checkbox" id="branch-colors-toggle" onchange="window.Strom.UI.toggleBranchColors(this.checked)">
                         <span data-i18n="branchColors.settingHint"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="viewModeSwitch.settingLabel"></label>
+                <div class="settings-options">
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="descendants-families-default-toggle" onchange="window.Strom.UI.setDescendantsFullFamiliesDefault(this.checked)">
+                        <span data-i18n="viewModeSwitch.settingHint"></span>
                     </label>
                 </div>
             </div>

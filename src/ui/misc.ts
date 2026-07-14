@@ -259,6 +259,8 @@ export const miscMethods = uiModule({
 
         const branchColorsToggle = document.getElementById('branch-colors-toggle') as HTMLInputElement | null;
         if (branchColorsToggle) branchColorsToggle.checked = SettingsManager.isBranchColorsEnabled();
+        const descFamiliesToggle = document.getElementById('descendants-families-default-toggle') as HTMLInputElement | null;
+        if (descFamiliesToggle) descFamiliesToggle.checked = SettingsManager.isDescendantsFullFamiliesDefault();
 
         const familyButtonToggle = document.getElementById('family-button-toggle') as HTMLInputElement | null;
         if (familyButtonToggle) familyButtonToggle.checked = SettingsManager.isFamilyButtonEnabled();
@@ -305,7 +307,9 @@ export const miscMethods = uiModule({
             const focusId = TreeRenderer.getFocusPersonId();
             const person = focusId ? DataManager.getPerson(focusId) : null;
             const name = person ? `${person.firstName} ${person.lastName}`.trim() : '';
-            if (text) text.textContent = strings.viewModeSwitch.badge(name, TreeRenderer.getVisiblePersonCount());
+            if (text) text.textContent = strings.viewModeSwitch.badge(name, TreeRenderer.getDescendantCount());
+            const famToggle = document.getElementById('descendants-families-toggle');
+            famToggle?.classList.toggle('active', TreeRenderer.isDescendantsFullFamilies());
             if (badge) badge.style.display = 'flex';
         } else if (badge) {
             badge.style.display = 'none';

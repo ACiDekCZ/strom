@@ -306,6 +306,25 @@ export function findAppendageAncestorIds(
 }
 
 /**
+ * Focus person + everyone descended from them by blood (BFS over childIds).
+ */
+export function collectBloodDescendants(data: StromData, focusPersonId: PersonId): Set<PersonId> {
+    const blood = new Set<PersonId>([focusPersonId]);
+    const queue: PersonId[] = [focusPersonId];
+    while (queue.length > 0) {
+        const person = data.persons[queue.shift()!];
+        if (!person) continue;
+        for (const childId of person.childIds) {
+            if (!blood.has(childId)) {
+                blood.add(childId);
+                queue.push(childId);
+            }
+        }
+    }
+    return blood;
+}
+
+/**
  * Run the complete layout pipeline.
  */
 export function runLayoutPipeline(input: PipelineInput): LayoutResult {
@@ -344,6 +363,16 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
     let effectivePolicy = displayPolicy;
     if (displayPolicy.autoExpand !== false) {
         const autoExpandIds = findAutoExpandPersonIds(data, focusPersonId, selection);
+        if (displayPolicy.expandLineageOnly) {
+            // Lineage-only expansion (descendants view): a partner of a
+            // descendant keeps their card, but their other unions and
+            // step-children must not be pulled in — only persons of the
+            // blood line themselves get their partnerships expanded.
+            const blood = collectBloodDescendants(data, focusPersonId);
+            for (const id of [...autoExpandIds]) {
+                if (!blood.has(id)) autoExpandIds.delete(id);
+            }
+        }
         const appendageIds = findAppendageAncestorIds(data, focusPersonId, selection);
         for (const id of autoExpandIds) appendageIds.delete(id);
         if (autoExpandIds.size > 0 || appendageIds.size > 0) {

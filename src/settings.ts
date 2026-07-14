@@ -123,6 +123,21 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /**
+     * Default for the descendants view: show partners' whole families
+     * (their other unions and step-children, de-emphasized)? Default OFF —
+     * the view starts with the blood line + partners only. The in-view badge
+     * toggle overrides this ad hoc; this setting is just the starting value.
+     */
+    isDescendantsFullFamiliesDefault(): boolean {
+        return this.settings.descendantsFullFamilies === true;
+    }
+
+    setDescendantsFullFamiliesDefault(enabled: boolean): void {
+        this.settings.descendantsFullFamilies = enabled;
+        this.save();
+    }
+
     /** Branch-colour legend default ON (undefined = enabled). */
     isBranchLegendEnabled(): boolean {
         return this.settings.branchLegend !== false;

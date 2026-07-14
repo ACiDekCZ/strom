@@ -434,6 +434,9 @@ const stringsEN = {
         toggle: 'Family / descendants view',
         back: 'Back to family view',
         badge: (name: string, count: number) => `Descendants: ${name} (${count})`,
+        fullFamilies: "Show partners' whole families (step-children)",
+        settingLabel: 'Descendants view',
+        settingHint: "Show partners' whole families by default (their other unions and step-children, de-emphasized)",
     },
 
     // Fan chart (ancestor semicircle)
@@ -1737,6 +1740,9 @@ const stringsCZ: StringsType = {
         toggle: 'Pohled rodina / potomci',
         back: 'Zpět na rodinný pohled',
         badge: (name: string, count: number) => `Potomci: ${name} (${count})`,
+        fullFamilies: 'Zobrazit celé rodiny partnerů (nevlastní děti)',
+        settingLabel: 'Pohled Potomci',
+        settingHint: 'Výchozí zobrazení celých rodin partnerů (jejich další svazky a nevlastní děti, znevýrazněně)',
     },
 
     // Fan chart (ancestor semicircle)

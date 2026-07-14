@@ -592,6 +592,23 @@ export const appModeMethods = uiModule({
         this.updateViewModeUI(); // owns the legend visibility
     },
 
+    /** Badge toggle in the descendants view: flip ad hoc and re-render. */
+    toggleDescendantsFullFamilies(): void {
+        TreeRenderer.setDescendantsFullFamilies(!TreeRenderer.isDescendantsFullFamilies());
+        TreeRenderer.render();
+        this.updateViewModeUI(); // badge count + toggle state
+    },
+
+    /** Settings default: also applies immediately as the current choice. */
+    setDescendantsFullFamiliesDefault(enabled: boolean): void {
+        SettingsManager.setDescendantsFullFamiliesDefault(enabled);
+        TreeRenderer.setDescendantsFullFamilies(enabled);
+        if (TreeRenderer.getViewMode() === 'descendants') {
+            TreeRenderer.render();
+            this.updateViewModeUI();
+        }
+    },
+
     toggleOnThisDay(enabled: boolean): void {
         SettingsManager.setOnThisDay(enabled);
         if (!enabled) this.dismissOnThisDay();

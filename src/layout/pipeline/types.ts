@@ -20,6 +20,13 @@ export interface DisplayPolicy {
     appendagePersonIds?: Set<PersonId>;
     /** Auto-expand all partnerships for direct-line persons at every generation (default: true) */
     autoExpand?: boolean;
+    /**
+     * Restrict auto-expansion to the focus person's BLOOD LINE (focus +
+     * descendants). Partners of descendants keep their card, but their OTHER
+     * unions and those unions' children (step-relatives) are not pulled in.
+     * Used by the descendants view in its default "lineage only" mode.
+     */
+    expandLineageOnly?: boolean;
 }
 
 export const DEFAULT_DISPLAY_POLICY: DisplayPolicy = { mode: 'standard' };

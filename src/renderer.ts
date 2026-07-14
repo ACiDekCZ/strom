@@ -25,6 +25,7 @@ import {
     SpouseLine,
     DisplayPolicy,
     runLayoutPipelineWithDebug,
+    collectBloodDescendants,
     DebugOptions,
     DebugSnapshot,
     LayoutDebugContext
@@ -74,6 +75,16 @@ class TreeRendererClass {
      * no layout pipeline). Persisted per tree in localStorage.
      */
     private viewMode: 'family' | 'descendants' | 'timeline' | 'fan' = 'family';
+
+    /**
+     * Descendants view: show partners' whole families (their other unions and
+     * step-children, de-emphasized)? null = not yet resolved; the first use
+     * takes the default from settings. The badge toggle flips it ad hoc.
+     */
+    private descendantsFullFamilies: boolean | null = null;
+
+    /** Blood descendants of the focus (incl. focus) — filled in descendants view. */
+    private bloodDescendantIds: Set<PersonId> | null = null;
 
     /** Fan chart: how many ancestor rings to draw (4–8, persisted globally). */
     private fanGenerations = ((): number => {
@@ -145,7 +156,8 @@ class TreeRendererClass {
             config: this.config,
             displayPolicy: {
                 mode: this.showAllPartnerships ? 'expanded' : 'standard',
-                autoExpand: this.showAllPartnerships
+                autoExpand: this.showAllPartnerships,
+                expandLineageOnly: descendantsOnly && !this.isDescendantsFullFamilies()
             }
         };
 
@@ -423,6 +435,32 @@ class TreeRendererClass {
     }
 
     /**
+     * Descendants badge count: BLOOD descendants only (focus excluded) —
+     * partners and step-relatives are visible context, not descendants.
+     */
+    getDescendantCount(): number {
+        if (!this.bloodDescendantIds) return this.getVisiblePersonCount();
+        let count = 0;
+        for (const id of this.positions.keys()) {
+            if (id === this.focusPersonId) continue;
+            if (this.bloodDescendantIds.has(id) && !DataManager.getPerson(id)?.isPlaceholder) count++;
+        }
+        return count;
+    }
+
+    isDescendantsFullFamilies(): boolean {
+        if (this.descendantsFullFamilies === null) {
+            this.descendantsFullFamilies = SettingsManager.isDescendantsFullFamiliesDefault();
+        }
+        return this.descendantsFullFamilies;
+    }
+
+    /** Ad hoc override from the badge toggle (does not touch the setting). */
+    setDescendantsFullFamilies(enabled: boolean): void {
+        this.descendantsFullFamilies = enabled;
+    }
+
+    /**
      * Highlight a set of persons in the tree (search results): matched cards get
      * 'search-hit', all others 'search-dim'. Pass null to clear. Pure DOM class
      * toggling — the layout is never recomputed.
@@ -686,6 +724,30 @@ class TreeRendererClass {
                 ? classifyBranches(DataManager.getData(), this.focusPersonId)
                 : null;
 
+        // Descendants view: mark step-relatives (neither blood descendants
+        // nor partners of one) so they render de-emphasized, and remember the
+        // blood set for the badge count.
+        this.bloodDescendantIds = null;
+        let indirectIds: Set<PersonId> | null = null;
+        if (this.viewMode === 'descendants' && this.focusPersonId) {
+            const data = DataManager.getData();
+            const blood = collectBloodDescendants(data, this.focusPersonId);
+            this.bloodDescendantIds = blood;
+            indirectIds = new Set();
+            for (const id of this.positions.keys()) {
+                if (blood.has(id)) continue;
+                const p = DataManager.getPerson(id);
+                if (!p || p.isPlaceholder) continue;
+                const partnerOfBlood = p.partnerships.some(pid => {
+                    const u = data.partnerships[pid];
+                    if (!u) return false;
+                    const other = u.person1Id === id ? u.person2Id : u.person1Id;
+                    return blood.has(other);
+                });
+                if (!partnerOfBlood) indirectIds.add(id);
+            }
+        }
+
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);
             if (!person) continue;
@@ -718,6 +780,10 @@ class TreeRendererClass {
             if (branchMap && !person.isPlaceholder) {
                 const b = branchMap.get(id);
                 if (b) classes += ` branch-${b}`;
+            }
+            // Descendants view: de-emphasize step-relatives.
+            if (indirectIds?.has(id)) {
+                classes += ' indirect';
             }
             card.className = classes;
             card.style.left = pos.x + 'px';
