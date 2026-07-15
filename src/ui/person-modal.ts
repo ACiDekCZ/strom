@@ -116,7 +116,9 @@ export const personModalMethods = uiModule({
         // Setup expand button
         this.setupExpandButton(true);
 
-        // Hide link-relationships button (new person has no relationships)
+        // Relationships need somebody to relate TO, which means a saved person —
+        // so the button is not here while adding. The offer after Save is what
+        // leads on to relatives (see savePerson).
         const linkRelBtn = document.getElementById('link-relationships');
         if (linkRelBtn) linkRelBtn.style.display = 'none';
 
@@ -564,10 +566,12 @@ export const personModalMethods = uiModule({
                     photo
                 });
             }
-            // First person in a brand-new tree: offer to add the rest of the family.
-            if (DataManager.getAllPersons().length === 1) {
-                createdFirstId = newPerson.id;
-            }
+            // A person added from the toolbar has no relatives yet — the form
+            // cannot offer relationships, because there was nobody to relate
+            // until Save. Rather than leaving them floating (the tree's own
+            // statistics call that "linked to nobody"), offer the family wizard,
+            // which is where relatives get added. Non-blocking, auto-dismisses.
+            createdFirstId = newPerson.id;
         }
 
         this.forceCloseModal();

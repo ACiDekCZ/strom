@@ -170,7 +170,13 @@ export const attachmentsMethods = uiModule({
 
     async deleteAttachment(attachmentId: string): Promise<void> {
         if (!this.currentId) return;
-        const confirmed = await this.showConfirm(strings.attachments.deleteConfirm, strings.attachments.delete);
+        // Name the file — a list of scans all confirming "Delete this
+        // attachment?" tells you nothing about which one you hit.
+        const person = DataManager.getPerson(this.currentId);
+        const att = person?.attachments?.find(a => a.id === attachmentId);
+        if (!att) return;
+        const confirmed = await this.showConfirm(
+            strings.attachments.deleteConfirm(att.name), strings.attachments.delete);
         if (!confirmed) return;
         DataManager.removeAttachment(this.currentId, attachmentId);
         this.renderAttachmentsList();

@@ -403,7 +403,14 @@ export const personEventsMethods = uiModule({
     /** Confirm and remove an event, then refresh the list. */
     async deleteEvent(eventId: string): Promise<void> {
         if (!this.currentId) return;
-        const confirmed = await this.showConfirm(strings.events.deleteConfirm, strings.buttons.delete);
+        // Say which one. A row of events all read "Delete this event?" otherwise,
+        // and the user is left guessing which one they clicked.
+        const person = DataManager.getPerson(this.currentId);
+        const event = person?.events?.find(e => e.id === eventId);
+        if (!event) return;
+        const meta = eventMeta(event.date, event.place);
+        const what = `${eventTypeLabel(event)}${meta ? ` — ${meta}` : ''}`;
+        const confirmed = await this.showConfirm(strings.events.deleteConfirm(what), strings.buttons.delete);
         if (!confirmed) return;
         DataManager.removeLifeEvent(this.currentId, eventId);
         this.renderEventsList();

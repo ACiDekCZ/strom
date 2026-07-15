@@ -33,3 +33,25 @@ test('the family offer gets out of the way of an open dialog', async ({ page }) 
     await page.locator('#person-modal').getByRole('button', { name: 'Cancel' }).click();
     await expect(page.locator('.family-offer')).toBeVisible();
 });
+
+test('a person added from the toolbar is offered relatives, not left floating', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
+    await page.locator('.family-offer .family-offer-close').click();
+
+    // Adding from the toolbar creates somebody with no relatives: the form has
+    // no relationships section (there is nobody to relate until Save), so the
+    // offer is what leads on. It used to appear for the first person only,
+    // leaving everyone added later unconnected with no hint at all.
+    await page.evaluate(() => window.Strom.UI.showAddPersonModal());
+    const modal = page.locator('#person-modal');
+    await modal.locator('#input-firstname').fill('Marie');
+    await modal.locator('#input-lastname').fill('Svobodova');
+    await modal.getByRole('button', { name: 'Save' }).click();
+
+    await expect(page.locator('.family-offer')).toBeVisible();
+    await page.locator('.family-offer .family-offer-btn').click();
+    // …and it opens the wizard around the person just added.
+    await expect(page.locator('#family-wizard-modal')).toHaveClass(/active/);
+    await expect(page.locator('#family-wizard-anchor')).toContainText('Marie');
+});

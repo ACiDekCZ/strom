@@ -99,7 +99,7 @@ const stringsEN = {
     // Versioned backups
     snapshots: {
         delete: 'Delete',
-        deleteConfirm: 'Delete this backup? The tree itself is not touched.',
+        deleteConfirm: (what: string) => `Delete this backup? The tree itself is not touched.\n\n${what}`,
         deleted: 'Backup deleted',
         inBrowser: 'Backups live in this browser, not in your tree file — they never make it bigger, and they are gone if you clear the browser or move to another computer. Export the tree for a backup you can keep.',
         menu: 'Backups',
@@ -179,7 +179,7 @@ const stringsEN = {
         note: 'Note',
         customLabel: 'Label',
         customLabelRequired: 'Enter a label for the custom event',
-        deleteConfirm: 'Delete this event?',
+        deleteConfirm: (what: string) => `Delete this event?\n\n${what}`,
         types: {
             birth: 'Birth',
             death: 'Death',
@@ -230,7 +230,7 @@ const stringsEN = {
         add: 'Add attachment',
         empty: 'No attachments yet',
         delete: 'Delete',
-        deleteConfirm: 'Delete this attachment?',
+        deleteConfirm: (what: string) => `Delete this attachment?\n\n${what}`,
         notePlaceholder: 'Note (optional)',
         total: (count: number, size: string) => `${count} attachment(s), ${size} total`,
         pdfTooLarge: 'PDF is too large (max 2 MB).',
@@ -1559,7 +1559,7 @@ const stringsCZ: StringsType = {
     // Versioned backups
     snapshots: {
         delete: 'Smazat',
-        deleteConfirm: 'Smazat tuto zálohu? Samotného stromu se to nedotkne.',
+        deleteConfirm: (what: string) => `Smazat tuto zálohu? Samotného stromu se to nedotkne.\n\n${what}`,
         deleted: 'Záloha smazána',
         inBrowser: 'Zálohy žijí v tomto prohlížeči, ne ve tvém souboru se stromem — nezvětšují ho, ale zmizí s vymazáním dat prohlížeče nebo na jiném počítači. Zálohu, kterou si opravdu odložíš, uděláš exportem stromu.',
         menu: 'Zálohy',
@@ -1639,7 +1639,7 @@ const stringsCZ: StringsType = {
         note: 'Poznámka',
         customLabel: 'Popis',
         customLabelRequired: 'Zadejte popis vlastní události',
-        deleteConfirm: 'Smazat tuto událost?',
+        deleteConfirm: (what: string) => `Smazat tuto událost?\n\n${what}`,
         types: {
             birth: 'Narození',
             death: 'Úmrtí',
@@ -1690,7 +1690,7 @@ const stringsCZ: StringsType = {
         add: 'Přidat přílohu',
         empty: 'Zatím žádné přílohy',
         delete: 'Smazat',
-        deleteConfirm: 'Smazat tuto přílohu?',
+        deleteConfirm: (what: string) => `Smazat tuto přílohu?\n\n${what}`,
         notePlaceholder: 'Poznámka (nepovinné)',
         total: (count: number, size: string) => `${count} příloh, celkem ${size}`,
         pdfTooLarge: 'PDF je příliš velké (max 2 MB).',

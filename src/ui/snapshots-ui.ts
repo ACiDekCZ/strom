@@ -89,7 +89,13 @@ export const snapshotsUiMethods = uiModule({
      * because "delete" in a list of your family's history reads alarming.
      */
     async deleteSnapshotFromUI(snapshotId: string): Promise<void> {
-        if (!await this.showConfirm(strings.snapshots.deleteConfirm, strings.snapshots.delete)) return;
+        // Which backup: they are told apart by when they were taken.
+        const snaps = await listSnapshots(this.snapshotsTreeId!);
+        const snap = snaps.find(s => s.id === snapshotId);
+        const what = snap
+            ? `${new Date(snap.createdAt).toLocaleString()} · ${strings.snapshots.persons(snap.personCount)}`
+            : '';
+        if (!await this.showConfirm(strings.snapshots.deleteConfirm(what), strings.snapshots.delete)) return;
         const { deleteSnapshot } = await import('../snapshots.js');
         await deleteSnapshot(snapshotId);
         this.showToast(strings.snapshots.deleted);
