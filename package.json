@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "test:real": "npx tsx scripts/test-real-data.ts",
     "gen:etalon": "tsx scripts/generate-etalon.ts",
-    "test:e2e": "npm run build && playwright test"
+    "test:e2e": "npm run build && playwright test",
+    "gen:demo-places": "tsx scripts/geocode-demo.ts"
   },
   "keywords": [
     "family-tree",

@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card } from './helpers.js';
+import { openApp, card, createFirstPerson, addRelation } from './helpers.js';
 
 /**
  * Map view (A6). The map is the one place that talks to the internet, so these
@@ -33,17 +33,52 @@ async function stubGeocoder(page: Page, answers: Record<string, [number, number]
     return asked;
 }
 
-async function seedPlaces(page: Page): Promise<void> {
-    await page.evaluate(() => {
+/**
+ * Give the sample tree exactly these places and nothing else. The tree ships
+ * with places AND their coordinates (that is the point of it), so a test that
+ * wants to control what is on the map must clear them first — otherwise it is
+ * counting the sample tree's markers, not its own.
+ */
+async function setPlaces(page: Page, places: Record<string, string>): Promise<void> {
+    await page.evaluate((wanted) => {
         const dm = window.Strom.DataManager;
-        const set = (n: string, place: string) => {
-            const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === n);
+        for (const p of dm.getAllPersons()) {
+            dm.updatePerson(p.id, { birthPlace: '', deathPlace: '' });
+        }
+        dm.getData().places = {};
+        for (const [name, place] of Object.entries(wanted)) {
+            const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === name);
             if (p) dm.updatePerson(p.id, { birthPlace: place });
-        };
-        set('Henry VIII', 'Greenwich');
-        set('Henry VII', 'Pembroke');
-    });
+        }
+        window.Strom.TreeRenderer.render();
+    }, places);
 }
+
+/** The usual two: Henry VIII in Greenwich, Henry VII in Pembroke. */
+async function seedPlaces(page: Page): Promise<void> {
+    await setPlaces(page, { 'Henry VIII': 'Greenwich', 'Henry VII': 'Pembroke' });
+}
+
+test('the sample tree is on the map the moment it loads', async ({ page }) => {
+    await stubTiles(page);
+    // No geocoder stub on purpose: if the demo needed a lookup, this route would
+    // never be called and the test would show an empty map.
+    let asked = 0;
+    await page.route('**://nominatim.openstreetmap.org/**', route => { asked++; void route.abort(); });
+
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await page.getByRole('button', { name: 'Whole tree' }).click();
+
+    // The demo ships its own coordinates: places show up with nothing sent.
+    await expect(page.locator('.map-marker').first()).toBeVisible();
+    expect(await page.locator('.map-marker').count()).toBeGreaterThan(10);
+    expect(asked).toBe(0);
+    await expect(page.getByRole('button', { name: /Look up/ })).toBeHidden();
+});
 
 test('the map offers to look up places, then plots them', async ({ page }) => {
     await stubTiles(page);
@@ -134,6 +169,37 @@ test('the map never scrolls out from under its own controls', async ({ page }) =
     expect(scope?.x).toBeGreaterThanOrEqual(0);
 });
 
+test('coordinates survive a reload — they are part of the tree', async ({ page }) => {
+    await stubTiles(page);
+    const asked = await stubGeocoder(page, { 'Kolín': [50.0281, 15.2003] });
+
+    // A tree of its own: this is about coordinates the USER looked up, not the
+    // ones the sample tree ships with.
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1900' });
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        dm.updatePerson(dm.getAllPersons()[0].id, { birthPlace: 'Kolín' });
+    });
+
+    await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
+    await page.getByRole('button', { name: 'Look them up' }).click();
+    await expect(page.locator('.map-marker')).toHaveCount(1, { timeout: 15000 });
+    expect(asked).toEqual(['Kolín']);
+
+    // Reopening the app must not lose them. The load path rebuilds the tree
+    // field by field, and once quietly dropped this one — so every coordinate
+    // the user had looked up was gone the next time they opened the app.
+    await page.reload();
+    // The map view is remembered, so the app comes back straight onto the map.
+    await expect(page.locator('#map-container')).toBeVisible();
+    expect(await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().places ?? {})))
+        .toEqual(['kolin']);
+    await expect(page.locator('.map-marker')).toHaveCount(1);
+    expect(asked).toEqual(['Kolín']);  // nothing looked up a second time
+});
+
 test('a marker tells you who belongs to the place and takes you to them', async ({ page }) => {
     await stubTiles(page);
     await stubGeocoder(page, { Greenwich: [51.48, 0.0], Pembroke: [51.67, -4.91] });
@@ -167,15 +233,7 @@ test('two places close together stay separately clickable', async ({ page }) => 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Henry VIII')).toBeVisible();
-    await page.evaluate(() => {
-        const dm = window.Strom.DataManager;
-        const set = (n: string, place: string) => {
-            const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === n);
-            if (p) dm.updatePerson(p.id, { birthPlace: place });
-        };
-        set('Henry VIII', 'Greenwich');
-        set('Henry VII', 'Westminster');
-    });
+    await setPlaces(page, { 'Henry VIII': 'Greenwich', 'Henry VII': 'Westminster' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
@@ -238,15 +296,7 @@ test('a place the map cannot find can be matched by hand', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Henry VIII')).toBeVisible();
-    await page.evaluate(() => {
-        const dm = window.Strom.DataManager;
-        const set = (n: string, place: string) => {
-            const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === n);
-            if (p) dm.updatePerson(p.id, { birthPlace: place });
-        };
-        set('Henry VIII', 'Praha');
-        set('Henry VII', 'Kravaře u Č. Lípy');
-    });
+    await setPlaces(page, { 'Henry VIII': 'Praha', 'Henry VII': 'Kravaře u Č. Lípy' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
@@ -288,11 +338,7 @@ test('a hand search that finds nothing says so and keeps the place', async ({ pa
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Henry VIII')).toBeVisible();
-    await page.evaluate(() => {
-        const dm = window.Strom.DataManager;
-        const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Henry VIII');
-        if (p) dm.updatePerson(p.id, { birthPlace: 'Lhota u Nikde' });
-    });
+    await setPlaces(page, { 'Henry VIII': 'Lhota u Nikde' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await page.getByRole('button', { name: 'Places', exact: true }).click();
@@ -317,11 +363,7 @@ test('a pin in the wrong place can be fixed from the map', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Henry VIII')).toBeVisible();
-    await page.evaluate(() => {
-        const dm = window.Strom.DataManager;
-        const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Henry VIII');
-        if (p) dm.updatePerson(p.id, { birthPlace: 'Boston' });
-    });
+    await setPlaces(page, { 'Henry VIII': 'Boston' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
@@ -381,13 +423,7 @@ test('renaming a place fixes it everywhere and keeps its pin', async ({ page }) 
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Henry VIII')).toBeVisible();
     // The same typo on two people — a rename must catch both.
-    await page.evaluate(() => {
-        const dm = window.Strom.DataManager;
-        for (const n of ['Henry VIII', 'Henry VII']) {
-            const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === n);
-            if (p) dm.updatePerson(p.id, { birthPlace: 'Grenwich' });
-        }
-    });
+    await setPlaces(page, { 'Henry VIII': 'Grenwich', 'Henry VII': 'Grenwich' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
@@ -434,25 +470,32 @@ test('nothing is sent when the user declines', async ({ page }) => {
 
 test('the scope switch covers the whole tree, not just the view', async ({ page }) => {
     await stubTiles(page);
-    const asked = await stubGeocoder(page, { Greenwich: [51.48, 0.0], Pembroke: [51.67, -4.91] });
+    const asked = await stubGeocoder(page, { 'Kolín': [50.0281, 15.2003], 'Beroun': [49.9639, 14.0722] });
 
+    // A tree of its own: the sample tree ships places for everybody, which is
+    // exactly what this test needs to control.
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
-    await seedPlaces(page);
-
-    // Narrow the view down to one person, so the two scopes differ.
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1900' });
+    await addRelation(page, 'Jan', 'parent', 'Otec', 'Novak');
     await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const set = (n: string, place: string) => {
+            const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === n);
+            if (p) dm.updatePerson(p.id, { birthPlace: place });
+        };
+        set('Jan', 'Kolín');
+        set('Otec', 'Beroun');
+        // Narrow the view to Jan alone, so the two scopes differ.
         window.Strom.TreeRenderer.setFocusDepth(0, 0);
     });
 
-    // The lookup covers the scope in use: on screen there is only Henry VIII,
-    // so only his place is asked about.
+    // The lookup covers the scope in use: only Jan is on screen, so only his
+    // place is asked about.
     await page.getByRole('button', { name: 'Map', exact: true }).click();
-    await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
+    await page.getByRole('button', { name: 'Look up 1 place', exact: true }).click();
     await page.getByRole('button', { name: 'Look them up' }).click();
     await expect(page.locator('.map-marker')).toHaveCount(1, { timeout: 15000 });
-    expect(asked).toEqual(['Greenwich']);
+    expect(asked).toEqual(['Kolín']);
 
     // Widening to the whole tree brings the rest of the family's places into
     // play — the one nobody has looked up yet is offered, not silently skipped.
@@ -460,12 +503,12 @@ test('the scope switch covers the whole tree, not just the view', async ({ page 
     await expect(page.locator('.map-marker')).toHaveCount(1);
     await page.getByRole('button', { name: 'Look up 1 place', exact: true }).click();
     await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
-    expect(asked).toEqual(['Greenwich', 'Pembroke']);
+    expect(asked).toEqual(['Kolín', 'Beroun']);
 
     // Consent already given, so the second lookup went ahead without re-asking.
     await expect(page.getByRole('button', { name: 'Look them up' })).toBeHidden();
 
-    // Back to the view: Pembroke keeps its coordinates but is out of scope.
+    // Back to the view: Beroun keeps its coordinates but is out of scope.
     await page.getByRole('button', { name: 'This view' }).click();
     await expect(page.locator('.map-marker')).toHaveCount(1);
 });

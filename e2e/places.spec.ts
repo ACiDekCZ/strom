@@ -7,26 +7,25 @@ import { openApp, createFirstPerson, card, cardAction, personModal } from './hel
  * in one click.
  */
 test('place suggestions come from the tree, most used first', async ({ page }) => {
+    // Built from scratch rather than from the demo, which carries places of its
+    // own — this is about the suggestions coming from THIS tree's places.
     await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1900' });
     await page.evaluate(() => {
         const dm = window.Strom.DataManager;
-        const set = (n: string, place: string) => {
-            const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === n);
-            if (p) dm.updatePerson(p.id, { birthPlace: place });
-        };
-        set('Henry VIII', 'Greenwich Palace');
-        set('Arthur', 'Greenwich Palace');
-        set('Henry VII', 'Pembroke Castle');
+        const jan = dm.getAllPersons()[0];
+        dm.updatePerson(jan.id, { birthPlace: 'Kolín', deathPlace: 'Kolín' });
+        const marie = dm.createPerson({ firstName: 'Marie', lastName: 'Novakova', gender: 'female' });
+        dm.updatePerson(marie.id, { birthPlace: 'Beroun' });
         window.Strom.TreeRenderer.render();
     });
+    // Most used first: Kolín (2×) before Beroun (1×).
     await expect.poll(() => page.evaluate(() =>
         [...document.querySelectorAll('#places-datalist option')].map(o => (o as HTMLOptionElement).value)
-    )).toEqual(['Greenwich Palace', 'Pembroke Castle']);
+    )).toEqual(['Kolín', 'Beroun']);
 
     // The birth-place field offers them.
-    await cardAction(page, 'Henry VIII', 'edit');
+    await cardAction(page, 'Jan', 'edit');
     await expect(personModal(page).locator('#input-birthplace')).toHaveAttribute('list', 'places-datalist');
 });
 

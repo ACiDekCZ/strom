@@ -699,6 +699,13 @@ class DataManagerClass {
             result.sources = d.sources as StromData['sources'];
         }
 
+        // Preserve place coordinates. This object is rebuilt field by field, so
+        // anything not named here is dropped on EVERY load — tree switch, app
+        // restart, opening a shared file. Add new StromData fields here too.
+        if (d.places && typeof d.places === 'object') {
+            result.places = d.places as StromData['places'];
+        }
+
         // Preserve default person settings if present
         if (d.defaultPersonId !== undefined) {
             result.defaultPersonId = d.defaultPersonId as PersonId | LastFocusedMarker;

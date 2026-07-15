@@ -14,6 +14,7 @@ test('photo: uploading shows an avatar on the card; removing it clears the avata
 
     await expect(card(page, 'Jan')).toHaveClass(/has-photo/);
     await expect(card(page, 'Jan').locator('.card-avatar img')).toBeVisible();
+    await expect(card(page, 'Jan').locator('.card-silhouette')).toHaveCount(0);
 
     // Remove: the edit modal auto-expands (photo present), so the remove button is visible.
     await cardAction(page, 'Jan', 'edit');
@@ -21,7 +22,15 @@ test('photo: uploading shows an avatar on the card; removing it clears the avata
     await modal.getByRole('button', { name: 'Save' }).click();
     await expect(modal).toBeHidden();
 
+    // Normal cards are only 130px wide, so nothing takes the slot in place of
+    // the photo — the name gets the room back.
+    await expect(card(page, 'Jan')).not.toHaveClass(/has-photo/);
     await expect(card(page, 'Jan').locator('.card-avatar')).toHaveCount(0);
+
+    // Detailed cards have room, so there the stand-in shows.
+    await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
+    await expect(card(page, 'Jan').locator('.card-silhouette')).toBeVisible();
+    await expect(card(page, 'Jan').locator('.card-avatar img')).toHaveCount(0);
 });
 
 test('photo: rotate buttons are available and the photo survives rotation + save', async ({ page }) => {
