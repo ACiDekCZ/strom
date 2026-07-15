@@ -123,8 +123,24 @@ export interface ParsedGedcom {
 }
 
 /** Result of GEDCOM to Strom conversion */
+/** External media file referenced by the GEDCOM (file itself not embedded). */
+export interface ExternalMediaRef {
+    personId: PersonId;
+    /** Basename of the referenced file (matching key for bulk attach). */
+    fileName: string;
+    /** Full FILE value as written in the GEDCOM. */
+    filePath: string;
+    title?: string;
+}
+
 export interface GedcomConversionResult {
     data: StromData;
+    /**
+     * OBJE FILE references pointing OUTSIDE the file (platform exports ship
+     * media as a separate folder/zip). The import summary offers to bulk-match
+     * these against user-picked files.
+     */
+    externalMedia: ExternalMediaRef[];
     stats: {
         totalPersons: number;
         totalPartnerships: number;
@@ -618,6 +634,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
 
     // Create persons
     const persons: Record<PersonId, Person> = {};
+    const externalMedia: ExternalMediaRef[] = [];
     for (const [gedId, indi] of validIndividuals) {
         const personId = personIdMap.get(gedId)!;
         let gender: 'male' | 'female';
@@ -677,7 +694,13 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                     (person.attachments ??= []).push(att);
                 }
             } else if (media.file) {
-                droppedTags.set('OBJE (external file)', (droppedTags.get('OBJE (external file)') ?? 0) + 1);
+                // Platform exports (MyHeritage, Ancestry) reference media by
+                // path — remember the ref so the user can attach the files.
+                const fileName = media.file.split(/[\\/]/).pop() || media.file;
+                externalMedia.push({
+                    personId, fileName, filePath: media.file,
+                    ...(media.title ? { title: media.title } : {}),
+                });
             }
         }
 
@@ -855,6 +878,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     }
 
     return {
+        externalMedia,
         data: {
             persons,
             partnerships,

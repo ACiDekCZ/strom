@@ -363,14 +363,18 @@ describe('GEDCOM media (OBJE) and standard sources', () => {
         expect(p2.attachments![0].dataUrl).toBe(person.attachments[0].dataUrl);
     });
 
-    it('external OBJE file paths are counted as dropped, not imported', () => {
+    it('external OBJE file paths are collected for bulk media attachment', () => {
         const ged = GED([
             '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M',
             '1 OBJE', '2 FORM jpeg', '2 FILE C:\\photos\\jan.jpg',
         ].join('\n'));
         const r = conv(ged);
         expect(Object.values(r.data.persons)[0].attachments).toBeUndefined();
-        expect(r.stats.droppedTagSummary).toContain('OBJE (external file)');
+        // External refs are no longer dropped: they are collected so the
+        // import summary can offer bulk media attachment (M3).
+        expect(r.externalMedia).toHaveLength(1);
+        expect(r.externalMedia[0].fileName).toBe('jan.jpg');   // basename, Windows path
+        expect(r.externalMedia[0].filePath).toBe('C:\\photos\\jan.jpg');
     });
 
     it('repositories export as @R@ records and resolve back on import', () => {

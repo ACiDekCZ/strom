@@ -23,6 +23,8 @@ import {
     EmbeddedDataEnvelope
 } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
+import { compressPhoto, dataUrlByteSize } from '../photo.js';
+import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES } from '../attachments.js';
 import { getDemoTree, getDemoFocus } from '../demo-trees.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
@@ -298,6 +300,22 @@ export const importExportMethods = uiModule({
         if (placeholdersEl) placeholdersEl.textContent = String(this.gedcomResult.stats.placeholderPersons);
         if (unsupportedEl) unsupportedEl.textContent = String(this.gedcomResult.stats.unsupportedTags);
 
+        // Trust-building breakdown: the migrating user must see at a glance
+        // that photos/documents/sources/events survived. Zero tiles hide.
+        const persons = Object.values(this.gedcomResult.data.persons);
+        const richStats: Array<[string, number]> = [
+            ['photos', persons.filter(p => p.photo).length],
+            ['documents', persons.reduce((n, p) => n + (p.attachments?.length ?? 0), 0)],
+            ['sources', Object.keys(this.gedcomResult.data.sources ?? {}).length],
+            ['events', persons.reduce((n, p) => n + (p.events?.length ?? 0), 0)],
+        ];
+        for (const [key, count] of richStats) {
+            const el = document.getElementById(`gedcom-stat-${key}`);
+            const item = document.getElementById(`gedcom-stat-${key}-item`);
+            if (el) el.textContent = String(count);
+            if (item) item.style.display = count > 0 ? '' : 'none';
+        }
+
         // What exactly was skipped (previously a dead counter — always 0).
         const detailEl = document.getElementById('gedcom-stat-detail');
         if (detailEl) {
@@ -308,9 +326,21 @@ export const importExportMethods = uiModule({
             if (this.gedcomResult.stats.unknownSexPersons > 0) {
                 parts.push(strings.gedcom.unknownSex(this.gedcomResult.stats.unknownSexPersons));
             }
+            if (parts.length === 0 && this.gedcomResult.stats.unsupportedTags === 0) {
+                // Say it out loud — silence reads as "who knows what got lost".
+                parts.push(strings.gedcom.allImported);
+            }
             detailEl.textContent = parts.join(' · ');
             detailEl.style.display = parts.length > 0 ? '' : 'none';
         }
+
+        // External media (photos exported as a separate folder by platforms):
+        // offer bulk attach BEFORE the data is inserted anywhere.
+        const mediaRow = document.getElementById('gedcom-media-row');
+        const mediaText = document.getElementById('gedcom-media-text');
+        const pending = this.gedcomResult.externalMedia.length;
+        if (mediaRow) mediaRow.style.display = pending > 0 ? '' : 'none';
+        if (mediaText && pending > 0) mediaText.textContent = strings.gedcom.externalMedia(pending);
 
         // Show/hide buttons based on context
         const newTreeBtn = document.getElementById('gedcom-new-tree-btn');
@@ -340,6 +370,72 @@ export const importExportMethods = uiModule({
         }
 
         modal.classList.add('active');
+    },
+
+    /**
+     * Bulk-attach user-picked files to the freshly converted GEDCOM data by
+     * matching file names against the OBJE FILE references. Images become the
+     * person's photo (first one) or image attachments; PDFs become documents.
+     * Mutates the in-memory conversion result — every import path (new tree /
+     * merge / insert) then carries the media along.
+     */
+    async attachGedcomMedia(files: FileList | null): Promise<void> {
+        if (!this.gedcomResult || !files || files.length === 0) return;
+        const byName = new Map<string, File>();
+        for (const f of Array.from(files)) byName.set(f.name.toLowerCase(), f);
+
+        const refs = this.gedcomResult.externalMedia;
+        const total = refs.length;
+        let matched = 0;
+        const remaining: typeof refs = [];
+
+        for (const ref of refs) {
+            const file = byName.get(ref.fileName.toLowerCase());
+            const person = this.gedcomResult.data.persons[ref.personId];
+            if (!file || !person) { remaining.push(ref); continue; }
+            try {
+                if (file.type.startsWith('image/')) {
+                    if (!person.photo) {
+                        person.photo = await compressPhoto(file);
+                        person.photoOriginalName = file.name;
+                    } else {
+                        (person.attachments ??= []).push({
+                            id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                            name: ref.title || file.name,
+                            mimeType: 'image/jpeg',
+                            dataUrl: await compressImageAttachment(file),
+                            sizeBytes: 0,
+                        });
+                    }
+                } else if (file.type === 'application/pdf' && file.size <= MAX_PDF_BYTES) {
+                    (person.attachments ??= []).push({
+                        id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                        name: ref.title || file.name,
+                        mimeType: 'application/pdf',
+                        dataUrl: await readFileAsDataUrl(file),
+                        sizeBytes: file.size,
+                    });
+                } else {
+                    remaining.push(ref);
+                    continue;
+                }
+                matched++;
+            } catch {
+                remaining.push(ref);
+            }
+        }
+        // Fix attachment sizes from data URLs (compression changed them).
+        for (const person of Object.values(this.gedcomResult.data.persons)) {
+            for (const att of person.attachments ?? []) {
+                if (!att.sizeBytes) att.sizeBytes = dataUrlByteSize(att.dataUrl);
+            }
+        }
+
+        this.gedcomResult.externalMedia = remaining;
+        this.showToast(matched > 0
+            ? strings.gedcom.mediaAttached(matched, total)
+            : strings.gedcom.mediaNoMatch);
+        this.showGedcomResultDialog();   // refresh tiles + media row
     },
 
     closeGedcomResultDialog(): void {

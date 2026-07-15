@@ -214,3 +214,37 @@ test('CSV export downloads a localized person table', async ({ page }) => {
     expect(text).toContain('First name;Last name');
     expect(text).toContain('Jan;Novak');
 });
+
+test('GEDCOM import: rich summary + bulk media attach by file name', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Seed', 'Person');
+    await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/media-refs.ged');
+
+    const dialog = page.locator('#gedcom-result-modal');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('#gedcom-stat-persons')).toHaveText('2');
+    // External media offer is visible and names the count.
+    const mediaRow = dialog.locator('#gedcom-media-row');
+    await expect(mediaRow).toBeVisible();
+    await expect(mediaRow).toContainText('2');
+
+    // Attach the folder contents — one file matches by basename.
+    await page.locator('#gedcom-media-input').setInputFiles('e2e/fixtures/avatar.png');
+    await expect(page.locator('.toast')).toContainText('1');
+    // One ref remains (missing-photo.jpg), the row stays with count 1.
+    await expect(mediaRow).toContainText('1');
+    // Photos tile appears.
+    await expect(dialog.locator('#gedcom-stat-photos')).toHaveText('1');
+
+    // Import as new tree: the photo really lands on Jan.
+    await dialog.locator('#gedcom-new-tree-btn').click();
+    const importDialog = page.locator('#import-tree-modal');
+    await expect(importDialog).toBeVisible();
+    await importDialog.getByRole('button', { name: 'Import' }).click();
+    await expect(importDialog).toBeHidden();
+    const hasPhoto = await page.evaluate(() => {
+        const jan = window.Strom.DataManager.getAllPersons().find((p: { firstName: string }) => p.firstName === 'Jan');
+        return !!jan?.photo && jan.photo.startsWith('data:image');
+    });
+    expect(hasPhoto).toBe(true);
+});

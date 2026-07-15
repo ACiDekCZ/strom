@@ -1,0 +1,21 @@
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Jan /Novak/
+1 SEX M
+1 BIRT
+2 DATE BET 1880 AND 1885
+1 OBJE
+2 FILE C:\Users\test\media\avatar.png
+2 TITL Jan portrait
+0 @I2@ INDI
+1 NAME Marie /Novakova/
+1 SEX F
+1 OBJE
+2 FILE missing-photo.jpg
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+0 TRLR

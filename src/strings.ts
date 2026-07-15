@@ -61,7 +61,7 @@ const stringsEN = {
         title: 'Welcome to Strom',
         subtitle: 'Start building your family tree',
         addFirst: 'Add First Person',
-        importFromFile: 'Import from File'
+        importFromFile: 'I have data elsewhere (GEDCOM from MyHeritage, Ancestry…)'
     },
 
     demo: {
@@ -709,6 +709,16 @@ const stringsEN = {
         parseError: 'Failed to parse GEDCOM file',
         skippedTags: 'Skipped records',
         unknownSex: (n: number) => `${n} person${n === 1 ? '' : 's'} with unknown sex (gender inferred from family role)`,
+        photos: 'Photos',
+        documents: 'Documents',
+        sources: 'Sources',
+        events: 'Events',
+        notes: 'Notes',
+        allImported: 'Everything in the file was imported.',
+        externalMedia: (n: number) => `The file references ${n} external media file${n === 1 ? '' : 's'} (platforms export photos as a separate folder/zip — unpack it first).`,
+        attachMedia: 'Attach media files…',
+        mediaAttached: (matched: number, total: number) => `Attached ${matched} of ${total} referenced files.`,
+        mediaNoMatch: 'None of the selected files match the referenced names.',
     },
 
     // Save current data dialog
@@ -1369,7 +1379,7 @@ const stringsCZ: StringsType = {
         title: 'Vítejte ve Stromu',
         subtitle: 'Začněte tvořit svůj rodokmen',
         addFirst: 'Přidat první osobu',
-        importFromFile: 'Importovat ze souboru'
+        importFromFile: 'Mám data jinde (GEDCOM z MyHeritage, Ancestry…)'
     },
 
     demo: {
@@ -2017,6 +2027,16 @@ const stringsCZ: StringsType = {
         parseError: 'Nepodařilo se zpracovat GEDCOM soubor',
         skippedTags: 'Přeskočené záznamy',
         unknownSex: (n: number) => `${n} ${n === 1 ? 'osoba' : n < 5 ? 'osoby' : 'osob'} s neznámým pohlavím (odvozeno z role v rodině)`,
+        photos: 'Fotografie',
+        documents: 'Dokumenty',
+        sources: 'Prameny',
+        events: 'Události',
+        notes: 'Poznámky',
+        allImported: 'Vše ze souboru bylo naimportováno.',
+        externalMedia: (n: number) => `Soubor odkazuje na ${n} externích souborů médií (platformy exportují fotky zvlášť jako složku/zip — nejdřív jej rozbalte).`,
+        attachMedia: 'Napojit soubory médií…',
+        mediaAttached: (matched: number, total: number) => `Napojeno ${matched} z ${total} odkazovaných souborů.`,
+        mediaNoMatch: 'Žádný z vybraných souborů neodpovídá odkazovaným názvům.',
     },
 
     // Save current data dialog

@@ -3295,6 +3295,12 @@
         .option-desc { font-size: 12px; color: var(--text-light); }
 
         /* GEDCOM result dialog */
+        .gedcom-media-row {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            background: rgba(74, 124, 89, 0.08); border-radius: 8px;
+            padding: 10px 12px; margin-bottom: 14px; font-size: 13px;
+        }
+        .gedcom-media-row button { margin: 0; }
         .gedcom-stat-detail {
             font-size: 12px;
             color: var(--text-light);
@@ -3303,18 +3309,19 @@
         }
         .gedcom-stats {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
+            grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+            gap: 8px;
             margin-bottom: 20px;
             text-align: center;
         }
         .gedcom-stats .stat-item {
             background: #f8f9fa;
-            padding: 12px;
+            padding: 10px 6px;
             border-radius: 8px;
+            min-width: 0;
         }
         .gedcom-stats .number {
-            font-size: 28px;
+            font-size: 24px;
             font-weight: 600;
             color: var(--primary);
         }
@@ -6965,12 +6972,34 @@
                     <div class="number" id="gedcom-stat-placeholders">0</div>
                     <div class="label" data-i18n="gedcom.placeholders"></div>
                 </div>
+                <div class="stat-item" id="gedcom-stat-photos-item">
+                    <div class="number" id="gedcom-stat-photos">0</div>
+                    <div class="label" data-i18n="gedcom.photos"></div>
+                </div>
+                <div class="stat-item" id="gedcom-stat-documents-item">
+                    <div class="number" id="gedcom-stat-documents">0</div>
+                    <div class="label" data-i18n="gedcom.documents"></div>
+                </div>
+                <div class="stat-item" id="gedcom-stat-sources-item">
+                    <div class="number" id="gedcom-stat-sources">0</div>
+                    <div class="label" data-i18n="gedcom.sources"></div>
+                </div>
+                <div class="stat-item" id="gedcom-stat-events-item">
+                    <div class="number" id="gedcom-stat-events">0</div>
+                    <div class="label" data-i18n="gedcom.events"></div>
+                </div>
                 <div class="stat-item">
                     <div class="number skipped" id="gedcom-stat-unsupported">0</div>
                     <div class="label" data-i18n="gedcom.unsupported"></div>
                 </div>
             </div>
             <p id="gedcom-stat-detail" class="gedcom-stat-detail" style="display:none;"></p>
+            <div id="gedcom-media-row" class="gedcom-media-row" style="display:none;">
+                <span id="gedcom-media-text"></span>
+                <button type="button" class="secondary" onclick="document.getElementById('gedcom-media-input').click()" data-i18n="gedcom.attachMedia"></button>
+                <input type="file" id="gedcom-media-input" multiple accept="image/*,.pdf" style="display:none;"
+                    onchange="window.Strom.UI.attachGedcomMedia(this.files)">
+            </div>
             <div class="menu-options" id="gedcom-options">
                 <!-- Normal options (hidden when importing to current tree) -->
                 <button id="gedcom-new-tree-btn" class="menu-option" onclick="window.Strom.UI.importGedcomAsNewTree()">
