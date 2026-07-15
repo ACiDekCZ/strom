@@ -259,6 +259,8 @@ export const miscMethods = uiModule({
         const deathAnnToggle = document.getElementById('death-anniversaries-toggle') as HTMLInputElement | null;
         if (deathAnnToggle) deathAnnToggle.checked = SettingsManager.isDeathAnniversariesEnabled();
 
+        const crossTreeToggle = document.getElementById('cross-tree-badges-toggle') as HTMLInputElement | null;
+        if (crossTreeToggle) crossTreeToggle.checked = SettingsManager.isCrossTreeBadgesEnabled();
         const branchColorsToggle = document.getElementById('branch-colors-toggle') as HTMLInputElement | null;
         if (branchColorsToggle) branchColorsToggle.checked = SettingsManager.isBranchColorsEnabled();
         const descFamiliesToggle = document.getElementById('descendants-families-default-toggle') as HTMLInputElement | null;

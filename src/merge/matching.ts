@@ -1004,6 +1004,10 @@ export function quickMatchScore(p1: Person, p2: Person): number {
     // Gender must match
     if (p1.gender !== p2.gender) return 0;
 
+    // A name is required: two unnamed people share an empty string (similarity
+    // 1.0) and would otherwise match on a coincidental birth year alone.
+    if (!`${p1.firstName}${p1.lastName}`.trim() || !`${p2.firstName}${p2.lastName}`.trim()) return 0;
+
     const firstNameSim = stringSimilarity(p1.firstName, p2.firstName);
     const lastNameSim = stringSimilarity(p1.lastName, p2.lastName);
     const nameSim = (firstNameSim + lastNameSim) / 2;

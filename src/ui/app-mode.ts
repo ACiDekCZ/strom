@@ -586,6 +586,11 @@ export const appModeMethods = uiModule({
         this.updateViewModeUI(); // owns the toolbar family-button visibility
     },
 
+    toggleCrossTreeBadges(enabled: boolean): void {
+        SettingsManager.setCrossTreeBadges(enabled);
+        TreeRenderer.render();
+    },
+
     toggleBranchColors(enabled: boolean): void {
         SettingsManager.setBranchColors(enabled);
         TreeRenderer.render();   // re-render to add/remove the stripes

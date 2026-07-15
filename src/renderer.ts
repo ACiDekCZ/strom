@@ -769,8 +769,10 @@ class TreeRendererClass {
      * Only available when not in view mode and there are multiple visible trees
      */
     private async getAllTreesForCrossTreeMatching(): Promise<Map<TreeId, { name: string; data: StromData }> | null> {
-        // Don't do cross-tree matching in view mode
+        // Don't do cross-tree matching in view mode, or when the user turned
+        // the connection badges off (also skips the per-tree decrypt cost).
         if (DataManager.isViewMode()) return null;
+        if (!SettingsManager.isCrossTreeBadgesEnabled()) return null;
 
         // Cached per tree (stamped by lastModifiedAt): loading + decrypting
         // every tree's data on every render was a real cost on big setups.

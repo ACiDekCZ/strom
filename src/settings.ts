@@ -160,6 +160,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Cross-tree connection badges (the "+N" on cards). Default ON. */
+    isCrossTreeBadgesEnabled(): boolean {
+        return this.settings.crossTreeBadges !== false;
+    }
+
+    setCrossTreeBadges(enabled: boolean): void {
+        this.settings.crossTreeBadges = enabled;
+        this.save();
+    }
+
     /** Toolbar "Add family" button default OFF (opt-in). */
     isFamilyButtonEnabled(): boolean {
         return this.settings.familyButton === true;

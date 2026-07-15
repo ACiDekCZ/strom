@@ -1170,6 +1170,8 @@ const stringsEN = {
     // Cross-tree links
     crossTree: {
         badgeTitle: (count: number) => `Found in ${count} other tree${count !== 1 ? 's' : ''}`,
+        settingLabel: 'Cross-tree connections',
+        settingHint: 'Show a badge when a person also appears in another tree',
         tooltipHeader: 'Also in:',
         clickToSwitch: 'Click to switch'
     },
@@ -2496,6 +2498,8 @@ const stringsCZ: StringsType = {
     // Cross-tree links
     crossTree: {
         badgeTitle: (count: number) => `Nalezeno v ${count} ${count === 1 ? 'jiném stromu' : count < 5 ? 'jiných stromech' : 'jiných stromech'}`,
+        settingLabel: 'Propojení mezi stromy',
+        settingHint: 'Zobrazit odznak, když se osoba vyskytuje i v jiném stromu',
         tooltipHeader: 'Také v:',
         clickToSwitch: 'Kliknutím přepnout'
     },
