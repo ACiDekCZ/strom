@@ -395,6 +395,8 @@ export const personModalMethods = uiModule({
         const removeBtn = document.getElementById('photo-remove-btn');
         const sizeEl = document.getElementById('photo-size');
         if (preview) {
+            // Note: this slot's <img> IS the person's photo when saving, so
+            // nothing decorative may be put here — it would be saved as theirs.
             preview.innerHTML = dataUrl ? `<img src="${dataUrl}" alt="">` : '';
         }
         if (removeBtn) removeBtn.style.display = dataUrl ? '' : 'none';

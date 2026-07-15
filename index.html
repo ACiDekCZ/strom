@@ -569,32 +569,8 @@
             object-fit: cover;
             display: block;
         }
-        /* The stand-in reads as "no picture", not as a picture: flat, quiet,
-           and it takes the card's own colour so it never fights the photo
-           avatars next to it. */
-        .card-silhouette {
-            width: 100%;
-            height: 100%;
-            display: block;
-            fill: currentColor;
-            opacity: 0.22;
-        }
-        .card-avatar:has(.card-silhouette) {
-            background: color-mix(in srgb, currentColor 8%, var(--card-bg));
-            box-shadow: none;
-        }
         .person-card.has-photo {
             padding-left: 52px;
-        }
-        /* The stand-in only shows on detailed cards (see renderer), where the
-           card is wide enough to give it room without squeezing the name. */
-        .person-card.has-avatar:not(.has-photo) {
-            padding-left: 40px;
-        }
-        .person-card.has-avatar:not(.has-photo) .card-avatar {
-            width: 28px;
-            height: 28px;
-            left: 6px;
         }
         .card-tooltip-photo {
             display: block;
@@ -623,6 +599,10 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
+        }
+        /* The stand-in is an invitation, not content — it sits back. */
+        .photo-preview img.photo-placeholder {
+            opacity: 0.75;
             display: block;
         }
         .photo-actions {

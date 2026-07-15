@@ -16,18 +16,6 @@ import {
     StromData
 } from './types.js';
 import { TreeManager } from './tree-manager.js';
-
-/**
- * Stand-in for a missing photo: head and shoulders, no face, no gender, no
- * era — a person we do not have a picture of, which is most of them. Drawn
- * inline (a few bytes) rather than shipped as an image; the app is one file and
- * a demo full of portraits would cost more than the whole app does.
- */
-const PERSON_SILHOUETTE = `
-    <svg class="card-silhouette" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
-        <circle cx="20" cy="14.5" r="6.5"/>
-        <path d="M20 23c-7.2 0-13 5.4-13 12v5h26v-5c0-6.6-5.8-12-13-12z"/>
-    </svg>`;
 import * as CrossTree from './cross-tree.js';
 import { CARD_SIZE, ViewMode, STANDALONE_VIEWS } from './types.js';
 import {
@@ -862,13 +850,13 @@ class TreeRendererClass {
             } else {
                 classes += ' ' + person.gender;
             }
-            // A photo earns its slot on any card. The stand-in only appears on
-            // detailed cards: it carries no information, and on a 130px normal
-            // card the slot would cost 40% of the width and push long names
-            // past the point where shrinking can still keep them whole.
-            const cardDensity = SettingsManager.getCardDensity();
-            if (person.photo && cardDensity !== 'compact') classes += ' has-photo has-avatar';
-            else if (cardDensity === 'detailed') classes += ' has-avatar';
+            // Photo avatar shifts the text right; without a photo the card is
+            // rendered exactly as before (no avatar element, no class). Nothing
+            // stands in for a missing photo here: most people in a tree — every
+            // ancestor — will never have one, and the slot costs 40% of a card.
+            if (person.photo && SettingsManager.getCardDensity() !== 'compact') {
+                classes += ' has-photo';
+            }
             // Add focused class if this is the focus person
             if (this.focusPersonId && id === this.focusPersonId) {
                 classes += ' focused';
@@ -1068,14 +1056,12 @@ class TreeRendererClass {
             // Density decides what fits: compact = names only (no dates/photo),
             // detailed = + birth place and age.
             const density = SettingsManager.getCardDensity();
-            const showAvatar = !!person.photo ? density !== 'compact' : density === 'detailed';
+            const showPhoto = density !== 'compact' && !!person.photo;
             const cardAge = density === 'detailed' ? this.calculateAge(person) : null;
             const place = density === 'detailed' ? (person.birthPlace ?? '') : '';
 
             html += `
-                ${showAvatar ? `<div class="card-avatar">${person.photo
-                    ? `<img src="${person.photo}" alt="">`
-                    : PERSON_SILHOUETTE}</div>` : ''}
+                ${showPhoto ? `<div class="card-avatar"><img src="${person.photo}" alt=""></div>` : ''}
                 <div class="name"><span class="name-text">${this.escapeHtml(displayName)}</span>${isDeceased ? '<span class="deceased-marker">†</span>' : ''}</div>
                 <div class="surname">${this.escapeHtml(displaySurname)}</div>
                 ${density !== 'compact' && birthYear ? `<div class="birth-date"><span class="date-year">${birthYear}</span>${birthFull ? `<span class="date-full">${birthFull}</span>` : ''}</div>` : ''}

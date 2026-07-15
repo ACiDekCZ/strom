@@ -22,6 +22,7 @@ import {
     toPersonId, toPartnershipId, STROM_DATA_VERSION,
 } from './types.js';
 
+
 interface PersonOpts {
     birthDate?: string;
     deathDate?: string;
