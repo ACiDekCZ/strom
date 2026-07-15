@@ -228,6 +228,18 @@ export type LastFocusedMarker = typeof LAST_FOCUSED;
  */
 export const STROM_DATA_VERSION = 5;
 
+/**
+ * Coordinates of one place, kept in the tree's own file so a place is looked up
+ * once and the map then works offline. Keyed by placeKey() (see src/places.ts),
+ * so every spelling variant of a place shares one entry.
+ */
+export interface PlaceGeo {
+    lat: number;
+    lon: number;
+    /** Full name as the geocoder understood it — lets the user check the hit. */
+    label?: string;
+}
+
 export interface StromData {
     /** Data format version for migration support */
     version?: number;
@@ -241,11 +253,24 @@ export interface StromData {
     // Default person settings (exports with tree)
     defaultPersonId?: PersonId | LastFocusedMarker;  // undefined = first person, LAST_FOCUSED = where user left off, PersonId = specific
 
+    /** Coordinates for places, keyed by placeKey(). Filled in by geocoding (opt-in). */
+    places?: Record<string, PlaceGeo>;
+
     // Last focused state (used when defaultPersonId === LAST_FOCUSED)
     lastFocusPersonId?: PersonId;
     lastFocusDepthUp?: number;
     lastFocusDepthDown?: number;
 }
+
+/**
+ * How the tree is drawn. 'family' is the default focus-centric view; the others
+ * are alternative readings of the SAME selection of people ('descendants'
+ * chart, 'timeline' life-bars, 'fan' ancestor chart, 'map' of their places).
+ */
+export type ViewMode = 'family' | 'descendants' | 'timeline' | 'fan' | 'map';
+
+/** Views drawn by something other than the layout pipeline (own containers). */
+export const STANDALONE_VIEWS: readonly ViewMode[] = ['timeline', 'fan', 'map'];
 
 // ==================== UI TYPES ====================
 
@@ -462,6 +487,7 @@ export interface AppSettings {
     cardDensity?: CardDensity;  // default: 'normal' - how much detail a card shows
     familyButton?: boolean;  // default: false - toolbar shortcut to the family wizard
     descendantsFullFamilies?: boolean;  // default: false - descendants view shows partners' other families
+    geocoding?: boolean;   // default: undefined (never asked) - user allowed sending place names to the geocoder
     senderName?: string;   // collaboration: name shown to relatives in shared files
 }
 

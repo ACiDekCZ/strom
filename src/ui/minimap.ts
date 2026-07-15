@@ -12,7 +12,7 @@ import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
-import { DEFAULT_LAYOUT_CONFIG, PersonId, Position } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG, PersonId, Position, STANDALONE_VIEWS } from '../types.js';
 import { uiModule } from './module.js';
 
 // Panel geometry (CSS px). Kept small; the card loop is a bare fillRect sweep.
@@ -116,10 +116,10 @@ export const minimapMethods = uiModule({
         const { cardWidth, cardHeight } = DEFAULT_LAYOUT_CONFIG;
         const box = worldBoundingBox(positions, cardWidth, cardHeight);
 
-        // Timeline mode has its own scroll container — no minimap there.
+        // The minimap navigates the tree canvas; the views with their own
+        // container (timeline, fan, map) have nothing for it to steer.
         if (!SettingsManager.isMinimapEnabled() || isMobile || !box
-            || TreeRenderer.getViewMode() === 'timeline'
-            || TreeRenderer.getViewMode() === 'fan') {
+            || STANDALONE_VIEWS.includes(TreeRenderer.getViewMode())) {
             panel.style.display = 'none';
             this.minimapTransform = null;
             return;

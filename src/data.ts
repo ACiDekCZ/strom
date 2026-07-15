@@ -27,7 +27,8 @@ import {
     EmbeddedDataEnvelope,
     isEmbeddedEnvelope,
     FamilyWizardSpec,
-    FamilyWizardMember
+    FamilyWizardMember,
+    PlaceGeo,
 } from './types.js';
 import { strings } from './strings.js';
 import { TreeManager } from './tree-manager.js';
@@ -869,6 +870,21 @@ class DataManagerClass {
             TreeManager.saveTreeData(this.currentTreeId, this.data);
             CrossTree.invalidateCacheForTree(this.currentTreeId);
         }
+    }
+
+    // ==================== PLACES ====================
+
+    /**
+     * Store coordinates for places (keyed by placeKey). Written into the tree's
+     * own data so they travel with the file and the map keeps working offline.
+     * Goes through the normal mutation path, so undo covers it.
+     */
+    setPlaceGeos(geos: ReadonlyMap<string, PlaceGeo>): void {
+        if (geos.size === 0) return;
+        this.beginMutation();
+        this.data.places = { ...this.data.places };
+        for (const [key, geo] of geos) this.data.places[key] = geo;
+        this.commitMutation(strings.undo.geocodePlaces(geos.size));
     }
 
     // ==================== GETTERS ====================

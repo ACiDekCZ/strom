@@ -442,6 +442,7 @@ const stringsEN = {
         descendants: 'Descendants',
         timeline: 'Timeline',
         fan: 'Fan',
+        map: 'Map',
         toggle: 'Family / descendants view',
         back: 'Back to family view',
         badge: (name: string, count: number) => `Descendants: ${name} (${count})`,
@@ -451,6 +452,32 @@ const stringsEN = {
     },
 
     // Fan chart (ancestor semicircle)
+    map: {
+        fit: 'Fit all places',
+        scopeView: 'This view',
+        scopeTree: 'Whole tree',
+        noPlaces: 'None of the people shown have a place filled in yet.',
+        offline: 'No internet, so the map picture cannot load. The coordinates you already have stay in your tree.',
+        missing: (shown: number, missing: number) =>
+            shown > 0
+                ? `${shown} places on the map, ${missing} without coordinates.`
+                : `${missing} places have no coordinates yet.`,
+        lookUp: (count: number) => `Look up ${count} places`,
+        geocodingProgress: (done: number, total: number, place: string) =>
+            `Looking up places… ${done}/${total} (${place})`,
+        done: (found: number) => `${found} places placed on the map.`,
+        doneWithMisses: (found: number, missed: number) =>
+            `${found} places placed. ${missed} could not be found — check the spelling, or add the country.`,
+        consentTitle: 'Look up coordinates online?',
+        consentBody: (count: number, service: string) =>
+            `To draw the map, ${count} place names (for example "Prague") will be sent to ${service}. `
+            + 'Nothing else leaves the app — no names, dates or relations of your family. '
+            + 'The coordinates are saved into your tree, so each place is looked up only once and the map works offline afterwards.',
+        consentConfirm: 'Look them up',
+        settingLabel: 'Look up places online',
+        settingHint: 'Allows the map to send place names to a geocoding service. Coordinates already found stay in your tree.',
+    },
+
     fan: {
         generations: 'Generations',
     },
@@ -1303,6 +1330,7 @@ const stringsEN = {
         addPerson: (name: string) => `adding ${name}`,
         editPerson: (name: string) => `editing ${name}`,
         clearedData: 'clearing all data',
+        geocodePlaces: (count: number) => `looking up ${count} places`,
         loadedData: 'importing data',
         repairedIssue: 'a validation repair',
         deletePerson: (name: string) => `deleting ${name}`,
@@ -1801,6 +1829,7 @@ const stringsCZ: StringsType = {
         descendants: 'Potomci',
         timeline: 'Časová osa',
         fan: 'Vějíř',
+        map: 'Mapa',
         toggle: 'Pohled rodina / potomci',
         back: 'Zpět na rodinný pohled',
         badge: (name: string, count: number) => `Potomci: ${name} (${count})`,
@@ -1810,6 +1839,32 @@ const stringsCZ: StringsType = {
     },
 
     // Fan chart (ancestor semicircle)
+    map: {
+        fit: 'Zobrazit všechna místa',
+        scopeView: 'Tento pohled',
+        scopeTree: 'Celý strom',
+        noPlaces: 'Žádná ze zobrazených osob zatím nemá vyplněné místo.',
+        offline: 'Bez internetu se mapový podklad nenačte. Už dohledané souřadnice zůstávají ve vašem stromu.',
+        missing: (shown: number, missing: number) =>
+            shown > 0
+                ? `${shown} míst na mapě, ${missing} bez souřadnic.`
+                : `${missing} míst zatím nemá souřadnice.`,
+        lookUp: (count: number) => `Dohledat ${count} míst`,
+        geocodingProgress: (done: number, total: number, place: string) =>
+            `Dohledávám místa… ${done}/${total} (${place})`,
+        done: (found: number) => `${found} míst je na mapě.`,
+        doneWithMisses: (found: number, missed: number) =>
+            `${found} míst je na mapě. ${missed} se nepodařilo najít — zkuste opravit zápis nebo doplnit zemi.`,
+        consentTitle: 'Dohledat souřadnice online?',
+        consentBody: (count: number, service: string) =>
+            `Pro vykreslení mapy se do služby ${service} odešle ${count} názvů míst (například „Praha“). `
+            + 'Nic jiného aplikaci neopustí — žádná jména, data ani vztahy vaší rodiny. '
+            + 'Souřadnice se uloží do vašeho stromu, takže se každé místo dohledává jen jednou a mapa pak funguje i offline.',
+        consentConfirm: 'Dohledat',
+        settingLabel: 'Dohledávat místa online',
+        settingHint: 'Umožní mapě odesílat názvy míst do geokódovací služby. Už dohledané souřadnice zůstávají ve vašem stromu.',
+    },
+
     fan: {
         generations: 'Generace',
     },
@@ -2662,6 +2717,7 @@ const stringsCZ: StringsType = {
         addPerson: (name: string) => `přidání osoby ${name}`,
         editPerson: (name: string) => `úprava osoby ${name}`,
         clearedData: 'smazání všech dat',
+        geocodePlaces: (count: number) => `dohledání ${count} míst`,
         loadedData: 'import dat',
         repairedIssue: 'oprava z validace',
         deletePerson: (name: string) => `smazání osoby ${name}`,

@@ -581,6 +581,14 @@ export const appModeMethods = uiModule({
         this.updateViewModeUI(); // owns the legend visibility
     },
 
+    /**
+     * Turning this off withdraws consent: no further place names are sent.
+     * Coordinates already found stay in the tree — they are the user's data now.
+     */
+    toggleGeocoding(enabled: boolean): void {
+        SettingsManager.setGeocodingAllowed(enabled);
+    },
+
     toggleFamilyButton(enabled: boolean): void {
         SettingsManager.setFamilyButton(enabled);
         this.updateViewModeUI(); // owns the toolbar family-button visibility

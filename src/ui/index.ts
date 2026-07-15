@@ -19,7 +19,8 @@ import {
     StromData,
     TreeId,
     LAST_FOCUSED,
-    LastFocusedMarker
+    LastFocusedMarker,
+    PlaceGeo
 } from '../types.js';
 import { strings } from '../strings.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
@@ -69,6 +70,7 @@ import { snapshotsUiMethods } from './snapshots-ui.js';
 import { minimapMethods, MinimapTransform, WorldBox } from './minimap.js';
 import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { slideshowMethods } from './slideshow.js';
+import { mapMethods, MapScope } from './map-ui.js';
 import { shareUiMethods } from './share-ui.js';
 import { familyWizardMethods } from './family-wizard.js';
 import { pwaUiMethods } from './pwa-ui.js';
@@ -141,6 +143,14 @@ export class UIClass {
     slideshowStops: PersonId[] = [];
     slideshowIndex = 0;
     slideshowTimer: number | null = null;
+
+    // Map view. mapCenter null = not framed yet (the next draw fits the places).
+    mapScope: MapScope = 'view';
+    mapCenter: PlaceGeo | null = null;
+    mapZoom = 5;
+    /** Progress of a running lookup, null when idle. */
+    mapGeocoding: { done: number; total: number; place: string } | null = null;
+    mapGeocodeAbort: AbortController | null = null;
     /** When the source editor was opened from the picker, cite the new source. */
     citeSourceAfterCreate = false;
 
@@ -302,6 +312,10 @@ Object.assign(UIClass.prototype, anniversariesUiMethods);
 type SlideshowMethods = typeof slideshowMethods;
 export interface UIClass extends SlideshowMethods {}
 Object.assign(UIClass.prototype, slideshowMethods);
+
+type MapMethods = typeof mapMethods;
+export interface UIClass extends MapMethods {}
+Object.assign(UIClass.prototype, mapMethods);
 
 type FamilyWizardMethods = typeof familyWizardMethods;
 export interface UIClass extends FamilyWizardMethods {}

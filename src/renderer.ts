@@ -17,7 +17,7 @@ import {
 } from './types.js';
 import { TreeManager } from './tree-manager.js';
 import * as CrossTree from './cross-tree.js';
-import { CARD_SIZE } from './types.js';
+import { CARD_SIZE, ViewMode, STANDALONE_VIEWS } from './types.js';
 import {
     computeLayout,
     StromLayoutEngine,
@@ -80,9 +80,11 @@ class TreeRendererClass {
      * descendants and their partners (a classic descendants chart). 'timeline'
      * shows the same selection as a set of life-bars on a year axis (no layout
      * pipeline). 'fan' is the classic semicircular ancestor chart (own SVG,
-     * no layout pipeline). Persisted per tree in localStorage.
+     * no layout pipeline). 'map' plots the places of the same people (own
+     * container, needs the internet for tiles). Persisted per tree in
+     * localStorage.
      */
-    private viewMode: 'family' | 'descendants' | 'timeline' | 'fan' = 'family';
+    private viewMode: ViewMode = 'family';
 
     /**
      * Descendants view: show partners' whole families (their other unions and
@@ -219,34 +221,32 @@ class TreeRendererClass {
         this.connections = result.connections;
         this.spouseLines = result.spouseLines;
 
-        // Timeline uses the same person selection but its own SVG layout (the
-        // pipeline above only served to pick which persons are visible).
-        const timelineContainer = document.getElementById('timeline-container');
-        const fanContainer = document.getElementById('fan-container');
-        if (this.viewMode === 'timeline' && timelineContainer) {
-            canvas.style.display = 'none';
-            if (fanContainer) fanContainer.style.display = 'none';
-            timelineContainer.style.display = 'block';
-            this.renderTimeline(timelineContainer);
-            this.updateFocusUI();
-            UI.updateViewModeUI?.();
-            UI.updateMinimap?.();  // hides the minimap in timeline mode
-            return;
+        // Timeline, fan and map show the same person selection drawn their own
+        // way, in their own container (the pipeline above only served to pick
+        // which persons are visible). Everything else uses the tree canvas.
+        const standalone: Partial<Record<ViewMode, { id: string; display: string; draw: (el: HTMLElement) => void }>> = {
+            timeline: { id: 'timeline-container', display: 'block', draw: el => this.renderTimeline(el) },
+            fan: { id: 'fan-container', display: 'flex', draw: el => this.renderFan(el) },
+            map: { id: 'map-container', display: 'block', draw: el => UI.renderMapView?.(el) },
+        };
+        const active = standalone[this.viewMode];
+        for (const [mode, view] of Object.entries(standalone)) {
+            const el = document.getElementById(view.id);
+            if (el) el.style.display = mode === this.viewMode ? view.display : 'none';
         }
-        // Fan chart: ancestors-only semicircle, its own SVG (no pipeline).
-        if (this.viewMode === 'fan' && fanContainer) {
-            canvas.style.display = 'none';
-            if (timelineContainer) timelineContainer.style.display = 'none';
-            fanContainer.style.display = 'flex';
-            this.renderFan(fanContainer);
-            this.updateFocusUI();
-            UI.updateViewModeUI?.();
-            UI.updateMinimap?.();  // hidden in fan mode
-            return;
+        if (active) {
+            const el = document.getElementById(active.id);
+            if (el) {
+                canvas.style.display = 'none';
+                active.draw(el);
+                this.updateFocusUI();
+                UI.updateViewModeUI?.();
+                UI.updateMinimap?.();  // hidden outside the tree canvas
+                return;
+            }
         }
+
         canvas.style.display = '';
-        if (timelineContainer) timelineContainer.style.display = 'none';
-        if (fanContainer) fanContainer.style.display = 'none';
 
         await this.renderCards(canvas);
         this.renderLines(svg);
@@ -396,9 +396,9 @@ class TreeRendererClass {
         return this.focusPersonId;
     }
 
-    // ==================== DISPLAY VIEW MODE (family / descendants / timeline / fan) ====================
+    // ==================== DISPLAY VIEW MODE ====================
 
-    getViewMode(): 'family' | 'descendants' | 'timeline' | 'fan' {
+    getViewMode(): ViewMode {
         return this.viewMode;
     }
 
@@ -406,14 +406,14 @@ class TreeRendererClass {
      * Set + persist the view mode WITHOUT rendering. For callers that follow
      * up with setFocus (which renders) — avoids two overlapping renders.
      */
-    presetViewMode(mode: 'family' | 'descendants' | 'timeline' | 'fan'): void {
+    presetViewMode(mode: ViewMode): void {
         if (this.viewMode === mode) return;
         this.viewMode = mode;
         this.persistViewMode();
     }
 
     /** Switch the display view mode and re-render. Persisted per tree. */
-    setViewMode(mode: 'family' | 'descendants' | 'timeline' | 'fan'): void {
+    setViewMode(mode: ViewMode): void {
         if (this.viewMode === mode) return;
         this.viewMode = mode;
         this.persistViewMode();
@@ -427,7 +427,7 @@ class TreeRendererClass {
 
     /** Re-center the viewport for the current view mode (after a render). */
     centerForViewMode(): void {
-        if (this.viewMode === 'timeline' || this.viewMode === 'fan') return;
+        if (STANDALONE_VIEWS.includes(this.viewMode)) return;
         // The descendants chart is focus-at-top: center it and align its top
         // edge, but KEEP the user's current zoom level (user feedback —
         // fitting to screen kept re-zooming under their hands).
@@ -452,7 +452,8 @@ class TreeRendererClass {
         const key = this.viewModeStorageKey();
         let stored: string | null = null;
         try { stored = key ? localStorage.getItem(key) : null; } catch { /* ignore */ }
-        this.viewMode = (stored === 'descendants' || stored === 'timeline' || stored === 'fan') ? stored : 'family';
+        const known: readonly string[] = ['descendants', 'timeline', 'fan', 'map'];
+        this.viewMode = (stored && known.includes(stored)) ? stored as ViewMode : 'family';
     }
 
     /**

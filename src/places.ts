@@ -11,7 +11,7 @@
  * variants) with no migration.
  */
 
-import { StromData } from './types.js';
+import { StromData, PersonId } from './types.js';
 
 export interface PlaceUsage {
     /** The spelling shown to the user: the most frequent variant (ties: first alphabetically). */
@@ -20,6 +20,8 @@ export interface PlaceUsage {
     variants: Map<string, number>;
     /** How many fields across the tree use this place (all variants together). */
     count: number;
+    /** Everyone connected to this place — born, died, married or an event here. */
+    personIds: PersonId[];
 }
 
 /**
@@ -35,26 +37,39 @@ export function placeKey(raw: string): string {
         .trim();
 }
 
-/** Every place string in the tree, with usage counts, keyed by placeKey(). */
-export function collectPlaces(data: StromData): Map<string, PlaceUsage> {
+/**
+ * Every place string in the tree, with usage counts, keyed by placeKey().
+ * `personFilter` narrows the result to places connected to those people — that
+ * is how the map shows just what is on screen.
+ */
+export function collectPlaces(data: StromData, personFilter?: ReadonlySet<PersonId>): Map<string, PlaceUsage> {
     const out = new Map<string, PlaceUsage>();
-    const add = (raw: string | undefined): void => {
+    const add = (raw: string | undefined, who: PersonId[]): void => {
         const value = raw?.trim();
         if (!value) return;
         const key = placeKey(value);
         if (!key) return;
-        const entry = out.get(key) ?? { display: value, variants: new Map<string, number>(), count: 0 };
+        const entry = out.get(key)
+            ?? { display: value, variants: new Map<string, number>(), count: 0, personIds: [] };
         entry.variants.set(value, (entry.variants.get(value) ?? 0) + 1);
         entry.count++;
+        for (const id of who) if (!entry.personIds.includes(id)) entry.personIds.push(id);
         out.set(key, entry);
     };
+    const kept = (id: PersonId): boolean => !personFilter || personFilter.has(id);
 
     for (const person of Object.values(data.persons)) {
-        add(person.birthPlace);
-        add(person.deathPlace);
-        for (const ev of person.events ?? []) add(ev.place);
+        if (!kept(person.id)) continue;
+        add(person.birthPlace, [person.id]);
+        add(person.deathPlace, [person.id]);
+        for (const ev of person.events ?? []) add(ev.place, [person.id]);
     }
-    for (const union of Object.values(data.partnerships)) add(union.startPlace);
+    for (const union of Object.values(data.partnerships)) {
+        // A wedding place belongs to both partners; one of them being on screen
+        // is enough for the wedding to belong on the map.
+        const couple = [union.person1Id, union.person2Id].filter(kept);
+        if (couple.length > 0) add(union.startPlace, couple);
+    }
 
     // The display spelling is the one used most (stable tiebreak: alphabetical).
     for (const entry of out.values()) {

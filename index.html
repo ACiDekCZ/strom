@@ -2794,6 +2794,189 @@
         [data-theme="dark"] .timeline-container { background: #1e1e1e; }
 
         /* Fan chart view */
+        /* ---- Map view (A6) ---- */
+        .map-container {
+            display: none;
+            position: absolute;
+            inset: 0;
+            /* clip, NOT hidden: tiles and markers deliberately overflow, and
+               "hidden" would still make this a scroll container — the browser
+               then scrolls it when focus lands on a marker, dragging the map
+               out from under its own controls. "clip" cannot scroll at all. */
+            overflow: clip;
+            background: #e8e4dc;  /* map paper tone, visible while tiles load */
+            touch-action: none;
+            cursor: grab;
+        }
+        [data-theme="dark"] .map-container { background: #2a2a2a; }
+        .map-container.map-dragging { cursor: grabbing; }
+        .map-canvas { position: absolute; inset: 0; }
+        .map-tiles, .map-markers { position: absolute; inset: 0; }
+        .map-markers { pointer-events: none; }
+        .map-tile {
+            position: absolute;
+            width: 256px;
+            height: 256px;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+        /* The dot IS the marker: it sits on the spot and takes the clicks. The
+           label is a caption hanging under it and never intercepts anything —
+           otherwise two nearby places (Greenwich and Westminster) would cover
+           each other's dots and the one behind could not be clicked. */
+        .map-marker {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            padding: 0;
+            border: none;
+            background: none;
+            pointer-events: none;
+        }
+        .map-marker-dot {
+            pointer-events: auto;
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+            min-width: 26px;
+            height: 26px;
+            padding: 0 6px;
+            border-radius: 13px;
+            border: 2px solid #fff;
+            background: var(--primary, #4a7c59);
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+        }
+        .map-marker-dot:hover { transform: scale(1.12); }
+        .map-marker-label {
+            position: absolute;
+            top: calc(100% + 2px);
+            left: 50%;
+            transform: translateX(-50%);
+            pointer-events: none;
+            max-width: 140px;
+            padding: 1px 5px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.86);
+            color: #222;
+            font-size: 11px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        [data-theme="dark"] .map-marker-label { background: rgba(30,30,30,0.86); color: #eee; }
+        .map-controls {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .map-controls button {
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        .map-scope {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            display: flex;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+        }
+        .map-scope button {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 0;
+            background: var(--card-bg, #fff);
+            color: var(--text-color, #222);
+            font-size: 13px;
+        }
+        .map-scope button.active { background: var(--primary, #4a7c59); color: #fff; }
+        .map-status {
+            position: absolute;
+            left: 50%;
+            bottom: 16px;
+            transform: translateX(-50%);
+            display: none;
+            align-items: center;
+            gap: 10px;
+            max-width: calc(100% - 32px);
+            padding: 8px 12px;
+            border-radius: 10px;
+            background: var(--card-bg, #fff);
+            box-shadow: 0 3px 12px rgba(0,0,0,0.2);
+        }
+        .map-status-text { font-size: 13px; color: var(--text-color, #222); }
+        .map-status button { padding: 5px 10px; font-size: 13px; }
+        .map-attribution {
+            position: absolute;
+            right: 4px;
+            bottom: 2px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.7);
+            color: #333;
+            font-size: 10px;
+            text-decoration: none;
+        }
+        [data-theme="dark"] .map-attribution { background: rgba(0,0,0,0.5); color: #ccc; }
+        .map-popup {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: min(320px, calc(100% - 32px));
+            max-height: 60%;
+            overflow: auto;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: var(--card-bg, #fff);
+            box-shadow: 0 8px 28px rgba(0,0,0,0.3);
+        }
+        .map-popup-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .map-popup-close { border: none; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--text-light); }
+        .map-popup-label { margin-top: 2px; font-size: 12px; color: var(--text-light); }
+        .map-popup-people { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+        .map-popup-person {
+            padding: 4px 9px;
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 14px;
+            background: var(--bg-color, #fafafa);
+            color: var(--text-color, #222);
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .map-popup-person:hover { background: var(--primary, #4a7c59); color: #fff; }
+
+        /* Tablet: the map is the whole screen, so keep chrome smaller. */
+        @media (max-width: 900px) {
+            .map-marker-label { max-width: 110px; font-size: 10px; }
+            .map-scope button { padding: 5px 10px; font-size: 12px; }
+        }
+        /* Mobile: labels would cover the map — the dot with the count stays,
+           the name is one tap away in the popup. */
+        @media (max-width: 500px) {
+            .map-marker-label { display: none; }
+            .map-controls { right: 8px; }
+            .map-controls button { width: 30px; height: 30px; }
+            .map-scope { left: 8px; }
+            .map-status { bottom: 10px; padding: 7px 10px; gap: 8px; }
+            .map-status-text { font-size: 12px; }
+        }
+        /* Below 600px the focus bar floats across the top of the tree area (it
+           still belongs here: its depth controls decide who is "in this view").
+           The map's own controls step below it rather than hiding under it. */
+        @media (max-width: 600px) {
+            .map-controls, .map-scope { top: 52px; }
+        }
+
         .fan-container {
             display: none;
             position: absolute;
@@ -6090,6 +6273,9 @@
                 background: white !important;
             }
             .fan-container { background: white !important; }
+
+            /* The map is a live online view (tiles): nothing to print. */
+            .map-container { display: none !important; }
             .tl-name { color: #222 !important; }
             .tl-tick { fill: #666 !important; }
             .tl-dot { fill: #444 !important; }
@@ -6206,6 +6392,7 @@
             <button id="view-mode-descendants" onclick="window.Strom.UI.setDisplayViewMode('descendants')" data-i18n="viewModeSwitch.descendants"></button>
             <button id="view-mode-timeline" onclick="window.Strom.UI.setDisplayViewMode('timeline')" data-i18n="viewModeSwitch.timeline"></button>
             <button id="view-mode-fan" onclick="window.Strom.UI.setDisplayViewMode('fan')" data-i18n="viewModeSwitch.fan"></button>
+            <button id="view-mode-map" onclick="window.Strom.UI.setDisplayViewMode('map')" data-i18n="viewModeSwitch.map"></button>
         </div>
 
         <!-- Settings button (desktop) -->
@@ -6227,6 +6414,7 @@
             <button id="mm-view-descendants" onclick="window.Strom.UI.setDisplayViewMode('descendants'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.descendants"></button>
             <button id="mm-view-timeline" onclick="window.Strom.UI.setDisplayViewMode('timeline'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.timeline"></button>
             <button id="mm-view-fan" onclick="window.Strom.UI.setDisplayViewMode('fan'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.fan"></button>
+            <button id="mm-view-map" onclick="window.Strom.UI.setDisplayViewMode('map'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.map"></button>
         </div>
         <button class="edit-only" onclick="window.Strom.UI.makeTreeFromCurrentView(); window.Strom.UI.closeMobileMenu()">✂️ <span data-i18n="menu.makeTreeFromView"></span></button>
         <button onclick="window.Strom.UI.startSlideshow(); window.Strom.UI.closeMobileMenu()">📺 <span data-i18n="slideshow.menu"></span></button>
@@ -6252,6 +6440,7 @@
             <svg id="tree-lines"></svg>
         </div>
         <div id="timeline-container" class="timeline-container"></div>
+        <div id="map-container" class="map-container"></div>
         <div id="fan-container" class="fan-container">
             <div class="fan-controls">
                 <label><span data-i18n="fan.generations"></span>
@@ -6779,6 +6968,15 @@
                     <label class="settings-checkbox">
                         <input type="checkbox" id="descendants-families-default-toggle" onchange="window.Strom.UI.setDescendantsFullFamiliesDefault(this.checked)">
                         <span data-i18n="viewModeSwitch.settingHint"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="map.settingLabel"></label>
+                <div class="settings-options">
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="geocoding-toggle" onchange="window.Strom.UI.toggleGeocoding(this.checked)">
+                        <span data-i18n="map.settingHint"></span>
                     </label>
                 </div>
             </div>

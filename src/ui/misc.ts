@@ -35,7 +35,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog, APP_VERSION } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, APP_VERSION, ViewMode, STANDALONE_VIEWS } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
@@ -276,6 +276,9 @@ export const miscMethods = uiModule({
         const branchLegendToggle = document.getElementById('branch-legend-toggle') as HTMLInputElement | null;
         if (branchLegendToggle) branchLegendToggle.checked = SettingsManager.isBranchLegendEnabled();
 
+        const geocodingToggle = document.getElementById('geocoding-toggle') as HTMLInputElement | null;
+        if (geocodingToggle) geocodingToggle.checked = SettingsManager.isGeocodingAllowed();
+
         modal.classList.add('active');
     },
 
@@ -289,7 +292,7 @@ export const miscMethods = uiModule({
 
     // ==================== DISPLAY VIEW MODE (family / descendants) ====================
 
-    setDisplayViewMode(mode: 'family' | 'descendants' | 'timeline' | 'fan'): void {
+    setDisplayViewMode(mode: ViewMode): void {
         TreeRenderer.setViewMode(mode); // re-renders + calls updateViewModeUI
     },
 
@@ -302,7 +305,7 @@ export const miscMethods = uiModule({
         const mode = TreeRenderer.getViewMode();
         // Mobile CSS hides the focus bar under the descendants badge.
         document.body.classList.toggle('descendants-view', mode === 'descendants');
-        for (const m of ['family', 'descendants', 'timeline', 'fan']) {
+        for (const m of ['family', 'descendants', 'timeline', 'fan', 'map']) {
             document.getElementById(`view-mode-${m}`)?.classList.toggle('active', mode === m);
             document.getElementById(`mm-view-${m}`)?.classList.toggle('active', mode === m);
         }
@@ -326,7 +329,7 @@ export const miscMethods = uiModule({
         // hide them. The user can also turn them off entirely in settings.
         const zoomControls = document.querySelector('.zoom-controls') as HTMLElement | null;
         if (zoomControls) {
-            const hidden = mode === 'timeline' || mode === 'fan' || !SettingsManager.isZoomControlsEnabled();
+            const hidden = STANDALONE_VIEWS.includes(mode) || !SettingsManager.isZoomControlsEnabled();
             zoomControls.style.display = hidden ? 'none' : '';
         }
 

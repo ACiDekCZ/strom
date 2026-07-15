@@ -94,6 +94,19 @@ class SettingsManagerClass {
     }
 
     /** Floating zoom buttons default ON (undefined = enabled). */
+    /**
+     * Has the user allowed the map to look place names up online? Default is
+     * NO (undefined = never asked) — nothing leaves the app until they say so.
+     */
+    isGeocodingAllowed(): boolean {
+        return this.settings.geocoding === true;
+    }
+
+    setGeocodingAllowed(allowed: boolean): void {
+        this.settings.geocoding = allowed;
+        this.save();
+    }
+
     isZoomControlsEnabled(): boolean {
         return this.settings.zoomControls !== false;
     }
