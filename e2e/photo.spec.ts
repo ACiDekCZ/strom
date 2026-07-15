@@ -36,7 +36,6 @@ test('photo: rotate buttons are available and the photo survives rotation + save
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);
     // The photo editor lives in the collapsible "More Info" section.
-    await modal.locator('#expand-details').click();
     await modal.locator('#input-photo').setInputFiles('e2e/fixtures/avatar.png');
     await expect(modal.locator('#photo-preview img')).toHaveCount(1);
 
@@ -65,7 +64,6 @@ test('photo: a 90-degree rotation actually changes an asymmetric image', async (
     await createFirstPerson(page, 'Jan', 'Novak');
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);
-    await modal.locator('#expand-details').click();
     await modal.locator('#input-photo').setInputFiles('e2e/fixtures/asymmetric.png');
     await expect(modal.locator('#photo-preview img')).toHaveCount(1);
 

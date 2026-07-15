@@ -8,7 +8,6 @@ test('life events: add an event, it survives a page reload', async ({ page }) =>
     // Open the edit modal and reveal the extended fields that hold events.
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);
-    await modal.locator('#expand-details').click();
 
     // Add an "Occupation" event with a place via the event editor dialog.
     await modal.locator('#btn-add-event').click();

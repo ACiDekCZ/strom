@@ -2920,12 +2920,34 @@
         }
         .wiz-add:hover { border-color: var(--primary); color: var(--primary); }
         .wiz-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; position: sticky; bottom: 0; }
+        /* On a phone the role column ate 60px of ~370 and squeezed the name
+           fields to 133px. The role is a heading for the row, not a column —
+           put it above and give the fields the whole width. */
         @media (max-width: 640px) {
-            .wiz-row { grid-template-columns: 60px 1fr 1fr; grid-auto-rows: auto; }
-            .wiz-row .wiz-gender { grid-column: 2; }
-            .wiz-row .wiz-birth { grid-column: 3; }
-            .wiz-row .wiz-wedding { grid-column: 2 / 4; }
-            .wiz-remove { grid-column: 3; justify-self: end; }
+            .wiz-row {
+                grid-template-columns: 1fr 1fr;
+                grid-auto-rows: auto;
+                margin-bottom: 14px;
+            }
+            .wiz-row .wiz-role {
+                grid-column: 1 / -1;
+                font-weight: 600;
+                color: var(--text-color, #222);
+                margin-bottom: 2px;
+            }
+            /* The section title and the row's role are the same word. Side by
+               side that read as a label; stacked it reads as "FATHER / Father".
+               The rows now say who they are, so the section title steps out. */
+            .wiz-section-title { display: none; }
+            .wiz-section { margin-bottom: 4px; }
+            .wiz-row .wiz-first { grid-column: 1; }
+            .wiz-row .wiz-last { grid-column: 2; }
+            .wiz-row .wiz-gender { grid-column: 1; }
+            .wiz-row .wiz-birth { grid-column: 2; }
+            .wiz-row .wiz-wedding { grid-column: 1 / -1; }
+            .wiz-remove { grid-column: 2; justify-self: end; }
+            /* …and room to actually tap them. */
+            .wiz-row input, .wiz-row select { padding: 9px 10px; font-size: 14px; }
         }
 
         /* ==================== TIMELINE VIEW ==================== */

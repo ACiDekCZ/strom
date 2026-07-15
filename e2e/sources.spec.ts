@@ -10,7 +10,6 @@ test('sources: cite a new source on a person, chip survives a reload', async ({ 
     // Open the edit modal and reveal the extended fields that hold citations.
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);
-    await modal.locator('#expand-details').click();
 
     // Cite -> source picker -> create a new source -> it is cited automatically.
     await modal.locator('#btn-cite-person').click();
@@ -61,7 +60,6 @@ test('sources manager lists a source and shows its citation count', async ({ pag
     // Cite it on Jan, then confirm the manager shows a citation count.
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);
-    await modal.locator('#expand-details').click();
     await modal.locator('#btn-cite-person').click();
     const picker = page.locator('#source-picker-modal');
     await picker.locator('.source-picker-item', { hasText: 'Parish register' }).click();

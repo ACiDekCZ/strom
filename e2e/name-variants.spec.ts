@@ -15,7 +15,6 @@ test('search finds a person under the spelling the register used', async ({ page
 
     await cardAction(page, 'Josef', 'edit');
     const modal = personModal(page);
-    await modal.locator('#expand-details').click();
     await modal.locator('#input-name-variants').fill('Wischek, Vissek, u Kováře');
     await modal.getByRole('button', { name: 'Save' }).click();
     await expect(modal).toBeHidden();
@@ -37,7 +36,6 @@ test('a person whose only extra detail is a variant opens with it visible', asyn
     await createFirstPerson(page, 'Josef', 'Víšek');
     await cardAction(page, 'Josef', 'edit');
     const modal = personModal(page);
-    await modal.locator('#expand-details').click();
     await modal.locator('#input-name-variants').fill('Wischek');
     await modal.getByRole('button', { name: 'Save' }).click();
 
@@ -54,7 +52,6 @@ test('clearing the field removes the variants', async ({ page }) => {
     await createFirstPerson(page, 'Josef', 'Víšek');
     await cardAction(page, 'Josef', 'edit');
     const modal = personModal(page);
-    await modal.locator('#expand-details').click();
     await modal.locator('#input-name-variants').fill('Wischek');
     await modal.getByRole('button', { name: 'Save' }).click();
 

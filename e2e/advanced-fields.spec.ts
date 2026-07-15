@@ -14,7 +14,6 @@ test('a plain person form does not open with an archive of fields', async ({ pag
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);
-    await modal.locator('#expand-details').click();
 
     for (const sel of ADVANCED) {
         await expect(modal.locator(sel), sel).toBeHidden();
@@ -32,7 +31,6 @@ test('turning research fields on brings them back', async ({ page }) => {
 
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);
-    await modal.locator('#expand-details').click();
     for (const sel of ADVANCED) {
         await expect(modal.locator(sel), sel).toBeVisible();
     }
@@ -69,7 +67,6 @@ test('adding a person starts from the short form', async ({ page }) => {
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
     await page.evaluate(() => window.Strom.UI.showAddPersonModal());
     const modal = personModal(page);
-    await modal.locator('#expand-details').click();
     for (const sel of ADVANCED) {
         await expect(modal.locator(sel), sel).toBeHidden();
     }

@@ -10,7 +10,6 @@ test('attachments: add an image, it survives a reload, then delete it', async ({
     // Open the edit modal and reveal the extended fields that hold attachments.
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);
-    await modal.locator('#expand-details').click();
 
     // Attach an image (compressed in-browser) and add a note.
     await modal.locator('#input-attachment').setInputFiles('e2e/fixtures/avatar.png');
@@ -46,7 +45,6 @@ test('attachments: a rejected PDF over the size cap is not added', async ({ page
     await createFirstPerson(page, 'Jan', 'Novak');
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);
-    await modal.locator('#expand-details').click();
 
     // A > 2 MB PDF is rejected with a warning; nothing is attached.
     const bigPdf = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(2 * 1024 * 1024 + 1024, 0x20)]);

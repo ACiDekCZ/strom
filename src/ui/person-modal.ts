@@ -114,7 +114,7 @@ export const personModalMethods = uiModule({
         // Setup date input styling
         this.setupDateInputs();
         // Setup expand button
-        this.setupExpandButton(false);
+        this.setupExpandButton(true);
 
         // Hide link-relationships button (new person has no relationships)
         const linkRelBtn = document.getElementById('link-relationships');
@@ -237,20 +237,34 @@ export const personModalMethods = uiModule({
         }
     },
 
-    setupExpandButton(hasExtendedData: boolean): void {
+    /**
+     * "More info" is for ADDING someone quickly — name, year, Save — so the rest
+     * of the form starts out of the way. Editing shows everything: you opened
+     * the record to look at it, and hunting for a collapsed section to find the
+     * death date is not looking at it.
+     *
+     * It used to auto-expand when the person "had extended data", which meant a
+     * hand-written list of every field behind it. Miss one and its value was
+     * invisible until the user expanded by hand — which happened twice
+     * (refn/question, then name variants). With editing always expanded, that
+     * list has nothing to be wrong about.
+     *
+     * @param collapsible true while adding, false while editing
+     */
+    setupExpandButton(collapsible: boolean): void {
         const expandBtn = document.getElementById('expand-details');
         const extendedFields = document.getElementById('extended-fields');
         if (!expandBtn || !extendedFields) return;
 
-        // Show expanded if there's existing data
-        if (hasExtendedData) {
-            expandBtn.classList.add('expanded');
+        if (!collapsible) {
+            expandBtn.style.display = 'none';
             extendedFields.classList.add('visible');
-        } else {
-            expandBtn.classList.remove('expanded');
-            extendedFields.classList.remove('visible');
+            return;
         }
 
+        expandBtn.style.display = '';
+        expandBtn.classList.remove('expanded');
+        extendedFields.classList.remove('visible');
         expandBtn.onclick = () => {
             expandBtn.classList.toggle('expanded');
             extendedFields.classList.toggle('visible');
@@ -329,17 +343,8 @@ export const personModalMethods = uiModule({
         // Setup date input styling
         this.setupDateInputs();
 
-        // Setup expand button - expand if there's death data, notes or a photo
-        // Every field that lives behind "More Info" must be listed here, or a
-        // person whose ONLY extended data is that field opens collapsed and the
-        // value is invisible until the user expands by hand.
-        const hasExtendedData = !!(person.deathDate || person.deathPlace || person.notes
-            || person.refn || person.question || person.photo
-            || (person.nameVariants && person.nameVariants.length > 0)
-            || (person.events && person.events.length > 0)
-            || (person.sourceIds && person.sourceIds.length > 0)
-            || (person.attachments && person.attachments.length > 0));
-        this.setupExpandButton(hasExtendedData);
+        // Editing shows the whole record — no list of fields to keep in sync.
+        this.setupExpandButton(false);
 
         // Show link-relationships button
         const linkRelBtn = document.getElementById('link-relationships');

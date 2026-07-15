@@ -33,7 +33,6 @@ test('editing every person field survives a reload', async ({ page }) => {
     await modal.locator('#input-birthdate').fill('1900');
     await modal.locator('#input-birthplace').fill('Praha');
     // Extended fields (death, notes, deceased) live behind the expander.
-    await modal.locator('#expand-details').click();
     await modal.locator('#input-deathdate').fill('1970');
     await modal.locator('#input-deathplace').fill('Brno');
     await modal.locator('#input-notes').fill('A test biography');
@@ -144,7 +143,6 @@ test('reference number and open question persist and mark the card (K12/F3)', as
     await createFirstPerson(page, 'Marie', 'Novakova', { gender: 'female' });
     await cardAction(page, 'Marie', 'edit');
     const modal = personModal(page);
-    await modal.locator('#expand-details').click();
     await modal.locator('#input-refn').fill('box 12/1880');
     await modal.locator('#input-question').fill('Does anyone know her birth date?');
     await modal.getByRole('button', { name: 'Save' }).click();
@@ -168,4 +166,25 @@ test('reference number and open question persist and mark the card (K12/F3)', as
     await modal.locator('#input-question').fill('');
     await modal.getByRole('button', { name: 'Save' }).click();
     await expect(card(page, 'Marie')).not.toHaveClass(/has-question/);
+});
+
+test('editing shows the whole record; adding starts short', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
+
+    // Adding: the short form, with the rest a click away.
+    await page.evaluate(() => window.Strom.UI.showAddPersonModal());
+    const modal = personModal(page);
+    await expect(modal.locator('#expand-details')).toBeVisible();
+    await expect(modal.locator('#input-deathdate')).toBeHidden();
+    await modal.getByRole('button', { name: 'Cancel' }).click();
+
+    // Editing: everything, no hunting. This used to depend on a hand-written
+    // list of "fields that count as extended data" — miss one and its value was
+    // invisible until you expanded by hand, which happened twice.
+    await cardAction(page, 'Jan', 'edit');
+    await expect(modal.locator('#expand-details')).toBeHidden();
+    await expect(modal.locator('#input-deathdate')).toBeVisible();
+    await expect(modal.locator('#input-notes')).toBeVisible();
+    await expect(modal.locator('#events-section')).toBeVisible();
 });
