@@ -66,7 +66,12 @@ jobs:
           git clone https://oauth2:${GITLAB_TOKEN}@gitlab.com/acidek/strom-app-info.git deploy-repo
           cp strom.html deploy-repo/run/index.html
           cd deploy-repo
-          git add run/index.html
+          # Stamp the service worker cache name with the shell hash: browsers
+          # only offer a PWA update when sw.js bytes change, so without this
+          # the in-app update banner never fires for anyone.
+          HASH=$(sha256sum run/index.html | cut -c1-12)
+          sed -i "s/const CACHE_NAME = 'strom-[^']*'/const CACHE_NAME = 'strom-${HASH}'/" run/sw.js
+          git add run/index.html run/sw.js
           git diff --staged --quiet || git commit -m "Update PWA from GitHub build"
           git push origin main
 
