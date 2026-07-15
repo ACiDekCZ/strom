@@ -454,6 +454,8 @@ const stringsEN = {
     // Fan chart (ancestor semicircle)
     map: {
         fit: 'Fit all places',
+        zoomIn: 'Zoom in',
+        zoomOut: 'Zoom out',
         scopeView: 'This view',
         scopeTree: 'Whole tree',
         noPlaces: 'None of the people shown have a place filled in yet.',
@@ -1841,6 +1843,8 @@ const stringsCZ: StringsType = {
     // Fan chart (ancestor semicircle)
     map: {
         fit: 'Zobrazit všechna místa',
+        zoomIn: 'Přiblížit',
+        zoomOut: 'Oddálit',
         scopeView: 'Tento pohled',
         scopeTree: 'Celý strom',
         noPlaces: 'Žádná ze zobrazených osob zatím nemá vyplněné místo.',

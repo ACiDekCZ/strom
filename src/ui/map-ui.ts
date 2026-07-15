@@ -77,9 +77,12 @@ export const mapMethods = uiModule({
                     <div class="map-popup" style="display:none;"></div>
                 </div>
                 <div class="map-controls">
-                    <button type="button" class="map-zoom-in" onclick="window.Strom.UI.zoomMap(1)" aria-label="+">+</button>
-                    <button type="button" class="map-zoom-out" onclick="window.Strom.UI.zoomMap(-1)" aria-label="−">−</button>
-                    <button type="button" class="map-fit" onclick="window.Strom.UI.fitMapToPlaces()" title="${strings.map.fit}">⤢</button>
+                    <button type="button" class="map-zoom-in" onclick="window.Strom.UI.zoomMap(1)"
+                            aria-label="${strings.map.zoomIn}" title="${strings.map.zoomIn}">+</button>
+                    <button type="button" class="map-zoom-out" onclick="window.Strom.UI.zoomMap(-1)"
+                            aria-label="${strings.map.zoomOut}" title="${strings.map.zoomOut}">−</button>
+                    <button type="button" class="map-fit" onclick="window.Strom.UI.fitMapToPlaces()"
+                            aria-label="${strings.map.fit}" title="${strings.map.fit}">⤢</button>
                 </div>
                 <div class="map-scope">
                     <button type="button" id="map-scope-view" onclick="window.Strom.UI.setMapScope('view')">${strings.map.scopeView}</button>

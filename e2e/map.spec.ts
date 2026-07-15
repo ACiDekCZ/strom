@@ -212,6 +212,23 @@ test('offline, the map says so instead of showing a blank canvas', async ({ page
     await context.setOffline(false);
 });
 
+test('the map controls say what they do', async ({ page }) => {
+    await stubTiles(page);
+    await stubGeocoder(page, { Greenwich: [51.48, 0.0], Pembroke: [51.67, -4.91] });
+
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await seedPlaces(page);
+    await page.getByRole('button', { name: 'Map', exact: true }).click();
+
+    // The glyphs on these buttons ("+", "−", "⤢") mean nothing on their own —
+    // each must carry a real name for screen readers.
+    for (const name of ['Zoom in', 'Zoom out', 'Fit all places']) {
+        await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+    }
+});
+
 test('nothing is sent when the user declines', async ({ page }) => {
     await stubTiles(page);
     const asked = await stubGeocoder(page, { Greenwich: [51.48, 0.0] });
