@@ -1113,21 +1113,32 @@ class TreeRendererClass {
                 }
             }
 
-            // Build tooltip content
+            // Build tooltip content.
+            //
+            // Date and place are shown independently: knowing the village but
+            // not the date is ordinary in parish work (a damaged register, an
+            // entry you have not found yet), and requiring the date hid the
+            // place completely — a person with only places got no tooltip at all.
             const tooltipLines: string[] = [];
-            if (person.birthDate) {
-                const bStr = this.formatDateFull(person.birthDate);
-                tooltipLines.push(`* ${bStr}${person.birthPlace ? ', ' + this.escapeHtml(person.birthPlace) : ''}`);
-            }
-            if (person.deathDate) {
-                const dStr = this.formatDateFull(person.deathDate);
-                tooltipLines.push(`† ${dStr}${person.deathPlace ? ', ' + this.escapeHtml(person.deathPlace) : ''}`);
-            }
+            const event = (mark: string, date: string | undefined, place: string | undefined): void => {
+                if (!date && !place) return;
+                const parts = [date ? this.formatDateFull(date) : '', place ? this.escapeHtml(place) : ''];
+                tooltipLines.push(`${mark} ${parts.filter(Boolean).join(', ')}`);
+            };
+            event('*', person.birthDate, person.birthPlace);
+            event('†', person.deathDate, person.deathPlace);
+
             const age = this.calculateAge(person);
-            const tooltipTrade = this.occupationOf(person);
-            if (tooltipTrade) tooltipLines.push(`${strings.events.types.occupation}: ${this.escapeHtml(tooltipTrade)}`);
             if (age !== null) {
                 tooltipLines.push(`${strings.tooltip.age}: ${age}`);
+            }
+            const tooltipTrade = this.occupationOf(person);
+            if (tooltipTrade) tooltipLines.push(`${strings.events.types.occupation}: ${this.escapeHtml(tooltipTrade)}`);
+            // How the registers spell the name — the reason the variants exist.
+            if (person.nameVariants?.length) {
+                // A short label here: the form's "Other spellings of the name"
+                // is a heading, too long for a hover.
+                tooltipLines.push(`${strings.tooltip.alsoWritten}: ${this.escapeHtml(person.nameVariants.join(', '))}`);
             }
             if (person.question?.trim()) {
                 tooltipLines.push(`❓ ${this.escapeHtml(person.question.trim())}`);

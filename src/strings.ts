@@ -426,6 +426,7 @@ const stringsEN = {
 
     // Tooltip
     tooltip: {
+        alsoWritten: 'also written',
         age: 'Age',
         born: 'Born',
         died: 'Died',
@@ -1880,6 +1881,7 @@ const stringsCZ: StringsType = {
 
     // Tooltip
     tooltip: {
+        alsoWritten: 'psáno také',
         age: 'Věk',
         born: 'Narozen/a',
         died: 'Zemřel/a',
