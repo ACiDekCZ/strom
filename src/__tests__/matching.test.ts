@@ -258,3 +258,50 @@ describe('merge matching sees through name variants (K3)', () => {
         expect(findMatches(existing, incoming)).toHaveLength(1);
     });
 });
+
+describe('merge matching uses the tree’s surname groups (K3 v2)', () => {
+    /**
+     * Entered once for the tree, and it holds whichever spelling each person
+     * happens to be recorded under — the great-grandfathers are Vyšek, the
+     * living are Víšek, and neither had to be annotated by hand.
+     */
+    function p(id: string, firstName: string, lastName: string): Person {
+        return {
+            id: toPersonId(id), firstName, lastName, gender: 'male',
+            isPlaceholder: false, partnerships: [], parentIds: [], childIds: [],
+            birthDate: '1783',
+        };
+    }
+    const tree = (people: Person[], groups?: string[][]): StromData => ({
+        persons: Object.fromEntries(people.map(x => [x.id, x])) as StromData['persons'],
+        partnerships: {},
+        ...(groups ? { surnameVariants: groups } : {}),
+    });
+
+    it('matches Vyšek to Víšek without a word on either person', () => {
+        const groups = [['Víšek', 'Vyšek']];
+        const existing = tree([p('a', 'Josef', 'Víšek')], groups);
+        const incoming = tree([p('b', 'Josef', 'Vyšek')], groups);
+
+        const matches = findMatches(existing, incoming);
+        expect(matches).toHaveLength(1);
+        expect(matches[0].existingPerson?.id).toBe(toPersonId('a'));
+    });
+
+    it('does not match them when no group says they are the same', () => {
+        const existing = tree([p('a', 'Josef', 'Víšek')]);
+        const incoming = tree([p('b', 'Josef', 'Vyšek')]);
+        const strong = findMatches(existing, incoming)
+            .filter(m => m.confidence === 'high');
+        expect(strong).toHaveLength(0);
+    });
+
+    it('still keeps different families apart', () => {
+        const groups = [['Víšek', 'Vyšek']];
+        const existing = tree([p('a', 'Josef', 'Víšek')], groups);
+        const incoming = tree([p('b', 'Josef', 'Svoboda')], groups);
+        const strong = findMatches(existing, incoming)
+            .filter(m => m.confidence === 'high' || m.confidence === 'medium');
+        expect(strong).toHaveLength(0);
+    });
+});

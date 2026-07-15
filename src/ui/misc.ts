@@ -447,6 +447,10 @@ export const miscMethods = uiModule({
                         this.closeSplitDialog();
                         return;
                     }
+                    if (currentDialog === 'surnames-modal') {
+                        this.closeSurnamesDialog();
+                        return;
+                    }
 
                     // Special handling for person-merge-modal: closePersonMergeDialog handles stack and parent
                     if (currentDialog === 'person-merge-modal') {

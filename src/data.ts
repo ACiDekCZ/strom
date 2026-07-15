@@ -38,6 +38,7 @@ import { AuditLogManager } from './audit-log.js';
 import { extractSubtree } from './subtree.js';
 import { collectPlaces, renamePlace, placeKey } from './places.js';
 import { StorageManager } from './storage.js';
+import { surnameForms, addSurnameGroup, removeSurnameGroup } from './surnames.js';
 import { createSnapshot, getSnapshotJson, SnapshotReason } from './snapshots.js';
 import { ValidationIssue } from './validation.js';
 import { UndoManager } from './undo.js';
@@ -128,6 +129,10 @@ export function migrateData(data: unknown): StromData {
     // restart, opening a shared file. Add new StromData fields here too.
     if (d.places && typeof d.places === 'object') {
         result.places = d.places as StromData['places'];
+    }
+
+    if (Array.isArray(d.surnameVariants)) {
+        result.surnameVariants = d.surnameVariants as StromData['surnameVariants'];
     }
 
     // Preserve default person settings if present
@@ -898,6 +903,29 @@ class DataManagerClass {
         }
     }
 
+    // ==================== SURNAMES ====================
+
+    /**
+     * Record that these spellings mean the same family. Tree-level on purpose:
+     * a spelling belongs to the NAME, so it is said once and holds for everyone,
+     * including people added later.
+     */
+    addSurnameGroup(names: string[]): void {
+        const next = addSurnameGroup(this.data, names);
+        if (next === this.data.surnameVariants) return;
+        this.beginMutation();
+        this.data.surnameVariants = next;
+        this.commitMutation(strings.undo.addSurnameGroup(names.join(', ')));
+    }
+
+    removeSurnameGroup(surname: string): void {
+        const next = removeSurnameGroup(this.data, surname);
+        if (next.length === (this.data.surnameVariants ?? []).length) return;
+        this.beginMutation();
+        this.data.surnameVariants = next.length > 0 ? next : undefined;
+        this.commitMutation(strings.undo.removeSurnameGroup(surname));
+    }
+
     // ==================== PLACES ====================
 
     /**
@@ -994,9 +1022,13 @@ class DataManagerClass {
             const searchText = normalizeText([
                 person.firstName,
                 person.lastName,
-                // The register's spellings count as this person's name: someone
-                // searching "Víšek" must find the man they entered as "Wischek",
-                // or they will decide he is missing and add him twice.
+                // Every spelling of this surname counts as this person's name:
+                // someone searching "Víšek" must find the great-grandfather they
+                // entered as "Vyšek", or they decide he is missing and add him
+                // twice. Written down once per tree, not per person.
+                ...surnameForms(person.lastName, this.data).slice(1),
+                // Plus anything that belongs to this person alone (alias, the
+                // farm the family was known by).
                 ...(person.nameVariants ?? []),
                 person.birthDate?.split('-')[0] || '',  // birth year
                 person.deathDate?.split('-')[0] || ''   // death year

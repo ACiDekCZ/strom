@@ -148,6 +148,23 @@ const stringsEN = {
         settingHint: 'Show sources, attachments, reference numbers, name spellings and open questions on a person. Off by default — a person you already filled one in for always shows it.',
     },
 
+    surnames: {
+        menu: 'Surname spellings',
+        title: 'Surname spellings',
+        intro: 'Before about 1900 the registers spell a family differently from one entry to the next. Say once that spellings mean the same family and search and merging find them all — however each person happens to be written, including people you add later.',
+        groupsTitle: 'Linked spellings',
+        none: 'No spellings linked yet.',
+        addTitle: 'Link spellings',
+        addHint: 'Pick the spellings that mean one family.',
+        inTree: (count: number) => count === 1 ? '1 person' : `${count} people`,
+        notInTree: 'not in the tree',
+        addOther: 'Other spelling…',
+        link: 'Link them',
+        unlink: 'Unlink',
+        needTwo: 'Pick at least two spellings.',
+        linked: 'Spellings linked.',
+    },
+
     events: {
         occupationLabel: 'Occupation / trade',
         occupationHint: 'The trade itself — "blacksmith", not "worked in Kladno as a blacksmith". It goes out as the occupation in GEDCOM.',
@@ -1404,6 +1421,8 @@ const stringsEN = {
         geocodePlaces: (count: number) => `looking up ${count} places`,
         clearPlaceGeo: 'removing a place from the map',
         renamePlace: (name: string) => `renaming a place to ${name}`,
+        addSurnameGroup: (names: string) => `linking the spellings ${names}`,
+        removeSurnameGroup: (name: string) => `unlinking the spellings of ${name}`,
         loadedData: 'importing data',
         repairedIssue: 'a validation repair',
         deletePerson: (name: string) => `deleting ${name}`,
@@ -1606,6 +1625,23 @@ const stringsCZ: StringsType = {
     advanced: {
         settingLabel: 'Pokročilá pole',
         settingHint: 'Zobrazit u osoby prameny, přílohy, referenční číslo, další tvary jména a otevřené otázky. Výchozí je vypnuto — u osoby, kde už něco z toho vyplněné máte, se pole ukáže vždy.',
+    },
+
+    surnames: {
+        menu: 'Tvary příjmení',
+        title: 'Tvary příjmení',
+        intro: 'Do zhruba roku 1900 píší matriky rod pokaždé jinak. Řekněte jednou, že tvary znamenají tentýž rod, a hledání i slučování je najdou všechny — ať je kdo zapsaný jakkoli, včetně lidí, které přidáte později.',
+        groupsTitle: 'Propojené tvary',
+        none: 'Zatím nic propojeného.',
+        addTitle: 'Propojit tvary',
+        addHint: 'Vyberte tvary, které znamenají jeden rod.',
+        inTree: (count: number) => count === 1 ? '1 osoba' : (count < 5 ? `${count} osoby` : `${count} osob`),
+        notInTree: 've stromu není',
+        addOther: 'Jiný tvar…',
+        link: 'Propojit',
+        unlink: 'Zrušit propojení',
+        needTwo: 'Vyberte aspoň dva tvary.',
+        linked: 'Tvary propojeny.',
     },
 
     events: {
@@ -2865,6 +2901,8 @@ const stringsCZ: StringsType = {
         geocodePlaces: (count: number) => `dohledání ${count} míst`,
         clearPlaceGeo: 'odebrání místa z mapy',
         renamePlace: (name: string) => `přejmenování místa na ${name}`,
+        addSurnameGroup: (names: string) => `propojení tvarů ${names}`,
+        removeSurnameGroup: (name: string) => `zrušení propojení tvarů ${name}`,
         loadedData: 'import dat',
         repairedIssue: 'oprava z validace',
         deletePerson: (name: string) => `smazání osoby ${name}`,

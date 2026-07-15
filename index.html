@@ -2011,6 +2011,44 @@
         .tree-stats-unrelated span { color: var(--text-light); }
         .tree-stats-unrelated-hint { font-style: italic; }
 
+        /* ---- Surname spellings that mean one family (K3 v2) ---- */
+        .surnames-modal { max-width: 560px; }
+        .surnames-intro { margin: 4px 0 14px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
+        .surnames-groups-title, .surnames-add-title {
+            font-size: 12px; font-weight: 600; color: var(--text-light);
+            text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;
+        }
+        .surname-group {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            padding: 8px 10px; margin-bottom: 6px;
+            border: 1px solid var(--border-color, #ddd); border-radius: 8px;
+            background: var(--bg-color, #fafafa);
+        }
+        .surname-group-names { font-size: 13px; font-weight: 600; min-width: 0; }
+        .surname-group button { padding: 4px 9px; font-size: 12px; white-space: nowrap; }
+        .surnames-none { font-size: 13px; color: var(--text-light); font-style: italic; margin: 0 0 12px; }
+        .surnames-add { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-color, #eee); }
+        .surnames-hint { margin: 0 0 8px; font-size: 12px; color: var(--text-light); }
+        .surnames-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+        /* `.modal button` (0,1,1) sets border:none and its own padding, so a
+           bare `.surname-chip` (0,1,0) loses to it and the chips come out as
+           plain text. Same shape as `.modal button.primary` for the same reason. */
+        .modal button.surname-chip {
+            display: inline-flex; align-items: baseline; gap: 5px;
+            padding: 6px 12px;
+            border: 1px solid var(--border-color, #ddd); border-radius: 16px;
+            background: var(--card-bg, #fff); color: var(--text-color, #222);
+            font-size: 13px; cursor: pointer;
+        }
+        .modal button.surname-chip.picked {
+            background: var(--primary, #4a7c59); border-color: var(--primary, #4a7c59); color: #fff;
+        }
+        .surname-chip-count { font-size: 11px; opacity: 0.7; }
+        .surnames-add-row { display: flex; gap: 6px; margin-bottom: 10px; }
+        .surnames-add-row input { flex: 1; min-width: 0; }
+        .surnames-add-row button { padding: 6px 12px; }
+        @media (max-width: 900px) { .surnames-modal { max-width: 94vw; } }
+
         /* ---- Split a tree into the families it holds (N3) ---- */
         .split-modal { max-width: 560px; }
         .split-intro { margin: 4px 0 14px; font-size: 13px; color: var(--text-light); line-height: 1.5; }

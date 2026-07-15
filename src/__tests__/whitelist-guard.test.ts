@@ -58,6 +58,7 @@ describe('migrateData keeps every StromData field', () => {
         places: {
             'kolin': { lat: 50.0281, lon: 15.2003, label: 'Kolín, Česko' },
         },
+        surnameVariants: [['Víšek', 'Vyšek', 'Wischek']],
         defaultPersonId: LAST_FOCUSED,
         lastFocusPersonId: ALICE,
         lastFocusDepthUp: 3,

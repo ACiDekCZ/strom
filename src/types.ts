@@ -305,6 +305,21 @@ export interface StromData {
     /** Coordinates for places, keyed by placeKey(). Filled in by geocoding (opt-in). */
     places?: Record<string, PlaceGeo>;
 
+    /**
+     * Surnames that mean the same family, written down once for the whole tree:
+     * [['Víšek', 'Vyšek', 'Wischek']].
+     *
+     * A spelling is a fact about the NAME, not about one person — the same way a
+     * place's coordinates belong to the place and not to whoever was born there.
+     * Kept here so it is entered once and holds for everybody, including people
+     * added later; on a person it would have to be repeated for every one of
+     * thirty Víšeks, in both directions, and the thirty-first would miss out.
+     *
+     * A group is an equivalence, not "canonical + variants": nobody's spelling
+     * is the wrong one, and the registers disagree in every direction.
+     */
+    surnameVariants?: string[][];
+
     // Last focused state (used when defaultPersonId === LAST_FOCUSED)
     lastFocusPersonId?: PersonId;
     lastFocusDepthUp?: number;

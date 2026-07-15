@@ -74,6 +74,7 @@ import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { slideshowMethods } from './slideshow.js';
 import { mapMethods, MapScope } from './map-ui.js';
 import { splitMethods } from './split-ui.js';
+import { surnamesMethods } from './surnames-ui.js';
 import { shareUiMethods } from './share-ui.js';
 import { familyWizardMethods } from './family-wizard.js';
 import { pwaUiMethods } from './pwa-ui.js';
@@ -163,6 +164,10 @@ export class UIClass {
     /** Places dialog: which places it lists, and what to return to on close. */
     placesManagerScope: MapScope = 'tree';
     placesManagerParent: string | null = null;
+
+    // Surname-spellings dialog: what is picked, and what to return to.
+    surnamePicks: string[] = [];
+    surnamesParentDialog: string | null = null;
 
     // Split-by-families dialog.
     splitTreeId: TreeId | null = null;
@@ -337,6 +342,10 @@ Object.assign(UIClass.prototype, mapMethods);
 type SplitMethods = typeof splitMethods;
 export interface UIClass extends SplitMethods {}
 Object.assign(UIClass.prototype, splitMethods);
+
+type SurnamesMethods = typeof surnamesMethods;
+export interface UIClass extends SurnamesMethods {}
+Object.assign(UIClass.prototype, surnamesMethods);
 
 type FamilyWizardMethods = typeof familyWizardMethods;
 export interface UIClass extends FamilyWizardMethods {}
