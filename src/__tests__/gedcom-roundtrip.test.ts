@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
+import { validateTreeData } from '../validation.js';
 import { StromData, PersonId, PartnershipId } from '../types.js';
 
 function importGed(ged: string): StromData {
@@ -492,11 +493,25 @@ describe('MyHeritage export quirks (M1, real-export shapes)', () => {
         '0 TRLR',
     ].join('\n');
 
-    it('duplicate BIRT: first wins, the alternative survives as an event', () => {
+    it('duplicate BIRT: first wins, the alternative survives as a labelled custom event', () => {
         const emil = Object.values(importGed(MH).persons).find(p => p.firstName === 'Emil')!;
         expect(emil.birthPlace).toBe('First Place');
-        const alt = emil.events!.find(e => e.type === 'birth')!;
-        expect(alt.place).toBe('Second Place');
+        const alt = emil.events!.find(e => e.place === 'Second Place')!;
+        // NOT a 'birth' event: validation reserves birth/death for the date
+        // fields and would flag them as an error.
+        expect(alt.type).toBe('custom');
+        expect(alt.customLabel).toMatch(/alternative/i);
+    });
+
+    it('an imported MyHeritage tree does not validate with self-inflicted errors', () => {
+        const data = importGed(MH);
+        const birthDeathEvents = Object.values(data.persons)
+            .flatMap(p => p.events ?? [])
+            .filter(e => e.type === 'birth' || e.type === 'death');
+        expect(birthDeathEvents).toHaveLength(0);
+        const result = validateTreeData(data);
+        expect(result.issues.filter(i => i.type === 'event-birth-death')).toHaveLength(0);
+        expect(result.issues.filter(i => i.type === 'event-no-label')).toHaveLength(0);
     });
 
     it("bare 'DEAT Y' marks the person deceased", () => {

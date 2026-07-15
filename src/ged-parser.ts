@@ -53,6 +53,8 @@ interface RawMedia {
 
 interface RawEvent {
     type: LifeEventType;
+    /** Label for 'custom' events (e.g. an alternative birth fact). */
+    customLabel?: string;
     date?: string;
     place?: string;
     note?: string;
@@ -277,6 +279,15 @@ const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 
 /** Level-1 FAM tags the parser understands. */
 const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', 'SOUR']);
 /** Level-0 record types (handled or structural). */
+/**
+ * Labels for ALTERNATIVE birth/death facts. Platforms (MyHeritage) allow several
+ * BIRT/DEAT records per person; the first fills the dedicated date fields and
+ * the rest are kept as labelled CUSTOM events — 'birth'/'death' event types are
+ * reserved for the date fields (validation flags them as a data-entry mistake).
+ */
+const ALT_BIRTH_LABEL = 'Birth (alternative record)';
+const ALT_DEATH_LABEL = 'Death (alternative record)';
+
 const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'REPO', 'HEAD', 'TRLR', 'SUBM', 'SUBN']);
 
 /**
@@ -469,7 +480,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             // fills the primary fields, duplicates become
                             // events so the alternative place/date survives.
                             if (indi.birthSeen) {
-                                const ev: RawEvent = { type: 'birth' };
+                                const ev: RawEvent = { type: 'custom', customLabel: ALT_BIRTH_LABEL };
                                 indi.events.push(ev);
                                 currentEvent = ev;
                                 currentSubTag = '_DUP';
@@ -481,7 +492,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             // A bare 'DEAT Y' (no date) still means deceased.
                             indi.deceased = true;
                             if (indi.deathSeen) {
-                                const ev: RawEvent = { type: 'death' };
+                                const ev: RawEvent = { type: 'custom', customLabel: ALT_DEATH_LABEL };
                                 indi.events.push(ev);
                                 currentEvent = ev;
                                 currentSubTag = '_DUP';
@@ -734,6 +745,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (indi.events.length > 0) {
             person.events = indi.events.map((ev): LifeEvent => {
                 const out: LifeEvent = { id: generateLifeEventId(), type: ev.type };
+                if (ev.customLabel) out.customLabel = ev.customLabel;
                 if (ev.date) out.date = ev.date;
                 if (ev.place) out.place = ev.place;
                 if (ev.note) out.note = ev.note;
