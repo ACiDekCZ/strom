@@ -3206,6 +3206,28 @@
         /* Descendants view: step-relatives (partner's other families) are
            shown de-emphasized so the blood line stays dominant. */
         .person-card.indirect { opacity: 0.5; }
+
+        /* ---- Card density (A8). Box sizes MUST match CARD_SIZE in types.ts,
+           the layout engine spaces cards from those numbers. ---- */
+        body[data-card-density="compact"] .person-card {
+            width: 120px; height: 40px; padding: 5px 8px;
+        }
+        body[data-card-density="compact"] .person-card .name { font-size: 12px; }
+        body[data-card-density="compact"] .person-card .surname { font-size: 10.5px; }
+        /* "Names only" means exactly that — the deceased dagger goes too (the
+           tooltip and every other density still carry it). */
+        body[data-card-density="compact"] .person-card .deceased-marker { display: none; }
+
+        body[data-card-density="detailed"] .person-card {
+            width: 150px; height: 85px; padding: 7px 10px;
+        }
+        body[data-card-density="detailed"] .person-card.has-photo .card-avatar {
+            width: 40px; height: 40px;
+        }
+        .card-place, .card-age {
+            font-size: 9.5px; line-height: 1.25; color: var(--text-light, #888);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
         /* An open question about this person — a small corner marker so the
            question is findable without opening every card. */
         .person-card.has-question::after {
@@ -6607,6 +6629,16 @@
                         <input type="checkbox" id="death-anniversaries-toggle" onchange="window.Strom.UI.toggleDeathAnniversaries(this.checked)">
                         <span data-i18n="anniversaries.deathHint"></span>
                     </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="cardDensity.settingLabel"></label>
+                <div class="settings-options">
+                    <select id="card-density-select" onchange="window.Strom.UI.setCardDensity(this.value)">
+                        <option value="compact" data-i18n="cardDensity.compact"></option>
+                        <option value="normal" data-i18n="cardDensity.normal"></option>
+                        <option value="detailed" data-i18n="cardDensity.detailed"></option>
+                    </select>
                 </div>
             </div>
             <div class="settings-section">

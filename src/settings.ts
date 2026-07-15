@@ -3,7 +3,7 @@
  * Settings are NOT exported with tree data - they are local preferences
  */
 
-import { AppSettings, ThemeMode, LanguageSetting, SETTINGS_KEY } from './types.js';
+import { AppSettings, ThemeMode, LanguageSetting, CardDensity, SETTINGS_KEY } from './types.js';
 import { initLanguage, Language } from './strings.js';
 
 class SettingsManagerClass {
@@ -177,6 +177,16 @@ class SettingsManagerClass {
 
     setFanKekule(enabled: boolean): void {
         this.settings.fanKekule = enabled;
+        this.save();
+    }
+
+    /** Card detail level: compact (names only) / normal / detailed (+places, age). */
+    getCardDensity(): CardDensity {
+        return this.settings.cardDensity ?? 'normal';
+    }
+
+    setCardDensity(density: CardDensity): void {
+        this.settings.cardDensity = density;
         this.save();
     }
 

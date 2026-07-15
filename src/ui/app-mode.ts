@@ -35,7 +35,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, CardDensity } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
@@ -584,6 +584,11 @@ export const appModeMethods = uiModule({
     toggleFamilyButton(enabled: boolean): void {
         SettingsManager.setFamilyButton(enabled);
         this.updateViewModeUI(); // owns the toolbar family-button visibility
+    },
+
+    setCardDensity(density: string): void {
+        SettingsManager.setCardDensity(density as CardDensity);
+        TreeRenderer.render();
     },
 
     toggleFanKekule(enabled: boolean): void {

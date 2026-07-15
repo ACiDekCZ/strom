@@ -1178,6 +1178,13 @@ const stringsEN = {
     },
 
     // Cross-tree links
+    cardDensity: {
+        settingLabel: 'Card detail',
+        compact: 'Compact — names only',
+        normal: 'Normal — names and years',
+        detailed: 'Detailed — + place and age',
+    },
+
     fanChart: {
         settingLabel: 'Fan chart',
         kekuleHint: 'Show Kekulé (ancestor) numbers',
@@ -2521,6 +2528,13 @@ const stringsCZ: StringsType = {
     },
 
     // Cross-tree links
+    cardDensity: {
+        settingLabel: 'Detail karet',
+        compact: 'Kompaktní — jen jména',
+        normal: 'Normální — jména a roky',
+        detailed: 'Podrobné — + místo a věk',
+    },
+
     fanChart: {
         settingLabel: 'Vějíř',
         kekuleHint: 'Zobrazit Kekulého (ahnentafel) čísla předků',

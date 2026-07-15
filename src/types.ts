@@ -307,6 +307,24 @@ export interface LayoutConfig {
     minEdgeClearance: number;  // Min gap between non-related edge segments (px)
 }
 
+/**
+ * How much a person card shows. The card SIZE differs per density, so the
+ * layout engine must be told (CARD_SIZE) — spacing is computed from it.
+ */
+export type CardDensity = 'compact' | 'normal' | 'detailed';
+
+/**
+ * Card box per density. Keys match LayoutConfig on purpose so the values can be
+ * spread straight into it — with `width`/`height` names the spread silently did
+ * nothing and the engine kept spacing for the default card.
+ * MUST match the CSS for .person-card at each density.
+ */
+export const CARD_SIZE: Record<CardDensity, Pick<LayoutConfig, 'cardWidth' | 'cardHeight'>> = {
+    compact: { cardWidth: 120, cardHeight: 40 },
+    normal: { cardWidth: 130, cardHeight: 65 },
+    detailed: { cardWidth: 150, cardHeight: 85 },
+};
+
 export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
     cardWidth: 130,
     cardHeight: 65,
@@ -441,6 +459,7 @@ export interface AppSettings {
     deathAnniversaries?: boolean;  // default: false - include yearly death anniversaries
     crossTreeBadges?: boolean;  // default: true - show cross-tree connection badges
     fanKekule?: boolean;  // default: false - show Kekule (ahnentafel) numbers in the fan chart
+    cardDensity?: CardDensity;  // default: 'normal' - how much detail a card shows
     familyButton?: boolean;  // default: false - toolbar shortcut to the family wizard
     descendantsFullFamilies?: boolean;  // default: false - descendants view shows partners' other families
     senderName?: string;   // collaboration: name shown to relatives in shared files

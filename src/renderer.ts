@@ -17,6 +17,7 @@ import {
 } from './types.js';
 import { TreeManager } from './tree-manager.js';
 import * as CrossTree from './cross-tree.js';
+import { CARD_SIZE } from './types.js';
 import {
     computeLayout,
     StromLayoutEngine,
@@ -150,6 +151,11 @@ class TreeRendererClass {
         // Descendants view: no ancestors, no aunts/uncles/cousins — only the
         // focus person's descendants and their partners.
         const descendantsOnly = this.viewMode === 'descendants';
+        // The layout engine spaces cards from the config size — keep it in sync
+        // with the density (and the CSS box) or cards overlap / drift apart.
+        const density = SettingsManager.getCardDensity();
+        this.config = { ...this.config, ...CARD_SIZE[density] };
+        document.body.dataset.cardDensity = density;
         const request: LayoutRequest = {
             data: DataManager.getData(),
             focusPersonId: this.focusPersonId,
@@ -830,7 +836,7 @@ class TreeRendererClass {
             }
             // Photo avatar shifts the text right; without a photo the card is
             // rendered exactly as before (no avatar element, no class).
-            if (person.photo) {
+            if (person.photo && SettingsManager.getCardDensity() !== 'compact') {
                 classes += ' has-photo';
             }
             // Add focused class if this is the focus person
@@ -1029,11 +1035,20 @@ class TreeRendererClass {
 
             const isLocked = DataManager.isPersonLocked(id);
 
+            // Density decides what fits: compact = names only (no dates/photo),
+            // detailed = + birth place and age.
+            const density = SettingsManager.getCardDensity();
+            const showPhoto = density !== 'compact' && !!person.photo;
+            const cardAge = density === 'detailed' ? this.calculateAge(person) : null;
+            const place = density === 'detailed' ? (person.birthPlace ?? '') : '';
+
             html += `
-                ${person.photo ? `<div class="card-avatar"><img src="${person.photo}" alt=""></div>` : ''}
+                ${showPhoto ? `<div class="card-avatar"><img src="${person.photo}" alt=""></div>` : ''}
                 <div class="name"><span class="name-text">${this.escapeHtml(displayName)}</span>${isDeceased ? '<span class="deceased-marker">†</span>' : ''}</div>
                 <div class="surname">${this.escapeHtml(displaySurname)}</div>
-                ${birthYear ? `<div class="birth-date"><span class="date-year">${birthYear}</span>${birthFull ? `<span class="date-full">${birthFull}</span>` : ''}</div>` : ''}
+                ${density !== 'compact' && birthYear ? `<div class="birth-date"><span class="date-year">${birthYear}</span>${birthFull ? `<span class="date-full">${birthFull}</span>` : ''}</div>` : ''}
+                ${place ? `<div class="card-place">${this.escapeHtml(place)}</div>` : ''}
+                ${cardAge !== null ? `<div class="card-age">${strings.tooltip.age}: ${cardAge}</div>` : ''}
                 ${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">&#128274;</span>` : ''}
                 ${!isLocked ? `<button class="rel-link-icon" data-action="relationships" title="${strings.buttons.manageRelationships}">&#128279;</button>` : ''}
             `;
