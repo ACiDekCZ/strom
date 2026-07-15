@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { computeCoverCrop, dataUrlByteSize, totalPhotoBytes, stripPhotos } from '../photo.js';
+import { computeCoverCrop, dataUrlByteSize, totalPhotoBytes, stripPhotos , rotatePhotoDataUrl} from '../photo.js';
 import { applyLivingPrivacy } from '../privacy.js';
 import { StromData, Person, PersonId, PartnershipId } from '../types.js';
 
@@ -73,5 +73,13 @@ describe('privacy strips photos of living persons', () => {
         }
         const full = applyLivingPrivacy(tree(living), 'full', 2026);
         expect(full.persons['a' as PersonId].photo).toBe(DATA_URL);
+    });
+});
+
+describe('rotatePhotoDataUrl (no-op paths, DOM-free)', () => {
+    it('returns the same data URL for whole-turn multiples', async () => {
+        for (const turns of [0, 4, -4, 8]) {
+            expect(await rotatePhotoDataUrl(DATA_URL, turns)).toBe(DATA_URL);
+        }
     });
 });

@@ -611,6 +611,7 @@
             font-size: 12px;
             color: var(--text-light);
         }
+        .photo-rotate-btn { font-size: 16px; line-height: 1; padding: 6px 10px; }
 
         .person-card .name {
             font-weight: 600;
@@ -6283,6 +6284,8 @@
                         <div class="photo-actions">
                             <input type="file" id="input-photo" accept="image/*" style="display:none" onchange="window.Strom.UI.handlePhotoInput(event)">
                             <button type="button" class="secondary" onclick="document.getElementById('input-photo').click()" data-i18n="labels.photoChoose"></button>
+                            <button type="button" class="secondary photo-rotate-btn" id="photo-rotate-left" style="display:none" onclick="window.Strom.UI.rotatePersonPhoto(-1)" data-i18n-title="labels.photoRotateLeft">↺</button>
+                            <button type="button" class="secondary photo-rotate-btn" id="photo-rotate-right" style="display:none" onclick="window.Strom.UI.rotatePersonPhoto(1)" data-i18n-title="labels.photoRotateRight">↻</button>
                             <button type="button" class="secondary" id="photo-remove-btn" onclick="window.Strom.UI.removePersonPhoto()" data-i18n="labels.photoRemove"></button>
                             <span class="photo-size" id="photo-size"></span>
                         </div>

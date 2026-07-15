@@ -53,6 +53,36 @@ export async function compressPhoto(file: File): Promise<string> {
     }
 }
 
+/**
+ * Rotate a square photo data URL by a multiple of 90°. The stored portrait is
+ * already a square JPEG, so rotation keeps it square. `quarterTurns` is
+ * clockwise (1 = 90° right, -1 = 90° left). Browser-only (canvas + Image).
+ */
+export function rotatePhotoDataUrl(dataUrl: string, quarterTurns: number): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const turns = ((quarterTurns % 4) + 4) % 4;
+        if (turns === 0) { resolve(dataUrl); return; }
+        const img = new Image();
+        img.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = PHOTO_SIZE;
+                canvas.height = PHOTO_SIZE;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) throw new Error('Canvas 2D context unavailable');
+                ctx.translate(PHOTO_SIZE / 2, PHOTO_SIZE / 2);
+                ctx.rotate((turns * Math.PI) / 2);
+                ctx.drawImage(img, -PHOTO_SIZE / 2, -PHOTO_SIZE / 2, PHOTO_SIZE, PHOTO_SIZE);
+                resolve(canvas.toDataURL('image/jpeg', PHOTO_QUALITY));
+            } catch (e) {
+                reject(e instanceof Error ? e : new Error(String(e)));
+            }
+        };
+        img.onerror = () => reject(new Error('Image load failed'));
+        img.src = dataUrl;
+    });
+}
+
 /** Approximate byte size of a data-URL string (base64 payload). */
 export function dataUrlByteSize(dataUrl: string): number {
     const comma = dataUrl.indexOf(',');

@@ -364,6 +364,8 @@ const stringsEN = {
         photo: 'Photo',
         photoChoose: 'Choose photo',
         photoRemove: 'Remove',
+        photoRotateLeft: 'Rotate left',
+        photoRotateRight: 'Rotate right',
         maidenName: 'Maiden Name',
         // Partnership dates - used based on status
         startDateMarried: 'Wedding Date',
@@ -1685,6 +1687,8 @@ const stringsCZ: StringsType = {
         photo: 'Fotka',
         photoChoose: 'Vybrat fotku',
         photoRemove: 'Odebrat',
+        photoRotateLeft: 'Otočit vlevo',
+        photoRotateRight: 'Otočit vpravo',
         maidenName: 'Rodné příjmení',
         // Partnership dates - used based on status
         startDateMarried: 'Datum sňatku',

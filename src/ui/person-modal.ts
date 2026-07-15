@@ -23,7 +23,7 @@ import {
 } from '../types.js';
 import { strings } from '../strings.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
-import { compressPhoto, dataUrlByteSize } from '../photo.js';
+import { compressPhoto, dataUrlByteSize, rotatePhotoDataUrl } from '../photo.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -354,7 +354,23 @@ export const personModalMethods = uiModule({
             preview.innerHTML = dataUrl ? `<img src="${dataUrl}" alt="">` : '';
         }
         if (removeBtn) removeBtn.style.display = dataUrl ? '' : 'none';
+        for (const id of ['photo-rotate-left', 'photo-rotate-right']) {
+            const b = document.getElementById(id);
+            if (b) b.style.display = dataUrl ? '' : 'none';
+        }
         if (sizeEl) sizeEl.textContent = dataUrl ? `${Math.round(dataUrlByteSize(dataUrl) / 1024)} kB` : '';
+    },
+
+    /** Rotate the previewed photo 90° (saved only when the modal is saved). */
+    async rotatePersonPhoto(quarterTurns: number): Promise<void> {
+        const img = document.querySelector('#photo-preview img') as HTMLImageElement | null;
+        const current = img?.getAttribute('src');
+        if (!current) return;
+        try {
+            this.setPhotoPreview(await rotatePhotoDataUrl(current, quarterTurns));
+        } catch (e) {
+            console.error('Photo rotate failed:', e);
+        }
     },
 
     /** Compress the selected file and show it in the preview. */
