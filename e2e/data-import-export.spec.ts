@@ -291,3 +291,28 @@ test('plain GEDCOM import clears stale manager intent; new-tree opens naming dia
     await expect(importDialog).toBeVisible();
     await expect(dialog).toBeHidden();
 });
+
+test('make a tree from the current view creates a separate tree of the shown people', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+    const treesBefore = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
+    const shown = await page.evaluate(() => window.Strom.TreeRenderer.getVisiblePersonIds().size);
+
+    await page.evaluate(() => window.Strom.UI.showExportDialog());
+    await page.locator('#make-tree-from-view-btn').click();
+    const importDialog = page.locator('#import-tree-modal');
+    await expect(importDialog).toBeVisible();
+    // Name is pre-filled from the focus person.
+    await expect(importDialog.locator('#import-tree-name')).toHaveValue(/Henry VIII/);
+    await importDialog.getByRole('button', { name: 'Import' }).click();
+    await expect(importDialog).toBeHidden();
+
+    // A new tree exists and it is now active; it has at most the shown people.
+    const treesAfter = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
+    expect(treesAfter).toBe(treesBefore + 1);
+    const count = await page.evaluate(() =>
+        Object.keys(window.Strom.DataManager.getData().persons).length);
+    expect(count).toBeGreaterThan(1);
+    expect(count).toBeLessThanOrEqual(shown + 2);   // + possible glue partners
+});

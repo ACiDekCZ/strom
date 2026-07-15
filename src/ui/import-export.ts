@@ -23,6 +23,7 @@ import {
     EmbeddedDataEnvelope
 } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
+import { extractSubtree } from '../subtree.js';
 import { compressPhoto, dataUrlByteSize } from '../photo.js';
 import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES } from '../attachments.js';
 import { getDemoTree, getDemoFocus } from '../demo-trees.js';
@@ -229,6 +230,32 @@ export const importExportMethods = uiModule({
             const visibleIds = TreeRenderer.getVisiblePersonIds();
             await DataManager.exportFocusedJSON(visibleIds, password, this.readExportPrivacyMode(), this.readExportStripPhotos());
         });
+    },
+
+    /**
+     * "Make a tree from this view": copy exactly the persons currently shown
+     * (focus + depth, or the descendants view) into a new, separate tree. A
+     * WYSIWYG cut — the naming dialog then creates and switches to it.
+     */
+    makeTreeFromCurrentView(): void {
+        if (DataManager.isViewMode()) return;
+        const visibleIds = TreeRenderer.getVisiblePersonIds();
+        // The fan/timeline views don't populate the layout positions; this is
+        // a family/descendants-view action.
+        if (visibleIds.size < 2) {
+            this.showToast(strings.gedcom.viewCutTooSmall);
+            return;
+        }
+        const subtree = extractSubtree(DataManager.getData(), visibleIds);
+        const focus = TreeRenderer.getFocusPersonId();
+        const focusPerson = focus ? DataManager.getPerson(focus) : null;
+        const base = focusPerson ? `${focusPerson.firstName} ${focusPerson.lastName}`.trim() : '';
+        const suggested = base ? strings.gedcom.viewCutName(base) : strings.treeManager.importTreeName;
+
+        this.closeExportDialog();
+        this.importFromTreeManager = false;
+        this.importToCurrentTree = false;
+        this.showImportTreeDialog(subtree, suggested);
     },
 
     /**
