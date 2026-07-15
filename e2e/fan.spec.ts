@@ -59,6 +59,26 @@ test('fan view: empty ancestor slot offers adding a parent', async ({ page }) =>
     await expect(page.locator('#relation-modal')).toBeVisible();
 });
 
+test('Kekule numbers are off by default, drawn when enabled, always in the tooltip (K9)', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
+    await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
+
+    // Default: no numbers drawn, but the tooltip carries the ahnentafel.
+    await expect(page.locator('.fan-kekule')).toHaveCount(0);
+    await expect(page.locator('.fan-sector title').first()).toHaveText(/^#2 · Henry VII/);
+
+    // Enabled: numbers appear in the sectors.
+    await page.evaluate(() => window.Strom.UI.toggleFanKekule(true));
+    await expect.poll(() => page.locator('.fan-kekule').count()).toBeGreaterThan(0);
+    await expect(page.locator('.fan-kekule').first()).toHaveText(/^\d+$/);
+
+    await page.evaluate(() => window.Strom.UI.toggleFanKekule(false));
+    await expect(page.locator('.fan-kekule')).toHaveCount(0);
+});
+
 test.describe('mobile', () => {
     test.use({ viewport: { width: 390, height: 844 } });
 

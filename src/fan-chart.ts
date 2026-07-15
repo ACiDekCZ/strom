@@ -97,6 +97,8 @@ export interface FanSvgOptions {
     editable: boolean;
     /** Label under the focus name, e.g. localized "generations" for a11y. */
     addParentLabel: string;
+    /** K9: draw the Kekulé (ahnentafel) number in each ancestor sector. */
+    showKekule?: boolean;
 }
 
 const FOCUS_R = 72;
@@ -268,10 +270,23 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
                 + tspans + `</text>`;
         }
 
+        // Kekulé/ahnentafel number: always in the tooltip (free), drawn in the
+        // sector only when the user asked for it (it is noise for most people).
+        let kekuleSvg = '';
+        if (opts.showKekule) {
+            // Always at the sector's INNER edge: the name/years rails own the
+            // middle of the ring, a number there collides with them.
+            const [kx, ky] = pt(cx, cy, r1 + 9, mid);
+            let krot = -mid;
+            if (mid > 90) krot += 180;
+            kekuleSvg = `<text class="fan-kekule" x="${fmt(kx)}" y="${fmt(ky)}"`
+                + ` transform="rotate(${fmt(krot)} ${fmt(kx)} ${fmt(ky)})" text-anchor="middle">${s.ahnentafel}</text>`;
+        }
         parts.push(`<g class="fan-sector ${gcls}" data-fan-person="${esc(p.id)}">`
             + `<path d="${path}"/>`
             + textSvg
-            + `<title>${esc(name)}${years ? ` (${years})` : ''}</title></g>`);
+            + kekuleSvg
+            + `<title>#${s.ahnentafel} · ${esc(name)}${years ? ` (${years})` : ''}</title></g>`);
     }
 
     // Focus disc at the fan's center bottom.
@@ -282,7 +297,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         + `<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${FOCUS_R}"/>`
         + `<text x="${fmt(cx)}" y="${fmt(cy - 6)}" text-anchor="middle" class="fan-name g0">${esc(truncate(fname, 18))}</text>`
         + (fyears ? `<text x="${fmt(cx)}" y="${fmt(cy + 12)}" text-anchor="middle" class="fan-years g0">${esc(fyears)}</text>` : '')
-        + `<title>${esc(fname)}</title></g>`);
+        + `<title>#1 · ${esc(fname)}</title></g>`);
 
     return `<svg class="fan-svg" viewBox="0 0 ${fmt(W)} ${fmt(H)}" role="img">`
         + `<defs>${defs.join('')}</defs>${parts.join('')}</svg>`;

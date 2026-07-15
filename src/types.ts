@@ -430,6 +430,7 @@ export interface AppSettings {
     branchLegend?: boolean;  // default: false - show the branch-colour legend box
     deathAnniversaries?: boolean;  // default: false - include yearly death anniversaries
     crossTreeBadges?: boolean;  // default: true - show cross-tree connection badges
+    fanKekule?: boolean;  // default: false - show Kekule (ahnentafel) numbers in the fan chart
     familyButton?: boolean;  // default: false - toolbar shortcut to the family wizard
     descendantsFullFamilies?: boolean;  // default: false - descendants view shows partners' other families
     senderName?: string;   // collaboration: name shown to relatives in shared files

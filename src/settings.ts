@@ -170,6 +170,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Kekulé (ahnentafel) numbers in the fan chart. Default OFF (genealogist tool). */
+    isFanKekuleEnabled(): boolean {
+        return this.settings.fanKekule === true;
+    }
+
+    setFanKekule(enabled: boolean): void {
+        this.settings.fanKekule = enabled;
+        this.save();
+    }
+
     /** Toolbar "Add family" button default OFF (opt-in). */
     isFamilyButtonEnabled(): boolean {
         return this.settings.familyButton === true;

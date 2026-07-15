@@ -1174,6 +1174,11 @@ const stringsEN = {
     },
 
     // Cross-tree links
+    fanChart: {
+        settingLabel: 'Fan chart',
+        kekuleHint: 'Show Kekulé (ancestor) numbers',
+    },
+
     crossTree: {
         badgeTitle: (count: number) => `Found in ${count} other tree${count !== 1 ? 's' : ''}`,
         settingLabel: 'Cross-tree connections',
@@ -2508,6 +2513,11 @@ const stringsCZ: StringsType = {
     },
 
     // Cross-tree links
+    fanChart: {
+        settingLabel: 'Vějíř',
+        kekuleHint: 'Zobrazit Kekulého (ahnentafel) čísla předků',
+    },
+
     crossTree: {
         badgeTitle: (count: number) => `Nalezeno v ${count} ${count === 1 ? 'jiném stromu' : count < 5 ? 'jiných stromech' : 'jiných stromech'}`,
         settingLabel: 'Propojení mezi stromy',

@@ -586,6 +586,11 @@ export const appModeMethods = uiModule({
         this.updateViewModeUI(); // owns the toolbar family-button visibility
     },
 
+    toggleFanKekule(enabled: boolean): void {
+        SettingsManager.setFanKekule(enabled);
+        TreeRenderer.render();
+    },
+
     toggleCrossTreeBadges(enabled: boolean): void {
         SettingsManager.setCrossTreeBadges(enabled);
         TreeRenderer.render();

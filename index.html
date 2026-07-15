@@ -2834,6 +2834,10 @@
             width: auto;
             height: auto;
         }
+        .fan-kekule {
+            font-size: 9px; fill: var(--text-light, #999);
+            dominant-baseline: middle; pointer-events: none;
+        }
         .fan-sector path {
             stroke: var(--line-color, #b9b9b9);
             stroke-width: 1;
@@ -6586,6 +6590,15 @@
                     <label class="settings-checkbox">
                         <input type="checkbox" id="death-anniversaries-toggle" onchange="window.Strom.UI.toggleDeathAnniversaries(this.checked)">
                         <span data-i18n="anniversaries.deathHint"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="fanChart.settingLabel"></label>
+                <div class="settings-options">
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="fan-kekule-toggle" onchange="window.Strom.UI.toggleFanKekule(this.checked)">
+                        <span data-i18n="fanChart.kekuleHint"></span>
                     </label>
                 </div>
             </div>

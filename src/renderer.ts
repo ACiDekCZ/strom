@@ -1564,6 +1564,7 @@ class TreeRendererClass {
             esc: (t) => this.escapeHtml(t),
             editable: !DataManager.isViewMode() && !DataManager.isTreeLocked(),
             addParentLabel: strings.contextMenu.addParent,
+            showKekule: SettingsManager.isFanKekuleEnabled(),
         });
 
         // Mobile: the fan keeps a minimum drawing width and overflows the
