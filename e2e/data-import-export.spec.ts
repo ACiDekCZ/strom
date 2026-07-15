@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { readFileSync } from 'fs';
 import {
     openApp, createFirstPerson, card, cardAction, addRelation, fillPerson,
-    exportTreeJson, importJsonAsNewTree,
+    exportTreeJson, importJsonAsNewTree, focusViaSearch,
 } from './helpers.js';
 
 /** Build a small couple-with-child tree: Jan + Marie, child Petr. */
@@ -315,4 +315,28 @@ test('make a tree from the current view creates a separate tree of the shown peo
         Object.keys(window.Strom.DataManager.getData().persons).length);
     expect(count).toBeGreaterThan(1);
     expect(count).toBeLessThanOrEqual(shown + 2);   // + possible glue partners
+});
+
+test('focus slice (New Tree from focus) is self-consistent — no dangling refs', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+    // Focus a mid-tree person so some parents/children are off-screen.
+    await focusViaSearch(page, 'Henry VIII');
+
+    const consistent = await page.evaluate(() => {
+        const data = window.Strom.TreeRenderer.getFocusedData();
+        if (!data) return { ok: false, reason: 'no data' };
+        const ids = new Set(Object.keys(data.persons));
+        for (const p of Object.values(data.persons) as any[]) {
+            for (const pid of p.parentIds) if (!ids.has(pid)) return { ok: false, reason: 'dangling parent ' + pid };
+            for (const cid of p.childIds) if (!ids.has(cid)) return { ok: false, reason: 'dangling child ' + cid };
+        }
+        for (const u of Object.values(data.partnerships) as any[]) {
+            if (!ids.has(u.person1Id) || !ids.has(u.person2Id)) return { ok: false, reason: 'dangling partner' };
+            for (const c of u.childIds) if (!ids.has(c)) return { ok: false, reason: 'dangling union child' };
+        }
+        return { ok: true };
+    });
+    expect(consistent.ok, consistent.reason).toBe(true);
 });

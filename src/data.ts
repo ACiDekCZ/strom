@@ -34,6 +34,7 @@ import { TreeManager } from './tree-manager.js';
 import { isEncrypted, EncryptedData } from './crypto.js';
 import * as CrossTree from './cross-tree.js';
 import { AuditLogManager } from './audit-log.js';
+import { extractSubtree } from './subtree.js';
 import { StorageManager } from './storage.js';
 import { createSnapshot, getSnapshotJson, SnapshotReason } from './snapshots.js';
 import { ValidationIssue } from './validation.js';
@@ -2197,28 +2198,12 @@ class DataManagerClass {
     }
 
     async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full', dropMedia = false): Promise<void> {
-        // Filter persons - only visible ones
-        const filteredPersons: Record<PersonId, Person> = {} as Record<PersonId, Person>;
-        for (const id of visiblePersonIds) {
-            const person = this.data.persons[id];
-            if (person) {
-                filteredPersons[id] = person;
-            }
-        }
-
-        // Filter partnerships - only those where BOTH partners are visible
-        const filteredPartnerships: Record<PartnershipId, Partnership> = {} as Record<PartnershipId, Partnership>;
-        for (const [id, partnership] of Object.entries(this.data.partnerships)) {
-            if (visiblePersonIds.has(partnership.person1Id) &&
-                visiblePersonIds.has(partnership.person2Id)) {
-                filteredPartnerships[id as PartnershipId] = partnership;
-            }
-        }
-
+        // Self-consistent slice (glue + cleaned relations + pruned sources),
+        // shared with "make a tree from this view".
+        const sliced = extractSubtree(this.data, visiblePersonIds);
         let focusedData: StromData = applyLivingPrivacy({
             version: STROM_DATA_VERSION,
-            persons: filteredPersons,
-            partnerships: filteredPartnerships
+            ...sliced,
         }, privacyMode);
         if (dropMedia) focusedData = stripMedia(focusedData);
 

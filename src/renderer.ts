@@ -37,6 +37,7 @@ import { computeTimelineModel, yearToFraction, axisTicks, TimelineRow, TimelineE
 import { classifyBranches, Branch } from './branch-colors.js';
 import { presumedDeceasedSet } from './privacy.js';
 import { SettingsManager } from './settings.js';
+import { extractSubtree } from './subtree.js';
 import { buildFanModel, buildFanSvg } from './fan-chart.js';
 
 class TreeRendererClass {
@@ -661,31 +662,9 @@ class TreeRendererClass {
      */
     getFocusedData(): import('./types.js').StromData | null {
         if (!this.focusPersonId || this.positions.size === 0) return null;
-
-        const visibleIds = new Set(this.positions.keys());
-        const data = DataManager.getData();
-
-        // Filter persons - only visible ones
-        const filteredPersons: Record<PersonId, import('./types.js').Person> = {} as Record<PersonId, import('./types.js').Person>;
-        for (const id of visibleIds) {
-            const person = data.persons[id];
-            if (person) {
-                filteredPersons[id] = person;
-            }
-        }
-
-        // Filter partnerships - only those where BOTH partners are visible
-        const filteredPartnerships: Record<import('./types.js').PartnershipId, import('./types.js').Partnership> = {} as Record<import('./types.js').PartnershipId, import('./types.js').Partnership>;
-        for (const [id, partnership] of Object.entries(data.partnerships)) {
-            if (visibleIds.has(partnership.person1Id) && visibleIds.has(partnership.person2Id)) {
-                filteredPartnerships[id as import('./types.js').PartnershipId] = partnership;
-            }
-        }
-
-        return {
-            persons: filteredPersons,
-            partnerships: filteredPartnerships
-        };
+        // Shared, self-consistent slice logic (glue + cleaned relations +
+        // pruned sources) — same as "make a tree from this view".
+        return extractSubtree(DataManager.getData(), new Set(this.positions.keys()));
     }
 
     /**
