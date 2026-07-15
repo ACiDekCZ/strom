@@ -28,9 +28,22 @@ interface NominatimHit {
     display_name?: string;
 }
 
-export function buildGeocodeUrl(place: string): string {
-    const params = new URLSearchParams({ q: place, format: 'jsonv2', limit: '1' });
+export function buildGeocodeUrl(place: string, limit = 1): string {
+    const params = new URLSearchParams({ q: place, format: 'jsonv2', limit: String(limit) });
     return `${GEOCODER_URL}?${params.toString()}`;
+}
+
+/** How many options a manual search offers the user to choose from. */
+export const CANDIDATE_LIMIT = 5;
+
+/** One hit, or null if it is missing or nonsense. Never guesses. */
+function parseHit(hit: unknown): PlaceGeo | null {
+    const h = hit as NominatimHit;
+    const lat = Number(h?.lat);
+    const lon = Number(h?.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+    return { lat, lon, label: h.display_name?.trim() || undefined };
 }
 
 /**
@@ -39,12 +52,13 @@ export function buildGeocodeUrl(place: string): string {
  */
 export function parseGeocodeResponse(body: unknown): PlaceGeo | null {
     if (!Array.isArray(body) || body.length === 0) return null;
-    const hit = body[0] as NominatimHit;
-    const lat = Number(hit?.lat);
-    const lon = Number(hit?.lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
-    return { lat, lon, label: hit.display_name?.trim() || undefined };
+    return parseHit(body[0]);
+}
+
+/** Read every usable hit, for a manual search where the user picks. */
+export function parseGeocodeCandidates(body: unknown): PlaceGeo[] {
+    if (!Array.isArray(body)) return [];
+    return body.map(parseHit).filter((p): p is PlaceGeo => p !== null);
 }
 
 export interface GeocodeOptions {
@@ -72,6 +86,26 @@ export async function geocodePlace(place: string, options: GeocodeOptions = {}):
         return parseGeocodeResponse(await response.json());
     } catch {
         return null;  // offline, blocked, rate-limited — all just "unknown"
+    }
+}
+
+/**
+ * Search for a place the automatic lookup could not find, returning several
+ * options for the user to choose from. The query is whatever the user typed —
+ * usually the nearest town — and is NOT what gets stored: only the coordinates
+ * are, under the place the family actually wrote.
+ */
+export async function geocodeCandidates(query: string, options: GeocodeOptions = {}): Promise<PlaceGeo[]> {
+    const doFetch = options.fetchFn ?? fetch;
+    try {
+        const response = await doFetch(buildGeocodeUrl(query, CANDIDATE_LIMIT), {
+            headers: { Accept: 'application/json' },
+            signal: options.signal,
+        });
+        if (!response.ok) return [];
+        return parseGeocodeCandidates(await response.json());
+    } catch {
+        return [];
     }
 }
 

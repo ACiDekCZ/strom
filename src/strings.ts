@@ -462,17 +462,36 @@ const stringsEN = {
         offline: 'No internet, so the map picture cannot load. The coordinates you already have stay in your tree.',
         missing: (shown: number, missing: number) =>
             shown > 0
-                ? `${shown} places on the map, ${missing} without coordinates.`
-                : `${missing} places have no coordinates yet.`,
-        lookUp: (count: number) => `Look up ${count} places`,
+                ? `${strings.map.placeCount(shown)} on the map, ${missing} without coordinates.`
+                : `${strings.map.placeCount(missing)} with no coordinates yet.`,
+        lookUp: (count: number) => `Look up ${strings.map.placeCount(count)}`,
+        placeCount: (count: number) => `${count} ${count === 1 ? 'place' : 'places'}`,
+        managePlaces: 'Places',
+        allPlaced: (count: number) => `${strings.map.placeCount(count)} on the map.`,
+        placesTitle: 'Places',
+        placesIntro: 'Rename a place to fix it everywhere in the tree at once. To put one on the map, search under a name the map knows — the nearest town usually works. Only the coordinates are attached; the place keeps the name your family wrote.',
+        nameLabel: 'Place name, as used in the tree',
+        rename: 'Rename',
+        renamed: (count: number) => `Renamed in ${count} ${count === 1 ? 'place' : 'places'}.`,
+        notOnMap: 'Not on the map yet',
+        findOnMap: 'Find on the map',
+        changePin: 'Change',
+        removePin: 'Remove',
+        wrongSpot: 'Wrong spot? Fix this place',
+        usedBy: (count: number) => count === 1 ? '1 person' : `${count} people`,
+        search: 'Search',
+        searchLabel: 'Search for this place under another name',
+        searching: 'Searching…',
+        noCandidates: 'Nothing found. Try the nearest town, or add the country.',
+        matched: (label: string) => label ? `Matched to ${label}` : 'Matched',
         geocodingProgress: (done: number, total: number, place: string) =>
             `Looking up places… ${done}/${total} (${place})`,
-        done: (found: number) => `${found} places placed on the map.`,
+        done: (found: number) => `${strings.map.placeCount(found)} placed on the map.`,
         doneWithMisses: (found: number, missed: number) =>
-            `${found} places placed. ${missed} could not be found — check the spelling, or add the country.`,
+            `${strings.map.placeCount(found)} placed. ${missed} could not be found — check the spelling, or add the country.`,
         consentTitle: 'Look up coordinates online?',
         consentBody: (count: number, service: string) =>
-            `To draw the map, ${count} place names (for example "Prague") will be sent to ${service}. `
+            `To draw the map, ${count} place ${count === 1 ? 'name' : 'names'} (for example "Prague") will be sent to ${service}. `
             + 'Nothing else leaves the app — no names, dates or relations of your family. '
             + 'The coordinates are saved into your tree, so each place is looked up only once and the map works offline afterwards.',
         consentConfirm: 'Look them up',
@@ -1333,6 +1352,8 @@ const stringsEN = {
         editPerson: (name: string) => `editing ${name}`,
         clearedData: 'clearing all data',
         geocodePlaces: (count: number) => `looking up ${count} places`,
+        clearPlaceGeo: 'removing a place from the map',
+        renamePlace: (name: string) => `renaming a place to ${name}`,
         loadedData: 'importing data',
         repairedIssue: 'a validation repair',
         deletePerson: (name: string) => `deleting ${name}`,
@@ -1851,17 +1872,37 @@ const stringsCZ: StringsType = {
         offline: 'Bez internetu se mapový podklad nenačte. Už dohledané souřadnice zůstávají ve vašem stromu.',
         missing: (shown: number, missing: number) =>
             shown > 0
-                ? `${shown} míst na mapě, ${missing} bez souřadnic.`
-                : `${missing} míst zatím nemá souřadnice.`,
-        lookUp: (count: number) => `Dohledat ${count} míst`,
+                ? `${strings.map.placeCount(shown)} na mapě, ${missing} bez souřadnic.`
+                : `${strings.map.placeCount(missing)} zatím bez souřadnic.`,
+        lookUp: (count: number) => `Dohledat ${strings.map.placeCount(count)}`,
+        placeCount: (count: number) =>
+            `${count} ${count === 1 ? 'místo' : (count < 5 ? 'místa' : 'míst')}`,
+        managePlaces: 'Místa',
+        allPlaced: (count: number) => `${strings.map.placeCount(count)} na mapě.`,
+        placesTitle: 'Místa',
+        placesIntro: 'Přejmenováním opravíte místo všude ve stromu naráz. Na mapu ho dostanete tak, že ho najdete pod názvem, který mapa zná — obvykle stačí nejbližší město. Připojí se jen souřadnice, místo si ponechá název, jak ho píše vaše rodina.',
+        nameLabel: 'Název místa, jak je ve stromu',
+        rename: 'Přejmenovat',
+        renamed: (count: number) => `Přejmenováno na ${count} ${count === 1 ? 'místě' : 'místech'}.`,
+        notOnMap: 'Zatím není na mapě',
+        findOnMap: 'Najít na mapě',
+        changePin: 'Změnit',
+        removePin: 'Odebrat',
+        wrongSpot: 'Špatné místo? Opravit',
+        usedBy: (count: number) => count === 1 ? '1 osoba' : (count < 5 ? `${count} osoby` : `${count} osob`),
+        search: 'Hledat',
+        searchLabel: 'Najít toto místo pod jiným názvem',
+        searching: 'Hledám…',
+        noCandidates: 'Nic nenalezeno. Zkuste nejbližší město nebo doplňte zemi.',
+        matched: (label: string) => label ? `Napárováno na ${label}` : 'Napárováno',
         geocodingProgress: (done: number, total: number, place: string) =>
             `Dohledávám místa… ${done}/${total} (${place})`,
-        done: (found: number) => `${found} míst je na mapě.`,
+        done: (found: number) => `Na mapě je ${strings.map.placeCount(found)}.`,
         doneWithMisses: (found: number, missed: number) =>
-            `${found} míst je na mapě. ${missed} se nepodařilo najít — zkuste opravit zápis nebo doplnit zemi.`,
+            `Na mapě je ${strings.map.placeCount(found)}. ${missed} se nepodařilo najít — zkuste opravit zápis nebo doplnit zemi.`,
         consentTitle: 'Dohledat souřadnice online?',
         consentBody: (count: number, service: string) =>
-            `Pro vykreslení mapy se do služby ${service} odešle ${count} názvů míst (například „Praha“). `
+            `Pro vykreslení mapy se do služby ${service} odešle ${count} ${count === 1 ? 'název místa' : (count < 5 ? 'názvy míst' : 'názvů míst')} (například „Praha“). `
             + 'Nic jiného aplikaci neopustí — žádná jména, data ani vztahy vaší rodiny. '
             + 'Souřadnice se uloží do vašeho stromu, takže se každé místo dohledává jen jednou a mapa pak funguje i offline.',
         consentConfirm: 'Dohledat',
@@ -2722,6 +2763,8 @@ const stringsCZ: StringsType = {
         editPerson: (name: string) => `úprava osoby ${name}`,
         clearedData: 'smazání všech dat',
         geocodePlaces: (count: number) => `dohledání ${count} míst`,
+        clearPlaceGeo: 'odebrání místa z mapy',
+        renamePlace: (name: string) => `přejmenování místa na ${name}`,
         loadedData: 'import dat',
         repairedIssue: 'oprava z validace',
         deletePerson: (name: string) => `smazání osoby ${name}`,

@@ -24,7 +24,7 @@ import {
     fitBounds, panCenter, pointInViewport, tileUrl, tilesForViewport, zoomAround,
     TILE_ATTRIBUTION, TILE_ATTRIBUTION_URL,
 } from '../map.js';
-import { GEOCODER_NAME, geocodePlaces } from '../geocode.js';
+import { GEOCODER_NAME, geocodeCandidates, geocodePlaces } from '../geocode.js';
 import { uiModule } from './module.js';
 
 /** A place that has coordinates and therefore something to draw. */
@@ -137,14 +137,17 @@ export const mapMethods = uiModule({
             box.style.display = 'flex';
             return;
         }
-        if (missing.length === 0) {
-            box.style.display = 'none';
-            return;
-        }
 
+        // The Places button stays even when everything is placed: a pin can be
+        // in the wrong country, and that needs a way back.
         box.innerHTML = `
-            <span class="map-status-text">${strings.map.missing(places.length, missing.length)}</span>
-            <button type="button" onclick="window.Strom.UI.startGeocoding()">${strings.map.lookUp(missing.length)}</button>`;
+            <span class="map-status-text">${missing.length > 0
+                ? strings.map.missing(places.length, missing.length)
+                : strings.map.allPlaced(places.length)}</span>
+            ${missing.length > 0
+                ? `<button type="button" onclick="window.Strom.UI.startGeocoding()">${strings.map.lookUp(missing.length)}</button>`
+                : ''}
+            <button type="button" class="secondary" onclick="window.Strom.UI.showPlacesManager()">${strings.map.managePlaces}</button>`;
         box.style.display = 'flex';
     },
 
@@ -207,7 +210,10 @@ export const mapMethods = uiModule({
                 <button type="button" class="map-popup-close" onclick="window.Strom.UI.closeMapPopup()" aria-label="close">×</button>
             </div>
             ${place.geo.label ? `<div class="map-popup-label">${this.escapeHtml(place.geo.label)}</div>` : ''}
-            <div class="map-popup-people">${people}</div>`;
+            <div class="map-popup-people">${people}</div>
+            <button type="button" class="map-popup-fix" onclick="window.Strom.UI.showPlacesManager('${this.escapeHtml(place.key)}')">
+                ${strings.map.wrongSpot}
+            </button>`;
         popup.style.display = 'block';
     },
 
@@ -367,6 +373,187 @@ export const mapMethods = uiModule({
 
         this.mapCenter = null;  // reframe now that there is more to show
         TreeRenderer.render();
+    },
+
+    // ==================== PLACES MANAGER ====================
+
+    /**
+     * One home for everything about a place: what it is called, who it belongs
+     * to, and where it sits on the map.
+     *
+     * It exists because both halves can go wrong and neither could be fixed:
+     *   - a place the geocoder cannot find ("Kravaře u Č. Lípy" — a spelling
+     *     only the family uses) had no way to get onto the map at all,
+     *   - a place matched to the WRONG spot (a same-named town elsewhere) fell
+     *     out of the "missing" list and became unreachable.
+     *
+     * Searching and renaming are kept apart on purpose. The search query is
+     * throwaway — type the nearest town, take the coordinates. The name is the
+     * record, and renaming it rewrites every use in the tree.
+     */
+    placesForManager(): { key: string; usage: PlaceUsage; geo?: PlaceGeo }[] {
+        const data = DataManager.getData();
+        const filter: ReadonlySet<PersonId> | undefined =
+            this.mapScope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
+        return [...collectPlaces(data, filter)]
+            .map(([key, usage]) => ({ key, usage, geo: data.places?.[key] }))
+            // Unplaced first — those are the ones asking for attention.
+            .sort((a, b) => Number(!!a.geo) - Number(!!b.geo)
+                || b.usage.count - a.usage.count
+                || a.usage.display.localeCompare(b.usage.display));
+    },
+
+    /** @param focusKey scroll to this place and open its search straight away */
+    showPlacesManager(focusKey?: string): void {
+        const places = this.placesForManager();
+        if (places.length === 0) return;
+        this.closeMapPopup();
+
+        document.getElementById('places-modal')?.remove();
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay active';
+        overlay.id = 'places-modal';
+        overlay.innerHTML = `
+            <div class="modal places-modal">
+                <div class="modal-header">
+                    <h2>${strings.map.placesTitle}</h2>
+                    <button class="close-btn" id="places-close-x">&times;</button>
+                </div>
+                <p class="places-intro">${strings.map.placesIntro}</p>
+                <div class="places-list">
+                    ${places.map(p => this.renderPlaceRow(p)).join('')}
+                </div>
+                <div class="modal-buttons">
+                    <button type="button" class="secondary" id="places-close">${strings.buttons.close}</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+
+        const close = (): void => this.closePlacesManager();
+        overlay.onclick = (e) => { if (e.target === overlay) close(); };
+        (overlay.querySelector('#places-close') as HTMLButtonElement).onclick = close;
+        (overlay.querySelector('#places-close-x') as HTMLButtonElement).onclick = close;
+        overlay.querySelectorAll('.place-row').forEach(row => this.bindPlaceRow(row as HTMLElement));
+
+        if (focusKey) {
+            const row = overlay.querySelector(`.place-row[data-key="${CSS.escape(focusKey)}"]`) as HTMLElement | null;
+            row?.scrollIntoView({ block: 'center' });
+            (row?.querySelector('.place-change') as HTMLButtonElement | null)?.click();
+        }
+
+        this.clearDialogStack();
+        this.pushDialog('places-modal');
+    },
+
+    renderPlaceRow(p: { key: string; usage: PlaceUsage; geo?: PlaceGeo }): string {
+        const pinned = p.geo
+            ? `<div class="place-pin">
+                   <span class="place-pin-label">📍 ${this.escapeHtml(p.geo.label ?? `${p.geo.lat.toFixed(3)}, ${p.geo.lon.toFixed(3)}`)}</span>
+                   <button type="button" class="place-change secondary">${strings.map.changePin}</button>
+                   <button type="button" class="place-remove secondary">${strings.map.removePin}</button>
+               </div>`
+            : `<div class="place-pin place-pin-none">
+                   <span class="place-hint">${strings.map.notOnMap}</span>
+                   <button type="button" class="place-change secondary">${strings.map.findOnMap}</button>
+               </div>`;
+        return `
+            <div class="place-row${p.geo ? '' : ' place-row-unplaced'}" data-key="${this.escapeHtml(p.key)}">
+                <div class="place-head">
+                    <input type="text" class="place-name" value="${this.escapeHtml(p.usage.display)}"
+                           aria-label="${strings.map.nameLabel}">
+                    <button type="button" class="place-rename secondary" disabled>${strings.map.rename}</button>
+                    <span class="place-count">${strings.map.usedBy(p.usage.personIds.length)}</span>
+                </div>
+                ${pinned}
+                <div class="place-search" hidden>
+                    <input type="text" class="place-query" value="${this.escapeHtml(p.usage.display)}"
+                           aria-label="${strings.map.searchLabel}">
+                    <button type="button" class="place-search-go">${strings.map.search}</button>
+                </div>
+                <div class="place-results"></div>
+            </div>`;
+    },
+
+    bindPlaceRow(row: HTMLElement): void {
+        const key = row.getAttribute('data-key') ?? '';
+        const name = row.querySelector('.place-name') as HTMLInputElement;
+        const renameBtn = row.querySelector('.place-rename') as HTMLButtonElement;
+        const original = name.value;
+
+        // Rename only lights up once the name actually differs — no accidental
+        // tree-wide rewrite from clicking around.
+        const sync = (): void => { renameBtn.disabled = name.value.trim() === original.trim() || !name.value.trim(); };
+        name.oninput = sync;
+        name.onkeydown = (e) => { if (e.key === 'Enter' && !renameBtn.disabled) { e.preventDefault(); renameBtn.click(); } };
+        renameBtn.onclick = () => this.renamePlaceFromManager(key, name.value);
+
+        const search = row.querySelector('.place-search') as HTMLElement;
+        const query = row.querySelector('.place-query') as HTMLInputElement;
+        const go = row.querySelector('.place-search-go') as HTMLButtonElement;
+        const run = (): void => { void this.searchPlaceFromManager(key, query.value, row); };
+        go.onclick = run;
+        query.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); run(); } };
+
+        (row.querySelector('.place-change') as HTMLButtonElement).onclick = () => {
+            search.hidden = false;
+            query.focus();
+            query.select();
+        };
+        const remove = row.querySelector('.place-remove') as HTMLButtonElement | null;
+        if (remove) remove.onclick = () => this.removePlacePin(key);
+    },
+
+    closePlacesManager(): void {
+        document.getElementById('places-modal')?.remove();
+        this.dialogStack = this.dialogStack.filter(d => d !== 'places-modal');
+    },
+
+    /** Redraw the dialog in place, keeping the map behind it in step. */
+    refreshPlacesManager(focusKey?: string): void {
+        this.mapCenter = null;  // what is on the map changed — reframe it
+        TreeRenderer.render();
+        if (document.getElementById('places-modal')) this.showPlacesManager(focusKey);
+    },
+
+    renamePlaceFromManager(key: string, newName: string): void {
+        const changed = DataManager.renamePlaceTo(key, newName);
+        if (changed === 0) return;
+        this.showToast(strings.map.renamed(changed));
+        this.refreshPlacesManager();
+    },
+
+    removePlacePin(key: string): void {
+        DataManager.clearPlaceGeo(key);
+        this.refreshPlacesManager();
+    },
+
+    /** Search under whatever name the user typed and offer what comes back. */
+    async searchPlaceFromManager(key: string, query: string, row: HTMLElement): Promise<void> {
+        const results = row.querySelector('.place-results') as HTMLElement;
+        const text = query.trim();
+        if (!text) return;
+        // The typed name goes out too, so the same consent rule applies.
+        if (!await this.confirmGeocoding(1)) return;
+
+        results.innerHTML = `<span class="place-hint">${strings.map.searching}</span>`;
+        const candidates = await geocodeCandidates(text);
+        if (candidates.length === 0) {
+            results.innerHTML = `<span class="place-hint">${strings.map.noCandidates}</span>`;
+            return;
+        }
+
+        results.innerHTML = candidates.map((c, i) => `
+            <button type="button" class="place-candidate" data-index="${i}">
+                ${this.escapeHtml(c.label ?? `${c.lat}, ${c.lon}`)}
+            </button>`).join('');
+        results.querySelectorAll('.place-candidate').forEach(btn => {
+            (btn as HTMLButtonElement).onclick = () => {
+                const geo = candidates[Number(btn.getAttribute('data-index'))];
+                DataManager.setPlaceGeos(new Map([[key, geo]]));
+                this.showToast(strings.map.matched(geo.label ?? ''));
+                this.refreshPlacesManager();
+            };
+        });
     },
 
     cancelGeocoding(): void {

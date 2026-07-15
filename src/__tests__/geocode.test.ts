@@ -6,8 +6,9 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import {
-    buildGeocodeUrl, geocodePlace, geocodePlaces, parseGeocodeResponse,
-    GEOCODER_URL, REQUEST_INTERVAL_MS,
+    buildGeocodeUrl, geocodeCandidates, geocodePlace, geocodePlaces,
+    parseGeocodeCandidates, parseGeocodeResponse,
+    CANDIDATE_LIMIT, GEOCODER_URL, REQUEST_INTERVAL_MS,
 } from '../geocode.js';
 
 const hit = (lat: string, lon: string, name = 'Somewhere'): unknown =>
@@ -46,6 +47,49 @@ describe('parseGeocodeResponse', () => {
         expect(parseGeocodeResponse({ lat: 1, lon: 2 })).toBeNull();
         expect(parseGeocodeResponse([{ lat: 'nonsense', lon: '14' }])).toBeNull();
         expect(parseGeocodeResponse([{ lat: '999', lon: '14' }])).toBeNull();
+    });
+});
+
+describe('parseGeocodeCandidates', () => {
+    it('keeps every usable option, in the order given', () => {
+        const body = [
+            { lat: '50.0', lon: '14.0', display_name: 'First' },
+            { lat: '51.0', lon: '15.0', display_name: 'Second' },
+        ];
+        expect(parseGeocodeCandidates(body)).toEqual([
+            { lat: 50, lon: 14, label: 'First' },
+            { lat: 51, lon: 15, label: 'Second' },
+        ]);
+    });
+
+    it('drops the broken ones rather than the whole answer', () => {
+        const body = [
+            { lat: 'nonsense', lon: '14.0' },
+            { lat: '51.0', lon: '15.0', display_name: 'Good' },
+        ];
+        expect(parseGeocodeCandidates(body)).toEqual([{ lat: 51, lon: 15, label: 'Good' }]);
+    });
+
+    it('has nothing to offer for an empty or broken answer', () => {
+        expect(parseGeocodeCandidates([])).toEqual([]);
+        expect(parseGeocodeCandidates(null)).toEqual([]);
+    });
+});
+
+describe('geocodeCandidates', () => {
+    it('asks for several options so the user can choose', async () => {
+        const fetchFn = vi.fn().mockResolvedValue(okResponse(hit('50.0', '14.0', 'Kravaře')));
+        await geocodeCandidates('Kravaře', { fetchFn });
+
+        const url = new URL(fetchFn.mock.calls[0][0] as string);
+        expect(url.searchParams.get('q')).toBe('Kravaře');
+        expect(url.searchParams.get('limit')).toBe(String(CANDIDATE_LIMIT));
+        expect(CANDIDATE_LIMIT).toBeGreaterThan(1);
+    });
+
+    it('offers nothing rather than throwing when the search fails', async () => {
+        const fetchFn = vi.fn().mockRejectedValue(new Error('offline'));
+        await expect(geocodeCandidates('Kravaře', { fetchFn })).resolves.toEqual([]);
     });
 });
 

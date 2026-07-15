@@ -1988,6 +1988,84 @@
         }
         /* Make empty date input placeholder very light */
                 /* Archive search */
+        /* ---- Places manager: names + where they sit on the map (K5/A6) ---- */
+        .places-modal { max-width: 580px; }
+        .places-intro { margin: 4px 0 14px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
+        .places-list { display: flex; flex-direction: column; gap: 10px; max-height: 52vh; overflow-y: auto; }
+        .place-row {
+            padding: 10px 12px;
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 10px;
+            background: var(--bg-color, #fafafa);
+        }
+        /* A place with nowhere to sit is the one worth noticing. */
+        .place-row-unplaced { border-color: color-mix(in srgb, var(--primary, #4a7c59) 45%, transparent); }
+        .place-head { display: flex; align-items: center; gap: 6px; }
+        .place-name {
+            flex: 1;
+            min-width: 0;
+            padding: 6px 9px;
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 6px;
+            background: var(--card-bg, #fff);
+            color: var(--text-color, #222);
+            font-size: 13px;
+        }
+        .place-count { font-size: 12px; color: var(--text-light); white-space: nowrap; }
+        .place-pin { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+        .place-pin-label { flex: 1; min-width: 0; font-size: 12px; color: var(--text-light); }
+        .place-hint { flex: 1; font-size: 12px; color: var(--text-light); }
+        .place-row button { padding: 5px 10px; font-size: 12px; white-space: nowrap; }
+        .place-search { display: flex; gap: 6px; margin-top: 8px; }
+        /* `display` beats the hidden attribute — say it explicitly, or every
+           row shows its search box before anyone asked for it. */
+        .place-search[hidden] { display: none; }
+        .place-query {
+            flex: 1;
+            min-width: 0;
+            padding: 6px 9px;
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        .place-results { display: flex; flex-direction: column; gap: 4px; }
+        .place-results:not(:empty) { margin-top: 8px; }
+        .place-candidate {
+            padding: 6px 9px;
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 6px;
+            background: var(--card-bg, #fff);
+            color: var(--text-color, #222);
+            font-size: 12px;
+            text-align: left;
+            cursor: pointer;
+        }
+        .place-candidate:hover { background: var(--primary, #4a7c59); color: #fff; }
+        .map-popup-fix {
+            width: 100%;
+            margin-top: 10px;
+            padding: 6px;
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 6px;
+            background: none;
+            color: var(--text-light);
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .map-popup-fix:hover { background: var(--bg-color, #f4f4f4); color: var(--text-color, #222); }
+        /* Tablet: the name row keeps its shape, the pin row wraps as needed. */
+        @media (max-width: 900px) {
+            .places-modal { max-width: 94vw; }
+        }
+        /* Mobile: everything stacks — nothing gets squeezed to nothing. */
+        @media (max-width: 500px) {
+            .place-head { flex-wrap: wrap; }
+            .place-name { flex-basis: 100%; }
+            .place-search { flex-direction: column; }
+            .place-search-go { width: 100%; }
+            .places-list { max-height: 60vh; }
+        }
+
         .archives-modal { max-width: 520px; }
         .archives-modal h3 { margin: 12px 0 6px; font-size: 0.95em; opacity: 0.8; }
         .archive-link { display: block; padding: 8px 10px; margin: 4px 0; border-radius: 8px;
@@ -2906,7 +2984,9 @@
             transform: translateX(-50%);
             display: none;
             align-items: center;
-            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 8px 10px;
             max-width: calc(100% - 32px);
             padding: 8px 12px;
             border-radius: 10px;
@@ -2967,8 +3047,19 @@
             .map-controls { right: 8px; }
             .map-controls button { width: 30px; height: 30px; }
             .map-scope { left: 8px; }
-            .map-status { bottom: 10px; padding: 7px 10px; gap: 8px; }
-            .map-status-text { font-size: 12px; }
+            /* Narrow screens: a full-width bar. Sized to its content it shrank
+               to the width of the sentence, which left no room for the buttons
+               to sit next to each other. */
+            .map-status {
+                left: 8px;
+                right: 8px;
+                bottom: 10px;
+                transform: none;
+                max-width: none;
+                padding: 8px 10px;
+                gap: 8px;
+            }
+            .map-status-text { flex-basis: 100%; text-align: center; font-size: 12px; }
         }
         /* Below 600px the focus bar floats across the top of the tree area (it
            still belongs here: its depth controls decide who is "in this view").

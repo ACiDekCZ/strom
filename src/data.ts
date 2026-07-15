@@ -887,6 +887,50 @@ class DataManagerClass {
         this.commitMutation(strings.undo.geocodePlaces(geos.size));
     }
 
+    /**
+     * Rename a place everywhere it is used (a typo, or a name only the family
+     * would recognise). Renaming changes the place's KEY, so any coordinates
+     * already found must move with it — otherwise a rename would silently drop
+     * the pin off the map.
+     *
+     * @returns how many fields changed
+     */
+    renamePlaceTo(key: string, newName: string): number {
+        const target = newName.trim();
+        if (!target) return 0;
+        const { data: renamed, changed } = renamePlace(this.data, key, target);
+        if (changed === 0) return 0;
+
+        this.beginMutation();
+        this.data = renamed;
+
+        const geo = this.data.places?.[key];
+        const newKey = placeKey(target);
+        if (geo && newKey !== key) {
+            const places = { ...this.data.places };
+            delete places[key];
+            // If the name it merges into is already on the map, that pin wins —
+            // it was placed for this spelling, so it is the more specific answer.
+            if (!places[newKey]) places[newKey] = geo;
+            this.data.places = places;
+        }
+        this.commitMutation(strings.undo.renamePlace(target));
+        return changed;
+    }
+
+    /**
+     * Forget a place's coordinates (a wrong match). The place itself and every
+     * person's record of it stay untouched — only the pin is removed.
+     */
+    clearPlaceGeo(key: string): void {
+        if (!this.data.places?.[key]) return;
+        this.beginMutation();
+        const places = { ...this.data.places };
+        delete places[key];
+        this.data.places = places;
+        this.commitMutation(strings.undo.clearPlaceGeo);
+    }
+
     // ==================== GETTERS ====================
 
     getData(): StromData {
