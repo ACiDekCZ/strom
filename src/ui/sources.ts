@@ -8,7 +8,7 @@
  */
 
 import { DataManager } from '../data.js';
-import { PersonId, Source } from '../types.js';
+import { PersonId, PartnershipId, Source } from '../types.js';
 import { strings } from '../strings.js';
 import { uiModule } from './module.js';
 
@@ -223,6 +223,12 @@ export const sourcesMethods = uiModule({
         this.openSourcePicker();
     },
 
+    /** Cite a source on a partnership (marriage record etc.). */
+    showSourcePickerForPartnership(partnershipId: PartnershipId): void {
+        this.citationContext = { partnershipId };
+        this.openSourcePicker();
+    },
+
     openSourcePicker(): void {
         const search = document.getElementById('source-picker-search') as HTMLInputElement | null;
         if (search) {
@@ -269,6 +275,9 @@ export const sourcesMethods = uiModule({
     currentCitationSourceIds(): string[] {
         const ctx = this.citationContext;
         if (!ctx) return [];
+        if ('partnershipId' in ctx) {
+            return DataManager.getData().partnerships[ctx.partnershipId]?.sourceIds ?? [];
+        }
         const person = DataManager.getPerson(ctx.personId);
         if (!person) return [];
         if (ctx.eventId) {
@@ -281,7 +290,9 @@ export const sourcesMethods = uiModule({
     applyCitation(sourceId: string): void {
         const ctx = this.citationContext;
         if (!ctx) return;
-        if (ctx.eventId) {
+        if ('partnershipId' in ctx) {
+            DataManager.citePartnership(ctx.partnershipId, sourceId);
+        } else if (ctx.eventId) {
             DataManager.citeEvent(ctx.personId, ctx.eventId, sourceId);
         } else {
             DataManager.citePerson(ctx.personId, sourceId);
@@ -289,9 +300,11 @@ export const sourcesMethods = uiModule({
     },
 
     pickSource(sourceId: string): void {
+        const wasPartnership = !!this.citationContext && 'partnershipId' in this.citationContext;
         this.applyCitation(sourceId);
         this.closeSourcePicker();
         this.refreshCitationChips();
+        if (wasPartnership) this.refreshRelationshipsPanel();
     },
 
     /** "New source…" in the picker: open the editor; on save it cites the result. */

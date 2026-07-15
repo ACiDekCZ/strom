@@ -133,6 +133,9 @@ export function applyLivingPrivacy(
         delete person.attachments;
         for (const ev of person.events ?? []) delete ev.sourceIds;
     }
+    for (const partnership of Object.values(copy.partnerships)) {
+        delete partnership.sourceIds;
+    }
 
     // Decide liveness BEFORE any transformation (the loop below strips the
     // very dates the inference reads), with indirect evidence: a person whose

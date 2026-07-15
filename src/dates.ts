@@ -20,6 +20,12 @@ export interface FlexDate {
     year: number;
     month?: number;
     day?: number;
+    /**
+     * Date RANGE ('1880..1885', GEDCOM BET/AND, FROM/TO): year/month/day above
+     * hold the range START; `end` holds the other bound. Ranges never carry a
+     * qualifier. Consumers that ignore `end` conservatively see the start.
+     */
+    end?: { year: number; month?: number; day?: number };
 }
 
 const CANONICAL_RE = /^([~<>]?)(\d{3,4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$/;
@@ -40,7 +46,18 @@ function daysInMonth(year: number, month: number): number {
  */
 export function parseFlexDate(value?: string): FlexDate | null {
     if (!value) return null;
-    const m = CANONICAL_RE.exec(value.trim());
+    const trimmed = value.trim();
+
+    // Range 'A..B' — both sides plain canonical dates (no qualifiers).
+    const dots = trimmed.indexOf('..');
+    if (dots > 0) {
+        const start = parseFlexDate(trimmed.slice(0, dots));
+        const end = parseFlexDate(trimmed.slice(dots + 2));
+        if (!start || !end || start.qualifier || end.qualifier || start.end || end.end) return null;
+        return { ...start, end: { year: end.year, month: end.month, day: end.day } };
+    }
+
+    const m = CANONICAL_RE.exec(trimmed);
     if (!m) return null;
 
     const qualifier = (m[1] ?? '') as DateQualifier;
@@ -63,6 +80,9 @@ export function toCanonical(date: FlexDate): string {
             s += `-${String(date.day).padStart(2, '0')}`;
         }
     }
+    if (date.end) {
+        s += `..${toCanonical({ qualifier: '', ...date.end })}`;
+    }
     return s;
 }
 
@@ -73,6 +93,18 @@ export function toCanonical(date: FlexDate): string {
 export function normalizeDateInput(input: string): string | null {
     let s = input.trim();
     if (!s) return '';
+
+    // Range: 'A..B', 'mezi A a B', 'between A and B' — sides normalize
+    // through the single-date path (no qualifiers inside a range).
+    const rangeMatch = /^(?:mezi|between)\s+(.+?)\s+(?:a|and)\s+(.+)$/i.exec(s);
+    const sides = rangeMatch ? [rangeMatch[1], rangeMatch[2]]
+        : s.includes('..') ? s.split('..', 2) : null;
+    if (sides) {
+        const a = normalizeDateInput(sides[0]);
+        const b = normalizeDateInput(sides[1]);
+        if (!a || !b || /^[~<>]/.test(a) || /^[~<>]/.test(b) || a.includes('..') || b.includes('..')) return null;
+        return `${a}..${b}`;
+    }
 
     // Qualifier: leading symbol or word
     let qualifier: DateQualifier = '';
@@ -180,6 +212,11 @@ export function formatFlexDate(value?: string, lang?: 'cs' | 'en'): string {
         core = `${d.year}`;
     }
 
+    if (d.end) {
+        const endCore = formatFlexDate(toCanonical({ qualifier: '', ...d.end }), locale);
+        return locale === 'cs' ? `mezi ${core} a ${endCore}` : `between ${core} and ${endCore}`;
+    }
+
     return d.qualifier ? `${QUALIFIER_TEXT[locale][d.qualifier]} ${core}` : core;
 }
 
@@ -193,6 +230,7 @@ export function formatDateForInput(value?: string): string {
     if (!value) return '';
     const d = parseFlexDate(value);
     if (!d) return value;
+    if (d.end) return value;  // ranges stay canonical ('1880..1885')
     if (getCurrentLanguage() !== 'cs') return value;
     const q = d.qualifier;
     if (d.day !== undefined && d.month !== undefined) return `${q}${d.day}.${d.month}.${d.year}`;

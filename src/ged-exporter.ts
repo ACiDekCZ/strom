@@ -41,6 +41,15 @@ const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', '
 function formatGedcomDate(isoDate: string | undefined): string | null {
     if (!isoDate) return null;
 
+    // Range 'a..b' -> BET a AND b
+    const dots = isoDate.indexOf('..');
+    if (dots > 0) {
+        const a = formatGedcomDate(isoDate.slice(0, dots));
+        const b = formatGedcomDate(isoDate.slice(dots + 2));
+        if (a && b) return `BET ${a} AND ${b}`;
+        return a || b;
+    }
+
     // Flex-date qualifier prefix -> GEDCOM keyword
     let prefix = '';
     let value = isoDate;
@@ -188,8 +197,9 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
         const ref = sourceIdMap.get(srcId);
         if (!ref) return;
         lines.push(`${level} SOUR ${ref}`);
-        const reference = data.sources?.[srcId]?.reference;
-        if (reference) lines.push(`${level + 1} PAGE ${escapeGedcomText(reference)}`);
+        const src = data.sources?.[srcId];
+        if (src?.reference) lines.push(`${level + 1} PAGE ${escapeGedcomText(src.reference)}`);
+        if (src?.quality !== undefined) lines.push(`${level + 1} QUAY ${src.quality}`);
     };
 
     // Get current date for header
@@ -399,6 +409,11 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
         // Note
         if (partnership.note) {
             pushNote(lines, 1, partnership.note);
+        }
+
+        // Family citations (marriage record etc.)
+        for (const srcId of partnership.sourceIds ?? []) {
+            pushCitation(1, srcId);
         }
     }
 

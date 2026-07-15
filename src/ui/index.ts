@@ -131,7 +131,7 @@ export class UIClass {
     // Sources/citations state.
     editingSourceId: string | null = null;
     /** What a citation applies to (person, or a specific event on that person). */
-    citationContext: { personId: PersonId; eventId?: string } | null = null;
+    citationContext: { personId: PersonId; eventId?: string } | { partnershipId: PartnershipId } | null = null;
     /** When the source editor was opened from the picker, cite the new source. */
     citeSourceAfterCreate = false;
 

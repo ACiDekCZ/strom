@@ -68,3 +68,33 @@ test('sources manager lists a source and shows its citation count', async ({ pag
     await page.evaluate(() => window.Strom.UI.showSourcesDialog());
     await expect(manager.locator('#sources-list')).toContainText('1×');
 });
+
+test('sources: cite a source on a partnership (marriage record)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const jan = dm.getAllPersons()[0];
+        const marie = dm.createPerson({ firstName: 'Marie', lastName: 'Novakova', gender: 'female' });
+        dm.createPartnership(jan.id, marie.id);
+        dm.addSource({ title: 'Oddaci matrika', reference: 'fol. 5' });
+        window.Strom.UI.showRelationshipsPanel(jan.id);
+    });
+    const panel = page.locator('#relationships-modal');
+    await expect(panel).toBeVisible();
+
+    // Cite button opens the picker; picking attaches the chip to the partnership.
+    await panel.locator('.partnership-cite-btn').first().click();
+    const picker = page.locator('#source-picker-modal');
+    await expect(picker).toBeVisible();
+    await picker.locator('.source-picker-item', { hasText: 'Oddaci matrika' }).click();
+    await expect(picker).toBeHidden();
+    await expect(panel.locator('.partnership-citations .source-chip')).toContainText('Oddaci matrika');
+
+    // Data really landed on the partnership; uncite removes it.
+    const cited = await page.evaluate(() =>
+        Object.values(window.Strom.DataManager.getData().partnerships)[0].sourceIds?.length ?? 0);
+    expect(cited).toBe(1);
+    await panel.locator('.partnership-uncite').click();
+    await expect(panel.locator('.partnership-citations .source-chip')).toHaveCount(0);
+});

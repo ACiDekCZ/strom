@@ -225,3 +225,37 @@ describe('formatDateForInput', () => {
         expect(formatDateForInput('nonsense')).toBe('nonsense');
     });
 });
+
+describe('date ranges (K4)', () => {
+    it('parses canonical ranges with start components + end', () => {
+        const d = parseFlexDate('1880..1885')!;
+        expect(d.year).toBe(1880);
+        expect(d.end).toEqual({ year: 1885, month: undefined, day: undefined });
+        expect(parseFlexDate('1880-05..1881-02-03')!.end).toEqual({ year: 1881, month: 2, day: 3 });
+    });
+
+    it('rejects malformed ranges', () => {
+        expect(parseFlexDate('~1880..1885')).toBeNull();
+        expect(parseFlexDate('1880..')).toBeNull();
+        expect(parseFlexDate('1880..~1885')).toBeNull();
+        expect(parseFlexDate('1880..1885..1890')).toBeNull();
+    });
+
+    it('normalizes user input ranges (.., mezi/a, between/and)', () => {
+        expect(normalizeDateInput('1880..1885')).toBe('1880..1885');
+        expect(normalizeDateInput('15.5.1880..1890')).toBe('1880-05-15..1890');
+        expect(normalizeDateInput('mezi 1880 a 1885')).toBe('1880..1885');
+        expect(normalizeDateInput('between 1880 and 1885')).toBe('1880..1885');
+        expect(normalizeDateInput('kolem 1880..1885')).toBeNull();
+    });
+
+    it('formats ranges for display and keeps input form canonical', () => {
+        expect(formatFlexDate('1880..1885', 'cs')).toBe('mezi 1880 a 1885');
+        expect(formatFlexDate('1880..1885', 'en')).toBe('between 1880 and 1885');
+        expect(formatDateForInput('1880..1885')).toBe('1880..1885');
+    });
+
+    it('yearOf of a range is the start year (conservative sort key)', () => {
+        expect(yearOf('1880..1885')).toBe(1880);
+    });
+});

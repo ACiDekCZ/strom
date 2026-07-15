@@ -66,6 +66,8 @@ interface RawSource {
     reference: string;
     url: string;
     note: string;
+    /** QUAY seen on the record or a citation (first wins). */
+    quality?: number;
 }
 
 // ==================== TYPES ====================
@@ -105,6 +107,8 @@ interface GedcomFamily {
     /** A DIV tag was present, even without a date (divorce date unknown). */
     divorced: boolean;
     note: string;
+    /** 1 SOUR citations on the family (marriage record etc.). */
+    sourceRefs: string[];
 }
 
 /** Parsed GEDCOM data */
@@ -153,6 +157,23 @@ const MONTHS: Record<string, string> = {
  */
 export function parseGedcomDate(dateStr: string): string {
     if (!dateStr) return '';
+
+    // Ranges/periods: BET X AND Y, FROM X TO Y -> 'x..y' (both bounds kept —
+    // previously these were mangled and the information silently lost).
+    // One-sided periods degrade to qualifiers: FROM X -> '>x', TO Y -> '<y'.
+    const range = /^(BET|BETWEEN|FROM)\s+(.+?)\s+(AND|TO)\s+(.+)$/i.exec(dateStr.trim());
+    if (range) {
+        const a = parseGedcomDate(range[2]);
+        const b = parseGedcomDate(range[4]);
+        if (a && b && !/^[~<>]/.test(a) && !/^[~<>]/.test(b)) return `${a}..${b}`;
+        return a || b || '';
+    }
+    const oneSided = /^(FROM|TO)\s+(.+)$/i.exec(dateStr.trim());
+    if (oneSided) {
+        const d = parseGedcomDate(oneSided[2]);
+        if (d && !/^[~<>]/.test(d)) return `${oneSided[1].toUpperCase() === 'FROM' ? '>' : '<'}${d}`;
+        return d;
+    }
 
     // Qualifier prefixes map to flex-date qualifiers instead of being dropped
     let qualifier = '';
@@ -225,7 +246,7 @@ function generateId(prefix: string): string {
 const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT', 'OBJE',
     ...Object.keys(EVENT_TAG_TO_TYPE)]);
 /** Level-1 FAM tags the parser understands. */
-const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV']);
+const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', 'SOUR']);
 /** Level-0 record types (handled or structural). */
 const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'REPO', 'HEAD', 'TRLR', 'SUBM', 'SUBN']);
 
@@ -242,6 +263,12 @@ export function parseGedcom(content: string): ParsedGedcom {
     const repositories = new Map<string, string>();
     /** PAGE seen on a citation (2/3 PAGE under SOUR @Sx@) -> source reference. */
     const citationPages = new Map<string, string>();
+    /** QUAY seen on a citation -> source quality (first wins, like PAGE). */
+    const citationQuality = new Map<string, number>();
+    const noteQuay = (ref: string | null, value: string): void => {
+        const q = parseInt(value, 10);
+        if (ref && q >= 0 && q <= 3 && !citationQuality.has(ref)) citationQuality.set(ref, q);
+    };
     const droppedTags = new Map<string, number>();
     const drop = (tag: string) => droppedTags.set(tag, (droppedTags.get(tag) ?? 0) + 1);
 
@@ -315,7 +342,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     marriagePlace: '',
                     divorceDate: '',
                     divorced: false,
-                    note: ''
+                    note: '',
+                    sourceRefs: []
                 };
                 currentType = 'FAM';
                 currentSource = null;
@@ -342,6 +370,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 if (tag === 'TITL') currentSource.title = value;
                 else if (tag === 'REPO') currentSource.repository = value;
                 else if (tag === 'PAGE') currentSource.reference = value;
+                else if (tag === 'QUAY') { const q = parseInt(value, 10); if (q >= 0 && q <= 3) currentSource.quality = q; }
                 else if (tag === 'WWW' || tag === 'URL') currentSource.url = value;
                 else if (tag === 'NOTE') currentSource.note = value;
             } else if (level === 2) {
@@ -429,6 +458,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                             // A bare DIV (no date sub-record) still means divorced.
                             fam.divorced = true;
                             break;
+                        case 'SOUR':
+                            // Family citation (typically the marriage record).
+                            if (value) { fam.sourceRefs.push(value); currentCitationId = value; }
+                            break;
                         case 'MARR':
                             break;
                         default:
@@ -461,6 +494,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     } else if (currentSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
                         // Citation page: standard place for a source reference.
                         if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
+                    } else if (currentSubTag === 'SOUR' && tag === 'QUAY' && currentCitationId) {
+                        noteQuay(currentCitationId, value);
                     } else if (currentEvent) {
                         currentEventSubTag = tag;
                         if (tag === 'DATE') currentEvent.date = parseGedcomDate(value);
@@ -475,7 +510,11 @@ export function parseGedcom(content: string): ParsedGedcom {
                     }
                 } else if (currentType === 'FAM') {
                     const fam = currentRecord as GedcomFamily;
-                    if (currentSubTag === 'MARR') {
+                    if (currentSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
+                        if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
+                    } else if (currentSubTag === 'SOUR' && tag === 'QUAY' && currentCitationId) {
+                        noteQuay(currentCitationId, value);
+                    } else if (currentSubTag === 'MARR') {
                         if (tag === 'DATE') fam.marriageDate = parseGedcomDate(value);
                         if (tag === 'PLAC') fam.marriagePlace = value;
                     } else if (currentSubTag === 'DIV') {
@@ -497,6 +536,9 @@ export function parseGedcom(content: string): ParsedGedcom {
             } else if (level === 3 && currentType === 'INDI' && currentEvent
                 && currentEventSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
                 if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
+            } else if (level === 3 && currentType === 'INDI' && currentEvent
+                && currentEventSubTag === 'SOUR' && tag === 'QUAY' && currentCitationId) {
+                noteQuay(currentCitationId, value);
             }
         }
     }
@@ -508,6 +550,9 @@ export function parseGedcom(content: string): ParsedGedcom {
         if (m) src.repository = repositories.get(src.repository) ?? '';
         if (!src.reference && citationPages.has(src.id)) {
             src.reference = citationPages.get(src.id)!;
+        }
+        if (src.quality === undefined && citationQuality.has(src.id)) {
+            src.quality = citationQuality.get(src.id);
         }
     }
 
@@ -544,6 +589,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (raw.reference) src.reference = raw.reference;
         if (raw.url) src.url = raw.url;
         if (raw.note) src.note = raw.note;
+        if (raw.quality !== undefined) src.quality = raw.quality;
         sources[newId] = src;
     }
     /** Map raw @Sx@ refs to catalog ids, dropping any that don't resolve. */
@@ -673,6 +719,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (fam.divorceDate) partnership.endDate = fam.divorceDate;
         if (fam.divorceDate || fam.divorced) partnership.status = 'divorced';
 
+        const famRefs = mapRefs(fam.sourceRefs);
+        if (famRefs.length > 0) partnership.sourceIds = famRefs;
+
         partnerships[partnershipId] = partnership;
 
         // Add partnership to both persons
@@ -770,6 +819,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (fam.note) partnership.note = fam.note;
         if (fam.divorceDate) partnership.endDate = fam.divorceDate;
         if (fam.divorceDate || fam.divorced) partnership.status = 'divorced';
+
+        const famRefs = mapRefs(fam.sourceRefs);
+        if (famRefs.length > 0) partnership.sourceIds = famRefs;
         partnerships[partnershipId] = partnership;
 
         // Add partnership to both persons

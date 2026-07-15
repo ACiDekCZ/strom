@@ -93,6 +93,11 @@ export interface Source {
     reference?: string;
     url?: string;
     note?: string;
+    /**
+     * GEDCOM QUAY 0–3 (unreliable … primary evidence). Preserved on import
+     * (first citation wins, like `reference`) and re-exported on citations.
+     */
+    quality?: number;
 }
 
 /**
@@ -188,6 +193,8 @@ export interface Partnership {
     startPlace?: string;
     endDate?: string;
     note?: string;
+    /** Ids of Source entries citing this partnership (marriage record etc.). */
+    sourceIds?: string[];
     // Primary partnership flag - when person has multiple partnerships,
     // this one is shown by default (unless viewing from child's perspective)
     isPrimary?: boolean;

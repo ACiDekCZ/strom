@@ -5780,6 +5780,16 @@
             color: var(--text-secondary, #777); padding: 0 2px;
         }
         .source-chip-remove:hover { color: var(--danger, #c0392b); }
+        .partnership-citations { margin-top: 6px; }
+        .partnership-cite-btn {
+            border: 1px dashed var(--border-color, #ccc); background: none; cursor: pointer;
+            border-radius: 12px; padding: 3px 10px; font-size: 12px;
+            color: var(--text-secondary, #777);
+        }
+        .partnership-cite-btn:hover { border-color: var(--primary, #4a7c59); color: var(--primary, #4a7c59); }
+        /* Source picker + editor open ABOVE whatever dialog cited them
+           (person modal, relationships panel) — DOM order is not enough. */
+        #source-picker-modal, #source-editor-modal { z-index: 250; }
         /* Source picker */
         .source-picker-search { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
         .source-picker-list { display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow-y: auto; margin-bottom: 12px; }

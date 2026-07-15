@@ -138,6 +138,23 @@ export const relationshipsPanelMethods = uiModule({
             });
         });
 
+        // Partnership citations: cite opens the source picker, ✕ uncites.
+        content.querySelectorAll('.partnership-cite-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const partnershipId = (e.currentTarget as HTMLElement).dataset.partnershipId as PartnershipId;
+                this.showSourcePickerForPartnership(partnershipId);
+            });
+        });
+        content.querySelectorAll('.partnership-uncite').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const el = e.currentTarget as HTMLElement;
+                const partnershipId = el.dataset.partnershipId as PartnershipId;
+                const sourceId = el.dataset.sourceId!;
+                DataManager.uncitePartnership(partnershipId, sourceId);
+                this.refreshRelationshipsPanel();
+            });
+        });
+
         // Attach event listeners for partnership notes (pending change)
         content.querySelectorAll('.partnership-note').forEach(textarea => {
             textarea.addEventListener('input', (e) => {
@@ -322,6 +339,13 @@ export const relationshipsPanelMethods = uiModule({
                         ${primaryCheckboxHtml}
                         <textarea class="partnership-note" data-partnership-id="${partnership.id}"
                             placeholder="${strings.labels.note}...">${partnership.note || ''}</textarea>
+                        <div class="partnership-citations sources-chips">
+                            ${(partnership.sourceIds ?? []).map(sid => {
+                                const src = DataManager.getData().sources?.[sid];
+                                return src ? `<span class="source-chip"><span class="source-chip-label" title="${this.escapeHtml(src.title)}">${this.escapeHtml(src.title)}</span><button type="button" class="source-chip-remove partnership-uncite" data-partnership-id="${partnership.id}" data-source-id="${sid}">&times;</button></span>` : '';
+                            }).join('')}
+                            <button type="button" class="partnership-cite-btn" data-partnership-id="${partnership.id}">📚 ${strings.sources.citePartnership}</button>
+                        </div>
                     `;
                 }
             }

@@ -770,6 +770,14 @@ function checkSourceIntegrity(data: StromData, addIssue: AddIssue): void {
     const sourceIds = new Set(Object.keys(data.sources ?? {}));
     const missing = (ids?: string[]) => (ids ?? []).filter(id => !sourceIds.has(id));
 
+    for (const partnership of Object.values(data.partnerships)) {
+        for (const id of missing(partnership.sourceIds)) {
+            addIssue('warning', 'citationMissingSource',
+                `partnership citation points to a source that no longer exists`,
+                [partnership.person1Id, partnership.person2Id], undefined, id);
+        }
+    }
+
     for (const [personId, person] of Object.entries(data.persons) as [PersonId, Person][]) {
         const name = getPersonName(person);
 

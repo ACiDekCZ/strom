@@ -1209,6 +1209,12 @@ class DataManagerClass {
                 }
             }
         }
+        for (const partnership of Object.values(this.data.partnerships)) {
+            if (partnership.sourceIds) {
+                partnership.sourceIds = partnership.sourceIds.filter(id => id !== sourceId);
+                if (partnership.sourceIds.length === 0) delete partnership.sourceIds;
+            }
+        }
         this.commitMutation(strings.undo.removeSource(src.title));
         AuditLogManager.log(this.currentTreeId, 'source.remove', strings.auditLog.removedSource(src.title));
         return true;
@@ -1222,6 +1228,9 @@ class DataManagerClass {
             for (const ev of person.events ?? []) {
                 if (ev.sourceIds?.includes(sourceId)) count++;
             }
+        }
+        for (const partnership of Object.values(this.data.partnerships)) {
+            if (partnership.sourceIds?.includes(sourceId)) count++;
         }
         return count;
     }
@@ -1253,6 +1262,46 @@ class DataManagerClass {
         this.commitMutation(strings.undo.uncite(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(auditPersonName(person)));
         return true;
+    }
+
+    /** Add a citation of `sourceId` on a partnership (marriage record etc.). */
+    citePartnership(partnershipId: PartnershipId, sourceId: string): boolean {
+        const partnership = this.data.partnerships[partnershipId];
+        if (!partnership || !this.data.sources?.[sourceId]) return false;
+        if (this.isTreeLocked()) return false;
+        if (partnership.sourceIds?.includes(sourceId)) return false;
+
+        this.beginMutation();
+        if (!partnership.sourceIds) partnership.sourceIds = [];
+        partnership.sourceIds.push(sourceId);
+        const names = this.partnershipNames(partnership);
+        this.commitMutation(strings.undo.cite(names));
+        AuditLogManager.log(this.currentTreeId, 'source.cite', strings.auditLog.citedSource(names));
+        return true;
+    }
+
+    /** Remove a citation of `sourceId` from a partnership. */
+    uncitePartnership(partnershipId: PartnershipId, sourceId: string): boolean {
+        const partnership = this.data.partnerships[partnershipId];
+        if (!partnership?.sourceIds?.includes(sourceId)) return false;
+        if (this.isTreeLocked()) return false;
+
+        this.beginMutation();
+        partnership.sourceIds = partnership.sourceIds.filter(id => id !== sourceId);
+        if (partnership.sourceIds.length === 0) delete partnership.sourceIds;
+        const names = this.partnershipNames(partnership);
+        this.commitMutation(strings.undo.uncite(names));
+        AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(names));
+        return true;
+    }
+
+    /** "Jan Novák & Marie Nováková" — for undo/audit labels. */
+    private partnershipNames(partnership: Partnership): string {
+        return [partnership.person1Id, partnership.person2Id]
+            .map(id => this.data.persons[id])
+            .filter((p): p is Person => !!p)
+            .map(p => auditPersonName(p))
+            .join(' & ');
     }
 
     /** Add a citation of `sourceId` on a person's life event. */

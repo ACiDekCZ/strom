@@ -402,3 +402,67 @@ describe('GEDCOM media (OBJE) and standard sources', () => {
         expect(Object.values(r.data.sources!)[0].reference).toBe('p. 44');
     });
 });
+
+describe('data honesty batch (K1/K4/K6)', () => {
+    const GED = [
+        '0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @S1@ SOUR', '1 TITL Oddaci matrika Decin', '1 QUAY 3',
+        '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M',
+        '1 BIRT', '2 DATE BET 1880 AND 1885',
+        '1 RESI', '2 DATE FROM 1902 TO 1910',
+        '0 @I2@ INDI', '1 NAME Marie /Novakova/', '1 SEX F',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@',
+        '1 MARR', '2 DATE 5 MAY 1903',
+        '1 SOUR @S1@', '2 PAGE fol. 12',
+        '0 TRLR',
+    ].join('\n');
+
+    it('K1: family SOUR citation lands on the partnership and round-trips', () => {
+        const data = importGed(GED);
+        const partnership = Object.values(data.partnerships)[0];
+        expect(partnership.sourceIds).toHaveLength(1);
+        const src = data.sources![partnership.sourceIds![0]];
+        expect(src.title).toBe('Oddaci matrika Decin');
+        expect(src.reference).toBe('fol. 12');   // citation PAGE preserved
+
+        const again = importGed(exportGed(data));
+        const p2 = Object.values(again.partnerships)[0];
+        expect(p2.sourceIds).toHaveLength(1);
+        expect(again.sources![p2.sourceIds![0]].title).toBe('Oddaci matrika Decin');
+    });
+
+    it('K4: BET/AND and FROM/TO import as ranges and re-export as BET/AND', () => {
+        const data = importGed(GED);
+        const jan = Object.values(data.persons).find(p => p.firstName === 'Jan')!;
+        expect(jan.birthDate).toBe('1880..1885');
+        const resi = jan.events!.find(e => e.type === 'residence')!;
+        expect(resi.date).toBe('1902..1910');
+
+        const ged2 = exportGed(data);
+        expect(ged2).toContain('DATE BET 1880 AND 1885');
+        expect(ged2).toContain('DATE BET 1902 AND 1910');
+    });
+
+    it('K4: one-sided periods degrade to qualifiers', () => {
+        const ged = GED.replace('2 DATE FROM 1902 TO 1910', '2 DATE FROM 1902');
+        const jan = Object.values(importGed(ged).persons).find(p => p.firstName === 'Jan')!;
+        expect(jan.events!.find(e => e.type === 'residence')!.date).toBe('>1902');
+    });
+
+    it('K6: QUAY survives the round-trip (record and citation)', () => {
+        const data = importGed(GED);
+        const src = Object.values(data.sources!)[0];
+        expect(src.quality).toBe(3);
+
+        const ged2 = exportGed(data);
+        expect(ged2).toMatch(/QUAY 3/);
+        const again = importGed(ged2);
+        expect(Object.values(again.sources!)[0].quality).toBe(3);
+    });
+
+    it('K6: citation-level QUAY is picked up when the record has none', () => {
+        const ged = GED.replace('1 QUAY 3\n', '').replace('2 PAGE fol. 12', '2 PAGE fol. 12\n2 QUAY 2');
+        const data = importGed(ged);
+        expect(Object.values(data.sources!)[0].quality).toBe(2);
+    });
+});
