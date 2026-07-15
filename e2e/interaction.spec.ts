@@ -112,3 +112,18 @@ test('Escape closes dialogs that are not on the dialog stack (book, sources)', a
     // Nothing resurrected.
     await expect(page.locator('.modal-overlay.active')).toHaveCount(0);
 });
+
+test.describe('mobile', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test('search filter panel hides the floating zoom buttons while open', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await expect(page.locator('.zoom-controls')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.toggleSearchFilters());
+        await expect(page.locator('.zoom-controls')).toBeHidden();
+        await expect(page.locator('#search-filters .search-filters-footer button').last()).toBeVisible();
+        await page.keyboard.press('Escape');   // closes the panel first
+        await expect(page.locator('.zoom-controls')).toBeVisible();
+    });
+});

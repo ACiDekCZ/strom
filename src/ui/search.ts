@@ -87,6 +87,9 @@ export const searchMethods = uiModule({
         const show = panel.style.display === 'none';
         panel.style.display = show ? '' : 'none';
         toggle?.classList.toggle('active', show);
+        // Mobile: the floating zoom buttons overlap the panel's right edge
+        // (and its Clear button) — CSS hides them while the panel is open.
+        document.body.classList.toggle('search-filters-open', show);
     },
 
     /** Debounced (150 ms) re-application of the search filter + highlight. */

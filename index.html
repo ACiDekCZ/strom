@@ -328,6 +328,10 @@
            (inputs in the row flex instead). */
         .search-filters-row > select { width: auto; flex: 1 0 auto; max-width: 100%; }
         .search-filters-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
+        @media (max-width: 600px) {
+            /* The floating zoom buttons sit over the bottom filter panel. */
+            body.search-filters-open .zoom-controls { display: none !important; }
+        }
         .search-result-count { font-size: 12px; color: var(--text-secondary, #777); }
         [data-theme="dark"] .search-filters,
         [data-theme="dark"] .search-filter-toggle { background: #2a2a2a; border-color: #444; }
