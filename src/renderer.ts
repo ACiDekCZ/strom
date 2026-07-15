@@ -56,7 +56,6 @@ class TreeRendererClass {
     /** Focus navigation history (browser back/forward style), per tree. */
     private focusHistory: PersonId[] = [];
     private focusForward: PersonId[] = [];
-    private focusHistoryTreeId: string | null = null;
     private suppressHistoryPush = false;
     /** Search highlight: hits get 'search-hit', everyone else 'search-dim'. */
     private highlightIds: Set<PersonId> | null = null;
@@ -279,6 +278,9 @@ class TreeRendererClass {
      * Called during initialization and after tree switch to restore user's position
      */
     restoreFromSession(): void {
+        // Tree load/switch/startup: the focus that follows is programmatic,
+        // not user navigation, so history starts empty for the new tree.
+        this.resetFocusHistory();
         // Restore the per-tree display view mode on tree switch / startup.
         this.loadViewModeForCurrentTree();
 
@@ -326,16 +328,13 @@ class TreeRendererClass {
             personId = this.findDefaultFocusPerson();
         }
 
-        // Focus history (browser back/forward). Reset on tree switch. On a
-        // NORMAL navigation push the previous focus onto the back stack and
-        // clear the forward stack (a new branch). goBack/goForward set
-        // suppressHistoryPush so they can manage the stacks themselves.
-        const historyTreeId = DataManager.getCurrentTreeId();
-        if (this.focusHistoryTreeId !== historyTreeId) {
-            this.focusHistory = [];
-            this.focusForward = [];
-            this.focusHistoryTreeId = historyTreeId;
-        } else if (!this.suppressHistoryPush && this.focusPersonId && personId
+        // Focus history (browser back/forward): a NORMAL navigation pushes the
+        // previous focus and clears the forward stack. History is reset
+        // explicitly by resetFocusHistory() on tree load/switch (not inferred
+        // here) — that avoids counting the programmatic focus a load performs,
+        // while still counting the user's very first click. goBack/goForward
+        // set suppressHistoryPush so they can manage the stacks themselves.
+        if (!this.suppressHistoryPush && this.focusPersonId && personId
             && this.focusPersonId !== personId) {
             this.focusHistory.push(this.focusPersonId);
             if (this.focusHistory.length > 50) this.focusHistory.shift();
@@ -446,6 +445,17 @@ class TreeRendererClass {
         let stored: string | null = null;
         try { stored = key ? localStorage.getItem(key) : null; } catch { /* ignore */ }
         this.viewMode = (stored === 'descendants' || stored === 'timeline' || stored === 'fan') ? stored : 'family';
+    }
+
+    /**
+     * Clear the focus back/forward history. Called on tree load/switch so the
+     * programmatic focus a load performs doesn't seed history; stale entries
+     * from another tree would be skipped anyway, this just keeps it tidy.
+     */
+    resetFocusHistory(): void {
+        this.focusHistory = [];
+        this.focusForward = [];
+        this.updateNavButtons();
     }
 
     /** Is there a previous focus to go back to? */

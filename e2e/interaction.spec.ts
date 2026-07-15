@@ -167,3 +167,21 @@ test('focus back/forward buttons walk history in both directions', async ({ page
 });
 
 
+
+test('the very first navigation counts the default focus (back works after one step)', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+    // Fresh tree: no history yet.
+    await expect(page.locator('#focus-back-btn')).toBeHidden();
+    const defaultFocus = await page.evaluate(() =>
+        window.Strom.DataManager.getPerson(window.Strom.TreeRenderer.getFocusPersonId())?.firstName);
+
+    // ONE navigation must already enable back (the default must be counted).
+    await focusViaSearch(page, 'Henry VII');
+    await expect(page.locator('#focus-back-btn')).toBeVisible();
+    // Back returns to the default person.
+    await page.locator('#focus-back-btn').click();
+    await expect.poll(() => page.evaluate(() =>
+        window.Strom.DataManager.getPerson(window.Strom.TreeRenderer.getFocusPersonId())?.firstName)).toBe(defaultFocus);
+});

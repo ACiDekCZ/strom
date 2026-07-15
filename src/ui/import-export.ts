@@ -1008,6 +1008,7 @@ export const importExportMethods = uiModule({
         this.updateTreeSwitcher();
         this.updateTreeManagerList();
         TreeRenderer.render();
+        TreeRenderer.resetFocusHistory();
         this.refreshSearch();
         // Update URL to reflect new tree
         this.updateUrlTreeParam(newTreeId);
@@ -1033,6 +1034,7 @@ export const importExportMethods = uiModule({
         this.updateTreeSwitcher();
         this.updateTreeManagerList();
         TreeRenderer.setFocus(focusId);
+        TreeRenderer.resetFocusHistory();
         this.refreshSearch();
         this.updateUrlTreeParam(newTreeId);
         this.showToast(strings.demo.hint);
