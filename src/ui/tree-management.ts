@@ -356,6 +356,7 @@ export const treeManagementMethods = uiModule({
                                 ${menuItem(`window.Strom.UI.showDefaultPersonDialog('${tree.id}', 'tree-manager-modal')`, '⭐', s.defaultPerson, 'edit-only')}
                                 ${menuItem(`window.Strom.UI.showSnapshotsDialog('${tree.id}', 'tree-manager-modal')`, '🕑', strings.snapshots.menu, 'edit-only')}
                                 ${isActive ? menuItem(`window.Strom.UI.showPlacesManager(undefined, 'tree-manager-modal')`, '📍', strings.map.placesTitle, 'edit-only') : ''}
+                                ${menuItem(`window.Strom.UI.showSplitDialog('${tree.id}', 'tree-manager-modal')`, '🔀', strings.split.menu, 'edit-only')}
                                 ${auditItem}
                                 ${menuItem(`window.Strom.UI.duplicateTree('${tree.id}')`, '⧉', s.duplicate, 'edit-only')}
                                 ${menuItem(`window.Strom.UI.showMergeTreesDialog('${tree.id}', 'tree-manager-modal')`, '🔀', s.mergeInto, 'edit-only')}

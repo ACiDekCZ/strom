@@ -48,6 +48,7 @@ import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { yearOf, parseFlexDate } from '../dates.js';
 import { computeFamilyStats } from '../stats.js';
+import { findComponents, componentName } from '../components.js';
 
 /** Escape text for safe inclusion in SVG/HTML (names come from user data). */
 function escXml(s: string): string {
@@ -489,7 +490,21 @@ export const treeStatsMethods = uiModule({
                 <span class="pct">${pct}%</span>
             </div>`;
 
+        // A tree that holds several unconnected families is worth saying out
+        // loud — it is usually a surprise, and it is the thing the split acts on.
+        const components = findComponents(treeData);
+        const unrelated = components.length > 1
+            ? `<div class="tree-stats-unrelated">
+                   <strong>${strings.split.unrelated(components.length)}</strong>
+                   <span>${components.map(c =>
+                       `${componentName(c, strings.split.familyName, strings.split.noSurname)} (${strings.split.persons(c.count)})`)
+                       .join('  ·  ')}</span>
+                   <span class="tree-stats-unrelated-hint">${strings.split.unrelatedHint}</span>
+               </div>`
+            : '';
+
         return `
+            ${unrelated}
             <div class="tree-stats-header">
                 <div class="tree-stats-header-item">
                     <div class="tree-stats-header-value">${totalPersons}</div>

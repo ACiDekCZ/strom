@@ -440,6 +440,10 @@ export const miscMethods = uiModule({
                         this.closePlacesManager();
                         return;
                     }
+                    if (currentDialog === 'split-modal') {
+                        this.closeSplitDialog();
+                        return;
+                    }
 
                     // Special handling for person-merge-modal: closePersonMergeDialog handles stack and parent
                     if (currentDialog === 'person-merge-modal') {

@@ -41,6 +41,7 @@ import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
+import { TreeComponent } from '../components.js';
 import { AuditLogManager } from '../audit-log.js';
 
 // Extracted method modules (composed onto UIClass at the bottom of this file).
@@ -72,6 +73,7 @@ import { minimapMethods, MinimapTransform, WorldBox } from './minimap.js';
 import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { slideshowMethods } from './slideshow.js';
 import { mapMethods, MapScope } from './map-ui.js';
+import { splitMethods } from './split-ui.js';
 import { shareUiMethods } from './share-ui.js';
 import { familyWizardMethods } from './family-wizard.js';
 import { pwaUiMethods } from './pwa-ui.js';
@@ -159,6 +161,11 @@ export class UIClass {
     /** Places dialog: which places it lists, and what to return to on close. */
     placesManagerScope: MapScope = 'tree';
     placesManagerParent: string | null = null;
+
+    // Split-by-families dialog.
+    splitTreeId: TreeId | null = null;
+    splitComponents: TreeComponent[] = [];
+    splitParentDialog: string | null = null;
     /** When the source editor was opened from the picker, cite the new source. */
     citeSourceAfterCreate = false;
 
@@ -324,6 +331,10 @@ Object.assign(UIClass.prototype, slideshowMethods);
 type MapMethods = typeof mapMethods;
 export interface UIClass extends MapMethods {}
 Object.assign(UIClass.prototype, mapMethods);
+
+type SplitMethods = typeof splitMethods;
+export interface UIClass extends SplitMethods {}
+Object.assign(UIClass.prototype, splitMethods);
 
 type FamilyWizardMethods = typeof familyWizardMethods;
 export interface UIClass extends FamilyWizardMethods {}

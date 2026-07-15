@@ -120,6 +120,24 @@ const stringsEN = {
         },
     },
 
+    split: {
+        unrelated: (count: number) => `Holds ${count} families that nothing connects`,
+        unrelatedHint: 'Split them in Manage trees → ⋯ → Split by families.',
+        menu: 'Split by families',
+        title: 'Families in this tree',
+        intro: 'This tree holds families that nothing connects — no parent, child or marriage leads from one to another. Each can become a tree of its own.',
+        single: 'Everyone in this tree is connected — there is one family here, so there is nothing to split.',
+        familyName: (surname: string) => `${surname} family`,
+        persons: (count: number) => count === 1 ? '1 person' : `${count} people`,
+        oldest: (name: string, year: number) => `oldest ${name} (${year})`,
+        noSurname: 'no surname',
+        alone: 'Linked to nobody',
+        selected: (count: number) => `Split off ${count}`,
+        keepsOriginal: 'The original tree stays as it is — delete it yourself once you are happy with the split.',
+        done: (count: number) => `${count} trees created. The original is untouched.`,
+        nothingSelected: 'Pick at least one family.',
+    },
+
     events: {
         participants: 'Godparents & witnesses',
         participantsHint: 'Who else the record names. A godparent who keeps turning up is usually a relative.',
@@ -1544,6 +1562,24 @@ const stringsCZ: StringsType = {
             'pre-import': 'Před importem',
             'pre-merge': 'Před sloučením',
         },
+    },
+
+    split: {
+        unrelated: (count: number) => `Obsahuje ${count} rodiny, které nic nespojuje`,
+        unrelatedHint: 'Rozdělit je můžete ve Správě stromů → ⋯ → Rozdělit podle rodin.',
+        menu: 'Rozdělit podle rodin',
+        title: 'Rodiny v tomto stromu',
+        intro: 'V tomto stromu jsou rodiny, které nic nespojuje — nevede mezi nimi žádný rodič, dítě ani sňatek. Z každé může být samostatný strom.',
+        single: 'Všichni v tomto stromu jsou propojení — je tu jedna rodina, takže není co rozdělovat.',
+        familyName: (surname: string) => `Rod ${surname}`,
+        persons: (count: number) => count === 1 ? '1 osoba' : (count < 5 ? `${count} osoby` : `${count} osob`),
+        oldest: (name: string, year: number) => `nejstarší ${name} (${year})`,
+        noSurname: 'bez příjmení',
+        alone: 'Není napojen na nikoho',
+        selected: (count: number) => `Vyčlenit ${count}`,
+        keepsOriginal: 'Původní strom zůstává, jak je — smažte si ho sami, až budete s rozdělením spokojení.',
+        done: (count: number) => `Vytvořeno ${count} stromů. Původní je nedotčený.`,
+        nothingSelected: 'Vyberte aspoň jednu rodinu.',
     },
 
     events: {

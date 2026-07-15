@@ -1992,6 +1992,53 @@
         }
         /* Make empty date input placeholder very light */
                 /* Archive search */
+        .tree-stats-unrelated {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            margin-bottom: 14px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border-left: 3px solid var(--primary, #4a7c59);
+            background: color-mix(in srgb, var(--primary, #4a7c59) 8%, transparent);
+            font-size: 12px;
+            color: var(--text-color, #222);
+        }
+        .tree-stats-unrelated span { color: var(--text-light); }
+        .tree-stats-unrelated-hint { font-style: italic; }
+
+        /* ---- Split a tree into the families it holds (N3) ---- */
+        .split-modal { max-width: 560px; }
+        .split-intro { margin: 4px 0 14px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
+        .split-list { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
+        /* Each row is a <label> so the whole box is clickable — which means
+           beating `.modal label { display: block }`, hence the longer selector. */
+        .split-modal .split-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 0;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 10px;
+            background: var(--bg-color, #fafafa);
+            font-size: 13px;
+            font-weight: 400;
+            color: var(--text-color, #222);
+            cursor: pointer;
+        }
+        .split-modal .split-row:hover { border-color: var(--primary, #4a7c59); }
+        .split-modal .split-row input { width: auto; margin-top: 3px; flex-shrink: 0; }
+        .split-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .split-row-meta, .split-row-names { font-size: 12px; color: var(--text-light); }
+        .split-note {
+            margin: 12px 0 0;
+            font-size: 12px;
+            color: var(--text-light);
+            line-height: 1.5;
+        }
+        @media (max-width: 900px) { .split-modal { max-width: 94vw; } }
+
         /* ---- Places manager: names + where they sit on the map (K5/A6) ---- */
         .places-modal { max-width: 580px; }
         .places-intro { margin: 4px 0 14px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
