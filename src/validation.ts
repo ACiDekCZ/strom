@@ -5,6 +5,7 @@
 
 import { StromData, Person, Partnership, PersonId, PartnershipId } from './types.js';
 import { parseFlexDate, FlexDate } from './dates.js';
+import { collectPlaces } from './places.js';
 
 // ==================== ISSUE TYPES ====================
 
@@ -74,6 +75,7 @@ export function validateTreeData(data: StromData): ValidationResult {
     checkDateConsistency(data, addIssue);
     checkSourceIntegrity(data, addIssue);
     checkPossibleDuplicates(data, addIssue);
+    checkPlaceSpellings(data, addIssue);
 
     const stats = {
         errors: issues.filter(i => i.severity === 'error').length,
@@ -811,6 +813,29 @@ function checkSourceIntegrity(data: StromData, addIssue: AddIssue): void {
 }
 
 // ==================== HELPERS ====================
+
+/**
+ * One place written several ways ("Děčín" / "decin") splits the same village in
+ * two: filters, statistics and any later map treat them as different. Info-level
+ * and auto-fixable — the fix rewrites every use to the most-used spelling.
+ * `detail` carries the normalized key so the repair knows what to unify.
+ */
+function checkPlaceSpellings(
+    data: StromData,
+    addIssue: (s: IssueSeverity, t: string, m: string, p?: PersonId[], pp?: PartnershipId[], d?: string) => void
+): void {
+    for (const place of collectPlaces(data).values()) {
+        if (place.variants.size < 2) continue;
+        // Most-used spelling first — that is the one a fix would unify to.
+        const spellings = [...place.variants.entries()]
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .map(([name, n]) => `${name} (${n}×)`)
+            .join('  ·  ');
+        addIssue('info', 'placeSpelling',
+            `"${place.display}" is written in ${place.variants.size} ways`,
+            undefined, undefined, spellings);
+    }
+}
 
 /**
  * Flag likely-accidental DUPLICATE persons within one tree: same gender, very

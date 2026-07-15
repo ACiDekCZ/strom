@@ -37,6 +37,7 @@ import { yearOf, displayYear, formatFlexDate } from './dates.js';
 import { computeTimelineModel, yearToFraction, axisTicks, TimelineRow, TimelineEvent } from './timeline.js';
 import { classifyBranches, Branch } from './branch-colors.js';
 import { presumedDeceasedSet, isLivingPerson } from './privacy.js';
+import { placeList } from './places.js';
 import { SettingsManager } from './settings.js';
 import { extractSubtree } from './subtree.js';
 import { buildFanModel, buildFanSvg } from './fan-chart.js';
@@ -156,6 +157,7 @@ class TreeRendererClass {
         const density = SettingsManager.getCardDensity();
         this.config = { ...this.config, ...CARD_SIZE[density] };
         document.body.dataset.cardDensity = density;
+        this.updatePlacesDatalist();
         const request: LayoutRequest = {
             data: DataManager.getData(),
             focusPersonId: this.focusPersonId,
@@ -517,6 +519,19 @@ class TreeRendererClass {
     /** @deprecated use updateNavButtons */
     updateBackButton(): void {
         this.updateNavButtons();
+    }
+
+    /**
+     * Refill the shared place suggestions from the tree's own places, so typing
+     * a place offers what this family already uses (see src/places.ts — nothing
+     * is downloaded). Most-used first: the browser keeps datalist order.
+     */
+    private updatePlacesDatalist(): void {
+        const list = document.getElementById('places-datalist');
+        if (!list) return;
+        list.innerHTML = placeList(DataManager.getData())
+            .map(p => `<option value="${this.escapeHtml(p.display)}"></option>`)
+            .join('');
     }
 
     /** Number of visible (non-placeholder) persons — used by the descendants badge. */

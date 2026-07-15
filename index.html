@@ -6383,7 +6383,7 @@
             <div id="duplicate-suggest-person" class="duplicate-suggest" style="display:none;"></div>
             <div class="form-group">
                 <label data-i18n="labels.birthPlace"></label>
-                <input type="text" id="input-birthplace" autocomplete="off">
+                <input type="text" id="input-birthplace" autocomplete="off" list="places-datalist">
             </div>
             <button type="button" class="expand-btn" id="expand-details">
                 <span class="expand-icon">▶</span> <span data-i18n="labels.moreInfo">More Info</span>
@@ -6396,7 +6396,7 @@
                     </div>
                     <div class="form-group half">
                         <label data-i18n="labels.deathPlace"></label>
-                        <input type="text" id="input-deathplace" autocomplete="off">
+                        <input type="text" id="input-deathplace" autocomplete="off" list="places-datalist">
                     </div>
                 </div>
                 <div class="form-group">
@@ -6480,7 +6480,7 @@
                 </div>
                 <div class="form-group half">
                     <label data-i18n="events.place"></label>
-                    <input type="text" id="input-event-place" autocomplete="off">
+                    <input type="text" id="input-event-place" autocomplete="off" list="places-datalist">
                 </div>
             </div>
             <div class="form-group">
@@ -7163,6 +7163,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Place suggestions, refilled from the tree's own places (see places.ts) -->
+    <datalist id="places-datalist"></datalist>
 
     <input type="file" id="file-input" accept=".json" onchange="window.Strom.UI.handleJsonFile(event)">
     <input type="file" id="gedcom-input" accept=".ged" onchange="window.Strom.UI.handleGedcomFile(event)">

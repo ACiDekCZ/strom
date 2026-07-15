@@ -35,6 +35,7 @@ import { isEncrypted, EncryptedData } from './crypto.js';
 import * as CrossTree from './cross-tree.js';
 import { AuditLogManager } from './audit-log.js';
 import { extractSubtree } from './subtree.js';
+import { collectPlaces, renamePlace, placeKey } from './places.js';
 import { StorageManager } from './storage.js';
 import { createSnapshot, getSnapshotJson, SnapshotReason } from './snapshots.js';
 import { ValidationIssue } from './validation.js';
@@ -2534,6 +2535,7 @@ class DataManagerClass {
         'missingPartnershipRef',
         'selfPartnership',
         'duplicatePartnership',
+        'placeSpelling',
     ]);
 
     /**
@@ -2657,6 +2659,23 @@ class DataManagerClass {
                 if (!person) break;
                 if (!person.partnerships.includes(partnershipId)) {
                     person.partnerships.push(partnershipId);
+                    repaired = true;
+                }
+                break;
+            }
+
+            case 'placeSpelling': {
+                // detail lists the spellings ("Děčín (2×)  ·  decin (1×)"); every
+                // variant shares one key, so the first one gives it. Unify to
+                // the most-used spelling (see src/places.ts).
+                const firstSpelling = issue.detail?.split('  ·  ')[0]?.replace(/\s*\(\d+×\)$/, '');
+                const key = firstSpelling ? placeKey(firstSpelling) : '';
+                if (!key) break;
+                const place = collectPlaces(this.data).get(key);
+                if (!place) break;
+                const { data: fixed, changed } = renamePlace(this.data, key, place.display);
+                if (changed > 0) {
+                    this.data = fixed;
                     repaired = true;
                 }
                 break;

@@ -324,6 +324,7 @@ export const treeStatsMethods = uiModule({
                 'attachmentNoData': 'valAttachmentNoData',
                 'partnerAgeGap': 'valPartnerAgeGap',
                 'possibleDuplicate': 'valPossibleDuplicate',
+                'placeSpelling': 'valPlaceSpelling',
             };
             const key = typeToKey[type];
             return key ? (s[key] as string) : type;

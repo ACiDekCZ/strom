@@ -326,7 +326,7 @@ export const relationshipsPanelMethods = uiModule({
                                 data-partnership-id="${partnership.id}"
                                 value="${formatDateForInput(partnership.startDate)}"
                                 title="${startDateLabel}">
-                            <input type="text" class="partnership-start-place"
+                            <input type="text" class="partnership-start-place" list="places-datalist"
                                 data-partnership-id="${partnership.id}"
                                 value="${partnership.startPlace || ''}"
                                 placeholder="${strings.labels.startPlace}">
