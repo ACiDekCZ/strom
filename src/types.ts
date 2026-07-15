@@ -427,7 +427,7 @@ export interface AppSettings {
     zoomControls?: boolean;  // default: true - floating zoom buttons over the tree
     onThisDay?: boolean;  // default: true - daily "on this day" reminder
     branchColors?: boolean;  // default: true - colour cards by branch vs focus
-    branchLegend?: boolean;  // default: true - show the branch-colour legend box
+    branchLegend?: boolean;  // default: false - show the branch-colour legend box
     familyButton?: boolean;  // default: false - toolbar shortcut to the family wizard
     descendantsFullFamilies?: boolean;  // default: false - descendants view shows partners' other families
     senderName?: string;   // collaboration: name shown to relatives in shared files

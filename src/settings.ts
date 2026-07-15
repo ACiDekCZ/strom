@@ -139,8 +139,10 @@ class SettingsManagerClass {
     }
 
     /** Branch-colour legend default ON (undefined = enabled). */
+    /** Branch-colour legend box: default OFF (the colours speak for
+     *  themselves; the box took tree real estate on every screenshot). */
     isBranchLegendEnabled(): boolean {
-        return this.settings.branchLegend !== false;
+        return this.settings.branchLegend === true;
     }
 
     setBranchLegend(enabled: boolean): void {
