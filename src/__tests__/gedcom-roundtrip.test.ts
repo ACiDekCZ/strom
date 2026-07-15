@@ -470,3 +470,61 @@ describe('data honesty batch (K1/K4/K6)', () => {
         expect(Object.values(data.sources!)[0].quality).toBe(2);
     });
 });
+
+describe('MyHeritage export quirks (M1, real-export shapes)', () => {
+    const MH = [
+        '0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8', '1 SOUR MYHERITAGE',
+        '0 @I1@ INDI',
+        '1 _UPD 14 JAN 2026 06:59:33 GMT -0500',
+        '1 NAME Emil /Tester/', '2 GIVN Emil', '2 SURN Tester',
+        '1 SEX M',
+        '1 BIRT', '2 DATE 3 JUN 1942', '2 PLAC First Place',
+        '1 BIRT', '2 DATE 3 JUN 1942', '2 PLAC Second Place',
+        '1 DEAT Y',
+        '1 RIN MH:I1', '1 _UID F8DB4F74-XXXX',
+        '1 OBJE', '2 FORM jpg', '2 FILE https://cdn.example.com/x/500022_crop.jpg?sig=1', '2 _PHOTO_RIN MH:P2',
+        '1 OBJE', '2 FORM jpg', '2 FILE https://cdn.example.com/x/500022_main.jpg?sig=1', '2 _PERSONALPHOTO Y', '2 _PHOTO_RIN MH:P1',
+        '0 @I2@ INDI', '1 NAME Jana /Testerova/', '1 SEX F',
+        '1 RESI', '2 EMAIL jana@@example.com',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@',
+        '1 MARR', '2 DATE 5 MAY 1965',
+        '1 ENGA', '2 DATE 1 JAN 1964',
+        '0 TRLR',
+    ].join('\n');
+
+    it('duplicate BIRT: first wins, the alternative survives as an event', () => {
+        const emil = Object.values(importGed(MH).persons).find(p => p.firstName === 'Emil')!;
+        expect(emil.birthPlace).toBe('First Place');
+        const alt = emil.events!.find(e => e.type === 'birth')!;
+        expect(alt.place).toBe('Second Place');
+    });
+
+    it("bare 'DEAT Y' marks the person deceased", () => {
+        const emil = Object.values(importGed(MH).persons).find(p => p.firstName === 'Emil')!;
+        expect(emil.deathDate).toBeUndefined();
+        expect(emil.isDeceased).toBe(true);
+    });
+
+    it('bookkeeping tags (_UPD/RIN/_UID) are not counted as unsupported', () => {
+        const r = convertToStrom(parseGedcom(MH));
+        expect(r.stats.droppedTagSummary).not.toMatch(/_UPD|RIN|_UID/);
+    });
+
+    it('RESI e-mail lands in the event note with @@ unescaped', () => {
+        const jana = Object.values(importGed(MH).persons).find(p => p.firstName === 'Jana')!;
+        expect(jana.events!.find(e => e.type === 'residence')!.note).toBe('E-mail: jana@example.com');
+    });
+
+    it('ENGA becomes a partnership note', () => {
+        const u = Object.values(importGed(MH).partnerships)[0];
+        expect(u.note).toContain('Engagement: 1964-01-01');
+    });
+
+    it('URL media refs: primary portrait first, url flag set, query stripped from name', () => {
+        const r = convertToStrom(parseGedcom(MH));
+        expect(r.externalMedia).toHaveLength(2);
+        expect(r.externalMedia[0].fileName).toBe('500022_main.jpg');   // _PERSONALPHOTO first
+        expect(r.externalMedia[0].primary).toBe(true);
+        expect(r.externalMedia[0].isUrl).toBe(true);
+    });
+});

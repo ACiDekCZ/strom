@@ -248,3 +248,23 @@ test('GEDCOM import: rich summary + bulk media attach by file name', async ({ pa
     });
     expect(hasPhoto).toBe(true);
 });
+
+test('GEDCOM import: photos referenced by URL download directly (MyHeritage)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Seed', 'Person');
+    // Serve the CDN URL from the test fixture.
+    await page.route('https://cdn.mh-test.example/**', route =>
+        route.fulfill({ path: 'e2e/fixtures/avatar.png', contentType: 'image/png' }));
+
+    await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/mh-style.ged');
+    const dialog = page.locator('#gedcom-result-modal');
+    await expect(dialog).toBeVisible();
+
+    const downloadBtn = dialog.locator('#gedcom-media-download');
+    await expect(downloadBtn).toBeVisible();
+    await downloadBtn.click();
+    await expect(page.locator('.toast')).toContainText('1');
+    await expect(dialog.locator('#gedcom-stat-photos')).toHaveText('1');
+    // All refs resolved — the media row disappears.
+    await expect(dialog.locator('#gedcom-media-row')).toBeHidden();
+});

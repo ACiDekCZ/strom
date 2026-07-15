@@ -341,6 +341,11 @@ export const importExportMethods = uiModule({
         const pending = this.gedcomResult.externalMedia.length;
         if (mediaRow) mediaRow.style.display = pending > 0 ? '' : 'none';
         if (mediaText && pending > 0) mediaText.textContent = strings.gedcom.externalMedia(pending);
+        // Platform exports (MyHeritage) reference photos by URL — offer a
+        // direct download (their CDN allows cross-origin GET).
+        const downloadBtn = document.getElementById('gedcom-media-download');
+        const urlRefs = this.gedcomResult.externalMedia.filter(r => r.isUrl).length;
+        if (downloadBtn) downloadBtn.style.display = urlRefs > 0 ? '' : 'none';
 
         // Show/hide buttons based on context
         const newTreeBtn = document.getElementById('gedcom-new-tree-btn');
@@ -391,38 +396,11 @@ export const importExportMethods = uiModule({
 
         for (const ref of refs) {
             const file = byName.get(ref.fileName.toLowerCase());
-            const person = this.gedcomResult.data.persons[ref.personId];
-            if (!file || !person) { remaining.push(ref); continue; }
-            try {
-                if (file.type.startsWith('image/')) {
-                    if (!person.photo) {
-                        person.photo = await compressPhoto(file);
-                        person.photoOriginalName = file.name;
-                    } else {
-                        (person.attachments ??= []).push({
-                            id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-                            name: ref.title || file.name,
-                            mimeType: 'image/jpeg',
-                            dataUrl: await compressImageAttachment(file),
-                            sizeBytes: 0,
-                        });
-                    }
-                } else if (file.type === 'application/pdf' && file.size <= MAX_PDF_BYTES) {
-                    (person.attachments ??= []).push({
-                        id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-                        name: ref.title || file.name,
-                        mimeType: 'application/pdf',
-                        dataUrl: await readFileAsDataUrl(file),
-                        sizeBytes: file.size,
-                    });
-                } else {
-                    remaining.push(ref);
-                    continue;
-                }
-                matched++;
-            } catch {
+            if (!file || !(await this.attachFileToGedcomRef(ref, file))) {
                 remaining.push(ref);
+                continue;
             }
+            matched++;
         }
         // Fix attachment sizes from data URLs (compression changed them).
         for (const person of Object.values(this.gedcomResult.data.persons)) {
@@ -436,6 +414,79 @@ export const importExportMethods = uiModule({
             ? strings.gedcom.mediaAttached(matched, total)
             : strings.gedcom.mediaNoMatch);
         this.showGedcomResultDialog();   // refresh tiles + media row
+    },
+
+    /** Attach one picked/downloaded file to the person of a media ref. */
+    async attachFileToGedcomRef(ref: { personId: PersonId; title?: string }, file: File): Promise<boolean> {
+        const person = this.gedcomResult?.data.persons[ref.personId];
+        if (!person) return false;
+        try {
+            if (file.type.startsWith('image/')) {
+                if (!person.photo) {
+                    person.photo = await compressPhoto(file);
+                    person.photoOriginalName = file.name;
+                } else {
+                    (person.attachments ??= []).push({
+                        id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                        name: ref.title || file.name,
+                        mimeType: 'image/jpeg',
+                        dataUrl: await compressImageAttachment(file),
+                        sizeBytes: 0,
+                    });
+                }
+            } else if (file.type === 'application/pdf' && file.size <= MAX_PDF_BYTES) {
+                (person.attachments ??= []).push({
+                    id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                    name: ref.title || file.name,
+                    mimeType: 'application/pdf',
+                    dataUrl: await readFileAsDataUrl(file),
+                    sizeBytes: file.size,
+                });
+            } else {
+                return false;
+            }
+            return true;
+        } catch {
+            return false;
+        }
+    },
+
+    /**
+     * Download URL-referenced media (MyHeritage exports photos as time-limited
+     * CDN links with permissive CORS) and attach them like picked files.
+     */
+    async downloadGedcomMedia(): Promise<void> {
+        if (!this.gedcomResult) return;
+        const refs = this.gedcomResult.externalMedia;
+        const urlRefs = refs.filter(r => r.isUrl);
+        if (urlRefs.length === 0) return;
+
+        const btn = document.getElementById('gedcom-media-download') as HTMLButtonElement | null;
+        if (btn) btn.disabled = true;
+        let done = 0, ok = 0;
+        const succeeded = new Set<(typeof refs)[number]>();
+        for (const ref of urlRefs) {
+            done++;
+            if (btn) btn.textContent = strings.gedcom.downloading(done, urlRefs.length);
+            try {
+                const resp = await fetch(ref.filePath);
+                if (!resp.ok) continue;
+                const blob = await resp.blob();
+                const type = blob.type || 'image/jpeg';
+                const file = new File([blob], ref.fileName, { type });
+                if (await this.attachFileToGedcomRef(ref, file)) {
+                    succeeded.add(ref);
+                    ok++;
+                }
+            } catch { /* expired link, offline, CORS — ref stays offered */ }
+        }
+        if (btn) btn.disabled = false;
+
+        this.gedcomResult.externalMedia = refs.filter(r => !succeeded.has(r));
+        this.showToast(ok > 0
+            ? strings.gedcom.mediaAttached(ok, urlRefs.length)
+            : strings.gedcom.mediaNoMatch);
+        this.showGedcomResultDialog();
     },
 
     closeGedcomResultDialog(): void {

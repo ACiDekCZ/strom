@@ -42,6 +42,8 @@ const EVENT_TAG_TO_TYPE: Record<string, LifeEventType> = {
 
 /** Raw OBJE media object under an individual. */
 interface RawMedia {
+    /** _PRIM / _PERSONALPHOTO Y — preferred as the person's portrait. */
+    primary?: boolean;
     title: string;
     form: string;
     file: string;
@@ -90,6 +92,11 @@ interface GedcomIndividual {
     sourceRefs: string[];
     /** OBJE media objects (photo / attachments). */
     media: RawMedia[];
+    /** A DEAT tag was present (even a bare 'DEAT Y' without a date). */
+    deceased: boolean;
+    /** First BIRT/DEAT block already consumed (duplicates become events). */
+    birthSeen: boolean;
+    deathSeen: boolean;
     fams: string[];  // Families as spouse
     famc: string | null;  // Family as child
     famcPedi: string;  // PEDI value under FAMC (adopted/foster/birth/…)
@@ -98,6 +105,8 @@ interface GedcomIndividual {
 /** Raw GEDCOM family record */
 interface GedcomFamily {
     id: string;
+    /** ENGA date (engagement) — lands in the partnership note. */
+    engagementDate: string;
     husb: string | null;
     wife: string | null;
     children: string[];
@@ -131,6 +140,10 @@ export interface ExternalMediaRef {
     /** Full FILE value as written in the GEDCOM. */
     filePath: string;
     title?: string;
+    /** The reference is an http(s) URL — downloadable directly. */
+    isUrl?: boolean;
+    /** Platform marked this as the person's primary portrait. */
+    primary?: boolean;
 }
 
 export interface GedcomConversionResult {
@@ -266,6 +279,14 @@ const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', '
 /** Level-0 record types (handled or structural). */
 const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'REPO', 'HEAD', 'TRLR', 'SUBM', 'SUBN']);
 
+/**
+ * Pure bookkeeping tags (platform sync ids, change stamps). Ignored WITHOUT
+ * counting them as unsupported — a MyHeritage export carries three of these
+ * per person and the "1079 unsupported records" number needlessly scared
+ * migrating users even though no user data was involved.
+ */
+const IGNORED_BOOKKEEPING_TAGS = new Set(['_UPD', 'RIN', '_UID', 'CHAN', '_PROJECT_GUID', '_EXPORTED_FROM_SITE_ID']);
+
 export function parseGedcom(content: string): ParsedGedcom {
     // Strip BOM (Byte Order Mark) if present
     if (content.charCodeAt(0) === 0xFEFF) {
@@ -309,7 +330,8 @@ export function parseGedcom(content: string): ParsedGedcom {
 
         const level = parseInt(match[1]);
         const tag = match[2];
-        const value = (match[3] || '').trim();
+        // GEDCOM escapes a literal '@' as '@@' (pointers never contain it).
+        const value = (match[3] || '').trim().replace(/@@/g, '@');
 
         if (level === 0) {
             // New record
@@ -328,6 +350,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                     events: [],
                     sourceRefs: [],
                     media: [],
+                    deceased: false,
+                    birthSeen: false,
+                    deathSeen: false,
                     fams: [],
                     famc: null,
                     famcPedi: ''
@@ -359,6 +384,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     divorceDate: '',
                     divorced: false,
                     note: '',
+                    engagementDate: '',
                     sourceRefs: []
                 };
                 currentType = 'FAM';
@@ -386,6 +412,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                 if (tag === 'TITL') currentSource.title = value;
                 else if (tag === 'REPO') currentSource.repository = value;
                 else if (tag === 'PAGE') currentSource.reference = value;
+                else if (tag === 'PUBL' || tag === 'TEXT') {
+                    const text = value.replace(/<[^>]*>/g, '').trim();
+                    if (text) currentSource.note = currentSource.note ? `${currentSource.note}\n${text}` : text;
+                }
                 else if (tag === 'QUAY') { const q = parseInt(value, 10); if (q >= 0 && q <= 3) currentSource.quality = q; }
                 else if (tag === 'WWW' || tag === 'URL') currentSource.url = value;
                 else if (tag === 'NOTE') currentSource.note = value;
@@ -434,6 +464,31 @@ export function parseGedcom(content: string): ParsedGedcom {
                             // Level-1 SOUR on INDI is a citation reference (@Sx@).
                             if (value) { indi.sourceRefs.push(value); currentCitationId = value; }
                             break;
+                        case 'BIRT':
+                            // MyHeritage allows several BIRT facts: the first
+                            // fills the primary fields, duplicates become
+                            // events so the alternative place/date survives.
+                            if (indi.birthSeen) {
+                                const ev: RawEvent = { type: 'birth' };
+                                indi.events.push(ev);
+                                currentEvent = ev;
+                                currentSubTag = '_DUP';
+                            } else {
+                                indi.birthSeen = true;
+                            }
+                            break;
+                        case 'DEAT':
+                            // A bare 'DEAT Y' (no date) still means deceased.
+                            indi.deceased = true;
+                            if (indi.deathSeen) {
+                                const ev: RawEvent = { type: 'death' };
+                                indi.events.push(ev);
+                                currentEvent = ev;
+                                currentSubTag = '_DUP';
+                            } else {
+                                indi.deathSeen = true;
+                            }
+                            break;
                         case 'OBJE': {
                             const media: RawMedia = { title: '', form: '', file: '', stromKind: '' };
                             indi.media.push(media);
@@ -449,7 +504,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 if (tag === 'OCCU' && value) ev.note = value;
                                 indi.events.push(ev);
                                 currentEvent = ev;
-                            } else if (!KNOWN_INDI_TAGS.has(tag) && tag !== 'BIRT' && tag !== 'DEAT') {
+                            } else if (!KNOWN_INDI_TAGS.has(tag) && tag !== 'BIRT' && tag !== 'DEAT'
+                                && !IGNORED_BOOKKEEPING_TAGS.has(tag)) {
                                 drop(tag);
                             }
                             break;
@@ -480,8 +536,11 @@ export function parseGedcom(content: string): ParsedGedcom {
                             break;
                         case 'MARR':
                             break;
+                        case 'ENGA':
+                            fam.engagementDate = value === 'Y' ? '?' : '';
+                            break;
                         default:
-                            if (!KNOWN_FAM_TAGS.has(tag)) drop(tag);
+                            if (!KNOWN_FAM_TAGS.has(tag) && !IGNORED_BOOKKEEPING_TAGS.has(tag)) drop(tag);
                             break;
                     }
                 }
@@ -507,6 +566,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         else if (tag === 'FORM') currentMedia.form = value;
                         else if (tag === 'FILE') currentMedia.file = value;
                         else if (tag === '_STROM_KIND') currentMedia.stromKind = value;
+                        else if ((tag === '_PRIM' || tag === '_PERSONALPHOTO') && value === 'Y') currentMedia.primary = true;
                     } else if (currentSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
                         // Citation page: standard place for a source reference.
                         if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
@@ -522,6 +582,11 @@ export function parseGedcom(content: string): ParsedGedcom {
                         } else if (tag === 'NOTE') {
                             currentEvent.note = currentEvent.note
                                 ? `${currentEvent.note}\n${value}` : value;
+                        } else if (tag === 'EMAIL' && value) {
+                            // MyHeritage keeps contact e-mail under RESI.
+                            const line = `E-mail: ${value}`;
+                            currentEvent.note = currentEvent.note
+                                ? `${currentEvent.note}\n${line}` : line;
                         }
                     }
                 } else if (currentType === 'FAM') {
@@ -535,6 +600,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                         if (tag === 'PLAC') fam.marriagePlace = value;
                     } else if (currentSubTag === 'DIV') {
                         if (tag === 'DATE') fam.divorceDate = parseGedcomDate(value);
+                    } else if (currentSubTag === 'ENGA') {
+                        if (tag === 'DATE') fam.engagementDate = parseGedcomDate(value);
                     } else if (currentSubTag === 'NOTE') {
                         if (tag === 'CONT') fam.note += '\n' + value;
                         else if (tag === 'CONC') fam.note += value;
@@ -659,6 +726,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (indi.birthDate) person.birthDate = indi.birthDate;
         if (indi.birthPlace) person.birthPlace = indi.birthPlace;
         if (indi.deathDate) person.deathDate = indi.deathDate;
+        // 'DEAT Y' without a date: mark deceased explicitly, otherwise the
+        // liveness heuristic would treat the person as possibly living.
+        if (indi.deceased && !indi.deathDate) person.isDeceased = true;
         if (indi.deathPlace) person.deathPlace = indi.deathPlace;
         if (indi.notes) person.notes = indi.notes;
         if (indi.events.length > 0) {
@@ -696,11 +766,22 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             } else if (media.file) {
                 // Platform exports (MyHeritage, Ancestry) reference media by
                 // path — remember the ref so the user can attach the files.
-                const fileName = media.file.split(/[\\/]/).pop() || media.file;
-                externalMedia.push({
-                    personId, fileName, filePath: media.file,
+                const isUrl = /^https?:\/\//i.test(media.file);
+                const base = (isUrl ? media.file.split('?')[0] : media.file).split(/[\\/]/).pop() || media.file;
+                const ref: ExternalMediaRef = {
+                    personId, fileName: base, filePath: media.file,
                     ...(media.title ? { title: media.title } : {}),
-                });
+                    ...(isUrl ? { isUrl: true } : {}),
+                    ...(media.primary ? { primary: true } : {}),
+                };
+                // Primary portraits first so the photo (not a crop) wins.
+                if (media.primary) {
+                    const firstOfPerson = externalMedia.findIndex(m => m.personId === personId);
+                    if (firstOfPerson >= 0) { externalMedia.splice(firstOfPerson, 0, ref); }
+                    else externalMedia.push(ref);
+                } else {
+                    externalMedia.push(ref);
+                }
             }
         }
 
@@ -741,6 +822,11 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
 
         if (fam.divorceDate) partnership.endDate = fam.divorceDate;
         if (fam.divorceDate || fam.divorced) partnership.status = 'divorced';
+
+        if (fam.engagementDate && fam.engagementDate !== '?') {
+            const line = `Engagement: ${fam.engagementDate}`;
+            partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
+        }
 
         const famRefs = mapRefs(fam.sourceRefs);
         if (famRefs.length > 0) partnership.sourceIds = famRefs;
@@ -842,6 +928,11 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (fam.note) partnership.note = fam.note;
         if (fam.divorceDate) partnership.endDate = fam.divorceDate;
         if (fam.divorceDate || fam.divorced) partnership.status = 'divorced';
+
+        if (fam.engagementDate && fam.engagementDate !== '?') {
+            const line = `Engagement: ${fam.engagementDate}`;
+            partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
+        }
 
         const famRefs = mapRefs(fam.sourceRefs);
         if (famRefs.length > 0) partnership.sourceIds = famRefs;

@@ -6996,6 +6996,7 @@
             <p id="gedcom-stat-detail" class="gedcom-stat-detail" style="display:none;"></p>
             <div id="gedcom-media-row" class="gedcom-media-row" style="display:none;">
                 <span id="gedcom-media-text"></span>
+                <button type="button" id="gedcom-media-download" onclick="window.Strom.UI.downloadGedcomMedia()" data-i18n="gedcom.downloadMedia" style="display:none;"></button>
                 <button type="button" class="secondary" onclick="document.getElementById('gedcom-media-input').click()" data-i18n="gedcom.attachMedia"></button>
                 <input type="file" id="gedcom-media-input" multiple accept="image/*,.pdf" style="display:none;"
                     onchange="window.Strom.UI.attachGedcomMedia(this.files)">

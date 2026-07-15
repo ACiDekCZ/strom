@@ -1,0 +1,13 @@
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+1 CHAR UTF-8
+1 SOUR MYHERITAGE
+0 @I1@ INDI
+1 NAME Jan /Novak/
+1 SEX M
+1 OBJE
+2 FORM png
+2 FILE https://cdn.mh-test.example/media/avatar.png
+2 _PERSONALPHOTO Y
+0 TRLR
