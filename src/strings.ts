@@ -144,6 +144,8 @@ const stringsEN = {
     },
 
     events: {
+        occupationLabel: 'Occupation / trade',
+        occupationHint: 'The trade itself — "blacksmith", not "worked in Kladno as a blacksmith". It goes out as the occupation in GEDCOM.',
         participants: 'Godparents & witnesses',
         participantsHint: 'Who else the record names. A godparent who keeps turning up is usually a relative.',
         addParticipant: '+ Add',
@@ -1596,6 +1598,8 @@ const stringsCZ: StringsType = {
     },
 
     events: {
+        occupationLabel: 'Povolání / řemeslo',
+        occupationHint: 'Jen to řemeslo — „kovář“, ne „pracoval v Kladně jako kovář“. Odchází to jako povolání v GEDCOMu.',
         participants: 'Kmotři a svědci',
         participantsHint: 'Koho ještě zápis jmenuje. Kmotr, který se opakuje, bývá příbuzný.',
         addParticipant: '+ Přidat',

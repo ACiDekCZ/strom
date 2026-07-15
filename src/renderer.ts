@@ -35,6 +35,7 @@ import { renderDebugOverlay, clearDebugOverlay } from './debug-overlay.js';
 import { debugPanel } from './debug-panel.js';
 import { yearOf, displayYear, formatFlexDate } from './dates.js';
 import { computeTimelineModel, yearToFraction, axisTicks, TimelineRow, TimelineEvent } from './timeline.js';
+import { sortLifeEvents } from './events.js';
 import { classifyBranches, Branch } from './branch-colors.js';
 import { presumedDeceasedSet, isLivingPerson } from './privacy.js';
 import { placeList } from './places.js';
@@ -1059,6 +1060,7 @@ class TreeRendererClass {
             const showPhoto = density !== 'compact' && !!person.photo;
             const cardAge = density === 'detailed' ? this.calculateAge(person) : null;
             const place = density === 'detailed' ? (person.birthPlace ?? '') : '';
+            const trade = density === 'detailed' ? (this.occupationOf(person) ?? '') : '';
 
             html += `
                 ${showPhoto ? `<div class="card-avatar"><img src="${person.photo}" alt=""></div>` : ''}
@@ -1066,6 +1068,7 @@ class TreeRendererClass {
                 <div class="surname">${this.escapeHtml(displaySurname)}</div>
                 ${density !== 'compact' && birthYear ? `<div class="birth-date"><span class="date-year">${birthYear}</span>${birthFull ? `<span class="date-full">${birthFull}</span>` : ''}</div>` : ''}
                 ${place ? `<div class="card-place">${this.escapeHtml(place)}</div>` : ''}
+                ${trade ? `<div class="card-trade">${this.escapeHtml(trade)}</div>` : ''}
                 ${cardAge !== null ? `<div class="card-age">${strings.tooltip.age}: ${cardAge}</div>` : ''}
                 ${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">&#128274;</span>` : ''}
                 ${!isLocked ? `<button class="rel-link-icon" data-action="relationships" title="${strings.buttons.manageRelationships}">&#128279;</button>` : ''}
@@ -1121,6 +1124,8 @@ class TreeRendererClass {
                 tooltipLines.push(`† ${dStr}${person.deathPlace ? ', ' + this.escapeHtml(person.deathPlace) : ''}`);
             }
             const age = this.calculateAge(person);
+            const tooltipTrade = this.occupationOf(person);
+            if (tooltipTrade) tooltipLines.push(`${strings.events.types.occupation}: ${this.escapeHtml(tooltipTrade)}`);
             if (age !== null) {
                 tooltipLines.push(`${strings.tooltip.age}: ${age}`);
             }
@@ -1223,6 +1228,17 @@ class TreeRendererClass {
      * after all cards are in the DOM (needs real text measurements). When the
      * canvas is not measurable yet (hidden / zero width), retry a few frames.
      */
+    /**
+     * What this person did. Occupation is an event (it changes over a life:
+     * apprentice, journeyman, master), so for a one-line summary take the last
+     * one recorded — the trade they ended up with.
+     */
+    private occupationOf(person: Person): string | null {
+        const jobs = (person.events ?? []).filter(e => e.type === 'occupation' && e.note?.trim());
+        if (jobs.length === 0) return null;
+        return sortLifeEvents(jobs)[jobs.length - 1].note?.trim() ?? null;
+    }
+
     private fitCardNames(canvas: HTMLElement, attempt = 0): void {
         if (canvas.clientWidth === 0 && attempt < 5) {
             requestAnimationFrame(() => this.fitCardNames(canvas, attempt + 1));

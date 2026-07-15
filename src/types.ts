@@ -396,7 +396,9 @@ export type CardDensity = 'compact' | 'normal' | 'detailed';
 export const CARD_SIZE: Record<CardDensity, Pick<LayoutConfig, 'cardWidth' | 'cardHeight'>> = {
     compact: { cardWidth: 120, cardHeight: 40 },
     normal: { cardWidth: 130, cardHeight: 65 },
-    detailed: { cardWidth: 150, cardHeight: 85 },
+    // 98, not 85: the detailed card carries an occupation line when there is
+    // one. MUST match the CSS below.
+    detailed: { cardWidth: 150, cardHeight: 98 },
 };
 
 export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {

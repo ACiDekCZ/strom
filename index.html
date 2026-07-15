@@ -3586,10 +3586,15 @@
         body[data-card-density="compact"] .person-card .deceased-marker { display: none; }
 
         body[data-card-density="detailed"] .person-card {
-            width: 150px; height: 85px; padding: 7px 10px;
+            width: 150px; height: 98px; padding: 7px 10px;
         }
         body[data-card-density="detailed"] .person-card.has-photo .card-avatar {
             width: 40px; height: 40px;
+        }
+        .card-trade {
+            font-size: 10px; line-height: 1.25; font-style: italic;
+            color: var(--text-color, #444);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .card-place, .card-age {
             font-size: 9.5px; line-height: 1.25; color: var(--text-light, #888);
@@ -6873,7 +6878,7 @@
                 </div>
             </div>
             <div class="form-group">
-                <label data-i18n="events.note"></label>
+                <label id="event-note-label" data-i18n="events.note"></label>
                 <textarea id="input-event-note" rows="2" autocomplete="off"></textarea>
             </div>
             <div class="form-group" id="event-participants-section">

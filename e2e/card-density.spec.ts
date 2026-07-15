@@ -26,7 +26,8 @@ test('every density sizes the cards, tells the layout, and never overlaps', asyn
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Henry VIII')).toBeVisible();
 
-    const expected = { compact: [120, 40], normal: [130, 65], detailed: [150, 85] } as const;
+    // Detailed is 98 tall since it carries an occupation line (see CARD_SIZE).
+    const expected = { compact: [120, 40], normal: [130, 65], detailed: [150, 98] } as const;
     for (const d of ['compact', 'normal', 'detailed'] as const) {
         await page.evaluate((den) => window.Strom.UI.setCardDensity(den), d);
         await expect.poll(() => page.evaluate(() => document.body.dataset.cardDensity)).toBe(d);

@@ -305,6 +305,23 @@ export const personEventsMethods = uiModule({
         const group = document.getElementById('event-custom-label-group');
         if (!select || !group) return;
         group.style.display = select.value === 'custom' ? '' : 'none';
+        this.updateEventNoteLabel(select.value as LifeEventType);
+    },
+
+    /**
+     * For an occupation, this field IS the occupation — it goes out as GEDCOM
+     * OCCU. Labelling it "Note" invited "worked in Kladno as a blacksmith",
+     * which then became the man's trade in every other program.
+     */
+    updateEventNoteLabel(type: LifeEventType): void {
+        const label = document.getElementById('event-note-label');
+        const input = document.getElementById('input-event-note') as HTMLTextAreaElement | null;
+        const isOccupation = type === 'occupation';
+        if (label) label.textContent = isOccupation ? strings.events.occupationLabel : strings.events.note;
+        if (input) {
+            input.placeholder = isOccupation ? strings.events.occupationHint : '';
+            input.rows = isOccupation ? 1 : 2;
+        }
     },
 
     setEventEditorFields(type: LifeEventType, customLabel: string, date: string, place: string, note: string): void {
