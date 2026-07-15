@@ -585,6 +585,7 @@ const stringsEN = {
     // Focus mode
     focus: {
         focusedOn: 'Focused on',
+        back: 'Back to previous person (Alt+←)',
         showAll: 'Show All',
         generationsUp: 'Generations up',
         generationsDown: 'Generations down',
@@ -700,8 +701,8 @@ const stringsEN = {
         unsupported: 'Unsupported',
         saveAsJson: 'Save as JSON',
         saveAsJsonDesc: 'Download converted data as JSON file',
-        importAsNew: 'Import as New Tree',
-        importAsNewDesc: 'Replace current tree with imported data',
+        importAsNew: 'Import as a new tree',
+        importAsNewDesc: 'Add as a separate tree (your current tree stays)',
         mergeExisting: 'Merge with Existing',
         mergeExistingDesc: 'Smart merge into current tree',
         insertToTree: 'Insert into Tree',
@@ -1904,6 +1905,7 @@ const stringsCZ: StringsType = {
 
     // Focus mode
     focus: {
+        back: 'Zpět na předchozí osobu (Alt+←)',
         focusedOn: 'Zaměřeno na',
         showAll: 'Zobrazit vše',
         generationsUp: 'Generací nahoru',
@@ -2021,7 +2023,7 @@ const stringsCZ: StringsType = {
         saveAsJson: 'Uložit jako JSON',
         saveAsJsonDesc: 'Stáhnout převedená data jako JSON soubor',
         importAsNew: 'Importovat jako nový strom',
-        importAsNewDesc: 'Nahradit aktuální strom importovanými daty',
+        importAsNewDesc: 'Přidat jako samostatný strom (aktuální zůstane)',
         mergeExisting: 'Sloučit s existujícím',
         mergeExistingDesc: 'Inteligentní sloučení do aktuálního stromu',
         insertToTree: 'Vložit do stromu',

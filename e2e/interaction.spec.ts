@@ -127,3 +127,36 @@ test.describe('mobile', () => {
         await expect(page.locator('.zoom-controls')).toBeVisible();
     });
 });
+
+test('focus back button unwinds navigation, including fan chart clicks', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+    const backBtn = page.locator('#focus-back-btn');
+    await expect(backBtn).toBeHidden();   // no history yet
+
+    const focusName = () => page.evaluate(() =>
+        window.Strom.DataManager.getPerson(window.Strom.TreeRenderer.getFocusPersonId())?.firstName ?? null);
+
+    // Navigate to Henry VII, then via a fan sector to one of his parents.
+    await focusViaSearch(page, 'Henry VII');
+    await expect(backBtn).toBeVisible();
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
+    await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
+    await page.evaluate(() => {
+        const p = window.Strom.DataManager.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Edmund');
+        if (p) window.Strom.TreeRenderer.setFocus(p.id);
+    });
+    await expect.poll(focusName).toBe('Edmund');
+    await expect(backBtn).toBeVisible();
+
+    // Back → Henry VII → Henry VIII, then the button disappears.
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('family'));
+    await backBtn.click();
+    await expect.poll(focusName).toBe('Henry VII');
+    await expect(backBtn).toBeVisible();
+    await backBtn.click();
+    await expect.poll(focusName).toBe('Henry VIII');
+    await expect(backBtn).toBeHidden();
+});
+

@@ -257,12 +257,22 @@ export const importExportMethods = uiModule({
         const file = input.files?.[0];
         if (!file) return;
 
+        // Snapshot the import intent NOW: manager / empty-state paths set their
+        // flag right before triggering this input; the plain "Import GEDCOM"
+        // menu triggers it with no flag set, so stale flags from an earlier
+        // import must not leak in. Re-apply the snapshot when the async read
+        // resolves (input.value reset below would otherwise not matter).
+        const fromManager = this.importFromTreeManager;
+        const toCurrent = this.importToCurrentTree;
+
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
                 const content = e.target?.result as string;
                 const gedcom = parseGedcom(content);
                 this.gedcomResult = convertToStrom(gedcom);
+                this.importFromTreeManager = fromManager;
+                this.importToCurrentTree = toCurrent;
                 this.showGedcomResultDialog();
             } catch (error) {
                 this.showAlert(strings.gedcom.parseError, 'error');
@@ -281,11 +291,12 @@ export const importExportMethods = uiModule({
         const modal = document.getElementById('gedcom-result-modal');
         if (!modal) return;
 
-        // Handle dialog stack - if from tree manager, keep it in stack
-        if (this.importFromTreeManager) {
-            // tree-manager is already in stack from startGedcomImportFromManager
-            this.pushDialog('gedcom-result-modal');
-        } else if (this.importToCurrentTree) {
+        // Handle dialog stack - if from tree manager, keep it in stack.
+        // The dialog re-renders itself after media attach/download — never
+        // push a DUPLICATE stack entry then, or closing pops a stale copy
+        // and resurrects this dialog over the next one.
+        const alreadyOnStack = this.dialogStack[this.dialogStack.length - 1] === 'gedcom-result-modal';
+        if (!alreadyOnStack && (this.importFromTreeManager || this.importToCurrentTree)) {
             this.pushDialog('gedcom-result-modal');
         }
 
@@ -798,6 +809,14 @@ export const importExportMethods = uiModule({
      * Start GEDCOM import from tree manager
      * Sets up dialog stack for proper navigation
      */
+    /** Plain "Import GEDCOM" (main import menu): a fresh, standalone import
+     *  — clear any stale manager/current-tree intent from a previous import. */
+    startGedcomImportPlain(): void {
+        this.importFromTreeManager = false;
+        this.importToCurrentTree = false;
+        document.getElementById('gedcom-input')?.click();
+    },
+
     startGedcomImportFromManager(): void {
         this.importFromTreeManager = true;
         // Close new-tree-menu but keep tree-manager in stack

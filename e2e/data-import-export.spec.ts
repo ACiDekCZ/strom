@@ -268,3 +268,26 @@ test('GEDCOM import: photos referenced by URL download directly (MyHeritage)', a
     // All refs resolved — the media row disappears.
     await expect(dialog.locator('#gedcom-media-row')).toBeHidden();
 });
+
+test('plain GEDCOM import clears stale manager intent; new-tree opens naming dialog', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Emil', 'Visek');
+    await page.route('https://cdn.mh-test.example/**', route =>
+        route.fulfill({ path: 'e2e/fixtures/avatar.png', contentType: 'image/png' }));
+
+    // Leave a STALE manager flag from an earlier (abandoned) manager import.
+    await page.evaluate(() => { (window.Strom.UI as unknown as { importFromTreeManager: boolean }).importFromTreeManager = true; });
+
+    // Plain path: the main "Import GEDCOM" entry clears that stale intent.
+    await page.evaluate(() => window.Strom.UI.startGedcomImportPlain());
+    await page.locator('#gedcom-input').setInputFiles('e2e/fixtures/mh-style.ged');
+    const dialog = page.locator('#gedcom-result-modal');
+    await expect(dialog).toBeVisible();
+    await dialog.locator('#gedcom-media-download').click();
+    await expect(page.locator('.toast')).toContainText('1');
+
+    await dialog.locator('#gedcom-new-tree-btn').click();
+    const importDialog = page.locator('#import-tree-modal');
+    await expect(importDialog).toBeVisible();
+    await expect(dialog).toBeHidden();
+});

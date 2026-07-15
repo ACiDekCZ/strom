@@ -502,6 +502,13 @@ export const miscMethods = uiModule({
             const activeModals = document.querySelectorAll('.modal-overlay.active');
             if (activeModals.length > 0) return;
 
+            // Alt+Left: focus-history back (browser-back style)
+            if (e.altKey && e.key === 'ArrowLeft') {
+                e.preventDefault();
+                TreeRenderer.goBack();
+                return;
+            }
+
             // Ctrl/Cmd+F: Focus search
             if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
                 e.preventDefault();

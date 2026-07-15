@@ -51,6 +51,11 @@ class TreeRendererClass {
 
     // Focus mode state
     private focusPersonId: PersonId | null = null;
+
+    /** Focus navigation history (browser-back style), per tree. */
+    private focusHistory: PersonId[] = [];
+    private focusHistoryTreeId: string | null = null;
+    private suppressHistoryPush = false;
     /** Search highlight: hits get 'search-hit', everyone else 'search-dim'. */
     private highlightIds: Set<PersonId> | null = null;
     private focusDepthUp: number = 3;
@@ -319,6 +324,18 @@ class TreeRendererClass {
             personId = this.findDefaultFocusPerson();
         }
 
+        // Focus history (browser-back style). Reset on tree switch; skip the
+        // push when navigating BACK so history doesn't grow while unwinding.
+        const historyTreeId = DataManager.getCurrentTreeId();
+        if (this.focusHistoryTreeId !== historyTreeId) {
+            this.focusHistory = [];
+            this.focusHistoryTreeId = historyTreeId;
+        } else if (!this.suppressHistoryPush && this.focusPersonId && personId
+            && this.focusPersonId !== personId) {
+            this.focusHistory.push(this.focusPersonId);
+            if (this.focusHistory.length > 50) this.focusHistory.shift();
+        }
+
         this.focusPersonId = personId;
 
         // Set default depth to max available when focusing on a new person
@@ -425,6 +442,34 @@ class TreeRendererClass {
         this.viewMode = (stored === 'descendants' || stored === 'timeline' || stored === 'fan') ? stored : 'family';
     }
 
+    /** Is there a previous focus to go back to? */
+    canGoBack(): boolean {
+        return this.focusHistory.length > 0;
+    }
+
+    /** Navigate to the previous focus (skips persons deleted meanwhile). */
+    goBack(): void {
+        while (this.focusHistory.length > 0) {
+            const prev = this.focusHistory.pop()!;
+            if (DataManager.getPerson(prev)) {
+                this.suppressHistoryPush = true;
+                try {
+                    this.setFocus(prev);
+                } finally {
+                    this.suppressHistoryPush = false;
+                }
+                return;
+            }
+        }
+        this.updateBackButton();
+    }
+
+    /** Show/hide the floating back button to match the history state. */
+    updateBackButton(): void {
+        const btn = document.getElementById('focus-back-btn');
+        if (btn) btn.style.display = this.canGoBack() ? '' : 'none';
+    }
+
     /** Number of visible (non-placeholder) persons — used by the descendants badge. */
     getVisiblePersonCount(): number {
         let count = 0;
@@ -485,6 +530,7 @@ class TreeRendererClass {
     }
 
     private updateFocusUI(): void {
+        this.updateBackButton();
         const focusControls = document.getElementById('focus-controls');
         const focusName = document.getElementById('focus-name');
         const focusCount = document.getElementById('focus-person-count');

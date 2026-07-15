@@ -3198,6 +3198,20 @@
         .person-card.indirect { opacity: 0.5; }
         .person-card.indirect:hover { opacity: 1; }
 
+        /* Floating focus-back button (browser-back for focus navigation). */
+        .focus-back-btn {
+            position: fixed; left: 16px; bottom: 24px; z-index: 80;
+            width: 44px; height: 44px; border-radius: 50%;
+            border: 1px solid var(--border-color, #ddd);
+            background: var(--bg-color, #fff); color: var(--text-color, #333);
+            font-size: 20px; cursor: pointer;
+            box-shadow: 0 2px 8px var(--shadow, rgba(0,0,0,0.15));
+        }
+        .focus-back-btn:hover { background: rgba(128,128,128,0.12); }
+        [data-theme="dark"] .focus-back-btn { background: #2a2a2a; color: #eee; border-color: #444; }
+        body.view-mode-print .focus-back-btn { display: none !important; }
+        @media print { .focus-back-btn { display: none !important; } }
+
         /* Hamburger button */
         .toolbar .hamburger-btn {
             width: 44px;
@@ -6125,6 +6139,9 @@
         </div>
     </div>
 
+    <button id="focus-back-btn" class="focus-back-btn" style="display:none;"
+        onclick="window.Strom.TreeRenderer.goBack()" data-i18n-title="focus.back">↩</button>
+
     <div class="zoom-controls">
         <button onclick="window.Strom.ZoomPan.zoomIn()" data-i18n-title="zoomControls.zoomIn">+</button>
         <button onclick="window.Strom.ZoomPan.zoomOut()" data-i18n-title="zoomControls.zoomOut">−</button>
@@ -6937,7 +6954,7 @@
                         <span class="option-desc" data-i18n="fileAccess.openFromFileDesc"></span>
                     </span>
                 </button>
-                <button class="menu-option" onclick="document.getElementById('gedcom-input').click(); window.Strom.UI.closeImportDialog()">
+                <button class="menu-option" onclick="window.Strom.UI.startGedcomImportPlain(); window.Strom.UI.closeImportDialog()">
                     <span class="option-icon">🌳</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="menu.importGedcom"></span>
