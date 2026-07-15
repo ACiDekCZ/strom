@@ -211,9 +211,11 @@ export const personModalMethods = uiModule({
     },
 
     /**
-     * Sources, attachments, reference numbers and name spellings are for someone
-     * working from archives; most people writing down their grandmother will
-     * never touch them, and a wall of fields is its own kind of unusable.
+     * The fields most people never touch. Sources, attachments, reference
+     * numbers and name spellings are for working from archives; an open question
+     * ("does anyone know when she was born?") is for the moment you send the file
+     * to your aunt — a real flow, but not one you meet while writing down your
+     * grandmother, who gets a note instead.
      *
      * The rule that matters: hiding only ever applies to an EMPTY field. A
      * person who HAS a source cited shows the sources section whatever the
@@ -225,6 +227,7 @@ export const personModalMethods = uiModule({
         const filled: Record<string, boolean> = {
             'name-variants-group': !!person?.nameVariants?.length,
             'refn-group': !!person?.refn?.trim(),
+            'question-group': !!person?.question?.trim(),
             'person-sources-section': !!person?.sourceIds?.length,
             'attachments-section': !!person?.attachments?.length,
         };

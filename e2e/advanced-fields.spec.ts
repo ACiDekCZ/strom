@@ -6,7 +6,8 @@ import { openApp, createFirstPerson, cardAction, personModal } from './helpers.j
  * off by default: most people writing down their family never touch them, and a
  * wall of fields is its own kind of unusable.
  */
-const ADVANCED = ['#person-sources-section', '#attachments-section', '#refn-group', '#name-variants-group'];
+const ADVANCED = ['#person-sources-section', '#attachments-section', '#refn-group',
+    '#name-variants-group', '#question-group'];
 
 test('a plain person form does not open with an archive of fields', async ({ page }) => {
     await openApp(page);
@@ -44,7 +45,9 @@ test('a field that already has something in it is never hidden', async ({ page }
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
     await page.evaluate(() => {
         const dm = window.Strom.DataManager;
-        dm.updatePerson(dm.getAllPersons()[0].id, { refn: 'box 12/1880', nameVariants: ['Wischek'] });
+        dm.updatePerson(dm.getAllPersons()[0].id, {
+            refn: 'box 12/1880', nameVariants: ['Wischek'], question: 'Kdo byli rodiče?',
+        });
     });
     // Research fields are OFF...
     await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(false));
@@ -56,6 +59,7 @@ test('a field that already has something in it is never hidden', async ({ page }
     await expect(modal.locator('#input-refn')).toHaveValue('box 12/1880');
     await expect(modal.locator('#name-variants-group')).toBeVisible();
     await expect(modal.locator('#input-name-variants')).toHaveValue('Wischek');
+    await expect(modal.locator('#question-group')).toBeVisible();
     // The empty ones stay out of the way.
     await expect(modal.locator('#person-sources-section')).toBeHidden();
 });
