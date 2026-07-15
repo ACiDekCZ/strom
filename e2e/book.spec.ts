@@ -72,6 +72,12 @@ test('book window carries its own Print and Close controls', async ({ page, cont
     const book = await popup;
     await book.waitForLoadState('domcontentloaded');
     await expect(book.locator('.book-toolbar')).toBeVisible();
-    await book.locator('.book-toolbar button', { hasText: 'Close' }).click();
+    // Clicking Close runs window.close(); the click races with the page
+    // tearing down, so tolerate the "page closed" error and assert the result.
+    await Promise.all([
+        book.waitForEvent('close').catch(() => { /* already closed */ }),
+        book.locator('.book-toolbar button', { hasText: 'Close' })
+            .click({ noWaitAfter: true }).catch(() => { /* page closed mid-click */ }),
+    ]);
     await expect.poll(() => book.isClosed()).toBe(true);
 });
