@@ -256,6 +256,8 @@ export const miscMethods = uiModule({
 
         const otdToggle = document.getElementById('on-this-day-toggle') as HTMLInputElement | null;
         if (otdToggle) otdToggle.checked = SettingsManager.isOnThisDayEnabled();
+        const deathAnnToggle = document.getElementById('death-anniversaries-toggle') as HTMLInputElement | null;
+        if (deathAnnToggle) deathAnnToggle.checked = SettingsManager.isDeathAnniversariesEnabled();
 
         const branchColorsToggle = document.getElementById('branch-colors-toggle') as HTMLInputElement | null;
         if (branchColorsToggle) branchColorsToggle.checked = SettingsManager.isBranchColorsEnabled();
@@ -501,10 +503,15 @@ export const miscMethods = uiModule({
             const activeModals = document.querySelectorAll('.modal-overlay.active');
             if (activeModals.length > 0) return;
 
-            // Alt+Left: focus-history back (browser-back style)
+            // Alt+Left / Alt+Right: focus-history back / forward
             if (e.altKey && e.key === 'ArrowLeft') {
                 e.preventDefault();
                 TreeRenderer.goBack();
+                return;
+            }
+            if (e.altKey && e.key === 'ArrowRight') {
+                e.preventDefault();
+                TreeRenderer.goForward();
                 return;
             }
 

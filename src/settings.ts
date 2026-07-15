@@ -150,6 +150,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Include yearly death anniversaries (not just round milestones). Default OFF. */
+    isDeathAnniversariesEnabled(): boolean {
+        return this.settings.deathAnniversaries === true;
+    }
+
+    setDeathAnniversaries(enabled: boolean): void {
+        this.settings.deathAnniversaries = enabled;
+        this.save();
+    }
+
     /** Toolbar "Add family" button default OFF (opt-in). */
     isFamilyButtonEnabled(): boolean {
         return this.settings.familyButton === true;

@@ -11,7 +11,7 @@ import { StromData } from './types.js';
 import { parseFlexDate } from './dates.js';
 import { isLivingPerson, inferBirthUpperBounds } from './privacy.js';
 
-export type AnniversaryType = 'birthday' | 'wedding' | 'birth-milestone' | 'death-milestone';
+export type AnniversaryType = 'birthday' | 'wedding' | 'birth-milestone' | 'death-milestone' | 'death';
 
 export interface Anniversary {
     /** The occurrence date within the horizon (midnight, local). */
@@ -67,7 +67,7 @@ function fullYear(value?: string): number | null {
  * the deceased. Sorted by soonest, then by type for stability.
  */
 export function upcomingAnniversaries(
-    data: StromData, today: Date, horizonDays = 30
+    data: StromData, today: Date, horizonDays = 30, includeDeaths = false
 ): Anniversary[] {
     const out: Anniversary[] = [];
     const currentYear = today.getFullYear();
@@ -105,6 +105,7 @@ export function upcomingAnniversaries(
             const occ = nextOccurrence(today, dmd.month, dmd.day);
             const years = occ.date.getFullYear() - deathYear;
             if (DEATH_MILESTONES.has(years)) add('death-milestone', [p.id], years, occ);
+            else if (includeDeaths && years > 0) add('death', [p.id], years, occ);
         }
     }
 

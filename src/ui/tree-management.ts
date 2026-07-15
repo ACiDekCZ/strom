@@ -145,6 +145,9 @@ export const treeManagementMethods = uiModule({
         const annBadge = this.anniversaryBadgeCount();
         html += `
             <div class="tree-switcher-divider"></div>
+            <div class="tree-switcher-action" onclick="window.Strom.UI.toggleTreeSwitcher(); window.Strom.UI.makeTreeFromCurrentView()">
+                <span>✂️</span> ${strings.menu.makeTreeFromView}
+            </div>
             <div class="tree-switcher-action" onclick="window.Strom.UI.showAnniversariesDialog()">
                 <span>🎂</span> ${strings.anniversaries.menu}
                 ${annBadge > 0 ? `<span class="tree-switcher-badge">${annBadge}</span>` : ''}

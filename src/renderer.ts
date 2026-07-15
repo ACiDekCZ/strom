@@ -53,8 +53,9 @@ class TreeRendererClass {
     // Focus mode state
     private focusPersonId: PersonId | null = null;
 
-    /** Focus navigation history (browser-back style), per tree. */
+    /** Focus navigation history (browser back/forward style), per tree. */
     private focusHistory: PersonId[] = [];
+    private focusForward: PersonId[] = [];
     private focusHistoryTreeId: string | null = null;
     private suppressHistoryPush = false;
     /** Search highlight: hits get 'search-hit', everyone else 'search-dim'. */
@@ -325,16 +326,20 @@ class TreeRendererClass {
             personId = this.findDefaultFocusPerson();
         }
 
-        // Focus history (browser-back style). Reset on tree switch; skip the
-        // push when navigating BACK so history doesn't grow while unwinding.
+        // Focus history (browser back/forward). Reset on tree switch. On a
+        // NORMAL navigation push the previous focus onto the back stack and
+        // clear the forward stack (a new branch). goBack/goForward set
+        // suppressHistoryPush so they can manage the stacks themselves.
         const historyTreeId = DataManager.getCurrentTreeId();
         if (this.focusHistoryTreeId !== historyTreeId) {
             this.focusHistory = [];
+            this.focusForward = [];
             this.focusHistoryTreeId = historyTreeId;
         } else if (!this.suppressHistoryPush && this.focusPersonId && personId
             && this.focusPersonId !== personId) {
             this.focusHistory.push(this.focusPersonId);
             if (this.focusHistory.length > 50) this.focusHistory.shift();
+            this.focusForward = [];
         }
 
         this.focusPersonId = personId;
@@ -448,27 +453,54 @@ class TreeRendererClass {
         return this.focusHistory.length > 0;
     }
 
-    /** Navigate to the previous focus (skips persons deleted meanwhile). */
-    goBack(): void {
-        while (this.focusHistory.length > 0) {
-            const prev = this.focusHistory.pop()!;
-            if (DataManager.getPerson(prev)) {
+    /** Is there a focus to go forward to (after going back)? */
+    canGoForward(): boolean {
+        return this.focusForward.length > 0;
+    }
+
+    /**
+     * Navigate one step through focus history. `from` is the stack we pop the
+     * target off; `to` is the stack the current focus is pushed onto, so the
+     * opposite direction can retrace it. Skips persons deleted meanwhile.
+     */
+    private navigateHistory(from: PersonId[], to: PersonId[]): void {
+        while (from.length > 0) {
+            const target = from.pop()!;
+            if (DataManager.getPerson(target)) {
+                if (this.focusPersonId) to.push(this.focusPersonId);
                 this.suppressHistoryPush = true;
                 try {
-                    this.setFocus(prev);
+                    this.setFocus(target);
                 } finally {
                     this.suppressHistoryPush = false;
                 }
                 return;
             }
         }
-        this.updateBackButton();
+        this.updateNavButtons();
     }
 
-    /** Show/hide the floating back button to match the history state. */
+    /** Navigate to the previous focus (browser back). */
+    goBack(): void {
+        this.navigateHistory(this.focusHistory, this.focusForward);
+    }
+
+    /** Navigate to the next focus after going back (browser forward). */
+    goForward(): void {
+        this.navigateHistory(this.focusForward, this.focusHistory);
+    }
+
+    /** Show/hide the floating back & forward buttons to match history state. */
+    updateNavButtons(): void {
+        const back = document.getElementById('focus-back-btn');
+        if (back) back.style.display = this.canGoBack() ? '' : 'none';
+        const fwd = document.getElementById('focus-forward-btn');
+        if (fwd) fwd.style.display = this.canGoForward() ? '' : 'none';
+    }
+
+    /** @deprecated use updateNavButtons */
     updateBackButton(): void {
-        const btn = document.getElementById('focus-back-btn');
-        if (btn) btn.style.display = this.canGoBack() ? '' : 'none';
+        this.updateNavButtons();
     }
 
     /** Number of visible (non-placeholder) persons — used by the descendants badge. */
@@ -531,7 +563,7 @@ class TreeRendererClass {
     }
 
     private updateFocusUI(): void {
-        this.updateBackButton();
+        this.updateNavButtons();
         const focusControls = document.getElementById('focus-controls');
         const focusName = document.getElementById('focus-name');
         const focusCount = document.getElementById('focus-person-count');

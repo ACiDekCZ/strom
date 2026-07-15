@@ -22,6 +22,7 @@ export const ANNIVERSARY_ICON: Record<Anniversary['type'], string> = {
     'wedding': '💍',
     'birth-milestone': '🌟',
     'death-milestone': '🕯️',
+    'death': '🕯️',
 };
 
 function personName(p?: Person): string {
@@ -38,7 +39,7 @@ export const anniversariesUiMethods = uiModule({
         if (!modal || !list) return;
 
         const data = DataManager.getData();
-        const items = upcomingAnniversaries(data, new Date());
+        const items = upcomingAnniversaries(data, new Date(), 30, SettingsManager.isDeathAnniversariesEnabled());
         const a = strings.anniversaries;
 
         list.innerHTML = items.length === 0
@@ -72,6 +73,7 @@ export const anniversariesUiMethods = uiModule({
             case 'wedding': return a.wedding(names[0], names[1] ?? '', item.years);
             case 'birth-milestone': return a.birthMilestone(names[0], item.years);
             case 'death-milestone': return a.deathMilestone(names[0], item.years);
+            case 'death': return a.deathAnniversary(names[0], item.years);
         }
     },
 
@@ -138,6 +140,6 @@ export const anniversariesUiMethods = uiModule({
     /** Count of anniversaries within 7 days, for the menu badge (0 = none). */
     anniversaryBadgeCount(): number {
         if (DataManager.isViewMode()) return 0;
-        return upcomingAnniversaries(DataManager.getData(), new Date(), 7).length;
+        return upcomingAnniversaries(DataManager.getData(), new Date(), 7, SettingsManager.isDeathAnniversariesEnabled()).length;
     },
 });

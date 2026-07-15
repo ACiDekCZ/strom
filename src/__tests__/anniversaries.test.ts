@@ -99,3 +99,36 @@ describe('onThisDay', () => {
         expect(onThisDay(data([p]), TODAY)).toHaveLength(0);
     });
 });
+
+describe('death anniversaries (opt-in)', () => {
+    it('yearly death anniversaries appear only when includeDeaths is on', () => {
+        // A person who died on a date ~5 days out, 7 years ago (not a milestone).
+        const today = new Date('2026-06-01T00:00:00');
+        const data = {
+            persons: {
+                p1: { id: 'p1', firstName: 'A', lastName: 'B', gender: 'male', isPlaceholder: false,
+                      parentIds: [], childIds: [], partnerships: [], deathDate: '2019-06-05' } as any,
+            },
+            partnerships: {},
+        } as any;
+        const without = upcomingAnniversaries(data, today, 30, false).filter(a => a.type === 'death');
+        expect(without).toHaveLength(0);
+        const withDeaths = upcomingAnniversaries(data, today, 30, true).filter(a => a.type === 'death');
+        expect(withDeaths).toHaveLength(1);
+        expect(withDeaths[0].years).toBe(7);
+    });
+
+    it('round milestones still surface without the setting (as death-milestone)', () => {
+        const today = new Date('2026-06-01T00:00:00');
+        const data = {
+            persons: { p1: { id: 'p1', firstName: 'A', lastName: 'B', gender: 'male', isPlaceholder: false,
+                parentIds: [], childIds: [], partnerships: [], deathDate: '1976-06-05' } as any },
+            partnerships: {},
+        } as any;
+        const ms = upcomingAnniversaries(data, today, 30, false);
+        expect(ms.some(a => a.type === 'death-milestone' && a.years === 50)).toBe(true);
+        // With the setting on, the milestone is NOT duplicated as a plain death.
+        const on = upcomingAnniversaries(data, today, 30, true);
+        expect(on.filter(a => a.personIds[0] === 'p1' && a.daysUntil === ms[0].daysUntil)).toHaveLength(1);
+    });
+});

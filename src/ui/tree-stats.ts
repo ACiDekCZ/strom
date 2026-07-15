@@ -632,7 +632,7 @@ export const treeStatsMethods = uiModule({
         // shared module decides what counts (living birthdays, living couples'
         // weddings, round milestones of the deceased) — the two lists must
         // never disagree.
-        const items = upcomingAnniversaries(treeData, new Date()).slice(0, 10);
+        const items = upcomingAnniversaries(treeData, new Date(), 30, SettingsManager.isDeathAnniversariesEnabled()).slice(0, 10);
         if (items.length === 0) {
             return `<div class="tree-stats-none">${strings.treeManager.statsAnniversariesNone}</div>`;
         }

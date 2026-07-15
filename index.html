@@ -3199,19 +3199,21 @@
         .person-card.indirect { opacity: 0.5; }
         .person-card.indirect:hover { opacity: 1; }
 
-        /* Floating focus-back button (browser-back for focus navigation). */
-        .focus-back-btn {
-            position: fixed; left: 16px; bottom: 24px; z-index: 80;
+        /* Floating focus back/forward buttons (browser-style navigation). */
+        .focus-nav-btn {
+            position: fixed; bottom: 24px; z-index: 80;
             width: 44px; height: 44px; border-radius: 50%;
             border: 1px solid var(--border-color, #ddd);
             background: var(--bg-color, #fff); color: var(--text-color, #333);
             font-size: 20px; cursor: pointer;
             box-shadow: 0 2px 8px var(--shadow, rgba(0,0,0,0.15));
         }
-        .focus-back-btn:hover { background: rgba(128,128,128,0.12); }
-        [data-theme="dark"] .focus-back-btn { background: #2a2a2a; color: #eee; border-color: #444; }
-        body.view-mode-print .focus-back-btn { display: none !important; }
-        @media print { .focus-back-btn { display: none !important; } }
+        .focus-back-btn { left: 16px; }
+        .focus-forward-btn { left: 68px; }
+        .focus-nav-btn:hover { background: rgba(128,128,128,0.12); }
+        [data-theme="dark"] .focus-nav-btn { background: #2a2a2a; color: #eee; border-color: #444; }
+        body.view-mode-print .focus-nav-btn { display: none !important; }
+        @media print { .focus-nav-btn { display: none !important; } }
 
         /* Hamburger button */
         .toolbar .hamburger-btn {
@@ -6094,7 +6096,7 @@
             <button id="mm-view-timeline" onclick="window.Strom.UI.setDisplayViewMode('timeline'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.timeline"></button>
             <button id="mm-view-fan" onclick="window.Strom.UI.setDisplayViewMode('fan'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.fan"></button>
         </div>
-        <button class="edit-only" onclick="window.Strom.UI.showExportDialog(); window.Strom.UI.closeMobileMenu()">💾 <span data-i18n="mobileMenu.export"></span></button>
+        <button class="edit-only" onclick="window.Strom.UI.makeTreeFromCurrentView(); window.Strom.UI.closeMobileMenu()">✂️ <span data-i18n="menu.makeTreeFromView"></span></button>
         <button onclick="window.Strom.UI.showSettingsDialog(); window.Strom.UI.closeMobileMenu()">⚙ <span data-i18n="settings.title"></span></button>
     </div>
 
@@ -6140,8 +6142,10 @@
         </div>
     </div>
 
-    <button id="focus-back-btn" class="focus-back-btn" style="display:none;"
+    <button id="focus-back-btn" class="focus-nav-btn focus-back-btn" style="display:none;"
         onclick="window.Strom.TreeRenderer.goBack()" data-i18n-title="focus.back">↩</button>
+    <button id="focus-forward-btn" class="focus-nav-btn focus-forward-btn" style="display:none;"
+        onclick="window.Strom.TreeRenderer.goForward()" data-i18n-title="focus.forward">↪</button>
 
     <div class="zoom-controls">
         <button onclick="window.Strom.ZoomPan.zoomIn()" data-i18n-title="zoomControls.zoomIn">+</button>
@@ -6572,6 +6576,10 @@
                     <label class="settings-checkbox">
                         <input type="checkbox" id="on-this-day-toggle" onchange="window.Strom.UI.toggleOnThisDay(this.checked)">
                         <span data-i18n="anniversaries.settingHint"></span>
+                    </label>
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="death-anniversaries-toggle" onchange="window.Strom.UI.toggleDeathAnniversaries(this.checked)">
+                        <span data-i18n="anniversaries.deathHint"></span>
                     </label>
                 </div>
             </div>

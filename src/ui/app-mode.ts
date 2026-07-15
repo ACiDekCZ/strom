@@ -614,6 +614,11 @@ export const appModeMethods = uiModule({
         if (!enabled) this.dismissOnThisDay();
     },
 
+    toggleDeathAnniversaries(enabled: boolean): void {
+        SettingsManager.setDeathAnniversaries(enabled);
+        this.updateTreeSwitcher();   // badge count may change
+    },
+
     showAuditLogDialog(treeId?: TreeId | string, parentDialogId?: string): void {
         const modal = document.getElementById('audit-log-modal');
         if (!modal) return;

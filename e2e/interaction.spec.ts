@@ -128,35 +128,42 @@ test.describe('mobile', () => {
     });
 });
 
-test('focus back button unwinds navigation, including fan chart clicks', async ({ page }) => {
+test('focus back/forward buttons walk history in both directions', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Henry VIII')).toBeVisible();
-    const backBtn = page.locator('#focus-back-btn');
-    await expect(backBtn).toBeHidden();   // no history yet
+    const back = page.locator('#focus-back-btn');
+    const fwd = page.locator('#focus-forward-btn');
+    await expect(back).toBeHidden();
+    await expect(fwd).toBeHidden();
 
     const focusName = () => page.evaluate(() =>
         window.Strom.DataManager.getPerson(window.Strom.TreeRenderer.getFocusPersonId())?.firstName ?? null);
 
-    // Navigate to Henry VII, then via a fan sector to one of his parents.
+    // VIII → VII → (via fan) Edmund.
     await focusViaSearch(page, 'Henry VII');
-    await expect(backBtn).toBeVisible();
-    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
-    await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
+    await expect(back).toBeVisible();
+    await expect(fwd).toBeHidden();               // no forward yet
     await page.evaluate(() => {
         const p = window.Strom.DataManager.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Edmund');
         if (p) window.Strom.TreeRenderer.setFocus(p.id);
     });
     await expect.poll(focusName).toBe('Edmund');
-    await expect(backBtn).toBeVisible();
 
-    // Back → Henry VII → Henry VIII, then the button disappears.
-    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('family'));
-    await backBtn.click();
+    // Back to VII: forward becomes available.
+    await back.click();
     await expect.poll(focusName).toBe('Henry VII');
-    await expect(backBtn).toBeVisible();
-    await backBtn.click();
-    await expect.poll(focusName).toBe('Henry VIII');
-    await expect(backBtn).toBeHidden();
+    await expect(fwd).toBeVisible();
+    // Forward returns to Edmund.
+    await fwd.click();
+    await expect.poll(focusName).toBe('Edmund');
+    await expect(fwd).toBeHidden();               // at the tip again
+
+    // A NEW navigation after going back clears forward.
+    await back.click();                            // → Henry VII
+    await expect(fwd).toBeVisible();
+    await focusViaSearch(page, 'Henry VIII');       // new branch
+    await expect(fwd).toBeHidden();
 });
+
 

@@ -260,6 +260,7 @@ const stringsEN = {
 
     // Anniversaries + "on this day"
     anniversaries: {
+        deathHint: 'Also show yearly death anniversaries',
         menu: 'Anniversaries',
         title: 'Upcoming anniversaries',
         empty: 'No anniversaries in the next 30 days',
@@ -271,6 +272,7 @@ const stringsEN = {
         wedding: (a: string, b: string, years: number) => `${a} & ${b} — ${years} years married`,
         birthMilestone: (name: string, years: number) => `${name} — ${years} years since birth`,
         deathMilestone: (name: string, years: number) => `${name} — ${years} years since death`,
+        deathAnniversary: (name: string, years: number) => `${name} — ${years} years since death`,
         otdTitle: 'On this day',
         otdBirth: (name: string, ago: string, _female: boolean) => `${ago}, ${name} was born`,
         otdDeath: (name: string, ago: string, _female: boolean) => `${ago}, ${name} died`,
@@ -586,6 +588,7 @@ const stringsEN = {
     focus: {
         focusedOn: 'Focused on',
         back: 'Back to previous person (Alt+←)',
+        forward: 'Forward (Alt+→)',
         showAll: 'Show All',
         generationsUp: 'Generations up',
         generationsDown: 'Generations down',
@@ -1583,6 +1586,7 @@ const stringsCZ: StringsType = {
 
     // Anniversaries + "on this day"
     anniversaries: {
+        deathHint: 'Zobrazovat i výroční dny úmrtí',
         menu: 'Výročí',
         title: 'Nadcházející výročí',
         empty: 'Žádná výročí v příštích 30 dnech',
@@ -1594,6 +1598,7 @@ const stringsCZ: StringsType = {
         wedding: (a: string, b: string, years: number) => `${a} a ${b} — ${years}. výročí svatby`,
         birthMilestone: (name: string, years: number) => `${name} — ${years} let od narození`,
         deathMilestone: (name: string, years: number) => `${name} — ${years} let od úmrtí`,
+        deathAnniversary: (name: string, years: number) => `${name} — výročí úmrtí (${years} let)`,
         otdTitle: 'V tento den',
         otdBirth: (name: string, ago: string, female: boolean) => `${ago} se narodil${female ? 'a' : ''} ${name}`,
         otdDeath: (name: string, ago: string, female: boolean) => `${ago} zemřel${female ? 'a' : ''} ${name}`,
@@ -1908,6 +1913,7 @@ const stringsCZ: StringsType = {
     // Focus mode
     focus: {
         back: 'Zpět na předchozí osobu (Alt+←)',
+        forward: 'Vpřed (Alt+→)',
         focusedOn: 'Zaměřeno na',
         showAll: 'Zobrazit vše',
         generationsUp: 'Generací nahoru',
