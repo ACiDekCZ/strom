@@ -538,6 +538,7 @@ export interface AppSettings {
     cardDensity?: CardDensity;  // default: 'normal' - how much detail a card shows
     familyButton?: boolean;  // default: false - toolbar shortcut to the family wizard
     descendantsFullFamilies?: boolean;  // default: false - descendants view shows partners' other families
+    advancedFields?: boolean;  // default: false - show sources/attachments/refn/name variants on a person
     geocoding?: boolean;   // default: undefined (never asked) - user allowed sending place names to the geocoder
     senderName?: string;   // collaboration: name shown to relatives in shared files
 }

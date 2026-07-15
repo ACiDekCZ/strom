@@ -143,6 +143,11 @@ const stringsEN = {
         nothingSelected: 'Pick at least one family.',
     },
 
+    advanced: {
+        settingLabel: 'Research fields',
+        settingHint: 'Show sources, attachments, reference numbers and name spellings on a person. Off by default — a person you already filled one in for always shows it.',
+    },
+
     events: {
         occupationLabel: 'Occupation / trade',
         occupationHint: 'The trade itself — "blacksmith", not "worked in Kladno as a blacksmith". It goes out as the occupation in GEDCOM.',
@@ -1596,6 +1601,11 @@ const stringsCZ: StringsType = {
         keepsOriginal: 'Původní strom zůstává, jak je — smažte si ho sami, až budete s rozdělením spokojení.',
         done: (count: number) => `Vytvořeno ${count} stromů. Původní je nedotčený.`,
         nothingSelected: 'Vyberte aspoň jednu rodinu.',
+    },
+
+    advanced: {
+        settingLabel: 'Badatelská pole',
+        settingHint: 'Zobrazit u osoby prameny, přílohy, referenční číslo a další tvary jména. Výchozí je vypnuto — u osoby, kde už něco z toho vyplněné máte, se pole ukáže vždy.',
     },
 
     events: {

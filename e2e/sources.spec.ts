@@ -3,6 +3,8 @@ import { openApp, createFirstPerson, cardAction, personModal, waitForPersist } f
 
 test('sources: cite a new source on a person, chip survives a reload', async ({ page }) => {
     await openApp(page);
+    // Citing is a research field — off by default (see advanced-fields.spec).
+    await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
     await createFirstPerson(page, 'Jan', 'Novak');
 
     // Open the edit modal and reveal the extended fields that hold citations.
@@ -41,6 +43,7 @@ test('sources: cite a new source on a person, chip survives a reload', async ({ 
 
 test('sources manager lists a source and shows its citation count', async ({ page }) => {
     await openApp(page);
+    await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
     await createFirstPerson(page, 'Jan', 'Novak');
 
     // Add a source via the manager.

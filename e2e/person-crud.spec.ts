@@ -139,6 +139,8 @@ test('birth-date estimate hint fills an approximate year from other dates (K11)'
 
 test('reference number and open question persist and mark the card (K12/F3)', async ({ page }) => {
     await openApp(page);
+    // Name variants / reference numbers are research fields — off by default.
+    await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
     await createFirstPerson(page, 'Marie', 'Novakova', { gender: 'female' });
     await cardAction(page, 'Marie', 'edit');
     const modal = personModal(page);

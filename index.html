@@ -6809,12 +6809,12 @@
                         <input type="text" id="input-deathplace" autocomplete="off" list="places-datalist">
                     </div>
                 </div>
-                <div class="form-group">
+                <div class="form-group advanced-field" id="name-variants-group">
                     <label data-i18n="labels.nameVariants"></label>
                     <input type="text" id="input-name-variants" autocomplete="off" data-i18n-placeholder="placeholders.nameVariants">
                     <p class="field-hint" data-i18n="labels.nameVariantsHint"></p>
                 </div>
-                <div class="form-group">
+                <div class="form-group advanced-field" id="refn-group">
                     <label data-i18n="labels.refn"></label>
                     <input type="text" id="input-refn" autocomplete="off" data-i18n-placeholder="placeholders.refn">
                 </div>
@@ -6831,12 +6831,12 @@
                     <div id="events-list" class="events-list"></div>
                     <button type="button" class="secondary" id="btn-add-event" onclick="window.Strom.UI.showAddEventModal()" data-i18n="events.add"></button>
                 </div>
-                <div class="form-group" id="person-sources-section">
+                <div class="form-group advanced-field" id="person-sources-section">
                     <label data-i18n="sources.sectionTitle"></label>
                     <div id="person-sources-chips" class="sources-chips"></div>
                     <button type="button" class="secondary" id="btn-cite-person" onclick="window.Strom.UI.showSourcePickerForPerson()" data-i18n="sources.cite"></button>
                 </div>
-                <div class="form-group" id="attachments-section">
+                <div class="form-group advanced-field" id="attachments-section">
                     <label data-i18n="attachments.title"></label>
                     <div id="attachments-list" class="attachments-list"></div>
                     <div id="attachments-total" class="attachments-total"></div>
@@ -7214,6 +7214,15 @@
                     <label class="settings-checkbox">
                         <input type="checkbox" id="descendants-families-default-toggle" onchange="window.Strom.UI.setDescendantsFullFamiliesDefault(this.checked)">
                         <span data-i18n="viewModeSwitch.settingHint"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="advanced.settingLabel"></label>
+                <div class="settings-options">
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="advanced-fields-toggle" onchange="window.Strom.UI.toggleAdvancedFields(this.checked)">
+                        <span data-i18n="advanced.settingHint"></span>
                     </label>
                 </div>
             </div>

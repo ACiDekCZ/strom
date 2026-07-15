@@ -9,6 +9,8 @@ import { openApp, createFirstPerson, cardAction, personModal, card } from './hel
  */
 test('search finds a person under the spelling the register used', async ({ page }) => {
     await openApp(page);
+    // Name variants are a research field — off by default (see advanced-fields.spec).
+    await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
     await createFirstPerson(page, 'Josef', 'Víšek', { birthDate: '1783' });
 
     await cardAction(page, 'Josef', 'edit');
@@ -30,6 +32,8 @@ test('search finds a person under the spelling the register used', async ({ page
 
 test('a person whose only extra detail is a variant opens with it visible', async ({ page }) => {
     await openApp(page);
+    // Name variants / reference numbers are research fields — off by default.
+    await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
     await createFirstPerson(page, 'Josef', 'Víšek');
     await cardAction(page, 'Josef', 'edit');
     const modal = personModal(page);
@@ -45,6 +49,8 @@ test('a person whose only extra detail is a variant opens with it visible', asyn
 
 test('clearing the field removes the variants', async ({ page }) => {
     await openApp(page);
+    // Name variants / reference numbers are research fields — off by default.
+    await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
     await createFirstPerson(page, 'Josef', 'Víšek');
     await cardAction(page, 'Josef', 'edit');
     const modal = personModal(page);

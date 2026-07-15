@@ -107,6 +107,22 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /**
+     * Show the fields that only serious research needs (sources, attachments,
+     * reference numbers, name variants)? Default NO: someone writing down their
+     * grandmother should meet a short form, not an archive's worth of fields.
+     *
+     * Hiding is only ever about EMPTY fields — see the person modal.
+     */
+    isAdvancedFields(): boolean {
+        return this.settings.advancedFields === true;
+    }
+
+    setAdvancedFields(enabled: boolean): void {
+        this.settings.advancedFields = enabled;
+        this.save();
+    }
+
     isZoomControlsEnabled(): boolean {
         return this.settings.zoomControls !== false;
     }

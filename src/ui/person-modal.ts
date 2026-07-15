@@ -100,6 +100,8 @@ export const personModalMethods = uiModule({
         if (addDeceased) addDeceased.checked = false;
         this.setPhotoPreview(undefined);
 
+        this.applyAdvancedFieldVisibility(null);
+
         // Snapshot original values (all empty for add)
         this.personModalSnapshot = {
             firstName: '', lastName: '', gender: 'male',
@@ -206,6 +208,30 @@ export const personModalMethods = uiModule({
             dateInput.addEventListener('input', updateClass);
             updateClass(); // Initial state
         });
+    },
+
+    /**
+     * Sources, attachments, reference numbers and name spellings are for someone
+     * working from archives; most people writing down their grandmother will
+     * never touch them, and a wall of fields is its own kind of unusable.
+     *
+     * The rule that matters: hiding only ever applies to an EMPTY field. A
+     * person who HAS a source cited shows the sources section whatever the
+     * setting says — hiding filled data would be the invisible-value bug again,
+     * just with a switch on it.
+     */
+    applyAdvancedFieldVisibility(person: Person | null): void {
+        const advanced = SettingsManager.isAdvancedFields();
+        const filled: Record<string, boolean> = {
+            'name-variants-group': !!person?.nameVariants?.length,
+            'refn-group': !!person?.refn?.trim(),
+            'person-sources-section': !!person?.sourceIds?.length,
+            'attachments-section': !!person?.attachments?.length,
+        };
+        for (const [id, hasValue] of Object.entries(filled)) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = (advanced || hasValue) ? '' : 'none';
+        }
     },
 
     setupExpandButton(hasExtendedData: boolean): void {
@@ -359,6 +385,10 @@ export const personModalMethods = uiModule({
         const attachmentsSection = document.getElementById('attachments-section');
         if (attachmentsSection) attachmentsSection.style.display = '';
         this.renderAttachmentsList();
+
+        // LAST: the lines above switch sources/attachments on for edit mode, so
+        // deciding what a research field should do has to come after them.
+        this.applyAdvancedFieldVisibility(person);
 
         // Editing an existing person → no duplicate suggestions.
         this.disableDuplicateSuggest('person');

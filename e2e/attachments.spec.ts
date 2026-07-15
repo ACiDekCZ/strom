@@ -3,6 +3,8 @@ import { openApp, createFirstPerson, cardAction, personModal, waitForPersist } f
 
 test('attachments: add an image, it survives a reload, then delete it', async ({ page }) => {
     await openApp(page);
+    // Attachments are a research field — off by default (see advanced-fields.spec).
+    await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
     await createFirstPerson(page, 'Jan', 'Novak');
 
     // Open the edit modal and reveal the extended fields that hold attachments.
@@ -39,6 +41,8 @@ test('attachments: add an image, it survives a reload, then delete it', async ({
 
 test('attachments: a rejected PDF over the size cap is not added', async ({ page }) => {
     await openApp(page);
+    // Attachments are a research field — off by default (see advanced-fields.spec).
+    await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
     await createFirstPerson(page, 'Jan', 'Novak');
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);

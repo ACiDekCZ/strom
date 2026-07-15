@@ -279,6 +279,9 @@ export const miscMethods = uiModule({
         const geocodingToggle = document.getElementById('geocoding-toggle') as HTMLInputElement | null;
         if (geocodingToggle) geocodingToggle.checked = SettingsManager.isGeocodingAllowed();
 
+        const advancedToggle = document.getElementById('advanced-fields-toggle') as HTMLInputElement | null;
+        if (advancedToggle) advancedToggle.checked = SettingsManager.isAdvancedFields();
+
         modal.classList.add('active');
     },
 

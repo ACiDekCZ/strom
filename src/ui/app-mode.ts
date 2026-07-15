@@ -589,6 +589,10 @@ export const appModeMethods = uiModule({
         SettingsManager.setGeocodingAllowed(enabled);
     },
 
+    toggleAdvancedFields(enabled: boolean): void {
+        SettingsManager.setAdvancedFields(enabled);
+    },
+
     toggleFamilyButton(enabled: boolean): void {
         SettingsManager.setFamilyButton(enabled);
         this.updateViewModeUI(); // owns the toolbar family-button visibility
