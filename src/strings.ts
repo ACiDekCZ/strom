@@ -98,6 +98,10 @@ const stringsEN = {
 
     // Versioned backups
     snapshots: {
+        delete: 'Delete',
+        deleteConfirm: 'Delete this backup? The tree itself is not touched.',
+        deleted: 'Backup deleted',
+        inBrowser: 'Backups live in this browser, not in your tree file — they never make it bigger, and they are gone if you clear the browser or move to another computer. Export the tree for a backup you can keep.',
         menu: 'Backups',
         title: 'Backup history',
         empty: 'No backups yet',
@@ -111,6 +115,7 @@ const stringsEN = {
         colDate: 'Date',
         colReason: 'Reason',
         colPersons: 'People',
+        persons: (count: number) => count === 1 ? '1 person' : `${count} people`,
         colSize: 'Size',
         reasons: {
             auto: 'Automatic',
@@ -1542,6 +1547,10 @@ const stringsCZ: StringsType = {
 
     // Versioned backups
     snapshots: {
+        delete: 'Smazat',
+        deleteConfirm: 'Smazat tuto zálohu? Samotného stromu se to nedotkne.',
+        deleted: 'Záloha smazána',
+        inBrowser: 'Zálohy žijí v tomto prohlížeči, ne ve tvém souboru se stromem — nezvětšují ho, ale zmizí s vymazáním dat prohlížeče nebo na jiném počítači. Zálohu, kterou si opravdu odložíš, uděláš exportem stromu.',
         menu: 'Zálohy',
         title: 'Historie záloh',
         empty: 'Zatím žádné zálohy',
@@ -1555,6 +1564,7 @@ const stringsCZ: StringsType = {
         colDate: 'Datum',
         colReason: 'Důvod',
         colPersons: 'Osob',
+        persons: (count: number) => count === 1 ? '1 osoba' : (count < 5 ? `${count} osoby` : `${count} osob`),
         colSize: 'Velikost',
         reasons: {
             auto: 'Automatická',

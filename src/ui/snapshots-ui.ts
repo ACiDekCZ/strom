@@ -67,7 +67,8 @@ export const snapshotsUiMethods = uiModule({
         list.innerHTML = snaps.map((s: SnapshotMeta) => {
             const date = new Date(s.createdAt).toLocaleString();
             const reason = strings.snapshots.reasons[s.reason] || s.reason;
-            const meta = `${reason} · ${s.personCount} ${strings.snapshots.colPersons.toLowerCase()} · ${formatBytes(s.sizeBytes)}`;
+            // The column header is a heading, not a count — reusing it gave "1 people".
+            const meta = `${reason} · ${strings.snapshots.persons(s.personCount)} · ${formatBytes(s.sizeBytes)}`;
             return `<div class="snapshot-row">
                 <div class="snapshot-main">
                     <div class="snapshot-date">${date}</div>
@@ -76,9 +77,23 @@ export const snapshotsUiMethods = uiModule({
                 <div class="snapshot-actions">
                     <button onclick="window.Strom.UI.restoreSnapshotFromUI('${s.id}')">${strings.snapshots.restore}</button>
                     <button onclick="window.Strom.UI.downloadSnapshot('${s.id}')">${strings.snapshots.download}</button>
+                    <button class="snapshot-delete" onclick="window.Strom.UI.deleteSnapshotFromUI('${s.id}')"
+                            title="${strings.snapshots.delete}">&#128465;</button>
                 </div>
             </div>`;
         }).join('');
+    },
+
+    /**
+     * Delete one backup. Only the backup goes — saying so on the confirm matters,
+     * because "delete" in a list of your family's history reads alarming.
+     */
+    async deleteSnapshotFromUI(snapshotId: string): Promise<void> {
+        if (!await this.showConfirm(strings.snapshots.deleteConfirm, strings.snapshots.delete)) return;
+        const { deleteSnapshot } = await import('../snapshots.js');
+        await deleteSnapshot(snapshotId);
+        this.showToast(strings.snapshots.deleted);
+        await this.renderSnapshotsList();
     },
 
     async createManualSnapshot(): Promise<void> {
