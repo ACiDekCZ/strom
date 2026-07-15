@@ -14,6 +14,7 @@ import {
 } from '../types.js';
 import { PersonPicker } from '../person-picker.js';
 import { strings } from '../strings.js';
+import { SettingsManager } from '../settings.js';
 import { SELECTABLE_EVENT_TYPES, sortLifeEvents } from '../events.js';
 import { formatFlexDate, normalizeDateInput, formatDateForInput } from '../dates.js';
 import { uiModule } from './module.js';
@@ -282,9 +283,14 @@ export const personEventsMethods = uiModule({
         // A copy: editing the rows must not touch the stored event until Save.
         this.eventParticipants = (event.participants ?? []).map(p => ({ ...p }));
         this.renderEventParticipants();
-        // Citations available for an existing event.
+        // Citations available for an existing event — but they are a research
+        // field, so the same rule as everywhere: only when asked for, unless this
+        // event already cites something.
         const src = document.getElementById('event-sources-section');
-        if (src) src.style.display = '';
+        if (src) {
+            src.style.display = (SettingsManager.isAdvancedFields() || event.sourceIds?.length)
+                ? '' : 'none';
+        }
         this.renderEventSourcesChips();
         this.openEventEditor(strings.events.editTitle);
     },

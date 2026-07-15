@@ -339,7 +339,12 @@ export const relationshipsPanelMethods = uiModule({
                         ${primaryCheckboxHtml}
                         <textarea class="partnership-note" data-partnership-id="${partnership.id}"
                             placeholder="${strings.labels.note}...">${partnership.note || ''}</textarea>
-                        <div class="partnership-citations sources-chips">
+                        <div class="partnership-citations sources-chips"${
+                            // Citing a marriage record is research: same rule as on a
+                            // person — hidden unless asked for, but never hidden once
+                            // something is actually cited.
+                            SettingsManager.isAdvancedFields() || partnership.sourceIds?.length
+                                ? '' : ' style="display:none"'}>
                             ${(partnership.sourceIds ?? []).map(sid => {
                                 const src = DataManager.getData().sources?.[sid];
                                 return src ? `<span class="source-chip"><span class="source-chip-label" title="${this.escapeHtml(src.title)}">${this.escapeHtml(src.title)}</span><button type="button" class="source-chip-remove partnership-uncite" data-partnership-id="${partnership.id}" data-source-id="${sid}">&times;</button></span>` : '';

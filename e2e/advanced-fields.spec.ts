@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp, createFirstPerson, cardAction, personModal } from './helpers.js';
+import { openApp, createFirstPerson, cardAction, personModal, addRelation } from './helpers.js';
 
 /**
  * Research fields (sources, attachments, reference number, name spellings) are
@@ -73,4 +73,53 @@ test('adding a person starts from the short form', async ({ page }) => {
     for (const sel of ADVANCED) {
         await expect(modal.locator(sel), sel).toBeHidden();
     }
+});
+
+test('sources are hidden everywhere they appear, not just on a person', async ({ page }) => {
+    // Sources sit in three places: the person, a marriage, and an event. Hiding
+    // one and leaving the others was worse than hiding none — the form claimed
+    // to be simple and the panel next to it did not.
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
+    await addRelation(page, 'Jan', 'partner', 'Marie', 'Novakova', 'female');
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        dm.addLifeEvent(dm.getAllPersons()[0].id, { type: 'baptism', date: '1880' });
+    });
+
+    // Relationships panel: no citing a marriage record.
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        window.Strom.UI.showRelationshipsPanel(dm.getAllPersons()[0].id);
+    });
+    await expect(page.locator('#relationships-modal')).toHaveClass(/active/);
+    await expect(page.locator('.partnership-citations')).toBeHidden();
+    await page.keyboard.press('Escape');
+
+    // Event editor: no citing an event either.
+    await cardAction(page, 'Jan', 'edit');
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        window.Strom.UI.showEditEventModal(dm.getAllPersons()[0].events![0].id);
+    });
+    await expect(page.locator('#event-sources-section')).toBeHidden();
+});
+
+test('a marriage that already cites a source keeps showing it', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
+    await addRelation(page, 'Jan', 'partner', 'Marie', 'Novakova', 'female');
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const src = dm.addSource({ title: 'Parish register' });
+        const union = Object.values(dm.getData().partnerships)[0] as { id: string };
+        dm.citePartnership(union.id, src.id);
+    });
+
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        window.Strom.UI.showRelationshipsPanel(dm.getAllPersons()[0].id);
+    });
+    await expect(page.locator('.partnership-citations')).toBeVisible();
+    await expect(page.locator('.partnership-citations')).toContainText('Parish register');
 });

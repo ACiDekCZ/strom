@@ -74,6 +74,8 @@ test('sources manager lists a source and shows its citation count', async ({ pag
 
 test('sources: cite a source on a partnership (marriage record)', async ({ page }) => {
     await openApp(page);
+    // Citing is an advanced field — off by default (see advanced-fields.spec).
+    await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
     await createFirstPerson(page, 'Jan', 'Novak');
     await page.evaluate(() => {
         const dm = window.Strom.DataManager;
