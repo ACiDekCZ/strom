@@ -3206,6 +3206,14 @@
         /* Descendants view: step-relatives (partner's other families) are
            shown de-emphasized so the blood line stays dominant. */
         .person-card.indirect { opacity: 0.5; }
+        /* An open question about this person — a small corner marker so the
+           question is findable without opening every card. */
+        .person-card.has-question::after {
+            content: '?';
+            position: absolute; top: 2px; right: 4px;
+            font-size: 11px; font-weight: 700; line-height: 1;
+            color: var(--primary, #4a7c59); opacity: 0.75; pointer-events: none;
+        }
         .person-card.indirect:hover { opacity: 1; }
 
         /* Floating focus back/forward buttons (browser-style navigation). */
@@ -6263,6 +6271,14 @@
                         <label data-i18n="labels.deathPlace"></label>
                         <input type="text" id="input-deathplace" autocomplete="off">
                     </div>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="labels.refn"></label>
+                    <input type="text" id="input-refn" autocomplete="off" data-i18n-placeholder="placeholders.refn">
+                </div>
+                <div class="form-group">
+                    <label data-i18n="labels.question"></label>
+                    <input type="text" id="input-question" autocomplete="off" data-i18n-placeholder="placeholders.question">
                 </div>
                 <div class="form-group">
                     <label data-i18n="labels.notes"></label>

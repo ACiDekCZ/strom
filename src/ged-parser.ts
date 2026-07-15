@@ -88,6 +88,8 @@ interface GedcomIndividual {
     deathDate: string;
     deathPlace: string;
     notes: string;
+    /** User reference number (1 REFN) — id in a paper archive / other program. */
+    refn: string;
     /** Life events (BAPM/BURI/OCCU/RESI/EMIG/IMMI/EDUC). */
     events: RawEvent[];
     /** GEDCOM ids (@Sx@) of sources cited on this individual. */
@@ -274,7 +276,7 @@ function generateId(prefix: string): string {
  * Parse GEDCOM file content into structured data
  */
 /** Level-1 INDI tags the parser understands (everything else is counted as dropped). */
-const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT', 'OBJE',
+const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT', 'OBJE', 'REFN',
     ...Object.keys(EVENT_TAG_TO_TYPE)]);
 /** Level-1 FAM tags the parser understands. */
 const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', 'SOUR']);
@@ -358,6 +360,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     deathDate: '',
                     deathPlace: '',
                     notes: '',
+                    refn: '',
                     events: [],
                     sourceRefs: [],
                     media: [],
@@ -470,6 +473,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                             break;
                         case 'NOTE':
                             indi.notes = value;
+                            break;
+                        case 'REFN':
+                            indi.refn = value;
                             break;
                         case 'SOUR':
                             // Level-1 SOUR on INDI is a citation reference (@Sx@).
@@ -742,6 +748,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (indi.deceased && !indi.deathDate) person.isDeceased = true;
         if (indi.deathPlace) person.deathPlace = indi.deathPlace;
         if (indi.notes) person.notes = indi.notes;
+        if (indi.refn) person.refn = indi.refn;
         if (indi.events.length > 0) {
             person.events = indi.events.map((ev): LifeEvent => {
                 const out: LifeEvent = { id: generateLifeEventId(), type: ev.type };

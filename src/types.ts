@@ -133,6 +133,16 @@ export interface Person {
     deathDate?: string;
     deathPlace?: string;
     notes?: string;
+    /**
+     * User reference number (GEDCOM REFN): the person's id in a paper archive
+     * or another genealogy program. Free-form, never interpreted by the app.
+     */
+    refn?: string;
+    /**
+     * An open question about this person ("does anyone know when she was
+     * born?"). Travels with shared/exported files so a relative can answer it.
+     */
+    question?: string;
     isLocked?: boolean;
     /**
      * Explicit override of the "is this person alive?" heuristic used by the

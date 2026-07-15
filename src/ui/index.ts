@@ -120,6 +120,8 @@ export class UIClass {
         firstName: string; lastName: string; gender: string;
         birthDate: string; birthPlace: string; deathDate: string; deathPlace: string;
         notes: string;
+        refn: string;
+        question: string;
     } | null = null;
 
     // Debounce timer for the live search filter/highlight.

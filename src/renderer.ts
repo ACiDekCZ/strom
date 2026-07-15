@@ -854,6 +854,10 @@ class TreeRendererClass {
             if (indirectIds?.has(id)) {
                 classes += ' indirect';
             }
+            // An open question about this person (collaboration hint).
+            if (person.question?.trim() && !person.isPlaceholder) {
+                classes += ' has-question';
+            }
             card.className = classes;
             card.style.left = pos.x + 'px';
             card.style.top = pos.y + 'px';
@@ -1086,6 +1090,9 @@ class TreeRendererClass {
             const age = this.calculateAge(person);
             if (age !== null) {
                 tooltipLines.push(`${strings.tooltip.age}: ${age}`);
+            }
+            if (person.question?.trim()) {
+                tooltipLines.push(`❓ ${this.escapeHtml(person.question.trim())}`);
             }
             for (const p of partnerships) {
                 const partnerId = p.person1Id === id ? p.person2Id : p.person1Id;

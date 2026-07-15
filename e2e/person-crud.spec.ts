@@ -136,3 +136,32 @@ test('birth-date estimate hint fills an approximate year from other dates (K11)'
     await cardAction(page, 'Otec', 'edit');
     await expect(modal.locator('#birthdate-estimate')).toBeHidden();
 });
+
+test('reference number and open question persist and mark the card (K12/F3)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Marie', 'Novakova', { gender: 'female' });
+    await cardAction(page, 'Marie', 'edit');
+    const modal = personModal(page);
+    await modal.locator('#expand-details').click();
+    await modal.locator('#input-refn').fill('box 12/1880');
+    await modal.locator('#input-question').fill('Does anyone know her birth date?');
+    await modal.getByRole('button', { name: 'Save' }).click();
+    await expect(modal).toBeHidden();
+
+    const stored = await page.evaluate(() => {
+        const p = window.Strom.DataManager.getAllPersons()[0];
+        return { refn: p.refn, question: p.question };
+    });
+    expect(stored.refn).toBe('box 12/1880');
+    expect(stored.question).toBe('Does anyone know her birth date?');
+
+    // The card gets a subtle open-question marker.
+    await expect(card(page, 'Marie')).toHaveClass(/has-question/);
+
+    // Values survive a reopen; clearing the question drops the marker.
+    await cardAction(page, 'Marie', 'edit');
+    await expect(modal.locator('#input-refn')).toHaveValue('box 12/1880');
+    await modal.locator('#input-question').fill('');
+    await modal.getByRole('button', { name: 'Save' }).click();
+    await expect(card(page, 'Marie')).not.toHaveClass(/has-question/);
+});

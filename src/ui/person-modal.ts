@@ -90,6 +90,10 @@ export const personModalMethods = uiModule({
         if (deathDateInput) deathDateInput.value = '';
         if (deathPlaceInput) deathPlaceInput.value = '';
         if (notesInput) notesInput.value = '';
+        const refnClear = document.getElementById('input-refn') as HTMLInputElement | null;
+        if (refnClear) refnClear.value = '';
+        const questionClear = document.getElementById('input-question') as HTMLInputElement | null;
+        if (questionClear) questionClear.value = '';
         const addDeceased = document.getElementById('input-is-deceased') as HTMLInputElement;
         if (addDeceased) addDeceased.checked = false;
         this.setPhotoPreview(undefined);
@@ -97,7 +101,7 @@ export const personModalMethods = uiModule({
         // Snapshot original values (all empty for add)
         this.personModalSnapshot = {
             firstName: '', lastName: '', gender: 'male',
-            birthDate: '', birthPlace: '', deathDate: '', deathPlace: '', notes: '',
+            birthDate: '', birthPlace: '', deathDate: '', deathPlace: '', notes: '', refn: '', question: '',
         };
 
         // Setup gender change listener for dynamic labels
@@ -256,6 +260,10 @@ export const personModalMethods = uiModule({
         if (deathDateInput) deathDateInput.value = formatDateForInput(person.deathDate);
         if (deathPlaceInput) deathPlaceInput.value = person.deathPlace || '';
         if (notesInput) notesInput.value = person.notes || '';
+        const refnInput = document.getElementById('input-refn') as HTMLInputElement | null;
+        if (refnInput) refnInput.value = person.refn || '';
+        const questionInput = document.getElementById('input-question') as HTMLInputElement | null;
+        if (questionInput) questionInput.value = person.question || '';
 
         // "Deceased" checkbox reflects the current (heuristic or explicit) status.
         const deceasedInput = document.getElementById('input-is-deceased') as HTMLInputElement;
@@ -277,6 +285,8 @@ export const personModalMethods = uiModule({
             deathDate: deathDateInput?.value || '',
             deathPlace: deathPlaceInput?.value || '',
             notes: notesInput?.value || '',
+            refn: (document.getElementById('input-refn') as HTMLInputElement | null)?.value || '',
+            question: (document.getElementById('input-question') as HTMLInputElement | null)?.value || '',
         };
 
         // Setup gender change listener for dynamic labels
@@ -437,6 +447,8 @@ export const personModalMethods = uiModule({
         const deathDate = normalizeDateInput(deathDateInput?.value || '');
         const deathPlace = deathPlaceInput?.value.trim() || '';
         const notes = notesInput?.value.trim() || '';
+        const refn = (document.getElementById('input-refn') as HTMLInputElement | null)?.value.trim() || '';
+        const question = (document.getElementById('input-question') as HTMLInputElement | null)?.value.trim() || '';
         // Explicit alive/deceased override; a death date already implies deceased.
         const deceasedChecked = (document.getElementById('input-is-deceased') as HTMLInputElement)?.checked || false;
         const isDeceased = deathDate ? undefined : deceasedChecked;
@@ -471,6 +483,8 @@ export const personModalMethods = uiModule({
                 deathDate,
                 deathPlace,
                 notes,
+                refn,
+                question,
                 isDeceased,
                 photo
             });
@@ -478,13 +492,15 @@ export const personModalMethods = uiModule({
             // Create new
             const newPerson = DataManager.createPerson({ firstName, lastName, gender });
             // Update with extended info if provided
-            if (birthDate || birthPlace || deathDate || deathPlace || notes || photo) {
+            if (birthDate || birthPlace || deathDate || deathPlace || notes || refn || question || photo) {
                 DataManager.updatePerson(newPerson.id, {
                     birthDate,
                     birthPlace,
                     deathDate,
                     deathPlace,
                     notes,
+                    refn,
+                    question,
                     photo
                 });
             }
@@ -577,11 +593,13 @@ export const personModalMethods = uiModule({
         const deathDate = (document.getElementById('input-deathdate') as HTMLInputElement)?.value || '';
         const deathPlace = (document.getElementById('input-deathplace') as HTMLInputElement)?.value || '';
         const notes = (document.getElementById('input-notes') as HTMLTextAreaElement)?.value || '';
+        const refn = (document.getElementById('input-refn') as HTMLInputElement)?.value || '';
+        const question = (document.getElementById('input-question') as HTMLInputElement)?.value || '';
 
         return firstName !== s.firstName || lastName !== s.lastName || gender !== s.gender
             || birthDate !== s.birthDate || birthPlace !== s.birthPlace
             || deathDate !== s.deathDate || deathPlace !== s.deathPlace
-            || notes !== s.notes;
+            || notes !== s.notes || refn !== s.refn || question !== s.question;
     },
 
     /**

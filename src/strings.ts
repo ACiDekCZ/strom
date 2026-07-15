@@ -367,6 +367,8 @@ const stringsEN = {
         photoRotateLeft: 'Rotate left',
         photoRotateRight: 'Rotate right',
         maidenName: 'Maiden Name',
+        refn: 'Reference number',
+        question: 'Open question',
         // Partnership dates - used based on status
         startDateMarried: 'Wedding Date',
         startDatePartners: 'Relationship Start',
@@ -393,6 +395,8 @@ const stringsEN = {
         firstName: 'First name',
         lastName: 'Last name',
         maidenName: 'Maiden name',
+        refn: 'e.g. archive box 12, or an id from another program',
+        question: 'e.g. does anyone know her birth date?',
         flexDate: '5/15/1880 · 5/1880 · 1880 · about 1880'
     },
 
@@ -1706,6 +1710,8 @@ const stringsCZ: StringsType = {
         photoRotateLeft: 'Otočit vlevo',
         photoRotateRight: 'Otočit vpravo',
         maidenName: 'Rodné příjmení',
+        refn: 'Referenční číslo',
+        question: 'Otevřená otázka',
         // Partnership dates - used based on status
         startDateMarried: 'Datum sňatku',
         startDatePartners: 'Začátek vztahu',
@@ -1732,6 +1738,8 @@ const stringsCZ: StringsType = {
         firstName: 'Jméno',
         lastName: 'Příjmení',
         maidenName: 'Rodné příjmení',
+        refn: 'např. archivní karton 12 nebo id z jiného programu',
+        question: 'např. neví někdo, kdy se narodila?',
         flexDate: '15.5.1880 · 5/1880 · 1880 · kolem 1880'
     },
 

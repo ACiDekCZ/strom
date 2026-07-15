@@ -543,3 +543,28 @@ describe('MyHeritage export quirks (M1, real-export shapes)', () => {
         expect(r.externalMedia[0].isUrl).toBe(true);
     });
 });
+
+describe('REFN reference numbers (K12)', () => {
+    it('imports 1 REFN and round-trips it', () => {
+        const ged = [
+            '0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+            '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M', '1 REFN box-12/1880',
+            '0 TRLR',
+        ].join('\n');
+        const data = importGed(ged);
+        const jan = Object.values(data.persons)[0];
+        expect(jan.refn).toBe('box-12/1880');
+
+        const out = exportGed(data);
+        expect(out).toContain('1 REFN box-12/1880');
+        expect(Object.values(importGed(out).persons)[0].refn).toBe('box-12/1880');
+    });
+
+    it('REFN is not counted as an unsupported tag', () => {
+        const ged = [
+            '0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+            '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 REFN X1', '0 TRLR',
+        ].join('\n');
+        expect(convertToStrom(parseGedcom(ged)).stats.droppedTagSummary).not.toMatch(/REFN/);
+    });
+});

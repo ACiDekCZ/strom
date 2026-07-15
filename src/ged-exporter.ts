@@ -266,6 +266,11 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
             }
         }
 
+        // User reference number (id in a paper archive / another program)
+        if (person.refn) {
+            lines.push(`1 REFN ${escapeGedcomText(person.refn)}`);
+        }
+
         // Note
         if (person.notes) {
             pushNote(lines, 1, person.notes);
