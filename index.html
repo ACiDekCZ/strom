@@ -1978,18 +1978,22 @@
             margin-bottom: 6px;
             font-weight: 500;
         }
-        .modal input, .modal select {
+        .modal input, .modal select, .modal textarea {
             width: 100%;
+            box-sizing: border-box;
             padding: 10px 12px;
             border: 1px solid #ddd;
             border-radius: 8px;
             font-size: 14px;
             transition: border-color 0.2s;
         }
-        .modal input:focus, .modal select:focus {
+        .modal input:focus, .modal select:focus, .modal textarea:focus {
             outline: none;
             border-color: var(--primary);
         }
+        /* A textarea is for a paragraph — let it grow downwards, never sideways
+           (a horizontal resize inside a fixed dialog just breaks the layout). */
+        .modal textarea { resize: vertical; }
         /* Make empty date input placeholder very light */
                 /* Archive search */
         .tree-stats-unrelated {
@@ -2837,6 +2841,11 @@
         }
 
         /* Family wizard offer (non-blocking action toast) */
+        /* An offer about the tree, not about whatever dialog is open. It floats
+           above everything (z-index 250), so with a dialog open it sat right on
+           top of that dialog's Save/Cancel row on a phone. While a dialog is
+           open the offer has nothing to say — get out of the way. */
+        body:has(.modal-overlay.active) .family-offer { display: none; }
         .family-offer {
             position: fixed;
             bottom: 24px;
