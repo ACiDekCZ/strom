@@ -30,8 +30,8 @@ const stringsEN = {
         exportJsonDesc: 'Download data as JSON file',
         exportFocus: 'Export Focus',
         makeTreeFromView: 'Make a tree from this view',
-        makeTreeFromViewDesc: 'Save the people currently shown as a new separate tree',
-        exportFocusDesc: 'Download focused subset',
+        makeTreeFromViewDesc: 'Create a new tree in the app from the shown people',
+        exportFocusDesc: 'Download the shown people as a JSON file',
         exportApp: 'Export App',
         exportAppDesc: 'Download standalone HTML',
         importJson: 'Import JSON',
@@ -45,10 +45,6 @@ const stringsEN = {
     },
 
     // Export Focus dialog
-    exportFocus: {
-        jsonDesc: 'Focused family as JSON file',
-        appDesc: 'Standalone HTML with focused family'
-    },
 
     // Mobile menu
     mobileMenu: {
@@ -1357,8 +1353,8 @@ const stringsCZ: StringsType = {
         exportJsonDesc: 'Stáhnout data jako JSON soubor',
         exportFocus: 'Export výběru',
         makeTreeFromView: 'Vytvořit strom z tohoto výřezu',
-        makeTreeFromViewDesc: 'Uložit právě zobrazené osoby jako nový samostatný strom',
-        exportFocusDesc: 'Stáhnout zobrazený výběr',
+        makeTreeFromViewDesc: 'Vytvořit z nich nový strom přímo v aplikaci',
+        exportFocusDesc: 'Stáhnout zobrazené osoby jako JSON soubor',
         exportApp: 'Export aplikace',
         exportAppDesc: 'Stáhnout jako samostatný HTML soubor',
         importJson: 'Import JSON',
@@ -1372,10 +1368,6 @@ const stringsCZ: StringsType = {
     },
 
     // Export Focus dialog
-    exportFocus: {
-        jsonDesc: 'Zobrazená rodina jako JSON',
-        appDesc: 'Samostatný HTML se zobraznou rodinou'
-    },
 
     // Mobile menu
     mobileMenu: {

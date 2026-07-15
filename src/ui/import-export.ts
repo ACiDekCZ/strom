@@ -258,18 +258,6 @@ export const importExportMethods = uiModule({
         this.showImportTreeDialog(subtree, suggested);
     },
 
-    /**
-     * Export focused data as JSON (from focus export dialog)
-     */
-    async exportFocusedJSONFromDialog(): Promise<void> {
-        this.closeExportFocusDialog();
-
-        this.showExportPasswordDialog(async (password: string | null) => {
-            const visibleIds = TreeRenderer.getVisiblePersonIds();
-            await DataManager.exportFocusedJSON(visibleIds, password, this.readExportPrivacyMode(), this.readExportStripPhotos());
-        });
-    },
-
     showImportDialog(): void {
         document.getElementById('import-modal')?.classList.add('active');
     },
@@ -1072,55 +1060,6 @@ export const importExportMethods = uiModule({
     closeExportAllDialog(): void {
         document.getElementById('export-all-modal')?.classList.remove('active');
         this.returnToParentDialog();
-    },
-
-    // ---- EXPORT FOCUS DIALOG ----
-    /**
-     * Show export focus dialog
-     */
-    showExportFocusDialog(parentDialogId?: string): void {
-        // Handle dialog stack for ESC navigation
-        this.clearDialogStack();
-        if (parentDialogId) {
-            this.pushDialog(parentDialogId);
-            this.closeDialogById(parentDialogId);
-        }
-        this.pushDialog('export-focus-modal');
-
-        document.getElementById('export-focus-modal')?.classList.add('active');
-    },
-
-    /**
-     * Show export focus dialog from Tree Manager (uses dialog stack for ESC to return)
-     */
-    showExportFocusDialogFromManager(): void {
-        this.showExportFocusDialog('tree-manager-modal');
-    },
-
-    /**
-     * Close export focus dialog
-     */
-    closeExportFocusDialog(): void {
-        document.getElementById('export-focus-modal')?.classList.remove('active');
-        this.returnToParentDialog();
-    },
-
-    /**
-     * Export focused data as standalone App
-     */
-    async exportFocusAsApp(): Promise<void> {
-        const focusedData = TreeRenderer.getFocusedData();
-        if (!focusedData || Object.keys(focusedData.persons).length === 0) {
-            this.clearDialogStack();
-            this.pushDialog('export-focus-modal');
-            this.showAlert(strings.treeManager.noFocusedData, 'warning');
-            return;
-        }
-
-        this.closeExportFocusDialog();
-        this.showExportPasswordDialog(async (password: string | null) => {
-            await AppExporter.exportFocusAsApp(focusedData, 'strom-focus.html', password, this.readExportPrivacyMode(), this.readExportStripPhotos());
-        }, false, { defaultPrivacy: 'initials' });
     },
 
     /**

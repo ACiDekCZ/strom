@@ -480,7 +480,6 @@ export const miscMethods = uiModule({
                 this.closePendingMergeDialog();
                 this.closeNewTreeMenu();
                 this.closeExportAllDialog();
-                this.closeExportFocusDialog();
                 this.closeDefaultPersonDialog();
                 this.closeTreeManagerDialog();
                 this.closePersonMergeDialog();
