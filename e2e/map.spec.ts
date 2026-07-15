@@ -387,6 +387,49 @@ test('a pin in the wrong place can be fixed from the map', async ({ page }) => {
     await expect(page.locator('.map-marker')).toHaveCount(1);
 });
 
+test('places can be fixed without going to the map', async ({ page }) => {
+    await stubTiles(page);
+    await stubGeocoder(page, { 'Kolín': [50.0281, 15.2003] });
+
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1900' });
+    await addRelation(page, 'Jan', 'parent', 'Otec', 'Novak');
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const set = (n: string, place: string) => {
+            const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === n);
+            if (p) dm.updatePerson(p.id, { birthPlace: place });
+        };
+        set('Jan', 'Kolin');
+        set('Otec', 'Beroun');
+        // Only Jan on screen: the dialog must still cover the whole tree, since
+        // "this view" means nothing when you are not looking at the map.
+        window.Strom.TreeRenderer.setFocusDepth(0, 0);
+    });
+
+    // Renaming a place is a data job, so it is reachable from the tree manager.
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    await page.locator('.tree-row-menu-btn').first().click();
+    await page.locator('.tree-row-menu-item', { hasText: 'Places' }).click();
+
+    await expect(page.locator('#places-modal')).toBeVisible();
+    await expect(page.locator('.place-row')).toHaveCount(2);   // whole tree, not the view
+
+    // Fix the spelling; every use in the tree follows.
+    const row = page.locator('.place-row[data-key="kolin"]');
+    await row.locator('.place-name').fill('Kolín');
+    await row.getByRole('button', { name: 'Rename' }).click();
+    expect(await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        return dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Jan')?.birthPlace;
+    })).toBe('Kolín');
+
+    // Escape goes back where it came from.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#places-modal')).toHaveCount(0);
+    await expect(page.locator('#tree-manager-modal')).toHaveClass(/active/);
+});
+
 test('a pin can be removed, and the place stays', async ({ page }) => {
     await stubTiles(page);
     await stubGeocoder(page, { Greenwich: [51.48, 0.0], Pembroke: [51.67, -4.91] });

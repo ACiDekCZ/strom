@@ -71,6 +71,82 @@ export function auditPersonName(person: Person | null | undefined): string {
     return year ? `${name} (*${year})` : name;
 }
 
+
+/** A brand-new, empty tree. */
+export function createEmptyData(): StromData {
+    return {
+        persons: {} as Record<PersonId, Person>,
+        partnerships: {} as Record<PartnershipId, Partnership>
+    };
+}
+
+/**
+ * Bring loaded data to the current shape. EVERY load goes through here — tree
+ * switch, app restart, import, snapshot restore, opening a shared file.
+ *
+ * The result is built field by field, so ANY StromData field not named below is
+ * silently dropped on load. That has bitten twice (Person.refn/question via a
+ * different whitelist, and StromData.places, which lost every coordinate a user
+ * had looked up). Adding a field to StromData means adding it here — the
+ * round-trip test in src/__tests__/whitelist-guard.test.ts will not compile
+ * until you do.
+ *
+ * Exported (not a private method) so that test can call it directly.
+ */
+export function migrateData(data: unknown): StromData {
+    // Type guard and migration for older data formats
+    if (!data || typeof data !== 'object') {
+        return createEmptyData();
+    }
+
+    const d = data as Record<string, unknown>;
+    const partnerships = (d.partnerships || {}) as Record<PartnershipId, Partnership>;
+
+    // Migrate partnerships without status field
+    for (const partnership of Object.values(partnerships)) {
+        if (!partnership.status) {
+            partnership.status = 'married';
+        }
+    }
+
+    // v1 -> v2: Person.events was added. v2 -> v3: the per-tree source
+    // catalog (sources) plus citation ids were added. All optional, so older
+    // data needs no transformation; the version is re-stamped on next save.
+
+    const result: StromData = {
+        persons: (d.persons || {}) as Record<PersonId, Person>,
+        partnerships
+    };
+
+    // Preserve the source catalog if present.
+    if (d.sources && typeof d.sources === 'object') {
+        result.sources = d.sources as StromData['sources'];
+    }
+
+    // Preserve place coordinates. This object is rebuilt field by field, so
+    // anything not named here is dropped on EVERY load — tree switch, app
+    // restart, opening a shared file. Add new StromData fields here too.
+    if (d.places && typeof d.places === 'object') {
+        result.places = d.places as StromData['places'];
+    }
+
+    // Preserve default person settings if present
+    if (d.defaultPersonId !== undefined) {
+        result.defaultPersonId = d.defaultPersonId as PersonId | LastFocusedMarker;
+    }
+    if (d.lastFocusPersonId) {
+        result.lastFocusPersonId = d.lastFocusPersonId as PersonId;
+    }
+    if (d.lastFocusDepthUp !== undefined) {
+        result.lastFocusDepthUp = d.lastFocusDepthUp as number;
+    }
+    if (d.lastFocusDepthDown !== undefined) {
+        result.lastFocusDepthDown = d.lastFocusDepthDown as number;
+    }
+
+    return result;
+}
+
 class DataManagerClass {
     private data: StromData = {
         persons: {} as Record<PersonId, Person>,
@@ -176,13 +252,13 @@ class DataManagerClass {
             // Tree from this export already exists - UI will show choice dialog
             // For now, enter view mode - UI will handle showing the dialog
             this.viewMode = true;
-            this.data = this.migrateData(data);
+            this.data = migrateData(data);
             // Set current tree to null in view mode (not editing any localStorage tree)
             this.currentTreeId = null;
         } else {
             // New export - enter view mode
             this.viewMode = true;
-            this.data = this.migrateData(data);
+            this.data = migrateData(data);
             this.currentTreeId = null;
         }
     }
@@ -298,7 +374,7 @@ class DataManagerClass {
         if (!tree) return false;
 
         this.activeEmbeddedTreeId = treeId;
-        this.data = this.migrateData(tree.data);
+        this.data = migrateData(tree.data);
 
         if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
         return true;
@@ -359,7 +435,7 @@ class DataManagerClass {
         if (this.embeddedAllTrees) {
             for (const [, tree] of Object.entries(this.embeddedAllTrees)) {
                 const name = this.getUniqueTreeName(tree.name, existingNames);
-                const newTreeId = TreeManager.createTreeFromImport(this.migrateData(tree.data), name);
+                const newTreeId = TreeManager.createTreeFromImport(migrateData(tree.data), name);
                 // Apply isHidden flag if it was set in the export
                 if (tree.isHidden) {
                     TreeManager.setTreeVisibility(newTreeId, true);
@@ -515,7 +591,7 @@ class DataManagerClass {
         // Load data in view mode - import will be blocked
         this.viewMode = true;
         this.importBlockedDueToVersion = true;
-        this.data = this.migrateData(this.pendingNewerVersionData);
+        this.data = migrateData(this.pendingNewerVersionData);
         this.currentTreeId = null;
 
         // Clear pending state
@@ -598,7 +674,7 @@ class DataManagerClass {
 
             const treeData = await TreeManager.getTreeData(startupTreeId);
             if (treeData) {
-                this.data = this.migrateData(treeData);
+                this.data = migrateData(treeData);
                 return;
             }
         }
@@ -630,7 +706,7 @@ class DataManagerClass {
         this.currentTreeId = treeId;
         const treeData = await TreeManager.getTreeData(treeId);
         if (treeData) {
-            this.data = this.migrateData(treeData);
+            this.data = migrateData(treeData);
         } else {
             this.data = this.createEmptyData();
         }
@@ -654,7 +730,7 @@ class DataManagerClass {
 
         const treeData = await TreeManager.getTreeData(this.currentTreeId);
         if (treeData) {
-            this.data = this.migrateData(treeData);
+            this.data = migrateData(treeData);
         } else {
             this.data = this.createEmptyData();
         }
@@ -669,65 +745,8 @@ class DataManagerClass {
         return this.currentTreeId;
     }
 
-    private migrateData(data: unknown): StromData {
-        // Type guard and migration for older data formats
-        if (!data || typeof data !== 'object') {
-            return this.createEmptyData();
-        }
-
-        const d = data as Record<string, unknown>;
-        const partnerships = (d.partnerships || {}) as Record<PartnershipId, Partnership>;
-
-        // Migrate partnerships without status field
-        for (const partnership of Object.values(partnerships)) {
-            if (!partnership.status) {
-                partnership.status = 'married';
-            }
-        }
-
-        // v1 -> v2: Person.events was added. v2 -> v3: the per-tree source
-        // catalog (sources) plus citation ids were added. All optional, so older
-        // data needs no transformation; the version is re-stamped on next save.
-
-        const result: StromData = {
-            persons: (d.persons || {}) as Record<PersonId, Person>,
-            partnerships
-        };
-
-        // Preserve the source catalog if present.
-        if (d.sources && typeof d.sources === 'object') {
-            result.sources = d.sources as StromData['sources'];
-        }
-
-        // Preserve place coordinates. This object is rebuilt field by field, so
-        // anything not named here is dropped on EVERY load — tree switch, app
-        // restart, opening a shared file. Add new StromData fields here too.
-        if (d.places && typeof d.places === 'object') {
-            result.places = d.places as StromData['places'];
-        }
-
-        // Preserve default person settings if present
-        if (d.defaultPersonId !== undefined) {
-            result.defaultPersonId = d.defaultPersonId as PersonId | LastFocusedMarker;
-        }
-        if (d.lastFocusPersonId) {
-            result.lastFocusPersonId = d.lastFocusPersonId as PersonId;
-        }
-        if (d.lastFocusDepthUp !== undefined) {
-            result.lastFocusDepthUp = d.lastFocusDepthUp as number;
-        }
-        if (d.lastFocusDepthDown !== undefined) {
-            result.lastFocusDepthDown = d.lastFocusDepthDown as number;
-        }
-
-        return result;
-    }
-
     private createEmptyData(): StromData {
-        return {
-            persons: {} as Record<PersonId, Person>,
-            partnerships: {} as Record<PartnershipId, Partnership>
-        };
+        return createEmptyData();
     }
 
     private save(): void {
@@ -824,7 +843,7 @@ class DataManagerClass {
         if (this.viewMode || !this.currentTreeId) return false;
         const json = await getSnapshotJson(snapshotId);
         if (!json) return false;
-        const migrated = this.migrateData(JSON.parse(json));
+        const migrated = migrateData(JSON.parse(json));
 
         this.beginMutation();
         this.data = migrated;
@@ -2128,7 +2147,7 @@ class DataManagerClass {
         // Undo choke point (see clearData) — an accidental import-over is
         // now one Ctrl+Z away instead of silently corrupting the stack.
         this.beginMutation();
-        this.data = this.migrateData(newData);
+        this.data = migrateData(newData);
         this.commitMutation(strings.undo.loadedData);
         // Audit log
         const personCount = Object.keys(this.data.persons).length;
@@ -2149,7 +2168,7 @@ class DataManagerClass {
      * @returns The new tree's ID
      */
     async importAsNewTree(data: StromData, treeName: string): Promise<TreeId> {
-        const migratedData = this.migrateData(data);
+        const migratedData = migrateData(data);
         const treeId = TreeManager.createTreeFromImport(migratedData, treeName);
         this.currentTreeId = treeId;
         this.data = migratedData;
@@ -2557,7 +2576,7 @@ class DataManagerClass {
                             }
 
                             this.beginMutation();
-                            this.data = this.migrateData(data);
+                            this.data = migrateData(data);
                             this.commitMutation(strings.undo.loadedData);
                             if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
                         } catch {
@@ -2573,7 +2592,7 @@ class DataManagerClass {
                 }
 
                 this.beginMutation();
-                this.data = this.migrateData(imported);
+                this.data = migrateData(imported);
                 this.commitMutation(strings.undo.loadedData);
                 // Dispatch event for UI to re-render
                 if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));

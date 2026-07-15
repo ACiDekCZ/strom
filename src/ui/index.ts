@@ -151,6 +151,9 @@ export class UIClass {
     /** Progress of a running lookup, null when idle. */
     mapGeocoding: { done: number; total: number; place: string } | null = null;
     mapGeocodeAbort: AbortController | null = null;
+    /** Places dialog: which places it lists, and what to return to on close. */
+    placesManagerScope: MapScope = 'tree';
+    placesManagerParent: string | null = null;
     /** When the source editor was opened from the picker, cite the new source. */
     citeSourceAfterCreate = false;
 

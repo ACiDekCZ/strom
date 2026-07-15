@@ -459,6 +459,7 @@ const stringsEN = {
         scopeView: 'This view',
         scopeTree: 'Whole tree',
         noPlaces: 'None of the people shown have a place filled in yet.',
+        noPlacesAtAll: 'This tree has no places filled in yet.',
         offline: 'No internet, so the map picture cannot load. The coordinates you already have stay in your tree.',
         missing: (shown: number, missing: number) =>
             shown > 0
@@ -1869,6 +1870,7 @@ const stringsCZ: StringsType = {
         scopeView: 'Tento pohled',
         scopeTree: 'Celý strom',
         noPlaces: 'Žádná ze zobrazených osob zatím nemá vyplněné místo.',
+        noPlacesAtAll: 'Tento strom zatím nemá vyplněná žádná místa.',
         offline: 'Bez internetu se mapový podklad nenačte. Už dohledané souřadnice zůstávají ve vašem stromu.',
         missing: (shown: number, missing: number) =>
             shown > 0

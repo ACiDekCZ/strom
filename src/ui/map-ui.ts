@@ -391,10 +391,10 @@ export const mapMethods = uiModule({
      * throwaway — type the nearest town, take the coordinates. The name is the
      * record, and renaming it rewrites every use in the tree.
      */
-    placesForManager(): { key: string; usage: PlaceUsage; geo?: PlaceGeo }[] {
+    placesForManager(scope: MapScope): { key: string; usage: PlaceUsage; geo?: PlaceGeo }[] {
         const data = DataManager.getData();
         const filter: ReadonlySet<PersonId> | undefined =
-            this.mapScope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
+            scope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
         return [...collectPlaces(data, filter)]
             .map(([key, usage]) => ({ key, usage, geo: data.places?.[key] }))
             // Unplaced first — those are the ones asking for attention.
@@ -403,10 +403,21 @@ export const mapMethods = uiModule({
                 || a.usage.display.localeCompare(b.usage.display));
     },
 
-    /** @param focusKey scroll to this place and open its search straight away */
-    showPlacesManager(focusKey?: string): void {
-        const places = this.placesForManager();
-        if (places.length === 0) return;
+    /**
+     * @param focusKey scroll to this place and open its search straight away
+     * @param parentDialogId dialog to return to on Escape/Close (tree manager)
+     *
+     * Opened from the map it follows the map's scope; opened from anywhere else
+     * "this view" would mean nothing, so it covers the whole tree.
+     */
+    showPlacesManager(focusKey?: string, parentDialogId?: string): void {
+        this.placesManagerScope = parentDialogId ? 'tree' : this.mapScope;
+        this.placesManagerParent = parentDialogId ?? null;
+        const places = this.placesForManager(this.placesManagerScope);
+        if (places.length === 0) {
+            this.showToast(strings.map.noPlacesAtAll);
+            return;
+        }
         this.closeMapPopup();
 
         document.getElementById('places-modal')?.remove();
@@ -512,7 +523,9 @@ export const mapMethods = uiModule({
     refreshPlacesManager(focusKey?: string): void {
         this.mapCenter = null;  // what is on the map changed — reframe it
         TreeRenderer.render();
-        if (document.getElementById('places-modal')) this.showPlacesManager(focusKey);
+        if (document.getElementById('places-modal')) {
+            this.showPlacesManager(focusKey, this.placesManagerParent ?? undefined);
+        }
     },
 
     renamePlaceFromManager(key: string, newName: string): void {

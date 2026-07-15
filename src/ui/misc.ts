@@ -436,6 +436,10 @@ export const miscMethods = uiModule({
                         this.closeRelationshipCalculator();
                         return;
                     }
+                    if (currentDialog === 'places-modal') {
+                        this.closePlacesManager();
+                        return;
+                    }
 
                     // Special handling for person-merge-modal: closePersonMergeDialog handles stack and parent
                     if (currentDialog === 'person-merge-modal') {
