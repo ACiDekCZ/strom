@@ -69,3 +69,27 @@ test('compact hides years and the deceased dagger; detailed adds place and age',
     await expect(card(page, 'Henry VIII').locator('.card-place')).toHaveText('Greenwich Palace');
     await expect(card(page, 'Henry VIII').locator('.card-age')).toContainText(/\d/);
 });
+
+test('detailed cards never show a nonsense age for historical people', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
+
+    // Someone long dead WITHOUT a death date has no knowable age — counting to
+    // today produced ages like 230.
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Henry VIII');
+        if (p) dm.updatePerson(p.id, { deathDate: '' });
+        window.Strom.TreeRenderer.render();
+    });
+    await expect(card(page, 'Henry VIII').locator('.card-age')).toHaveCount(0);
+
+    // Nobody in the sample tree shows an implausible age.
+    const overMax = await page.evaluate(() =>
+        [...document.querySelectorAll('.card-age')]
+            .map(e => parseInt(e.textContent!.replace(/\D+/g, ''), 10))
+            .filter(n => n > 120).length);
+    expect(overMax).toBe(0);
+});

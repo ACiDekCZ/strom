@@ -36,7 +36,7 @@ import { debugPanel } from './debug-panel.js';
 import { yearOf, displayYear, formatFlexDate } from './dates.js';
 import { computeTimelineModel, yearToFraction, axisTicks, TimelineRow, TimelineEvent } from './timeline.js';
 import { classifyBranches, Branch } from './branch-colors.js';
-import { presumedDeceasedSet } from './privacy.js';
+import { presumedDeceasedSet, isLivingPerson } from './privacy.js';
 import { SettingsManager } from './settings.js';
 import { extractSubtree } from './subtree.js';
 import { buildFanModel, buildFanSvg } from './fan-chart.js';
@@ -1507,8 +1507,14 @@ class TreeRendererClass {
         return `${month}/${day}/${year}`;
     }
 
+    /**
+     * Age at death, or today's age for someone plausibly still alive.
+     * Without a death date we must NOT count to today for a historical person —
+     * that produced ages like 230. When we can't know, we say nothing.
+     */
     private calculateAge(person: Person): number | null {
         if (!person.birthDate) return null;
+        if (!person.deathDate && !isLivingPerson(person, new Date().getFullYear())) return null;
         const birthParts = person.birthDate.split('-');
         if (birthParts.length < 1) return null;
         const birthYear = parseInt(birthParts[0], 10);
