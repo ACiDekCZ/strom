@@ -75,6 +75,8 @@ const stringsEN = {
     book: {
         menu: 'Family book',
         menuDesc: 'Printable book: chapters by family, photos, sources and a person index',
+        toolbarPrint: 'Print',
+        toolbarClose: 'Close',
         title: 'Family Book',
         dialogTitle: 'Family book',
         subtitle: 'The book of the family',
@@ -1379,6 +1381,8 @@ const stringsCZ: StringsType = {
     // Family book
     book: {
         menu: 'Kniha rodu',
+        toolbarPrint: 'Tisk',
+        toolbarClose: 'Zavřít',
         menuDesc: 'Tisknutelná kniha: kapitoly po rodinách, fotky, prameny a rejstřík osob',
         title: 'Kniha rodu',
         dialogTitle: 'Kniha rodu',

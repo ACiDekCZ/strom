@@ -301,8 +301,23 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     .book-index-row { display: flex; align-items: baseline; gap: 8px; font-size: 13px; line-height: 1.9; }
     .book-index-row .book-dots { flex: 1; border-bottom: 1px dotted var(--book-rule); }
 
+    /* Floating toolbar: the book opens in its own window/view — standalone
+       PWAs have no browser chrome, so it must carry its own Close + Print. */
+    .book-toolbar {
+        position: fixed; top: 10px; right: 10px; z-index: 10;
+        display: flex; gap: 8px;
+    }
+    .book-toolbar button {
+        font: 600 13px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        padding: 9px 14px; border-radius: 18px; border: 1px solid #cfc7b8;
+        background: rgba(255,255,255,0.92); color: #4a4436; cursor: pointer;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    }
+    .book-toolbar button:hover { background: #fff; }
+
     @page { size: A4; margin: 18mm 16mm; }
     @media print {
+        .book-toolbar { display: none; }
         body { background: #fff; }
         .book-page { max-width: none; box-shadow: none; margin: 0; padding: 0; background: #fff; }
         .book-page-break { break-before: page; }
@@ -310,6 +325,11 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         .book-chapter { break-inside: avoid; }
     }
 </style></head><body>
+
+<div class="book-toolbar">
+    <button type="button" onclick="window.print()">🖨 ${esc(B.toolbarPrint)}</button>
+    <button type="button" onclick="window.close(); setTimeout(function(){ if (!window.closed) history.back(); }, 200)">✕ ${esc(B.toolbarClose)}</button>
+</div>
 
 <div class="book-page book-title-page">
     <div class="book-title-ornament">❦</div>

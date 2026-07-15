@@ -61,3 +61,17 @@ test('family book: the initials privacy default also hides living names in the t
     expect(html).not.toContain('Zivana');
     expect(html).toContain('Predek'); // the deceased relative stays readable
 });
+
+test('book window carries its own Print and Close controls', async ({ page, context }) => {
+    await openApp(page);
+    await page.evaluate(() => window.Strom.UI.loadDemoTree());
+    await expect(page.locator('.person-card').first()).toBeVisible();
+    await page.evaluate(() => window.Strom.UI.showBookDialog());
+    const popup = context.waitForEvent('page');
+    await page.locator('#book-modal button', { hasText: 'Open book' }).click();
+    const book = await popup;
+    await book.waitForLoadState('domcontentloaded');
+    await expect(book.locator('.book-toolbar')).toBeVisible();
+    await book.locator('.book-toolbar button', { hasText: 'Close' }).click();
+    await expect.poll(() => book.isClosed()).toBe(true);
+});

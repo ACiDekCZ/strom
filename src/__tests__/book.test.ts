@@ -158,3 +158,14 @@ describe('Register-style chapter ordering', () => {
         expect(posB).toBeGreaterThan(posAC);
     });
 });
+
+describe('book toolbar', () => {
+    it('carries its own Close and Print controls (standalone PWA has no chrome)', () => {
+        const html = buildFamilyBook(demo, { lang: 'en', privacyMode: 'full' });
+        expect(html).toContain('book-toolbar');
+        expect(html).toContain('window.print()');
+        expect(html).toContain('window.close()');
+        const cs = buildFamilyBook(demo, { lang: 'cs', privacyMode: 'full' });
+        expect(cs).toContain('Zavřít');
+    });
+});
