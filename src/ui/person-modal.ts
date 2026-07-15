@@ -295,7 +295,14 @@ export const personModalMethods = uiModule({
         this.setupDateInputs();
 
         // Setup expand button - expand if there's death data, notes or a photo
-        const hasExtendedData = !!(person.deathDate || person.deathPlace || person.notes || person.photo || (person.events && person.events.length > 0) || (person.sourceIds && person.sourceIds.length > 0) || (person.attachments && person.attachments.length > 0));
+        // Every field that lives behind "More Info" must be listed here, or a
+        // person whose ONLY extended data is that field opens collapsed and the
+        // value is invisible until the user expands by hand.
+        const hasExtendedData = !!(person.deathDate || person.deathPlace || person.notes
+            || person.refn || person.question || person.photo
+            || (person.events && person.events.length > 0)
+            || (person.sourceIds && person.sourceIds.length > 0)
+            || (person.attachments && person.attachments.length > 0));
         this.setupExpandButton(hasExtendedData);
 
         // Show link-relationships button

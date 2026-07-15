@@ -158,8 +158,10 @@ test('reference number and open question persist and mark the card (K12/F3)', as
     // The card gets a subtle open-question marker.
     await expect(card(page, 'Marie')).toHaveClass(/has-question/);
 
-    // Values survive a reopen; clearing the question drops the marker.
+    // Values survive a reopen — and the modal auto-expands because the person
+    // now HAS extended data, so the fields are visible without a click.
     await cardAction(page, 'Marie', 'edit');
+    await expect(modal.locator('#input-refn')).toBeVisible();
     await expect(modal.locator('#input-refn')).toHaveValue('box 12/1880');
     await modal.locator('#input-question').fill('');
     await modal.getByRole('button', { name: 'Save' }).click();
