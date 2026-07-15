@@ -126,6 +126,8 @@ export class UIClass {
         firstName: string; lastName: string; gender: string;
         birthDate: string; birthPlace: string; deathDate: string; deathPlace: string;
         notes: string;
+        /** Raw comma-separated field value, as typed. */
+        nameVariants: string;
         refn: string;
         question: string;
     } | null = null;

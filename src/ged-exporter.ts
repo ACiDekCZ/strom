@@ -246,6 +246,11 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
             const name = formatGedcomName(person.firstName, person.lastName);
             lines.push(`1 NAME ${escapeGedcomText(name)}`);
         }
+        // Other spellings as further NAME lines — the first one above stays the
+        // primary, which is what every reader expects.
+        for (const variant of person.nameVariants ?? []) {
+            lines.push(`1 NAME ${escapeGedcomText(variant)}`);
+        }
 
         // Sex
         lines.push(`1 SEX ${person.gender === 'male' ? 'M' : 'F'}`);

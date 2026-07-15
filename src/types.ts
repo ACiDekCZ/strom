@@ -179,6 +179,19 @@ export interface Person {
      * born?"). Travels with shared/exported files so a relative can answer it.
      */
     question?: string;
+    /**
+     * Other written forms of this person's name: how the registers actually
+     * spell it (Wischek / Víšek / Vissek), an alias, or the Czech "jméno po
+     * chalupě" — the farm a family was known by, which on a village identified
+     * people better than a surname did.
+     *
+     * Not typos to be corrected: before ~1900 spelling was not fixed, and what
+     * the register wrote is a fact about the source. Kept so that search and
+     * merge matching find the person under any of them — otherwise you search
+     * the name you know, miss the one you faithfully copied from the register,
+     * and add the same ancestor twice.
+     */
+    nameVariants?: string[];
     isLocked?: boolean;
     /**
      * Explicit override of the "is this person alive?" heuristic used by the

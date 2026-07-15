@@ -656,3 +656,39 @@ describe('godparents and witnesses survive the round-trip (K2)', () => {
         expect(parts.map(p => p.name)).toEqual(['Marie Dvorakova', 'Josef Kratky']);
     });
 });
+
+
+describe('name variants survive the round-trip (K3)', () => {
+    /**
+     * GEDCOM allows several NAME lines: the first is the primary one, the rest
+     * are other spellings. The parser used to overwrite, so the primary name was
+     * silently replaced by whatever variant came last in the file.
+     */
+    const GED = `0 HEAD
+1 GEDC
+2 VERS 5.5.1
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Josef /Visek/
+1 NAME Wischek
+1 NAME u Kovare
+1 SEX M
+0 TRLR`;
+
+    it('keeps the first name as the name, and the rest as variants', () => {
+        const person = Object.values(importGed(GED).persons)[0];
+        expect(person.firstName).toBe('Josef');
+        expect(person.lastName).toBe('Visek');       // NOT overwritten by the last NAME
+        expect(person.nameVariants).toEqual(['Wischek', 'u Kovare']);
+    });
+
+    it('writes them back as further NAME lines', () => {
+        const ged = exportGed(importGed(GED));
+        expect(ged).toMatch(/1 NAME Josef \/Visek\/\n1 NAME Wischek\n1 NAME u Kovare/);
+    });
+
+    it('survives import → export → import unchanged', () => {
+        const once = importGed(GED);
+        expect(normalize(importGed(exportGed(once)))).toEqual(normalize(once));
+    });
+});

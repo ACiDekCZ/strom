@@ -994,6 +994,10 @@ class DataManagerClass {
             const searchText = normalizeText([
                 person.firstName,
                 person.lastName,
+                // The register's spellings count as this person's name: someone
+                // searching "Víšek" must find the man they entered as "Wischek",
+                // or they will decide he is missing and add him twice.
+                ...(person.nameVariants ?? []),
                 person.birthDate?.split('-')[0] || '',  // birth year
                 person.deathDate?.split('-')[0] || ''   // death year
             ].join(' '));
@@ -1181,6 +1185,11 @@ class DataManagerClass {
         if (updates.notes !== undefined) person.notes = updates.notes || undefined;
         if (updates.refn !== undefined) person.refn = updates.refn || undefined;
         if (updates.question !== undefined) person.question = updates.question || undefined;
+        // Empty list means none — do not keep an empty array around.
+        if (updates.nameVariants !== undefined) {
+            const kept = updates.nameVariants.map(v => v.trim()).filter(Boolean);
+            person.nameVariants = kept.length > 0 ? kept : undefined;
+        }
         // isDeceased is tri-state (true / false / undefined); apply verbatim when provided.
         if ('isDeceased' in updates) person.isDeceased = updates.isDeceased;
         if ('photo' in updates) person.photo = updates.photo || undefined;

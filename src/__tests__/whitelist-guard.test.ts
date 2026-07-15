@@ -112,7 +112,7 @@ describe('migrateData keeps every StromData field', () => {
  * change in the person modal belongs here.
  */
 type EditedByUpdatePerson =
-    | 'firstName' | 'lastName' | 'gender'
+    | 'firstName' | 'lastName' | 'gender' | 'nameVariants'
     | 'birthDate' | 'birthPlace' | 'deathDate' | 'deathPlace'
     | 'notes' | 'refn' | 'question' | 'isDeceased' | 'isLocked' | 'photo';
 
@@ -174,6 +174,7 @@ describe('updatePerson applies every field it owns', () => {
         firstName: 'Marie',
         lastName: 'Nováková',
         gender: 'female',
+        nameVariants: ['Wischek', 'u Kováře'],
         birthDate: '1901-02-03',
         birthPlace: 'Kolín',
         deathDate: '1980-04-05',

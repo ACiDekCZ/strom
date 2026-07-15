@@ -9,7 +9,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { normalizeName, stringSimilarity } from '../merge/matching.js';
+import { normalizeName, stringSimilarity, findMatches } from '../merge/matching.js';
+import { Person, StromData, toPersonId } from '../types.js';
 
 describe('normalizeName', () => {
     it('converts to lowercase', () => {
@@ -209,5 +210,51 @@ describe('edge cases', () => {
     it('handles mixed case with diacritics', () => {
         const sim = stringSimilarity('PŘÍLIŠ', 'prilis');
         expect(sim).toBe(1);
+    });
+});
+
+describe('merge matching sees through name variants (K3)', () => {
+    /**
+     * The same family is Wischek in one register and Víšek in the next. Without
+     * variants the merge sees two families and refuses to match them — which is
+     * exactly the case where merging matters most.
+     */
+    function person(id: string, firstName: string, lastName: string,
+        nameVariants?: string[]): Person {
+        return {
+            id: toPersonId(id), firstName, lastName, gender: 'male',
+            isPlaceholder: false, partnerships: [], parentIds: [], childIds: [],
+            birthDate: '1783',
+            ...(nameVariants ? { nameVariants } : {}),
+        };
+    }
+    const tree = (...people: Person[]): StromData => ({
+        persons: Object.fromEntries(people.map(p => [p.id, p])) as StromData['persons'],
+        partnerships: {},
+    });
+
+    it('matches Wischek to Víšek when the variant says they are the same', () => {
+        const existing = tree(person('a', 'Josef', 'Víšek', ['Wischek']));
+        const incoming = tree(person('b', 'Josef', 'Wischek'));
+
+        const matches = findMatches(existing, incoming);
+        expect(matches).toHaveLength(1);
+        expect(matches[0].existingPerson?.id).toBe(toPersonId('a'));
+    });
+
+    it('still tells two different families apart', () => {
+        // The variant must widen the net, not break it: Svoboda is not Víšek.
+        const existing = tree(person('a', 'Josef', 'Víšek', ['Wischek']));
+        const incoming = tree(person('b', 'Josef', 'Svoboda'));
+
+        const matches = findMatches(existing, incoming);
+        const strong = matches.filter(m => m.confidence === 'high' || m.confidence === 'medium');
+        expect(strong).toHaveLength(0);
+    });
+
+    it('matches when the variant is on the incoming side instead', () => {
+        const existing = tree(person('a', 'Josef', 'Wischek'));
+        const incoming = tree(person('b', 'Josef', 'Víšek', ['Wischek']));
+        expect(findMatches(existing, incoming)).toHaveLength(1);
     });
 });

@@ -390,6 +390,8 @@ const stringsEN = {
 
     // Labels
     labels: {
+        nameVariants: 'Other spellings of the name',
+        nameVariantsHint: 'How the registers actually write it (Wischek, Vissek), an alias, or the farm the family was known by. Separate with commas. Search and merge find the person under any of them.',
         firstName: 'First Name',
         lastName: 'Last Name',
         gender: 'Gender',
@@ -430,6 +432,7 @@ const stringsEN = {
 
     // Placeholders
     placeholders: {
+        nameVariants: 'Wischek, Vissek, u Kováře',
         firstName: 'First name',
         lastName: 'Last name',
         maidenName: 'Maiden name',
@@ -1839,6 +1842,8 @@ const stringsCZ: StringsType = {
 
     // Labels
     labels: {
+        nameVariants: 'Další tvary jména',
+        nameVariantsHint: 'Jak to píší matriky (Wischek, Vissek), alias, nebo jméno po chalupě. Oddělte čárkami. Hledání i slučování pak osobu najdou pod kterýmkoli z nich.',
         firstName: 'Jméno',
         lastName: 'Příjmení',
         gender: 'Pohlaví',
@@ -1879,6 +1884,7 @@ const stringsCZ: StringsType = {
 
     // Placeholders
     placeholders: {
+        nameVariants: 'Wischek, Vissek, u Kováře',
         firstName: 'Jméno',
         lastName: 'Příjmení',
         maidenName: 'Rodné příjmení',

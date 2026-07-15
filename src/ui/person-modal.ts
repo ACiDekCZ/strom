@@ -90,6 +90,8 @@ export const personModalMethods = uiModule({
         if (deathDateInput) deathDateInput.value = '';
         if (deathPlaceInput) deathPlaceInput.value = '';
         if (notesInput) notesInput.value = '';
+        const variantsClear = document.getElementById('input-name-variants') as HTMLInputElement | null;
+        if (variantsClear) variantsClear.value = '';
         const refnClear = document.getElementById('input-refn') as HTMLInputElement | null;
         if (refnClear) refnClear.value = '';
         const questionClear = document.getElementById('input-question') as HTMLInputElement | null;
@@ -101,7 +103,8 @@ export const personModalMethods = uiModule({
         // Snapshot original values (all empty for add)
         this.personModalSnapshot = {
             firstName: '', lastName: '', gender: 'male',
-            birthDate: '', birthPlace: '', deathDate: '', deathPlace: '', notes: '', refn: '', question: '',
+            birthDate: '', birthPlace: '', deathDate: '', deathPlace: '', notes: '',
+            nameVariants: '', refn: '', question: '',
         };
 
         // Setup gender change listener for dynamic labels
@@ -260,6 +263,8 @@ export const personModalMethods = uiModule({
         if (deathDateInput) deathDateInput.value = formatDateForInput(person.deathDate);
         if (deathPlaceInput) deathPlaceInput.value = person.deathPlace || '';
         if (notesInput) notesInput.value = person.notes || '';
+        const variantsInput = document.getElementById('input-name-variants') as HTMLInputElement | null;
+        if (variantsInput) variantsInput.value = (person.nameVariants ?? []).join(', ');
         const refnInput = document.getElementById('input-refn') as HTMLInputElement | null;
         if (refnInput) refnInput.value = person.refn || '';
         const questionInput = document.getElementById('input-question') as HTMLInputElement | null;
@@ -285,6 +290,7 @@ export const personModalMethods = uiModule({
             deathDate: deathDateInput?.value || '',
             deathPlace: deathPlaceInput?.value || '',
             notes: notesInput?.value || '',
+            nameVariants: (document.getElementById('input-name-variants') as HTMLInputElement | null)?.value || '',
             refn: (document.getElementById('input-refn') as HTMLInputElement | null)?.value || '',
             question: (document.getElementById('input-question') as HTMLInputElement | null)?.value || '',
         };
@@ -300,6 +306,7 @@ export const personModalMethods = uiModule({
         // value is invisible until the user expands by hand.
         const hasExtendedData = !!(person.deathDate || person.deathPlace || person.notes
             || person.refn || person.question || person.photo
+            || (person.nameVariants && person.nameVariants.length > 0)
             || (person.events && person.events.length > 0)
             || (person.sourceIds && person.sourceIds.length > 0)
             || (person.attachments && person.attachments.length > 0));
@@ -456,6 +463,9 @@ export const personModalMethods = uiModule({
         const deathDate = normalizeDateInput(deathDateInput?.value || '');
         const deathPlace = deathPlaceInput?.value.trim() || '';
         const notes = notesInput?.value.trim() || '';
+        // Comma-separated in the field, a list in the data.
+        const nameVariants = ((document.getElementById('input-name-variants') as HTMLInputElement | null)?.value ?? '')
+            .split(',').map(v => v.trim()).filter(Boolean);
         const refn = (document.getElementById('input-refn') as HTMLInputElement | null)?.value.trim() || '';
         const question = (document.getElementById('input-question') as HTMLInputElement | null)?.value.trim() || '';
         // Explicit alive/deceased override; a death date already implies deceased.
@@ -492,6 +502,7 @@ export const personModalMethods = uiModule({
                 deathDate,
                 deathPlace,
                 notes,
+                nameVariants,
                 refn,
                 question,
                 isDeceased,
@@ -501,13 +512,15 @@ export const personModalMethods = uiModule({
             // Create new
             const newPerson = DataManager.createPerson({ firstName, lastName, gender });
             // Update with extended info if provided
-            if (birthDate || birthPlace || deathDate || deathPlace || notes || refn || question || photo) {
+            if (birthDate || birthPlace || deathDate || deathPlace || notes || refn || question
+                || photo || nameVariants.length > 0) {
                 DataManager.updatePerson(newPerson.id, {
                     birthDate,
                     birthPlace,
                     deathDate,
                     deathPlace,
                     notes,
+                    nameVariants,
                     refn,
                     question,
                     photo

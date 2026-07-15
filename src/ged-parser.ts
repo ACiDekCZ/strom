@@ -111,6 +111,8 @@ interface GedcomIndividual {
     name: string;
     firstName: string;
     lastName: string;
+    /** Extra 1 NAME lines: the file's other spellings of this person. */
+    nameVariants: string[];
     sex: string;
     birthDate: string;
     birthPlace: string;
@@ -391,6 +393,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     notes: '',
                     refn: '',
                     events: [],
+                    nameVariants: [],
                     sourceRefs: [],
                     media: [],
                     deceased: false,
@@ -485,6 +488,14 @@ export function parseGedcom(content: string): ParsedGedcom {
                     const indi = currentRecord as GedcomIndividual;
                     switch (tag) {
                         case 'NAME': {
+                            // GEDCOM allows several NAME lines; the first is the
+                            // primary one and the rest are other spellings. This
+                            // used to overwrite, so the primary name was silently
+                            // replaced by the last variant in the file.
+                            if (indi.name) {
+                                if (value.trim()) indi.nameVariants.push(value.trim());
+                                break;
+                            }
                             const parsed = parseName(value);
                             indi.name = value;
                             indi.firstName = parsed.firstName;
@@ -793,6 +804,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (indi.deathPlace) person.deathPlace = indi.deathPlace;
         if (indi.notes) person.notes = indi.notes;
         if (indi.refn) person.refn = indi.refn;
+        // Other spellings from the file, kept as written.
+        const variants = indi.nameVariants.map(v => v.replace(/\//g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
+        if (variants.length > 0) person.nameVariants = variants;
         if (indi.events.length > 0) {
             person.events = indi.events.map((ev): LifeEvent => {
                 const out: LifeEvent = { id: generateLifeEventId(), type: ev.type };

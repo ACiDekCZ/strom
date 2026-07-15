@@ -165,6 +165,29 @@ function firstNamesMatch(name1: string, name2: string): { exact: boolean; firstW
 }
 
 /**
+ * Every written form of a person's surname: the one on the record, plus any
+ * variants noted from the registers.
+ */
+function surnameForms(person: { lastName: string; nameVariants?: string[] }): string[] {
+    return [person.lastName, ...(person.nameVariants ?? [])].filter(Boolean);
+}
+
+/** The best match across every written form of both names. */
+function bestLastNameMatch(
+    existing: { lastName: string; nameVariants?: string[] },
+    incoming: { lastName: string; nameVariants?: string[] },
+): { exact: boolean; similar: boolean; similarity: number } {
+    let best = lastNamesSimilar(existing.lastName, incoming.lastName);
+    for (const a of surnameForms(existing)) {
+        for (const b of surnameForms(incoming)) {
+            const match = lastNamesSimilar(a, b);
+            if (match.similarity > best.similarity || (match.exact && !best.exact)) best = match;
+        }
+    }
+    return best;
+}
+
+/**
  * Check if last names are similar (handles typos and spelling variations)
  */
 function lastNamesSimilar(name1: string, name2: string): { exact: boolean; similar: boolean; similarity: number } {
@@ -614,8 +637,11 @@ function calculateMatchScore(
     const firstNameMatch = firstNamesMatch(existing.firstName, incoming.firstName);
     const firstNameSimilarity = stringSimilarity(existing.firstName, incoming.firstName);
 
-    // Analyze last names (handles typos and spelling variations)
-    const lastNameMatch = lastNamesSimilar(existing.lastName, incoming.lastName);
+    // Analyze last names (handles typos and spelling variations). Recorded name
+    // variants count as this person's surname too: a family written Wischek in
+    // one register and Víšek in another is one family, and without this the
+    // merge sees two — exactly when merging matters most.
+    const lastNameMatch = bestLastNameMatch(existing, incoming);
 
     // Full name similarity for traditional matching
     const fullNameSimilarity = (firstNameSimilarity + lastNameMatch.similarity) / 2;
