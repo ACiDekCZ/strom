@@ -73,6 +73,7 @@ export function validateTreeData(data: StromData): ValidationResult {
     checkLifeEvents(data, addIssue);
     checkDateConsistency(data, addIssue);
     checkSourceIntegrity(data, addIssue);
+    checkPossibleDuplicates(data, addIssue);
 
     const stats = {
         errors: issues.filter(i => i.severity === 'error').length,
@@ -810,6 +811,57 @@ function checkSourceIntegrity(data: StromData, addIssue: AddIssue): void {
 }
 
 // ==================== HELPERS ====================
+
+/**
+ * Flag likely-accidental DUPLICATE persons within one tree: same gender, very
+ * similar name and the same birth year (or, without any birth date, an exact
+ * normalized name). Info-level — it never blocks; it just surfaces pairs the
+ * user may want to merge. Bucketed by birth year / normalized name so it stays
+ * linear-ish instead of comparing every pair.
+ */
+function checkPossibleDuplicates(
+    data: StromData,
+    addIssue: (s: IssueSeverity, t: string, m: string, p?: PersonId[], pp?: PartnershipId[], d?: string) => void
+): void {
+    const norm = (s: string): string => s.trim().toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const persons = Object.values(data.persons).filter(p => !p.isPlaceholder);
+
+    // Bucket key: birth year when known, else "noyear". Only compare within a
+    // bucket (same year => plausible dup; different year => almost never).
+    const buckets = new Map<string, Person[]>();
+    for (const p of persons) {
+        const name = `${p.firstName}${p.lastName}`.trim();
+        if (!name) continue;                       // unnamed people never flagged
+        const year = parseYear(p.birthDate);
+        const key = year !== null ? `y${year}` : `n:${norm(p.firstName)}|${norm(p.lastName)}`;
+        (buckets.get(key) ?? buckets.set(key, []).get(key)!).push(p);
+    }
+
+    const reported = new Set<string>();
+    for (const group of buckets.values()) {
+        if (group.length < 2) continue;
+        for (let i = 0; i < group.length; i++) {
+            for (let j = i + 1; j < group.length; j++) {
+                const a = group[i], b = group[j];
+                if (a.gender !== b.gender) continue;
+                const firstEq = norm(a.firstName) === norm(b.firstName);
+                const lastEq = norm(a.lastName) === norm(b.lastName);
+                // Require the surname to match and the given name to match or be
+                // empty on one side (initials / partial records).
+                const givenOk = firstEq || !norm(a.firstName) || !norm(b.firstName);
+                if (!lastEq || !givenOk) continue;
+                const pairKey = [a.id, b.id].sort().join('|');
+                if (reported.has(pairKey)) continue;
+                reported.add(pairKey);
+                const yr = parseYear(a.birthDate);
+                addIssue('info', 'possibleDuplicate',
+                    `${getPersonName(a)} and ${getPersonName(b)} look like the same person`,
+                    [a.id, b.id], undefined, yr !== null ? `* ${yr}` : undefined);
+            }
+        }
+    }
+}
 
 function getPersonName(person: Person | undefined): string {
     if (!person) return '(unknown)';

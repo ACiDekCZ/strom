@@ -118,3 +118,21 @@ test('a long first name shrinks to fit the card instead of truncating', async ({
     const fits = await nameText.evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
     expect(fits).toBe(true);
 });
+
+test('birth-date estimate hint fills an approximate year from other dates (K11)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Dcera', 'Novakova', { birthDate: '1880', gender: 'female' });
+    await addRelation(page, 'Dcera', 'parent', 'Otec', 'Novak');
+    await cardAction(page, 'Otec', 'edit');
+    const modal = personModal(page);
+    const hint = modal.locator('#birthdate-estimate');
+    await expect(hint).toBeVisible();
+    await expect(hint).toContainText('1868');   // 1880 - min parent age (12)
+    await hint.locator('.field-hint-apply').click();
+    await expect(modal.locator('#input-birthdate')).toHaveValue('~1868');
+    // Once a date is entered, the hint hides.
+    await modal.locator('#input-birthdate').fill('1870');
+    await modal.getByRole('button', { name: 'Save' }).click();
+    await cardAction(page, 'Otec', 'edit');
+    await expect(modal.locator('#birthdate-estimate')).toBeHidden();
+});

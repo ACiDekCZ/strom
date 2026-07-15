@@ -461,6 +461,8 @@ const stringsEN = {
 
     // Person modal
     personModal: {
+        birthEstimate: (year: number) => `Born no later than ~${year} (from other dates)`,
+        birthEstimateApply: 'use',
         addTitle: 'Add Person',
         editTitle: 'Edit Person',
         completeTitle: 'Complete Person',
@@ -987,6 +989,9 @@ const stringsEN = {
         validate: 'Validate',
         validateDesc: 'Check tree for errors',
         validationTitle: 'Tree Validation',
+        postImportCheckTitle: 'Data check',
+        postImportCheck: (n: number) => `We checked the imported data and found ${n} thing${n === 1 ? '' : 's'} worth a look. Review them?`,
+        postImportReview: 'Review',
         validationPassed: 'No issues found',
         validationErrors: 'errors',
         validationWarnings: 'warnings',
@@ -1025,6 +1030,7 @@ const stringsEN = {
         valCitationMissingSource: 'Citation points to a missing source',
         valAttachmentNoData: 'Attachment has no usable data',
         valPartnerAgeGap: 'Extreme age difference between partners',
+        valPossibleDuplicate: 'Possible duplicate person (same name and birth year)',
         valFix: 'Fix',
         valFixAll: 'Fix all',
         valFixed: (count: number) => `Fixed ${count} issue${count !== 1 ? 's' : ''}`,
@@ -1789,6 +1795,8 @@ const stringsCZ: StringsType = {
 
     // Person modal
     personModal: {
+        birthEstimate: (year: number) => `Narozen(a) nejpozději ~${year} (odvozeno z ostatních dat)`,
+        birthEstimateApply: 'použít',
         addTitle: 'Přidat osobu',
         editTitle: 'Upravit osobu',
         completeTitle: 'Doplnit osobu',
@@ -2315,6 +2323,9 @@ const stringsCZ: StringsType = {
         validate: 'Validovat',
         validateDesc: 'Zkontrolovat strom na chyby',
         validationTitle: 'Validace stromu',
+        postImportCheckTitle: 'Kontrola dat',
+        postImportCheck: (n: number) => `Zkontrolovali jsme naimportovaná data a našli ${n} ${n === 1 ? 'věc k prohlédnutí' : n < 5 ? 'věci k prohlédnutí' : 'věcí k prohlédnutí'}. Zobrazit?`,
+        postImportReview: 'Zobrazit',
         validationPassed: 'Žádné problémy nenalezeny',
         validationErrors: 'chyby',
         validationWarnings: 'varování',
@@ -2353,6 +2364,7 @@ const stringsCZ: StringsType = {
         valCitationMissingSource: 'Citace odkazuje na neexistující pramen',
         valAttachmentNoData: 'Příloha nemá použitelná data',
         valPartnerAgeGap: 'Extrémní věkový rozdíl partnerů',
+        valPossibleDuplicate: 'Možná duplicitní osoba (stejné jméno a rok narození)',
         valFix: 'Opravit',
         valFixAll: 'Opravit vše',
         valFixed: (count: number) => `Opraveno ${count} ${count === 1 ? 'problém' : count < 5 ? 'problémy' : 'problémů'}`,

@@ -323,6 +323,7 @@ export const treeStatsMethods = uiModule({
                 'citationMissingSource': 'valCitationMissingSource',
                 'attachmentNoData': 'valAttachmentNoData',
                 'partnerAgeGap': 'valPartnerAgeGap',
+                'possibleDuplicate': 'valPossibleDuplicate',
             };
             const key = typeToKey[type];
             return key ? (s[key] as string) : type;

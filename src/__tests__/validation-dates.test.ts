@@ -169,3 +169,44 @@ describe('source and attachment integrity', () => {
         expect(t).not.toContain('attachmentNoData');
     });
 });
+
+describe('possible duplicate detection (J2)', () => {
+    const named = (id: string, first: string, last: string, o: POpts = {}): Person =>
+        ({ ...person(id, o), firstName: first, lastName: last });
+
+    it('flags two same-name, same-birth-year persons as a possible duplicate', () => {
+        const d = data([
+            named('a', 'Jan', 'Novak', { birthDate: '1900' }),
+            named('b', 'Jan', 'Novak', { birthDate: '1900-05-12' }),
+        ]);
+        const dup = validateTreeData(d).issues.filter(i => i.type === 'possibleDuplicate');
+        expect(dup).toHaveLength(1);
+        expect(dup[0].severity).toBe('info');
+        expect(dup[0].personIds).toEqual(expect.arrayContaining(['a', 'b']));
+    });
+
+    it('does not flag different birth years or different surnames', () => {
+        const d = data([
+            named('a', 'Jan', 'Novak', { birthDate: '1900' }),
+            named('b', 'Jan', 'Novak', { birthDate: '1930' }),   // different year
+            named('c', 'Jan', 'Svoboda', { birthDate: '1900' }), // different surname
+        ]);
+        expect(validateTreeData(d).issues.filter(i => i.type === 'possibleDuplicate')).toHaveLength(0);
+    });
+
+    it('matches when one given name is missing (partial record)', () => {
+        const d = data([
+            named('a', 'Jan', 'Novak', { birthDate: '1900' }),
+            named('b', '', 'Novak', { birthDate: '1900' }),
+        ]);
+        expect(validateTreeData(d).issues.filter(i => i.type === 'possibleDuplicate')).toHaveLength(1);
+    });
+
+    it('ignores gender mismatch and placeholders', () => {
+        const d = data([
+            named('a', 'Jan', 'Novak', { birthDate: '1900', gender: 'male' }),
+            named('b', 'Jan', 'Novak', { birthDate: '1900', gender: 'female' }),
+        ]);
+        expect(validateTreeData(d).issues.filter(i => i.type === 'possibleDuplicate')).toHaveLength(0);
+    });
+});

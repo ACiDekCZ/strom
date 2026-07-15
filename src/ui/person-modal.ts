@@ -251,6 +251,7 @@ export const personModalMethods = uiModule({
 
         // Extended info (dates shown in the locale's input form, e.g. 15.5.1880)
         if (birthDateInput) birthDateInput.value = formatDateForInput(person.birthDate);
+        this.updateBirthEstimate(person);
         if (birthPlaceInput) birthPlaceInput.value = person.birthPlace || '';
         if (deathDateInput) deathDateInput.value = formatDateForInput(person.deathDate);
         if (deathPlaceInput) deathPlaceInput.value = person.deathPlace || '';
@@ -343,6 +344,32 @@ export const personModalMethods = uiModule({
 
         // Setup Enter as Tab for form fields
         this.setupEnterAsTab('person-modal', ['input-firstname', 'input-lastname', 'input-gender', 'input-birthdate', 'input-birthplace', 'input-deathdate', 'input-deathplace'], () => this.savePerson());
+    },
+
+    /**
+     * K11: when a person has no birth date, show the latest-possible birth year
+     * inferred from their other dates (death, events, wedding, children), with
+     * a one-click "use" that fills the field as an approximate year.
+     */
+    updateBirthEstimate(person: import('../types.js').Person): void {
+        const hint = document.getElementById('birthdate-estimate');
+        if (!hint) return;
+        if (person.birthDate) { hint.style.display = 'none'; hint.innerHTML = ''; return; }
+        const bounds = inferBirthUpperBounds(DataManager.getData());
+        const year = bounds.get(person.id);
+        if (year === undefined) { hint.style.display = 'none'; hint.innerHTML = ''; return; }
+        hint.style.display = '';
+        hint.textContent = strings.personModal.birthEstimate(year) + ' ';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'field-hint-apply';
+        btn.textContent = strings.personModal.birthEstimateApply;
+        btn.onclick = () => {
+            const input = document.getElementById('input-birthdate') as HTMLInputElement | null;
+            if (input) { input.value = `~${year}`; input.dispatchEvent(new Event('input', { bubbles: true })); }
+            hint.style.display = 'none';
+        };
+        hint.appendChild(btn);
     },
 
     /** Update the modal's photo preview, remove button and size label. */

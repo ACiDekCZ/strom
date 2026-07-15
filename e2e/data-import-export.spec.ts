@@ -340,3 +340,33 @@ test('focus slice (New Tree from focus) is self-consistent — no dangling refs'
     });
     expect(consistent.ok, consistent.reason).toBe(true);
 });
+
+test('post-import health check offers a review when the data has issues (M6)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Seed', 'Person');
+    const bad = {
+        version: 5,
+        persons: { p1: { id: 'p1', firstName: 'Jan', lastName: 'Novak', gender: 'male',
+            isPlaceholder: false, parentIds: [], childIds: [], partnerships: [],
+            birthDate: '1950', deathDate: '1940' } },
+        partnerships: {},
+    };
+    await page.evaluate((data) => {
+        const dt = new DataTransfer();
+        const file = new File([JSON.stringify(data)], 'bad.json', { type: 'application/json' });
+        dt.items.add(file);
+        const input = document.getElementById('file-input') as HTMLInputElement;
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }, bad);
+    const importDialog = page.locator('#import-tree-modal');
+    await expect(importDialog).toBeVisible();
+    await importDialog.getByRole('button', { name: 'Import' }).click();
+
+    const confirm = page.locator('#confirmation-modal');
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toContainText(/checked the imported data|zkontrolovali/i);
+    await confirm.locator('#confirm-ok-btn').click();
+    await expect(page.locator('#tree-validation-modal')).toBeVisible();
+    await expect(page.locator('#tree-validation-modal')).toContainText(/Death date is before birth|before birth/i);
+});

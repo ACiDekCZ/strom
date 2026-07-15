@@ -1014,6 +1014,26 @@ export const importExportMethods = uiModule({
         this.updateUrlTreeParam(newTreeId);
         // If this import came from "open from file", attach that handle now.
         void this.attachPendingFileHandle(newTreeId);
+        // M6: post-import health check — offer to review any data issues.
+        void this.offerPostImportValidation(newTreeId);
+    },
+
+    /**
+     * After importing a tree, quietly validate it and — only if something looks
+     * off — offer to open the validation report. Shows care for the data and
+     * gives a free aha-moment; silent when the data is clean.
+     */
+    async offerPostImportValidation(treeId: TreeId): Promise<void> {
+        const data = DataManager.getData();
+        const result = validateTreeData(data);
+        const notable = result.stats.errors + result.stats.warnings;
+        if (notable === 0) return;
+        const review = await this.showConfirm(
+            strings.treeManager.postImportCheck(notable),
+            strings.treeManager.postImportCheckTitle,
+            { ok: strings.treeManager.postImportReview, cancel: strings.buttons.close }
+        );
+        if (review) await this.showTreeValidationDialog(treeId);
     },
 
     /**
