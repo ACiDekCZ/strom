@@ -2070,6 +2070,48 @@
             .places-list { max-height: 60vh; }
         }
 
+        /* ---- Godparents & witnesses on an event (K2) ---- */
+        .event-participants {
+            margin-top: 2px;
+            font-size: 11px;
+            color: var(--text-light);
+        }
+        .participants-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+        .participant-row {
+            display: grid;
+            grid-template-columns: minmax(90px, 0.8fr) minmax(0, 1.4fr) minmax(0, 1fr) auto auto;
+            gap: 6px;
+            align-items: center;
+        }
+        .participant-row select,
+        .participant-row input {
+            min-width: 0;
+            padding: 5px 7px;
+            font-size: 12px;
+        }
+        /* A linked person's name comes from the tree — it is shown, not typed. */
+        .participant-row input.is-linked {
+            background: color-mix(in srgb, var(--primary, #4a7c59) 10%, var(--card-bg, #fff));
+            font-weight: 600;
+        }
+        .participant-btn {
+            padding: 4px 7px;
+            font-size: 12px;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        .participant-btn.linked { background: var(--primary, #4a7c59); color: #fff; }
+        /* Mobile: one field per line beats five squeezed into 300px. */
+        @media (max-width: 500px) {
+            .participant-row {
+                grid-template-columns: 1fr auto auto;
+                grid-template-areas: "role link del" "name name name" "note note note";
+            }
+            .participant-row select { grid-area: role; }
+            .participant-row .participant-name { grid-area: name; }
+            .participant-row .participant-note { grid-area: note; }
+        }
+
         .archives-modal { max-width: 520px; }
         .archives-modal h3 { margin: 12px 0 6px; font-size: 0.95em; opacity: 0.8; }
         .archive-link { display: block; padding: 8px 10px; margin: 4px 0; border-radius: 8px;
@@ -6771,6 +6813,12 @@
                 <label data-i18n="events.note"></label>
                 <textarea id="input-event-note" rows="2" autocomplete="off"></textarea>
             </div>
+            <div class="form-group" id="event-participants-section">
+                <label data-i18n="events.participants"></label>
+                <p class="field-hint" data-i18n="events.participantsHint"></p>
+                <div id="event-participants-list" class="participants-list"></div>
+                <button type="button" class="secondary" onclick="window.Strom.UI.addEventParticipantRow()" data-i18n="events.addParticipant"></button>
+            </div>
             <div class="form-group" id="event-sources-section">
                 <label data-i18n="sources.sectionTitle"></label>
                 <div id="event-sources-chips" class="sources-chips"></div>
@@ -6831,6 +6879,20 @@
     </div>
 
     <!-- Source Picker Modal (cite an existing source or create a new one) -->
+    <!-- Picking someone from the tree for an event (a godparent who IS a relative) -->
+    <div class="modal-overlay" id="participant-picker-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 data-i18n="events.participantLink"></h2>
+                <button class="close-btn" onclick="window.Strom.UI.cancelParticipantPicker()">&times;</button>
+            </div>
+            <div id="participant-picker"></div>
+            <div class="buttons">
+                <button class="secondary" onclick="window.Strom.UI.cancelParticipantPicker()" data-i18n="buttons.cancel"></button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="source-picker-modal">
         <div class="modal">
             <div class="modal-header">

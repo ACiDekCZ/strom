@@ -121,6 +121,21 @@ const stringsEN = {
     },
 
     events: {
+        participants: 'Godparents & witnesses',
+        participantsHint: 'Who else the record names. A godparent who keeps turning up is usually a relative.',
+        addParticipant: '+ Add',
+        participantName: 'Name as written',
+        participantNote: 'Detail (trade, "neighbour"…)',
+        participantLink: 'Link to someone in the tree',
+        participantUnlink: 'Not this person',
+        participantInTree: 'in the tree',
+        participantNameRequired: 'Give a name, or link someone from the tree.',
+        roles: {
+            godparent: 'Godparent',
+            witness: 'Witness',
+            officiant: 'Officiant',
+            other: 'Present',
+        },
         title: 'Events',
         add: 'Add event',
         addTitle: 'Add event',
@@ -1532,6 +1547,21 @@ const stringsCZ: StringsType = {
     },
 
     events: {
+        participants: 'Kmotři a svědci',
+        participantsHint: 'Koho ještě zápis jmenuje. Kmotr, který se opakuje, bývá příbuzný.',
+        addParticipant: '+ Přidat',
+        participantName: 'Jméno, jak je zapsáno',
+        participantNote: 'Bližší určení (řemeslo, „soused“…)',
+        participantLink: 'Propojit s osobou ve stromu',
+        participantUnlink: 'Přece jen ne tato osoba',
+        participantInTree: 've stromu',
+        participantNameRequired: 'Zadejte jméno, nebo vyberte osobu ze stromu.',
+        roles: {
+            godparent: 'Kmotr / kmotra',
+            witness: 'Svědek',
+            officiant: 'Oddávající / křtící',
+            other: 'Přítomen',
+        },
         title: 'Události',
         add: 'Přidat událost',
         addTitle: 'Přidat událost',

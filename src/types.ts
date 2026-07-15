@@ -36,6 +36,11 @@ export function generateLifeEventId(): string {
     return `ev_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** Generate unique EventParticipant id */
+export function generateParticipantId(): string {
+    return `pt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
 /** Generate unique Source id */
 export function generateSourceId(): string {
     return `src_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -66,6 +71,35 @@ export type LifeEventType =
  * birthDate/deathDate fields and are not stored here (only synthesized read-only
  * in the UI); every other kind lives in Person.events.
  */
+/**
+ * How someone took part in an event that is not their own.
+ *
+ * 'godparent' at a baptism and 'witness' at a wedding are the ones that matter
+ * for parish registers: a godparent who keeps turning up at one family's
+ * baptisms is almost always a relative, which is a lead that vanishes if the
+ * name is buried in a free-text note.
+ */
+export type ParticipantRole = 'godparent' | 'witness' | 'officiant' | 'other';
+
+/**
+ * Someone present at an event besides its subject.
+ *
+ * Either `personId` (they are in the tree) or `name` (they are not) — and the
+ * second case is the common one: a godparent is usually a neighbour nobody
+ * wants as a person in their family tree. Forcing a link would make people
+ * either invent persons or skip the record entirely.
+ */
+export interface EventParticipant {
+    id: string;
+    role: ParticipantRole;
+    /** Linked person in the tree. */
+    personId?: PersonId;
+    /** Name as the register writes it, when they are not in the tree. */
+    name?: string;
+    /** What the record says about them ("soused, kovář"). */
+    note?: string;
+}
+
 export interface LifeEvent {
     id: string;
     type: LifeEventType;
@@ -77,6 +111,8 @@ export interface LifeEvent {
     note?: string;
     /** Ids of Source entries (StromData.sources) citing this event. */
     sourceIds?: string[];
+    /** Godparents, witnesses, the officiating priest… (see EventParticipant). */
+    participants?: EventParticipant[];
 }
 
 /**

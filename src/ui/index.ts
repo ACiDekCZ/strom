@@ -20,7 +20,8 @@ import {
     TreeId,
     LAST_FOCUSED,
     LastFocusedMarker,
-    PlaceGeo
+    PlaceGeo,
+    EventParticipant
 } from '../types.js';
 import { strings } from '../strings.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
@@ -132,6 +133,10 @@ export class UIClass {
 
     // Life-events editor state: the event being edited, or null when adding.
     editingEventId: string | null = null;
+    /** Participants being edited; held here until the event is saved. */
+    eventParticipants: EventParticipant[] = [];
+    /** Set while the person picker is open, so Cancel/Escape can settle it. */
+    participantPickerResolve: (() => void) | null = null;
 
     // Sources/citations state.
     editingSourceId: string | null = null;

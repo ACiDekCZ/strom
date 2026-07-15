@@ -45,7 +45,17 @@ function normalize(data: StromData): StromData {
             parentIds: person.parentIds.map(x => p.get(x)!),
             childIds: person.childIds.map(x => p.get(x)!),
             // Event ids are generated fresh on every import — re-key positionally.
-            ...(person.events ? { events: person.events.map((e, i) => ({ ...e, id: `E${i}`, ...(e.sourceIds ? { sourceIds: mapSrc(e.sourceIds) } : {}) })) } : {}),
+            // So are participant ids, and their personId links need the person map.
+            ...(person.events ? { events: person.events.map((e, i) => ({
+                ...e,
+                id: `E${i}`,
+                ...(e.sourceIds ? { sourceIds: mapSrc(e.sourceIds) } : {}),
+                ...(e.participants ? { participants: e.participants.map((pt, j) => ({
+                    ...pt,
+                    id: `PT${i}_${j}`,
+                    ...(pt.personId ? { personId: p.get(pt.personId)! } : {}),
+                })) } : {}),
+            })) } : {}),
             ...(person.sourceIds ? { sourceIds: mapSrc(person.sourceIds) } : {}),
             // parentRelTypes is keyed by parent PersonId — re-key the keys too.
             ...(person.parentRelTypes ? {
@@ -566,5 +576,83 @@ describe('REFN reference numbers (K12)', () => {
             '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 REFN X1', '0 TRLR',
         ].join('\n');
         expect(convertToStrom(parseGedcom(ged)).stats.droppedTagSummary).not.toMatch(/REFN/);
+    });
+});
+
+
+describe('godparents and witnesses survive the round-trip (K2)', () => {
+    /**
+     * The two cases that matter: a godparent who IS in the tree (ASSO points at
+     * their record) and one who is not (_WITN carries just the name). The second
+     * is the common one — a godparent is usually a neighbour.
+     */
+    const GED = `0 HEAD
+1 GEDC
+2 VERS 5.5.1
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Jan /Novak/
+1 SEX M
+1 BAPM
+2 DATE 15 MAY 1880
+2 PLAC Kolin
+2 ASSO @I2@
+3 RELA Godparent
+2 _WITN Marie Dvorakova
+3 RELA Godparent
+3 NOTE soused, kovar
+2 _WITN Josef Kratky
+3 RELA Witness
+0 @I2@ INDI
+1 NAME Frantisek /Novak/
+1 SEX M
+0 TRLR`;
+
+    it('reads a linked godparent, a named one, and their roles', () => {
+        const data = importGed(GED);
+        const jan = Object.values(data.persons).find(p => p.firstName === 'Jan')!;
+        const frantisek = Object.values(data.persons).find(p => p.firstName === 'Frantisek')!;
+        const parts = jan.events?.[0].participants ?? [];
+
+        expect(parts).toHaveLength(3);
+        // In the tree: linked, no free-text name needed.
+        expect(parts[0]).toMatchObject({ role: 'godparent', personId: frantisek.id });
+        expect(parts[0].name).toBeUndefined();
+        // Not in the tree: the name as written, plus what the register said.
+        expect(parts[1]).toMatchObject({ role: 'godparent', name: 'Marie Dvorakova', note: 'soused, kovar' });
+        expect(parts[2]).toMatchObject({ role: 'witness', name: 'Josef Kratky' });
+    });
+
+    it('writes them back out again', () => {
+        const ged = exportGed(importGed(GED));
+        expect(ged).toContain('2 ASSO @I2@');
+        expect(ged).toMatch(/2 ASSO @I2@\n3 RELA Godparent/);
+        expect(ged).toMatch(/2 _WITN Marie Dvorakova\n3 RELA Godparent\n3 NOTE soused, kovar/);
+        expect(ged).toMatch(/2 _WITN Josef Kratky\n3 RELA Witness/);
+    });
+
+    it('survives import → export → import unchanged', () => {
+        const once = importGed(GED);
+        const twice = importGed(exportGed(once));
+        expect(normalize(twice)).toEqual(normalize(once));
+    });
+
+    it('understands however another program spells the role', () => {
+        const foreign = GED
+            .replace('3 RELA Godparent\n2 _WITN Marie', '3 RELA godmother\n2 _WITN Marie')
+            .replace('3 RELA Witness', '3 RELA Svědek');
+        const data = importGed(foreign);
+        const parts = Object.values(data.persons).find(p => p.firstName === 'Jan')!.events![0].participants!;
+        expect(parts[0].role).toBe('godparent');
+        expect(parts[2].role).toBe('witness');
+    });
+
+    it('keeps the role when ASSO points at nobody, rather than dropping the person', () => {
+        const dangling = GED.replace('2 ASSO @I2@', '2 ASSO @I99@');
+        const parts = Object.values(importGed(dangling).persons)
+            .find(p => p.firstName === 'Jan')!.events![0].participants!;
+        // No link and no name → nothing to show, so that one goes; the rest stay.
+        expect(parts).toHaveLength(2);
+        expect(parts.map(p => p.name)).toEqual(['Marie Dvorakova', 'Josef Kratky']);
     });
 });

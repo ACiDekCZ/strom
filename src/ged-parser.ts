@@ -26,13 +26,30 @@ import {
     LifeEvent,
     LifeEventType,
     ParentChildRelType,
+    ParticipantRole,
     Source,
     Attachment,
     toPersonId,
     toPartnershipId,
     generateLifeEventId,
+    generateParticipantId,
     generateSourceId
 } from './types';
+
+/**
+ * RELA text -> role. Other programs write these freely ("Godparent", "godmother",
+ * "Kmotr"), so match loosely and fall back to 'other' rather than dropping the
+ * person: knowing someone was there beats knowing nothing.
+ */
+function relaToRole(rela: string | undefined): ParticipantRole {
+    const r = (rela ?? '').toLowerCase();
+    if (r.includes('godparent') || r.includes('godfather') || r.includes('godmother')
+        || r.includes('kmotr') || r.includes('sponsor')) return 'godparent';
+    if (r.includes('witness') || r.includes('svěd') || r.includes('sved')) return 'witness';
+    if (r.includes('officiant') || r.includes('clergy') || r.includes('priest')
+        || r.includes('minister') || r.includes('kněz') || r.includes('knez')) return 'officiant';
+    return 'other';
+}
 
 /** GEDCOM event tag <-> LifeEvent type. */
 const EVENT_TAG_TO_TYPE: Record<string, LifeEventType> = {
@@ -60,6 +77,18 @@ interface RawEvent {
     note?: string;
     /** GEDCOM ids (@Sx@) of sources cited on this event. */
     sourceRefs?: string[];
+    /** Godparents / witnesses: ASSO (a person ref) or _WITN (a bare name). */
+    participants?: RawParticipant[];
+}
+
+/** A participant as it comes out of the file, before ids are resolved. */
+interface RawParticipant {
+    /** GEDCOM id (@Ix@) for ASSO; undefined for a _WITN name. */
+    ref?: string;
+    name?: string;
+    /** RELA value as written, mapped to a role later. */
+    rela?: string;
+    note?: string;
 }
 
 /** Raw GEDCOM source record (0 @Sx@ SOUR). */
@@ -604,6 +633,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                             const line = `E-mail: ${value}`;
                             currentEvent.note = currentEvent.note
                                 ? `${currentEvent.note}\n${line}` : line;
+                        } else if (tag === 'ASSO' && value) {
+                            // Godparent/witness who has a record of their own.
+                            (currentEvent.participants ??= []).push({ ref: value });
+                        } else if ((tag === '_WITN' || tag === 'WITN') && value) {
+                            // …and one who does not: just a name in the register.
+                            (currentEvent.participants ??= []).push({ name: value });
                         }
                     }
                 } else if (currentType === 'FAM') {
@@ -630,6 +665,15 @@ export function parseGedcom(content: string): ParsedGedcom {
                 // dropped, which broke the round-trip of multi-line notes).
                 if (tag === 'CONT') currentEvent.note = (currentEvent.note ?? '') + '\n' + value;
                 else if (tag === 'CONC') currentEvent.note = (currentEvent.note ?? '') + value;
+            } else if (level === 3 && currentType === 'INDI' && currentEvent
+                && (currentEventSubTag === 'ASSO' || currentEventSubTag === '_WITN'
+                    || currentEventSubTag === 'WITN')) {
+                // The role (and any detail) of the godparent/witness just read.
+                const last = currentEvent.participants?.[currentEvent.participants.length - 1];
+                if (last) {
+                    if (tag === 'RELA') last.rela = value;
+                    else if (tag === 'NOTE') last.note = value;
+                }
             } else if (level === 3 && currentMedia && currentMediaSubTag === 'FILE' && tag === 'CONC') {
                 // Data-URL payloads are CONC-wrapped (255-char physical lines).
                 currentMedia.file += value;
@@ -758,6 +802,21 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 if (ev.note) out.note = ev.note;
                 const evRefs = mapRefs(ev.sourceRefs);
                 if (evRefs.length > 0) out.sourceIds = evRefs;
+
+                // Godparents / witnesses. An ASSO pointing at someone the file
+                // never defines keeps its role but loses the link — better a
+                // nameless role than a dangling reference.
+                const parts = (ev.participants ?? []).map(raw => {
+                    const linked = raw.ref ? personIdMap.get(raw.ref) : undefined;
+                    return {
+                        id: generateParticipantId(),
+                        role: relaToRole(raw.rela),
+                        ...(linked ? { personId: linked } : {}),
+                        ...(raw.name ? { name: raw.name } : {}),
+                        ...(raw.note ? { note: raw.note } : {}),
+                    };
+                }).filter(p => p.personId || p.name);
+                if (parts.length > 0) out.participants = parts;
                 return out;
             });
         }

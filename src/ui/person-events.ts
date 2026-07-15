@@ -8,7 +8,11 @@
  */
 
 import { DataManager } from '../data.js';
-import { LifeEvent, LifeEventType } from '../types.js';
+import {
+    LifeEvent, LifeEventType, EventParticipant, ParticipantRole, PersonId,
+    generateParticipantId,
+} from '../types.js';
+import { PersonPicker } from '../person-picker.js';
 import { strings } from '../strings.js';
 import { SELECTABLE_EVENT_TYPES, sortLifeEvents } from '../events.js';
 import { formatFlexDate, normalizeDateInput, formatDateForInput } from '../dates.js';
@@ -63,7 +67,8 @@ export const personEventsMethods = uiModule({
         const events = sortLifeEvents(person.events ?? []);
         for (const event of events) {
             rows.push(this.eventRowHtml(eventTypeLabel(event),
-                eventMeta(event.date, event.place), locked ? null : event.id));
+                eventMeta(event.date, event.place), locked ? null : event.id,
+                this.participantsSummary(event)));
         }
 
         if (person.deathDate || person.deathPlace) {
@@ -86,7 +91,20 @@ export const personEventsMethods = uiModule({
      * One event row. `eventId` null means a non-editable row (birth/death or a
      * locked person) rendered without edit/delete actions.
      */
-    eventRowHtml(typeLabel: string, meta: string, eventId: string | null): string {
+    /**
+     * "Godparent: Marie Dvořáková · Witness: Josef Krátký" — the point of
+     * recording them is seeing them, and reopening the editor to find out who
+     * stood at a baptism defeats it.
+     */
+    participantsSummary(event: LifeEvent): string {
+        return (event.participants ?? []).map(p => {
+            const person = p.personId ? DataManager.getPerson(p.personId) : null;
+            const name = person ? `${person.firstName} ${person.lastName}`.trim() : (p.name ?? '');
+            return `${strings.events.roles[p.role]}: ${name}`;
+        }).join('  ·  ');
+    },
+
+    eventRowHtml(typeLabel: string, meta: string, eventId: string | null, participants = ''): string {
         const actions = eventId === null ? '' : `
             <div class="event-actions">
                 <button type="button" title="${esc(strings.events.edit)}"
@@ -95,11 +113,145 @@ export const personEventsMethods = uiModule({
                     onclick="window.Strom.UI.deleteEvent('${esc(eventId)}')">&#128465;</button>
             </div>`;
         const metaHtml = meta ? `<span class="event-meta"> — ${esc(meta)}</span>` : '';
+        const peopleHtml = participants
+            ? `<div class="event-participants">${esc(participants)}</div>` : '';
         return `
             <div class="event-row${eventId === null ? ' readonly' : ''}">
-                <div class="event-main"><span class="event-type">${esc(typeLabel)}</span>${metaHtml}</div>
+                <div class="event-main">
+                    <div><span class="event-type">${esc(typeLabel)}</span>${metaHtml}</div>
+                    ${peopleHtml}
+                </div>
                 ${actions}
             </div>`;
+    },
+
+    /**
+     * Pick someone from the tree, or nothing. Resolves when the user chooses or
+     * cancels, so callers can just await it.
+     */
+    pickPerson(title: string, excludeId?: PersonId): Promise<PersonId | null> {
+        return new Promise(resolve => {
+            const modal = document.getElementById('participant-picker-modal');
+            const titleEl = modal?.querySelector('h2');
+            if (!modal) { resolve(null); return; }
+            if (titleEl) titleEl.textContent = title;
+
+            const done = (id: PersonId | null): void => {
+                modal.classList.remove('active');
+                this.participantPickerResolve = null;
+                resolve(id);
+            };
+            this.participantPickerResolve = () => done(null);
+
+            new PersonPicker({
+                containerId: 'participant-picker',
+                persons: DataManager.getAllPersons().filter(p => !p.isPlaceholder && p.id !== excludeId),
+                onSelect: (personId) => done(personId),
+            });
+            modal.classList.add('active');
+        });
+    },
+
+    /** Close the picker without choosing (× / Cancel / Escape). */
+    cancelParticipantPicker(): void {
+        this.participantPickerResolve?.();
+    },
+
+    // ==================== GODPARENTS & WITNESSES (K2) ====================
+
+    /**
+     * The participants are edited as plain rows held in `this.eventParticipants`
+     * until the event is saved, so cancelling really cancels.
+     *
+     * A row is either a name typed as the register writes it, or a link to
+     * someone in the tree. The typed name is the normal case: a godparent is
+     * usually a neighbour, and making people invent a person for every one of
+     * them would mean they write nothing down at all.
+     */
+    renderEventParticipants(): void {
+        const list = document.getElementById('event-participants-list');
+        if (!list) return;
+        const esc = (t: string): string => this.escapeHtml(t);
+
+        list.innerHTML = this.eventParticipants.map((p, i) => {
+            const linked = p.personId ? DataManager.getPerson(p.personId) : null;
+            const shownName = linked ? `${linked.firstName} ${linked.lastName}`.trim() : (p.name ?? '');
+            const roles = (['godparent', 'witness', 'officiant', 'other'] as ParticipantRole[])
+                .map(r => `<option value="${r}"${p.role === r ? ' selected' : ''}>${esc(strings.events.roles[r])}</option>`)
+                .join('');
+            return `
+                <div class="participant-row" data-index="${i}">
+                    <select class="participant-role" aria-label="${esc(strings.events.participants)}">${roles}</select>
+                    <input type="text" class="participant-name${linked ? ' is-linked' : ''}"
+                           value="${esc(shownName)}" placeholder="${esc(strings.events.participantName)}"
+                           aria-label="${esc(strings.events.participantName)}"${linked ? ' readonly' : ''}>
+                    <input type="text" class="participant-note" value="${esc(p.note ?? '')}"
+                           placeholder="${esc(strings.events.participantNote)}"
+                           aria-label="${esc(strings.events.participantNote)}">
+                    <button type="button" class="participant-btn secondary participant-link${linked ? ' linked' : ''}"
+                            title="${esc(linked ? strings.events.participantUnlink : strings.events.participantLink)}">
+                        ${linked ? `🔗 ${esc(strings.events.participantInTree)}` : '🔗'}
+                    </button>
+                    <button type="button" class="participant-btn secondary participant-del"
+                            title="${esc(strings.events.delete)}">&#128465;</button>
+                </div>`;
+        }).join('');
+
+        list.querySelectorAll('.participant-row').forEach(row => {
+            const i = Number(row.getAttribute('data-index'));
+            (row.querySelector('.participant-role') as HTMLSelectElement).onchange = (e) => {
+                this.eventParticipants[i].role = (e.target as HTMLSelectElement).value as ParticipantRole;
+            };
+            (row.querySelector('.participant-name') as HTMLInputElement).oninput = (e) => {
+                this.eventParticipants[i].name = (e.target as HTMLInputElement).value;
+            };
+            (row.querySelector('.participant-note') as HTMLInputElement).oninput = (e) => {
+                this.eventParticipants[i].note = (e.target as HTMLInputElement).value;
+            };
+            (row.querySelector('.participant-link') as HTMLButtonElement).onclick = () => this.toggleParticipantLink(i);
+            (row.querySelector('.participant-del') as HTMLButtonElement).onclick = () => {
+                this.eventParticipants.splice(i, 1);
+                this.renderEventParticipants();
+            };
+        });
+    },
+
+    addEventParticipantRow(): void {
+        // Baptism is the common case, so godparent is the useful default.
+        this.eventParticipants.push({ id: generateParticipantId(), role: 'godparent', name: '' });
+        this.renderEventParticipants();
+        (document.querySelector('.participant-row:last-child .participant-name') as HTMLInputElement | null)?.focus();
+    },
+
+    /** Link a row to someone in the tree, or drop the link and keep the name. */
+    async toggleParticipantLink(index: number): Promise<void> {
+        const row = this.eventParticipants[index];
+        if (row.personId) {
+            // Unlink: keep the name that was shown, so nothing is lost.
+            const person = DataManager.getPerson(row.personId);
+            row.name = person ? `${person.firstName} ${person.lastName}`.trim() : row.name;
+            row.personId = undefined;
+            this.renderEventParticipants();
+            return;
+        }
+        const personId = await this.pickPerson(strings.events.participantLink, this.currentId ?? undefined);
+        if (!personId) return;
+        row.personId = personId;
+        row.name = undefined;   // the name now comes from the person
+        this.renderEventParticipants();
+    },
+
+    /** Rows worth keeping: a row with neither a link nor a name is just noise. */
+    collectEventParticipants(): EventParticipant[] {
+        return this.eventParticipants
+            .map(p => ({
+                id: p.id,
+                role: p.role,
+                ...(p.personId ? { personId: p.personId } : {}),
+                ...(p.name?.trim() ? { name: p.name.trim() } : {}),
+                ...(p.note?.trim() ? { note: p.note.trim() } : {}),
+            }))
+            .filter(p => p.personId || p.name);
     },
 
     /** Open the event editor in "add" mode. */
@@ -109,6 +261,8 @@ export const personEventsMethods = uiModule({
         this.editingEventId = null;
         this.populateEventTypeSelect();
         this.setEventEditorFields('baptism', '', '', '', '');
+        this.eventParticipants = [];
+        this.renderEventParticipants();
         // Citations need a saved event id — hide the section while adding.
         const src = document.getElementById('event-sources-section');
         if (src) src.style.display = 'none';
@@ -125,6 +279,9 @@ export const personEventsMethods = uiModule({
         this.populateEventTypeSelect();
         this.setEventEditorFields(event.type, event.customLabel ?? '',
             formatDateForInput(event.date), event.place ?? '', event.note ?? '');
+        // A copy: editing the rows must not touch the stored event until Save.
+        this.eventParticipants = (event.participants ?? []).map(p => ({ ...p }));
+        this.renderEventParticipants();
         // Citations available for an existing event.
         const src = document.getElementById('event-sources-section');
         if (src) src.style.display = '';
@@ -207,6 +364,8 @@ export const personEventsMethods = uiModule({
         if (date) payload.date = date;
         if (place) payload.place = place;
         if (note) payload.note = note;
+        const participants = this.collectEventParticipants();
+        if (participants.length > 0) payload.participants = participants;
 
         if (this.editingEventId) {
             DataManager.updateLifeEvent(this.currentId, this.editingEventId, payload);

@@ -11,7 +11,7 @@
  * foster→foster); 'step' has no GEDCOM equivalent and exports without PEDI.
  */
 
-import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType } from './types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole } from './types.js';
 
 /**
  * LifeEvent type -> GEDCOM tag. Types with no GEDCOM equivalent ('military',
@@ -20,6 +20,14 @@ import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType 
 const EVENT_TYPE_TO_TAG: Partial<Record<LifeEventType, string>> = {
     baptism: 'BAPM', burial: 'BURI', occupation: 'OCCU', residence: 'RESI',
     emigration: 'EMIG', immigration: 'IMMI', education: 'EDUC',
+};
+
+/** RELA values for participant roles. Godparent/Witness are the conventional ones. */
+const GEDCOM_RELA: Record<ParticipantRole, string> = {
+    godparent: 'Godparent',
+    witness: 'Witness',
+    officiant: 'Officiant',
+    other: 'Present',
 };
 
 export interface GedcomExportResult {
@@ -296,6 +304,27 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
             if (event.note && event.type !== 'occupation') {
                 pushNote(lines, 2, event.note);
             }
+            // Godparents / witnesses. Someone in the tree goes out as ASSO
+            // pointing at their record; someone who is not (the usual case for
+            // a godparent) has no record to point at, so they go as _WITN with
+            // the name as written. Both carry the role in RELA.
+            for (const part of event.participants ?? []) {
+                const xref = part.personId ? personIdMap.get(part.personId) : undefined;
+                if (xref) {
+                    lines.push(`2 ASSO ${xref}`);
+                } else if (part.name) {
+                    lines.push(`2 _WITN ${escapeGedcomText(part.name)}`);
+                } else {
+                    // Linked to someone who is not in this export — cut out by a
+                    // subtree export, or removed by the privacy filter. Their
+                    // name is deliberately NOT written out instead: if the
+                    // filter took them out, naming them here would put them back.
+                    continue;
+                }
+                lines.push(`3 RELA ${GEDCOM_RELA[part.role]}`);
+                if (part.note) pushNote(lines, 3, part.note);
+            }
+
             // Source citations on the event (2 SOUR @Sx@ + 3 PAGE).
             for (const srcId of event.sourceIds ?? []) {
                 pushCitation(2, srcId);
