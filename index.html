@@ -6274,6 +6274,18 @@
             font-size: 15px; line-height: 1; color: var(--text-secondary, #777);
         }
         .event-row .event-actions button:hover { color: var(--text-primary, #222); }
+        /* On a phone these were 24x19 and 31x19 — half the 44px a finger needs,
+           side by side, and one of them deletes. Give them room to be hit, and
+           to be missed apart from each other. */
+        @media (max-width: 500px) {
+            .event-row .event-actions { gap: 8px; }
+            .event-row .event-actions button {
+                min-width: 40px;
+                min-height: 40px;
+                padding: 8px;
+                font-size: 17px;
+            }
+        }
         .events-empty { color: var(--text-secondary, #999); font-size: 13px; font-style: italic; padding: 4px 0; }
         [data-theme="dark"] .event-row { border-color: #444; background: #2a2a2a; }
 

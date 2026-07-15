@@ -55,3 +55,27 @@ test('a person with no trade recorded gets no empty line', async ({ page }) => {
     await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
     await expect(card(page, 'Jan').locator('.card-trade')).toHaveCount(0);
 });
+
+test('event actions on a phone are big enough to hit', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 780 });
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        dm.addLifeEvent(dm.getAllPersons()[0].id, { type: 'occupation', note: 'kovář', date: '1910' });
+    });
+    await cardAction(page, 'Jan', 'edit');
+
+    // They were 24x19 and 31x19, touching — half of what a finger needs, with
+    // the destructive one right next to the harmless one.
+    const buttons = page.locator('.event-row:not(.readonly) .event-actions button');
+    for (const b of await buttons.all()) {
+        const box = await b.boundingBox();
+        expect(box!.width, `${await b.getAttribute('title')} width`).toBeGreaterThanOrEqual(40);
+        expect(box!.height, `${await b.getAttribute('title')} height`).toBeGreaterThanOrEqual(40);
+    }
+    // …and far enough apart that a miss is not a delete.
+    const [edit, del] = await buttons.all();
+    const a = await edit.boundingBox(), b = await del.boundingBox();
+    expect(b!.x - (a!.x + a!.width)).toBeGreaterThanOrEqual(6);
+});
