@@ -370,6 +370,14 @@ export const miscMethods = uiModule({
     // ---- KEYBOARD SHORTCUTS ----
     initKeyboard(): void {
         document.addEventListener('keydown', (e) => {
+            // The slideshow owns the keyboard while it runs (TV remote style).
+            if (this.slideshowActive) {
+                if (e.key === 'Escape') { e.preventDefault(); this.stopSlideshow(); return; }
+                if (e.key === ' ') { e.preventDefault(); this.toggleSlideshowPause(); return; }
+                if (e.key === 'ArrowRight') { e.preventDefault(); this.advanceSlideshow(1); return; }
+                if (e.key === 'ArrowLeft') { e.preventDefault(); this.advanceSlideshow(-1); return; }
+                return;
+            }
             if (e.key === 'Escape') {
                 // The interactive tour takes precedence (it is not a modal).
                 if (this.tourActive) {

@@ -1178,6 +1178,14 @@ const stringsEN = {
     },
 
     // Cross-tree links
+    slideshow: {
+        menu: 'Slideshow (TV mode)',
+        menuDesc: 'A hands-off flight through the tree — for the family screen',
+        needMore: 'Show more people before starting the slideshow.',
+        hint: 'Space = pause · ← → = move · Esc = exit',
+        paused: 'Paused',
+    },
+
     cardDensity: {
         settingLabel: 'Card detail',
         compact: 'Compact — names only',
@@ -2528,6 +2536,14 @@ const stringsCZ: StringsType = {
     },
 
     // Cross-tree links
+    slideshow: {
+        menu: 'Průlet stromem (TV režim)',
+        menuDesc: 'Automatický průlet rodokmenem — pro promítání rodině',
+        needMore: 'Nejdřív zobrazte více osob, pak spusťte průlet.',
+        hint: 'Mezerník = pauza · ← → = posun · Esc = konec',
+        paused: 'Pozastaveno',
+    },
+
     cardDensity: {
         settingLabel: 'Detail karet',
         compact: 'Kompaktní — jen jména',

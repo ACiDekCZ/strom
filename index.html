@@ -3254,6 +3254,99 @@
         body.view-mode-print .focus-nav-btn { display: none !important; }
         @media print { .focus-nav-btn { display: none !important; } }
 
+        /* ==================== SLIDESHOW / TV MODE ==================== */
+        .slideshow-overlay { display: none; }
+        body.slideshow-mode .slideshow-overlay {
+            display: block; position: fixed; inset: 0; z-index: 150; pointer-events: none;
+        }
+        /* Nothing but the tree and the caption on screen. */
+        body.slideshow-mode .toolbar,
+        body.slideshow-mode .zoom-controls,
+        body.slideshow-mode .focus-nav-btn,
+        body.slideshow-mode #focus-controls,
+        body.slideshow-mode .minimap-panel,
+        body.slideshow-mode #descendants-badge,
+        body.slideshow-mode .branch-legend,
+        body.slideshow-mode .toast,
+        body.slideshow-mode .tour-offer,
+        body.slideshow-mode .pwa-update,
+        body.slideshow-mode .collab-bar,
+        body.slideshow-mode .collab-badge,
+        body.slideshow-mode .on-this-day { display: none !important; }
+        body.slideshow-mode #tree-container { top: 0; }
+        body.slideshow-mode .person-card .add-btn,
+        body.slideshow-mode .person-card .rel-link-icon { display: none !important; }
+
+        /* Spotlight: the stop we are on stands out, the rest recedes. */
+        body.slideshow-mode .person-card {
+            opacity: 0.45; filter: saturate(0.7);
+            transition: opacity 0.6s ease, filter 0.6s ease, transform 0.6s ease, box-shadow 0.6s ease;
+        }
+        body.slideshow-mode .person-card.slideshow-current {
+            opacity: 1; filter: none;
+            transform: scale(1.12);
+            box-shadow: 0 0 0 3px var(--primary, #4a7c59),
+                        0 0 28px 6px rgba(74, 124, 89, 0.55),
+                        0 10px 30px rgba(0, 0, 0, 0.35);
+            z-index: 5;
+            animation: slideshow-pulse 2.4s ease-in-out infinite;
+        }
+        /* The focus ring would fight the spotlight — the slideshow decides. */
+        body.slideshow-mode .person-card.focused { transform: none; }
+        body.slideshow-mode .person-card.focused.slideshow-current { transform: scale(1.12); }
+        @keyframes slideshow-pulse {
+            0%, 100% { box-shadow: 0 0 0 3px var(--primary, #4a7c59),
+                        0 0 24px 4px rgba(74, 124, 89, 0.45),
+                        0 10px 30px rgba(0, 0, 0, 0.35); }
+            50%      { box-shadow: 0 0 0 3px var(--primary, #4a7c59),
+                        0 0 34px 10px rgba(74, 124, 89, 0.65),
+                        0 10px 30px rgba(0, 0, 0, 0.35); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            body.slideshow-mode .person-card.slideshow-current { animation: none; }
+        }
+
+        .slideshow-caption {
+            position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%);
+            display: flex; align-items: center; gap: 18px;
+            max-width: min(900px, 90vw);
+            background: rgba(20, 20, 20, 0.88); color: #fff;
+            border-radius: 16px; padding: 18px 24px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            animation: slideshow-in 0.5s ease;
+        }
+        @keyframes slideshow-in { from { opacity: 0; transform: translateX(-50%) translateY(12px); } }
+        .slideshow-photo img {
+            width: 88px; height: 88px; border-radius: 50%; object-fit: cover;
+            display: block; border: 2px solid rgba(255,255,255,0.25);
+        }
+        .slideshow-text { min-width: 0; }
+        .slideshow-name { font-size: 26px; font-weight: 700; line-height: 1.2; }
+        .slideshow-years { font-size: 15px; opacity: 0.75; margin-top: 2px; }
+        .slideshow-story {
+            font-size: 14px; line-height: 1.5; margin-top: 8px; opacity: 0.92;
+            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .slideshow-progress { font-size: 12px; opacity: 0.5; align-self: flex-start; white-space: nowrap; }
+
+        .slideshow-controls {
+            position: absolute; right: 24px; bottom: 44px;
+            display: flex; gap: 8px; pointer-events: auto;
+            opacity: 0.25; transition: opacity 0.2s;
+        }
+        .slideshow-overlay:hover .slideshow-controls { opacity: 1; }
+        .slideshow-controls button {
+            width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.25); background: rgba(20,20,20,0.8);
+            color: #fff; font-size: 16px; line-height: 1;
+        }
+        .slideshow-hint {
+            position: absolute; left: 50%; top: 20px; transform: translateX(-50%);
+            font-size: 12px; color: #fff; background: rgba(20,20,20,0.6);
+            padding: 6px 14px; border-radius: 14px; opacity: 0.3;
+        }
+        body.slideshow-paused #slideshow-pause { background: var(--primary, #4a7c59); }
+
         /* Hamburger button */
         .toolbar .hamburger-btn {
             width: 44px;
@@ -6136,6 +6229,7 @@
             <button id="mm-view-fan" onclick="window.Strom.UI.setDisplayViewMode('fan'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.fan"></button>
         </div>
         <button class="edit-only" onclick="window.Strom.UI.makeTreeFromCurrentView(); window.Strom.UI.closeMobileMenu()">✂️ <span data-i18n="menu.makeTreeFromView"></span></button>
+        <button onclick="window.Strom.UI.startSlideshow(); window.Strom.UI.closeMobileMenu()">📺 <span data-i18n="slideshow.menu"></span></button>
         <button onclick="window.Strom.UI.showSettingsDialog(); window.Strom.UI.closeMobileMenu()">⚙ <span data-i18n="settings.title"></span></button>
     </div>
 
@@ -6185,6 +6279,17 @@
         onclick="window.Strom.TreeRenderer.goBack()" data-i18n-title="focus.back">↩</button>
     <button id="focus-forward-btn" class="focus-nav-btn focus-forward-btn" style="display:none;"
         onclick="window.Strom.TreeRenderer.goForward()" data-i18n-title="focus.forward">↪</button>
+
+    <div id="slideshow-overlay" class="slideshow-overlay">
+        <div id="slideshow-caption" class="slideshow-caption"></div>
+        <div class="slideshow-controls">
+            <button type="button" onclick="window.Strom.UI.advanceSlideshow(-1)" aria-label="previous">‹</button>
+            <button type="button" id="slideshow-pause" onclick="window.Strom.UI.toggleSlideshowPause()" aria-label="pause">⏸</button>
+            <button type="button" onclick="window.Strom.UI.advanceSlideshow(1)" aria-label="next">›</button>
+            <button type="button" onclick="window.Strom.UI.stopSlideshow()" aria-label="exit">✕</button>
+        </div>
+        <div class="slideshow-hint" data-i18n="slideshow.hint"></div>
+    </div>
 
     <div class="zoom-controls">
         <button onclick="window.Strom.ZoomPan.zoomIn()" data-i18n-title="zoomControls.zoomIn">+</button>

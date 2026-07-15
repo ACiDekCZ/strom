@@ -516,6 +516,42 @@ class ZoomPanClass {
     /**
      * Center the view on a specific person card
      */
+    /**
+     * Animate BOTH pan and zoom so a person ends up centred at `targetScale`.
+     * The slideshow's building block: centerOnPerson jumps, this glides.
+     * Returns false when the card isn't rendered (nothing to fly to).
+     */
+    flyToPerson(personId: PersonId, targetScale: number, duration = 1600): boolean {
+        const container = document.getElementById('tree-container');
+        const card = document.querySelector(`.person-card[data-id="${personId}"]`) as HTMLElement | null;
+        if (!container || !card) return false;
+
+        const cardCenterX = (parseFloat(card.style.left) || 0) + card.offsetWidth / 2;
+        const cardCenterY = (parseFloat(card.style.top) || 0) + card.offsetHeight / 2;
+        const endScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, targetScale));
+        const endTx = container.clientWidth / 2 - cardCenterX * endScale;
+        const endTy = container.clientHeight / 2 - cardCenterY * endScale;
+
+        if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
+        const startScale = this.scale, startTx = this.tx, startTy = this.ty;
+        const startTime = performance.now();
+
+        const animate = (now: number) => {
+            const progress = Math.min((now - startTime) / duration, 1);
+            // Ease in-out: a gentle glide reads better on a TV than a snap.
+            const eased = progress < 0.5
+                ? 4 * progress ** 3
+                : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+            this.scale = startScale + (endScale - startScale) * eased;
+            this.tx = startTx + (endTx - startTx) * eased;
+            this.ty = startTy + (endTy - startTy) * eased;
+            this.apply();
+            this.animationFrame = progress < 1 ? requestAnimationFrame(animate) : null;
+        };
+        this.animationFrame = requestAnimationFrame(animate);
+        return true;
+    }
+
     centerOnPerson(personId: PersonId): void {
         const container = document.getElementById('tree-container');
         const card = document.querySelector(`.person-card[data-id="${personId}"]`) as HTMLElement;

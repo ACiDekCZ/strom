@@ -68,6 +68,7 @@ import { bookUiMethods } from './book-ui.js';
 import { snapshotsUiMethods } from './snapshots-ui.js';
 import { minimapMethods, MinimapTransform, WorldBox } from './minimap.js';
 import { anniversariesUiMethods } from './anniversaries-ui.js';
+import { slideshowMethods } from './slideshow.js';
 import { shareUiMethods } from './share-ui.js';
 import { familyWizardMethods } from './family-wizard.js';
 import { pwaUiMethods } from './pwa-ui.js';
@@ -134,6 +135,12 @@ export class UIClass {
     editingSourceId: string | null = null;
     /** What a citation applies to (person, or a specific event on that person). */
     citationContext: { personId: PersonId; eventId?: string } | { partnershipId: PartnershipId } | null = null;
+    // Slideshow / TV mode
+    slideshowActive = false;
+    slideshowPaused = false;
+    slideshowStops: PersonId[] = [];
+    slideshowIndex = 0;
+    slideshowTimer: number | null = null;
     /** When the source editor was opened from the picker, cite the new source. */
     citeSourceAfterCreate = false;
 
@@ -291,6 +298,10 @@ Object.assign(UIClass.prototype, minimapMethods);
 type AnniversariesUiMethods = typeof anniversariesUiMethods;
 export interface UIClass extends AnniversariesUiMethods {}
 Object.assign(UIClass.prototype, anniversariesUiMethods);
+
+type SlideshowMethods = typeof slideshowMethods;
+export interface UIClass extends SlideshowMethods {}
+Object.assign(UIClass.prototype, slideshowMethods);
 
 type FamilyWizardMethods = typeof familyWizardMethods;
 export interface UIClass extends FamilyWizardMethods {}
