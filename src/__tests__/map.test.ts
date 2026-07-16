@@ -5,8 +5,8 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    fitBounds, panCenter, pointInViewport, project, tileUrl, tilesForViewport, unproject, zoomAround,
-    MAX_ZOOM, MIN_ZOOM, TILE_SIZE,
+    fitBounds, panCenter, pinchZoomStep, pointInViewport, project, tileUrl, tilesForViewport, unproject, zoomAround,
+    MAX_ZOOM, MIN_ZOOM, PINCH_ZOOM_IN_RATIO, PINCH_ZOOM_OUT_RATIO, TILE_SIZE,
 } from '../map.js';
 
 const PRAGUE = { lat: 50.0755, lon: 14.4378 };
@@ -87,8 +87,60 @@ describe('tilesForViewport', () => {
     });
 
     it('builds an OpenStreetMap tile URL', () => {
-        expect(tileUrl({ x: 4, y: 5, z: 3, left: 0, top: 0 }))
+        expect(tileUrl({ x: 4, y: 5, z: 3, wx: 4, left: 0, top: 0 }))
             .toBe('https://tile.openstreetmap.org/3/4/5.png');
+    });
+
+    it('gives each tile a stable unwrapped column, distinct even where x wraps', () => {
+        // Straddling the date line: two columns wrap to the same tile x but keep
+        // different wx, so tile diffing never confuses them for one <img>.
+        const tiles = tilesForViewport({ lat: 0, lon: 179.9 }, 3, 800, 600);
+        const count = Math.pow(2, 3);
+        for (const t of tiles) expect(((t.wx % count) + count) % count).toBe(t.x);
+        // wx is unique per drawn tile position; x need not be.
+        const wxKeys = tiles.map(t => `${t.wx}/${t.y}`);
+        expect(new Set(wxKeys).size).toBe(tiles.length);
+    });
+});
+
+describe('pinchZoomStep', () => {
+    it('does not step until the fingers cross a threshold', () => {
+        expect(pinchZoomStep(105, 100).step).toBe(0);   // barely spread
+        expect(pinchZoomStep(90, 100).step).toBe(0);    // barely pinched
+    });
+
+    it('steps in when the spread grows past the in-ratio', () => {
+        const r = pinchZoomStep(100 * PINCH_ZOOM_IN_RATIO, 100);
+        expect(r.step).toBe(1);
+        expect(r.baseline).toBe(100 * PINCH_ZOOM_IN_RATIO);   // rebaselined for the next step
+    });
+
+    it('steps out when the spread shrinks past the out-ratio', () => {
+        const r = pinchZoomStep(100 * PINCH_ZOOM_OUT_RATIO, 100);
+        expect(r.step).toBe(-1);
+        expect(r.baseline).toBe(100 * PINCH_ZOOM_OUT_RATIO);
+    });
+
+    it('carries the baseline through when it does not step', () => {
+        expect(pinchZoomStep(110, 100).baseline).toBe(100);
+    });
+
+    it('adopts the first real spread instead of stepping from nothing', () => {
+        // First move of a pinch: no baseline yet, so it only records one.
+        const r = pinchZoomStep(150, 0);
+        expect(r.step).toBe(0);
+        expect(r.baseline).toBe(150);
+    });
+
+    it('takes repeated steps as the fingers keep spreading', () => {
+        let baseline = 100;
+        let steps = 0;
+        for (const spread of [150, 230, 350]) {   // each comfortably past 1.4× the last
+            const r = pinchZoomStep(spread, baseline);
+            baseline = r.baseline;
+            steps += r.step;
+        }
+        expect(steps).toBe(3);
     });
 });
 

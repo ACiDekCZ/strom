@@ -191,6 +191,7 @@ export const treeManagementMethods = uiModule({
 
     /** Toggle the desktop ⋯ actions menu (mirrors the tree switcher dropdown). */
     toggleActionsMenu(): void {
+        this.closeAllMenusExcept('actions');
         const dropdown = document.getElementById('actions-menu-dropdown');
         if (!dropdown) return;
         dropdown.classList.toggle('active');
@@ -206,6 +207,7 @@ export const treeManagementMethods = uiModule({
      * Toggle tree switcher dropdown
      */
     toggleTreeSwitcher(): void {
+        this.closeAllMenusExcept('switcher');
         const dropdown = document.getElementById('tree-switcher-dropdown');
         if (dropdown) {
             dropdown.classList.toggle('active');

@@ -363,8 +363,23 @@ export const miscMethods = uiModule({
         TreeRenderer.render();
     },
 
+    // ---- MENUS ----
+    /**
+     * The three floating toolbar menus — the hamburger, the tree switcher and
+     * the desktop ⋯ actions menu — are mutually exclusive: opening one closes
+     * the others. Called at the top of each toggle so a second one never layers
+     * on top of the first (a user once saw the hamburger and the switcher
+     * dropdown open together on mobile).
+     */
+    closeAllMenusExcept(which: 'mobile' | 'switcher' | 'actions'): void {
+        if (which !== 'mobile') document.getElementById('mobile-menu')?.classList.remove('active');
+        if (which !== 'switcher') document.getElementById('tree-switcher-dropdown')?.classList.remove('active');
+        if (which !== 'actions') document.getElementById('actions-menu-dropdown')?.classList.remove('active');
+    },
+
     // ---- MOBILE MENU ----
     toggleMobileMenu(): void {
+        this.closeAllMenusExcept('mobile');
         const menu = document.getElementById('mobile-menu');
         menu?.classList.toggle('active');
     },

@@ -3996,6 +3996,11 @@
         .mobile-menu .mobile-view-row button.active {
             background: var(--primary, #4a7c59); color: #fff; border-color: var(--primary, #4a7c59);
         }
+        /* Undo/Redo sit side by side as two half-width buttons. */
+        .mobile-menu .mobile-action-row { display: flex; gap: 6px; }
+        .mobile-menu .mobile-action-row button {
+            flex: 1; text-align: center; padding: 12px 8px;
+        }
 
         /* Menu modal (Export/Import dialog) */
         .menu-modal {
@@ -6881,8 +6886,10 @@
         <div class="menu-section-header edit-only" data-i18n="menu.sectionEdits"></div>
         <button class="edit-only" onclick="window.Strom.UI.showAddPersonModal(); window.Strom.UI.closeMobileMenu()" data-i18n="mobileMenu.addPerson"></button>
         <button class="edit-only" id="mm-family-btn" style="display:none;" onclick="window.Strom.UI.startFamilyWizardFromToolbar(); window.Strom.UI.closeMobileMenu()">👪 <span data-i18n="familyWizard.title"></span></button>
-        <button class="edit-only" onclick="window.Strom.UI.performUndo(); window.Strom.UI.closeMobileMenu()">↶ <span data-i18n="undo.undo"></span></button>
-        <button class="edit-only" onclick="window.Strom.UI.performRedo(); window.Strom.UI.closeMobileMenu()">↷ <span data-i18n="undo.redo"></span></button>
+        <div class="mobile-action-row edit-only">
+            <button class="edit-only" onclick="window.Strom.UI.performUndo(); window.Strom.UI.closeMobileMenu()">↶ <span data-i18n="undo.undo"></span></button>
+            <button class="edit-only" onclick="window.Strom.UI.performRedo(); window.Strom.UI.closeMobileMenu()">↷ <span data-i18n="undo.redo"></span></button>
+        </div>
         <div class="menu-section-header" data-i18n="menu.sectionView"></div>
         <div class="mobile-view-row">
             <button id="mm-view-family" onclick="window.Strom.UI.setDisplayViewMode('family'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.family"></button>

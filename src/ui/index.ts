@@ -160,6 +160,13 @@ export class UIClass {
     mapScope: MapScope = 'view';
     mapCenter: PlaceGeo | null = null;
     mapZoom = 5;
+    /**
+     * Live tile <img> elements keyed by their stable identity (`z/wx/y`). Kept
+     * between draws so panning re-positions the same images instead of rebuilding
+     * the layer — a wholesale rebuild flashes the paper background black for a
+     * frame while cached images re-decode. Reset when the map canvas is recreated.
+     */
+    mapTileEls = new Map<string, HTMLImageElement>();
     /** Progress of a running lookup, null when idle. */
     mapGeocoding: { done: number; total: number; place: string } | null = null;
     mapGeocodeAbort: AbortController | null = null;

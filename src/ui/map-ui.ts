@@ -21,7 +21,7 @@ import { strings } from '../strings.js';
 import { PersonId, PlaceGeo } from '../types.js';
 import { collectPlaces, PlaceUsage } from '../places.js';
 import {
-    fitBounds, panCenter, pointInViewport, tileUrl, tilesForViewport, zoomAround,
+    fitBounds, panCenter, pinchZoomStep, pointInViewport, tileUrl, tilesForViewport, zoomAround,
     TILE_ATTRIBUTION, TILE_ATTRIBUTION_URL,
 } from '../map.js';
 import { GEOCODER_NAME, geocodeCandidates, geocodePlaces } from '../geocode.js';
@@ -90,6 +90,7 @@ export const mapMethods = uiModule({
                 </div>
                 <div class="map-status" id="map-status"></div>
                 <a class="map-attribution" href="${TILE_ATTRIBUTION_URL}" target="_blank" rel="noopener noreferrer">${TILE_ATTRIBUTION}</a>`;
+            this.mapTileEls = new Map();  // fresh canvas: the old <img> refs are detached
             this.bindMapGestures(container);
             this.bindMapClicks(container);
         }
@@ -170,12 +171,36 @@ export const mapMethods = uiModule({
         if (!layer || !this.mapCenter) return;
         const { width, height } = this.mapViewportSize(container);
 
-        // Rebuilt per draw; the browser serves already-seen tiles from its cache,
-        // so panning does not re-download anything.
-        layer.innerHTML = tilesForViewport(this.mapCenter, this.mapZoom, width, height)
-            .map(t => `<img class="map-tile" src="${tileUrl(t)}" alt="" draggable="false" loading="lazy"
-                        style="left:${t.left}px; top:${t.top}px;">`)
-            .join('');
+        // Diffed, not rebuilt. Each tile <img> is keyed by its stable identity
+        // (z/wx/y) and kept across draws: panning only re-positions the existing,
+        // already-decoded images and adds/removes the few at the edges. Rebuilding
+        // the whole layer instead flashed the background black for a frame while
+        // even cached images re-decoded.
+        const wanted = tilesForViewport(this.mapCenter, this.mapZoom, width, height);
+        const live = this.mapTileEls;
+        const seen = new Set<string>();
+        for (const t of wanted) {
+            const key = `${t.z}/${t.wx}/${t.y}`;
+            seen.add(key);
+            let img = live.get(key);
+            if (!img) {
+                img = document.createElement('img');
+                img.className = 'map-tile';
+                img.alt = '';
+                img.draggable = false;
+                img.src = tileUrl(t);
+                layer.appendChild(img);
+                live.set(key, img);
+            }
+            img.style.left = `${t.left}px`;
+            img.style.top = `${t.top}px`;
+        }
+        for (const [key, img] of live) {
+            if (!seen.has(key)) {
+                img.remove();
+                live.delete(key);
+            }
+        }
     },
 
     drawMapMarkers(container: HTMLElement, places: MappedPlace[]): void {
@@ -319,13 +344,20 @@ export const mapMethods = uiModule({
         this.drawMapMarkers(container, this.mapPlaces());
     },
 
-    /** Drag to pan, wheel to zoom — what everyone expects from a map. */
+    /** Drag to pan, pinch (or wheel) to zoom — what everyone expects from a map. */
     bindMapGestures(container: HTMLElement): void {
+        // Active pointers by id. One = drag/pan; two = pinch zoom. Tracking them
+        // ourselves (rather than a single-pointer flag) lets a second finger land
+        // mid-drag without the map lurching.
+        const pointers = new Map<number, { x: number; y: number }>();
         let dragging = false;
         let lastX = 0;
         let lastY = 0;
-        // Redraws rebuild the tile/marker HTML wholesale, so during a drag they
-        // are coalesced to one per frame instead of one per pointer event.
+        let pinching = false;
+        let pinchBaseline = 0;   // finger spread measured at the last zoom step
+
+        // Redraws re-position tiles/markers, so during a gesture they are
+        // coalesced to one per frame instead of one per pointer event.
         let redrawQueued = false;
         const queueRedraw = (): void => {
             if (redrawQueued) return;
@@ -337,29 +369,79 @@ export const mapMethods = uiModule({
             });
         };
 
+        const spread = (): number => {
+            const [a, b] = [...pointers.values()];
+            return Math.hypot(a.x - b.x, a.y - b.y);
+        };
+
         container.addEventListener('pointerdown', (e: PointerEvent) => {
             if ((e.target as HTMLElement).closest('.map-marker, .map-popup, .map-controls, .map-scope, .map-status, .map-tiles-notice')) return;
-            dragging = true;
-            lastX = e.clientX;
-            lastY = e.clientY;
-            container.classList.add('map-dragging');
-            container.setPointerCapture(e.pointerId);
+            pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            try { container.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
+            if (pointers.size === 1) {
+                dragging = true;
+                lastX = e.clientX;
+                lastY = e.clientY;
+                container.classList.add('map-dragging');
+            } else if (pointers.size === 2) {
+                // Second finger down: stop panning and start a pinch. Panning is
+                // paused so the frame the finger lands does not also pan-jump.
+                dragging = false;
+                pinching = true;
+                pinchBaseline = spread();
+                container.classList.remove('map-dragging');
+                this.closeMapPopup();
+            }
         });
         container.addEventListener('pointermove', (e: PointerEvent) => {
-            if (!dragging || !this.mapCenter) return;
-            this.mapCenter = panCenter(this.mapCenter, this.mapZoom, e.clientX - lastX, e.clientY - lastY);
-            lastX = e.clientX;
-            lastY = e.clientY;
-            queueRedraw();
+            if (!pointers.has(e.pointerId)) return;
+            pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+            if (pinching && pointers.size >= 2 && this.mapCenter) {
+                const { step, baseline } = pinchZoomStep(spread(), pinchBaseline);
+                pinchBaseline = baseline;
+                if (step !== 0) {
+                    const [a, b] = [...pointers.values()];
+                    const rect = container.getBoundingClientRect();
+                    const next = zoomAround(
+                        this.mapCenter, this.mapZoom, this.mapZoom + step,
+                        { x: (a.x + b.x) / 2 - rect.left, y: (a.y + b.y) / 2 - rect.top },
+                        Math.round(rect.width), Math.round(rect.height),
+                    );
+                    this.mapCenter = next.center;
+                    this.mapZoom = next.zoom;
+                    queueRedraw();
+                }
+                return;
+            }
+
+            if (dragging && this.mapCenter) {
+                this.mapCenter = panCenter(this.mapCenter, this.mapZoom, e.clientX - lastX, e.clientY - lastY);
+                lastX = e.clientX;
+                lastY = e.clientY;
+                queueRedraw();
+            }
         });
-        const endDrag = (e: PointerEvent): void => {
-            if (!dragging) return;
-            dragging = false;
-            container.classList.remove('map-dragging');
+        const endPointer = (e: PointerEvent): void => {
+            if (!pointers.has(e.pointerId)) return;
+            pointers.delete(e.pointerId);
             try { container.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+            if (pointers.size < 2) pinching = false;
+            if (pointers.size === 1) {
+                // Back to one finger: resume panning from where it rests, so
+                // lifting one pinch finger does not snap the map.
+                const [p] = [...pointers.values()];
+                dragging = true;
+                lastX = p.x;
+                lastY = p.y;
+                container.classList.add('map-dragging');
+            } else if (pointers.size === 0) {
+                dragging = false;
+                container.classList.remove('map-dragging');
+            }
         };
-        container.addEventListener('pointerup', endDrag);
-        container.addEventListener('pointercancel', endDrag);
+        container.addEventListener('pointerup', endPointer);
+        container.addEventListener('pointercancel', endPointer);
 
         container.addEventListener('wheel', (e: WheelEvent) => {
             if (!this.mapCenter) return;

@@ -27,6 +27,13 @@ export interface TileRef {
     x: number;
     y: number;
     z: number;
+    /**
+     * Unwrapped world column. `x` is wrapped into [0, 2^z) for the tile URL, so
+     * two copies of the same tile either side of the date line share `x`; `wx`
+     * keeps them apart. It is also a stable identity for a tile across pans
+     * (only its `left`/`top` change), which is what tile diffing keys on.
+     */
+    wx: number;
     /** CSS offset inside the map container. */
     left: number;
     top: number;
@@ -81,6 +88,7 @@ export function tilesForViewport(center: PlaceGeo, zoom: number, width: number, 
                 x: ((tx % count) + count) % count,  // wrap around the date line
                 y: ty,
                 z,
+                wx: tx,
                 left: tx * TILE_SIZE - originX,
                 top: ty * TILE_SIZE - originY,
             });
@@ -163,3 +171,36 @@ export function tileUrl(tile: TileRef): string {
 /** Required by the OSM tile policy and shown in the map corner. */
 export const TILE_ATTRIBUTION = '© OpenStreetMap contributors';
 export const TILE_ATTRIBUTION_URL = 'https://www.openstreetmap.org/copyright';
+
+/**
+ * Pinch thresholds. The map zoom is INTEGER tile zoom, not a continuous scale,
+ * so a pinch cannot smoothly grow the picture — it must decide when the fingers
+ * have moved far enough apart (or together) to warrant the next whole step.
+ * Spreading to 1.4× steps in; pinching to 0.7× steps out. The gap between the
+ * two (rather than a single 1.0 boundary) stops a jittering pinch from flipping
+ * the zoom back and forth around one point.
+ */
+export const PINCH_ZOOM_IN_RATIO = 1.4;
+export const PINCH_ZOOM_OUT_RATIO = 0.7;
+
+/**
+ * Given the current finger spread and the spread measured at the last zoom step,
+ * decide whether a stepped (integer-zoom) map should take a step now.
+ *
+ * Returns the step (−1, 0 or +1) and the baseline the NEXT step is measured
+ * against: after a step the baseline resets to the current spread, so each
+ * further 1.4×/0.7× triggers the following step; with no step the baseline is
+ * carried through unchanged.
+ */
+export function pinchZoomStep(
+    currentSpread: number,
+    baselineSpread: number,
+): { step: -1 | 0 | 1; baseline: number } {
+    if (baselineSpread <= 0 || currentSpread <= 0) {
+        return { step: 0, baseline: currentSpread };
+    }
+    const ratio = currentSpread / baselineSpread;
+    if (ratio >= PINCH_ZOOM_IN_RATIO) return { step: 1, baseline: currentSpread };
+    if (ratio <= PINCH_ZOOM_OUT_RATIO) return { step: -1, baseline: currentSpread };
+    return { step: 0, baseline: baselineSpread };
+}

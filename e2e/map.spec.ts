@@ -287,6 +287,66 @@ test('two places close together stay separately clickable', async ({ page }) => 
     }
 });
 
+test('panning re-positions the same tile images instead of rebuilding them', async ({ page }) => {
+    await stubTiles(page);
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await expect(page.locator('.map-tile').first()).toBeVisible();
+
+    // Tag one tile so we can tell whether it survives a pan (diffed, the same
+    // <img> re-positioned) or is thrown away and rebuilt (innerHTML — the case
+    // that flashed the map background black for a frame).
+    const startLeft = await page.evaluate(() => {
+        const img = document.querySelector('.map-tiles .map-tile') as HTMLElement;
+        img.setAttribute('data-probe', '1');
+        return img.style.left;
+    });
+
+    await page.evaluate(() => {
+        const el = document.getElementById('map-container')!;
+        const pe = (type: string, x: number, y: number) =>
+            new PointerEvent(type, { pointerId: 1, clientX: x, clientY: y, bubbles: true, cancelable: true, pointerType: 'touch' });
+        el.dispatchEvent(pe('pointerdown', 400, 300));
+        el.dispatchEvent(pe('pointermove', 340, 260));
+        el.dispatchEvent(pe('pointerup', 340, 260));
+    });
+
+    const probe = page.locator('.map-tile[data-probe="1"]');
+    await expect(probe).toHaveCount(1);   // still the very same element
+    await expect.poll(() => probe.evaluate((el: HTMLElement) => el.style.left)).not.toBe(startLeft);
+});
+
+test('a two-finger pinch steps the map zoom in', async ({ page }) => {
+    await stubTiles(page);
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await expect(page.locator('.map-tile').first()).toBeVisible();
+
+    const before = await page.evaluate(() => window.Strom.UI.mapZoom);
+
+    // Two fingers starting 40px apart, spread to ~280px — well past the step
+    // threshold, so the integer tile zoom advances.
+    await page.evaluate(() => {
+        const el = document.getElementById('map-container')!;
+        const pe = (type: string, id: number, x: number) =>
+            new PointerEvent(type, { pointerId: id, clientX: x, clientY: 300, bubbles: true, cancelable: true, pointerType: 'touch' });
+        el.dispatchEvent(pe('pointerdown', 1, 380));
+        el.dispatchEvent(pe('pointerdown', 2, 420));
+        el.dispatchEvent(pe('pointermove', 1, 260));
+        el.dispatchEvent(pe('pointermove', 2, 540));
+        el.dispatchEvent(pe('pointerup', 1, 260));
+        el.dispatchEvent(pe('pointerup', 2, 540));
+    });
+
+    await expect.poll(() => page.evaluate(() => window.Strom.UI.mapZoom)).toBeGreaterThan(before);
+});
+
 test('offline, the map says so instead of showing a blank canvas', async ({ page, context }) => {
     await stubTiles(page);
     await stubGeocoder(page, { Greenwich: [51.48, 0.0], Pembroke: [51.67, -4.91] });
