@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, card, cardAction, addRelation, personModal, waitForPersist } from './helpers.js';
+import { openApp, createFirstPerson, fillPerson, card, cardAction, addRelation, personModal, waitForPersist } from './helpers.js';
 
 /** Count real (non-placeholder) persons; single-parent children spawn a placeholder partner. */
 function realPersonCount(page: Page): Promise<number> {
@@ -187,4 +187,20 @@ test('editing shows the whole record; adding starts short', async ({ page }) => 
     await expect(modal.locator('#input-deathdate')).toBeVisible();
     await expect(modal.locator('#input-notes')).toBeVisible();
     await expect(modal.locator('#events-section')).toBeVisible();
+});
+
+test('a person added from the modal is findable in search right away', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    // Add a second person via the toolbar modal — no import, no tree switch.
+    await page.evaluate(() => window.Strom.UI.showAddPersonModal());
+    await fillPerson(page, 'Bartolomej', 'Vzacny');
+
+    // The search picker must know them immediately (its cached list refreshes
+    // on save — it used to stay stale until an import or a tree switch).
+    const input = page.locator('#toolbar-search-picker .person-picker-input');
+    await input.click();
+    await input.fill('Bartolomej');
+    await expect(page.locator('#toolbar-search-picker .person-picker-item', { hasText: 'Bartolomej' })).toBeVisible();
 });

@@ -883,6 +883,8 @@ export const miscMethods = uiModule({
         const result = DataManager.undo();
         if (!result) return;
         void TreeRenderer.renderAsync();
+        // Undo can add/remove/rename people — the picker's cached list too.
+        this.refreshSearch();
         this.showToast(strings.undo.undone(result.description));
     },
 
@@ -891,6 +893,7 @@ export const miscMethods = uiModule({
         const result = DataManager.redo();
         if (!result) return;
         void TreeRenderer.renderAsync();
+        this.refreshSearch();
         this.showToast(strings.undo.redone(result.description));
     },
 

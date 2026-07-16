@@ -150,6 +150,7 @@ export const familyWizardMethods = uiModule({
         const created = DataManager.addFamily(spec);
         this.closeFamilyWizard();
         TreeRenderer.render();
+        this.refreshSearch();
         this.showToast(strings.familyWizard.added(created));
     },
 

@@ -576,6 +576,9 @@ export const personModalMethods = uiModule({
 
         this.forceCloseModal();
         TreeRenderer.render();
+        // The toolbar picker caches the person list — without this, a person
+        // added or renamed here is unfindable until an import or tree switch.
+        this.refreshSearch();
 
         // After the very first person, offer to add the rest of the family — as
         // a non-blocking action toast, so it never interrupts other flows.
@@ -603,6 +606,7 @@ export const personModalMethods = uiModule({
                 document.getElementById(parentDialogId)?.classList.remove('active');
             }
             TreeRenderer.render();
+            this.refreshSearch();
         }
         // If not confirmed, parent dialog stays open (returnToParentDialog handles it)
     },
