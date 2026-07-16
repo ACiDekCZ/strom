@@ -29,9 +29,6 @@ const matchCache = new Map<string, CrossTreeMatch[]>();
  */
 const treeDataCache = new Map<string, { stamp: string; name: string; data: import('./types.js').StromData }>();
 
-// Track current navigation index for cycling through matches
-const navigationIndex = new Map<string, number>();
-
 /**
  * Invalidate entire cache
  * Call when any tree data changes
@@ -39,7 +36,6 @@ const navigationIndex = new Map<string, number>();
 export function invalidateCache(): void {
     matchCache.clear();
     treeDataCache.clear();
-    navigationIndex.clear();
 }
 
 /**
@@ -64,7 +60,6 @@ export function invalidateCacheForTree(treeId: TreeId): void {
             }
         }
     }
-    navigationIndex.clear();
 }
 
 // ==================== MAIN FUNCTIONS ====================
@@ -126,33 +121,6 @@ export function findCrossTreeMatches(
     matchCache.set(cacheKey, matches);
 
     return matches;
-}
-
-/**
- * Get the next match in the cycle for navigation
- * Returns the match to navigate to, or null if no matches
- */
-export function getNextMatch(
-    currentTreeId: TreeId,
-    personId: PersonId,
-    matches: CrossTreeMatch[]
-): CrossTreeMatch | null {
-    if (matches.length === 0) return null;
-
-    const navKey = `${currentTreeId}:${personId}`;
-    const currentIndex = navigationIndex.get(navKey) ?? -1;
-    const nextIndex = (currentIndex + 1) % matches.length;
-
-    navigationIndex.set(navKey, nextIndex);
-
-    return matches[nextIndex];
-}
-
-/**
- * Reset navigation index (call when switching trees)
- */
-export function resetNavigationIndex(): void {
-    navigationIndex.clear();
 }
 
 /**

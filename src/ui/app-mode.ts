@@ -531,9 +531,6 @@ export const appModeMethods = uiModule({
      * Used for cross-tree link navigation
      */
     async switchToTreeAndFocus(treeId: TreeId, personId: PersonId): Promise<void> {
-        // Reset cross-tree navigation index when switching trees
-        CrossTree.resetNavigationIndex();
-
         // Switch to the target tree
         if (await DataManager.switchTree(treeId)) {
             // Update UI to reflect tree switch
@@ -548,6 +545,104 @@ export const appModeMethods = uiModule({
 
             // Center view on the person
             ZoomPan.centerOnPerson(personId);
+        }
+    },
+
+    /**
+     * Cross-tree chooser: when a person matches persons in more than one other
+     * tree, clicking the badge opens this small floating menu so the user can
+     * pick which tree to switch to (instead of blindly cycling). A single
+     * match switches directly and never opens the chooser.
+     *
+     * Modelled on the card context menu (floating, position: fixed, appended
+     * to <body>): closes on outside click, canvas pan/zoom (mousedown/touch/
+     * wheel outside the menu), Escape (see the keydown handler in ui/misc.ts)
+     * and re-render (renderer calls hideCrossTreeChooser()).
+     */
+    showCrossTreeChooser(matches: CrossTree.CrossTreeMatch[], anchor: HTMLElement): void {
+        this.hideCrossTreeChooser();
+        if (matches.length === 0) return;
+
+        const menu = document.createElement('div');
+        menu.className = 'cross-tree-chooser';
+        // User data (tree + person names) is escaped and carried via a data
+        // attribute index, never interpolated into inline handlers.
+        const header = `<div class="cross-tree-chooser-header">${this.escapeHtml(strings.crossTree.chooserHeader)}</div>`;
+        const rows = matches.map((m, i) =>
+            `<div class="cross-tree-chooser-item" data-index="${i}" role="button" tabindex="0">
+                <div class="cross-tree-chooser-tree">${this.escapeHtml(m.treeName)}</div>
+                <div class="cross-tree-chooser-person">${this.escapeHtml(m.personName)}</div>
+            </div>`
+        ).join('');
+        menu.innerHTML = header + rows;
+
+        // Initial position: left-aligned to the badge, just below it.
+        const rect = anchor.getBoundingClientRect();
+        menu.style.left = `${rect.left}px`;
+        menu.style.top = `${rect.bottom + 6}px`;
+
+        menu.querySelectorAll('.cross-tree-chooser-item').forEach(item => {
+            const choose = () => {
+                const idx = parseInt((item as HTMLElement).dataset.index ?? '', 10);
+                const match = matches[idx];
+                this.hideCrossTreeChooser();
+                if (match) void this.switchToTreeAndFocus(match.treeId, match.personId);
+            };
+            item.addEventListener('click', choose);
+            item.addEventListener('keydown', (e) => {
+                const ke = e as KeyboardEvent;
+                if (ke.key === 'Enter' || ke.key === ' ') {
+                    ke.preventDefault();
+                    choose();
+                }
+            });
+        });
+
+        document.body.appendChild(menu);
+        this.crossTreeChooser = menu;
+
+        // Keep the menu on screen (mirror of the context menu adjustment).
+        requestAnimationFrame(() => {
+            const menuRect = menu.getBoundingClientRect();
+            const padding = 10;
+            let left = parseFloat(menu.style.left);
+            let top = parseFloat(menu.style.top);
+            if (menuRect.right > window.innerWidth - padding) {
+                left = window.innerWidth - menuRect.width - padding;
+            }
+            if (left < padding) left = padding;
+            if (menuRect.bottom > window.innerHeight - padding) {
+                // No room below → flip above the badge.
+                top = Math.max(padding, rect.top - menuRect.height - 6);
+            }
+            if (top < padding) top = padding;
+            menu.style.left = `${left}px`;
+            menu.style.top = `${top}px`;
+        });
+
+        // Outside click / canvas pan / wheel zoom closes the chooser.
+        this.crossTreeChooserCloseHandler = (e: Event) => {
+            const target = e.target as Node;
+            if (this.crossTreeChooser && this.crossTreeChooser.contains(target)) return;
+            this.hideCrossTreeChooser();
+        };
+        setTimeout(() => {
+            document.addEventListener('mousedown', this.crossTreeChooserCloseHandler!, true);
+            document.addEventListener('touchstart', this.crossTreeChooserCloseHandler!, true);
+            document.addEventListener('wheel', this.crossTreeChooserCloseHandler!, true);
+        }, 10);
+    },
+
+    hideCrossTreeChooser(): void {
+        if (this.crossTreeChooserCloseHandler) {
+            document.removeEventListener('mousedown', this.crossTreeChooserCloseHandler, true);
+            document.removeEventListener('touchstart', this.crossTreeChooserCloseHandler, true);
+            document.removeEventListener('wheel', this.crossTreeChooserCloseHandler, true);
+            this.crossTreeChooserCloseHandler = null;
+        }
+        if (this.crossTreeChooser) {
+            this.crossTreeChooser.remove();
+            this.crossTreeChooser = null;
         }
     },
 

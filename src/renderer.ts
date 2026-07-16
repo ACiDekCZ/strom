@@ -129,6 +129,10 @@ class TreeRendererClass {
 
         if (!canvas || !svg) return;
 
+        // A re-render invalidates the anchor of the cross-tree chooser (its
+        // badge card is about to be removed) — close it first.
+        UI.hideCrossTreeChooser?.();
+
         // Clear previous render
         canvas.querySelectorAll('.person-card').forEach(c => c.remove());
         svg.innerHTML = '';
@@ -1211,14 +1215,17 @@ class TreeRendererClass {
                 });
             });
 
-            // Attach event listener for cross-tree badge (cycle through trees)
+            // Attach event listener for cross-tree badge.
+            // One match → switch directly. More than one → open a chooser so
+            // the user picks which tree to open (no blind cycling).
             const crossTreeBadge = card.querySelector('.cross-tree-badge');
             if (crossTreeBadge && currentTreeId && crossTreeMatches.length > 0) {
                 crossTreeBadge.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    const nextMatch = CrossTree.getNextMatch(currentTreeId, id, crossTreeMatches);
-                    if (nextMatch) {
-                        UI.switchToTreeAndFocus(nextMatch.treeId, nextMatch.personId);
+                    if (crossTreeMatches.length === 1) {
+                        UI.switchToTreeAndFocus(crossTreeMatches[0].treeId, crossTreeMatches[0].personId);
+                    } else {
+                        UI.showCrossTreeChooser(crossTreeMatches, crossTreeBadge as HTMLElement);
                     }
                 });
             }

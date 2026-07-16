@@ -1334,7 +1334,8 @@ const stringsEN = {
         settingLabel: 'Cross-tree connections',
         settingHint: 'Show a badge when a person also appears in another tree',
         tooltipHeader: 'Also in:',
-        clickToSwitch: 'Click to switch'
+        clickToSwitch: 'Click to switch',
+        chooserHeader: 'Open in tree…'
     },
 
     // Embedded Mode (local HTML file)
@@ -2829,7 +2830,8 @@ const stringsCZ: StringsType = {
         settingLabel: 'Propojení mezi stromy',
         settingHint: 'Zobrazit odznak, když se osoba vyskytuje i v jiném stromu',
         tooltipHeader: 'Také v:',
-        clickToSwitch: 'Kliknutím přepnout'
+        clickToSwitch: 'Kliknutím přepnout',
+        chooserHeader: 'Otevřít ve stromu…'
     },
 
     // Embedded Mode (local HTML file)

@@ -86,6 +86,8 @@ export class UIClass {
     relationContext: RelationContext | null = null;
     contextMenu: HTMLElement | null = null;
     contextMenuCloseHandler: ((e: Event) => void) | null = null;
+    crossTreeChooser: HTMLElement | null = null;
+    crossTreeChooserCloseHandler: ((e: Event) => void) | null = null;
     bottomSheet: HTMLElement | null = null;
     linkMode = false;
     gedcomResult: GedcomConversionResult | null = null;

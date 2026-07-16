@@ -385,6 +385,13 @@ export const miscMethods = uiModule({
                 return;
             }
             if (e.key === 'Escape') {
+                // The cross-tree chooser (a floating menu, not a modal) closes
+                // first and ONLY itself — it must not fall through to the
+                // dialog-stack handling below.
+                if (this.crossTreeChooser) {
+                    this.hideCrossTreeChooser();
+                    return;
+                }
                 // The interactive tour takes precedence (it is not a modal).
                 if (this.tourActive) {
                     this.endTour();
