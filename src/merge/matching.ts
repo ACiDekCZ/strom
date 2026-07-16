@@ -5,7 +5,7 @@
 
 import { parseFlexDate, yearOf } from '../dates.js';
 import { PersonId, Person, Partnership, StromData } from '../types.js';
-import { surnameForms as treeSurnameForms } from '../surnames.js';
+import { sameSurname } from '../surnames.js';
 import {
     PersonMatch,
     MatchConfidence,
@@ -165,16 +165,9 @@ function firstNamesMatch(name1: string, name2: string): { exact: boolean; firstW
     return { exact: false, firstWord, anyWord, prefix, matchedWord };
 }
 
-/**
- * Every written form of a person's surname: the one on their record, the tree's
- * other spellings of it, and anything noted on the person themselves.
- */
-function allSurnameForms(
-    person: { lastName: string; nameVariants?: string[] },
-    data?: StromData,
-): string[] {
-    const fromTree = data ? treeSurnameForms(person.lastName, data) : [person.lastName];
-    return [...fromTree, ...(person.nameVariants ?? [])].filter(Boolean);
+/** What is actually written for this person: their surname and their own spellings. */
+function writtenSurnames(person: { lastName: string; nameVariants?: string[] }): string[] {
+    return [person.lastName, ...(person.nameVariants ?? [])].filter(Boolean);
 }
 
 /** The best match across every written form of both names. */
@@ -184,9 +177,21 @@ function bestLastNameMatch(
     existingData?: StromData,
     incomingData?: StromData,
 ): { exact: boolean; similar: boolean; similarity: number } {
+    // A rule (Víšek/Víšková) or a group the user entered is not a similarity
+    // question — it is an answer, so it does not go near the fuzzy comparison.
+    const rulesSay = (data?: StromData): boolean =>
+        !!data && sameSurname(existing.lastName, incoming.lastName, data);
+    if (rulesSay(existingData) || rulesSay(incomingData)) {
+        return { exact: true, similar: true, similarity: 1.0 };
+    }
+
+    // Otherwise compare what is WRITTEN — never the generated forms. Every Czech
+    // surname has an -ová form and they all rhyme: feeding those to the fuzzy
+    // matcher made Víšková/Svobodová look 0.44 alike where Víšek/Svoboda are
+    // 0.14, which was enough to push two unrelated families over the threshold.
     let best = lastNamesSimilar(existing.lastName, incoming.lastName);
-    for (const a of allSurnameForms(existing, existingData)) {
-        for (const b of allSurnameForms(incoming, incomingData)) {
+    for (const a of writtenSurnames(existing)) {
+        for (const b of writtenSurnames(incoming)) {
             const match = lastNamesSimilar(a, b);
             if (match.similarity > best.similarity || (match.exact && !best.exact)) best = match;
         }

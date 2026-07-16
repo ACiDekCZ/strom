@@ -16,6 +16,81 @@
 
 import { StromData } from './types.js';
 
+/**
+ * The masculine form of a Czech feminine surname, or null if it does not look
+ * like one.
+ *
+ * Not a guess — Czech has rules. A woman in the family is Víšková where the men
+ * are Víšek, and today searching "Víšek" finds fourteen men and none of the ten
+ * women, because the "e" drops when the name is made feminine. It only ever
+ * worked by accident, where the feminine form happens to contain the masculine
+ * one as a substring (Novák → Nováková).
+ *
+ * Deliberately conservative: only endings that are unmistakably Czech feminine
+ * forms, so a tree in another language never sees any of this.
+ */
+export function masculineForm(surname: string): string | null {
+    const name = surname.trim();
+
+    // Adjectival: Brodská → Brodský, Zelená → Zelený, Roštejnská → Roštejnský.
+    if (/ská$/.test(name)) return name.slice(0, -1) + 'ý';
+    if (/cká$/.test(name)) return name.slice(0, -1) + 'ý';
+    if (/á$/.test(name) && /[nl]á$/.test(name)) return name.slice(0, -1) + 'ý';
+
+    if (!/ová$/.test(name)) return null;
+    const stem = name.slice(0, -3);
+    if (!stem) return null;
+
+    // The vowel that drops when the name is made feminine: Víšek → Víšková,
+    // Adamec → Adamcová, Pavel → Pavlová. Putting it back is a guess about
+    // WHICH vowel, so both candidates are offered by sameSurname below.
+    return stem;
+}
+
+/** Every masculine spelling a feminine surname could have come from. */
+function masculineCandidates(surname: string): string[] {
+    const base = masculineForm(surname);
+    if (!base) return [];
+    if (!/ová$/.test(surname.trim())) return [base];   // adjectival: one answer
+    // Which spelling the -ová was built from cannot be known, so offer each one
+    // the rules allow and let the caller compare: Novák(ová) → "Novák";
+    // Svobod(ová) → "Svoboda"; Víšk(ová) → "Víšek"; Adamc(ová) → "Adamec".
+    const out = [base, base + 'a'];
+    const last = base.slice(-1);
+    const beforeLast = base.slice(-2, -1);
+    if (/[^aeiouyáéíóúýůě]/i.test(last) && /[^aeiouyáéíóúýůě]/i.test(beforeLast)) {
+        out.push(base.slice(0, -1) + 'e' + last);   // Víšk → Víšek, Adamc → Adamec
+    }
+    return out;
+}
+
+/**
+ * The feminine form of a Czech masculine surname — the same rules read the other
+ * way, so that searching either form reaches the whole family. Without it,
+ * "Víšek" found all 24 and "Víšková" only the 10 women, which is the kind of
+ * inconsistency nobody can explain to themselves.
+ */
+export function feminineForm(surname: string): string | null {
+    const name = surname.trim();
+    if (!name || /ová$/.test(name)) return null;
+
+    // Indeclinable: Macků, Kočí, Nových are the same for everyone.
+    if (/[ůí]$/.test(name) || /ých$/.test(name)) return null;
+
+    // Adjectival: Brodský → Brodská, Zelený → Zelená.
+    if (/ý$/.test(name)) return name.slice(0, -1) + 'á';
+    if (/á$/.test(name)) return null;   // already feminine
+
+    // The vowel that drops: Víšek → Víšková, Adamec → Adamcová, Pavel → Pavlová.
+    const dropped = /^(.*[^aeiouyáéíóúýůě])[eě]([kcl])$/i.exec(name);
+    if (dropped) return `${dropped[1]}${dropped[2]}ová`;
+
+    // Ending in -a loses it: Svoboda → Svobodová, Kopřiva → Kopřivová, Mika → Miková.
+    if (/a$/.test(name)) return name.slice(0, -1) + 'ová';
+
+    return name + 'ová';
+}
+
 /** Compare surnames the way search does: no case, no diacritics. */
 export function surnameKey(raw: string): string {
     return raw
@@ -31,21 +106,48 @@ export function surnameKey(raw: string): string {
 export function surnameForms(surname: string, data: StromData): string[] {
     const key = surnameKey(surname);
     if (!key) return [];
-    const group = (data.surnameVariants ?? []).find(g => g.some(n => surnameKey(n) === key));
-    if (!group) return [surname];
-    // The person's own spelling first: it is the one on their record.
-    return [surname, ...group.filter(n => surnameKey(n) !== key)];
+
+    // Both genders: a woman's surname carries the men's form and vice versa, so
+    // searching either reaches the whole family.
+    const other = feminineForm(surname);
+    const seeds = [surname, ...masculineCandidates(surname), ...(other ? [other] : [])];
+    const out: string[] = [];
+    const add = (n: string): void => {
+        if (n && !out.some(o => surnameKey(o) === surnameKey(n))) out.push(n);
+    };
+    seeds.forEach(add);
+
+    // Plus every spelling the tree groups with any of those forms.
+    for (const group of data.surnameVariants ?? []) {
+        const keys = group.map(surnameKey);
+        if (seeds.some(f => keys.includes(surnameKey(f)))) group.forEach(add);
+    }
+    return out;
 }
 
-/** Do these two surnames mean the same family? */
+/**
+ * Do these two surnames mean the same family? True for the same name, for a
+ * masculine/feminine pair (a rule), and for spellings the tree has grouped
+ * (a fact the user gave us).
+ */
 export function sameSurname(a: string, b: string, data: StromData): boolean {
     const ka = surnameKey(a);
     const kb = surnameKey(b);
     if (!ka || !kb) return false;
     if (ka === kb) return true;
+
+    // Víšek and Víšková are one family; nobody should have to say so.
+    if (masculineCandidates(a).some(m => surnameKey(m) === kb)) return true;
+    if (masculineCandidates(b).some(m => surnameKey(m) === ka)) return true;
+    if (surnameKey(feminineForm(a) ?? '') === kb) return true;
+    if (surnameKey(feminineForm(b) ?? '') === ka) return true;
+
+    // …and the two could be a grouped spelling of each other's masculine form.
+    const formsA = [a, ...masculineCandidates(a), feminineForm(a) ?? ''].map(surnameKey);
+    const formsB = [b, ...masculineCandidates(b), feminineForm(b) ?? ''].map(surnameKey);
     return (data.surnameVariants ?? []).some(g => {
         const keys = g.map(surnameKey);
-        return keys.includes(ka) && keys.includes(kb);
+        return formsA.some(x => keys.includes(x)) && formsB.some(y => keys.includes(y));
     });
 }
 

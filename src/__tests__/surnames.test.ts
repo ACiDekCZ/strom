@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     surnameKey, surnameForms, sameSurname, addSurnameGroup, removeSurnameGroup, surnamesInTree,
+    masculineForm, feminineForm,
 } from '../surnames.js';
 import { StromData, Person, PersonId, toPersonId } from '../types.js';
 
@@ -65,11 +66,12 @@ describe('surnameForms', () => {
     const data = tree([['Víšek', 'Vyšek', 'Wischek']]);
 
     it('gives every spelling, the person’s own first', () => {
-        expect(surnameForms('Vyšek', data)).toEqual(['Vyšek', 'Víšek', 'Wischek']);
+        // The other gender rides along too, so searching either reaches the family.
+        expect(surnameForms('Vyšek', data)).toEqual(['Vyšek', 'Vyšková', 'Víšek', 'Wischek']);
     });
 
-    it('gives back a surname nobody grouped, unchanged', () => {
-        expect(surnameForms('Svoboda', data)).toEqual(['Svoboda']);
+    it('gives back a surname nobody grouped, plus its other gender', () => {
+        expect(surnameForms('Svoboda', data)).toEqual(['Svoboda', 'Svobodová']);
     });
 });
 
@@ -134,5 +136,90 @@ describe('surnamesInTree', () => {
             person('a', 'Jan', 'Víšek'), person('b', '?', 'Víšek', true), person('c', 'Kdo', ''),
         ]);
         expect(surnamesInTree(data)).toEqual([{ surname: 'Víšek', count: 1 }]);
+    });
+});
+
+describe('masculine and feminine are one family (P1, found by testing a real tree)', () => {
+    const empty = tree();
+
+    it('sees through the vowel that drops — the case that was broken', () => {
+        // Measured on a real tree: "Víšek" found 14 men and none of the 10
+        // women, because the "e" disappears when the name is made feminine.
+        expect(sameSurname('Víšek', 'Víšková', empty)).toBe(true);
+        expect(sameSurname('Víšková', 'Víšek', empty)).toBe(true);
+        expect(sameSurname('Adamec', 'Adamcová', empty)).toBe(true);
+        expect(sameSurname('Pavel', 'Pavlová', empty)).toBe(true);
+    });
+
+    it('handles the plain ones, which only ever worked by accident', () => {
+        // "novakova".includes("novak") is true, so search stumbled onto these.
+        expect(sameSurname('Novák', 'Nováková', empty)).toBe(true);
+        expect(sameSurname('Horák', 'Horáková', empty)).toBe(true);
+    });
+
+    it('handles adjectival surnames, where the substring trick never worked', () => {
+        expect(sameSurname('Brodský', 'Brodská', empty)).toBe(true);
+        expect(sameSurname('Zelený', 'Zelená', empty)).toBe(true);
+        expect(sameSurname('Roštejnský', 'Roštejnská', empty)).toBe(true);
+    });
+
+    it('does NOT join different families that merely look alike', () => {
+        // These all scored >= 0.7 on string similarity in the real tree, which
+        // is why suggesting groups from similarity was dropped.
+        expect(sameSurname('Krepčíková', 'Krejčíková', empty)).toBe(false);
+        expect(sameSurname('Horáková', 'Nováková', empty)).toBe(false);
+        expect(sameSurname('Víšková', 'Vaňková', empty)).toBe(false);
+        expect(sameSurname('Novák', 'Horáková', empty)).toBe(false);
+    });
+
+    it('leaves names outside Czech alone', () => {
+        expect(sameSurname('Tudor', 'Boleyn', empty)).toBe(false);
+        expect(sameSurname('Schaffer', 'Seeman', empty)).toBe(false);
+        expect(masculineForm('Tudor')).toBeNull();
+        expect(masculineForm('Boleyn')).toBeNull();
+    });
+
+    it('reaches a woman through a grouped spelling of the man’s name', () => {
+        // Vyšek is grouped with Víšek, so Vyšek must find Víšková too.
+        const data = tree([['Víšek', 'Vyšek']]);
+        expect(sameSurname('Vyšek', 'Víšková', data)).toBe(true);
+    });
+
+    it('offers the masculine form among a woman’s search terms', () => {
+        expect(surnameForms('Víšková', empty)).toContain('Víšek');
+    });
+
+    it('works the other way too, or the two searches disagree', () => {
+        // Measured: "Víšek" reached all 24 and "Víšková" only the 10 women —
+        // an inconsistency nobody could explain to themselves.
+        expect(surnameForms('Víšek', empty)).toContain('Víšková');
+        expect(feminineForm('Víšek')).toBe('Víšková');
+        expect(feminineForm('Adamec')).toBe('Adamcová');
+        expect(feminineForm('Pavel')).toBe('Pavlová');
+        expect(feminineForm('Novák')).toBe('Nováková');
+        expect(feminineForm('Brodský')).toBe('Brodská');
+    });
+
+    it('drops the -a rather than gluing an ending onto it', () => {
+        // Svobodaová was what the first attempt produced; the test caught it.
+        expect(feminineForm('Svoboda')).toBe('Svobodová');
+        expect(feminineForm('Kopřiva')).toBe('Kopřivová');
+        expect(feminineForm('Mika')).toBe('Miková');
+        expect(sameSurname('Svoboda', 'Svobodová', empty)).toBe(true);
+        expect(sameSurname('Kopřiva', 'Kopřivová', empty)).toBe(true);
+    });
+
+    it('leaves indeclinable surnames alone — Macků is Macků for everyone', () => {
+        expect(feminineForm('Macků')).toBeNull();
+        expect(feminineForm('Kočí')).toBeNull();
+        expect(feminineForm('Nových')).toBeNull();
+    });
+
+    it('does not try to feminise what is feminine already, or foreign', () => {
+        expect(feminineForm('Nováková')).toBeNull();
+        expect(feminineForm('Brodská')).toBeNull();
+        // A German name gets a Czech ending only in a Czech tree's search text,
+        // never in a comparison that could join two families.
+        expect(sameSurname('Schaffer', 'Seeman', empty)).toBe(false);
     });
 });

@@ -305,3 +305,34 @@ describe('merge matching uses the tree’s surname groups (K3 v2)', () => {
         expect(strong).toHaveLength(0);
     });
 });
+
+describe('the feminine rule must not leak into fuzzy matching', () => {
+    /**
+     * Regression: generated forms were fed to the similarity comparison, and
+     * every Czech surname has an -ová form. Víšková/Svobodová measure 0.44 alike
+     * where Víšek/Svoboda measure 0.14 — enough, with the same first name, to
+     * push two unrelated families over the match threshold. A rule is an answer,
+     * not an input to a guess.
+     */
+    function p(id: string, firstName: string, lastName: string): Person {
+        return {
+            id: toPersonId(id), firstName, lastName, gender: 'male',
+            isPlaceholder: false, partnerships: [], parentIds: [], childIds: [],
+            birthDate: '1783',
+        };
+    }
+    const tree = (people: Person[]): StromData => ({
+        persons: Object.fromEntries(people.map(x => [x.id, x])) as StromData['persons'],
+        partnerships: {},
+    });
+
+    it('does not match Víšek to Svoboda through their -ová forms', () => {
+        const matches = findMatches(tree([p('a', 'Josef', 'Víšek')]), tree([p('b', 'Josef', 'Svoboda')]));
+        expect(matches.filter(m => m.confidence === 'high' || m.confidence === 'medium')).toHaveLength(0);
+    });
+
+    it('still matches a man to the same family’s woman, which is the point', () => {
+        const matches = findMatches(tree([p('a', 'Josef', 'Víšek')]), tree([p('b', 'Josef', 'Víšková')]));
+        expect(matches).toHaveLength(1);
+    });
+});
