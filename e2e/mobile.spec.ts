@@ -65,3 +65,19 @@ test('a single tap on a card opens the bottom sheet (first tap = person menu)', 
     // The desktop floating context menu must NOT appear on touch.
     await expect(page.locator('.context-menu')).toHaveCount(0);
 });
+
+test('the hamburger menu exposes the current-view actions (poster, export selection)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    await page.evaluate(() => window.Strom.UI.toggleMobileMenu());
+    const menu = page.locator('#mobile-menu');
+    await expect(menu).toHaveClass(/active/);
+
+    await expect(menu.locator('button', { hasText: 'Poster' })).toBeVisible();
+    await expect(menu.locator('button', { hasText: 'Export selection' })).toBeVisible();
+
+    // Poster… opens the view-aware poster dialog.
+    await menu.locator('button', { hasText: 'Poster' }).click();
+    await expect(page.locator('#poster-modal')).toBeVisible();
+});

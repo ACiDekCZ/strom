@@ -188,3 +188,38 @@ test('cancelling the file picker returns to the New Tree menu, not to nowhere', 
     await page.keyboard.press('Escape');
     await expect(page.locator('#tree-manager-modal')).toBeHidden();
 });
+
+test('tree switcher: current-view actions (poster, export selection) are in the dropdown', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    await page.locator('.tree-switcher-btn').click();
+    const dropdown = page.locator('#tree-switcher-dropdown');
+    await expect(dropdown).toHaveClass(/active/);
+
+    // The current-view action group is present, in order.
+    await expect(dropdown.locator('.tree-switcher-action', { hasText: 'Make a tree from this view' })).toBeVisible();
+    await expect(dropdown.locator('.tree-switcher-action', { hasText: 'Poster' })).toBeVisible();
+    await expect(dropdown.locator('.tree-switcher-action', { hasText: 'Export selection' })).toBeVisible();
+
+    // Poster… opens the view-aware poster dialog with its "prints the current view" label.
+    await dropdown.locator('.tree-switcher-action', { hasText: 'Poster' }).click();
+    await expect(page.locator('#poster-modal')).toBeVisible();
+    await expect(page.locator('#poster-view-label')).not.toBeEmpty();
+    await page.evaluate(() => window.Strom.UI.closePosterDialog());
+    await expect(page.locator('#poster-modal')).toBeHidden();
+});
+
+test('tree switcher: Export selection opens the export/privacy dialog for the current view', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    await page.locator('.tree-switcher-btn').click();
+    const dropdown = page.locator('#tree-switcher-dropdown');
+    await dropdown.locator('.tree-switcher-action', { hasText: 'Export selection' }).click();
+
+    // No silent export with defaults: the privacy/password dialog opens focused
+    // on the current view, offering the same options as the export dialog path.
+    await expect(page.locator('#export-password-modal')).toBeVisible();
+    await expect(page.locator('#export-privacy-mode')).toBeVisible();
+});

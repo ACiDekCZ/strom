@@ -141,12 +141,20 @@ export const treeManagementMethods = uiModule({
             `;
         }
 
-        // Divider and actions
+        // Divider and actions. Current-view actions (cut, poster, export
+        // selection) come first, then presentation (slideshow, anniversaries),
+        // then a divider before tree management.
         const annBadge = this.anniversaryBadgeCount();
         html += `
             <div class="tree-switcher-divider"></div>
             <div class="tree-switcher-action" onclick="window.Strom.UI.toggleTreeSwitcher(); window.Strom.UI.makeTreeFromCurrentView()">
                 <span>✂️</span> ${strings.menu.makeTreeFromView}
+            </div>
+            <div class="tree-switcher-action" onclick="window.Strom.UI.toggleTreeSwitcher(); window.Strom.UI.showPosterDialog()">
+                <span>🖼️</span> ${strings.menu.poster}
+            </div>
+            <div class="tree-switcher-action" onclick="window.Strom.UI.toggleTreeSwitcher(); window.Strom.UI.exportFocusedJSON()">
+                <span>📤</span> ${strings.menu.exportSelection}
             </div>
             <div class="tree-switcher-action" onclick="window.Strom.UI.toggleTreeSwitcher(); window.Strom.UI.startSlideshow()">
                 <span>📺</span> ${strings.slideshow.menu}
@@ -155,6 +163,7 @@ export const treeManagementMethods = uiModule({
                 <span>🎂</span> ${strings.anniversaries.menu}
                 ${annBadge > 0 ? `<span class="tree-switcher-badge">${annBadge}</span>` : ''}
             </div>
+            <div class="tree-switcher-divider"></div>
             <div class="tree-switcher-action" onclick="window.Strom.UI.showTreeManagerDialog()">
                 <span>⚙</span> ${strings.treeManager.manageTreesTitle}...
             </div>
