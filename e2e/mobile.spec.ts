@@ -1,6 +1,37 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, createFirstPerson, card } from './helpers.js';
 
+test('the search dropdown sizes to long names, not the narrow mobile input', async ({ page }) => {
+    await openApp(page);
+    // A name far wider than the ~140px mobile toolbar search field.
+    await createFirstPerson(page, 'Bartholomew', 'Featherstonehaugh-Wellington');
+    // The toolbar picker snapshots its person list on build; tree load/import
+    // paths refresh it. Do the same so it sees the just-added person.
+    await page.evaluate(() => window.Strom.UI.refreshSearch());
+
+    const input = page.locator('#toolbar-search-picker .person-picker-input');
+    await input.click();
+    await input.fill('Bartho');
+
+    const item = page.locator('#toolbar-search-picker .person-picker-item', { hasText: 'Bartholomew' }).first();
+    await expect(item).toBeVisible();
+
+    const inputBox = (await input.boundingBox())!;
+    const dropBox = (await page.locator('#toolbar-search-picker .person-picker-dropdown').boundingBox())!;
+
+    // The dropdown is wider than the narrow search input (names not squashed)...
+    expect(dropBox.width).toBeGreaterThan(inputBox.width + 10);
+
+    // ...yet stays fully on-screen (never overflows the right edge).
+    const viewport = page.viewportSize()!;
+    expect(dropBox.x).toBeGreaterThanOrEqual(0);
+    expect(dropBox.x + dropBox.width).toBeLessThanOrEqual(viewport.width);
+
+    // The option text is not clipped mid-name: its content fits its own box.
+    const overflow = await item.evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+});
+
 // Emulate a touch phone so matchMedia('(pointer: coarse)') is true.
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 

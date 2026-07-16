@@ -200,19 +200,41 @@ export class PersonPicker {
      */
     show(): void {
         this.isOpen = true;
-        this.positionDropdown();
+        // Render first so the dropdown has content: its width is content-driven
+        // (see positionDropdown), which requires the items to be in the DOM and
+        // the dropdown to be visible before we can measure it.
         this.renderDropdown();
         this.dropdown.classList.add('active');
+        this.positionDropdown();
     }
 
     /**
-     * Position dropdown using fixed positioning
+     * Position dropdown using fixed positioning.
+     *
+     * The dropdown sizes to its content (long names must not be squashed to the
+     * width of a narrow search input, esp. on mobile where the toolbar search is
+     * ~140px): min-width matches the input so it is never narrower than before,
+     * width follows the content, and max-width is clamped to the viewport. The
+     * left edge is then clamped so the dropdown never overflows the screen edge.
      */
     private positionDropdown(): void {
         const inputRect = this.input.getBoundingClientRect();
+        const margin = 8;  // keep the dropdown off the very screen edge
         this.dropdown.style.top = `${inputRect.bottom + 4}px`;
-        this.dropdown.style.left = `${inputRect.left}px`;
-        this.dropdown.style.width = `${inputRect.width}px`;
+        this.dropdown.style.minWidth = `${inputRect.width}px`;
+        this.dropdown.style.maxWidth = `${Math.max(inputRect.width, window.innerWidth - margin * 2)}px`;
+        this.dropdown.style.width = 'max-content';
+
+        // Measure the resolved width and clamp horizontally so the dropdown
+        // stays fully on-screen (extend right from the input when there is room,
+        // otherwise flip/clamp against the right edge).
+        const dropdownWidth = this.dropdown.offsetWidth;
+        let left = inputRect.left;
+        if (left + dropdownWidth > window.innerWidth - margin) {
+            left = window.innerWidth - margin - dropdownWidth;
+        }
+        if (left < margin) left = margin;
+        this.dropdown.style.left = `${left}px`;
     }
 
     /**

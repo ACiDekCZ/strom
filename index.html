@@ -5840,6 +5840,10 @@
         }
         .person-picker-dropdown {
             position: fixed;
+            /* Size to content, never narrower than the input, capped to the
+               viewport by JS (positionDropdown). Keeps long names readable
+               even when the search field is narrow (mobile toolbar). */
+            width: max-content;
             max-height: 250px;
             overflow-y: auto;
             background: white;
@@ -5858,6 +5862,10 @@
             border-bottom: 1px solid #eee;
             font-size: 14px;
             transition: background 0.15s;
+            /* One name per row; ellipsis only when the viewport cap truly bites. */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .person-picker-item:last-child {
             border-bottom: none;
