@@ -190,15 +190,19 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
     // --- Connections (parent -> children bus routing) ---
     out.push('<g class="connections">');
     for (const conn of result.connections) {
-        // Stem
-        out.push(line(conn.stemX, conn.stemTopY, conn.stemX, conn.stemBottomY, COLORS.line));
-        // Connector (horizontal)
+        // Stem — down to the CONNECTOR lane, not stemBottomY: lane allocation
+        // can place the connector lower (secondary unions in partner chains),
+        // and stopping short left visible gaps in the printed lines.
+        out.push(line(conn.stemX, conn.stemTopY, conn.stemX, conn.connectorY, COLORS.line));
         if (Math.abs(conn.connectorFromX - conn.connectorToX) > 0.5) {
+            // Connector (horizontal), then its drop to the bus lane.
             out.push(line(conn.connectorFromX, conn.connectorY, conn.connectorToX, conn.connectorY, COLORS.line));
-        }
-        // Connector drop to bus
-        if (Math.abs(conn.connectorY - conn.branchY) > 0.5) {
-            out.push(line(conn.connectorToX, conn.connectorY, conn.connectorToX, conn.branchY, COLORS.line));
+            if (Math.abs(conn.connectorY - conn.branchY) > 0.5) {
+                out.push(line(conn.connectorToX, conn.connectorY, conn.connectorToX, conn.branchY, COLORS.line));
+            }
+        } else if (Math.abs(conn.connectorY - conn.branchY) > 0.5) {
+            // Stem sits within the bus range — extend it straight to the bus.
+            out.push(line(conn.stemX, conn.connectorY, conn.stemX, conn.branchY, COLORS.line));
         }
         // Bus (horizontal branch)
         if (Math.abs(conn.branchRightX - conn.branchLeftX) > 0.5) {

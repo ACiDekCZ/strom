@@ -127,3 +127,50 @@ describe('buildTreeSvg', () => {
         expect(svg).not.toContain('font-size="14" font-weight="600" fill="#333333">Maximilian Alexander');
     });
 });
+
+describe('connection continuity (the printed lines must not break)', () => {
+    // Secondary unions in partner chains get their connector on a LOWER lane
+    // than the stem's natural end — the poster used to draw the stem only to
+    // stemBottomY and left a visible gap (reported on a real printed poster:
+    // the drops to children of a spouse's other unions arrived from nowhere).
+    const conn = {
+        unionId: 'u2' as never,
+        stemX: 300, stemTopY: 65, stemBottomY: 100,
+        branchY: 140, branchLeftX: 250, branchRightX: 350,
+        connectorFromX: 300, connectorToX: 250, connectorY: 120,
+        drops: [{ personId: 'b' as PersonId, x: 350, topY: 140, bottomY: 200 }],
+    };
+
+    it('draws the stem all the way down to the connector lane', () => {
+        const data = makeData(person('a'), person('b'));
+        const l: PosterLayout = {
+            positions: new Map([['a' as PersonId, { x: 270, y: 0 }], ['b' as PersonId, { x: 320, y: 200 }]]),
+            connections: [conn],
+            spouseLines: [],
+        };
+        const svg = buildTreeSvg(data, l);
+        // Stem reaches connectorY (120), not just stemBottomY (100)…
+        expect(svg).toMatch(/x1="300(\.0*)?" y1="65(\.0*)?" x2="300(\.0*)?" y2="120(\.0*)?"/);
+        // …the horizontal connector runs on its lane…
+        expect(svg).toMatch(/x1="300(\.0*)?" y1="120(\.0*)?" x2="250(\.0*)?" y2="120(\.0*)?"/);
+        // …and its junction continues down to the bus lane.
+        expect(svg).toMatch(/x1="250(\.0*)?" y1="120(\.0*)?" x2="250(\.0*)?" y2="140(\.0*)?"/);
+    });
+
+    it('extends an in-range stem straight to the bus (no gap either)', () => {
+        const straight = {
+            ...conn,
+            connectorFromX: 300, connectorToX: 300, connectorY: 120,
+            branchLeftX: 280, branchRightX: 350,
+        };
+        const data = makeData(person('a'), person('b'));
+        const l: PosterLayout = {
+            positions: new Map([['a' as PersonId, { x: 270, y: 0 }], ['b' as PersonId, { x: 320, y: 200 }]]),
+            connections: [straight],
+            spouseLines: [],
+        };
+        const svg = buildTreeSvg(data, l);
+        expect(svg).toMatch(/x1="300(\.0*)?" y1="65(\.0*)?" x2="300(\.0*)?" y2="120(\.0*)?"/);
+        expect(svg).toMatch(/x1="300(\.0*)?" y1="120(\.0*)?" x2="300(\.0*)?" y2="140(\.0*)?"/);
+    });
+});
