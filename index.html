@@ -2902,6 +2902,10 @@
         body.fsa-supported .fsa-only { display: flex !important; }
         .fsa-linked-only { display: none !important; }
         body.fsa-supported.file-linked .fsa-linked-only { display: flex !important; }
+        /* Export dialog opened for a non-active tree hides every view-scoped and
+           active-tree-only action (higher specificity than the fsa rules above,
+           so it also wins for the Save-to-file / Unlink tiles). */
+        #export-modal.non-active-tree .active-tree-only { display: none !important; }
         .file-link-indicator {
             display: inline-flex;
             align-items: center;
@@ -7578,11 +7582,11 @@
     <div class="modal-overlay" id="export-modal">
         <div class="modal menu-modal">
             <div class="modal-header">
-                <h2 data-i18n="menu.export"></h2>
+                <h2><span data-i18n="menu.export"></span><span id="export-modal-tree-name"></span></h2>
                 <button class="close-btn" onclick="window.Strom.UI.closeExportDialog()">&times;</button>
             </div>
             <div class="menu-options">
-                <button class="menu-option" onclick="window.Strom.UI.closeExportDialog(); window.Strom.UI.showShareDialog()">
+                <button class="menu-option active-tree-only" onclick="window.Strom.UI.closeExportDialog(); window.Strom.UI.showShareDialog()">
                     <span class="option-icon">📩</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="share.dialogTitle"></span>
@@ -7596,27 +7600,27 @@
                         <span class="option-desc" data-i18n="menu.exportJsonDesc"></span>
                     </span>
                 </button>
-                <button class="menu-option fsa-only" onclick="window.Strom.UI.attachSaveToFile()">
+                <button class="menu-option fsa-only active-tree-only" onclick="window.Strom.UI.attachSaveToFile()">
                     <span class="option-icon">💾</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="fileAccess.saveToFile"></span>
                         <span class="option-desc" data-i18n="fileAccess.saveToFileDesc"></span>
                     </span>
                 </button>
-                <button class="menu-option fsa-linked-only" onclick="window.Strom.UI.closeExportDialog(); window.Strom.UI.unlinkActiveTreeFile()">
+                <button class="menu-option fsa-linked-only active-tree-only" onclick="window.Strom.UI.closeExportDialog(); window.Strom.UI.unlinkActiveTreeFile()">
                     <span class="option-icon">⛓️‍💥</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="fileAccess.unlink"></span>
                     </span>
                 </button>
-                <button class="menu-option" id="export-focus-btn" onclick="window.Strom.UI.exportFocusedJSON()">
+                <button class="menu-option active-tree-only" id="export-focus-btn" onclick="window.Strom.UI.exportFocusedJSON()">
                     <span class="option-icon">💾</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="menu.exportFocus"></span>
                         <span class="option-desc" data-i18n="menu.exportFocusDesc"></span>
                     </span>
                 </button>
-                <button class="menu-option" id="make-tree-from-view-btn" onclick="window.Strom.UI.makeTreeFromCurrentView()">
+                <button class="menu-option active-tree-only" id="make-tree-from-view-btn" onclick="window.Strom.UI.makeTreeFromCurrentView()">
                     <span class="option-icon">✂️</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="menu.makeTreeFromView"></span>
@@ -7644,14 +7648,14 @@
                         <span class="option-desc" data-i18n="csv.menuDesc"></span>
                     </span>
                 </button>
-                <button class="menu-option" onclick="window.Strom.UI.showPosterDialog()">
+                <button class="menu-option active-tree-only" onclick="window.Strom.UI.showPosterDialog()">
                     <span class="option-icon">🖼️</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="poster.title"></span>
                         <span class="option-desc" data-i18n="poster.description"></span>
                     </span>
                 </button>
-                <button class="menu-option" onclick="window.Strom.UI.showBookDialog()">
+                <button class="menu-option active-tree-only" onclick="window.Strom.UI.showBookDialog()">
                     <span class="option-icon">📖</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="book.title"></span>

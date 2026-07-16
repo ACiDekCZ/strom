@@ -210,6 +210,45 @@ test('tree switcher: current-view actions (poster, export selection) are in the 
     await expect(page.locator('#poster-modal')).toBeHidden();
 });
 
+test('export dialog: view-scoped tiles are gated to the active tree; title names the target', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    // The tree holding Jan becomes non-active once we make another one.
+    const firstTreeName = (await page.locator('.tree-switcher-btn .tree-name').textContent())?.trim() || '';
+
+    await createTree(page, 'Archived');   // creates + switches to the new empty tree
+    await page.evaluate(() => window.Strom.UI.closeTreeManagerDialog());
+
+    const modal = page.locator('#export-modal');
+    const treeName = modal.locator('#export-modal-tree-name');
+    const poster = modal.locator('.menu-option', { hasText: 'Poster' });
+    const exportView = modal.locator('#export-focus-btn');
+    const makeTree = modal.locator('#make-tree-from-view-btn');
+
+    // Opened for the ACTIVE tree: the view-scoped actions are offered.
+    await page.evaluate(() => window.Strom.UI.showExportDialog());
+    await expect(modal).toBeVisible();
+    await expect(treeName).toHaveText(': Archived');
+    await expect(poster).toBeVisible();
+    await expect(exportView).toBeVisible();
+    await expect(makeTree).toBeVisible();
+    await page.evaluate(() => window.Strom.UI.closeExportDialog());
+    await expect(modal).toBeHidden();
+
+    // Opened for a NON-ACTIVE tree: only whole-tree actions; the title names it.
+    const otherId = await page.evaluate(
+        (name) => window.Strom.TreeManager.getTrees().find((t: { name: string }) => t.name === name)?.id,
+        firstTreeName
+    );
+    await page.evaluate((id) => window.Strom.UI.showExportDialog(id), otherId);
+    await expect(modal).toBeVisible();
+    await expect(treeName).toHaveText(`: ${firstTreeName}`);
+    await expect(poster).toBeHidden();
+    await expect(exportView).toBeHidden();
+    await expect(makeTree).toBeHidden();
+    await page.evaluate(() => window.Strom.UI.closeExportDialog());
+});
+
 test('tree switcher: Export this view opens the export/privacy dialog for the current view', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');

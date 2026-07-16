@@ -52,12 +52,25 @@ export const importExportMethods = uiModule({
     // ---- EXPORT/IMPORT DIALOGS ----
     showExportDialog(treeId?: TreeId, parentDialogId?: string): void {
         this.exportTargetTreeId = treeId || TreeManager.getActiveTreeId();
+        const isActiveTree = this.exportTargetTreeId === TreeManager.getActiveTreeId();
 
-        // Show/hide Export Focus button - only available for active tree
-        const exportFocusBtn = document.getElementById('export-focus-btn');
-        if (exportFocusBtn) {
-            const isActiveTree = this.exportTargetTreeId === TreeManager.getActiveTreeId();
-            exportFocusBtn.style.display = isActiveTree ? '' : 'none';
+        // The dialog opened for the ACTIVE tree may offer both view-scoped and
+        // whole-tree actions; opened for a NON-ACTIVE tree it must offer ONLY
+        // whole-tree actions that provably operate on THAT tree. A single class
+        // on the modal drives the CSS gating of every `.active-tree-only` tile
+        // (Share, Save-to-file, Unlink, Export this view, Make a tree from this
+        // view, Poster, Book — all read the active tree / active view).
+        const modal = document.getElementById('export-modal');
+        modal?.classList.toggle('non-active-tree', !isActiveTree);
+
+        // Name the target tree in the title so it is unambiguous which tree the
+        // whole-tree actions will operate on (textContent, never innerHTML).
+        const nameSpan = document.getElementById('export-modal-tree-name');
+        if (nameSpan) {
+            const name = this.exportTargetTreeId
+                ? TreeManager.getTreeMetadata(this.exportTargetTreeId)?.name || ''
+                : '';
+            nameSpan.textContent = name ? `: ${name}` : '';
         }
 
         // Handle dialog stack for ESC navigation
