@@ -353,6 +353,9 @@ export const importExportMethods = uiModule({
             if (this.gedcomResult.stats.unknownSexPersons > 0) {
                 parts.push(strings.gedcom.unknownSex(this.gedcomResult.stats.unknownSexPersons));
             }
+            if (this.gedcomResult.stats.otherFamilyLinks > 0) {
+                parts.push(strings.gedcom.otherFamilyLinks(this.gedcomResult.stats.otherFamilyLinks));
+            }
             if (parts.length === 0 && this.gedcomResult.stats.unsupportedTags === 0) {
                 // Say it out loud — silence reads as "who knows what got lost".
                 parts.push(strings.gedcom.allImported);

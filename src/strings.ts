@@ -837,6 +837,9 @@ const stringsEN = {
         parseError: 'Failed to parse GEDCOM file',
         skippedTags: 'Skipped records',
         unknownSex: (n: number) => `${n} person${n === 1 ? '' : 's'} with unknown sex (gender inferred from family role)`,
+        otherFamilyLinks: (n: number) =>
+            `${n} ${n === 1 ? 'child was' : 'children were'} recorded in more than one family `
+            + `(e.g. adopted); shown with the birth family, the rest noted on the person`,
         photos: 'Photos',
         documents: 'Documents',
         sources: 'Sources',
@@ -2321,6 +2324,9 @@ const stringsCZ: StringsType = {
         parseError: 'Nepodařilo se zpracovat GEDCOM soubor',
         skippedTags: 'Přeskočené záznamy',
         unknownSex: (n: number) => `${n} ${n === 1 ? 'osoba' : n < 5 ? 'osoby' : 'osob'} s neznámým pohlavím (odvozeno z role v rodině)`,
+        otherFamilyLinks: (n: number) =>
+            `${n} ${n === 1 ? 'dítě je' : n < 5 ? 'děti jsou' : 'dětí je'} zapsáno ve více rodinách `
+            + `(např. adopce); zobrazeno u rodné rodiny, zbytek zapsán v poznámce osoby`,
         photos: 'Fotografie',
         documents: 'Dokumenty',
         sources: 'Prameny',

@@ -35,6 +35,7 @@ import {
     generateParticipantId,
     generateSourceId
 } from './types';
+import { dateSortKey } from './dates';
 
 /**
  * RELA text -> role. Other programs write these freely ("Godparent", "godmother",
@@ -133,8 +134,14 @@ interface GedcomIndividual {
     birthSeen: boolean;
     deathSeen: boolean;
     fams: string[];  // Families as spouse
-    famc: string | null;  // Family as child
-    famcPedi: string;  // PEDI value under FAMC (adopted/foster/birth/…)
+    famc: string | null;  // Family as child (the first one; see famcLinks)
+    /**
+     * Every FAMC with its own PEDI. A person may be a child of more than one
+     * family — born to one and adopted into another — and the PEDI belongs to
+     * the LINK, not to the person. Keeping one PEDI per person marked the birth
+     * parents adoptive as soon as any later FAMC said so (gedcom.org 555SAMPLE).
+     */
+    famcLinks: { famId: string; pedi: string }[];
 }
 
 /** Raw GEDCOM family record */
@@ -150,6 +157,14 @@ interface GedcomFamily {
     divorceDate: string;
     /** A DIV tag was present, even without a date (divorce date unknown). */
     divorced: boolean;
+    /**
+     * MARR and DIV tags in the order the file lists them. A couple may divorce
+     * and marry again, which GEDCOM 7 records as MARR/DIV/MARR in ONE family;
+     * reading only "was there a DIV" reported them divorced for ever after
+     * (gedcom.io remarriage1). Dates decide when they have them, file order
+     * otherwise.
+     */
+    unionEvents: { type: 'marriage' | 'divorce'; date: string }[];
     note: string;
     /** 1 SOUR citations on the family (marriage record etc.). */
     sourceRefs: string[];
@@ -200,6 +215,12 @@ export interface GedcomConversionResult {
         droppedTagSummary: string;
         /** Individuals with SEX other than M/F (gender inferred from family role). */
         unknownSexPersons: number;
+        /**
+         * Children recorded in more than one family (born to one, adopted into
+         * another). The tree draws one set of parents; the others became a note
+         * on the child.
+         */
+        otherFamilyLinks: number;
         totalGedFamilies: number;
     };
 }
@@ -274,15 +295,27 @@ export function parseGedcomDate(dateStr: string): string {
 
 /**
  * Parse GEDCOM name format to first/last name
- * Handles: "John /Surname/", "/Surname/", "FirstName"
+ * Handles: "John /Surname/", "/Surname/", "John /Surname/ Jr.", "FirstName"
+ *
+ * The slashes mark the surname wherever they fall — the name may carry a suffix
+ * after them ("John /Smith/ Jr."), which is ordinary in GEDCOM. Insisting the
+ * name END at the closing slash made those fall through to the guesswork below,
+ * which splits at the first space: "Lt. Cmndr. Joseph "John" /de Allen/ jr."
+ * came out as a man called Lt. with the surname 'Cmndr. Joseph "John" de Allen
+ * jr.' (gedcom.io maximal70-tree1).
+ *
+ * The suffix joins the surname because a person here has only two name fields
+ * and that is the order they are shown in: "John Smith Jr.".
  */
 export function parseName(nameStr: string): { firstName: string; lastName: string } {
-    // Try to match "Given /Surname/" pattern
-    const match = nameStr.match(/^(.*?)\/(.*)\/$/);
+    // Try to match "Given /Surname/ [suffix]" pattern
+    const match = nameStr.match(/^(.*?)\/([^/]*)\/(.*)$/);
     if (match) {
+        const surname = match[2].trim();
+        const suffix = match[3].trim();
         return {
             firstName: match[1].trim(),
-            lastName: match[2].trim()
+            lastName: suffix ? `${surname} ${suffix}`.trim() : surname
         };
     }
     // Fallback: no surname delimiter - split by whitespace
@@ -331,6 +364,77 @@ const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'REPO', 'HEAD', 'TRLR
  */
 const IGNORED_BOOKKEEPING_TAGS = new Set(['_UPD', 'RIN', '_UID', 'CHAN', '_PROJECT_GUID', '_EXPORTED_FROM_SITE_ID']);
 
+/** Attach a DATE to the MARR/DIV it sits under — the most recent one seen. */
+function lastUnionEvent(fam: GedcomFamily, type: 'marriage' | 'divorce', date: string): void {
+    for (let i = fam.unionEvents.length - 1; i >= 0; i--) {
+        if (fam.unionEvents[i].type === type) { fam.unionEvents[i].date = date; return; }
+    }
+}
+
+/**
+ * Where a couple ended up, reading their MARR/DIV events in order.
+ *
+ * A couple can divorce and marry each other again; GEDCOM 7 records that as
+ * MARR/DIV/MARR inside one family. Asking only "is there a DIV?" called them
+ * divorced for ever — and left the marriage starting after the divorce that
+ * ended it. Whichever came last decides. Dates say so when the file gives them,
+ * otherwise the order the file lists the events in.
+ */
+function resolveUnionStatus(fam: GedcomFamily): {
+    status: 'married' | 'divorced';
+    startDate: string;
+    endDate: string;
+    remarriage: { divorced: string; married: string } | null;
+} {
+    const marriages = fam.unionEvents.filter(e => e.type === 'marriage');
+    const divorces = fam.unionEvents.filter(e => e.type === 'divorce');
+    const divorcedAtAll = divorces.length > 0 || fam.divorced || !!fam.divorceDate;
+    // The union began at the FIRST marriage; a remarriage is a later chapter of
+    // the same couple, not a new start date.
+    const startDate = marriages.find(e => e.date)?.date ?? fam.marriageDate;
+
+    if (!divorcedAtAll) return { status: 'married', startDate, endDate: '', remarriage: null };
+
+    const lastIsMarriage = ((): boolean => {
+        const lastM = [...marriages].reverse().find(e => e.date);
+        const lastD = [...divorces].reverse().find(e => e.date);
+        // Both dated: compare them. Otherwise trust the order in the file.
+        if (lastM && lastD) return dateSortKey(lastM.date) > dateSortKey(lastD.date);
+        const lastEvent = fam.unionEvents[fam.unionEvents.length - 1];
+        return marriages.length > divorces.length
+            || (!!lastEvent && lastEvent.type === 'marriage' && marriages.length > 1);
+    })();
+
+    if (lastIsMarriage) {
+        const again = [...marriages].reverse().find(e => e.date)?.date ?? '';
+        return {
+            status: 'married',
+            startDate,
+            endDate: '',
+            // The divorce in between is real history — say so rather than drop it.
+            remarriage: again && again !== startDate
+                ? { divorced: fam.divorceDate, married: again }
+                : null,
+        };
+    }
+    return { status: 'divorced', startDate, endDate: fam.divorceDate, remarriage: null };
+}
+
+/** Put the resolved marriage/divorce outcome onto a partnership. */
+function applyUnionOutcome(partnership: Partnership, fam: GedcomFamily): void {
+    const outcome = resolveUnionStatus(fam);
+    if (outcome.startDate) partnership.startDate = outcome.startDate;
+    if (outcome.endDate) partnership.endDate = outcome.endDate;
+    partnership.status = outcome.status;
+    if (outcome.remarriage) {
+        const { divorced, married } = outcome.remarriage;
+        const line = divorced
+            ? `Divorced ${divorced}, married again ${married}`
+            : `Divorced, married again ${married}`;
+        partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
+    }
+}
+
 export function parseGedcom(content: string): ParsedGedcom {
     // Strip BOM (Byte Order Mark) if present
     if (content.charCodeAt(0) === 0xFEFF) {
@@ -355,6 +459,8 @@ export function parseGedcom(content: string): ParsedGedcom {
 
     let currentRecord: GedcomIndividual | GedcomFamily | null = null;
     let currentType: 'INDI' | 'FAM' | 'SOUR' | null = null;
+    /** Serial for records the file gives no xref — they still need a key. */
+    let anonRecordSeq = 0;
     let currentSubTag: string | null = null;
     let currentEvent: RawEvent | null = null;
     /** Level-2 tag inside the current event (for level-3 NOTE continuations). */
@@ -378,10 +484,20 @@ export function parseGedcom(content: string): ParsedGedcom {
         const value = (match[3] || '').trim().replace(/@@/g, '@');
 
         if (level === 0) {
-            // New record
-            if (tag.startsWith('@I') && value === 'INDI') {
+            // What KIND of record this is comes from the type word, never from
+            // the shape of the id. An xref is an opaque label: nothing obliges a
+            // program to number its people @I1@, and some use @P1@ or @1@.
+            // Requiring the '@I' prefix silently imported those files as an
+            // empty tree — a whole GEDCOM lost without a word of warning.
+            // A record with no xref at all (legal in GEDCOM 7) still holds a
+            // person, so it gets an internal id nothing can point at.
+            const hasXref = /^@[^@]+@$/.test(tag);
+            const recordType = hasXref ? value : tag;
+            const recordId = hasXref ? tag : `@__anon${anonRecordSeq++}__@`;
+
+            if (recordType === 'INDI') {
                 currentRecord = {
-                    id: tag,
+                    id: recordId,
                     name: '',
                     firstName: '',
                     lastName: '',
@@ -401,27 +517,27 @@ export function parseGedcom(content: string): ParsedGedcom {
                     deathSeen: false,
                     fams: [],
                     famc: null,
-                    famcPedi: ''
+                    famcLinks: []
                 };
                 currentType = 'INDI';
                 currentSource = null;
-                individuals.set(tag, currentRecord as GedcomIndividual);
-            } else if (tag.startsWith('@S') && value === 'SOUR') {
+                individuals.set(recordId, currentRecord as GedcomIndividual);
+            } else if (recordType === 'SOUR') {
                 currentSource = {
-                    id: tag, title: '', repository: '', reference: '', url: '', note: ''
+                    id: recordId, title: '', repository: '', reference: '', url: '', note: ''
                 };
                 currentRecord = null;
                 currentType = 'SOUR';
-                sources.set(tag, currentSource);
-            } else if (tag.startsWith('@R') && value === 'REPO') {
-                currentRepoId = tag;
-                repositories.set(tag, '');
+                sources.set(recordId, currentSource);
+            } else if (recordType === 'REPO') {
+                currentRepoId = recordId;
+                repositories.set(recordId, '');
                 currentRecord = null;
                 currentType = null;
                 currentSource = null;
-            } else if (tag.startsWith('@F') && value === 'FAM') {
+            } else if (recordType === 'FAM') {
                 currentRecord = {
-                    id: tag,
+                    id: recordId,
                     husb: null,
                     wife: null,
                     children: [],
@@ -429,18 +545,19 @@ export function parseGedcom(content: string): ParsedGedcom {
                     marriagePlace: '',
                     divorceDate: '',
                     divorced: false,
+                    unionEvents: [],
                     note: '',
                     engagementDate: '',
                     sourceRefs: []
                 };
                 currentType = 'FAM';
                 currentSource = null;
-                families.set(tag, currentRecord as GedcomFamily);
+                families.set(recordId, currentRecord as GedcomFamily);
             } else {
                 currentRecord = null;
                 currentType = null;
                 currentSource = null;
-                if (!KNOWN_RECORD_TYPES.has(value) && value) drop(value);
+                if (!KNOWN_RECORD_TYPES.has(recordType) && recordType) drop(recordType);
             }
             currentSubTag = null;
             currentEvent = null;
@@ -448,7 +565,7 @@ export function parseGedcom(content: string): ParsedGedcom {
             currentMedia = null;
             currentMediaSubTag = null;
             currentCitationId = null;
-            if (!(tag.startsWith('@R') && value === 'REPO')) currentRepoId = null;
+            if (recordType !== 'REPO') currentRepoId = null;
         } else if (currentRepoId !== null && level === 1 && tag === 'NAME') {
             repositories.set(currentRepoId, value);
         } else if (currentType === 'SOUR' && currentSource) {
@@ -509,7 +626,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                             indi.fams.push(value);
                             break;
                         case 'FAMC':
-                            indi.famc = value;
+                            if (!indi.famc) indi.famc = value;
+                            indi.famcLinks.push({ famId: value, pedi: '' });
                             break;
                         case 'NOTE':
                             indi.notes = value;
@@ -586,12 +704,14 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case 'DIV':
                             // A bare DIV (no date sub-record) still means divorced.
                             fam.divorced = true;
+                            fam.unionEvents.push({ type: 'divorce', date: '' });
                             break;
                         case 'SOUR':
                             // Family citation (typically the marriage record).
                             if (value) { fam.sourceRefs.push(value); currentCitationId = value; }
                             break;
                         case 'MARR':
+                            fam.unionEvents.push({ type: 'marriage', date: '' });
                             break;
                         case 'ENGA':
                             fam.engagementDate = value === 'Y' ? '?' : '';
@@ -612,7 +732,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                         if (tag === 'PLAC') indi.deathPlace = value;
                     } else if (currentSubTag === 'FAMC') {
                         // Pedigree type of the child→family link (adopted/foster).
-                        if (tag === 'PEDI') indi.famcPedi = value.toLowerCase();
+                        // It belongs to the FAMC it sits under — the last one seen.
+                        if (tag === 'PEDI' && indi.famcLinks.length > 0) {
+                            indi.famcLinks[indi.famcLinks.length - 1].pedi = value.toLowerCase();
+                        }
                     } else if (currentSubTag === 'NOTE') {
                         // Multi-line notes: CONT = new line, CONC = continuation.
                         if (tag === 'CONT') indi.notes += '\n' + value;
@@ -659,10 +782,16 @@ export function parseGedcom(content: string): ParsedGedcom {
                     } else if (currentSubTag === 'SOUR' && tag === 'QUAY' && currentCitationId) {
                         noteQuay(currentCitationId, value);
                     } else if (currentSubTag === 'MARR') {
-                        if (tag === 'DATE') fam.marriageDate = parseGedcomDate(value);
+                        if (tag === 'DATE') {
+                            fam.marriageDate = parseGedcomDate(value);
+                            lastUnionEvent(fam, 'marriage', fam.marriageDate);
+                        }
                         if (tag === 'PLAC') fam.marriagePlace = value;
                     } else if (currentSubTag === 'DIV') {
-                        if (tag === 'DATE') fam.divorceDate = parseGedcomDate(value);
+                        if (tag === 'DATE') {
+                            fam.divorceDate = parseGedcomDate(value);
+                            lastUnionEvent(fam, 'divorce', fam.divorceDate);
+                        }
                     } else if (currentSubTag === 'ENGA') {
                         if (tag === 'DATE') fam.engagementDate = parseGedcomDate(value);
                     } else if (currentSubTag === 'NOTE') {
@@ -732,6 +861,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (fam.wife) wifeIds.add(fam.wife);
     }
     let unknownSexPersons = 0;
+    let otherFamilyLinks = 0;
 
     // Build the source catalog and a GEDCOM-id -> new-id map for citations.
     const sourceIdMap = new Map<string, string>();
@@ -880,6 +1010,42 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         persons[personId] = person;
     }
 
+    /** Is this link the one the child was born into? No PEDI means birth. */
+    const isBirthLink = (pedi: string): boolean => !pedi || pedi === 'birth';
+
+    /** The PEDI the child's own FAMC gives for this family, if it names one. */
+    const pediFor = (childGedId: string, famGedId: string): string =>
+        individuals.get(childGedId)?.famcLinks.find(l => l.famId === famGedId)?.pedi ?? '';
+
+    /**
+     * The ONE family each child hangs from.
+     *
+     * GEDCOM lets a child belong to several families — born to one, adopted into
+     * another — but a person here has at most two parents (DataManager enforces
+     * it; only this importer ever broke the rule). Left unchecked the child
+     * collected a parent from every family and was drawn hanging off all of them
+     * at once, which is the long connector in the 555SAMPLE render.
+     *
+     * The birth family wins, because that is the one the tree is built from. Any
+     * other family the child was recorded in is kept as a note on the child
+     * rather than silently thrown away.
+     */
+    const childFamily = new Map<string, string>();
+    for (const [gedFamId, fam] of families) {
+        for (const childGedId of fam.children) {
+            const chosen = childFamily.get(childGedId);
+            if (!chosen) { childFamily.set(childGedId, gedFamId); continue; }
+            if (isBirthLink(pediFor(childGedId, gedFamId))
+                && !isBirthLink(pediFor(childGedId, chosen))) {
+                childFamily.set(childGedId, gedFamId);
+            }
+        }
+    }
+
+    /** Children this family actually keeps (the others hang from their own). */
+    const childrenOf = (gedFamId: string, fam: GedcomFamily): string[] =>
+        fam.children.filter(c => childFamily.get(c) === gedFamId);
+
     // Create partnerships and link relationships
     const partnerships: Record<PartnershipId, Partnership> = {};
     for (const [gedFamId, fam] of families) {
@@ -902,9 +1068,6 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             status: 'married'
         };
 
-        if (fam.marriageDate) {
-            partnership.startDate = fam.marriageDate;
-        }
         if (fam.marriagePlace) {
             partnership.startPlace = fam.marriagePlace;
         }
@@ -912,8 +1075,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             partnership.note = fam.note;
         }
 
-        if (fam.divorceDate) partnership.endDate = fam.divorceDate;
-        if (fam.divorceDate || fam.divorced) partnership.status = 'divorced';
+        applyUnionOutcome(partnership, fam);
 
         if (fam.engagementDate && fam.engagementDate !== '?') {
             const line = `Engagement: ${fam.engagementDate}`;
@@ -934,7 +1096,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         }
 
         // Process children
-        for (const childGedId of fam.children) {
+        for (const childGedId of childrenOf(gedFamId, fam)) {
             const childId = personIdMap.get(childGedId);
             if (!childId || !persons[childId]) continue;
 
@@ -949,9 +1111,12 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 persons[childId].parentIds.push(person2Id);
             }
 
-            // Pedigree type (PEDI) applies to the child's link to this family →
-            // set both parents' relationship type accordingly.
-            const pedi = individuals.get(childGedId)?.famcPedi;
+            // Pedigree type (PEDI) applies to the child's link to THIS family →
+            // set both parents' relationship type accordingly. Read from the
+            // FAMC naming this family: a PEDI under another FAMC says nothing
+            // about these parents, and taking any PEDI the person carried marked
+            // Joe's birth parents adoptive in 555SAMPLE.
+            const pedi = pediFor(childGedId, gedFamId);
             const relType: ParentChildRelType | null =
                 pedi === 'adopted' ? 'adoptive' : pedi === 'foster' ? 'foster' : null;
             if (relType) {
@@ -973,10 +1138,15 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
 
     // Handle single-parent families (only HUSB or only WIFE)
     // Create placeholder for the missing parent + partnership so layout engine can render children
-    for (const [, fam] of families) {
+    for (const [gedFamId, fam] of families) {
         // Skip if already processed (both spouses)
         if (fam.husb && fam.wife) continue;
-        if (fam.children.length === 0) continue;
+        // Only children who actually hang from this family count. A family whose
+        // every child was born in another one has nobody to render, so inventing
+        // a spouse for it would put a "?" card in the tree standing for a person
+        // the file never claimed existed — the placeholder in the 555SAMPLE render.
+        const ownChildren = childrenOf(gedFamId, fam);
+        if (ownChildren.length === 0) continue;
 
         const parentGedId = fam.husb || fam.wife;
         if (!parentGedId) continue;
@@ -1015,11 +1185,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             childIds: [],
             status: 'married'
         };
-        if (fam.marriageDate) partnership.startDate = fam.marriageDate;
         if (fam.marriagePlace) partnership.startPlace = fam.marriagePlace;
         if (fam.note) partnership.note = fam.note;
-        if (fam.divorceDate) partnership.endDate = fam.divorceDate;
-        if (fam.divorceDate || fam.divorced) partnership.status = 'divorced';
+        applyUnionOutcome(partnership, fam);
 
         if (fam.engagementDate && fam.engagementDate !== '?') {
             const line = `Engagement: ${fam.engagementDate}`;
@@ -1035,7 +1203,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         persons[person2Id].partnerships.push(partnershipId);
 
         // Process children
-        for (const childGedId of fam.children) {
+        for (const childGedId of ownChildren) {
             const childId = personIdMap.get(childGedId);
             if (!childId || !persons[childId]) continue;
 
@@ -1050,6 +1218,17 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 persons[childId].parentIds.push(person2Id);
             }
 
+            // PEDI applies here too: a child adopted by a lone parent is still
+            // adopted, and the two-parent path above has always said so.
+            const pedi = pediFor(childGedId, gedFamId);
+            const relType: ParentChildRelType | null =
+                pedi === 'adopted' ? 'adoptive' : pedi === 'foster' ? 'foster' : null;
+            if (relType) {
+                const child = persons[childId];
+                if (!child.parentRelTypes) child.parentRelTypes = {};
+                child.parentRelTypes[parentId] = relType;
+            }
+
             // Add child to parents' childIds
             if (!persons[person1Id].childIds.includes(childId)) {
                 persons[person1Id].childIds.push(childId);
@@ -1057,6 +1236,39 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             if (!persons[person2Id].childIds.includes(childId)) {
                 persons[person2Id].childIds.push(childId);
             }
+        }
+    }
+
+    /**
+     * The families a child was recorded in but does not hang from. The tree can
+     * only draw one set of parents, so the rest is written onto the child rather
+     * than vanishing — an adoption is exactly the kind of thing a genealogist
+     * would not forgive us for losing.
+     */
+    for (const [childGedId, keptFamId] of childFamily) {
+        const childId = personIdMap.get(childGedId);
+        if (!childId || !persons[childId]) continue;
+
+        for (const [gedFamId, fam] of families) {
+            if (gedFamId === keptFamId || !fam.children.includes(childGedId)) continue;
+
+            const parentNames = [fam.husb, fam.wife]
+                .map(p => (p ? personIdMap.get(p) : undefined))
+                .map(id => (id ? persons[id] : undefined))
+                .filter((p): p is Person => !!p && !p.isPlaceholder)
+                .map(p => `${p.firstName} ${p.lastName}`.trim())
+                .filter(Boolean);
+
+            const pedi = pediFor(childGedId, gedFamId);
+            const kind = pedi === 'adopted' ? 'adopted child'
+                : pedi === 'foster' ? 'foster child' : 'child';
+            const line = parentNames.length > 0
+                ? `Also recorded as ${kind} of ${parentNames.join(' and ')}.`
+                : `Also recorded as ${kind} in another family.`;
+
+            const child = persons[childId];
+            child.notes = child.notes ? `${child.notes}\n${line}` : line;
+            otherFamilyLinks++;
         }
     }
 
@@ -1068,6 +1280,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             ...(Object.keys(sources).length > 0 ? { sources } : {})
         },
         stats: {
+            otherFamilyLinks,
             totalPersons: Object.keys(persons).length,
             totalPartnerships: Object.keys(partnerships).length,
             placeholderPersons,
