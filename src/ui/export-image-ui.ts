@@ -8,9 +8,12 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
-import { buildTreeSvg, computeBounds, PosterOptions, FOOTER_HEIGHT } from '../export-image.js';
+import {
+    buildTreeSvg, computeBounds, escapeXml, PosterOptions, PosterFooterMeta, FOOTER_HEIGHT, POSTER_PADDING,
+} from '../export-image.js';
+import { buildFanModel, buildFanPosterSvg, fanPosterGeometry } from '../fan-chart.js';
 import { uiModule } from './module.js';
-import { DEFAULT_LAYOUT_CONFIG } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG, StromData, ViewMode } from '../types.js';
 import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy.js';
 import { classifyBranches } from '../branch-colors.js';
 import { SettingsManager } from '../settings.js';
@@ -39,13 +42,100 @@ function posterPrivacyMode(): PrivacyMode {
     return (v === 'initials' || v === 'anonymous' || v === 'minimal') ? v : 'full';
 }
 
-function currentPosterSvg(): string | null {
+/** What the poster will print, given the current view. */
+interface PosterViewInfo {
+    /** Dialog line, e.g. "Prints the current view: Family — from Jan (depth 3/3)". */
+    line: string;
+    /** Footer label ('' for views the poster cannot print). */
+    label: string;
+    /** True for views the poster cannot print (map, timeline). */
+    blocked: boolean;
+}
+
+/** The focus person's name as it appears in `source` (raw or privacy-filtered). */
+function focusNameFrom(source: StromData): string {
+    const id = TreeRenderer.getFocusPersonId();
+    const p = id ? source.persons[id] : null;
+    return p ? `${p.firstName} ${p.lastName}`.trim() : '';
+}
+
+/** The view label (no "Prints…" prefix), given the focus name to embed. */
+function viewLabelFor(mode: ViewMode, name: string): string {
+    switch (mode) {
+        case 'fan':
+            return strings.poster.viewFan(name, TreeRenderer.getFanGenerations());
+        case 'descendants':
+            return strings.poster.viewDescendants(name);
+        default:
+            return strings.poster.viewFamily(name, TreeRenderer.getFocusDepthUp(), TreeRenderer.getFocusDepthDown());
+    }
+}
+
+/**
+ * Describe what the poster will actually print for the CURRENT view — the
+ * poster prints what you are looking at, so map/timeline are honestly blocked
+ * rather than silently exporting the family card layout underneath. The dialog
+ * line shows the RAW focus name (the user is looking at their own screen); the
+ * footer label is rebuilt from privacy-filtered data in buildCurrentPoster.
+ */
+function posterViewInfo(): PosterViewInfo {
+    const mode = TreeRenderer.getViewMode();
+    if (mode === 'map') return { line: strings.poster.viewMapBlocked, label: '', blocked: true };
+    if (mode === 'timeline') return { line: strings.poster.viewTimelineBlocked, label: '', blocked: true };
+    const label = viewLabelFor(mode, focusNameFrom(DataManager.getData()));
+    return { line: `${strings.poster.printsView} ${label}`, label, blocked: false };
+}
+
+/** The current view rendered as a poster, with the size + tiling geometry. */
+interface PosterBuild {
+    svg: string;
+    widthPx: number;
+    heightPx: number;
+    /** Content predicate in poster-px space (origin top-left) for tile skipping. */
+    hasContent: (x: number, y: number, w: number, h: number) => boolean;
+}
+
+/**
+ * Build the poster for whatever view is on screen: the fan chart in fan view,
+ * the tree card layout otherwise. Returns null when there is nothing printable
+ * (empty tree, or a blocked view such as map/timeline).
+ *
+ * The poster leaves the house — the living-privacy filter applies here exactly
+ * like in the book/GEDCOM exports (audit K2: it used to export raw full names
+ * of living people with no option at all).
+ */
+function buildCurrentPoster(): PosterBuild | null {
+    const mode = TreeRenderer.getViewMode();
+    if (mode === 'map' || mode === 'timeline') return null; // not printable
+
+    const data = applyLivingPrivacy(DataManager.getData(), posterPrivacyMode());
+    const meta: PosterFooterMeta = {
+        treeName: TreeManager.getActiveTreeMetadata()?.name,
+        // Footer leaves the house — build the label from the SAME privacy-
+        // filtered data as the cards, so a living focus person is not named in
+        // full in the footer while their card shows only initials (audit K2).
+        viewLabel: viewLabelFor(mode, focusNameFrom(data)),
+        dateLabel: new Date().toLocaleDateString(),
+    };
+
+    if (mode === 'fan') {
+        const focusId = TreeRenderer.getFocusPersonId();
+        if (!focusId) return null;
+        const model = buildFanModel(data, focusId, TreeRenderer.getFanGenerations());
+        if (!model) return null;
+        const svg = buildFanPosterSvg(model, {
+            esc: escapeXml,
+            editable: false,
+            addParentLabel: '',
+            showKekule: SettingsManager.isFanKekuleEnabled(),
+        }, meta);
+        const geom = fanPosterGeometry(model, true);
+        return { svg, widthPx: geom.width, heightPx: geom.height, hasContent: geom.hasContent };
+    }
+
+    // Tree / descendants: the card layout as currently laid out.
     const layout = TreeRenderer.getPosterLayout();
     if (layout.positions.size === 0) return null;
-    // The poster leaves the house — the living-privacy filter applies here
-    // exactly like in the book/GEDCOM exports (audit K2: it used to export
-    // raw full names of living people with no option at all).
-    const data = applyLivingPrivacy(DataManager.getData(), posterPrivacyMode());
     // Draw-parity inputs shared with the on-screen renderer: branch colours
     // (when the setting is on) and the presumed-deceased † markers.
     const focusId = TreeRenderer.getFocusPersonId();
@@ -53,19 +143,32 @@ function currentPosterSvg(): string | null {
         ? classifyBranches(data, focusId) as unknown as Map<string, string>
         : null;
     const options: PosterOptions = {
-        treeName: TreeManager.getActiveTreeMetadata()?.name,
-        dateLabel: new Date().toLocaleDateString(),
+        ...meta,
         branchMap,
         deceasedSet: presumedDeceasedSet(data),
     };
-    return buildTreeSvg(data, layout, options);
-}
+    const svg = buildTreeSvg(data, layout, options);
 
-/** Exact pixel size of the poster SVG (must match buildTreeSvg's math). */
-function posterPixelSize(): { w: number; h: number } {
-    const bounds = computeBounds(TreeRenderer.getPosterLayout());
-    // 2×40 padding + footer (always present: dateLabel is always set).
-    return { w: bounds.width + 80, h: bounds.height + 80 + FOOTER_HEIGHT };
+    // Occupied rectangles in poster-px space (cards + footer strip). Sheets
+    // that intersect NOTHING are skipped, so a sparse tree corner no longer
+    // prints near-blank paper.
+    const bounds = computeBounds(layout);
+    const cfg = DEFAULT_LAYOUT_CONFIG;
+    const widthPx = bounds.width + POSTER_PADDING * 2;
+    const heightPx = bounds.height + POSTER_PADDING * 2 + FOOTER_HEIGHT;
+    const occupied: Array<{ x: number; y: number; w: number; h: number }> = [];
+    for (const pos of layout.positions.values()) {
+        occupied.push({
+            x: pos.x - bounds.minX + POSTER_PADDING,
+            y: pos.y - bounds.minY + POSTER_PADDING,
+            w: cfg.cardWidth,
+            h: cfg.cardHeight,
+        });
+    }
+    occupied.push({ x: POSTER_PADDING, y: heightPx - FOOTER_HEIGHT, w: 420, h: FOOTER_HEIGHT });
+    const hasContent = (x: number, y: number, w: number, h: number): boolean =>
+        occupied.some(o => o.x < x + w && o.x + o.w > x && o.y < y + h && o.y + o.h > y);
+    return { svg, widthPx, heightPx, hasContent };
 }
 
 function downloadBlob(content: string, type: string, filename: string): void {
@@ -96,6 +199,17 @@ export const exportImageMethods = uiModule({
         this.clearDialogStack();
         this.pushDialog('poster-modal');
         document.getElementById('poster-modal')?.classList.add('active');
+
+        // Tell the user WHAT will print (the poster prints what you are looking
+        // at), and disable the export buttons for views that cannot be printed
+        // as a poster (map: foreign raster tiles; timeline: not yet supported).
+        const info = posterViewInfo();
+        const labelEl = document.getElementById('poster-view-label');
+        if (labelEl) labelEl.textContent = info.line;
+        document.querySelectorAll<HTMLButtonElement>('#poster-modal .menu-option').forEach(btn => {
+            btn.disabled = info.blocked;
+            btn.classList.toggle('disabled', info.blocked);
+        });
     },
 
     closePosterDialog(): void {
@@ -103,25 +217,27 @@ export const exportImageMethods = uiModule({
         this.clearDialogStack();
     },
 
-    /** Download the current tree as a self-contained SVG. */
+    /** Download the current view as a self-contained SVG. */
     exportPosterSvg(): void {
-        const svg = currentPosterSvg();
-        if (!svg) {
+        const poster = buildCurrentPoster();
+        if (!poster) {
             this.showAlert(strings.poster.empty, 'warning');
             return;
         }
-        downloadBlob(svg, 'image/svg+xml', posterFilename('svg'));
+        downloadBlob(poster.svg, 'image/svg+xml', posterFilename('svg'));
         this.closePosterDialog();
     },
 
-    /** Rasterize the current tree to a 2x PNG (clamped to the canvas limit). */
+    /** Rasterize the current view to a 2x PNG (clamped to the canvas limit). */
     async exportPosterPng(): Promise<void> {
-        const svg = currentPosterSvg();
-        if (!svg) {
+        const poster = buildCurrentPoster();
+        if (!poster) {
             this.showAlert(strings.poster.empty, 'warning');
             return;
         }
-        const { w: baseW, h: baseH } = posterPixelSize();
+        const svg = poster.svg;
+        const baseW = poster.widthPx;
+        const baseH = poster.heightPx;
 
         let scale = 2;
         const maxScale = Math.min(MAX_CANVAS_PX / baseW, MAX_CANVAS_PX / baseH);
@@ -171,11 +287,12 @@ export const exportImageMethods = uiModule({
      * chosen paper size/orientation, with a 10mm overlap and glue/crop marks.
      */
     printPosterPdf(): void {
-        const svg = currentPosterSvg();
-        if (!svg) {
+        const poster = buildCurrentPoster();
+        if (!poster) {
             this.showAlert(strings.poster.empty, 'warning');
             return;
         }
+        const svg = poster.svg;
         const format = (document.getElementById('poster-format') as HTMLSelectElement)?.value || 'A4';
         const orientation = (document.getElementById('poster-orientation') as HTMLSelectElement)?.value || 'portrait';
         const paper = PAPER[format] || PAPER.A4;
@@ -184,42 +301,20 @@ export const exportImageMethods = uiModule({
         const contentW = pageW - PAGE_MARGIN_MM * 2;
         const contentH = pageH - PAGE_MARGIN_MM * 2;
 
-        const { w: posterWpx, h: posterHpx } = posterPixelSize();
-        const posterWmm = posterWpx * MM_PER_PX;
-        const posterHmm = posterHpx * MM_PER_PX;
+        const posterWmm = poster.widthPx * MM_PER_PX;
+        const posterHmm = poster.heightPx * MM_PER_PX;
 
         const stepX = contentW - PAGE_OVERLAP_MM;
         const stepY = contentH - PAGE_OVERLAP_MM;
         const cols = Math.max(1, Math.ceil((posterWmm - PAGE_OVERLAP_MM) / stepX));
         const rows = Math.max(1, Math.ceil((posterHmm - PAGE_OVERLAP_MM) / stepY));
 
-        // Occupied rectangles in poster-mm space (cards + the footer strip at
-        // the bottom-left) — sheets that intersect NOTHING are skipped, so a
-        // sparse tree corner no longer prints near-blank paper.
-        const layout = TreeRenderer.getPosterLayout();
-        const bounds = computeBounds(layout);
-        const PAD_PX = 40;
-        const occupied: Array<{ x: number; y: number; w: number; h: number }> = [];
-        const cfg = DEFAULT_LAYOUT_CONFIG;
-        for (const pos of layout.positions.values()) {
-            occupied.push({
-                x: (pos.x - bounds.minX + PAD_PX) * MM_PER_PX,
-                y: (pos.y - bounds.minY + PAD_PX) * MM_PER_PX,
-                w: cfg.cardWidth * MM_PER_PX,
-                h: cfg.cardHeight * MM_PER_PX,
-            });
-        }
-        // Footer (title · date), bottom-left. Width is a generous estimate.
-        occupied.push({
-            x: PAD_PX * MM_PER_PX,
-            y: posterHmm - FOOTER_HEIGHT * MM_PER_PX,
-            w: 420 * MM_PER_PX,
-            h: FOOTER_HEIGHT * MM_PER_PX,
-        });
+        // A sheet is printed only when it intersects drawn content — the poster
+        // knows its own occupancy (card rects for the tree, the semicircle for
+        // the fan), so sparse corners no longer print near-blank paper. Tiles
+        // are mm-space; the predicate is px-space, so convert with MM_PER_PX.
         const tileHasContent = (offX: number, offY: number): boolean =>
-            occupied.some(o =>
-                o.x < offX + contentW && o.x + o.w > offX &&
-                o.y < offY + contentH && o.y + o.h > offY);
+            poster.hasContent(offX / MM_PER_PX, offY / MM_PER_PX, contentW / MM_PER_PX, contentH / MM_PER_PX);
 
         const dataUrl = svgDataUrl(svg);
         const pages: string[] = [];

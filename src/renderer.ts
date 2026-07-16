@@ -408,6 +408,16 @@ class TreeRendererClass {
         return this.viewMode;
     }
 
+    /** Current ancestor depth (generations up) — used for the poster view label. */
+    getFocusDepthUp(): number {
+        return this.focusDepthUp;
+    }
+
+    /** Current descendant depth (generations down) — used for the poster view label. */
+    getFocusDepthDown(): number {
+        return this.focusDepthDown;
+    }
+
     /**
      * Set + persist the view mode WITHOUT rendering. For callers that follow
      * up with setFocus (which renders) — avoids two overlapping renders.

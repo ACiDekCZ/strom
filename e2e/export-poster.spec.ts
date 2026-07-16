@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'fs';
-import { openApp, createFirstPerson } from './helpers.js';
+import { openApp, createFirstPerson, card } from './helpers.js';
 
 test('export dialog: privacy select applies; JSON download hides living names with initials', async ({ page }) => {
     await openApp(page);
@@ -93,6 +93,65 @@ test('poster SVG applies the living-privacy filter', async ({ page }) => {
     const svg = readFileSync(await download.path(), 'utf-8');
     expect(svg).not.toContain('Alice');
     expect(svg).toContain('A.');
+});
+
+test('poster dialog shows a truthful view label for the family view', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    await page.evaluate(() => window.Strom.UI.showPosterDialog());
+    const poster = page.locator('#poster-modal');
+    await expect(poster).toBeVisible();
+    // The line names the view, the focus person and the depth.
+    const label = poster.locator('#poster-view-label');
+    await expect(label).toContainText('Prints the current view:');
+    await expect(label).toContainText('Family');
+    await expect(label).toContainText('Jan Novak');
+});
+
+test('fan view: poster downloads an SVG containing fan sectors', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+
+    await page.locator('#view-mode-fan').click();
+    await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
+
+    await page.evaluate(() => window.Strom.UI.showPosterDialog());
+    const poster = page.locator('#poster-modal');
+    await expect(poster).toBeVisible();
+    await expect(poster.locator('#poster-view-label')).toContainText('Fan');
+
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        poster.locator('.menu-option', { hasText: 'SVG' }).click(),
+    ]);
+    const svg = readFileSync(await download.path(), 'utf-8');
+    expect(svg.trimStart().startsWith('<svg')).toBe(true);
+    // A fan poster: the nested fan chart with drawn sectors (paths), the
+    // self-contained light colours, and NOT the tree card layout.
+    expect(svg).toContain('class="fan-svg"');
+    expect(svg).toContain('fan-sector');
+    expect(svg).toContain('#e3f2fd');       // embedded light male fill
+    expect(svg).toMatch(/<path d="M /);      // sector geometry
+});
+
+test('map view: poster export is honestly blocked and buttons are disabled', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
+    await page.evaluate(() => window.Strom.UI.showPosterDialog());
+    const poster = page.locator('#poster-modal');
+    await expect(poster).toBeVisible();
+    // Honest message, and every export button is disabled (no silent card print).
+    await expect(poster.locator('#poster-view-label')).toContainText('map is not printable');
+    const options = poster.locator('.menu-option');
+    const count = await options.count();
+    for (let i = 0; i < count; i++) {
+        await expect(options.nth(i)).toBeDisabled();
+    }
 });
 
 test('tiled print fires only after the tile image is decoded (empty-pages fix)', async ({ page }) => {

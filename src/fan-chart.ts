@@ -7,6 +7,9 @@
 
 import { StromData, Person, PersonId } from './types.js';
 import { displayYear } from './dates.js';
+import {
+    posterFooterSvg, PosterFooterMeta, FOOTER_HEIGHT, POSTER_PADDING, POSTER_FONT, POSTER_BG,
+} from './export-image.js';
 
 export interface FanSector {
     /** Ahnentafel number (>= 2 — the focus is the center disc, not a sector). */
@@ -99,7 +102,36 @@ export interface FanSvgOptions {
     addParentLabel: string;
     /** K9: draw the Kekulé (ahnentafel) number in each ancestor sector. */
     showKekule?: boolean;
+    /**
+     * Embed a self-contained light-theme `<style>` block in the SVG so the
+     * chart carries its own colours (the on-canvas fan relies on page CSS
+     * variables; the poster export must stand alone).
+     */
+    embedStyles?: boolean;
 }
+
+/**
+ * Light-theme fan colours as concrete values, mirroring the `.fan-*` rules in
+ * index.html (the `--male`/`--female`/`--text`… variables at their light
+ * values). Emitted inside the SVG when `embedStyles` is set so the exported
+ * poster renders identically without the app stylesheet.
+ */
+const FAN_LIGHT_STYLE =
+    '.fan-sector path{stroke:#888;stroke-width:1}'
+    + '.fan-sector.male path{fill:#e3f2fd}'
+    + '.fan-sector.female path{fill:#fce4ec}'
+    + '.fan-focus circle{stroke:#5a9a5a;stroke-width:2}'
+    + '.fan-focus.male circle{fill:#e3f2fd}'
+    + '.fan-focus.female circle{fill:#fce4ec}'
+    + '.fan-name{fill:#333;font-weight:600}'
+    + '.fan-years{fill:#666;font-weight:400}'
+    + '.fan-name.g0{font-size:14px}.fan-years.g0{font-size:11px}'
+    + '.fan-name.g1{font-size:14px}.fan-years.g1{font-size:11px}'
+    + '.fan-name.g2{font-size:12.5px}.fan-years.g2{font-size:10.5px}'
+    + '.fan-name.g3{font-size:11px}.fan-name.g3 .fan-years,.fan-name.g4 .fan-years{font-size:9.5px}'
+    + '.fan-name.g4{font-size:10.5px}.fan-name.g5{font-size:9.5px}'
+    + '.fan-name.g6{font-size:8.5px}.fan-name.g7{font-size:8px}.fan-name.g8{font-size:7.5px}'
+    + '.fan-kekule{font-size:9px;fill:#999}';
 
 const FOCUS_R = 72;
 /** Ring widths by generation (1-based); outer rings get narrower. */
@@ -165,17 +197,37 @@ function yearsOf(p: Person): string {
     return `${b || '?'}–${d || ''}`;
 }
 
+/** Intrinsic geometry of the fan drawing (viewBox size + focus centre). */
+export interface FanGeometry {
+    /** viewBox width. */
+    W: number;
+    /** viewBox height. */
+    H: number;
+    /** Fan centre X (= half width). */
+    cx: number;
+    /** Fan baseline / focus-disc centre Y. */
+    cy: number;
+    /** Outer radius of the last ring. */
+    R: number;
+    /** Focus-disc radius. */
+    focusR: number;
+}
+
+/** Compute the fan's intrinsic size and centre without building the SVG. */
+export function fanGeometry(model: FanModel): FanGeometry {
+    const R = ringRadii(model.generations).r2;
+    const W = 2 * R + 2 * PAD;
+    const H = R + FOCUS_R + 2 * PAD;
+    return { W, H, cx: W / 2, cy: PAD + R, R, focusR: FOCUS_R };
+}
+
 /**
  * Build the complete fan SVG. The viewBox is tight around the drawn fan; the
  * container CSS scales it to fit.
  */
 export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
     const { esc } = opts;
-    const R = ringRadii(model.generations).r2;
-    const W = 2 * R + 2 * PAD;
-    const H = R + FOCUS_R + 2 * PAD;
-    const cx = W / 2;
-    const cy = PAD + R; // fan baseline; focus disc dips below it
+    const { W, H, cx, cy } = fanGeometry(model); // cy: fan baseline; focus disc dips below it
 
     const parts: string[] = [];
     const defs: string[] = [];
@@ -299,6 +351,92 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         + (fyears ? `<text x="${fmt(cx)}" y="${fmt(cy + 12)}" text-anchor="middle" class="fan-years g0">${esc(fyears)}</text>` : '')
         + `<title>#1 · ${esc(fname)}</title></g>`);
 
+    const style = opts.embedStyles ? `<style>${FAN_LIGHT_STYLE}</style>` : '';
     return `<svg class="fan-svg" viewBox="0 0 ${fmt(W)} ${fmt(H)}" role="img">`
-        + `<defs>${defs.join('')}</defs>${parts.join('')}</svg>`;
+        + `${style}<defs>${defs.join('')}</defs>${parts.join('')}</svg>`;
+}
+
+// ==================== FAN POSTER ====================
+
+/**
+ * Occupancy predicate over the fan poster in PIXEL space (origin at the
+ * poster's top-left). Returns true when the given rectangle overlaps drawn
+ * content — used by the tiled print to skip genuinely blank sheets. The fan is
+ * a semicircle: the bottom corners of its bounding box and everything below the
+ * baseline (except the focus disc) are empty. This is a conservative test — it
+ * errs toward keeping a sheet, never toward dropping content.
+ */
+export type FanOccupancy = (x: number, y: number, w: number, h: number) => boolean;
+
+/** Everything the poster tiler needs about a fan poster. */
+export interface FanPosterGeometry {
+    /** Total poster width in px (fan + padding). */
+    width: number;
+    /** Total poster height in px (fan + padding + footer). */
+    height: number;
+    hasContent: FanOccupancy;
+}
+
+/** Distance² from a point to the nearest point of an axis-aligned rectangle. */
+function rectPointDistSq(px: number, py: number, x: number, y: number, w: number, h: number): number {
+    const nx = Math.max(x, Math.min(px, x + w));
+    const ny = Math.max(y, Math.min(py, y + h));
+    const dx = nx - px, dy = ny - py;
+    return dx * dx + dy * dy;
+}
+
+/**
+ * Poster-space geometry for a fan chart: total pixel size (with padding and an
+ * optional footer strip) and a content predicate for tile skipping.
+ */
+export function fanPosterGeometry(model: FanModel, hasFooter: boolean): FanPosterGeometry {
+    const g = fanGeometry(model);
+    const footer = hasFooter ? FOOTER_HEIGHT : 0;
+    const width = g.W + POSTER_PADDING * 2;
+    const height = g.H + POSTER_PADDING * 2 + footer;
+    // Fan centre in poster-px space (the fan is translated by the padding).
+    const cx = POSTER_PADDING + g.cx;
+    const cy = POSTER_PADDING + g.cy;
+    // Footer strip (bottom-left): generous width estimate, mirrors the tree.
+    const footerRect = { x: POSTER_PADDING, y: height - footer, w: 420, h: footer };
+    const hasContent: FanOccupancy = (x, y, w, h) => {
+        if (footer > 0
+            && footerRect.x < x + w && footerRect.x + footerRect.w > x
+            && footerRect.y < y + h && footerRect.y + footerRect.h > y) return true;
+        const distSq = rectPointDistSq(cx, cy, x, y, w, h);
+        // Focus disc dips just below the baseline.
+        if (distSq <= g.focusR * g.focusR) return true;
+        // Upper semicircle: the rect must reach the top half (y <= baseline)
+        // and come within the outer radius of the centre.
+        return y <= cy && distSq <= g.R * g.R;
+    };
+    return { width, height, hasContent };
+}
+
+/**
+ * Wrap a fan chart as a self-contained poster: white background, explicit
+ * light-theme colours, and the shared poster footer (tree name · view label ·
+ * date). Reuses `posterFooterSvg` so the fan and tree posters share one footer.
+ */
+export function buildFanPosterSvg(model: FanModel, opts: FanSvgOptions, meta: PosterFooterMeta): string {
+    const g = fanGeometry(model);
+    const hasFooter = !!(meta.treeName || meta.viewLabel || meta.dateLabel);
+    const { width, height } = fanPosterGeometry(model, hasFooter);
+
+    // Force poster-safe options: never editable (no "+" slots), always
+    // self-contained colours.
+    const fan = buildFanSvg(model, { ...opts, editable: false, embedStyles: true });
+    // Embed the fan as a nested SVG offset by the padding; give it an explicit
+    // viewport (x/y/width/height) so its viewBox maps 1:1 into poster px.
+    const nested = fan.replace(
+        '<svg class="fan-svg"',
+        `<svg class="fan-svg" x="${fmt(POSTER_PADDING)}" y="${fmt(POSTER_PADDING)}" width="${fmt(g.W)}" height="${fmt(g.H)}"`);
+
+    const out: string[] = [];
+    out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(width)}" height="${fmt(height)}" viewBox="0 0 ${fmt(width)} ${fmt(height)}" font-family="${POSTER_FONT}">`);
+    out.push(`<rect x="0" y="0" width="${fmt(width)}" height="${fmt(height)}" fill="${POSTER_BG}"/>`);
+    out.push(nested);
+    if (hasFooter) out.push(posterFooterSvg(meta, height));
+    out.push('</svg>');
+    return out.join('\n');
 }

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { buildFanModel, buildFanSvg } from '../fan-chart.js';
+import { buildFanModel, buildFanSvg, buildFanPosterSvg, fanPosterGeometry } from '../fan-chart.js';
 import { StromData, Person, PersonId, Gender } from '../types.js';
 
 function person(id: string, gender: Gender = 'male', parentIds: string[] = [], o: Partial<Person> = {}): Person {
@@ -154,5 +154,80 @@ describe('buildFanSvg', () => {
         const svg = buildFanSvg(model, svgOpts);
         expect(svg).toContain('&lt;Evil &amp;');
         expect(svg).not.toContain('<Evil');
+    });
+});
+
+describe('buildFanPosterSvg', () => {
+    const fam = () => data([
+        person('f', 'male', ['pgf']),
+        person('m', 'female'),
+        person('me', 'male', ['f', 'm']),
+        person('pgf'),
+    ]);
+
+    it('wraps the fan in a self-contained poster with a white background', () => {
+        const model = buildFanModel(fam(), 'me' as PersonId, 4)!;
+        const svg = buildFanPosterSvg(model, svgOpts, {});
+        expect(svg.startsWith('<svg')).toBe(true);
+        expect(svg.trimEnd().endsWith('</svg>')).toBe(true);
+        // Poster root carries xmlns + font (the on-canvas fan relies on page CSS).
+        expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
+        expect(svg).toContain('font-family=');
+        // White background rect.
+        expect(svg).toContain('fill="#ffffff"');
+        // Nested fan SVG is present and given an explicit viewport.
+        expect(svg).toMatch(/<svg class="fan-svg"[^>]*width="/);
+    });
+
+    it('embeds explicit light-theme colours (no CSS variables needed)', () => {
+        const model = buildFanModel(fam(), 'me' as PersonId, 4)!;
+        const svg = buildFanPosterSvg(model, svgOpts, {});
+        expect(svg).toContain('<style>');
+        expect(svg).toContain('.fan-sector.male path{fill:#e3f2fd}');
+        expect(svg).toContain('.fan-sector.female path{fill:#fce4ec}');
+        // No unresolved theme variables leak into the standalone poster.
+        expect(svg).not.toContain('var(--male)');
+        expect(svg).not.toContain('var(--text');
+    });
+
+    it('draws the shared footer (tree name · view label · date)', () => {
+        const model = buildFanModel(fam(), 'me' as PersonId, 4)!;
+        const svg = buildFanPosterSvg(model, svgOpts, {
+            treeName: 'My Family', viewLabel: 'Fan — ancestors of me, 4 generations', dateLabel: '1. 1. 2026',
+        });
+        expect(svg).toContain('My Family');
+        expect(svg).toContain('Fan — ancestors of me, 4 generations');
+        expect(svg).toContain('1. 1. 2026');
+    });
+
+    it('is never editable — no "+" add-parent affordances in the poster', () => {
+        // fam() leaves several empty ancestor slots (would be "+" in edit mode).
+        const model = buildFanModel(fam(), 'me' as PersonId, 4)!;
+        const svg = buildFanPosterSvg(model, { ...svgOpts, editable: true }, {});
+        expect(svg).not.toContain('data-fan-add');
+        expect(svg).not.toContain('fan-plus');
+    });
+});
+
+describe('fanPosterGeometry (tile skipping)', () => {
+    const model = () => buildFanModel(data([
+        person('me', 'male', ['f']), person('f', 'male'),
+    ]), 'me' as PersonId, 5)!;
+
+    it('reports a poster larger than the bare fan (padding + footer)', () => {
+        const noFooter = fanPosterGeometry(model(), false);
+        const withFooter = fanPosterGeometry(model(), true);
+        expect(withFooter.height).toBeGreaterThan(noFooter.height);
+        expect(withFooter.width).toBe(noFooter.width);
+    });
+
+    it('keeps the fan centre and skips a far bottom-right corner tile', () => {
+        const g = fanPosterGeometry(model(), true);
+        // A tile over the fan centre (top-middle of the poster) has content.
+        expect(g.hasContent(g.width / 2 - 20, 20, 40, 40)).toBe(true);
+        // The extreme bottom-right corner is outside the semicircle → empty.
+        expect(g.hasContent(g.width - 20, g.height - 60, 20, 15)).toBe(false);
+        // The footer strip at the bottom-left is content, though.
+        expect(g.hasContent(g.width * 0.05, g.height - 10, 30, 8)).toBe(true);
     });
 });

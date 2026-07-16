@@ -3581,6 +3581,17 @@
             z-index: 300;  /* Above tree-manager (200), below confirmation (500) */
         }
 
+        /* Poster: honest "what will print" line under the description. */
+        .poster-view-line {
+            margin: -6px 0 14px;
+            padding: 8px 12px;
+            font-size: 13px;
+            color: var(--text, #333);
+            background: var(--hover-bg, #f1f1ee);
+            border-radius: 8px;
+            border-left: 3px solid var(--primary, #5a9a5a);
+        }
+
         /* Sub-dialogs that appear above merge-modal */
         #merge-manual-dialog,
         #merge-conflict-dialog,
@@ -7690,6 +7701,7 @@
                 <button class="close-btn" onclick="window.Strom.UI.closePosterDialog()">&times;</button>
             </div>
             <p class="modal-description" data-i18n="poster.description"></p>
+            <p class="poster-view-line" id="poster-view-label"></p>
             <div class="form-group">
                 <label data-i18n="privacy.label"></label>
                 <select id="poster-privacy-mode">

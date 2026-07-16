@@ -30,6 +30,11 @@ const FONT = "'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 const PADDING = 40;
 export const FOOTER_HEIGHT = 44;
 
+/** Poster geometry/style shared with other poster builders (e.g. the fan). */
+export const POSTER_PADDING = PADDING;
+export const POSTER_FONT = FONT;
+export const POSTER_BG = COLORS.background;
+
 /** Branch stripe colours (match the on-screen --branch-* variables). */
 const BRANCH_COLORS: Record<string, string> = {
     paternal: '#d08a5a', maternal: '#5a8fc0', descendant: '#57a869',
@@ -96,11 +101,40 @@ export interface PosterOptions {
     treeName?: string;
     /** Footer date/subtitle. */
     dateLabel?: string;
+    /** Footer view label (e.g. "Family — from Jan Novák (depth 3/3)"). */
+    viewLabel?: string;
     config?: LayoutConfig;
     /** Branch classification (person id -> paternal|maternal|descendant). */
     branchMap?: Map<string, string> | null;
     /** Persons drawn with the † marker. */
     deceasedSet?: Set<string>;
+}
+
+/** Fields the shared poster footer needs (a subset of PosterOptions). */
+export interface PosterFooterMeta {
+    treeName?: string;
+    viewLabel?: string;
+    dateLabel?: string;
+}
+
+/**
+ * Shared poster footer: "<tree name>  ·  <view label>  ·  <date>" on the
+ * bottom-left. Title, view label and date sit TOGETHER on the left — a lone
+ * date in the far-right corner used to force a nearly-empty last print sheet.
+ * Returns '' when there is nothing to show. Positioned against `totalHeight`
+ * (the poster's full pixel height, footer strip included).
+ */
+export function posterFooterSvg(meta: PosterFooterMeta, totalHeight: number): string {
+    const title = meta.treeName ? escapeXml(meta.treeName) : '';
+    const view = meta.viewLabel ? escapeXml(meta.viewLabel) : '';
+    const date = meta.dateLabel ? escapeXml(meta.dateLabel) : '';
+    if (!title && !view && !date) return '';
+    const fy = totalHeight - FOOTER_HEIGHT / 2;
+    const parts: string[] = [];
+    if (title) parts.push(`<tspan font-size="16" font-weight="600" fill="${COLORS.text}">${title}</tspan>`);
+    if (view) parts.push(`<tspan font-size="12" fill="${COLORS.footer}">${parts.length ? '  ·  ' : ''}${view}</tspan>`);
+    if (date) parts.push(`<tspan font-size="12" fill="${COLORS.footer}">${parts.length ? '  ·  ' : ''}${date}</tspan>`);
+    return `<text x="${PADDING}" y="${fy.toFixed(1)}" dominant-baseline="middle">${parts.join('')}</text>`;
 }
 
 /** Bounding box of all cards (card top-left..bottom-right) in layout space. */
@@ -118,7 +152,7 @@ export function computeBounds(result: PosterLayout, config: LayoutConfig = DEFAU
     return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
 }
 
-function escapeXml(str: string): string {
+export function escapeXml(str: string): string {
     return str
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -141,7 +175,7 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
     const ch = config.cardHeight;
     const bounds = computeBounds(result, config);
 
-    const hasFooter = !!(options.treeName || options.dateLabel);
+    const hasFooter = !!(options.treeName || options.dateLabel || options.viewLabel);
     const footer = hasFooter ? FOOTER_HEIGHT : 0;
     const width = bounds.width + PADDING * 2;
     const height = bounds.height + PADDING * 2 + footer;
@@ -263,19 +297,9 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
 
     out.push('</g>'); // translate
 
-    // --- Footer ---
+    // --- Footer (tree name · view label · date) ---
     if (hasFooter) {
-        // Title and date TOGETHER on the left: a lone date in the far right
-        // corner used to force a nearly-empty last sheet in the tiled print.
-        const fy = height - footer / 2;
-        const title = options.treeName ? escapeXml(options.treeName) : '';
-        const date = options.dateLabel ? escapeXml(options.dateLabel) : '';
-        const parts: string[] = [];
-        if (title) parts.push(`<tspan font-size="16" font-weight="600" fill="${COLORS.text}">${title}</tspan>`);
-        if (date) parts.push(`<tspan font-size="12" fill="${COLORS.footer}">${title ? '  ·  ' : ''}${date}</tspan>`);
-        if (parts.length) {
-            out.push(`<text x="${PADDING}" y="${fy.toFixed(1)}" dominant-baseline="middle">${parts.join('')}</text>`);
-        }
+        out.push(posterFooterSvg(options, height));
     }
 
     out.push('</svg>');
