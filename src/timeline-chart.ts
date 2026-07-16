@@ -242,11 +242,14 @@ export function buildTimelinePosterSvg(
         labelW: POSTER_LABEL_W,
         mode: 'poster',
     });
-    // Embed the timeline as a nested SVG offset by the padding, with an explicit
-    // viewport so its viewBox maps 1:1 into poster px.
+    // Embed the timeline as a nested SVG offset by the padding. buildTimelineSvg
+    // already emits width="innerW" height="innerH" (== g.innerW/g.innerH), so we
+    // add ONLY x/y here — re-adding width/height would duplicate those attributes
+    // and make the SVG invalid XML, which silently fails to decode as an <img>
+    // (blank print tiles / PNG). The existing viewport already maps 1:1 to px.
     const nested = inner.replace(
         '<svg class="timeline-svg"',
-        `<svg class="timeline-svg" x="${POSTER_PADDING}" y="${POSTER_PADDING}" width="${g.innerW}" height="${g.innerH}"`);
+        `<svg class="timeline-svg" x="${POSTER_PADDING}" y="${POSTER_PADDING}"`);
 
     const out: string[] = [];
     out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${g.width}" height="${g.height}" viewBox="0 0 ${g.width} ${g.height}" font-family="${POSTER_FONT}">`);

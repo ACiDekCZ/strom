@@ -114,6 +114,27 @@ describe('buildTimelinePosterSvg', () => {
         expect(svg).toContain('1. 1. 2026');
     });
 
+    it('gives the nested timeline exactly one width/height (valid XML for <img>)', () => {
+        // Regression: the poster embeds buildTimelineSvg (which already emits
+        // width/height) as a nested <svg>. Re-adding width/height duplicated the
+        // attributes → fatal XML error → the SVG never decoded as an <img>, so
+        // every tiled print sheet and the PNG rasterised blank.
+        const d = fam();
+        const model = computeTimelineModel(d, ids(d), TODAY);
+        const svg = buildTimelinePosterSvg(model, { esc }, { treeName: 'F' });
+        const nested = svg.match(/<svg class="timeline-svg"[^>]*>/);
+        expect(nested).not.toBeNull();
+        const tag = nested![0];
+        expect((tag.match(/\bwidth=/g) ?? []).length).toBe(1);
+        expect((tag.match(/\bheight=/g) ?? []).length).toBe(1);
+        // And the nested viewport equals the geometry's inner size (1:1 mapping).
+        const g = timelinePosterGeometry(model, true);
+        expect(tag).toContain(`width="${g.innerW}"`);
+        expect(tag).toContain(`height="${g.innerH}"`);
+        expect(tag).toContain(`x="`);
+        expect(tag).toContain(`y="`);
+    });
+
     it('applies the caller-escaped, privacy-style names it is given', () => {
         // The poster names come straight from the model rows — feeding a
         // reduced-name person yields a reduced name, and no full name leaks.

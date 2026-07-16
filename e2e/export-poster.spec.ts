@@ -167,6 +167,44 @@ test('timeline view: poster downloads an SVG containing timeline bars', async ({
     expect(svg).not.toContain('<foreignObject');       // canvas-safe labels
 });
 
+test('timeline view: tiled print decodes its tiles (no blank sheets)', async ({ page }) => {
+    // Regression: the timeline poster embedded a nested <svg> with duplicate
+    // width/height attributes → invalid XML → the tile <img> never decoded, so
+    // the print preview showed blank sheets. Assert the tile image loads.
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('timeline'));
+    await expect(page.locator('.timeline-svg')).toBeVisible();
+
+    await page.evaluate(() => {
+        (window as unknown as { __printState?: unknown }).__printState = null;
+        (window as unknown as { print: () => void }).print = () => {
+            const img = document.querySelector('#poster-print img') as HTMLImageElement | null;
+            (window as unknown as { __printState?: unknown }).__printState = {
+                called: true,
+                imgComplete: img?.complete ?? false,
+                naturalWidth: img?.naturalWidth ?? 0,
+                pages: document.querySelectorAll('#poster-print .poster-page').length,
+            };
+        };
+    });
+    await page.evaluate(() => window.Strom.UI.showPosterDialog());
+    await page.evaluate(() => window.Strom.UI.printPosterPdf());
+
+    await expect.poll(() => page.evaluate(() =>
+        (window as unknown as { __printState?: { called?: boolean } }).__printState?.called ?? false
+    )).toBe(true);
+    const state = await page.evaluate(() =>
+        (window as unknown as { __printState?: { imgComplete: boolean; naturalWidth: number; pages: number } }).__printState!);
+    expect(state.pages).toBeGreaterThan(0);
+    // The nested timeline SVG is valid XML now, so the tile image actually
+    // decodes: a broken SVG leaves naturalWidth === 0 and blank sheets.
+    expect(state.imgComplete).toBe(true);
+    expect(state.naturalWidth).toBeGreaterThan(0);
+});
+
 test('map view: poster export is honestly blocked and buttons are disabled', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
