@@ -74,6 +74,9 @@ test('the hamburger menu exposes the current-view actions (poster, export select
     const menu = page.locator('#mobile-menu');
     await expect(menu).toHaveClass(/active/);
 
+    // The hamburger is grouped under non-interactive section headers now.
+    await expect(menu.locator('.menu-section-header', { hasText: 'Current view' })).toBeVisible();
+    await expect(menu.locator('.menu-section-header', { hasText: /^View$/ })).toBeVisible();
     await expect(menu.locator('button', { hasText: 'Poster' })).toBeVisible();
     await expect(menu.locator('button', { hasText: 'Export this view' })).toBeVisible();
 

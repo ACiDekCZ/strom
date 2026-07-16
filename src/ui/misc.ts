@@ -397,6 +397,19 @@ export const miscMethods = uiModule({
                     this.endTour();
                     return;
                 }
+                // Floating toolbar menus (not modals) close first and only
+                // themselves: the desktop ⋯ actions menu and the tree switcher.
+                const actionsMenu = document.getElementById('actions-menu-dropdown');
+                if (actionsMenu?.classList.contains('active')) {
+                    this.closeActionsMenu();
+                    return;
+                }
+                const switcher = document.getElementById('tree-switcher-dropdown');
+                if (switcher?.classList.contains('active')) {
+                    switcher.classList.remove('active');
+                    return;
+                }
+
                 // Search filter panel closes first (it is not a modal)
                 const searchFilters = document.getElementById('search-filters');
                 if (searchFilters && searchFilters.style.display !== 'none') {
@@ -792,6 +805,14 @@ export const miscMethods = uiModule({
             const key = el.getAttribute('data-i18n-title');
             if (key && el instanceof HTMLElement) {
                 el.title = getString(key);
+            }
+        });
+
+        // Set aria-label for data-i18n-aria-label elements (icon-only buttons)
+        document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+            const key = el.getAttribute('data-i18n-aria-label');
+            if (key && el instanceof HTMLElement) {
+                el.setAttribute('aria-label', getString(key));
             }
         });
     },

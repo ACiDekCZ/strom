@@ -284,6 +284,43 @@
             justify-content: center;
         }
 
+        /* ==================== ACTIONS MENU (⋯) ==================== */
+        .actions-menu {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .actions-menu-btn {
+            position: relative;
+        }
+        /* Small dot on the ⋯ trigger so the anniversaries signal survives the
+           move out of the tree switcher. */
+        .actions-menu-dot {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #e0555a;
+            box-shadow: 0 0 0 2px var(--bg, #fff);
+        }
+        .actions-menu-dropdown {
+            padding: 4px 0;
+        }
+        /* Non-interactive section labels in the ⋯ menu and the hamburger. */
+        .menu-section-header {
+            padding: 8px 14px 4px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-light, #999);
+            pointer-events: none;
+        }
+        .actions-menu-dropdown .menu-section-header:first-child { padding-top: 6px; }
+        [data-theme="dark"] .menu-section-header { color: #8a8a8a; }
+
         /* ==================== SEARCH ==================== */
         .search-container {
             position: relative;
@@ -5872,6 +5909,10 @@
             .toolbar > button.secondary {
                 display: none !important;
             }
+            /* The ⋯ actions menu is desktop-only; the hamburger covers it here. */
+            .actions-menu {
+                display: none !important;
+            }
             .hamburger-btn {
                 display: flex !important;
             }
@@ -6800,6 +6841,34 @@
             <button id="view-mode-map" onclick="window.Strom.UI.setDisplayViewMode('map')" data-i18n="viewModeSwitch.map"></button>
         </div>
 
+        <!-- Actions menu (⋯) — desktop only; hamburger covers smaller screens -->
+        <div class="actions-menu desktop-only">
+            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions">⋯<span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span></button>
+            <div id="actions-menu-dropdown" class="tree-switcher-dropdown actions-menu-dropdown">
+                <div class="menu-section-header" data-i18n="menu.sectionCurrentView"></div>
+                <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showPosterDialog()">
+                    <span>🖼️</span> <span data-i18n="menu.poster"></span>
+                </div>
+                <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.exportFocusedJSON()">
+                    <span>📤</span> <span data-i18n="menu.exportSelection"></span>
+                </div>
+                <div class="tree-switcher-action edit-only" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.makeTreeFromCurrentView()">
+                    <span>✂️</span> <span data-i18n="menu.makeTreeFromView"></span>
+                </div>
+                <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.startSlideshow()">
+                    <span>📺</span> <span data-i18n="slideshow.menu"></span>
+                </div>
+                <div class="menu-section-header" data-i18n="menu.sectionTree"></div>
+                <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showAnniversariesDialog()">
+                    <span>🎂</span> <span data-i18n="anniversaries.menu"></span>
+                    <span id="actions-ann-badge" class="tree-switcher-badge" style="display:none;"></span>
+                </div>
+                <div class="tree-switcher-action fsa-only" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.attachSaveToFile()">
+                    <span>💾</span> <span data-i18n="fileAccess.saveToFile"></span>
+                </div>
+            </div>
+        </div>
+
         <!-- Settings button (desktop) -->
         <button class="secondary desktop-only" onclick="window.Strom.UI.showSettingsDialog()" data-i18n-title="settings.title">⚙</button>
 
@@ -6807,13 +6876,14 @@
         <button class="hamburger-btn mobile-only" onclick="window.Strom.UI.toggleMobileMenu()">☰</button>
     </div>
 
-    <!-- Mobile menu overlay -->
+    <!-- Mobile menu overlay (grouped by section) -->
     <div id="mobile-menu" class="mobile-menu">
+        <div class="menu-section-header edit-only" data-i18n="menu.sectionEdits"></div>
         <button class="edit-only" onclick="window.Strom.UI.showAddPersonModal(); window.Strom.UI.closeMobileMenu()" data-i18n="mobileMenu.addPerson"></button>
         <button class="edit-only" id="mm-family-btn" style="display:none;" onclick="window.Strom.UI.startFamilyWizardFromToolbar(); window.Strom.UI.closeMobileMenu()">👪 <span data-i18n="familyWizard.title"></span></button>
         <button class="edit-only" onclick="window.Strom.UI.performUndo(); window.Strom.UI.closeMobileMenu()">↶ <span data-i18n="undo.undo"></span></button>
         <button class="edit-only" onclick="window.Strom.UI.performRedo(); window.Strom.UI.closeMobileMenu()">↷ <span data-i18n="undo.redo"></span></button>
-        <button class="edit-only" onclick="window.Strom.UI.showTreeManagerDialog(); window.Strom.UI.closeMobileMenu()">🌳 <span data-i18n="treeManager.manageTreesTitle"></span></button>
+        <div class="menu-section-header" data-i18n="menu.sectionView"></div>
         <div class="mobile-view-row">
             <button id="mm-view-family" onclick="window.Strom.UI.setDisplayViewMode('family'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.family"></button>
             <button id="mm-view-descendants" onclick="window.Strom.UI.setDisplayViewMode('descendants'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.descendants"></button>
@@ -6821,10 +6891,16 @@
             <button id="mm-view-fan" onclick="window.Strom.UI.setDisplayViewMode('fan'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.fan"></button>
             <button id="mm-view-map" onclick="window.Strom.UI.setDisplayViewMode('map'); window.Strom.UI.closeMobileMenu()" data-i18n="viewModeSwitch.map"></button>
         </div>
-        <button class="edit-only" onclick="window.Strom.UI.makeTreeFromCurrentView(); window.Strom.UI.closeMobileMenu()">✂️ <span data-i18n="menu.makeTreeFromView"></span></button>
+        <div class="menu-section-header" data-i18n="menu.sectionCurrentView"></div>
         <button onclick="window.Strom.UI.showPosterDialog(); window.Strom.UI.closeMobileMenu()">🖼️ <span data-i18n="menu.poster"></span></button>
         <button onclick="window.Strom.UI.exportFocusedJSON(); window.Strom.UI.closeMobileMenu()">📤 <span data-i18n="menu.exportSelection"></span></button>
+        <button class="edit-only" onclick="window.Strom.UI.makeTreeFromCurrentView(); window.Strom.UI.closeMobileMenu()">✂️ <span data-i18n="menu.makeTreeFromView"></span></button>
         <button onclick="window.Strom.UI.startSlideshow(); window.Strom.UI.closeMobileMenu()">📺 <span data-i18n="slideshow.menu"></span></button>
+        <div class="menu-section-header" data-i18n="menu.sectionTree"></div>
+        <button onclick="window.Strom.UI.showAnniversariesDialog(); window.Strom.UI.closeMobileMenu()">🎂 <span data-i18n="anniversaries.menu"></span><span id="mm-ann-badge" class="tree-switcher-badge" style="display:none;"></span></button>
+        <button class="edit-only" onclick="window.Strom.UI.showTreeManagerDialog(); window.Strom.UI.closeMobileMenu()">🌳 <span data-i18n="treeManager.manageTreesTitle"></span></button>
+        <button class="fsa-only" onclick="window.Strom.UI.attachSaveToFile(); window.Strom.UI.closeMobileMenu()">💾 <span data-i18n="fileAccess.saveToFile"></span></button>
+        <div class="menu-section-header" data-i18n="menu.sectionApp"></div>
         <button onclick="window.Strom.UI.showSettingsDialog(); window.Strom.UI.closeMobileMenu()">⚙ <span data-i18n="settings.title"></span></button>
     </div>
 

@@ -59,6 +59,15 @@ export const treeManagementMethods = uiModule({
                 !btn?.contains(e.target as Node)) {
                 dropdown.classList.remove('active');
             }
+
+            // Same outside-click behaviour for the desktop ⋯ actions menu.
+            const actions = document.getElementById('actions-menu-dropdown');
+            const actionsBtn = document.querySelector('.actions-menu-btn');
+            if (actions?.classList.contains('active') &&
+                !actions.contains(e.target as Node) &&
+                !actionsBtn?.contains(e.target as Node)) {
+                actions.classList.remove('active');
+            }
         });
     },
 
@@ -66,6 +75,10 @@ export const treeManagementMethods = uiModule({
      * Update tree switcher display
      */
     updateTreeSwitcher(): void {
+        // Keep the action-menu anniversaries signal in sync: this method is
+        // already called wherever the count can change (tree switch, edits, ...).
+        this.refreshActionMenuBadges();
+
         const nameEl = document.getElementById('current-tree-name');
         const dropdown = document.getElementById('tree-switcher-dropdown');
 
@@ -141,28 +154,9 @@ export const treeManagementMethods = uiModule({
             `;
         }
 
-        // Divider and actions. Current-view actions (cut, poster, export
-        // selection) come first, then presentation (slideshow, anniversaries),
-        // then a divider before tree management.
-        const annBadge = this.anniversaryBadgeCount();
+        // The switcher is trees only now: view/tree actions moved to the ⋯
+        // actions menu (desktop) and the grouped hamburger (≤900).
         html += `
-            <div class="tree-switcher-divider"></div>
-            <div class="tree-switcher-action" onclick="window.Strom.UI.toggleTreeSwitcher(); window.Strom.UI.makeTreeFromCurrentView()">
-                <span>✂️</span> ${strings.menu.makeTreeFromView}
-            </div>
-            <div class="tree-switcher-action" onclick="window.Strom.UI.toggleTreeSwitcher(); window.Strom.UI.showPosterDialog()">
-                <span>🖼️</span> ${strings.menu.poster}
-            </div>
-            <div class="tree-switcher-action" onclick="window.Strom.UI.toggleTreeSwitcher(); window.Strom.UI.exportFocusedJSON()">
-                <span>📤</span> ${strings.menu.exportSelection}
-            </div>
-            <div class="tree-switcher-action" onclick="window.Strom.UI.toggleTreeSwitcher(); window.Strom.UI.startSlideshow()">
-                <span>📺</span> ${strings.slideshow.menu}
-            </div>
-            <div class="tree-switcher-action" onclick="window.Strom.UI.showAnniversariesDialog()">
-                <span>🎂</span> ${strings.anniversaries.menu}
-                ${annBadge > 0 ? `<span class="tree-switcher-badge">${annBadge}</span>` : ''}
-            </div>
             <div class="tree-switcher-divider"></div>
             <div class="tree-switcher-action" onclick="window.Strom.UI.showTreeManagerDialog()">
                 <span>⚙</span> ${strings.treeManager.manageTreesTitle}...
@@ -170,6 +164,42 @@ export const treeManagementMethods = uiModule({
         `;
 
         dropdown.innerHTML = html;
+    },
+
+    /**
+     * Refresh the anniversaries signal on whichever action trigger is visible:
+     * a dot on the desktop ⋯ button and the mobile hamburger, plus the count
+     * badge inside both action menus. Driven by updateTreeSwitcher(), which is
+     * already called wherever the count can change.
+     */
+    refreshActionMenuBadges(): void {
+        const count = this.anniversaryBadgeCount();
+        // Small dot on the triggers so the signal survives the menu move.
+        for (const id of ['actions-menu-dot', 'hamburger-dot']) {
+            const dot = document.getElementById(id);
+            if (dot) dot.style.display = count > 0 ? 'block' : 'none';
+        }
+        // Count badge inside the menus (desktop ⋯ menu + hamburger).
+        for (const id of ['actions-ann-badge', 'mm-ann-badge']) {
+            const badge = document.getElementById(id);
+            if (badge) {
+                badge.textContent = count > 0 ? String(count) : '';
+                badge.style.display = count > 0 ? 'inline-flex' : 'none';
+            }
+        }
+    },
+
+    /** Toggle the desktop ⋯ actions menu (mirrors the tree switcher dropdown). */
+    toggleActionsMenu(): void {
+        const dropdown = document.getElementById('actions-menu-dropdown');
+        if (!dropdown) return;
+        dropdown.classList.toggle('active');
+        if (dropdown.classList.contains('active')) this.refreshActionMenuBadges();
+    },
+
+    /** Close the desktop ⋯ actions menu. */
+    closeActionsMenu(): void {
+        document.getElementById('actions-menu-dropdown')?.classList.remove('active');
     },
 
     /**

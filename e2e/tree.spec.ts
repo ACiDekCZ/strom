@@ -189,25 +189,55 @@ test('cancelling the file picker returns to the New Tree menu, not to nowhere', 
     await expect(page.locator('#tree-manager-modal')).toBeHidden();
 });
 
-test('tree switcher: current-view actions (poster, export selection) are in the dropdown', async ({ page }) => {
+test('actions menu: current-view actions (poster, export selection) live in the ⋯ menu', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
+    // The tree switcher is trees only now — no action items, just Manage trees.
     await page.locator('.tree-switcher-btn').click();
-    const dropdown = page.locator('#tree-switcher-dropdown');
-    await expect(dropdown).toHaveClass(/active/);
+    const switcher = page.locator('#tree-switcher-dropdown');
+    await expect(switcher).toHaveClass(/active/);
+    await expect(switcher.locator('.tree-switcher-action', { hasText: 'Poster' })).toHaveCount(0);
+    await expect(switcher.locator('.tree-switcher-action', { hasText: 'Export this view' })).toHaveCount(0);
+    await expect(switcher.locator('.tree-switcher-action', { hasText: 'Make a tree from this view' })).toHaveCount(0);
+    await expect(switcher.locator('.tree-switcher-action', { hasText: 'Manage Trees' })).toBeVisible();
+    await page.keyboard.press('Escape');
 
-    // The current-view action group is present, in order.
+    // Actions live in the desktop ⋯ menu, grouped under section headers.
+    await page.locator('.actions-menu-btn').click();
+    const dropdown = page.locator('#actions-menu-dropdown');
+    await expect(dropdown).toHaveClass(/active/);
+    await expect(dropdown.locator('.menu-section-header', { hasText: 'Current view' })).toBeVisible();
+    await expect(dropdown.locator('.menu-section-header', { hasText: 'Tree' })).toBeVisible();
     await expect(dropdown.locator('.tree-switcher-action', { hasText: 'Make a tree from this view' })).toBeVisible();
     await expect(dropdown.locator('.tree-switcher-action', { hasText: 'Poster' })).toBeVisible();
     await expect(dropdown.locator('.tree-switcher-action', { hasText: 'Export this view' })).toBeVisible();
 
     // Poster… opens the view-aware poster dialog with its "prints the current view" label.
     await dropdown.locator('.tree-switcher-action', { hasText: 'Poster' }).click();
+    await expect(dropdown).not.toHaveClass(/active/);   // item click closes the menu
     await expect(page.locator('#poster-modal')).toBeVisible();
     await expect(page.locator('#poster-view-label')).not.toBeEmpty();
     await page.evaluate(() => window.Strom.UI.closePosterDialog());
     await expect(page.locator('#poster-modal')).toBeHidden();
+});
+
+test('actions menu: closes on outside click and on Escape', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    const dropdown = page.locator('#actions-menu-dropdown');
+
+    // Outside click closes it.
+    await page.locator('.actions-menu-btn').click();
+    await expect(dropdown).toHaveClass(/active/);
+    await page.locator('#tree-container').click({ position: { x: 5, y: 5 } });
+    await expect(dropdown).not.toHaveClass(/active/);
+
+    // Escape closes it.
+    await page.locator('.actions-menu-btn').click();
+    await expect(dropdown).toHaveClass(/active/);
+    await page.keyboard.press('Escape');
+    await expect(dropdown).not.toHaveClass(/active/);
 });
 
 test('export dialog: view-scoped tiles are gated to the active tree; title names the target', async ({ page }) => {
@@ -249,12 +279,12 @@ test('export dialog: view-scoped tiles are gated to the active tree; title names
     await page.evaluate(() => window.Strom.UI.closeExportDialog());
 });
 
-test('tree switcher: Export this view opens the export/privacy dialog for the current view', async ({ page }) => {
+test('actions menu: Export this view opens the export/privacy dialog for the current view', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
-    await page.locator('.tree-switcher-btn').click();
-    const dropdown = page.locator('#tree-switcher-dropdown');
+    await page.locator('.actions-menu-btn').click();
+    const dropdown = page.locator('#actions-menu-dropdown');
     await dropdown.locator('.tree-switcher-action', { hasText: 'Export this view' }).click();
 
     // No silent export with defaults: the privacy/password dialog opens focused
