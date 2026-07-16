@@ -18,6 +18,15 @@ import { PlaceGeo } from './types.js';
 export const GEOCODER_NAME = 'OpenStreetMap Nominatim';
 export const GEOCODER_URL = 'https://nominatim.openstreetmap.org/search';
 
+/**
+ * Nominatim's usage policy asks every application to identify itself so they
+ * can reach out instead of blocking. A browser cannot set the User-Agent, and
+ * the exported single file runs from file:// where not even a Referer goes out
+ * — so the contact rides along as the documented `email` parameter. This is
+ * the app's contact, never the user's.
+ */
+export const GEOCODER_CONTACT = 'milan@stromapp.info';
+
 /** Nominatim's usage policy: one request per second, absolute maximum. */
 export const REQUEST_INTERVAL_MS = 1100;
 
@@ -29,7 +38,9 @@ interface NominatimHit {
 }
 
 export function buildGeocodeUrl(place: string, limit = 1): string {
-    const params = new URLSearchParams({ q: place, format: 'jsonv2', limit: String(limit) });
+    const params = new URLSearchParams({
+        q: place, format: 'jsonv2', limit: String(limit), email: GEOCODER_CONTACT,
+    });
     return `${GEOCODER_URL}?${params.toString()}`;
 }
 

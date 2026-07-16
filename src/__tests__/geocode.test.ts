@@ -8,7 +8,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
     buildGeocodeUrl, geocodeCandidates, geocodePlace, geocodePlaces,
     parseGeocodeCandidates, parseGeocodeResponse,
-    CANDIDATE_LIMIT, GEOCODER_URL, REQUEST_INTERVAL_MS,
+    CANDIDATE_LIMIT, GEOCODER_URL, GEOCODER_CONTACT, REQUEST_INTERVAL_MS,
 } from '../geocode.js';
 
 const hit = (lat: string, lon: string, name = 'Somewhere'): unknown =>
@@ -25,10 +25,13 @@ describe('buildGeocodeUrl', () => {
         expect(url.searchParams.get('limit')).toBe('1');
     });
 
-    it('sends the place name and nothing else', () => {
+    it('sends the place name and nothing else about the family', () => {
         const url = new URL(buildGeocodeUrl('Ústí nad Labem'));
-        expect([...url.searchParams.keys()].sort()).toEqual(['format', 'limit', 'q']);
+        // `email` is the app's own contact (Nominatim asks every application to
+        // identify itself) — a constant, never anything from the user's data.
+        expect([...url.searchParams.keys()].sort()).toEqual(['email', 'format', 'limit', 'q']);
         expect(url.searchParams.get('q')).toBe('Ústí nad Labem');
+        expect(url.searchParams.get('email')).toBe(GEOCODER_CONTACT);
     });
 });
 
