@@ -33,7 +33,8 @@ test('a name at several baptisms is reported as a lead', async ({ page }) => {
     // which one is useless.
     const report = page.locator('#tree-validation-content');
     await expect(report).toContainText('Marie Dvořáková');
-    await expect(report).toContainText('3×');
+    // States exactly what was counted: events across distinct people.
+    await expect(report).toContainText('at 3 events of 3 people');
     await expect(report).toContainText('Jan Novak');
 });
 

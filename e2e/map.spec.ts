@@ -7,14 +7,26 @@ import { openApp, card, createFirstPerson, addRelation } from './helpers.js';
  * That also pins the promise the UI makes — nothing but place names is sent.
  */
 
-/** Serve a 1×1 PNG for every tile, so no request reaches OpenStreetMap. */
-async function stubTiles(page: Page): Promise<void> {
+/**
+ * Serve a 1×1 PNG for every tile, so no request reaches OpenStreetMap.
+ * Also pre-acknowledges the one-time "tiles come from OSM" notice (it has its
+ * own test below); pass acknowledge: false to see the notice itself.
+ */
+async function stubTiles(page: Page, opts: { acknowledge?: boolean } = {}): Promise<void> {
     const png = Buffer.from(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
         'base64',
     );
     await page.route('**://tile.openstreetmap.org/**', route =>
         route.fulfill({ status: 200, contentType: 'image/png', body: png }));
+    if (opts.acknowledge !== false) {
+        await page.addInitScript(() => {
+            const raw = localStorage.getItem('strom-settings');
+            const settings = raw ? JSON.parse(raw) : {};
+            settings.mapTiles = true;
+            localStorage.setItem('strom-settings', JSON.stringify(settings));
+        });
+    }
 }
 
 /** Answer the geocoder locally and record exactly what was asked for. */
@@ -78,6 +90,34 @@ test('the sample tree is on the map the moment it loads', async ({ page }) => {
     expect(await page.locator('.map-marker').count()).toBeGreaterThan(10);
     expect(asked).toBe(0);
     await expect(page.getByRole('button', { name: /Look up/ })).toBeHidden();
+});
+
+test('first open shows the tiles notice and fetches nothing until it is read', async ({ page }) => {
+    let tilesFetched = 0;
+    await page.route('**://tile.openstreetmap.org/**', route => {
+        tilesFetched++;
+        void route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) });
+    });
+
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Map', exact: true }).click();
+
+    // The notice stands where the map would be; nothing has been fetched.
+    await expect(page.locator('.map-tiles-notice')).toBeVisible();
+    expect(tilesFetched).toBe(0);
+    await expect(page.locator('.map-marker')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Show the map' }).click();
+    await expect(page.locator('.map-marker').first()).toBeVisible();
+    await expect(page.locator('.map-tiles-notice')).toHaveCount(0);
+
+    // Once read, it stays read: leave the map and come back, no notice.
+    await page.getByRole('button', { name: 'Family', exact: true }).click();
+    await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await expect(page.locator('.map-tiles-notice')).toHaveCount(0);
 });
 
 test('the map offers to look up places, then plots them', async ({ page }) => {

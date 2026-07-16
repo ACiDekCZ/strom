@@ -69,7 +69,10 @@ export const sourcesMethods = uiModule({
 
     async deleteSource(sourceId: string): Promise<void> {
         const count = DataManager.countSourceCitations(sourceId);
-        const confirmed = await this.showConfirm(strings.sources.deleteConfirm(count), strings.sources.delete);
+        // Name what is being deleted — several rows would otherwise get the
+        // same sentence and the wrong one is one click away.
+        const title = DataManager.getData().sources?.[sourceId]?.title ?? '';
+        const confirmed = await this.showConfirm(strings.sources.deleteConfirm(title, count), strings.sources.delete);
         if (!confirmed) return;
         DataManager.removeSource(sourceId);
         this.renderSourcesList();

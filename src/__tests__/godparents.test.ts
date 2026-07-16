@@ -100,20 +100,65 @@ describe('recurringParticipants', () => {
 });
 
 describe('godparentLeads', () => {
-    it('drops the grandmother — her standing at her grandchildren is no news', () => {
+    it('drops the grandmother — two hops up is still family', () => {
         const babicka = person('g', 'Anna', 'Novakova');
         const otec = person('f', 'Josef', 'Novak');
         const jan = baptised(person('a', 'Jan', 'Novak'), [{ personId: babicka.id }]);
         const petr = baptised(person('b', 'Petr', 'Novak'), [{ personId: babicka.id }]);
-        // She is their grandmother: mother of their father… linked as a parent
-        // of each child for the purposes of this test's one-step check.
-        babicka.childIds = [jan.id, petr.id];
-        jan.parentIds = [babicka.id];
-        petr.parentIds = [babicka.id];
+        // A real grandmother, two hops away: babička → otec → each child.
+        babicka.childIds = [otec.id];
+        otec.parentIds = [babicka.id];
+        otec.childIds = [jan.id, petr.id];
+        jan.parentIds = [otec.id];
+        petr.parentIds = [otec.id];
 
         const data = tree(babicka, otec, jan, petr);
         expect(recurringParticipants(data)).toHaveLength(1);   // she does recur…
         expect(godparentLeads(data)).toEqual([]);              // …but it is not a lead
+    });
+
+    it('drops the uncle — three hops (parent’s sibling) is still family', () => {
+        // Uncles and aunts are the most common godparents, and a one-step check
+        // never reached them: strýc is child → otec → grandparent → strýc away.
+        const grandparent = person('gp', 'Karel', 'Novak');
+        const otec = person('f', 'Josef', 'Novak');
+        const stryc = person('u', 'Vaclav', 'Novak');
+        const petr = baptised(person('a', 'Petr', 'Novak'), [{ personId: stryc.id }]);
+        const anna = baptised(person('b', 'Anna', 'Novakova'), [{ personId: stryc.id }]);
+        grandparent.childIds = [otec.id, stryc.id];
+        otec.parentIds = [grandparent.id];
+        stryc.parentIds = [grandparent.id];
+        otec.childIds = [petr.id, anna.id];
+        petr.parentIds = [otec.id];
+        anna.parentIds = [otec.id];
+
+        const data = tree(grandparent, otec, stryc, petr, anna);
+        expect(godparentLeads(data)).toEqual([]);   // within the family radius
+    });
+
+    it('keeps a linked person who is a stranger to the children', () => {
+        // No blood or marriage path within three hops → still worth a look.
+        const soused = person('s', 'Marie', 'Dvorakova');
+        const data = tree(soused,
+            baptised(person('a', 'Jan', 'Novak'), [{ personId: soused.id }]),
+            baptised(person('b', 'Petr', 'Novak'), [{ personId: soused.id }]),
+        );
+        const [lead] = godparentLeads(data);
+        expect(lead.personId).toBe(soused.id);
+        expect(lead.alreadyRelated).toBe(false);
+    });
+
+    it('does not raise a lead from one person’s own two events', () => {
+        // A lead has to span at least two different people; a witness at Jan's
+        // wedding who is also his baptism godparent recurs but proves nothing.
+        const jan = person('a', 'Jan', 'Novak');
+        jan.events = [
+            { id: 'e1', type: 'baptism', participants: [{ id: 'p1', role: 'godparent', name: 'Marie Dvořáková' }] },
+            { id: 'e2', type: 'custom', customLabel: 'Svatba', participants: [{ id: 'p2', role: 'witness', name: 'Marie Dvořáková' }] },
+        ];
+        const data = tree(jan);
+        expect(recurringParticipants(data)[0].count).toBe(2);   // she recurs…
+        expect(godparentLeads(data)).toEqual([]);               // …but not a lead
     });
 
     it('keeps the stranger who keeps turning up — that IS the lead', () => {

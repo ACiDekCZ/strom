@@ -58,7 +58,10 @@ test('a godparent who is in the tree can be linked to their person', async ({ pa
         return { part: jan?.events?.[0].participants?.[0], fraId: fra?.id };
     });
     expect(saved.part).toMatchObject({ role: 'godparent', personId: saved.fraId });
-    expect(saved.part.name).toBeUndefined();   // the name lives on the person, not copied
+    // The written name stays as a snapshot beside the link: display prefers the
+    // live person, but if that person is ever deleted (or split away), the
+    // record keeps a name instead of a dangling id.
+    expect(saved.part.name).toMatch(/Frantisek/);
 });
 
 test('cancelling the editor does not touch the stored participants', async ({ page }) => {

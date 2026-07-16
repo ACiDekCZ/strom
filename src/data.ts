@@ -912,7 +912,7 @@ class DataManagerClass {
      */
     addSurnameGroup(names: string[]): void {
         const next = addSurnameGroup(this.data, names);
-        if (next === this.data.surnameVariants) return;
+        if (next === this.data.surnameVariants || next.length === 0) return;
         this.beginMutation();
         this.data.surnameVariants = next;
         this.commitMutation(strings.undo.addSurnameGroup(names.join(', ')));
@@ -1273,6 +1273,11 @@ class DataManagerClass {
 
         this.beginMutation();
         Object.assign(ev, updates);
+        // An empty participants array means "all participants removed" — drop the
+        // property so exported JSON stays clean (Object.assign would keep []).
+        if (Array.isArray(updates.participants) && updates.participants.length === 0) {
+            delete ev.participants;
+        }
         this.commitMutation(strings.undo.editEvent(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'event.update', strings.auditLog.updatedEvent(auditPersonName(person)));
         return true;
@@ -1574,6 +1579,22 @@ class DataManagerClass {
                 if (child.parentRelTypes && id in child.parentRelTypes) {
                     delete child.parentRelTypes[id];
                     if (Object.keys(child.parentRelTypes).length === 0) delete child.parentRelTypes;
+                }
+            }
+        }
+
+        // A linked godparent/witness in anyone's event keeps their written name
+        // instead of a dangling id — the record loses the link, not the fact.
+        // (Same contract as merge and split.)
+        const writtenName = `${person.firstName ?? ''} ${person.lastName ?? ''}`.trim();
+        for (const other of Object.values(this.data.persons)) {
+            for (const event of other.events ?? []) {
+                for (const part of event.participants ?? []) {
+                    if (part.personId !== id) continue;
+                    if (!part.name && writtenName && writtenName !== '?') {
+                        part.name = writtenName;
+                    }
+                    delete part.personId;
                 }
             }
         }
@@ -2576,6 +2597,24 @@ class DataManagerClass {
             }
         }
 
+        // 6c. Remap event participants (godparents / witnesses) that pointed at
+        // the removed person to the kept one. If the kept person already stands
+        // in the same event with the same role, drop the now-duplicate row
+        // instead of listing them twice.
+        for (const p of Object.values(this.data.persons)) {
+            for (const event of p.events ?? []) {
+                const parts = event.participants;
+                if (!parts) continue;
+                for (let i = parts.length - 1; i >= 0; i--) {
+                    if (parts[i].personId !== removeId) continue;
+                    const dupe = parts.some((q, j) =>
+                        j !== i && q.personId === keepId && q.role === parts[i].role);
+                    if (dupe) parts.splice(i, 1);
+                    else parts[i].personId = keepId;
+                }
+            }
+        }
+
         // 7. Delete the removed person
         delete this.data.persons[removeId];
 
@@ -2657,6 +2696,7 @@ class DataManagerClass {
         'orphanedPartnershipRef',
         'orphanedPartnerRef',
         'orphanedPartnershipChildRef',
+        'orphanedParticipantRef',
         'missingChildRef',
         'missingParentRef',
         'missingPartnershipRef',
@@ -2743,6 +2783,26 @@ class DataManagerClass {
                 const before = partnership.childIds.length;
                 partnership.childIds = partnership.childIds.filter(id => this.data.persons[id] !== undefined);
                 repaired = partnership.childIds.length < before;
+                break;
+            }
+
+            case 'orphanedParticipantRef': {
+                // Drop the dangling personId from event participants of this
+                // person; keep whatever written name the row still carries.
+                // (The linked person is already gone, so its name cannot be
+                // recovered here — the snapshot has to happen at delete time.)
+                const personId = issue.personIds?.[0];
+                if (!personId) break;
+                const person = this.data.persons[personId];
+                if (!person?.events) break;
+                for (const event of person.events) {
+                    for (const part of event.participants ?? []) {
+                        if (part.personId && !this.data.persons[part.personId]) {
+                            delete part.personId;
+                            repaired = true;
+                        }
+                    }
+                }
                 break;
             }
 

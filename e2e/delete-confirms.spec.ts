@@ -58,5 +58,7 @@ test('deleting a backup says which backup', async ({ page }) => {
     await page.locator('.snapshot-delete').first().click();
     const text = await confirmText(page);
     expect(text).toContain('person');          // "1 person" — what is in it
-    expect(text).toMatch(/\d{1,4}/);           // and when it was taken
+    // …and WHEN it was taken: the current year, as toLocaleString prints it
+    // ("1 person" alone would satisfy any bare \d+ pattern).
+    expect(text).toContain(String(new Date().getFullYear()));
 });

@@ -37,19 +37,39 @@ const fold = (t: string): string =>
 
 const fullName = (p: Person): string => `${p.firstName} ${p.lastName}`.trim();
 
-/** Everyone this person is linked to by blood or marriage — one step out. */
+/**
+ * Everyone reachable from this person by up to three parent/child/partner hops.
+ *
+ * One hop is not enough: the grandmother at her grandchildren's baptisms is two
+ * hops away (parent's parent), and uncles and aunts — the historically most
+ * common godparents — are three (parent's sibling, i.e. parent → grandparent →
+ * their child). Anyone within that radius is already family, so their recurring
+ * appearance is expected, not a lead.
+ */
 function relativesOf(id: PersonId, data: StromData): Set<PersonId> {
-    const person = data.persons[id];
-    if (!person) return new Set();
-    const out = new Set<PersonId>([...person.parentIds, ...person.childIds]);
-    for (const unionId of person.partnerships) {
-        const union = data.partnerships[unionId];
-        if (!union) continue;
-        out.add(union.person1Id);
-        out.add(union.person2Id);
-        union.childIds.forEach(c => out.add(c));
+    const out = new Set<PersonId>();
+    const visited = new Set<PersonId>([id]);
+    let frontier: PersonId[] = [id];
+    for (let depth = 0; depth < 3 && frontier.length > 0; depth++) {
+        const next: PersonId[] = [];
+        for (const cur of frontier) {
+            const person = data.persons[cur];
+            if (!person) continue;
+            const step: PersonId[] = [...person.parentIds, ...person.childIds];
+            for (const unionId of person.partnerships) {
+                const union = data.partnerships[unionId];
+                if (!union) continue;
+                step.push(union.person1Id, union.person2Id, ...union.childIds);
+            }
+            for (const n of step) {
+                if (visited.has(n)) continue;
+                visited.add(n);
+                out.add(n);
+                next.push(n);
+            }
+        }
+        frontier = next;
     }
-    out.delete(id);
     return out;
 }
 
@@ -101,7 +121,18 @@ export function recurringParticipants(data: StromData): RecurringParticipant[] {
     return out.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 }
 
-/** The ones worth telling someone about: recurring, and not already family. */
+/**
+ * The ones worth telling someone about: recurring, not already family, and
+ * spread across at least two different people's events.
+ *
+ * The two-people rule is what keeps a lead honest. Someone who witnessed one
+ * person's wedding and stood at that same person's child's baptism recurs, but
+ * says nothing about a wider family tie — and an unlinked name is keyed by its
+ * spelling across the whole tree, so requiring two distinct subjects also stops
+ * a common name (two unrelated "Jan Novák"s) from looking like one person on
+ * the strength of a single shared event.
+ */
 export function godparentLeads(data: StromData): RecurringParticipant[] {
-    return recurringParticipants(data).filter(p => !p.alreadyRelated);
+    return recurringParticipants(data)
+        .filter(p => !p.alreadyRelated && p.subjects.length >= 2);
 }

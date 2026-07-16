@@ -3,7 +3,7 @@
  * Settings are NOT exported with tree data - they are local preferences
  */
 
-import { AppSettings, ThemeMode, LanguageSetting, CardDensity, SETTINGS_KEY } from './types.js';
+import { AppSettings, ThemeMode, LanguageSetting, CardDensity, SETTINGS_KEY, StromData } from './types.js';
 import { initLanguage, Language } from './strings.js';
 
 class SettingsManagerClass {
@@ -118,9 +118,42 @@ class SettingsManagerClass {
         return this.settings.advancedFields === true;
     }
 
+    /**
+     * Has the user seen that the map background comes from openstreetmap.org
+     * (the tile requests reveal which area is being viewed)? Nothing is
+     * fetched until they have.
+     */
+    isMapTilesAcknowledged(): boolean {
+        return this.settings.mapTiles === true;
+    }
+
+    setMapTilesAcknowledged(): void {
+        this.settings.mapTiles = true;
+        this.save();
+    }
+
     setAdvancedFields(enabled: boolean): void {
         this.settings.advancedFields = enabled;
         this.save();
+    }
+
+    /**
+     * One-time default for users from before the setting existed: a tree that
+     * already cites sources or carries research fields was made by someone who
+     * uses them — hiding them behind a new default would look like the feature
+     * vanished. Runs only while the user has never decided (undefined); after
+     * this, the persisted choice rules and the checkbox is the only way back.
+     */
+    defaultAdvancedFieldsFromData(data: StromData): void {
+        if (this.settings.advancedFields !== undefined) return;
+        const researchInUse = Object.keys(data.sources ?? {}).length > 0
+            || Object.values(data.persons).some(p =>
+                (p.sourceIds?.length ?? 0) > 0 || (p.attachments?.length ?? 0) > 0
+                || !!p.refn || !!p.question || (p.nameVariants?.length ?? 0) > 0);
+        if (researchInUse) {
+            this.settings.advancedFields = true;
+            this.save();
+        }
     }
 
     isZoomControlsEnabled(): boolean {

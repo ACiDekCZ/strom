@@ -458,6 +458,14 @@ export const miscMethods = uiModule({
                         return;
                     }
 
+                    // Participant picker: resolve its promise with cancel (which
+                    // also pops the stack entry) rather than closing the event
+                    // editor underneath and leaving the await unsettled.
+                    if (currentDialog === 'participant-picker-modal') {
+                        this.cancelParticipantPicker();
+                        return;
+                    }
+
                     this.dialogStack.pop();
 
                     this.closeDialogById(currentDialog);

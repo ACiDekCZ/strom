@@ -600,11 +600,6 @@
             height: 100%;
             object-fit: cover;
         }
-        /* The stand-in is an invitation, not content — it sits back. */
-        .photo-preview img.photo-placeholder {
-            opacity: 0.75;
-            display: block;
-        }
         .photo-actions {
             display: flex;
             flex-wrap: wrap;
@@ -1534,7 +1529,9 @@
             outline: none;
             border-color: var(--primary);
         }
-        .partnership-note {
+        /* .modal qualifier: must outrank the generic `.modal textarea` rule,
+           which otherwise overrides the compact font-size and padding here. */
+        .modal .partnership-note {
             width: 100%;
             padding: 8px;
             margin-top: 8px;
@@ -2048,6 +2045,12 @@
         .surnames-add-row input { flex: 1; min-width: 0; }
         .surnames-add-row button { padding: 6px 12px; }
         @media (max-width: 900px) { .surnames-modal { max-width: 94vw; } }
+        /* Mobile: the add-row stacks, chips get finger-sized. */
+        @media (max-width: 500px) {
+            .surnames-add-row { flex-direction: column; }
+            .surnames-add-row button { width: 100%; padding: 10px 12px; }
+            .surnames-picker { gap: 8px; }
+        }
 
         /* ---- Split a tree into the families it holds (N3) ---- */
         .split-modal { max-width: 560px; }
@@ -3139,6 +3142,36 @@
             font-size: 13px;
         }
         .map-scope button.active { background: var(--primary, #4a7c59); color: #fff; }
+        /* One-time notice shown instead of the map (tiles come from OSM). */
+        .map-tiles-notice {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .map-tiles-notice-card {
+            max-width: 420px;
+            padding: 18px 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color, #ddd);
+            background: var(--card-bg, #fff);
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
+            text-align: center;
+        }
+        .map-tiles-notice-card p {
+            margin: 0 0 12px;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--text-primary, #222);
+        }
+        [data-theme="dark"] .map-tiles-notice-card { background: #2a2a2a; border-color: #444; }
+        @media (max-width: 500px) {
+            .map-tiles-notice-card { max-width: 94vw; padding: 14px 14px; }
+            .map-tiles-notice-card button { width: 100%; min-height: 44px; }
+        }
+
         .map-status {
             position: absolute;
             left: 50%;
@@ -6343,14 +6376,18 @@
             font-size: 15px; line-height: 1; color: var(--text-secondary, #777);
         }
         .event-row .event-actions button:hover { color: var(--text-primary, #222); }
-        /* On a phone these were 24x19 and 31x19 — half the 44px a finger needs,
-           side by side, and one of them deletes. Give them room to be hit, and
-           to be missed apart from each other. */
-        @media (max-width: 500px) {
+        /* These were 24x19 and 31x19 — half the 44px a finger needs, side by
+           side, and one of them deletes. Tablets are touch too, so the room to
+           hit (and to miss apart from each other) applies below 900px, and the
+           same goes for the other small destructive targets in the modal. */
+        @media (max-width: 900px) {
             .event-row .event-actions { gap: 8px; }
-            .event-row .event-actions button {
-                min-width: 40px;
-                min-height: 40px;
+            .event-row .event-actions button,
+            .source-actions button,
+            .source-chip-remove,
+            .wiz-remove {
+                min-width: 44px;
+                min-height: 44px;
                 padding: 8px;
                 font-size: 17px;
             }
@@ -6869,16 +6906,16 @@
                         <input type="text" id="input-deathplace" autocomplete="off" list="places-datalist">
                     </div>
                 </div>
-                <div class="form-group advanced-field" id="name-variants-group">
+                <div class="form-group" id="name-variants-group">
                     <label data-i18n="labels.nameVariants"></label>
                     <input type="text" id="input-name-variants" autocomplete="off" data-i18n-placeholder="placeholders.nameVariants">
                     <p class="field-hint" data-i18n="labels.nameVariantsHint"></p>
                 </div>
-                <div class="form-group advanced-field" id="refn-group">
+                <div class="form-group" id="refn-group">
                     <label data-i18n="labels.refn"></label>
                     <input type="text" id="input-refn" autocomplete="off" data-i18n-placeholder="placeholders.refn">
                 </div>
-                <div class="form-group advanced-field" id="question-group">
+                <div class="form-group" id="question-group">
                     <label data-i18n="labels.question"></label>
                     <input type="text" id="input-question" autocomplete="off" data-i18n-placeholder="placeholders.question">
                 </div>
@@ -6891,12 +6928,12 @@
                     <div id="events-list" class="events-list"></div>
                     <button type="button" class="secondary" id="btn-add-event" onclick="window.Strom.UI.showAddEventModal()" data-i18n="events.add"></button>
                 </div>
-                <div class="form-group advanced-field" id="person-sources-section">
+                <div class="form-group" id="person-sources-section">
                     <label data-i18n="sources.sectionTitle"></label>
                     <div id="person-sources-chips" class="sources-chips"></div>
                     <button type="button" class="secondary" id="btn-cite-person" onclick="window.Strom.UI.showSourcePickerForPerson()" data-i18n="sources.cite"></button>
                 </div>
-                <div class="form-group advanced-field" id="attachments-section">
+                <div class="form-group" id="attachments-section">
                     <label data-i18n="attachments.title"></label>
                     <div id="attachments-list" class="attachments-list"></div>
                     <div id="attachments-total" class="attachments-total"></div>

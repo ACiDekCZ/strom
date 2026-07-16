@@ -139,6 +139,12 @@ export const personEventsMethods = uiModule({
 
             const done = (id: PersonId | null): void => {
                 modal.classList.remove('active');
+                modal.onclick = null;
+                // Pop our own stack entry (Escape in misc.ts routes through
+                // cancelParticipantPicker, which also lands here).
+                if (this.dialogStack[this.dialogStack.length - 1] === 'participant-picker-modal') {
+                    this.dialogStack.pop();
+                }
                 this.participantPickerResolve = null;
                 resolve(id);
             };
@@ -149,6 +155,11 @@ export const personEventsMethods = uiModule({
                 persons: DataManager.getAllPersons().filter(p => !p.isPlaceholder && p.id !== excludeId),
                 onSelect: (personId) => done(personId),
             });
+            // Clicking the backdrop cancels, like the other modals.
+            modal.onclick = (e) => { if (e.target === modal) done(null); };
+            // On the dialog stack so Escape resolves the promise instead of
+            // closing the event editor underneath and stranding the await.
+            this.pushDialog('participant-picker-modal');
             modal.classList.add('active');
         });
     },
@@ -238,7 +249,15 @@ export const personEventsMethods = uiModule({
         const personId = await this.pickPerson(strings.events.participantLink, this.currentId ?? undefined);
         if (!personId) return;
         row.personId = personId;
-        row.name = undefined;   // the name now comes from the person
+        // Keep a name snapshot beside the link: the display prefers the live
+        // person (see renderEventParticipants / participantsSummary), but if the
+        // person is ever deleted the record keeps a name instead of a dangling
+        // id. If the row had no name yet, snapshot the linked person's current
+        // display name so the snapshot is never empty.
+        if (!row.name?.trim()) {
+            const linked = DataManager.getPerson(personId);
+            if (linked) row.name = `${linked.firstName} ${linked.lastName}`.trim();
+        }
         this.renderEventParticipants();
     },
 
@@ -388,11 +407,16 @@ export const personEventsMethods = uiModule({
         if (place) payload.place = place;
         if (note) payload.note = note;
         const participants = this.collectEventParticipants();
-        if (participants.length > 0) payload.participants = participants;
 
         if (this.editingEventId) {
+            // The participants editor is always live, so always send the array —
+            // even empty — or deleting the last participant would leave the old
+            // list untouched (Object.assign never removes a key). updateLifeEvent
+            // strips an empty array back out so stored events stay lean.
+            payload.participants = participants;
             DataManager.updateLifeEvent(this.currentId, this.editingEventId, payload);
         } else {
+            if (participants.length > 0) payload.participants = participants;
             DataManager.addLifeEvent(this.currentId, payload);
         }
 

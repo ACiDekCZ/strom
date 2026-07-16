@@ -161,6 +161,8 @@ export class UIClass {
     /** Progress of a running lookup, null when idle. */
     mapGeocoding: { done: number; total: number; place: string } | null = null;
     mapGeocodeAbort: AbortController | null = null;
+    /** A manual place search is in flight (blocks a double-started lookup). */
+    placeSearchBusy = false;
     /** Places dialog: which places it lists, and what to return to on close. */
     placesManagerScope: MapScope = 'tree';
     placesManagerParent: string | null = null;

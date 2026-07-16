@@ -99,7 +99,7 @@ const stringsEN = {
     // Versioned backups
     snapshots: {
         delete: 'Delete',
-        deleteConfirm: (what: string) => `Delete this backup? The tree itself is not touched.\n\n${what}`,
+        deleteConfirm: (what: string) => `Delete this backup? The tree itself is not touched.${what ? `\n\n${what}` : ''}`,
         deleted: 'Backup deleted',
         inBrowser: 'Backups live in this browser, not in your tree file — they never make it bigger, and they are gone if you clear the browser or move to another computer. Export the tree for a backup you can keep.',
         menu: 'Backups',
@@ -110,7 +110,7 @@ const stringsEN = {
         download: 'Download',
         restored: 'Backup restored',
         created: 'Backup created',
-        restoreConfirm: 'Restore this backup? It overwrites the current tree — the current state is saved as a backup first.',
+        restoreConfirm: (what: string) => `Restore this backup? It overwrites the current tree — the current state is saved as a backup first.${what ? `\n\n${what}` : ''}`,
         total: (count: number, size: string) => `${count} backups · ${size}`,
         colDate: 'Date',
         colReason: 'Reason',
@@ -143,7 +143,6 @@ const stringsEN = {
         selected: (count: number) => `Split off ${count}`,
         keepsOriginal: 'The original tree stays as it is — delete it yourself once you are happy with the split.',
         done: (count: number) => `${count} trees created. The original is untouched.`,
-        nothingSelected: 'Pick at least one family.',
     },
 
     advanced: {
@@ -164,7 +163,6 @@ const stringsEN = {
         addOther: 'Other spelling…',
         link: 'Link them',
         unlink: 'Unlink',
-        needTwo: 'Pick at least two spellings.',
         linked: 'Spellings linked.',
     },
 
@@ -240,8 +238,10 @@ const stringsEN = {
         fieldNote: 'Note',
         titleRequired: 'Enter a source title',
         citations: (n: number) => `${n}×`,
-        deleteConfirm: (n: number) =>
-            n > 0 ? `Delete this source? It is cited in ${n} place(s); those citations will be removed.` : 'Delete this source?',
+        deleteConfirm: (title: string, n: number) =>
+            n > 0
+                ? `Delete this source? It is cited in ${n} place(s); those citations will be removed.\n\n${title}`
+                : `Delete this source?\n\n${title}`,
     },
 
     // Attachments
@@ -567,6 +567,8 @@ const stringsEN = {
         consentConfirm: 'Look them up',
         settingLabel: 'Look up places online',
         settingHint: 'Allows the map to send place names to a geocoding service. Coordinates already found stay in your tree.',
+        tilesNotice: 'The map background is drawn from openstreetmap.org — loading it tells that server which area you are viewing, nothing more. Your family data stays in the app.',
+        tilesNoticeOk: 'Show the map',
     },
 
     fan: {
@@ -1158,6 +1160,12 @@ const stringsEN = {
         valPossibleDuplicate: 'Possible duplicate person (same name and birth year)',
         valPlaceSpelling: 'One place written several ways',
         valRecurringGodparent: 'A godparent who keeps turning up — often a relative',
+        valRecurringGodparentDetail: (name: string, events: number, people: number, whose: string) =>
+            `${name} — at ${events} events of ${people} people · ${whose}`,
+        valRecurringGodparentByName: 'matched by name',
+        valOrphanedParticipantRef: 'Event participant links to a person who no longer exists',
+        valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
+            `${person} · ${event}: ${who}`,
         valFix: 'Fix',
         valFixAll: 'Fix all',
         valFixed: (count: number) => `Fixed ${count} issue${count !== 1 ? 's' : ''}`,
@@ -1585,7 +1593,7 @@ const stringsCZ: StringsType = {
     // Versioned backups
     snapshots: {
         delete: 'Smazat',
-        deleteConfirm: (what: string) => `Smazat tuto zálohu? Samotného stromu se to nedotkne.\n\n${what}`,
+        deleteConfirm: (what: string) => `Smazat tuto zálohu? Samotného stromu se to nedotkne.${what ? `\n\n${what}` : ''}`,
         deleted: 'Záloha smazána',
         inBrowser: 'Zálohy žijí v tomto prohlížeči, ne ve tvém souboru se stromem — nezvětšují ho, ale zmizí s vymazáním dat prohlížeče nebo na jiném počítači. Zálohu, kterou si opravdu odložíš, uděláš exportem stromu.',
         menu: 'Zálohy',
@@ -1596,7 +1604,7 @@ const stringsCZ: StringsType = {
         download: 'Stáhnout',
         restored: 'Záloha obnovena',
         created: 'Záloha vytvořena',
-        restoreConfirm: 'Obnovit tuto zálohu? Přepíše aktuální strom — aktuální stav se před obnovou uloží jako záloha.',
+        restoreConfirm: (what: string) => `Obnovit tuto zálohu? Přepíše aktuální strom — aktuální stav se před obnovou uloží jako záloha.${what ? `\n\n${what}` : ''}`,
         total: (count: number, size: string) => `${count} záloh · ${size}`,
         colDate: 'Datum',
         colReason: 'Důvod',
@@ -1614,8 +1622,8 @@ const stringsCZ: StringsType = {
     split: {
         postImportTitle: 'Víc rodin v jednom souboru',
         postImport: (count: number) =>
-            `Naimportovaný soubor obsahuje ${count} rodiny, které nic nespojuje — nevede mezi nimi žádný rodič, dítě ani sňatek. Z každé může být samostatný strom.`,
-        unrelated: (count: number) => `Obsahuje ${count} rodiny, které nic nespojuje`,
+            `Naimportovaný soubor obsahuje ${count} ${count >= 5 ? 'rodin' : 'rodiny'}, které nic nespojuje — nevede mezi nimi žádný rodič, dítě ani sňatek. Z každé může být samostatný strom.`,
+        unrelated: (count: number) => `Obsahuje ${count} ${count >= 5 ? 'rodin' : 'rodiny'}, které nic nespojuje`,
         unrelatedHint: 'Rozdělit je můžete ve Správě stromů → ⋯ → Rozdělit podle rodin.',
         menu: 'Rozdělit podle rodin',
         title: 'Rodiny v tomto stromu',
@@ -1629,7 +1637,6 @@ const stringsCZ: StringsType = {
         selected: (count: number) => `Vyčlenit ${count}`,
         keepsOriginal: 'Původní strom zůstává, jak je — smažte si ho sami, až budete s rozdělením spokojení.',
         done: (count: number) => `Vytvořeno ${count} stromů. Původní je nedotčený.`,
-        nothingSelected: 'Vyberte aspoň jednu rodinu.',
     },
 
     advanced: {
@@ -1650,7 +1657,6 @@ const stringsCZ: StringsType = {
         addOther: 'Jiný tvar…',
         link: 'Propojit',
         unlink: 'Zrušit propojení',
-        needTwo: 'Vyberte aspoň dva tvary.',
         linked: 'Tvary propojeny.',
     },
 
@@ -1726,8 +1732,10 @@ const stringsCZ: StringsType = {
         fieldNote: 'Poznámka',
         titleRequired: 'Zadejte název pramene',
         citations: (n: number) => `${n}×`,
-        deleteConfirm: (n: number) =>
-            n > 0 ? `Smazat tento pramen? Je citován na ${n} místech; citace budou odebrány.` : 'Smazat tento pramen?',
+        deleteConfirm: (title: string, n: number) =>
+            n > 0
+                ? `Smazat tento pramen? Je citován na ${n} místech; citace budou odebrány.\n\n${title}`
+                : `Smazat tento pramen?\n\n${title}`,
     },
 
     // Attachments
@@ -2054,6 +2062,8 @@ const stringsCZ: StringsType = {
         consentConfirm: 'Dohledat',
         settingLabel: 'Dohledávat místa online',
         settingHint: 'Umožní mapě odesílat názvy míst do geokódovací služby. Už dohledané souřadnice zůstávají ve vašem stromu.',
+        tilesNotice: 'Podklad mapy se načítá z openstreetmap.org — načtení tomuto serveru prozradí jen to, jakou oblast si prohlížíte, nic víc. Data vaší rodiny zůstávají v aplikaci.',
+        tilesNoticeOk: 'Zobrazit mapu',
     },
 
     fan: {
@@ -2325,7 +2335,7 @@ const stringsCZ: StringsType = {
         skippedTags: 'Přeskočené záznamy',
         unknownSex: (n: number) => `${n} ${n === 1 ? 'osoba' : n < 5 ? 'osoby' : 'osob'} s neznámým pohlavím (odvozeno z role v rodině)`,
         otherFamilyLinks: (n: number) =>
-            `${n} ${n === 1 ? 'dítě je' : n < 5 ? 'děti jsou' : 'dětí je'} zapsáno ve více rodinách `
+            `${n} ${n === 1 ? 'dítě je zapsáno' : n < 5 ? 'děti jsou zapsány' : 'dětí je zapsáno'} ve více rodinách `
             + `(např. adopce); zobrazeno u rodné rodiny, zbytek zapsán v poznámce osoby`,
         photos: 'Fotografie',
         documents: 'Dokumenty',
@@ -2645,6 +2655,12 @@ const stringsCZ: StringsType = {
         valPossibleDuplicate: 'Možná duplicitní osoba (stejné jméno a rok narození)',
         valPlaceSpelling: 'Jedno místo zapsané víckrát jinak',
         valRecurringGodparent: 'Kmotr, který se opakuje — bývá to příbuzný',
+        valRecurringGodparentDetail: (name: string, events: number, people: number, whose: string) =>
+            `${name} — u ${events} událostí ${people} osob · ${whose}`,
+        valRecurringGodparentByName: 'shoda podle jména',
+        valOrphanedParticipantRef: 'Účastník události odkazuje na osobu, která už neexistuje',
+        valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
+            `${person} · ${event}: ${who}`,
         valFix: 'Opravit',
         valFixAll: 'Opravit vše',
         valFixed: (count: number) => `Opraveno ${count} ${count === 1 ? 'problém' : count < 5 ? 'problémy' : 'problémů'}`,

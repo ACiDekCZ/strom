@@ -7,6 +7,7 @@ import { StromData, Person, Partnership, PersonId, PartnershipId } from './types
 import { parseFlexDate, FlexDate } from './dates.js';
 import { collectPlaces } from './places.js';
 import { godparentLeads } from './godparents.js';
+import { strings } from './strings.js';
 
 // ==================== ISSUE TYPES ====================
 
@@ -325,7 +326,7 @@ function checkPartnershipConsistency(
  */
 function checkOrphanedReferences(
     data: StromData,
-    addIssue: (s: IssueSeverity, t: string, m: string, p?: PersonId[], pp?: PartnershipId[]) => void
+    addIssue: AddIssue
 ): void {
     const personIds = new Set(Object.keys(data.persons) as PersonId[]);
     const partnershipIds = new Set(Object.keys(data.partnerships) as PartnershipId[]);
@@ -364,6 +365,30 @@ function checkOrphanedReferences(
                     `${getPersonName(person)} references non-existent partnership: ${partnershipId}`,
                     [personId]
                 );
+            }
+        }
+
+        // Check event participants (godparents / witnesses) linked to a person
+        // who no longer exists. A dangling personId is silently skipped by every
+        // consumer, so the written name it should have kept is lost invisibly —
+        // report it so the user can restore the name or drop the link.
+        for (const event of person.events ?? []) {
+            for (const part of event.participants ?? []) {
+                if (part.personId && !personIds.has(part.personId)) {
+                    const eventLabel = event.customLabel?.trim()
+                        || strings.events.types[event.type] || event.type;
+                    const who = part.name?.trim()
+                        || strings.events.roles[part.role] || part.role;
+                    addIssue(
+                        'error',
+                        'orphanedParticipantRef',
+                        `${getPersonName(person)} has an event participant referencing a non-existent person: ${part.personId}`,
+                        [personId],
+                        undefined,
+                        strings.treeManager.valOrphanedParticipantDetail(
+                            getPersonName(person), eventLabel, who)
+                    );
+                }
             }
         }
     }
@@ -905,10 +930,16 @@ function checkRecurringGodparents(data: StromData, addIssue: AddIssue): void {
         // so the name has to be in the detail, or the finding says "a godparent
         // keeps turning up" without ever saying which one.
         const whose = lead.subjects.map(s => s.name).join(', ');
+        // State exactly what was counted: events across DISTINCT people, not
+        // "in this family" (which read as one clan even when the two events
+        // belonged to one person). An unlinked lead is matched by spelling, so
+        // it carries the same-name caveat.
+        const detail = strings.treeManager.valRecurringGodparentDetail(
+            lead.name, lead.count, lead.subjects.length, whose)
+            + (lead.personId ? '' : ` · ${strings.treeManager.valRecurringGodparentByName}`);
         addIssue('info', 'recurringGodparent',
-            `${lead.name} appears at ${lead.count} events in this family`,
-            lead.subjects.map(s => s.id), undefined,
-            `${lead.name} — ${lead.count}× · ${whose}`);
+            `${lead.name} appears at ${lead.count} events of ${lead.subjects.length} people`,
+            lead.subjects.map(s => s.id), undefined, detail);
     }
 }
 

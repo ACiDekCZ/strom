@@ -116,7 +116,14 @@ export const snapshotsUiMethods = uiModule({
     async restoreSnapshotFromUI(snapshotId: string): Promise<void> {
         const treeId = this.snapshotsTreeId;
         if (!treeId) return;
-        const confirmed = await this.showConfirm(strings.snapshots.restoreConfirm, strings.snapshots.restore);
+        // Restoring overwrites the whole tree — say WHICH backup, the same way
+        // deleting does: they are told apart by when they were taken.
+        const snaps = await listSnapshots(treeId);
+        const snap = snaps.find(s => s.id === snapshotId);
+        const what = snap
+            ? `${new Date(snap.createdAt).toLocaleString()} · ${strings.snapshots.persons(snap.personCount)}`
+            : '';
+        const confirmed = await this.showConfirm(strings.snapshots.restoreConfirm(what), strings.snapshots.restore);
         if (!confirmed) return;
         if (treeId !== DataManager.getCurrentTreeId()) {
             await DataManager.switchTree(treeId);

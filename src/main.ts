@@ -185,6 +185,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         await DataManager.switchTree(urlTreeId as any);
     }
 
+    // A tree that already cites sources belongs to someone who uses the
+    // research fields — keep them visible for that user (one-time default).
+    SettingsManager.defaultAdvancedFieldsFromData(DataManager.getData());
+
     // Initialize zoom/pan
     ZoomPan.init();
 

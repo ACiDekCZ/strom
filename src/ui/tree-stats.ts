@@ -53,7 +53,7 @@ import { findComponents, componentName } from '../components.js';
 /** Escape text for safe inclusion in SVG/HTML (names come from user data). */
 function escXml(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /**
@@ -300,6 +300,7 @@ export const treeStatsMethods = uiModule({
                 'orphanedPartnershipRef': 'valOrphanedRef',
                 'orphanedPartnerRef': 'valOrphanedRef',
                 'orphanedPartnershipChildRef': 'valOrphanedRef',
+                'orphanedParticipantRef': 'valOrphanedParticipantRef',
                 'tooManyParents': 'valTooManyParents',
                 'parentYoungerThanChild': 'valParentYoungerThanChild',
                 'parentTooYoung': 'valParentTooYoung',
@@ -498,7 +499,7 @@ export const treeStatsMethods = uiModule({
             ? `<div class="tree-stats-unrelated">
                    <strong>${strings.split.unrelated(components.length)}</strong>
                    <span>${components.map(c =>
-                       `${componentName(c, strings.split.familyName, strings.split.noSurname)} (${strings.split.persons(c.count)})`)
+                       `${escXml(componentName(c, strings.split.familyName, strings.split.noSurname))} (${strings.split.persons(c.count)})`)
                        .join('  ·  ')}</span>
                    <span class="tree-stats-unrelated-hint">${strings.split.unrelatedHint}</span>
                </div>`

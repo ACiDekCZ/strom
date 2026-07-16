@@ -91,10 +91,21 @@ export const mapMethods = uiModule({
                 <div class="map-status" id="map-status"></div>
                 <a class="map-attribution" href="${TILE_ATTRIBUTION_URL}" target="_blank" rel="noopener noreferrer">${TILE_ATTRIBUTION}</a>`;
             this.bindMapGestures(container);
+            this.bindMapClicks(container);
         }
 
         document.getElementById('map-scope-view')?.classList.toggle('active', this.mapScope !== 'tree');
         document.getElementById('map-scope-tree')?.classList.toggle('active', this.mapScope === 'tree');
+
+        // First open: the background tiles come from openstreetmap.org, and the
+        // tile requests themselves reveal which area the family lived in. In an
+        // app that promises "family data stays local", that is worth one
+        // sentence before anything is fetched.
+        if (!SettingsManager.isMapTilesAcknowledged()) {
+            this.renderMapTilesNotice(container);
+            return;
+        }
+        container.querySelector('.map-tiles-notice')?.remove();
 
         const places = this.mapPlaces();
         // First open (or a scope with nothing framed yet): frame what we have.
@@ -124,9 +135,12 @@ export const mapMethods = uiModule({
         }
 
         // Tiles need the network. Say so plainly rather than showing a blank
-        // canvas and letting the user wonder what broke.
+        // canvas and letting the user wonder what broke. Markers and the
+        // Places manager work on stored coordinates, so they stay available.
         if (!navigator.onLine) {
-            box.innerHTML = `<span class="map-status-text">${strings.map.offline}</span>`;
+            box.innerHTML = `
+                <span class="map-status-text">${strings.map.offline}</span>
+                <button type="button" class="secondary" onclick="window.Strom.UI.showPlacesManager()">${strings.map.managePlaces}</button>`;
             box.style.display = 'flex';
             return;
         }
@@ -175,12 +189,33 @@ export const mapMethods = uiModule({
             if (at.x < -200 || at.y < -200 || at.x > width + 200 || at.y > height + 200) return '';
             return `
                 <button type="button" class="map-marker" data-key="${this.escapeHtml(p.key)}"
-                        style="left:${Math.round(at.x)}px; top:${Math.round(at.y)}px;"
-                        onclick="window.Strom.UI.showMapPlace('${this.escapeHtml(p.key)}')">
+                        style="left:${Math.round(at.x)}px; top:${Math.round(at.y)}px;">
                     <span class="map-marker-dot">${p.usage.personIds.length}</span>
                     <span class="map-marker-label">${this.escapeHtml(p.usage.display)}</span>
                 </button>`;
         }).join('');
+    },
+
+    /** One-time notice shown instead of the map until the user has read it. */
+    renderMapTilesNotice(container: HTMLElement): void {
+        let notice = container.querySelector('.map-tiles-notice') as HTMLElement | null;
+        if (!notice) {
+            notice = document.createElement('div');
+            notice.className = 'map-tiles-notice';
+            container.appendChild(notice);
+        }
+        notice.innerHTML = `
+            <div class="map-tiles-notice-card">
+                <p>${strings.map.tilesNotice}</p>
+                <button type="button" onclick="window.Strom.UI.acknowledgeMapTiles()">${strings.map.tilesNoticeOk}</button>
+            </div>`;
+        const box = document.getElementById('map-status');
+        if (box) box.style.display = 'none';
+    },
+
+    acknowledgeMapTiles(): void {
+        SettingsManager.setMapTilesAcknowledged();
+        TreeRenderer.render();
     },
 
     mapViewportSize(container: HTMLElement): { width: number; height: number } {
@@ -199,7 +234,7 @@ export const mapMethods = uiModule({
             .map(id => DataManager.getPerson(id))
             .filter((p): p is NonNullable<typeof p> => !!p)
             .map(p => `
-                <button type="button" class="map-popup-person" onclick="window.Strom.UI.focusFromMap('${p.id}')">
+                <button type="button" class="map-popup-person" data-person-id="${p.id}">
                     ${this.escapeHtml(`${p.firstName} ${p.lastName}`.trim() || '?')}
                 </button>`)
             .join('');
@@ -207,14 +242,33 @@ export const mapMethods = uiModule({
         popup.innerHTML = `
             <div class="map-popup-head">
                 <strong>${this.escapeHtml(place.usage.display)}</strong>
-                <button type="button" class="map-popup-close" onclick="window.Strom.UI.closeMapPopup()" aria-label="close">×</button>
+                <button type="button" class="map-popup-close" aria-label="${strings.buttons.close}">×</button>
             </div>
             ${place.geo.label ? `<div class="map-popup-label">${this.escapeHtml(place.geo.label)}</div>` : ''}
             <div class="map-popup-people">${people}</div>
-            <button type="button" class="map-popup-fix" onclick="window.Strom.UI.showPlacesManager('${this.escapeHtml(place.key)}')">
+            <button type="button" class="map-popup-fix" data-key="${this.escapeHtml(place.key)}">
                 ${strings.map.wrongSpot}
             </button>`;
         popup.style.display = 'block';
+    },
+
+    /** Delegated clicks for map content that is re-rendered as HTML strings.
+     *  Place keys are user data — they must never be spliced into inline JS. */
+    bindMapClicks(container: HTMLElement): void {
+        const markers = container.querySelector('.map-markers') as HTMLElement | null;
+        markers?.addEventListener('click', (e: Event) => {
+            const btn = (e.target as HTMLElement).closest('.map-marker') as HTMLElement | null;
+            if (btn?.dataset.key !== undefined) this.showMapPlace(btn.dataset.key);
+        });
+        const popup = container.querySelector('.map-popup') as HTMLElement | null;
+        popup?.addEventListener('click', (e: Event) => {
+            const target = e.target as HTMLElement;
+            if (target.closest('.map-popup-close')) { this.closeMapPopup(); return; }
+            const person = target.closest('.map-popup-person') as HTMLElement | null;
+            if (person?.dataset.personId) { this.focusFromMap(person.dataset.personId); return; }
+            const fix = target.closest('.map-popup-fix') as HTMLElement | null;
+            if (fix) this.showPlacesManager(fix.dataset.key);
+        });
     },
 
     closeMapPopup(): void {
@@ -270,9 +324,21 @@ export const mapMethods = uiModule({
         let dragging = false;
         let lastX = 0;
         let lastY = 0;
+        // Redraws rebuild the tile/marker HTML wholesale, so during a drag they
+        // are coalesced to one per frame instead of one per pointer event.
+        let redrawQueued = false;
+        const queueRedraw = (): void => {
+            if (redrawQueued) return;
+            redrawQueued = true;
+            requestAnimationFrame(() => {
+                redrawQueued = false;
+                this.drawMapTiles(container);
+                this.drawMapMarkers(container, this.mapPlaces());
+            });
+        };
 
         container.addEventListener('pointerdown', (e: PointerEvent) => {
-            if ((e.target as HTMLElement).closest('.map-marker, .map-popup, .map-controls, .map-scope, .map-status')) return;
+            if ((e.target as HTMLElement).closest('.map-marker, .map-popup, .map-controls, .map-scope, .map-status, .map-tiles-notice')) return;
             dragging = true;
             lastX = e.clientX;
             lastY = e.clientY;
@@ -284,8 +350,7 @@ export const mapMethods = uiModule({
             this.mapCenter = panCenter(this.mapCenter, this.mapZoom, e.clientX - lastX, e.clientY - lastY);
             lastX = e.clientX;
             lastY = e.clientY;
-            this.drawMapTiles(container);
-            this.drawMapMarkers(container, this.mapPlaces());
+            queueRedraw();
         });
         const endDrag = (e: PointerEvent): void => {
             if (!dragging) return;
@@ -335,6 +400,11 @@ export const mapMethods = uiModule({
         const missing = this.mapMissingPlaces();
         if (missing.length === 0 || this.mapGeocoding) return;
         if (!await this.confirmGeocoding(missing.length)) return;
+        if (this.mapGeocoding) return;   // second click raced the consent dialog
+
+        // The run takes ~1.1 s per place — minutes on a big tree. The answers
+        // belong to the tree that asked, not to whatever is open when they land.
+        const treeId = DataManager.getCurrentTreeId();
 
         const controller = new AbortController();
         this.mapGeocodeAbort = controller;
@@ -358,6 +428,8 @@ export const mapMethods = uiModule({
 
         this.mapGeocoding = null;
         this.mapGeocodeAbort = null;
+
+        if (DataManager.getCurrentTreeId() !== treeId) return;   // tree switched mid-run
 
         const found = new Map<string, PlaceGeo>();
         for (const [name, geo] of results) {
@@ -452,7 +524,13 @@ export const mapMethods = uiModule({
             (row?.querySelector('.place-change') as HTMLButtonElement | null)?.click();
         }
 
+        // Same stack discipline as other child dialogs (see showAuditLog): the
+        // parent hides while the manager is open and Escape/Close returns to it.
         this.clearDialogStack();
+        if (parentDialogId) {
+            this.pushDialog(parentDialogId);
+            this.closeDialogById(parentDialogId);
+        }
         this.pushDialog('places-modal');
     },
 
@@ -517,6 +595,9 @@ export const mapMethods = uiModule({
     closePlacesManager(): void {
         document.getElementById('places-modal')?.remove();
         this.dialogStack = this.dialogStack.filter(d => d !== 'places-modal');
+        // Return to whoever opened the manager (tree manager), per stack rules.
+        const parent = this.dialogStack[this.dialogStack.length - 1];
+        if (parent) this.openDialogById(parent);
     },
 
     /** Redraw the dialog in place, keeping the map behind it in step. */
@@ -544,12 +625,18 @@ export const mapMethods = uiModule({
     async searchPlaceFromManager(key: string, query: string, row: HTMLElement): Promise<void> {
         const results = row.querySelector('.place-results') as HTMLElement;
         const text = query.trim();
-        if (!text) return;
+        if (!text || this.placeSearchBusy) return;
         // The typed name goes out too, so the same consent rule applies.
         if (!await this.confirmGeocoding(1)) return;
 
         results.innerHTML = `<span class="place-hint">${strings.map.searching}</span>`;
-        const candidates = await geocodeCandidates(text);
+        this.placeSearchBusy = true;
+        let candidates;
+        try {
+            candidates = await geocodeCandidates(text);
+        } finally {
+            this.placeSearchBusy = false;
+        }
         if (candidates.length === 0) {
             results.innerHTML = `<span class="place-hint">${strings.map.noCandidates}</span>`;
             return;

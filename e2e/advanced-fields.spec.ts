@@ -63,13 +63,27 @@ test('a field that already has something in it is never hidden', async ({ page }
 });
 
 test('adding a person starts from the short form', async ({ page }) => {
+    // With research fields ON and the extended section expanded — so the
+    // assertion is about the add-mode form itself, not about everything
+    // happening to be inside a collapsed section.
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
+    await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
     await page.evaluate(() => window.Strom.UI.showAddPersonModal());
     const modal = personModal(page);
+    // The short form first: everything extended sits behind the expander.
     for (const sel of ADVANCED) {
         await expect(modal.locator(sel), sel).toBeHidden();
     }
+    const expander = modal.locator('#expand-details');
+    if (await expander.isVisible()) await expander.click();
+    // Expanded: the research FIELDS are available (the setting is on)…
+    await expect(modal.locator('#input-deathdate')).toBeVisible();
+    await expect(modal.locator('#refn-group')).toBeVisible();
+    // …but sections that attach to a stored person (citations, attachments)
+    // stay out of an ADD form — the person does not exist yet.
+    await expect(modal.locator('#person-sources-section')).toBeHidden();
+    await expect(modal.locator('#attachments-section')).toBeHidden();
 });
 
 test('sources are hidden everywhere they appear, not just on a person', async ({ page }) => {

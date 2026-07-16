@@ -555,6 +555,7 @@ export interface AppSettings {
     descendantsFullFamilies?: boolean;  // default: false - descendants view shows partners' other families
     advancedFields?: boolean;  // default: false (basic mode) - sources/attachments/refn/name variants/question on a person
     geocoding?: boolean;   // default: undefined (never asked) - user allowed sending place names to the geocoder
+    mapTiles?: boolean;    // default: undefined (not seen) - user saw that map tiles come from openstreetmap.org
     senderName?: string;   // collaboration: name shown to relatives in shared files
 }
 

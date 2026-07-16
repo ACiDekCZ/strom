@@ -107,6 +107,19 @@ describe('DataManager life events', () => {
         DataManager.undo();
         expect(DataManager.getPerson(p.id)?.events).toHaveLength(1);
     });
+
+    it('removing the last participant via an empty array drops the property (finding 6)', () => {
+        const jan = DataManager.createPerson(personData('Jan'));
+        const event = DataManager.addLifeEvent(jan.id, {
+            type: 'baptism',
+            participants: [{ id: 'pt1', role: 'godparent', name: 'Marie' }],
+        })!;
+        expect(DataManager.getPerson(jan.id)?.events?.[0].participants).toHaveLength(1);
+
+        // The editor always sends the array; an empty one means "all removed".
+        DataManager.updateLifeEvent(jan.id, event.id, { participants: [] });
+        expect(DataManager.getPerson(jan.id)?.events?.[0].participants).toBeUndefined();
+    });
 });
 
 /** Build a minimal tree with one person carrying the given events. */
@@ -145,6 +158,90 @@ describe('validation of imported events', () => {
         const data = treeWithEvents([{ id: 'e1', type: 'baptism', date: '1900-01-15', place: 'Praha' }]);
         const result = validateTreeData(data);
         expect(result.issues.filter(i => i.severity === 'error')).toHaveLength(0);
+    });
+});
+
+describe('event participants survive person changes', () => {
+    it('deletePerson keeps the written name, drops the dangling link (finding 1)', () => {
+        const marie = DataManager.createPerson({ firstName: 'Marie', lastName: 'Dvořáková', gender: 'female' });
+        const jan = DataManager.createPerson(personData('Jan'));
+        DataManager.addLifeEvent(jan.id, {
+            type: 'baptism', date: '1880',
+            participants: [{ id: 'pt1', role: 'godparent', personId: marie.id }],
+        });
+
+        expect(DataManager.deletePerson(marie.id)).toBe(true);
+        const part = DataManager.getPerson(jan.id)?.events?.[0].participants?.[0];
+        expect(part?.personId).toBeUndefined();
+        expect(part?.name).toBe('Marie Dvořáková');   // name survives the delete
+
+        // Same mutation, so undo restores both the person and the link.
+        DataManager.undo();
+        const restored = DataManager.getPerson(jan.id)?.events?.[0].participants?.[0];
+        expect(restored?.personId).toBe(marie.id);
+        expect(restored?.name).toBeUndefined();
+        expect(DataManager.getPerson(marie.id)).toBeDefined();
+    });
+
+    it('mergePersons remaps a participant link to the kept person (finding 2)', () => {
+        const keep = DataManager.createPerson({ firstName: 'Marie', lastName: 'Dvořáková', gender: 'female' });
+        const remove = DataManager.createPerson({ firstName: 'Maria', lastName: 'Dvorak', gender: 'female' });
+        const jan = DataManager.createPerson(personData('Jan'));
+        DataManager.addLifeEvent(jan.id, {
+            type: 'baptism',
+            participants: [{ id: 'pt1', role: 'godparent', personId: remove.id }],
+        });
+
+        expect(DataManager.mergePersons(keep.id, remove.id, {}, new Map())).toBe(true);
+        const part = DataManager.getPerson(jan.id)?.events?.[0].participants?.[0];
+        expect(part?.personId).toBe(keep.id);
+    });
+
+    it('mergePersons drops a duplicate participant of the same role (finding 2)', () => {
+        const keep = DataManager.createPerson({ firstName: 'Marie', lastName: 'Dvořáková', gender: 'female' });
+        const remove = DataManager.createPerson({ firstName: 'Maria', lastName: 'Dvorak', gender: 'female' });
+        const jan = DataManager.createPerson(personData('Jan'));
+        DataManager.addLifeEvent(jan.id, {
+            type: 'baptism',
+            participants: [
+                { id: 'pt1', role: 'godparent', personId: keep.id },
+                { id: 'pt2', role: 'godparent', personId: remove.id },
+            ],
+        });
+
+        expect(DataManager.mergePersons(keep.id, remove.id, {}, new Map())).toBe(true);
+        const parts = DataManager.getPerson(jan.id)?.events?.[0].participants ?? [];
+        expect(parts).toHaveLength(1);
+        expect(parts[0].personId).toBe(keep.id);
+    });
+
+    it('validation flags a participant linked to a missing person (finding 5)', () => {
+        const data = treeWithEvents([{
+            id: 'e1', type: 'baptism',
+            participants: [{ id: 'pt1', role: 'godparent', personId: 'ghost' as PersonId, name: 'Marie' }],
+        }]);
+        const result = validateTreeData(data);
+        const issue = result.issues.find(i => i.type === 'orphanedParticipantRef');
+        expect(issue).toBeDefined();
+        expect(issue?.severity).toBe('error');
+        expect(issue?.personIds).toContain('p1' as PersonId);
+    });
+
+    it('auto-fix drops the dangling link but keeps the name (finding 5)', () => {
+        const jan = DataManager.createPerson(personData('Jan'));
+        DataManager.addLifeEvent(jan.id, {
+            type: 'baptism',
+            participants: [{ id: 'pt1', role: 'godparent', personId: 'ghost' as PersonId, name: 'Marie' }],
+        });
+
+        const issue = validateTreeData(DataManager.getData())
+            .issues.find(i => i.type === 'orphanedParticipantRef')!;
+        expect(DataManager.isFixableIssue(issue)).toBe(true);
+        expect(DataManager.repairValidationIssue(issue)).toBe(true);
+
+        const part = DataManager.getPerson(jan.id)?.events?.[0].participants?.[0];
+        expect(part?.personId).toBeUndefined();
+        expect(part?.name).toBe('Marie');
     });
 });
 
