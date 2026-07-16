@@ -135,6 +135,46 @@ test('descendants view: step-relatives hidden by default, badge toggle shows the
     await expect(card(page, 'Lucie')).toBeHidden();
 });
 
+test('view switcher: the selected mode carries .active, the previous loses it', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await cardAction(page, 'Jan', 'focus');
+
+    const modes = ['family', 'descendants', 'timeline', 'fan', 'map'];
+    for (const mode of modes) {
+        await page.locator(`#view-mode-${mode}`).click();
+        // Exactly the clicked segment is active.
+        for (const other of modes) {
+            const seg = page.locator(`#view-mode-${other}`);
+            if (other === mode) await expect(seg).toHaveClass(/active/);
+            else await expect(seg).not.toHaveClass(/active/);
+        }
+    }
+    // Back to family so the shared app state is clean for later assertions.
+    await page.locator('#view-mode-family').click();
+});
+
+test('view switcher: the selected segment is visibly highlighted in dark theme', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await cardAction(page, 'Jan', 'focus');
+
+    await page.evaluate(() => window.Strom.SettingsManager.setTheme('dark'));
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+    await page.locator('#view-mode-descendants').click();
+    // The active segment must not fall back to the generic dark button colour
+    // (regression guard: the .active rule used to be overridden in dark theme
+    // by the equal-specificity generic dark rule that came later in source).
+    const bg = (sel: string) => page.locator(sel).evaluate(el => getComputedStyle(el).backgroundColor);
+    const activeBg = await bg('#view-mode-descendants');
+    const inactiveBg = await bg('#view-mode-family');
+    expect(activeBg).not.toBe(inactiveBg);
+
+    await page.evaluate(() => window.Strom.SettingsManager.setTheme('system'));
+    await page.locator('#view-mode-family').click();
+});
+
 test.describe('mobile', () => {
     test.use({ viewport: { width: 390, height: 844 } });
 
@@ -152,5 +192,18 @@ test.describe('mobile', () => {
         // Exit restores the focus bar.
         await page.locator('#descendants-badge button').last().click();
         await expect(page.locator('#focus-controls')).toBeVisible();
+    });
+
+    test('mobile menu: the selected view row button carries .active', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await cardAction(page, 'Jan', 'focus');
+
+        // Pick a mode, then reopen the menu (clicking a row also closes it).
+        await page.locator('.hamburger-btn').click();
+        await page.locator('#mm-view-timeline').click();
+        await page.locator('.hamburger-btn').click();
+        await expect(page.locator('#mm-view-timeline')).toHaveClass(/active/);
+        await expect(page.locator('#mm-view-family')).not.toHaveClass(/active/);
     });
 });

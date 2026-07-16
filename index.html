@@ -3696,6 +3696,10 @@
         .view-mode-segment button.active { background: var(--primary, #4a90d9); color: #fff; }
         [data-theme="dark"] .view-mode-segment { border-color: #444; }
         [data-theme="dark"] .view-mode-segment button { background: #2a2a2a; color: #ddd; }
+        /* Dark theme: the active-state rule above has the same specificity as
+           the generic dark button rule but comes earlier, so it would lose.
+           Re-assert the selected highlight with a dark-scoped .active rule. */
+        [data-theme="dark"] .view-mode-segment button.active { background: var(--primary, #4a90d9); color: #fff; }
         /* Descendants badge bar */
         .collab-bar {
             position: fixed; top: 58px; left: 50%; transform: translateX(-50%); z-index: 95;
