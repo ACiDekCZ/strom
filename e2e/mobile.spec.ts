@@ -75,7 +75,7 @@ test('the hamburger menu exposes the current-view actions (poster, export select
     await expect(menu).toHaveClass(/active/);
 
     await expect(menu.locator('button', { hasText: 'Poster' })).toBeVisible();
-    await expect(menu.locator('button', { hasText: 'Export selection' })).toBeVisible();
+    await expect(menu.locator('button', { hasText: 'Export this view' })).toBeVisible();
 
     // Poster… opens the view-aware poster dialog.
     await menu.locator('button', { hasText: 'Poster' }).click();

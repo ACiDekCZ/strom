@@ -200,7 +200,7 @@ test('tree switcher: current-view actions (poster, export selection) are in the 
     // The current-view action group is present, in order.
     await expect(dropdown.locator('.tree-switcher-action', { hasText: 'Make a tree from this view' })).toBeVisible();
     await expect(dropdown.locator('.tree-switcher-action', { hasText: 'Poster' })).toBeVisible();
-    await expect(dropdown.locator('.tree-switcher-action', { hasText: 'Export selection' })).toBeVisible();
+    await expect(dropdown.locator('.tree-switcher-action', { hasText: 'Export this view' })).toBeVisible();
 
     // Poster… opens the view-aware poster dialog with its "prints the current view" label.
     await dropdown.locator('.tree-switcher-action', { hasText: 'Poster' }).click();
@@ -210,13 +210,13 @@ test('tree switcher: current-view actions (poster, export selection) are in the 
     await expect(page.locator('#poster-modal')).toBeHidden();
 });
 
-test('tree switcher: Export selection opens the export/privacy dialog for the current view', async ({ page }) => {
+test('tree switcher: Export this view opens the export/privacy dialog for the current view', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
     await page.locator('.tree-switcher-btn').click();
     const dropdown = page.locator('#tree-switcher-dropdown');
-    await dropdown.locator('.tree-switcher-action', { hasText: 'Export selection' }).click();
+    await dropdown.locator('.tree-switcher-action', { hasText: 'Export this view' }).click();
 
     // No silent export with defaults: the privacy/password dialog opens focused
     // on the current view, offering the same options as the export dialog path.
