@@ -848,6 +848,19 @@ export const importExportMethods = uiModule({
     },
 
     /**
+     * The OS file picker closed without a file being chosen. An import started
+     * from the tree manager closed its dialogs before opening the picker, so
+     * cancelling used to strand the user with everything gone — go back to the
+     * New Tree menu the click came from (Escape there leads to the manager,
+     * as always).
+     */
+    handleImportFileCancel(): void {
+        if (!this.importFromTreeManager) return;
+        this.importFromTreeManager = false;
+        this.showNewTreeMenu();
+    },
+
+    /**
      * Start HTML import from tree manager
      */
     startHtmlImportFromManager(): void {

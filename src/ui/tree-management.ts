@@ -336,7 +336,7 @@ export const treeManagementMethods = uiModule({
                 <div class="tree-manager-item ${isActive ? 'active' : ''} ${tree.isHidden ? 'hidden-tree' : ''}">
                     <div class="tree-manager-item-header">
                         <span class="tree-manager-item-indicator"></span>
-                        <span class="tree-manager-item-name${isActive ? '' : ' clickable'}"${isActive ? '' : ` onclick="window.Strom.UI.openTreeFromManager('${tree.id}')"`}>${this.escapeHtml(tree.name)}</span>
+                        <span class="tree-manager-item-name clickable" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${this.escapeHtml(tree.name)}</span>
                         ${badges}
                         <span class="tree-manager-item-size">${treeSizeFormatted}</span>
                     </div>
@@ -345,7 +345,7 @@ export const treeManagementMethods = uiModule({
                         ${defaultPersonDisplay ? ` • ${this.escapeHtml(defaultPersonDisplay)}` : ''}
                     </div>
                     <div class="tree-manager-item-actions">
-                        ${isActive ? '' : `<button class="tree-open-btn" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${s.open}</button>`}
+                        <button class="tree-open-btn" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${s.open}</button>
                         <button onclick="window.Strom.UI.showTreeStatsDialog('${tree.id}', 'tree-manager-modal')" data-tip="${s.stats}"><span class="btn-icon">📊</span><span class="btn-text">${s.stats}</span></button>
                         <button onclick="window.Strom.UI.showTreeValidationDialog('${tree.id}', 'tree-manager-modal')" data-tip="${s.validate}"><span class="btn-icon">🩺</span><span class="btn-text">${s.validate}</span></button>
                         <button onclick="window.Strom.UI.showExportDialogFromManager('${tree.id}')" data-tip="${s.export}"><span class="btn-icon">💾</span><span class="btn-text">${s.export}</span></button>
@@ -474,6 +474,10 @@ export const treeManagementMethods = uiModule({
     /** Switch to a tree from the manager and close the dialog to show it. */
     async openTreeFromManager(treeId: string): Promise<void> {
         this.closeTreeManagerDialog();
+        // The active tree is already open — its Open button simply shows it.
+        // (Every row has the button; a missing one on the active row read as
+        // an inconsistency, not as information.)
+        if (treeId === TreeManager.getActiveTreeId()) return;
         await this.switchToTree(treeId);
     },
 

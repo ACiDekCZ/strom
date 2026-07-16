@@ -142,3 +142,49 @@ test('hiding the active tree switches to a visible one; the last visible cannot 
     await expect(page.locator('.toast')).toContainText('cannot be hidden');
     await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText(original);
 });
+
+test('tree manager: Close button closes; the active tree has Open too', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await createTree(page, 'Branch E');   // creates + switches, manager open
+    const manager = page.locator('#tree-manager-modal');
+    await expect(manager).toBeVisible();
+
+    // Every row offers Open — the active one included: it also just shows the
+    // tree (a missing button on the active row read as an inconsistency).
+    const activeRow = manager.locator('.tree-manager-item.active');
+    await expect(activeRow).toContainText('Branch E');
+    await activeRow.locator('.tree-open-btn').click();
+    await expect(manager).toBeHidden();
+    await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Branch E');
+
+    // The footer has an explicit Close.
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    await expect(manager).toBeVisible();
+    await manager.locator('.tree-manager-close').click();
+    await expect(manager).toBeHidden();
+});
+
+test('cancelling the file picker returns to the New Tree menu, not to nowhere', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    await page.locator('.tree-manager-footer .primary').click();   // New Tree
+    const menu = page.locator('#new-tree-menu-modal');
+    await expect(menu).toBeVisible();
+
+    // "From GEDCOM" closes the dialogs and opens the OS picker. Headless
+    // Chromium may auto-dismiss the chooser (firing `cancel` itself); the
+    // explicit dispatch covers the environments that do not — the handler is
+    // a no-op when the cancel was already handled.
+    await menu.locator('.menu-option', { hasText: 'GEDCOM' }).click();
+    await page.dispatchEvent('#gedcom-input', 'cancel');
+
+    // Back where the click came from; Escape walks back to the manager.
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(page.locator('#tree-manager-modal')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#tree-manager-modal')).toBeHidden();
+});

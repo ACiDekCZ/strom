@@ -4740,6 +4740,8 @@
         .tree-manager-footer .btn-text {
             display: inline;
         }
+        /* Close stands apart from the actions — it ends the dialog. */
+        .tree-manager-footer .tree-manager-close { margin-left: auto; }
         /* CSS tooltips for action buttons: native title tooltips do not show
            in standalone PWA windows on some platforms, so draw our own. */
         [data-tip] { position: relative; }
@@ -7718,9 +7720,9 @@
     <!-- Place suggestions, refilled from the tree's own places (see places.ts) -->
     <datalist id="places-datalist"></datalist>
 
-    <input type="file" id="file-input" accept=".json" onchange="window.Strom.UI.handleJsonFile(event)">
-    <input type="file" id="gedcom-input" accept=".ged" onchange="window.Strom.UI.handleGedcomFile(event)">
-    <input type="file" id="html-input" accept=".html,.htm" onchange="window.Strom.UI.handleHtmlFile(event)">
+    <input type="file" id="file-input" accept=".json" onchange="window.Strom.UI.handleJsonFile(event)" oncancel="window.Strom.UI.handleImportFileCancel()">
+    <input type="file" id="gedcom-input" accept=".ged" onchange="window.Strom.UI.handleGedcomFile(event)" oncancel="window.Strom.UI.handleImportFileCancel()">
+    <input type="file" id="html-input" accept=".html,.htm" onchange="window.Strom.UI.handleHtmlFile(event)" oncancel="window.Strom.UI.handleImportFileCancel()">
 
     <!-- GEDCOM Result Dialog -->
     <div class="modal-overlay" id="gedcom-result-modal">
@@ -8059,6 +8061,9 @@
                 </button>
                 <button class="secondary" onclick="window.Strom.UI.showExportAllDialog()" data-i18n-title="treeManager.exportAll">
                     <span class="btn-icon">💾</span><span class="btn-text" data-i18n="treeManager.exportAll">Export All</span>
+                </button>
+                <button class="secondary tree-manager-close" onclick="window.Strom.UI.closeTreeManagerDialog()">
+                    <span class="btn-text" data-i18n="buttons.close">Close</span>
                 </button>
             </div>
         </div>
