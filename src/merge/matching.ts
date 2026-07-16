@@ -1038,7 +1038,7 @@ export function detectConflicts(existing: Person, incoming: Person): FieldConfli
  * Simplified version without relationship propagation (faster)
  * Returns score 0-100, threshold 50+ = match
  */
-export function quickMatchScore(p1: Person, p2: Person): number {
+export function quickMatchScore(p1: Person, p2: Person, data1?: StromData, data2?: StromData): number {
     // Gender must match
     if (p1.gender !== p2.gender) return 0;
 
@@ -1047,7 +1047,13 @@ export function quickMatchScore(p1: Person, p2: Person): number {
     if (!`${p1.firstName}${p1.lastName}`.trim() || !`${p2.firstName}${p2.lastName}`.trim()) return 0;
 
     const firstNameSim = stringSimilarity(p1.firstName, p2.firstName);
-    const lastNameSim = stringSimilarity(p1.lastName, p2.lastName);
+    // The same rule/group answer full matching uses (Víšek/Víšková is one
+    // family), so cross-tree suggestions agree with the merge matcher.
+    const rulesSay = (data?: StromData): boolean =>
+        !!data && sameSurname(p1.lastName, p2.lastName, data);
+    const lastNameSim = rulesSay(data1) || rulesSay(data2)
+        ? 1.0
+        : stringSimilarity(p1.lastName, p2.lastName);
     const nameSim = (firstNameSim + lastNameSim) / 2;
 
     // Names too different - no match

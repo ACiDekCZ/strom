@@ -90,6 +90,7 @@ export function findCrossTreeMatches(
 
     const matches: CrossTreeMatch[] = [];
     const MATCH_THRESHOLD = 50;
+    const currentData = allTrees.get(currentTreeId)?.data;
 
     // Search in all other trees
     for (const [treeId, tree] of allTrees.entries()) {
@@ -101,7 +102,7 @@ export function findCrossTreeMatches(
             // Skip placeholders
             if (otherPerson.isPlaceholder) continue;
 
-            const score = quickMatchScore(person, otherPerson);
+            const score = quickMatchScore(person, otherPerson, currentData, tree.data);
 
             if (score >= MATCH_THRESHOLD) {
                 const personName = `${otherPerson.firstName} ${otherPerson.lastName}`.trim();

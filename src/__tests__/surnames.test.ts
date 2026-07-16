@@ -7,11 +7,12 @@
  * way round they happen to be entered.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
     surnameKey, surnameForms, sameSurname, addSurnameGroup, removeSurnameGroup, surnamesInTree,
-    masculineForm, feminineForm,
+    masculineForm, feminineForm, czechRulesApply,
 } from '../surnames.js';
+import { setLanguage } from '../strings.js';
 import { StromData, Person, PersonId, toPersonId } from '../types.js';
 
 const tree = (groups?: string[][], people: Person[] = []): StromData => ({
@@ -142,6 +143,11 @@ describe('surnamesInTree', () => {
 describe('masculine and feminine are one family (P1, found by testing a real tree)', () => {
     const empty = tree();
 
+    // A Czech user's tree can be entirely ASCII (an old GEDCOM export), so the
+    // rules key off the UI language too — that is the gate exercised here.
+    beforeAll(() => setLanguage('cs'));
+    afterAll(() => setLanguage('en'));
+
     it('sees through the vowel that drops — the case that was broken', () => {
         // Measured on a real tree: "Víšek" found 14 men and none of the 10
         // women, because the "e" disappears when the name is made feminine.
@@ -221,5 +227,70 @@ describe('masculine and feminine are one family (P1, found by testing a real tre
         // A German name gets a Czech ending only in a Czech tree's search text,
         // never in a comparison that could join two families.
         expect(sameSurname('Schaffer', 'Seeman', empty)).toBe(false);
+    });
+
+    it('refuses a stem too short to be one — Nová is an adjective, not N-ová', () => {
+        // "Na" is a real Korean surname; gluing it to Nová once auto-confirmed
+        // a merge of two different women.
+        expect(sameSurname('Nová', 'Na', empty)).toBe(false);
+        expect(sameSurname('Nová', 'N', empty)).toBe(false);
+        expect(sameSurname('Sová', 'Sa', empty)).toBe(false);
+        // The adjective pair still works, through the -á rule.
+        expect(sameSurname('Nová', 'Nový', empty)).toBe(true);
+    });
+
+    it('reads the registers’ capitals and old ASCII exports', () => {
+        expect(sameSurname('NOVOTNÁ', 'NOVOTNÝ', empty)).toBe(true);
+        expect(sameSurname('Novakova', 'Novak', empty)).toBe(true);   // stripped -ová
+        expect(sameSurname('Nováková', 'NOVAK', empty)).toBe(true);
+        // Stripped adjectives are NOT touched: Ticha is indistinguishable
+        // from a noun like Kalina once the diacritic is gone.
+        expect(sameSurname('Ticha', 'Tichy', empty)).toBe(false);
+        expect(sameSurname('Kalina', 'Kaliny', empty)).toBe(false);
+    });
+
+    it('handles adjectives beyond -ná/-lá: Tichá, Mokrá, Hrubá', () => {
+        expect(sameSurname('Tichá', 'Tichý', empty)).toBe(true);
+        expect(sameSurname('Mokrá', 'Mokrý', empty)).toBe(true);
+        expect(sameSurname('Hrubá', 'Hrubý', empty)).toBe(true);
+        // …and both search directions agree (the original P1 complaint).
+        expect(surnameForms('Tichá', empty)).toContain('Tichý');
+        expect(surnameForms('Tichý', empty)).toContain('Tichá');
+    });
+});
+
+describe('the rules know where they apply (gating)', () => {
+    // These run with the UI in English — the gate has to come from the data.
+    it('leaves a tree with no Czech in it completely alone', () => {
+        // Bulgarian/Russian: -ova belongs to -ov (Ivanova ↔ Ivanov). Joining
+        // Ivanova to Ivan would silently merge two different people.
+        expect(czechRulesApply(tree())).toBe(false);
+        expect(sameSurname('Ivanova', 'Ivan', tree())).toBe(false);
+        expect(sameSurname('Doe', 'Doeová', tree())).toBe(false);
+        expect(surnameForms('Smith', tree())).toEqual(['Smith']);
+    });
+
+    it('turns on when the data itself is Czech', () => {
+        const data = tree(undefined, [person('a', 'Jan', 'Víšek')]);
+        expect(czechRulesApply(data)).toBe(true);
+        expect(sameSurname('Víšek', 'Víšková', data)).toBe(true);
+    });
+
+    it('a Czech group entered by the user is Czech enough', () => {
+        const data = tree([['Víšek', 'Wischek']]);
+        expect(czechRulesApply(data)).toBe(true);
+    });
+
+    it('user groups are facts and hold with the rules off', () => {
+        const data = tree([['Smith', 'Smythe']]);
+        expect(czechRulesApply(data)).toBe(false);
+        expect(sameSurname('Smith', 'Smythe', data)).toBe(true);
+    });
+
+    it('notices a Czech person added after the first look', () => {
+        const data = tree(undefined, [person('a', 'John', 'Smith')]);
+        expect(czechRulesApply(data)).toBe(false);
+        data.persons[toPersonId('b')] = person('b', 'Jan', 'Víšek');
+        expect(czechRulesApply(data)).toBe(true);
     });
 });

@@ -15,6 +15,30 @@
  */
 
 import { StromData } from './types.js';
+import { getCurrentLanguage } from './strings.js';
+
+/**
+ * The feminine-surname rules below are Czech. On Bulgarian or Russian data they
+ * would be wrong — there "-ova" belongs to "-ov" (Ivanova ↔ Ivanov), not to the
+ * bare name — so the rules only apply when the tree is plausibly Czech: the UI
+ * runs in Czech, or the surnames themselves carry Czech letters. Groups the
+ * user entered (surnameVariants) are facts, not rules, and always apply.
+ * Same gating idea as isCzechRelevant in archives.ts.
+ */
+const CZECH_LETTERS = /[áéíýčďěňřšťůžúóľĺŕäô]/i;
+
+const czechRelevanceCache = new WeakMap<StromData, { personCount: number; relevant: boolean }>();
+
+export function czechRulesApply(data: StromData): boolean {
+    if (getCurrentLanguage() === 'cs') return true;
+    const personCount = Object.keys(data.persons).length;
+    const cached = czechRelevanceCache.get(data);
+    if (cached && cached.personCount === personCount) return cached.relevant;
+    const relevant = Object.values(data.persons).some(p => CZECH_LETTERS.test(p.lastName ?? ''))
+        || (data.surnameVariants ?? []).some(g => g.some(n => CZECH_LETTERS.test(n)));
+    czechRelevanceCache.set(data, { personCount, relevant });
+    return relevant;
+}
 
 /**
  * The masculine form of a Czech feminine surname, or null if it does not look
@@ -31,27 +55,40 @@ import { StromData } from './types.js';
  */
 export function masculineForm(surname: string): string | null {
     const name = surname.trim();
+    // Endings are tested on a lowercase copy: registers and GEDCOM exports
+    // often write NOVOTNÁ, and the rule is about the ending, not the casing.
+    const t = name.toLowerCase();
 
     // Adjectival: Brodská → Brodský, Zelená → Zelený, Roštejnská → Roštejnský.
-    if (/ská$/.test(name)) return name.slice(0, -1) + 'ý';
-    if (/cká$/.test(name)) return name.slice(0, -1) + 'ý';
-    if (/á$/.test(name) && /[nl]á$/.test(name)) return name.slice(0, -1) + 'ý';
+    if (/ská$/.test(t) || /cká$/.test(t)) return name.slice(0, -1) + 'ý';
 
-    if (!/ová$/.test(name)) return null;
-    const stem = name.slice(0, -3);
-    if (!stem) return null;
+    // -ová with a real stem: Víšková → Víšk…. A one- or two-letter remainder is
+    // not a stem — Nová is the adjective Nový, and "N"/"Na" would pull in real
+    // foreign surnames — so such names fall through to the adjectival rule.
+    // ASCII "-ova" is accepted too: old exports strip diacritics, and no Czech
+    // masculine surname ends in -ova.
+    if (/ov[áa]$/.test(t)) {
+        const stem = name.slice(0, -3);
+        // The vowel that drops when the name is made feminine: Víšek → Víšková,
+        // Adamec → Adamcová, Pavel → Pavlová. Putting it back is a guess about
+        // WHICH vowel, so all candidates are offered by sameSurname below.
+        if (stem.length >= 3) return stem;
+    }
 
-    // The vowel that drops when the name is made feminine: Víšek → Víšková,
-    // Adamec → Adamcová, Pavel → Pavlová. Putting it back is a guess about
-    // WHICH vowel, so both candidates are offered by sameSurname below.
-    return stem;
+    // Any other -á is adjectival: Tichá → Tichý, Mokrá → Mokrý, Nová → Nový.
+    // Plain -a (Svoboda, Kalina) is a noun and stays untouched — which is also
+    // why the ASCII forms Ticha/Novotna cannot be helped: they are not
+    // distinguishable from nouns once the diacritic is gone.
+    if (/á$/.test(t)) return name.slice(0, -1) + 'ý';
+
+    return null;
 }
 
 /** Every masculine spelling a feminine surname could have come from. */
 function masculineCandidates(surname: string): string[] {
     const base = masculineForm(surname);
     if (!base) return [];
-    if (!/ová$/.test(surname.trim())) return [base];   // adjectival: one answer
+    if (/ý$/i.test(base)) return [base];   // adjectival: one answer
     // Which spelling the -ová was built from cannot be known, so offer each one
     // the rules allow and let the caller compare: Novák(ová) → "Novák";
     // Svobod(ová) → "Svoboda"; Víšk(ová) → "Víšek"; Adamc(ová) → "Adamec".
@@ -72,21 +109,26 @@ function masculineCandidates(surname: string): string[] {
  */
 export function feminineForm(surname: string): string | null {
     const name = surname.trim();
-    if (!name || /ová$/.test(name)) return null;
+    const t = name.toLowerCase();   // endings, not casing (NOVÁK → NOVÁKová)
+    if (!name || /ov[áa]$/.test(t)) return null;   // already feminine (incl. ASCII)
 
     // Indeclinable: Macků, Kočí, Nových are the same for everyone.
-    if (/[ůí]$/.test(name) || /ých$/.test(name)) return null;
+    if (/[ůí]$/.test(t) || /ých$/.test(t)) return null;
 
     // Adjectival: Brodský → Brodská, Zelený → Zelená.
-    if (/ý$/.test(name)) return name.slice(0, -1) + 'á';
-    if (/á$/.test(name)) return null;   // already feminine
+    if (/ý$/.test(t)) return name.slice(0, -1) + 'á';
+    if (/á$/.test(t)) return null;   // already feminine
+
+    // Too short to carry an ending at all: Na, Ho, Wu are whole names, and
+    // Na + ová would equate them with real Czech ones (N-ová ↔ Nová).
+    if (name.length < 3) return null;
 
     // The vowel that drops: Víšek → Víšková, Adamec → Adamcová, Pavel → Pavlová.
     const dropped = /^(.*[^aeiouyáéíóúýůě])[eě]([kcl])$/i.exec(name);
     if (dropped) return `${dropped[1]}${dropped[2]}ová`;
 
     // Ending in -a loses it: Svoboda → Svobodová, Kopřiva → Kopřivová, Mika → Miková.
-    if (/a$/.test(name)) return name.slice(0, -1) + 'ová';
+    if (/a$/.test(t)) return name.slice(0, -1) + 'ová';
 
     return name + 'ová';
 }
@@ -108,9 +150,11 @@ export function surnameForms(surname: string, data: StromData): string[] {
     if (!key) return [];
 
     // Both genders: a woman's surname carries the men's form and vice versa, so
-    // searching either reaches the whole family.
-    const other = feminineForm(surname);
-    const seeds = [surname, ...masculineCandidates(surname), ...(other ? [other] : [])];
+    // searching either reaches the whole family. Rule-generated forms only on
+    // Czech-relevant trees; the user's own groups always count.
+    const rules = czechRulesApply(data);
+    const other = rules ? feminineForm(surname) : null;
+    const seeds = [surname, ...(rules ? masculineCandidates(surname) : []), ...(other ? [other] : [])];
     const out: string[] = [];
     const add = (n: string): void => {
         if (n && !out.some(o => surnameKey(o) === surnameKey(n))) out.push(n);
@@ -136,15 +180,19 @@ export function sameSurname(a: string, b: string, data: StromData): boolean {
     if (!ka || !kb) return false;
     if (ka === kb) return true;
 
-    // Víšek and Víšková are one family; nobody should have to say so.
-    if (masculineCandidates(a).some(m => surnameKey(m) === kb)) return true;
-    if (masculineCandidates(b).some(m => surnameKey(m) === ka)) return true;
-    if (surnameKey(feminineForm(a) ?? '') === kb) return true;
-    if (surnameKey(feminineForm(b) ?? '') === ka) return true;
+    // Víšek and Víšková are one family; nobody should have to say so — but only
+    // where the Czech rules apply at all (see czechRulesApply above).
+    const rules = czechRulesApply(data);
+    if (rules) {
+        if (masculineCandidates(a).some(m => surnameKey(m) === kb)) return true;
+        if (masculineCandidates(b).some(m => surnameKey(m) === ka)) return true;
+        if (surnameKey(feminineForm(a) ?? '') === kb) return true;
+        if (surnameKey(feminineForm(b) ?? '') === ka) return true;
+    }
 
     // …and the two could be a grouped spelling of each other's masculine form.
-    const formsA = [a, ...masculineCandidates(a), feminineForm(a) ?? ''].map(surnameKey);
-    const formsB = [b, ...masculineCandidates(b), feminineForm(b) ?? ''].map(surnameKey);
+    const formsA = rules ? [a, ...masculineCandidates(a), feminineForm(a) ?? ''].map(surnameKey) : [ka];
+    const formsB = rules ? [b, ...masculineCandidates(b), feminineForm(b) ?? ''].map(surnameKey) : [kb];
     return (data.surnameVariants ?? []).some(g => {
         const keys = g.map(surnameKey);
         return formsA.some(x => keys.includes(x)) && formsB.some(y => keys.includes(y));
