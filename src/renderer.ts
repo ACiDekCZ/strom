@@ -35,7 +35,8 @@ import {
 import { renderDebugOverlay, clearDebugOverlay } from './debug-overlay.js';
 import { debugPanel } from './debug-panel.js';
 import { yearOf, displayYear, formatFlexDate } from './dates.js';
-import { computeTimelineModel, yearToFraction, axisTicks, TimelineRow, TimelineEvent } from './timeline.js';
+import { computeTimelineModel } from './timeline.js';
+import { buildTimelineSvg } from './timeline-chart.js';
 import { sortLifeEvents } from './events.js';
 import { classifyBranches, Branch } from './branch-colors.js';
 import { presumedDeceasedSet, isLivingPerson } from './privacy.js';
@@ -1722,91 +1723,27 @@ class TreeRendererClass {
         const isMobile = window.innerWidth < 500;
         const ROW_H = isMobile ? 28 : 30;
         const LABEL_W = isMobile ? 96 : 160;
-        const TOP = 40;
-        const PAD_R = 16;
         const W = Math.max(320, container.clientWidth || 800);
-        const plotX0 = LABEL_W;
-        const plotW = Math.max(40, W - LABEL_W - PAD_R);
-        const H = TOP + model.rows.length * ROW_H + 12;
-        const xOf = (year: number) => plotX0 + yearToFraction(year, model.axis) * plotW;
-
-        const grid = axisTicks(model.axis).map(yr => {
-            const x = xOf(yr).toFixed(1);
-            return `<line x1="${x}" y1="${TOP - 6}" x2="${x}" y2="${H}" class="tl-grid"/>`
-                + `<text x="${x}" y="${TOP - 14}" text-anchor="middle" class="tl-tick">${yr}</text>`;
-        }).join('');
-
-        const rows = model.rows
-            .map((r, i) => this.timelineRowSvg(r, i, TOP, ROW_H, LABEL_W, W, xOf, S))
-            .join('');
 
         const omitted = model.omittedCount > 0
             ? `<div class="tl-omitted">${this.escapeHtml(S.omitted(model.omittedCount))}</div>` : '';
         const empty = model.rows.length === 0
             ? `<div class="tl-omitted">${this.escapeHtml(S.empty)}</div>` : '';
 
-        // Fade-out gradients for bars with an unknown end (deceased, no death date).
-        const fadeStops = (color: string) =>
-            `<stop offset="0" stop-color="${color}" stop-opacity="0.85"/>`
-            + `<stop offset="1" stop-color="${color}" stop-opacity="0"/>`;
-        const defs = `<defs>`
-            + `<linearGradient id="tl-fade-male" x1="0" y1="0" x2="1" y2="0">${fadeStops('#8fb8de')}</linearGradient>`
-            + `<linearGradient id="tl-fade-female" x1="0" y1="0" x2="1" y2="0">${fadeStops('#e8a0bf')}</linearGradient>`
-            + `</defs>`;
+        // The on-screen SVG is built by the shared pure builder (screen mode:
+        // CSS classes + foreignObject labels). The poster reuses the same
+        // builder in 'poster' mode; see src/timeline-chart.ts.
+        const svg = buildTimelineSvg(model, {
+            esc: (t) => this.escapeHtml(t),
+            width: W,
+            rowH: ROW_H,
+            labelW: LABEL_W,
+            mode: 'screen',
+            focusId: this.focusPersonId,
+            highlightIds: this.highlightIds ?? null,
+        });
 
-        container.innerHTML = `${omitted}${empty}`
-            + `<svg class="timeline-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img">`
-            + `${defs}${grid}${rows}</svg>`;
-    }
-
-    /** SVG for one timeline row (label + life-bar + event dots). */
-    private timelineRowSvg(
-        r: TimelineRow, i: number, top: number, rowH: number, labelW: number,
-        rowWidth: number, xOf: (y: number) => number, S: typeof strings.timeline
-    ): string {
-        const y = top + i * rowH;
-        const barY = y + (rowH - 14) / 2;
-        const x1 = xOf(r.startYear), x2 = xOf(r.endYear);
-        const w = Math.max(2, x2 - x1);
-        const color = r.gender === 'female' ? '#e8a0bf' : '#8fb8de';
-        const focused = r.personId === this.focusPersonId ? ' focused' : '';
-        const highlight = this.highlightIds
-            ? (this.highlightIds.has(r.personId as PersonId) ? ' search-hit' : ' search-dim') : '';
-
-        const nameEsc = this.escapeHtml(r.name);
-        const yearsEsc = this.escapeHtml(
-            r.isLiving ? `${r.startYear}–` : r.endKnown ? `${r.startYear}–${r.endYear}` : `${r.startYear}–?`);
-        const cy = (barY + 7).toFixed(1);
-        const dots = r.events.map(ev => {
-            const ex = xOf(ev.year).toFixed(1);
-            const label = this.escapeHtml(`${this.timelineEventLabel(ev, S)} (${ev.year})`);
-            const cls = ev.type === 'wedding' ? 'tl-dot tl-dot-wedding' : 'tl-dot';
-            const rad = ev.type === 'wedding' ? 4.5 : 3;
-            return `<circle cx="${ex}" cy="${cy}" r="${rad}" class="${cls}"><title>${label}</title></circle>`;
-        }).join('');
-        const arrow = r.isLiving
-            ? `<polygon points="${x2.toFixed(1)},${barY} ${(x2 + 7).toFixed(1)},${(barY + 7).toFixed(1)} ${x2.toFixed(1)},${(barY + 14)}" class="tl-arrow"/>`
-            : '';
-        // Unknown end: fade the bar out to the right ("we don't know further").
-        const fadeW = Math.max(0, Math.min(26, rowWidth - x2 - 2));
-        const fade = !r.endKnown && fadeW > 4
-            ? `<rect x="${x2.toFixed(1)}" y="${barY}" width="${fadeW.toFixed(1)}" height="14"`
-              + ` fill="url(#tl-fade-${r.gender})"/>`
-            : '';
-
-        return `<g class="timeline-bar${focused}${highlight}" data-person-id="${this.escapeHtml(r.personId)}">`
-            + `<rect x="0" y="${y}" width="${rowWidth}" height="${rowH}" class="tl-rowhit" fill="transparent"/>`
-            + `<foreignObject x="2" y="${y}" width="${labelW - 6}" height="${rowH}">`
-            + `<div xmlns="http://www.w3.org/1999/xhtml" class="tl-name" title="${nameEsc}">`
-            + `<span class="tl-nm">${nameEsc}</span> <span class="tl-yr">${yearsEsc}</span></div></foreignObject>`
-            + `<rect x="${x1.toFixed(1)}" y="${barY}" width="${w.toFixed(1)}" height="14" rx="3" fill="${color}" class="tl-bar-rect"/>`
-            + `${fade}${arrow}${dots}</g>`;
-    }
-
-    private timelineEventLabel(ev: TimelineEvent, S: typeof strings.timeline): string {
-        if (ev.type === 'wedding') return S.wedding;
-        if (ev.type === 'custom' && ev.customLabel) return ev.customLabel;
-        return strings.events.types[ev.type as keyof typeof strings.events.types] ?? String(ev.type);
+        container.innerHTML = `${omitted}${empty}${svg}`;
     }
 
     private escapeHtml(text: string): string {

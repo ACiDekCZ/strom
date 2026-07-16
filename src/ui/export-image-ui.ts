@@ -12,6 +12,8 @@ import {
     buildTreeSvg, computeBounds, escapeXml, PosterOptions, PosterFooterMeta, FOOTER_HEIGHT, POSTER_PADDING,
 } from '../export-image.js';
 import { buildFanModel, buildFanPosterSvg, fanPosterGeometry } from '../fan-chart.js';
+import { computeTimelineModel } from '../timeline.js';
+import { buildTimelinePosterSvg, timelinePosterGeometry } from '../timeline-chart.js';
 import { uiModule } from './module.js';
 import { DEFAULT_LAYOUT_CONFIG, StromData, ViewMode } from '../types.js';
 import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy.js';
@@ -64,6 +66,8 @@ function viewLabelFor(mode: ViewMode, name: string): string {
     switch (mode) {
         case 'fan':
             return strings.poster.viewFan(name, TreeRenderer.getFanGenerations());
+        case 'timeline':
+            return strings.poster.viewTimeline(name);
         case 'descendants':
             return strings.poster.viewDescendants(name);
         default:
@@ -73,7 +77,7 @@ function viewLabelFor(mode: ViewMode, name: string): string {
 
 /**
  * Describe what the poster will actually print for the CURRENT view — the
- * poster prints what you are looking at, so map/timeline are honestly blocked
+ * poster prints what you are looking at, so the map is honestly blocked
  * rather than silently exporting the family card layout underneath. The dialog
  * line shows the RAW focus name (the user is looking at their own screen); the
  * footer label is rebuilt from privacy-filtered data in buildCurrentPoster.
@@ -81,7 +85,6 @@ function viewLabelFor(mode: ViewMode, name: string): string {
 function posterViewInfo(): PosterViewInfo {
     const mode = TreeRenderer.getViewMode();
     if (mode === 'map') return { line: strings.poster.viewMapBlocked, label: '', blocked: true };
-    if (mode === 'timeline') return { line: strings.poster.viewTimelineBlocked, label: '', blocked: true };
     const label = viewLabelFor(mode, focusNameFrom(DataManager.getData()));
     return { line: `${strings.poster.printsView} ${label}`, label, blocked: false };
 }
@@ -97,8 +100,8 @@ interface PosterBuild {
 
 /**
  * Build the poster for whatever view is on screen: the fan chart in fan view,
- * the tree card layout otherwise. Returns null when there is nothing printable
- * (empty tree, or a blocked view such as map/timeline).
+ * the timeline in timeline view, the tree card layout otherwise. Returns null
+ * when there is nothing printable (empty tree, or the blocked map view).
  *
  * The poster leaves the house — the living-privacy filter applies here exactly
  * like in the book/GEDCOM exports (audit K2: it used to export raw full names
@@ -106,7 +109,7 @@ interface PosterBuild {
  */
 function buildCurrentPoster(): PosterBuild | null {
     const mode = TreeRenderer.getViewMode();
-    if (mode === 'map' || mode === 'timeline') return null; // not printable
+    if (mode === 'map') return null; // not printable
 
     const data = applyLivingPrivacy(DataManager.getData(), posterPrivacyMode());
     const meta: PosterFooterMeta = {
@@ -117,6 +120,21 @@ function buildCurrentPoster(): PosterBuild | null {
         viewLabel: viewLabelFor(mode, focusNameFrom(data)),
         dateLabel: new Date().toLocaleDateString(),
     };
+
+    if (mode === 'timeline') {
+        // Persons = the SAME pipeline selection the on-screen timeline draws
+        // (positions.keys()), fed through the privacy-filtered data so living
+        // people are not named in full (audit K2).
+        const ids = [...TreeRenderer.getPosterLayout().positions.keys()] as unknown as string[];
+        const model = computeTimelineModel(data, ids, new Date().getFullYear());
+        if (model.rows.length === 0) return null;
+        const svg = buildTimelinePosterSvg(model, {
+            esc: escapeXml,
+            focusId: TreeRenderer.getFocusPersonId(),
+        }, meta);
+        const geom = timelinePosterGeometry(model, true);
+        return { svg, widthPx: geom.width, heightPx: geom.height, hasContent: geom.hasContent };
+    }
 
     if (mode === 'fan') {
         const focusId = TreeRenderer.getFocusPersonId();

@@ -136,6 +136,37 @@ test('fan view: poster downloads an SVG containing fan sectors', async ({ page }
     expect(svg).toMatch(/<path d="M /);      // sector geometry
 });
 
+test('timeline view: poster downloads an SVG containing timeline bars', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+
+    await page.evaluate(() => window.Strom.UI.setDisplayViewMode('timeline'));
+    await expect(page.locator('.timeline-svg')).toBeVisible();
+
+    await page.evaluate(() => window.Strom.UI.showPosterDialog());
+    const poster = page.locator('#poster-modal');
+    await expect(poster).toBeVisible();
+    // The label names the timeline view (no longer a "coming soon" block).
+    await expect(poster.locator('#poster-view-label')).toContainText('Timeline');
+    // Every export button is enabled (timeline is a first-class poster now).
+    await expect(poster.locator('.menu-option').first()).toBeEnabled();
+
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        poster.locator('.menu-option', { hasText: 'SVG' }).click(),
+    ]);
+    const svg = readFileSync(await download.path(), 'utf-8');
+    expect(svg.trimStart().startsWith('<svg')).toBe(true);
+    // A timeline poster: the nested timeline chart with life-bars, self-contained
+    // light colours, plain-text names (no foreignObject), and NOT the card layout.
+    expect(svg).toContain('class="timeline-svg"');
+    expect(svg).toContain('timeline-bar');
+    expect(svg).toContain('tl-bar-rect');
+    expect(svg).toContain('.tl-grid{stroke:#e2e2e2'); // embedded light colours
+    expect(svg).not.toContain('<foreignObject');       // canvas-safe labels
+});
+
 test('map view: poster export is honestly blocked and buttons are disabled', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
