@@ -27,6 +27,7 @@ import {
     DisplayPolicy,
     runLayoutPipelineWithDebug,
     collectBloodDescendants,
+    collectBloodRelatives,
     DebugOptions,
     DebugSnapshot,
     LayoutDebugContext
@@ -844,6 +845,45 @@ class TreeRendererClass {
             }
         }
 
+        // Family view: de-emphasize people shown only for context — those who
+        // belong to another union with no blood tie to the focus line (e.g. the
+        // second husband of a great-grandmother). Fully visible =
+        //   BLOOD(focus)
+        //   ∪ {partners of anyone in BLOOD(focus)}
+        //   ∪ BLOOD(each partner of focus)   (keeps the partner's V-fan ancestry)
+        // where BLOOD is the up-then-down closure (see collectBloodRelatives).
+        if (this.viewMode === 'family' && this.focusPersonId) {
+            const data = DataManager.getData();
+            const keep = collectBloodRelatives(data, this.focusPersonId);
+            // Partners of anyone in the focus blood set.
+            for (const bid of [...keep]) {
+                const bp = data.persons[bid];
+                if (!bp) continue;
+                for (const pid of bp.partnerships) {
+                    const u = data.partnerships[pid];
+                    if (!u) continue;
+                    keep.add(u.person1Id === bid ? u.person2Id : u.person1Id);
+                }
+            }
+            // Blood of each partner of the focus (their whole ancestry stays lit).
+            const focus = data.persons[this.focusPersonId];
+            if (focus) {
+                for (const pid of focus.partnerships) {
+                    const u = data.partnerships[pid];
+                    if (!u) continue;
+                    const partnerId = u.person1Id === this.focusPersonId ? u.person2Id : u.person1Id;
+                    for (const b of collectBloodRelatives(data, partnerId)) keep.add(b);
+                }
+            }
+            indirectIds = new Set();
+            for (const id of this.positions.keys()) {
+                if (keep.has(id)) continue;
+                const p = DataManager.getPerson(id);
+                if (!p || p.isPlaceholder) continue;
+                indirectIds.add(id);
+            }
+        }
+
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);
             if (!person) continue;
@@ -879,7 +919,7 @@ class TreeRendererClass {
                 const b = branchMap.get(id);
                 if (b) classes += ` branch-${b}`;
             }
-            // Descendants view: de-emphasize step-relatives.
+            // Descendants/family view: de-emphasize context-only relatives.
             if (indirectIds?.has(id)) {
                 classes += ' indirect';
             }

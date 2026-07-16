@@ -325,6 +325,48 @@ export function collectBloodDescendants(data: StromData, focusPersonId: PersonId
 }
 
 /**
+ * Blood relatives of a person: the up-closure through parentIds (the person
+ * plus every ancestor), THEN the down-closure of that whole set through
+ * childIds (every descendant of every ancestor — so siblings, uncles/aunts,
+ * cousins, and the person's own descendants).
+ *
+ * The two phases are deliberate and must not be collapsed into one BFS over
+ * parent+child edges together: a combined traversal leaks into the in-law's
+ * family through a shared child (from a child you step up to the OTHER,
+ * non-ancestor parent and then out to their blood). Going up first, then only
+ * down, never walks a child back up to a non-ancestor parent.
+ */
+export function collectBloodRelatives(data: StromData, personId: PersonId): Set<PersonId> {
+    // Phase 1: up-closure through parentIds (person + all ancestors).
+    const ancestors = new Set<PersonId>([personId]);
+    const upQueue: PersonId[] = [personId];
+    while (upQueue.length > 0) {
+        const person = data.persons[upQueue.shift()!];
+        if (!person) continue;
+        for (const parentId of person.parentIds) {
+            if (!ancestors.has(parentId)) {
+                ancestors.add(parentId);
+                upQueue.push(parentId);
+            }
+        }
+    }
+    // Phase 2: down-closure of the ancestor set through childIds.
+    const blood = new Set<PersonId>(ancestors);
+    const downQueue: PersonId[] = [...ancestors];
+    while (downQueue.length > 0) {
+        const person = data.persons[downQueue.shift()!];
+        if (!person) continue;
+        for (const childId of person.childIds) {
+            if (!blood.has(childId)) {
+                blood.add(childId);
+                downQueue.push(childId);
+            }
+        }
+    }
+    return blood;
+}
+
+/**
  * Run the complete layout pipeline.
  */
 export function runLayoutPipeline(input: PipelineInput): LayoutResult {
