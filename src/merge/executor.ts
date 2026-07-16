@@ -10,9 +10,11 @@ import {
     ParentChildRelType,
     Partnership,
     StromData,
+    LifeEvent,
     generatePersonId,
     generatePartnershipId
 } from '../types.js';
+import { addSurnameGroup } from '../surnames.js';
 import {
     MergeState,
     MergeResult,
@@ -141,6 +143,18 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             mergedData.sources = { ...(mergedData.sources ?? {}), ...structuredClone(state.incomingData.sources) };
         }
 
+        // Tree-level registries come along too — the user curated them.
+        // Coordinates: union, the existing tree wins where both know a place.
+        if (state.incomingData.places && Object.keys(state.incomingData.places).length > 0) {
+            mergedData.places = { ...structuredClone(state.incomingData.places), ...(mergedData.places ?? {}) };
+        }
+        // Surname groups: addSurnameGroup merges overlapping groups transitively,
+        // so both trees' equivalences end up in one consistent registry.
+        for (const group of state.incomingData.surnameVariants ?? []) {
+            const next = addSurnameGroup(mergedData, group);
+            if (next.length > 0) mergedData.surnameVariants = next;
+        }
+
         // Clear focus settings - new tree should start fresh
         delete mergedData.lastFocusPersonId;
         delete mergedData.lastFocusDepthUp;
@@ -158,13 +172,13 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 const existingPerson = mergedData.persons[match.existingId];
                 if (existingPerson) {
                     // Merge data according to conflict resolutions
-                    mergePersonData(existingPerson, match.incomingPerson, match.conflicts, mapping.persons);
+                    mergePersonData(existingPerson, match.incomingPerson, match.conflicts, mapping.persons, state.incomingData.persons);
                     mergedCount++;
                 }
             } else if (decision?.type === 'manual_match') {
                 const existingPerson = mergedData.persons[decision.targetId];
                 if (existingPerson) {
-                    mergePersonData(existingPerson, match.incomingPerson, match.conflicts, mapping.persons);
+                    mergePersonData(existingPerson, match.incomingPerson, match.conflicts, mapping.persons, state.incomingData.persons);
                     mergedCount++;
                 }
             }
@@ -213,6 +227,13 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             if (remappedRel) newPerson.parentRelTypes = remappedRel;
             else delete newPerson.parentRelTypes;
 
+            // Events came from the incoming tree: clone them (the spread above
+            // shares the array) and remap their participants like parentRelTypes.
+            if (newPerson.events) {
+                newPerson.events = structuredClone(newPerson.events);
+                remapEventParticipants(newPerson.events, mapping.persons, state.incomingData.persons);
+            }
+
             mergedData.persons[newId] = newPerson;
             addedCount++;
         }
@@ -248,6 +269,10 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                         : undefined;
                     if (remappedPhRel) newPerson.parentRelTypes = remappedPhRel;
                     else delete newPerson.parentRelTypes;
+                    if (newPerson.events) {
+                        newPerson.events = structuredClone(newPerson.events);
+                        remapEventParticipants(newPerson.events, mapping.persons, state.incomingData.persons);
+                    }
                     mergedData.persons[newId] = newPerson;
                 }
             }
@@ -299,6 +324,17 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         // Update parent-child relationships for merged persons
         updateRelationships(mergedData, state, mapping);
 
+        // No participant may point outside the merged tree: whoever did not
+        // come along stays by name (snapshotted during remap), never as a
+        // dangling id.
+        for (const person of Object.values(mergedData.persons)) {
+            for (const ev of person.events ?? []) {
+                for (const part of ev.participants ?? []) {
+                    if (part.personId && !mergedData.persons[part.personId]) delete part.personId;
+                }
+            }
+        }
+
         // Validate result
         const validationErrors = validateMergedData(mergedData);
         if (validationErrors.length > 0) {
@@ -330,6 +366,30 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
 // ==================== HELPER FUNCTIONS ====================
 
 /**
+ * Remap event participants to the merged tree's ids, and snapshot the written
+ * name while the incoming tree can still be asked for it. Whoever ends up
+ * without a live person in the merged tree keeps the name instead of a
+ * dangling id, which every consumer (UI, export, analysis) silently skips.
+ */
+function remapEventParticipants(
+    events: LifeEvent[] | undefined,
+    idMap: Map<PersonId, PersonId>,
+    incomingPersons: Record<PersonId, Person>,
+): void {
+    for (const ev of events ?? []) {
+        for (const part of ev.participants ?? []) {
+            if (!part.personId) continue;
+            const source = incomingPersons[part.personId];
+            const written = `${source?.firstName ?? ''} ${source?.lastName ?? ''}`.trim();
+            if (!part.name && written && written !== '?') part.name = written;
+            const mapped = idMap.get(part.personId);
+            if (mapped) part.personId = mapped;
+            else delete part.personId;
+        }
+    }
+}
+
+/**
  * Remap parentRelTypes keys (parent ids) through an id mapping. Keys whose
  * parent did not come along are dropped. Returns undefined when empty.
  */
@@ -346,35 +406,13 @@ function remapParentRelTypes(
 }
 
 /**
- * Deep clone StromData
+ * Deep clone StromData — wholesale on purpose. This used to copy field by
+ * field and silently dropped every field it did not know about (places,
+ * surnameVariants — the exact class of bug the whitelist-guard test exists
+ * for). A wholesale clone cannot forget a field, present or future.
  */
 function deepCloneStromData(data: StromData): StromData {
-    const clonedPersons: Record<PersonId, Person> = {};
-    const clonedPartnerships: Record<PartnershipId, Partnership> = {};
-
-    for (const [id, person] of Object.entries(data.persons)) {
-        clonedPersons[id as PersonId] = {
-            ...person,
-            partnerships: [...person.partnerships],
-            parentIds: [...person.parentIds],
-            childIds: [...person.childIds],
-            ...(person.events ? { events: person.events.map(e => ({ ...e, ...(e.sourceIds ? { sourceIds: [...e.sourceIds] } : {}) })) } : {}),
-            ...(person.sourceIds ? { sourceIds: [...person.sourceIds] } : {}),
-            ...(person.attachments ? { attachments: person.attachments.map(a => ({ ...a })) } : {}),
-            ...(person.parentRelTypes ? { parentRelTypes: { ...person.parentRelTypes } } : {})
-        };
-    }
-
-    for (const [id, partnership] of Object.entries(data.partnerships)) {
-        clonedPartnerships[id as PartnershipId] = {
-            ...partnership,
-            childIds: [...partnership.childIds]
-        };
-    }
-
-    const cloned: StromData = { persons: clonedPersons, partnerships: clonedPartnerships };
-    if (data.sources) cloned.sources = structuredClone(data.sources);
-    return cloned;
+    return structuredClone(data);
 }
 
 /**
@@ -384,7 +422,8 @@ export function mergePersonData(
     existing: Person,
     incoming: Person,
     conflicts: FieldConflict[],
-    personIdMap?: Map<PersonId, PersonId>
+    personIdMap?: Map<PersonId, PersonId>,
+    incomingPersons?: Record<PersonId, Person>
 ): void {
     // Merge non-conflicting data (fill in missing values)
     if (!existing.birthDate && incoming.birthDate) {
@@ -436,7 +475,12 @@ export function mergePersonData(
         const seen = new Set(existing.events.map(e => e.id));
         for (const event of incoming.events) {
             if (!seen.has(event.id)) {
-                existing.events.push({ ...event, ...(event.sourceIds ? { sourceIds: [...event.sourceIds] } : {}) });
+                // Wholesale clone: participants and sourceIds must not stay
+                // shared with the incoming tree. Participant ids are the
+                // incoming tree's — remap them like parentRelTypes below.
+                const cloned = structuredClone(event);
+                if (personIdMap) remapEventParticipants([cloned], personIdMap, incomingPersons ?? {});
+                existing.events.push(cloned);
                 seen.add(event.id);
             }
         }
@@ -446,6 +490,19 @@ export function mergePersonData(
     if (incoming.sourceIds && incoming.sourceIds.length > 0) {
         const merged = new Set([...(existing.sourceIds ?? []), ...incoming.sourceIds]);
         existing.sourceIds = [...merged];
+    }
+
+    // Merge written name variants: the spelling that made the match possible
+    // ("Wischek") must survive the merge, or the next import of the same
+    // source falls back to fuzzy matching again.
+    if (incoming.nameVariants && incoming.nameVariants.length > 0) {
+        const have = new Set((existing.nameVariants ?? []).map(v => v.trim().toLowerCase()));
+        for (const variant of incoming.nameVariants) {
+            const key = variant.trim().toLowerCase();
+            if (!key || have.has(key)) continue;
+            (existing.nameVariants ??= []).push(variant);
+            have.add(key);
+        }
     }
 
     // Merge parent relationship types: keys are parent ids from the INCOMING

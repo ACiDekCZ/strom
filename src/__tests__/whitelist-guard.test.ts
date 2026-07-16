@@ -1,15 +1,18 @@
 /**
  * Guard against silently dropping a field.
  *
- * Two places in the app copy data field by field instead of wholesale:
+ * Every path where data is copied rather than passed wholesale is a place a
+ * field can vanish without a word:
  *   - migrateData() — every load goes through it (tree switch, app restart,
  *     import, opening a shared file),
- *   - DataManager.updatePerson() — every edit from the person modal.
+ *   - DataManager.updatePerson() — every edit from the person modal,
+ *   - executeMerge() — merging two trees builds the result by hand,
+ *   - extractSubtree() — split / "tree from current view" extracts by hand.
  *
- * Anything not named there is dropped without a word. That has already cost
- * users data twice: Person.refn/question were invisible again the moment the
- * modal was reopened, and StromData.places threw away every coordinate a person
- * had looked up (hotfix 1.10.1).
+ * That has already cost users data three times: Person.refn/question were
+ * invisible again the moment the modal was reopened, StromData.places threw
+ * away every coordinate a person had looked up (hotfix 1.10.1), and merge
+ * dropped places AND surnameVariants of both trees.
  *
  * The fixtures below are typed `Required<...>`, so TypeScript refuses to compile
  * this file the moment a new field appears on StromData or Person. Filling it in
@@ -22,6 +25,10 @@ import { DataManager, migrateData } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
+import { executeMerge } from '../merge/executor.js';
+import { MergeState } from '../merge/types.js';
+import { StorageManager } from '../storage.js';
+import { extractSubtree } from '../subtree.js';
 import {
     StromData, Person, Partnership, PersonId, PartnershipId, TreeId,
     toPersonId, toPartnershipId, LAST_FOCUSED, STROM_DATA_VERSION,
@@ -35,6 +42,10 @@ function person(id: PersonId, firstName: string): Person {
     return {
         id, firstName, lastName: 'Novak', gender: 'female',
         isPlaceholder: false, partnerships: [UNION], parentIds: [], childIds: [],
+        // extractSubtree prunes coordinates to used places and sources to live
+        // citations, so the fixture must actually use both ('kolin', 's1').
+        birthPlace: 'Kolín',
+        sourceIds: ['s1'],
     };
 }
 
@@ -42,13 +53,13 @@ function partnership(): Partnership {
     return { id: UNION, person1Id: BOB, person2Id: ALICE, childIds: [], status: 'married' };
 }
 
-describe('migrateData keeps every StromData field', () => {
-    /**
-     * Every field of StromData, each with a value that is distinguishable from
-     * the default. `Required` is what makes this a guard rather than a sample:
-     * a new field breaks the build here first.
-     */
-    const full: Required<StromData> = {
+/**
+ * Every field of StromData with a value distinguishable from the default —
+ * shared by the migrate, merge and split guards below. `Required` is what
+ * makes this a guard: a new StromData field breaks the build here first.
+ */
+function fullTree(): Required<StromData> {
+    return {
         version: STROM_DATA_VERSION,
         persons: { [ALICE]: person(ALICE, 'Alice'), [BOB]: person(BOB, 'Bob') },
         partnerships: { [UNION]: partnership() },
@@ -64,6 +75,10 @@ describe('migrateData keeps every StromData field', () => {
         lastFocusDepthUp: 3,
         lastFocusDepthDown: 4,
     };
+}
+
+describe('migrateData keeps every StromData field', () => {
+    const full = fullTree();
 
     /**
      * `version` is deliberately not carried: the app re-stamps it on save, so a
@@ -214,5 +229,83 @@ describe('updatePerson applies every field it owns', () => {
         // The two whitelists in one go: edited, then carried through a load.
         const reloaded = migrateData(structuredClone(DataManager.getData()));
         expect(reloaded.persons[created.id]).toEqual(DataManager.getPerson(created.id));
+    });
+});
+
+
+// ==================== merge and split ====================
+
+/**
+ * Merge and split build their result by hand instead of passing data
+ * wholesale, so they are exactly where a new field silently vanishes —
+ * places and surnameVariants already did (found in the 1.15 review).
+ * Focus fields are the exception: merge clears them on purpose (a merged
+ * tree starts fresh), split has no meaningful focus to inherit.
+ */
+const FOCUS_FIELDS: (keyof StromData)[] =
+    ['defaultPersonId', 'lastFocusPersonId', 'lastFocusDepthUp', 'lastFocusDepthDown'];
+
+describe('merge keeps every tree-level field', () => {
+    beforeEach(() => {
+        vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never);
+    });
+
+    it('the existing tree loses nothing but focus', async () => {
+        const full = fullTree();
+        const state: MergeState = {
+            existingData: full,
+            incomingData: { persons: {}, partnerships: {} },
+            matches: [], unmatchedExisting: [], unmatchedIncoming: [],
+            decisions: new Map(), conflictResolutions: new Map(), phase: 'executing',
+        };
+        const result = await executeMerge(state);
+        expect(result.success).toBe(true);
+        const carried = (Object.keys(full) as (keyof StromData)[])
+            .filter(k => !FOCUS_FIELDS.includes(k));
+        for (const key of carried) {
+            expect({ [key]: result.mergedData[key] }).toEqual({ [key]: full[key] });
+        }
+    });
+
+    it('the incoming tree’s registries come along too', async () => {
+        const incoming = fullTree();
+        incoming.places = { 'beroun': { lat: 49.96, lon: 14.07, label: 'Beroun' } };
+        incoming.surnameVariants = [['Svoboda', 'Swoboda']];
+        const state: MergeState = {
+            existingData: fullTree(),
+            incomingData: incoming,
+            matches: [], unmatchedExisting: [], unmatchedIncoming: [],
+            decisions: new Map(), conflictResolutions: new Map(), phase: 'executing',
+        };
+        const result = await executeMerge(state);
+        expect(result.success).toBe(true);
+        expect(result.mergedData.places?.['beroun']).toBeDefined();
+        expect(result.mergedData.places?.['kolin']).toBeDefined();
+        expect(result.mergedData.surnameVariants).toContainEqual(['Svoboda', 'Swoboda']);
+        expect(result.mergedData.surnameVariants).toContainEqual(['Víšek', 'Vyšek', 'Wischek']);
+    });
+});
+
+describe('split (extractSubtree) keeps every tree-level field', () => {
+    it('carries registries and sources for the kept half', () => {
+        const full = fullTree();
+        const out = extractSubtree(full, new Set([ALICE, BOB]));
+        // Everything except focus + version (re-stamped on save) must survive.
+        const carried = (Object.keys(full) as (keyof StromData)[])
+            .filter(k => !FOCUS_FIELDS.includes(k) && k !== 'version');
+        for (const key of carried) {
+            expect({ [key]: out[key] }).toBeDefined();
+        }
+        expect(out.places?.['kolin']).toEqual(full.places['kolin']);
+        expect(out.surnameVariants).toEqual(full.surnameVariants);
+        expect(out.sources?.['s1']).toBeDefined();
+    });
+
+    it('prunes coordinates of places the kept half never uses', () => {
+        const full = fullTree();
+        full.places['praha'] = { lat: 50.08, lon: 14.43, label: 'Praha' };
+        const out = extractSubtree(full, new Set([ALICE, BOB]));
+        expect(out.places?.['kolin']).toBeDefined();
+        expect(out.places?.['praha']).toBeUndefined();
     });
 });

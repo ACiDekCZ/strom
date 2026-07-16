@@ -11,6 +11,7 @@
  */
 
 import { StromData, Person, PersonId, Partnership, PartnershipId } from './types.js';
+import { placeKey } from './places.js';
 
 /**
  * Build a deep-copied StromData containing only `seedIds` (plus glue partners),
@@ -41,6 +42,19 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
         if (copy.parentRelTypes) {
             for (const key of Object.keys(copy.parentRelTypes)) {
                 if (!kept.has(key as PersonId)) delete copy.parentRelTypes[key as PersonId];
+            }
+        }
+        // A linked godparent/witness who stays in the other half keeps their
+        // written name instead of a dangling id — the record loses the link,
+        // not the fact.
+        for (const ev of copy.events ?? []) {
+            for (const part of ev.participants ?? []) {
+                if (part.personId && !kept.has(part.personId)) {
+                    const gone = data.persons[part.personId];
+                    const written = `${gone?.firstName ?? ''} ${gone?.lastName ?? ''}`.trim();
+                    if (!part.name && written && written !== '?') part.name = written;
+                    delete part.personId;
+                }
             }
         }
         copy.partnerships = [];   // rebuilt below from the kept partnerships
@@ -79,5 +93,37 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
         }
         if (Object.keys(sources).length > 0) result.sources = sources;
     }
+
+    // 5. Tree-level registries travel with the new tree. Coordinates are pruned
+    //    to places the kept persons still use; surname groups are cheap facts
+    //    about names and come along whole — an unused group is not wrong.
+    if (data.places) {
+        const usedPlaces = collectSubtreePlaceKeys(result);
+        const places: NonNullable<StromData['places']> = {};
+        for (const [key, geo] of Object.entries(data.places)) {
+            if (usedPlaces.has(key)) places[key] = structuredClone(geo);
+        }
+        if (Object.keys(places).length > 0) result.places = places;
+    }
+    if (data.surnameVariants && data.surnameVariants.length > 0) {
+        result.surnameVariants = structuredClone(data.surnameVariants);
+    }
     return result;
+}
+
+/** Every placeKey the extracted persons/partnerships still refer to. */
+function collectSubtreePlaceKeys(data: StromData): Set<string> {
+    const keys = new Set<string>();
+    const add = (place?: string): void => {
+        if (place?.trim()) keys.add(placeKey(place));
+    };
+    for (const p of Object.values(data.persons)) {
+        add(p.birthPlace);
+        add(p.deathPlace);
+        p.events?.forEach(ev => add(ev.place));
+    }
+    for (const u of Object.values(data.partnerships)) {
+        add(u.startPlace);
+    }
+    return keys;
 }
