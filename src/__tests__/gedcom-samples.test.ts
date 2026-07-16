@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseGedcom, convertToStrom, parseName } from '../ged-parser.js';
+import { parseGedcom, convertToStrom, parseName, decodeGedcomFile, decodeAnsel } from '../ged-parser.js';
 import { StromData, Person } from '../types.js';
 
 const importGed = (ged: string): StromData => convertToStrom(parseGedcom(ged)).data;
@@ -405,5 +405,225 @@ describe('pointers to nobody (gedcom.io voidptr)', () => {
         expect(unions(data)).toHaveLength(1);
         // The PEDI hanging off the void pointer must not reach a real family.
         expect(named(data, 'John').parentRelTypes ?? {}).toEqual({});
+    });
+
+    it('keeps the real mother and children when the HUSB is @VOID@', () => {
+        // A @VOID@ spouse is a missing spouse, not a reason to drop the family.
+        // Testing the raw HUSB/WIFE strings skipped both family passes here —
+        // the real mother lost her children without a word of warning.
+        const result = convertToStrom(parseGedcom(`0 HEAD
+1 GEDC
+2 VERS 7.0
+0 @I1@ INDI
+1 NAME Jane /Doe/
+1 SEX F
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Junior /Doe/
+1 SEX M
+1 FAMC @F1@
+0 @F1@ FAM
+1 HUSB @VOID@
+1 WIFE @I1@
+1 CHIL @I2@
+0 TRLR`));
+        const data = result.data;
+        const jane = named(data, 'Jane');
+        const junior = named(data, 'Junior');
+        // Mother-child link exists; the void father became a placeholder card.
+        expect(junior.parentIds).toContain(jane.id);
+        expect(jane.childIds).toContain(junior.id);
+        expect(unions(data)).toHaveLength(1);
+        const placeholders = people(data).filter(p => p.isPlaceholder);
+        expect(placeholders).toHaveLength(1);
+        expect(placeholders[0].gender).toBe('male');
+        // The swapped-in placeholder shows up in the import summary.
+        expect(result.stats.placeholderPersons).toBe(1);
+    });
+
+    it('treats a WIFE pointing at a record the file never defines the same way', () => {
+        const data = importGed(`0 HEAD
+1 GEDC
+2 VERS 5.5.5
+0 @I1@ INDI
+1 NAME John /Smith/
+1 SEX M
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Junior /Smith/
+1 SEX M
+1 FAMC @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @NOSUCH@
+1 CHIL @I2@
+0 TRLR`);
+        expect(named(data, 'Junior').parentIds).toContain(named(data, 'John').id);
+        expect(unions(data)).toHaveLength(1);
+        expect(people(data).filter(p => p.isPlaceholder)).toHaveLength(1);
+    });
+});
+
+describe('line endings', () => {
+    it('reads a file separated by bare CR (classic Mac exports)', () => {
+        // /\r?\n/ saw such a file as ONE line — a silent empty import.
+        const ged = ['0 HEAD', '1 GEDC', '2 VERS 5.5.5',
+            '0 @I1@ INDI', '1 NAME John /Smith/', '0 TRLR'].join('\r');
+        const data = importGed(ged);
+        expect(people(data)).toHaveLength(1);
+        expect(named(data, 'John').lastName).toBe('Smith');
+    });
+});
+
+describe('person-level associations (level-1 ASSO, GEDCOM 5.5.1)', () => {
+    it('attaches a godparent association to the baptism event', () => {
+        const data = importGed(`0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME Child /Smith/
+1 BAPM
+2 DATE 3 JUN 1900
+1 ASSO @I2@
+2 RELA Godfather
+0 @I2@ INDI
+1 NAME Karel /Novák/
+1 SEX M
+0 TRLR`);
+        const child = named(data, 'Child');
+        const karel = named(data, 'Karel');
+        const baptism = child.events?.find(e => e.type === 'baptism');
+        expect(baptism?.participants).toHaveLength(1);
+        expect(baptism?.participants?.[0].role).toBe('godparent');
+        expect(baptism?.participants?.[0].personId).toBe(karel.id);
+    });
+
+    it('keeps a non-event association as a note on the person', () => {
+        const data = importGed(`0 HEAD
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME John /Smith/
+1 ASSO @I2@
+2 RELA Neighbor
+0 @I2@ INDI
+1 NAME Karel /Novák/
+0 TRLR`);
+        expect(named(data, 'John').notes).toContain('Association: Karel Novák (Neighbor)');
+    });
+
+    it('drops an association pointing at nobody', () => {
+        const data = importGed(`0 HEAD
+1 GEDC
+2 VERS 7.0
+0 @I1@ INDI
+1 NAME John /Smith/
+1 ASSO @VOID@
+2 RELA Godfather
+0 TRLR`);
+        expect(named(data, 'John').notes).toBeUndefined();
+        expect(named(data, 'John').events).toBeUndefined();
+    });
+});
+
+describe('remarriage where the file has the last word', () => {
+    it('believes an undated final MARR over an earlier dated DIV', () => {
+        // Comparing only the last DATED events called MARR(1911)/DIV(1912)/
+        // MARR(undated) divorced — but the file ends on a new marriage.
+        const data = importGed(`0 HEAD
+1 GEDC
+2 VERS 7.0
+0 @I1@ INDI
+1 NAME John Q /Public/
+1 SEX M
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Jane /Doe/
+1 SEX F
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 1 APR 1911
+1 DIV
+2 DATE 2 MAY 1912
+1 MARR
+0 TRLR`);
+        expect(unions(data)[0].status).toBe('married');
+    });
+
+    it('keeps the FIRST marriage place with the first marriage date', () => {
+        // startDate always came from the first wedding while startPlace took
+        // the LAST MARR/PLAC — a date in one town, a place in another.
+        const data = importGed(`0 HEAD
+1 GEDC
+2 VERS 7.0
+0 @I1@ INDI
+1 NAME John Q /Public/
+1 SEX M
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Jane /Doe/
+1 SEX F
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 1 APR 1911
+2 PLAC Praha
+1 DIV
+2 DATE 2 MAY 1912
+1 MARR
+2 DATE 4 JUL 1914
+2 PLAC Brno
+0 TRLR`);
+        const union = unions(data)[0];
+        expect(union.startDate).toBe('1911-04-01');
+        expect(union.startPlace).toBe('Praha');
+    });
+});
+
+describe('file encodings (HEAD > CHAR)', () => {
+    const toBuffer = (bytes: number[]): ArrayBuffer => new Uint8Array(bytes).buffer;
+    const ascii = (s: string): number[] => [...s].map(c => c.charCodeAt(0));
+
+    it('decodes ANSEL combining diacritics to NFC (č, ř, á)', () => {
+        // ANSEL puts the diacritic BEFORE the base letter.
+        const bytes = new Uint8Array([0xE9, 0x63, 0xE9, 0x72, 0xE2, 0x61]);
+        expect(decodeAnsel(bytes)).toBe('čřá'); // č ř á
+    });
+
+    it('decodes ANSEL spacing characters', () => {
+        expect(decodeAnsel(new Uint8Array([0xA5, 0xB2, 0xCF]))).toBe('Æøß');
+    });
+
+    it('imports an ANSEL file with Czech names intact', () => {
+        // "1 NAME Ji<caron>r<acute>i /Dvo<caron>r<acute>ak/" -> Jiří Dvořák
+        const bytes = [
+            ...ascii('0 HEAD\n1 CHAR ANSEL\n0 @I1@ INDI\n1 NAME Ji'),
+            0xE9, 0x72, 0xE2, 0x69, // ří
+            ...ascii(' /Dvo'),
+            0xE9, 0x72, 0xE2, 0x61, // řá
+            ...ascii('k/\n0 TRLR\n'),
+        ];
+        const data = importGed(decodeGedcomFile(toBuffer(bytes)));
+        const person = people(data)[0];
+        expect(person.firstName).toBe('Jiří');
+        expect(person.lastName).toBe('Dvořák');
+    });
+
+    it('honours a UTF-8 BOM even when CHAR says ANSEL', () => {
+        const utf8 = new TextEncoder().encode('0 HEAD\n1 CHAR ANSEL\n0 @I1@ INDI\n1 NAME Jiří /Dvořák/\n0 TRLR\n');
+        const bytes = new Uint8Array([0xEF, 0xBB, 0xBF, ...utf8]);
+        const data = importGed(decodeGedcomFile(bytes.buffer));
+        expect(people(data)[0].firstName).toBe('Jiří');
+    });
+
+    it('falls back to UTF-8 when the header declares nothing', () => {
+        const utf8 = new TextEncoder().encode('0 HEAD\n0 @I1@ INDI\n1 NAME Žofie /Křížová/\n0 TRLR\n');
+        const data = importGed(decodeGedcomFile(utf8.buffer as ArrayBuffer));
+        expect(people(data)[0].firstName).toBe('Žofie');
     });
 });

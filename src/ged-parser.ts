@@ -134,7 +134,8 @@ interface GedcomIndividual {
     birthSeen: boolean;
     deathSeen: boolean;
     fams: string[];  // Families as spouse
-    famc: string | null;  // Family as child (the first one; see famcLinks)
+    /** Level-1 ASSO on the person: associations outside any event. */
+    assos: RawParticipant[];
     /**
      * Every FAMC with its own PEDI. A person may be a child of more than one
      * family — born to one and adopted into another — and the PEDI belongs to
@@ -243,6 +244,12 @@ const MONTHS: Record<string, string> = {
 export function parseGedcomDate(dateStr: string): string {
     if (!dateStr) return '';
 
+    // Calendar escape (@#DJULIAN@, @#DGREGORIAN@ …): the calendar itself has
+    // no representation here, but the date after it is an ordinary date —
+    // strip the escape and keep the date instead of parsing the whole line
+    // to '' (which silently lost every pre-1752 Julian date).
+    dateStr = dateStr.trim().replace(/^@#D[^@]*@\s*/i, '');
+
     // Ranges/periods: BET X AND Y, FROM X TO Y -> 'x..y' (both bounds kept —
     // previously these were mangled and the information silently lost).
     // One-sided periods degrade to qualifiers: FROM X -> '>x', TO Y -> '<y'.
@@ -262,7 +269,7 @@ export function parseGedcomDate(dateStr: string): string {
 
     // Qualifier prefixes map to flex-date qualifiers instead of being dropped
     let qualifier = '';
-    const cleaned = dateStr.trim().replace(
+    let cleaned = dateStr.trim().replace(
         /^(ABT|ABOUT|EST|CAL|INT|BEF|BEFORE|AFT|AFTER)\s+/i,
         (m) => {
             const q = m.trim().toUpperCase();
@@ -273,7 +280,15 @@ export function parseGedcomDate(dateStr: string): string {
         }
     );
 
-    const parts = cleaned.split(/\s+/);
+    // The calendar escape sits AFTER any qualifier ("ABT @#DJULIAN@ 1699"),
+    // so strip it here too — the top-of-function strip only sees a leading one.
+    cleaned = cleaned.replace(/^@#D[^@]*@\s*/i, '');
+
+    // Dual year "1699/00" (old-style/new-style before the 1752 calendar shift):
+    // both notations name the same moment. The flex-date model has no dual-year
+    // form, so the year AS WRITTEN in the record (the first one) is kept — the
+    // least lossy single value, and the one a reader finds in the source.
+    const parts = cleaned.split(/\s+/).map(p => p.replace(/^(\d{3,4})\/\d{1,2}$/, '$1'));
 
     if (parts.length === 3) {
         // "3 JUN 1900" -> "1900-06-03"
@@ -334,13 +349,119 @@ function generateId(prefix: string): string {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// ==================== ENCODING ====================
+
+/**
+ * ANSEL (ANSI Z39.47 / MARC-8 extended Latin) -> Unicode, spacing characters.
+ * Includes the GEDCOM addition 0xCF (ß).
+ */
+const ANSEL_SPACING: Record<number, string> = {
+    0xA1: 'Ł', 0xA2: 'Ø', 0xA3: 'Đ', 0xA4: 'Þ', 0xA5: 'Æ',
+    0xA6: 'Œ', 0xA7: 'ʹ', 0xA8: '·', 0xA9: '♭', 0xAA: '®',
+    0xAB: '±', 0xAC: 'Ơ', 0xAD: 'Ư', 0xAE: 'ʼ',
+    0xB0: 'ʻ', 0xB1: 'ł', 0xB2: 'ø', 0xB3: 'đ', 0xB4: 'þ',
+    0xB5: 'æ', 0xB6: 'œ', 0xB7: 'ʺ', 0xB8: 'ı', 0xB9: '£',
+    0xBA: 'ð', 0xBC: 'ơ', 0xBD: 'ư',
+    0xC0: '°', 0xC1: 'ℓ', 0xC2: '℗', 0xC3: '©', 0xC4: '♯',
+    0xC5: '¿', 0xC6: '¡', 0xCF: 'ß',
+};
+
+/**
+ * ANSEL combining diacritics -> Unicode combining characters. In ANSEL the
+ * diacritic PRECEDES its base letter; Unicode puts it after, so the decoder
+ * holds pending marks until the base letter arrives.
+ */
+const ANSEL_COMBINING: Record<number, string> = {
+    0xE0: '\u0309', // hook above
+    0xE1: '\u0300', // grave
+    0xE2: '\u0301', // acute
+    0xE3: '\u0302', // circumflex
+    0xE4: '\u0303', // tilde
+    0xE5: '\u0304', // macron
+    0xE6: '\u0306', // breve
+    0xE7: '\u0307', // dot above
+    0xE8: '\u0308', // diaeresis
+    0xE9: '\u030C', // caron (háček)
+    0xEA: '\u030A', // ring above
+    0xEB: '\uFE20', // ligature, left half
+    0xEC: '\uFE21', // ligature, right half
+    0xED: '\u0315', // comma above right
+    0xEE: '\u030B', // double acute
+    0xEF: '\u0310', // candrabindu
+    0xF0: '\u0327', // cedilla
+    0xF1: '\u0328', // ogonek
+    0xF2: '\u0323', // dot below
+    0xF3: '\u0324', // diaeresis below
+    0xF4: '\u0325', // ring below
+    0xF5: '\u0333', // double low line
+    0xF6: '\u0332', // low line
+    0xF7: '\u0326', // comma below
+    0xF8: '\u031C', // left half ring below
+    0xF9: '\u032E', // breve below
+    0xFA: '\uFE22', // double tilde, left half
+    0xFB: '\uFE23', // double tilde, right half
+    0xFE: '\u0313', // comma above
+};
+
+/** Decode ANSEL bytes to an NFC-normalized string ("ANSEL č" -> U+010D). */
+export function decodeAnsel(bytes: Uint8Array): string {
+    let out = '';
+    let pending = ''; // combining marks waiting for their base letter
+    for (const b of bytes) {
+        if (b < 0x80) {
+            out += String.fromCharCode(b) + pending;
+            pending = '';
+        } else if (ANSEL_COMBINING[b]) {
+            pending += ANSEL_COMBINING[b];
+        } else {
+            out += (ANSEL_SPACING[b] ?? '�') + pending;
+            pending = '';
+        }
+    }
+    // A mark with no base letter (truncated file) is kept; NFC ignores it.
+    out += pending;
+    return out.normalize('NFC');
+}
+
+/**
+ * Decode a raw GEDCOM file to text, honouring what the file says about itself:
+ * a BOM wins outright, otherwise the HEAD > CHAR declaration decides (its line
+ * is ASCII-compatible in every charset GEDCOM allows, so peeking at the header
+ * bytes is safe). ANSEL gets the real decoder above — reading it as UTF-8
+ * silently mangled every diacritic. Unknown or absent CHAR falls back to UTF-8.
+ */
+export function decodeGedcomFile(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+        return new TextDecoder('utf-8').decode(bytes);
+    }
+    if (bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(bytes);
+    if (bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder('utf-16be').decode(bytes);
+
+    // Peek HEAD for "1 CHAR <value>". NULs are stripped so a BOM-less UTF-16
+    // header still matches; latin1 maps every byte so decoding cannot throw.
+    const head = new TextDecoder('latin1').decode(bytes.subarray(0, 4096)).replace(/\0/g, '');
+    const charMatch = /^\s*1\s+CHAR\s+(.+?)\s*$/m.exec(head);
+    const charset = (charMatch?.[1] ?? '').toUpperCase();
+
+    if (charset === 'ANSEL') return decodeAnsel(bytes);
+    if (charset === 'UNICODE' || charset === 'UTF-16') {
+        // No BOM to tell the byte order: the first character of a GEDCOM is
+        // ASCII ('0'), so a leading zero byte means big-endian.
+        return new TextDecoder(bytes[0] === 0 ? 'utf-16be' : 'utf-16le').decode(bytes);
+    }
+    if (charset === 'ANSI') return new TextDecoder('windows-1252').decode(bytes);
+    // ASCII, UTF-8, unknown, or no header at all.
+    return new TextDecoder('utf-8').decode(bytes);
+}
+
 // ==================== MAIN PARSER ====================
 
 /**
  * Parse GEDCOM file content into structured data
  */
 /** Level-1 INDI tags the parser understands (everything else is counted as dropped). */
-const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT', 'OBJE', 'REFN',
+const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT', 'OBJE', 'REFN', 'ASSO',
     ...Object.keys(EVENT_TAG_TO_TYPE)]);
 /** Level-1 FAM tags the parser understands. */
 const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', 'SOUR']);
@@ -396,13 +517,17 @@ function resolveUnionStatus(fam: GedcomFamily): {
     if (!divorcedAtAll) return { status: 'married', startDate, endDate: '', remarriage: null };
 
     const lastIsMarriage = ((): boolean => {
+        const lastEvent = fam.unionEvents[fam.unionEvents.length - 1];
+        // The file's final word is an undated event: dates cannot place it, so
+        // file order decides. Comparing only the last DATED events called
+        // MARR(1911)/DIV(1912)/MARR(undated) divorced — but the last thing the
+        // file says about the couple is that they married.
+        if (lastEvent && !lastEvent.date) return lastEvent.type === 'marriage';
         const lastM = [...marriages].reverse().find(e => e.date);
         const lastD = [...divorces].reverse().find(e => e.date);
         // Both dated: compare them. Otherwise trust the order in the file.
         if (lastM && lastD) return dateSortKey(lastM.date) > dateSortKey(lastD.date);
-        const lastEvent = fam.unionEvents[fam.unionEvents.length - 1];
-        return marriages.length > divorces.length
-            || (!!lastEvent && lastEvent.type === 'marriage' && marriages.length > 1);
+        return !!lastEvent && lastEvent.type === 'marriage';
     })();
 
     if (lastIsMarriage) {
@@ -441,7 +566,9 @@ export function parseGedcom(content: string): ParsedGedcom {
         content = content.slice(1);
     }
 
-    const lines = content.split(/\r?\n/);
+    // \r\n, \n AND bare \r: classic-Mac exports separate lines with CR only,
+    // and /\r?\n/ read such a file as one long line — a silent empty import.
+    const lines = content.split(/\r\n|\r|\n/);
     const individuals = new Map<string, GedcomIndividual>();
     const families = new Map<string, GedcomFamily>();
     const sources = new Map<string, RawSource>();
@@ -516,7 +643,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     birthSeen: false,
                     deathSeen: false,
                     fams: [],
-                    famc: null,
+                    assos: [],
                     famcLinks: []
                 };
                 currentType = 'INDI';
@@ -626,8 +753,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                             indi.fams.push(value);
                             break;
                         case 'FAMC':
-                            if (!indi.famc) indi.famc = value;
                             indi.famcLinks.push({ famId: value, pedi: '' });
+                            break;
+                        case 'ASSO':
+                            // Level-1 ASSO: an association of the person as a
+                            // whole (GEDCOM 5.5.1), not tied to any event.
+                            if (value) indi.assos.push({ ref: value });
                             break;
                         case 'NOTE':
                             indi.notes = value;
@@ -740,6 +871,13 @@ export function parseGedcom(content: string): ParsedGedcom {
                         // Multi-line notes: CONT = new line, CONC = continuation.
                         if (tag === 'CONT') indi.notes += '\n' + value;
                         else if (tag === 'CONC') indi.notes += value;
+                    } else if (currentSubTag === 'ASSO') {
+                        // Role/detail of the person-level association just read.
+                        const last = indi.assos[indi.assos.length - 1];
+                        if (last) {
+                            if (tag === 'RELA') last.rela = value;
+                            else if (tag === 'NOTE') last.note = value;
+                        }
                     } else if (currentSubTag === 'OBJE' && currentMedia) {
                         currentMediaSubTag = tag;
                         if (tag === 'TITL') currentMedia.title = value;
@@ -786,7 +924,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                             fam.marriageDate = parseGedcomDate(value);
                             lastUnionEvent(fam, 'marriage', fam.marriageDate);
                         }
-                        if (tag === 'PLAC') fam.marriagePlace = value;
+                        // First wins: the union's startDate comes from the FIRST
+                        // marriage, so its place must not drift to a later one.
+                        if (tag === 'PLAC' && !fam.marriagePlace) fam.marriagePlace = value;
                     } else if (currentSubTag === 'DIV') {
                         if (tag === 'DATE') {
                             fam.divorceDate = parseGedcomDate(value);
@@ -948,8 +1088,8 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 if (evRefs.length > 0) out.sourceIds = evRefs;
 
                 // Godparents / witnesses. An ASSO pointing at someone the file
-                // never defines keeps its role but loses the link — better a
-                // nameless role than a dangling reference.
+                // never defines (@VOID@ or a missing record) is dropped: with
+                // no link and no name, a bare role says nothing worth keeping.
                 const parts = (ev.participants ?? []).map(raw => {
                     const linked = raw.ref ? personIdMap.get(raw.ref) : undefined;
                     return {
@@ -964,6 +1104,34 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 return out;
             });
         }
+        // Person-level associations (level-1 ASSO). Participants live on events
+        // in this model, so a godparent joins the baptism when the person has
+        // one; every other association survives as a note on the person rather
+        // than being silently dropped. Unresolvable refs are dropped for the
+        // same reason as event participants above.
+        for (const asso of indi.assos) {
+            const linked = asso.ref ? personIdMap.get(asso.ref) : undefined;
+            if (!linked) continue;
+            const role = relaToRole(asso.rela);
+            const baptism = role === 'godparent'
+                ? person.events?.find(e => e.type === 'baptism') : undefined;
+            if (baptism) {
+                (baptism.participants ??= []).push({
+                    id: generateParticipantId(),
+                    role,
+                    personId: linked,
+                    ...(asso.note ? { note: asso.note } : {}),
+                });
+            } else {
+                const other = individuals.get(asso.ref!);
+                const name = `${other?.firstName ?? ''} ${other?.lastName ?? ''}`.trim() || '?';
+                const label = asso.rela?.trim() || role;
+                const line = `Association: ${name} (${label})`
+                    + (asso.note ? ` — ${asso.note}` : '');
+                person.notes = person.notes ? `${person.notes}\n${line}` : line;
+            }
+        }
+
         const personRefs = mapRefs(indi.sourceRefs);
         if (personRefs.length > 0) person.sourceIds = personRefs;
 
@@ -1051,12 +1219,15 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     for (const [gedFamId, fam] of families) {
         const partnershipId = partnershipIdMap.get(gedFamId)!;
 
-        // Skip families without both spouses
-        if (!fam.husb || !fam.wife) continue;
+        // Resolve the spouse pointers FIRST: a HUSB/WIFE of @VOID@ (or any
+        // pointer to a record the file never defines) is the same as no
+        // HUSB/WIFE line at all. Testing the raw strings sent such families
+        // here, where this continue dropped the real parent and every child;
+        // now they fall through to the single-parent handling below.
+        const person1Id = fam.husb ? personIdMap.get(fam.husb) : undefined;
+        const person2Id = fam.wife ? personIdMap.get(fam.wife) : undefined;
 
-        const person1Id = personIdMap.get(fam.husb);
-        const person2Id = personIdMap.get(fam.wife);
-
+        // Families without both resolvable spouses are handled below.
         if (!person1Id || !person2Id) continue;
 
         // Create partnership
@@ -1139,8 +1310,12 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     // Handle single-parent families (only HUSB or only WIFE)
     // Create placeholder for the missing parent + partnership so layout engine can render children
     for (const [gedFamId, fam] of families) {
-        // Skip if already processed (both spouses)
-        if (fam.husb && fam.wife) continue;
+        // Same pointer resolution as above: a @VOID@/unresolvable spouse is a
+        // missing spouse. Skip only families where BOTH resolved (processed
+        // above); one resolved parent belongs here.
+        const husbId = fam.husb ? personIdMap.get(fam.husb) : undefined;
+        const wifeId = fam.wife ? personIdMap.get(fam.wife) : undefined;
+        if (husbId && wifeId) continue;
         // Only children who actually hang from this family count. A family whose
         // every child was born in another one has nobody to render, so inventing
         // a spouse for it would put a "?" card in the tree standing for a person
@@ -1148,11 +1323,12 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         const ownChildren = childrenOf(gedFamId, fam);
         if (ownChildren.length === 0) continue;
 
-        const parentGedId = fam.husb || fam.wife;
-        if (!parentGedId) continue;
-
-        const parentId = personIdMap.get(parentGedId);
+        const parentId = husbId ?? wifeId;
         if (!parentId || !persons[parentId]) continue;
+
+        // The dropped pointer's stand-in IS the placeholder created below —
+        // count it so the import summary owns up to the swap.
+        if ((fam.husb && !husbId) || (fam.wife && !wifeId)) placeholderPersons++;
 
         // Create placeholder for the missing parent (opposite gender)
         const placeholderId = toPersonId(generateId('p'));
@@ -1245,12 +1421,25 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
      * than vanishing — an adoption is exactly the kind of thing a genealogist
      * would not forgive us for losing.
      */
+    // One pass over the families builds child -> families; walking ALL families
+    // for EVERY child was O(children × families) and dominated large imports.
+    const familiesOfChild = new Map<string, string[]>();
+    for (const [gedFamId, fam] of families) {
+        for (const childGedId of fam.children) {
+            const list = familiesOfChild.get(childGedId);
+            // A duplicated CHIL line inside one family counts once, as before.
+            if (list) { if (list[list.length - 1] !== gedFamId) list.push(gedFamId); }
+            else familiesOfChild.set(childGedId, [gedFamId]);
+        }
+    }
+
     for (const [childGedId, keptFamId] of childFamily) {
         const childId = personIdMap.get(childGedId);
         if (!childId || !persons[childId]) continue;
 
-        for (const [gedFamId, fam] of families) {
-            if (gedFamId === keptFamId || !fam.children.includes(childGedId)) continue;
+        for (const gedFamId of familiesOfChild.get(childGedId) ?? []) {
+            if (gedFamId === keptFamId) continue;
+            const fam = families.get(gedFamId)!;
 
             const parentNames = [fam.husb, fam.wife]
                 .map(p => (p ? personIdMap.get(p) : undefined))

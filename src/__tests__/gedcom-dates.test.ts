@@ -25,4 +25,23 @@ describe('parseGedcomDate (flex dates)', () => {
         expect(parseGedcomDate('')).toBe('');
         expect(parseGedcomDate('UNKNOWN')).toBe('');
     });
+
+    it('strips calendar escapes instead of losing the date', () => {
+        // "@#DJULIAN@ 3 JUN 1699" parsed to '' — every pre-1752 Julian date
+        // silently vanished.
+        expect(parseGedcomDate('@#DJULIAN@ 3 JUN 1699')).toBe('1699-06-03');
+        expect(parseGedcomDate('@#DGREGORIAN@ 1900')).toBe('1900');
+        expect(parseGedcomDate('ABT @#DJULIAN@ 1699')).toBe('~1699');
+        expect(parseGedcomDate('BET @#DJULIAN@ 1690 AND @#DJULIAN@ 1699')).toBe('1690..1699');
+    });
+
+    it('reads dual years as the year written in the record', () => {
+        // "1699/00" is the same moment under old-style/new-style year counting;
+        // the flex-date model has no dual form, so the first (as-written) year
+        // is kept rather than parsing to ''.
+        expect(parseGedcomDate('1699/00')).toBe('1699');
+        expect(parseGedcomDate('11 FEB 1699/00')).toBe('1699-02-11');
+        expect(parseGedcomDate('FEB 1699/00')).toBe('1699-02');
+        expect(parseGedcomDate('@#DJULIAN@ 11 FEB 1699/00')).toBe('1699-02-11');
+    });
 });

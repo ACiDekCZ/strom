@@ -28,7 +28,7 @@ import { findComponents } from '../components.js';
 import { compressPhoto, dataUrlByteSize } from '../photo.js';
 import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES } from '../attachments.js';
 import { getDemoTree, getDemoFocus } from '../demo-trees.js';
-import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
+import { parseGedcom, convertToStrom, decodeGedcomFile, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
     ValidationResult,
@@ -284,7 +284,9 @@ export const importExportMethods = uiModule({
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                const content = e.target?.result as string;
+                // Raw bytes, not readAsText: the file's own HEAD > CHAR decides
+                // the encoding (ANSEL files were silently mangled as UTF-8).
+                const content = decodeGedcomFile(e.target?.result as ArrayBuffer);
                 const gedcom = parseGedcom(content);
                 this.gedcomResult = convertToStrom(gedcom);
                 this.importFromTreeManager = fromManager;
@@ -295,7 +297,7 @@ export const importExportMethods = uiModule({
                 console.error('GEDCOM parse error:', error);
             }
         };
-        reader.readAsText(file);
+        reader.readAsArrayBuffer(file);
 
         // Reset input so same file can be re-imported
         input.value = '';
