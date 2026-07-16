@@ -126,6 +126,9 @@ const stringsEN = {
     },
 
     split: {
+        postImportTitle: 'Several families in one file',
+        postImport: (count: number) =>
+            `The file you imported holds ${count} families that nothing connects — no parent, child or marriage leads from one to another. Each could be a tree of its own.`,
         unrelated: (count: number) => `Holds ${count} families that nothing connects`,
         unrelatedHint: 'Split them in Manage trees → ⋯ → Split by families.',
         menu: 'Split by families',
@@ -1151,6 +1154,7 @@ const stringsEN = {
         valPartnerAgeGap: 'Extreme age difference between partners',
         valPossibleDuplicate: 'Possible duplicate person (same name and birth year)',
         valPlaceSpelling: 'One place written several ways',
+        valRecurringGodparent: 'A godparent who keeps turning up — often a relative',
         valFix: 'Fix',
         valFixAll: 'Fix all',
         valFixed: (count: number) => `Fixed ${count} issue${count !== 1 ? 's' : ''}`,
@@ -1605,6 +1609,9 @@ const stringsCZ: StringsType = {
     },
 
     split: {
+        postImportTitle: 'Víc rodin v jednom souboru',
+        postImport: (count: number) =>
+            `Naimportovaný soubor obsahuje ${count} rodiny, které nic nespojuje — nevede mezi nimi žádný rodič, dítě ani sňatek. Z každé může být samostatný strom.`,
         unrelated: (count: number) => `Obsahuje ${count} rodiny, které nic nespojuje`,
         unrelatedHint: 'Rozdělit je můžete ve Správě stromů → ⋯ → Rozdělit podle rodin.',
         menu: 'Rozdělit podle rodin',
@@ -2631,6 +2638,7 @@ const stringsCZ: StringsType = {
         valPartnerAgeGap: 'Extrémní věkový rozdíl partnerů',
         valPossibleDuplicate: 'Možná duplicitní osoba (stejné jméno a rok narození)',
         valPlaceSpelling: 'Jedno místo zapsané víckrát jinak',
+        valRecurringGodparent: 'Kmotr, který se opakuje — bývá to příbuzný',
         valFix: 'Opravit',
         valFixAll: 'Opravit vše',
         valFixed: (count: number) => `Opraveno ${count} ${count === 1 ? 'problém' : count < 5 ? 'problémy' : 'problémů'}`,

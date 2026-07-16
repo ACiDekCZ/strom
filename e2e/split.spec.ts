@@ -79,3 +79,65 @@ test('the split leaves the original alone, so a wrong pick costs a delete', asyn
     expect(await page.evaluate(() => window.Strom.DataManager.getAllPersons().length)).toBe(before);
     await expect(card(page, 'Jan')).toBeVisible();
 });
+
+test('importing a file with several families offers to split it', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1900' });
+
+    // A file holding two families that nothing connects — somebody's whole
+    // account exported at once, which is how they usually arrive.
+    const file = await page.evaluate(() => {
+        const mk = (id: string, first: string, last: string) => ({
+            id, firstName: first, lastName: last, gender: 'male',
+            isPlaceholder: false, partnerships: [], parentIds: [], childIds: [],
+        });
+        return JSON.stringify({
+            version: 5,
+            persons: {
+                a: { ...mk('a', 'Josef', 'Novak'), partnerships: ['u1'] },
+                b: { ...mk('b', 'Marie', 'Novakova'), gender: 'female', partnerships: ['u1'] },
+                x: { ...mk('x', 'Karel', 'Svoboda'), partnerships: ['u2'] },
+                y: { ...mk('y', 'Anna', 'Svobodova'), gender: 'female', partnerships: ['u2'] },
+            },
+            partnerships: {
+                u1: { id: 'u1', person1Id: 'a', person2Id: 'b', childIds: [], status: 'married' },
+                u2: { id: 'u2', person1Id: 'x', person2Id: 'y', childIds: [], status: 'married' },
+            },
+        });
+    });
+
+    await page.evaluate((json) => {
+        const ui = window.Strom.UI as unknown as { importTreeData: unknown };
+        ui.importTreeData = JSON.parse(json);
+        window.Strom.UI.showImportTreeDialog(JSON.parse(json), 'Imported');
+    }, file);
+    await page.getByRole('button', { name: /Import|Create/ }).first().click();
+
+    // The split has been in the tree manager all along; nobody goes looking for
+    // a thing they do not know they need. This is the moment they think about it.
+    await expect(page.getByText(/families that nothing connects/i)).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Split by families' }).click();
+    await expect(page.locator('#split-modal')).toBeVisible();
+    await expect(page.locator('.split-row')).toHaveCount(2);
+});
+
+test('a tree with one family and a few strays is not offered a split', async ({ page }) => {
+    // 222 people plus four unconnected strays is not "five families" — nobody
+    // wants a tree holding one person, they want to link them.
+    await openApp(page);
+    const file = await page.evaluate(() => JSON.stringify({
+        version: 5,
+        persons: {
+            a: { id: 'a', firstName: 'Josef', lastName: 'Novak', gender: 'male', isPlaceholder: false, partnerships: ['u1'], parentIds: [], childIds: [] },
+            b: { id: 'b', firstName: 'Marie', lastName: 'Novakova', gender: 'female', isPlaceholder: false, partnerships: ['u1'], parentIds: [], childIds: [] },
+            lost: { id: 'lost', firstName: 'Kdo', lastName: 'Vi', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] },
+        },
+        partnerships: { u1: { id: 'u1', person1Id: 'a', person2Id: 'b', childIds: [], status: 'married' } },
+    }));
+    await page.evaluate((json) => {
+        window.Strom.UI.showImportTreeDialog(JSON.parse(json), 'Imported');
+    }, file);
+    await page.getByRole('button', { name: /Import|Create/ }).first().click();
+    await page.waitForTimeout(1000);
+    await expect(page.getByText(/families that nothing connects/i)).toHaveCount(0);
+});

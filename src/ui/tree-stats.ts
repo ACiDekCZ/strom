@@ -326,6 +326,7 @@ export const treeStatsMethods = uiModule({
                 'partnerAgeGap': 'valPartnerAgeGap',
                 'possibleDuplicate': 'valPossibleDuplicate',
                 'placeSpelling': 'valPlaceSpelling',
+                'recurringGodparent': 'valRecurringGodparent',
             };
             const key = typeToKey[type];
             return key ? (s[key] as string) : type;

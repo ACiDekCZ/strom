@@ -6,6 +6,7 @@
 import { StromData, Person, Partnership, PersonId, PartnershipId } from './types.js';
 import { parseFlexDate, FlexDate } from './dates.js';
 import { collectPlaces } from './places.js';
+import { godparentLeads } from './godparents.js';
 
 // ==================== ISSUE TYPES ====================
 
@@ -76,6 +77,7 @@ export function validateTreeData(data: StromData): ValidationResult {
     checkSourceIntegrity(data, addIssue);
     checkPossibleDuplicates(data, addIssue);
     checkPlaceSpellings(data, addIssue);
+    checkRecurringGodparents(data, addIssue);
 
     const stats = {
         errors: issues.filter(i => i.severity === 'error').length,
@@ -885,6 +887,28 @@ function checkPossibleDuplicates(
                     [a.id, b.id], undefined, yr !== null ? `* ${yr}` : undefined);
             }
         }
+    }
+}
+
+/**
+ * A godparent at one baptism is a neighbour; the same name at three baptisms in
+ * one family is almost always a relative. That pattern is the whole reason for
+ * recording godparents as data, and nobody sees it by reading one event at a
+ * time. Reported as info, not a problem — it is a lead, not an error.
+ *
+ * People already related to the children are left out: a grandmother standing at
+ * her grandchildren's baptisms is not news.
+ */
+function checkRecurringGodparents(data: StromData, addIssue: AddIssue): void {
+    for (const lead of godparentLeads(data)) {
+        // The dialog shows the type's label and the DETAIL — not the message —
+        // so the name has to be in the detail, or the finding says "a godparent
+        // keeps turning up" without ever saying which one.
+        const whose = lead.subjects.map(s => s.name).join(', ');
+        addIssue('info', 'recurringGodparent',
+            `${lead.name} appears at ${lead.count} events in this family`,
+            lead.subjects.map(s => s.id), undefined,
+            `${lead.name} — ${lead.count}× · ${whose}`);
     }
 }
 

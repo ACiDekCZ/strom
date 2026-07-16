@@ -24,6 +24,7 @@ import {
 } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { extractSubtree } from '../subtree.js';
+import { findComponents } from '../components.js';
 import { compressPhoto, dataUrlByteSize } from '../photo.js';
 import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES } from '../attachments.js';
 import { getDemoTree, getDemoFocus } from '../demo-trees.js';
@@ -1015,7 +1016,37 @@ export const importExportMethods = uiModule({
         // If this import came from "open from file", attach that handle now.
         void this.attachPendingFileHandle(newTreeId);
         // M6: post-import health check — offer to review any data issues.
-        void this.offerPostImportValidation(newTreeId);
+        void this.afterImport(newTreeId);
+    },
+
+    /**
+     * The two questions worth asking about a file somebody just imported, one
+     * after the other so they do not pile up on top of each other.
+     */
+    async afterImport(treeId: TreeId): Promise<void> {
+        await this.offerPostImportValidation(treeId);
+        await this.offerPostImportSplit(treeId);
+    },
+
+    /**
+     * A file that holds families with nothing between them is usually somebody's
+     * whole account exported at once. This is the moment they think about it —
+     * the split has been reachable from the tree manager all along, and nobody
+     * goes looking for a thing they do not know they need.
+     *
+     * Only real families count. A tree of 222 people plus four strays is not
+     * "five families": nobody wants a tree containing one unconnected person,
+     * they want to link them — which is what the tree statistics say instead.
+     */
+    async offerPostImportSplit(treeId: TreeId): Promise<void> {
+        const families = findComponents(DataManager.getData()).filter(c => c.count >= 2);
+        if (families.length < 2) return;
+        const split = await this.showConfirm(
+            strings.split.postImport(families.length),
+            strings.split.postImportTitle,
+            { ok: strings.split.menu, cancel: strings.buttons.close }
+        );
+        if (split) await this.showSplitDialog(treeId, undefined);
     },
 
     /**
