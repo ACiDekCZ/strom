@@ -459,6 +459,21 @@
         .actions-menu-dropdown .menu-section-header:first-child { padding-top: 6px; }
         [data-theme="dark"] .menu-section-header { color: #8a8a8a; }
 
+        /* Keyboard-shortcut chip inside menu rows (same pill as the search "/"). */
+        .menu-shortcut-hint {
+            margin-left: auto; flex-shrink: 0;
+            font-family: var(--font-sans); font-size: 11px;
+            color: var(--text-light); background: var(--surface-2);
+            border: 1px solid var(--border); border-radius: var(--r-sm);
+            padding: 1px 6px; line-height: 1.5; text-align: center;
+        }
+        /* Disabled Undo / Redo rows: greyed, inert, no hover affordance. */
+        .tree-switcher-action.menu-row-disabled {
+            color: var(--text-faint); cursor: default; pointer-events: none;
+        }
+        .tree-switcher-action.menu-row-disabled .menu-shortcut-hint { opacity: 0.5; }
+        .actions-undo-row #actions-undo-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
         /* ==================== SEARCH ==================== */
         .search-container {
             position: relative;
@@ -5782,10 +5797,10 @@
             flex: 1;
         }
         .tree-stats-header-value {
-            font-size: 32px;
+            font-size: 26px;
             font-weight: 600;
             line-height: 1.1;
-            color: var(--primary);
+            color: var(--text);
         }
         .tree-stats-header-label {
             font-size: 11px;
@@ -5793,7 +5808,7 @@
             letter-spacing: 0.08em;
             color: var(--text-light);
         }
-        .tree-stats-header-value.tree-stats-header-span { font-size: 20px; padding-top: 8px; }
+        .tree-stats-header-value.tree-stats-header-span { font-size: 18px; padding-top: 8px; }
 
         /* Proportional split bars (men/women, living/deceased). */
         .stats-split { padding: 6px 0; }
@@ -5896,6 +5911,12 @@
         }
         .stats-bar-chart .stats-bar-rect { fill: var(--chart-soft); }
         .stats-bar-chart .stats-bar-rect.hi { fill: var(--primary); }
+        /* Vertical-column chart (births by month, by-generation series).
+           Fixed pixel height per frame 2b — few columns stay short, not tall. */
+        .stats-col-chart { display: block; width: 100%; height: 74px; overflow: visible; }
+        .stats-col-chart .stats-col-rect { fill: var(--chart-soft); }
+        .stats-col-chart .stats-col-rect.hi { fill: var(--primary); }
+        .stats-col-chart .stats-col-label { font-size: 9.5px; fill: var(--text-faint); }
         .stats-empty {
             font-size: 12px;
             font-style: italic;
@@ -6611,6 +6632,60 @@
             opacity: 1;
         }
 
+        /* Undo toast — paper pill raised after each single user mutation. */
+        .undo-toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(12px);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            max-width: min(92vw, 420px);
+            padding: 8px 10px 8px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            box-shadow: var(--shadow-lg);
+            font-size: 13px;
+            color: var(--text);
+            /* Above the family offer (250), below dialog overlays. */
+            z-index: 260;
+            opacity: 0;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+        .undo-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .undo-toast-msg {
+            font-family: var(--font-serif); font-weight: 600;
+            min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .undo-toast-btn {
+            flex-shrink: 0;
+            border: none; background: transparent; cursor: pointer;
+            color: var(--primary); font-weight: 600; font-size: 13px;
+            padding: 5px 12px; border-radius: 999px;
+            transition: background 0.15s;
+        }
+        .undo-toast-btn:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); }
+        /* Hidden while a modal is open (the toast would sit behind the overlay). */
+        body:has(.modal-overlay.active) .undo-toast { display: none; }
+        /* Lift the family offer above the undo toast when both are showing. */
+        body:has(.undo-toast) .family-offer { bottom: 84px; }
+        /* Mobile regime (bottom bar ≤1024px): sit above the bar. */
+        @media (max-width: 1024px) {
+            .undo-toast { bottom: calc(var(--bottom-bar-h) + 12px); }
+            body:has(.undo-toast) .family-offer { bottom: calc(var(--bottom-bar-h) + 72px); }
+        }
+        /* Phone (<500px): full width minus 24px, no centre transform. */
+        @media (max-width: 500px) {
+            .undo-toast {
+                left: 12px; right: 12px; max-width: none; width: auto;
+                justify-content: space-between;
+                transform: translateY(12px);
+            }
+            .undo-toast.show { transform: translateY(0); }
+        }
+
         /* Pending merge dialog */
         .pending-merge-message {
             font-size: 14px;
@@ -6915,7 +6990,7 @@
                 max-width: 500px;
             }
             .tree-stats-header-value {
-                font-size: 28px;
+                font-size: 24px;
             }
             /* Validation on tablet */
             .validation-modal {
@@ -7051,7 +7126,7 @@
                 gap: 8px;
             }
             .tree-stats-header-value {
-                font-size: 24px;
+                font-size: 22px;
             }
             .tree-stats-header-label {
                 font-size: 10px;
@@ -7796,6 +7871,15 @@
         <div class="actions-menu desktop-only">
             <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><svg class="actions-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span></button>
             <div id="actions-menu-dropdown" class="tree-switcher-dropdown actions-menu-dropdown">
+                <div id="actions-undo-row" class="tree-switcher-action edit-only actions-undo-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.performUndo()">
+                    <span id="actions-undo-label"></span>
+                    <span id="actions-undo-hint" class="menu-shortcut-hint" aria-hidden="true"></span>
+                </div>
+                <div id="actions-redo-row" class="tree-switcher-action edit-only actions-undo-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.performRedo()">
+                    <span data-i18n="actions.redo"></span>
+                    <span id="actions-redo-hint" class="menu-shortcut-hint" aria-hidden="true"></span>
+                </div>
+                <div class="tree-switcher-divider edit-only actions-undo-divider"></div>
                 <div class="menu-section-header" data-i18n="menu.sectionCurrentView"></div>
                 <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showPosterDialog()">
                     <span data-i18n="menu.poster"></span>

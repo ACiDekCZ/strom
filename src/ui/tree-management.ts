@@ -186,6 +186,38 @@ export const treeManagementMethods = uiModule({
             badge.textContent = count > 0 ? String(count) : '';
             badge.style.display = count > 0 ? 'inline-flex' : 'none';
         }
+        this.refreshActionsUndoRedo();
+    },
+
+    /**
+     * Refresh the ⋯ menu's Undo / Redo rows: the Undo label carries the last
+     * change's description (grey "Undo" with no description when the stack is
+     * empty); Redo greys out when there is nothing to replay. Shortcut hints
+     * follow the platform. Called whenever the menu opens.
+     */
+    refreshActionsUndoRedo(): void {
+        const s = strings.actions;
+        const undoRow = document.getElementById('actions-undo-row');
+        const undoLabel = document.getElementById('actions-undo-label');
+        const undoHint = document.getElementById('actions-undo-hint');
+        const redoRow = document.getElementById('actions-redo-row');
+        const redoHint = document.getElementById('actions-redo-hint');
+
+        const canUndo = DataManager.canUndo();
+        const desc = canUndo ? DataManager.lastUndoDescription() : null;
+        if (undoLabel) undoLabel.textContent = desc ? s.undoLabel(desc) : s.undoDisabled;
+        if (undoHint) undoHint.textContent = this.shortcutHint('undo');
+        if (undoRow) {
+            undoRow.classList.toggle('menu-row-disabled', !canUndo);
+            undoRow.setAttribute('aria-disabled', String(!canUndo));
+        }
+
+        const canRedo = DataManager.canRedo();
+        if (redoHint) redoHint.textContent = this.shortcutHint('redo');
+        if (redoRow) {
+            redoRow.classList.toggle('menu-row-disabled', !canRedo);
+            redoRow.setAttribute('aria-disabled', String(!canRedo));
+        }
     },
 
     /** Toggle the desktop ⋯ actions menu (mirrors the tree switcher dropdown). */

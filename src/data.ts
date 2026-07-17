@@ -165,6 +165,14 @@ class DataManagerClass {
     /** True while a batch (multiple mutations → one undo step) is in progress. */
     private batchActive = false;
 
+    /**
+     * Notified after every single user mutation is committed (with the audit-log
+     * description). The UI uses it to raise the "Undo" toast. NOT fired for bulk
+     * flows (import / merge / batch), which pass `silent` — those have their own
+     * UI. Set by the UI layer at startup; a no-op until then.
+     */
+    onMutationCommitted: ((description: string) => void) | null = null;
+
     // Pending encrypted embedded data (requires password to unlock)
     private pendingEncryptedEmbedded: EncryptedData | null = null;
 
@@ -782,7 +790,7 @@ class DataManagerClass {
      * stack with a description, then persist. Replaces this.save() at the end of
      * mutation methods. During a batch this defers to commitBatch (no push/save).
      */
-    private commitMutation(description: string): void {
+    private commitMutation(description: string, silent = false): void {
         if (this.batchActive) return;
         UndoManager.setActiveTree(this.currentTreeId);
         if (this.pendingBefore) {
@@ -792,6 +800,15 @@ class DataManagerClass {
             this.pendingBefore = null;
         }
         this.save();
+        // Single user actions raise the Undo toast; bulk flows (import / merge /
+        // batch) pass silent — they surface their own result UI instead.
+        if (!silent && !this.viewMode) this.onMutationCommitted?.(description);
+    }
+
+    /** Description a single undo would reverse (for the ⋯ menu label), or null. */
+    lastUndoDescription(): string | null {
+        UndoManager.setActiveTree(this.currentTreeId);
+        return UndoManager.peekUndoDescription();
     }
 
     /**
@@ -811,7 +828,8 @@ class DataManagerClass {
     commitBatch(description: string): void {
         if (!this.batchActive) return;
         this.batchActive = false;
-        this.commitMutation(description);
+        // Batches (family wizard) show their own toast — no Undo toast.
+        this.commitMutation(description, true);
     }
 
     // ==================== VERSIONED BACKUPS (snapshots) ====================
@@ -852,7 +870,7 @@ class DataManagerClass {
 
         this.beginMutation();
         this.data = migrated;
-        this.commitMutation(strings.undo.restoreBackup);
+        this.commitMutation(strings.undo.restoreBackup, true);
         AuditLogManager.log(this.currentTreeId, 'data.load', strings.auditLog.restoredBackup);
         if (this.currentTreeId) CrossTree.invalidateCacheForTree(this.currentTreeId);
         return true;
@@ -2210,7 +2228,7 @@ class DataManagerClass {
         // now one Ctrl+Z away instead of silently corrupting the stack.
         this.beginMutation();
         this.data = migrateData(newData);
-        this.commitMutation(strings.undo.loadedData);
+        this.commitMutation(strings.undo.loadedData, true);
         // Audit log
         const personCount = Object.keys(this.data.persons).length;
         const partnershipCount = Object.keys(this.data.partnerships).length;
@@ -2618,7 +2636,8 @@ class DataManagerClass {
         // 7. Delete the removed person
         delete this.data.persons[removeId];
 
-        this.commitMutation(strings.undo.mergePersons(keptName));
+        // Person merge has its own completion toast — no Undo toast.
+        this.commitMutation(strings.undo.mergePersons(keptName), true);
         // Audit log
         AuditLogManager.log(
             this.currentTreeId, 'persons.merge',
@@ -2657,7 +2676,7 @@ class DataManagerClass {
 
                             this.beginMutation();
                             this.data = migrateData(data);
-                            this.commitMutation(strings.undo.loadedData);
+                            this.commitMutation(strings.undo.loadedData, true);
                             if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
                         } catch {
                             window.Strom?.UI?.showAlert(strings.encryption.wrongPassword, 'error');
@@ -2673,7 +2692,7 @@ class DataManagerClass {
 
                 this.beginMutation();
                 this.data = migrateData(imported);
-                this.commitMutation(strings.undo.loadedData);
+                this.commitMutation(strings.undo.loadedData, true);
                 // Dispatch event for UI to re-render
                 if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
             } catch (error) {

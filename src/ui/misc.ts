@@ -409,6 +409,10 @@ export const miscMethods = uiModule({
 
     // ---- KEYBOARD SHORTCUTS ----
     initKeyboard(): void {
+        // Every single user mutation raises the Undo toast (bulk import/merge
+        // pass silent — they have their own UI). Registered once, at startup.
+        DataManager.onMutationCommitted = (description: string) => this.showUndoToast(description);
+
         document.addEventListener('keydown', (e) => {
             // The slideshow owns the keyboard while it runs (TV remote style).
             if (this.slideshowActive) {
@@ -469,6 +473,16 @@ export const miscMethods = uiModule({
                     this.relationPicker?.hide();
                     // Toggle back to create mode
                     this.toggleLinkMode();
+                    return;
+                }
+
+                // Nothing above consumed the Escape (every floating menu /
+                // link-mode branch returns) and no dialog is open → the Undo
+                // toast is the lowest-priority thing left for Escape to close.
+                if (this.undoToastEl
+                    && this.dialogStack.length === 0
+                    && document.querySelectorAll('.modal-overlay.active').length === 0) {
+                    this.dismissUndoToast();
                     return;
                 }
 
@@ -906,12 +920,92 @@ export const miscMethods = uiModule({
         }, duration);
     },
 
+    // ---- UNDO TOAST ----
+    /**
+     * True on macOS/iOS — where the undo shortcut is ⌘Z rather than Ctrl+Z.
+     * Uses the modern userAgentData when present, falling back to the platform
+     * string. Detected the same way across the app (menu hint + here).
+     */
+    isMacPlatform(): boolean {
+        const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+        const plat = nav.userAgentData?.platform || navigator.platform || navigator.userAgent || '';
+        return /mac|iphone|ipad|ipod/i.test(plat);
+    },
+
+    /** Keyboard hint chip text for undo / redo, per platform. */
+    shortcutHint(action: 'undo' | 'redo'): string {
+        if (this.isMacPlatform()) return action === 'undo' ? '⌘Z' : '⇧⌘Z';
+        return action === 'undo' ? 'Ctrl+Z' : 'Ctrl+Y';
+    },
+
+    /**
+     * Raise the bottom-centre "Undo" toast after a single user mutation: a paper
+     * pill carrying the audit-log description and a ghost "Undo" button. Auto-
+     * hides after 6 s; hovering pauses the countdown; Esc closes; a new action
+     * replaces it. Clicking Undo runs the same path as Ctrl+Z. Never shown for
+     * bulk import/merge (those pass silent through commitMutation).
+     */
+    showUndoToast(description: string): void {
+        this.dismissUndoToast();
+
+        const el = document.createElement('div');
+        el.className = 'undo-toast';
+        el.setAttribute('role', 'status');
+        el.setAttribute('aria-live', 'polite');
+
+        const msg = document.createElement('span');
+        msg.className = 'undo-toast-msg';
+        msg.textContent = description;
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'undo-toast-btn';
+        btn.textContent = strings.undo.undo;
+        btn.addEventListener('click', () => {
+            this.dismissUndoToast();
+            this.performUndo();
+        });
+
+        el.appendChild(msg);
+        el.appendChild(btn);
+        document.body.appendChild(el);
+        this.undoToastEl = el;
+
+        // Countdown with hover-to-pause: track the time left, re-arm on leave.
+        let remaining = 6000;
+        let startedAt = Date.now();
+        const clear = () => {
+            if (this.undoToastTimer) { clearTimeout(this.undoToastTimer); this.undoToastTimer = null; }
+        };
+        const arm = () => {
+            clear();
+            startedAt = Date.now();
+            this.undoToastTimer = setTimeout(() => this.dismissUndoToast(), remaining);
+        };
+        el.addEventListener('mouseenter', () => { remaining -= Date.now() - startedAt; clear(); });
+        el.addEventListener('mouseleave', () => { arm(); });
+        arm();
+
+        requestAnimationFrame(() => el.classList.add('show'));
+    },
+
+    /** Remove the Undo toast (if any) and cancel its countdown. */
+    dismissUndoToast(): void {
+        if (this.undoToastTimer) { clearTimeout(this.undoToastTimer); this.undoToastTimer = null; }
+        const el = this.undoToastEl;
+        this.undoToastEl = null;
+        if (!el) return;
+        el.classList.remove('show');
+        setTimeout(() => el.remove(), 200);
+    },
+
     // ---- UNDO / REDO ----
     /**
      * Undo the last data mutation of the active tree and re-render. Shows a
      * toast describing what was undone; silent when there is nothing to undo.
      */
     performUndo(): void {
+        this.dismissUndoToast();
         const result = DataManager.undo();
         if (!result) return;
         void TreeRenderer.renderAsync();
@@ -922,6 +1016,7 @@ export const miscMethods = uiModule({
 
     /** Replay the last undone mutation. Symmetric to performUndo(). */
     performRedo(): void {
+        this.dismissUndoToast();
         const result = DataManager.redo();
         if (!result) return;
         void TreeRenderer.renderAsync();

@@ -74,6 +74,13 @@ class UndoManagerClass {
         return this.undoStack.length > 0;
     }
 
+    /** Description of the action a single undo would reverse, or null. */
+    peekUndoDescription(): string | null {
+        return this.undoStack.length > 0
+            ? this.undoStack[this.undoStack.length - 1].description
+            : null;
+    }
+
     canRedo(): boolean {
         return this.redoStack.length > 0;
     }

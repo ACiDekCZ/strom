@@ -122,6 +122,10 @@ export class UIClass {
     // Dialog stack for ESC navigation (child -> parent)
     dialogStack: string[] = [];
 
+    // Undo toast (raised after each single user mutation).
+    undoToastEl: HTMLElement | null = null;
+    undoToastTimer: ReturnType<typeof setTimeout> | null = null;
+
     // Embedded mode state
     appMode: AppMode = 'pwa';
     lastExportTime: number = Date.now();

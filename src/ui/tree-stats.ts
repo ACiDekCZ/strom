@@ -85,6 +85,50 @@ function svgBarChart(rows: { label: string; value: number; display?: string }[])
     return `<svg class="stats-bar-chart" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img">${bars}</svg>`;
 }
 
+/**
+ * Vertical-column chart for axis-ordered series (births by month, average age /
+ * children by generation). Columns are soft; the tallest is highlighted in full
+ * green. Axis labels sit under the columns — `labelStride` thins them out (2 =
+ * every other, used for the twelve months). The exact value rides along in a
+ * <title> so it is still reachable on hover. Fixed pixel height (frame 2b) via
+ * CSS, so a series with few columns is not stretched tall.
+ */
+function svgColumnChart(
+    rows: { label: string; value: number; display?: string }[],
+    opts: { labelStride?: number } = {}
+): string {
+    if (rows.length === 0) return '';
+    const labelStride = opts.labelStride ?? 1;
+    const colAreaH = 58, labelH = 16, topPad = 2;
+    const H = colAreaH + labelH;
+    // Space columns so adjacent axis labels never collide. Only every
+    // labelStride-th column carries a label, so a label may span that many
+    // steps; at 9.5px a glyph is ~5.7 user units wide. "Gen. 4" (wide, every
+    // column) needs a wider step than "Led/Bře/…" (narrow, every other). Never
+    // tighter than the 24px by-month baseline. The chart stays centered (meet).
+    const shownLabelChars = rows.reduce(
+        (mx, r, i) => (i % labelStride === 0 ? Math.max(mx, r.label.length) : mx), 0);
+    const step = Math.max(24, Math.ceil((shownLabelChars * 5.7 + 8) / labelStride));
+    const barW = Math.min(14, Math.round(step * 0.5));
+    const W = rows.length * step;
+    const max = Math.max(1, ...rows.map(r => r.value));
+    const maxValue = Math.max(...rows.map(r => r.value));
+    const cols = rows.map((r, i) => {
+        const cx = i * step + step / 2;
+        const h = r.value > 0 ? Math.max(2, (r.value / max) * (colAreaH - topPad)) : 0;
+        const y = colAreaH - h;
+        const hi = r.value === maxValue && maxValue > 0 ? ' hi' : '';
+        const shown = r.display ?? String(r.value);
+        const label = i % labelStride === 0
+            ? `<text x="${cx}" y="${H - 3}" text-anchor="middle" class="stats-col-label">${escXml(r.label)}</text>`
+            : '';
+        return `<g><title>${escXml(r.label)}: ${escXml(shown)}</title>`
+            + `<rect x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW}" height="${h.toFixed(1)}" rx="2" class="stats-col-rect${hi}"></rect></g>`
+            + label;
+    }).join('');
+    return `<svg class="stats-col-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img">${cols}</svg>`;
+}
+
 
 /**
  * Flex-date components for anniversary math: [year, month, day].
@@ -599,26 +643,29 @@ export const treeStatsMethods = uiModule({
                 svgBarChart(stats.topFemaleNames.map(n => ({ label: n.name, value: n.count })))));
         }
 
-        // Average lifespan by generation (needs a meaningful sample).
+        // Average lifespan by generation (needs a meaningful sample). Axis-
+        // ordered → vertical columns (frame 2b).
         const lifespanN = stats.lifespanByGen.reduce((sum, g) => sum + g.n, 0);
         blocks.push(chartBlock(st.lifespanByGen, lifespanN >= 5
-            ? svgBarChart(stats.lifespanByGen.map(g => ({
+            ? svgColumnChart(stats.lifespanByGen.map(g => ({
                 label: st.generation(g.generation), value: g.avgYears,
                 display: `${g.avgYears} ${st.years} (${st.sampleN(g.n)})`,
             })))
             : notEnough));
 
-        // Children per couple by generation.
+        // Children per couple by generation — vertical columns.
         blocks.push(chartBlock(st.childrenByGen, stats.childrenByGen.length
-            ? svgBarChart(stats.childrenByGen.map(g => ({
+            ? svgColumnChart(stats.childrenByGen.map(g => ({
                 label: st.generation(g.generation), value: g.avgChildren,
                 display: `${g.avgChildren} (${st.sampleN(g.n)})`,
             })))
             : notEnough));
 
-        // Births by month.
+        // Births by month — vertical columns, every other month labelled.
         blocks.push(chartBlock(st.birthsByMonth, stats.birthsByMonthN >= 5
-            ? svgBarChart(stats.birthsByMonth.map(m => ({ label: st.months[m.month - 1], value: m.count })))
+            ? svgColumnChart(
+                stats.birthsByMonth.map(m => ({ label: st.months[m.month - 1], value: m.count })),
+                { labelStride: 2 })
             : notEnough));
 
         // Records as highlight cards (text-only per the Letopis design).

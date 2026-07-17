@@ -1567,6 +1567,13 @@ const stringsEN = {
         nothingToRedo: 'Nothing to redo'
     },
 
+    // Undo / redo entries in the ⋯ actions menu (labels carry the last change).
+    actions: {
+        undoLabel: (desc: string) => `Undo: ${desc}`,
+        undoDisabled: 'Undo',
+        redo: 'Redo',
+    },
+
     // Living-person privacy filter for exports
     privacy: {
         livingPerson: 'Living person',
@@ -3166,6 +3173,13 @@ const stringsCZ: StringsType = {
         redone: (desc: string) => `Znovu provedeno: ${desc}`,
         nothingToUndo: 'Není co vrátit',
         nothingToRedo: 'Není co zopakovat'
+    },
+
+    // Undo / redo entries in the ⋯ actions menu (labels carry the last change).
+    actions: {
+        undoLabel: (desc: string) => `Zpět: ${desc}`,
+        undoDisabled: 'Zpět',
+        redo: 'Znovu',
     },
 
     // Living-person privacy filter for exports
