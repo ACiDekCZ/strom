@@ -16,6 +16,7 @@ import {
     StromData
 } from './types.js';
 import { TreeManager } from './tree-manager.js';
+import { chainLinkSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
 import { CARD_SIZE, ViewMode, STANDALONE_VIEWS } from './types.js';
 import {
@@ -1131,15 +1132,21 @@ class TreeRendererClass {
             // Avatar initials (first name + surname), used when there is no photo.
             const initials = ((displayName[0] || '?') + (displaySurname[0] || '')).toUpperCase();
 
-            // Meta row (row 2): life-year range + birth place. The year range now
-            // carries the "deceased" cue (the † dagger is gone from the name row):
-            // a dead person reads "1902 – 1968", a living one "* 1958".
+            // Meta row (row 2): life-year range. The year range carries the
+            // "deceased" cue (the † dagger is gone from the name row): a dead
+            // person reads "1902 – 1968", a living one "* 1958".
             const deathYear = person.deathDate ? displayYear(person.deathDate) : '';
             let metaYears = '';
             if (deathYear) metaYears = `${birthYear || '?'} – ${deathYear}`;
             else if (birthYear) metaYears = `* ${birthYear}`;
             const metaPlace = person.birthPlace?.trim() ?? '';
-            const metaText = [metaYears, metaPlace].filter(Boolean).join(' · ');
+            // Normal cards pack "years · place" onto one ellipsized meta row.
+            // Detailed cards give the place its own two-line row below and put
+            // the age next to the years instead ("1907 – 1975 · věk 67").
+            const metaText = density === 'detailed'
+                ? [metaYears, cardAge !== null ? `${strings.card.ageWord} ${cardAge}` : '']
+                    .filter(Boolean).join(' · ')
+                : [metaYears, metaPlace].filter(Boolean).join(' · ');
 
             const avatarInner = showPhoto
                 ? `<img src="${person.photo}" alt="">`
@@ -1151,11 +1158,11 @@ class TreeRendererClass {
                     <div class="name"><span class="name-text" title="${this.escapeHtml(fullName)}" data-given="${this.escapeHtml(displayName)}" data-surname="${this.escapeHtml(displaySurname)}">${this.escapeHtml(fullName)}</span></div>
                     ${density !== 'compact' && metaText ? `<div class="birth-date" data-years="${this.escapeHtml(metaYears)}">${this.escapeHtml(metaText)}</div>` : ''}
                     ${trade ? `<div class="card-trade">${this.escapeHtml(trade)}</div>` : ''}
-                    ${cardAge !== null ? `<div class="card-age">${strings.tooltip.age}: ${cardAge}</div>` : ''}
+                    ${density === 'detailed' && metaPlace ? `<div class="card-place">${this.escapeHtml(metaPlace)}</div>` : ''}
                 </div>
                 ${this.focusPersonId && id === this.focusPersonId ? `<span class="focus-badge">${strings.card.focusBadge}</span>` : ''}
                 ${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">&#128274;</span>` : ''}
-                ${!isLocked ? `<button class="rel-link-icon" data-action="relationships" title="${strings.buttons.manageRelationships}">&#128279;</button>` : ''}
+                ${!isLocked ? `<button class="rel-link-icon" data-action="relationships" title="${strings.buttons.manageRelationships}" aria-label="${strings.buttons.manageRelationships}"><span class="rel-link-glyph">${chainLinkSvg({ stroke: 'currentColor', size: 11, strokeWidth: 3 })}</span><span class="rel-link-label">${strings.card.relTab}</span></button>` : ''}
             `;
 
             // Add buttons based on context (hidden for locked persons). Each
@@ -1382,6 +1389,12 @@ class TreeRendererClass {
             nameEl.classList.remove('name-fit-1');
             nameEl.classList.add('name-fit-13');                     // step 1: 13px floor
             if (fits()) return;
+
+            // Compact cards are a single centred line in a 44px box: the two-line
+            // step does not apply. Once the 12.5px floor still overflows, the base
+            // ellipsis takes over (the compact-scoped .name-fit-* CSS shrinks to
+            // that floor at matching specificity).
+            if (SettingsManager.getCardDensity() === 'compact') return;
 
             // Step 2: two lines (break between given name and surname) + years-only meta.
             nameEl.classList.remove('name-fit-13');

@@ -67,10 +67,12 @@ test('compact hides the meta row; normal and detailed show life years, place and
     await expect(card(page, 'Henry VIII').locator('.birth-date')).toHaveCount(1);
     await expect(card(page, 'Henry VIII').locator('.birth-date')).toContainText('Greenwich Palace');
 
-    // Detailed: keeps the meta row and adds the age line.
+    // Detailed: the place gets its own line and the age moves onto the year row
+    // ("1491 – 1547 · age 55"), so there is no separate .card-age element.
     await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
-    await expect(card(page, 'Henry VIII').locator('.birth-date')).toContainText('Greenwich Palace');
-    await expect(card(page, 'Henry VIII').locator('.card-age')).toContainText(/\d/);
+    await expect(card(page, 'Henry VIII').locator('.card-place')).toContainText('Greenwich Palace');
+    await expect(card(page, 'Henry VIII').locator('.birth-date')).toHaveText(/·\s*\D+\s*\d+\s*$/);
+    await expect(card(page, 'Henry VIII').locator('.card-age')).toHaveCount(0);
 });
 
 test('detailed cards never show a nonsense age for historical people', async ({ page }) => {
@@ -80,19 +82,23 @@ test('detailed cards never show a nonsense age for historical people', async ({ 
     await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
 
     // Someone long dead WITHOUT a death date has no knowable age — counting to
-    // today produced ages like 230.
+    // today produced ages like 230. The age now rides the meta row as a
+    // "· age N" suffix, so a person with no age shows just the years.
     await page.evaluate(() => {
         const dm = window.Strom.DataManager;
         const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Henry VIII');
         if (p) dm.updatePerson(p.id, { deathDate: '' });
         window.Strom.TreeRenderer.render();
     });
-    await expect(card(page, 'Henry VIII').locator('.card-age')).toHaveCount(0);
+    await expect(card(page, 'Henry VIII').locator('.birth-date')).not.toHaveText(/·\s*\D+\s*\d+\s*$/);
 
-    // Nobody in the sample tree shows an implausible age.
+    // Nobody in the sample tree shows an implausible age (parsed off the meta row).
     const overMax = await page.evaluate(() =>
-        [...document.querySelectorAll('.card-age')]
-            .map(e => parseInt(e.textContent!.replace(/\D+/g, ''), 10))
+        [...document.querySelectorAll('.person-card .birth-date')]
+            .map(e => {
+                const m = e.textContent!.match(/·\s*\D+?\s*(\d+)\s*$/);
+                return m ? parseInt(m[1], 10) : 0;
+            })
             .filter(n => n > 120).length);
     expect(overMax).toBe(0);
 });

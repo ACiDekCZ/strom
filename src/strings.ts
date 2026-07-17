@@ -314,7 +314,7 @@ const stringsEN = {
         skip: 'Skip',
         done: 'Done',
         step1: 'This is a person card. Click it to open actions — edit, add relatives, focus or delete.',
-        step2: 'Hovering a card reveals quick-add buttons: parent above, partner and sibling on the sides, child below. The 🔗 icon manages partnerships and parents.',
+        step2: 'Hovering a card reveals quick-add buttons: parent above, partner on the right, child below. The chain-link tab on the top edge manages partnerships and parents; adding a sibling lives in the card menu.',
         step3: 'Add people here too: one person, or a whole family at once with the family wizard.',
         step4: 'The focus panel shows who the tree centres on. The arrows change how many generations of ancestors and descendants are visible.',
         step5: 'Switch views: Family, Descendants, Timeline or the ancestor Fan.',
@@ -705,6 +705,10 @@ const stringsEN = {
         addTabParent: 'parent',
         addTabPartner: 'partner',
         addTabChild: 'child',
+        // Chain-link edge tab (manage partnerships/parents) expanded label.
+        relTab: 'relations',
+        // Lowercase inline word for the detailed card's "years · age" meta row.
+        ageWord: 'age',
     },
     buttons: {
         save: 'Save',
@@ -1905,7 +1909,7 @@ const stringsCZ: StringsType = {
         skip: 'Přeskočit',
         done: 'Hotovo',
         step1: 'Tohle je karta osoby. Klikněte na ni pro akce — upravit, přidat příbuzné, zaměřit nebo smazat.',
-        step2: 'Po najetí na kartu se objeví tlačítka rychlého přidání: nahoře rodič, po stranách partner a sourozenec, dole dítě. Ikona 🔗 spravuje partnerství a rodiče.',
+        step2: 'Po najetí na kartu se objeví tlačítka rychlého přidání: nahoře rodič, vpravo partner, dole dítě. Ouško s řetízkem na horní hraně spravuje partnerství a rodiče; přidání sourozence najdete v nabídce karty.',
         step3: 'Osoby přidáte i tady: jednu, nebo celou rodinu najednou průvodcem rodiny.',
         step4: 'Panel fokusu ukazuje, na koho je strom zaměřený. Šipkami měníte, kolik generací předků a potomků je vidět.',
         step5: 'Přepínejte pohledy: Rodina, Potomci, Časová osa nebo Vějíř předků.',
@@ -2297,6 +2301,10 @@ const stringsCZ: StringsType = {
         addTabParent: 'rodič',
         addTabPartner: 'partner',
         addTabChild: 'dítě',
+        // Chain-link edge tab (manage partnerships/parents) expanded label.
+        relTab: 'vztahy',
+        // Lowercase inline word for the detailed card's "years · age" meta row.
+        ageWord: 'věk',
     },
     buttons: {
         save: 'Uložit',

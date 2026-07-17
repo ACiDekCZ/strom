@@ -78,3 +78,61 @@ test('a long name stays readable without ellipsis and never drops below 12.5px',
     // Floor: never smaller than the two-line 12.5px.
     expect(await nameFontPx(page, 'Marianna')).toBeGreaterThanOrEqual(12.5);
 });
+
+/** Count of two-line split spans inside a card's name. */
+async function nameLineCount(page: Page, firstName: string): Promise<number> {
+    return card(page, firstName).locator('.name-text .name-line').count();
+}
+
+test('detailed card is 200x100 and its 128px column fits Kateřina Výšková at 15px', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Kateřina', 'Výšková', { gender: 'female', birthDate: '1874' });
+    await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
+
+    const c = card(page, 'Kateřina');
+    await expect(c).toBeVisible();
+    await settleFitting(page);
+
+    // Round-5 detailed box: 200x100, padding 8px 9px → 128px text column.
+    const size = await c.evaluate((n) => ({ w: (n as HTMLElement).offsetWidth, h: (n as HTMLElement).offsetHeight }));
+    expect(size).toEqual({ w: 200, h: 100 });
+
+    // The wider column holds the acceptance name at the full 15px, no shrink.
+    await expect.poll(() => nameFontPx(page, 'Kateřina')).toBe(15);
+    expect(await nameEllipsized(page, 'Kateřina')).toBe(false);
+});
+
+test('detailed card shows a long birth place on two lines, card height stays 100px', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Otto', 'Meyer', { birthDate: '1850', birthPlace: 'Landsberg an der Warthe' });
+    await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
+
+    const c = card(page, 'Otto');
+    await expect(c).toBeVisible();
+    await settleFitting(page);
+
+    // The card box does not grow to fit the place.
+    expect(await c.evaluate((n) => (n as HTMLElement).offsetHeight)).toBe(100);
+
+    // The place has its own line and reads in full (wraps to two lines, no clip).
+    const place = c.locator('.card-place');
+    await expect(place).toHaveText('Landsberg an der Warthe');
+    const clipped = await place.evaluate((n) => n.scrollHeight > n.clientHeight + 1);
+    expect(clipped).toBe(false);
+});
+
+test('compact shrinks a long name to the 12.5px floor as one line before ellipsis', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Maximiliana', 'Kolodziejczyk', { birthDate: '1900' });
+    await page.evaluate(() => window.Strom.UI.setCardDensity('compact'));
+
+    const c = card(page, 'Maximiliana');
+    await expect(c).toBeVisible();
+    await settleFitting(page);
+
+    // The compact density selector no longer blocks the shrink: the name reaches
+    // the 12.5px floor. Compact has no two-line step — it ellipsizes one line.
+    await expect.poll(() => nameFontPx(page, 'Maximiliana')).toBe(12.5);
+    expect(await nameLineCount(page, 'Maximiliana')).toBe(0);
+    expect(await nameEllipsized(page, 'Maximiliana')).toBe(true);
+});

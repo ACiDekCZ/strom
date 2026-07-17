@@ -81,6 +81,8 @@ test('the filter toggle stays visible when active (green fill, light icon)', asy
     // strip it, leaving a white icon on a transparent background).
     await toggle.click();
     await expect(toggle).toHaveClass(/active/);
-    const activeBg = await toggle.evaluate(el => getComputedStyle(el).backgroundColor);
-    expect(activeBg).not.toBe('rgba(0, 0, 0, 0)');
+    // The toolbar buttons animate background 0.2s — poll past the transition
+    // (an immediate read at t=0 sees the interpolated transparent start).
+    await expect.poll(() => toggle.evaluate(el => getComputedStyle(el).backgroundColor))
+        .not.toBe('rgba(0, 0, 0, 0)');
 });

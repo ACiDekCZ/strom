@@ -17,6 +17,7 @@ import { strings } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { SELECTABLE_EVENT_TYPES, sortLifeEvents } from '../events.js';
 import { formatFlexDate, normalizeDateInput, formatDateForInput } from '../dates.js';
+import { chainLinkSvg } from '../icons.js';
 import { uiModule } from './module.js';
 
 /** HTML-escape a user string for safe innerHTML insertion. */
@@ -202,7 +203,7 @@ export const personEventsMethods = uiModule({
                            aria-label="${esc(strings.events.participantNote)}">
                     <button type="button" class="participant-btn secondary participant-link${linked ? ' linked' : ''}"
                             title="${esc(linked ? strings.events.participantUnlink : strings.events.participantLink)}">
-                        ${linked ? `🔗 ${esc(strings.events.participantInTree)}` : '🔗'}
+                        ${chainLinkSvg({ stroke: 'currentColor', size: 11, strokeWidth: 2 })}${linked ? ` ${esc(strings.events.participantInTree)}` : ''}
                     </button>
                     <button type="button" class="participant-btn secondary participant-del"
                             title="${esc(strings.events.delete)}">&#128465;</button>
