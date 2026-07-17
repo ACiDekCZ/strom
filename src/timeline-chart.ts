@@ -40,7 +40,7 @@ const TIMELINE_LIGHT_STYLE =
     + '.tl-arrow{fill:#aaa}'
     + '.tl-name-txt{fill:#222;font-size:12px}'
     + '.tl-yr-txt{fill:#999;font-size:11px}'
-    + '.timeline-bar.focused .tl-bar-rect{stroke:#4a90d9;stroke-width:2.5}';
+    + '.timeline-bar.focused .tl-bar-rect{stroke:#3f6b4f;stroke-width:2.5}';
 
 export interface TimelineSvgOptions {
     /** Escape function for text content (renderer supplies its own). */
