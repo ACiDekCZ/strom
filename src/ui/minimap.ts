@@ -19,7 +19,10 @@ import { uiModule } from './module.js';
 const MINIMAP_W = 180;
 const MINIMAP_H = 120;
 const MINIMAP_PAD = 8;
-const MOBILE_MAX = 500;
+// At/below this width the control block dissolves (CSS `display: contents`),
+// so the minimap has no docked home and CSS hides it — mirror that here so the
+// JS never re-shows a detached panel. Keep in sync with the ≤600px CSS rule.
+const MOBILE_MAX = 600;
 // Below this world-overflow ratio the tree fits comfortably — hide the minimap.
 const FIT_MARGIN = 1.05;
 
@@ -112,7 +115,7 @@ export const minimapMethods = uiModule({
         if (!panel || !canvas) return;
 
         const positions = TreeRenderer.getPosterLayout().positions;
-        const isMobile = window.innerWidth < MOBILE_MAX;
+        const isMobile = window.innerWidth <= MOBILE_MAX;
         const { cardWidth, cardHeight } = DEFAULT_LAYOUT_CONFIG;
         const box = worldBoundingBox(positions, cardWidth, cardHeight);
 

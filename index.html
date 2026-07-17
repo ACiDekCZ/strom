@@ -3423,6 +3423,14 @@
             .control-block {
                 display: contents;
             }
+            /* The block is dissolved (display:contents) here, so its fixed
+               positioning is gone. The zoom buttons re-anchor themselves as a
+               floating stack below, but the minimap has no floating home — if
+               left visible it would fall into static body flow at the top-left,
+               landing on top of the focus chip and generation arrows. Hide it
+               together with the box that used to hold it (was ≤500px, which
+               left a 501–600px orphan window). */
+            .minimap-panel { display: none !important; }
             .zoom-controls {
                 position: fixed;
                 bottom: calc(var(--bottom-bar-h) + 16px);
@@ -3441,9 +3449,6 @@
                 font-size: 24px;
             }
             .zoom-controls button:nth-child(3) { display: none; }
-        }
-        @media (max-width: 500px) {
-            .minimap-panel { display: none !important; }
         }
 
         /* Anniversaries panel — "on this day" card with a copper left rim. */
@@ -4425,6 +4430,13 @@
         .view-mode-segment {
             display: inline-flex; align-self: stretch; align-items: stretch;
             margin-left: auto;
+            /* Never let the tabs squish under a crowded toolbar: the search
+               field absorbs the shrink instead, so the view switcher stays
+               intact and legible down to the 1024 bottom-bar boundary in every
+               locale (Czech labels are wide). Without this a tight desktop
+               toolbar could compress the tabs into an unreadable smear before
+               the bottom bar takes over. */
+            flex-shrink: 0;
         }
         .view-mode-segment button {
             border: none; background: transparent; color: var(--text-light);
@@ -4688,14 +4700,18 @@
         /* Top-bar ⋯ actions button and the fixed bottom bar replace the old
            hamburger + mobile-menu across the whole mobile regime. Both surfaces
            are desktop-hidden by default and revealed in the ≤1024 media query. */
-        .mobile-more-btn {
+        /* Scoped under .toolbar so the ghost fill outranks the generic
+           ".toolbar button { background: var(--primary) }" rule (specificity
+           0,1,1) that otherwise painted this ⋯ trigger as a solid green square.
+           Same specificity family as the tree-switcher / actions ghost fixes. */
+        .toolbar .mobile-more-btn {
             display: none;
             width: 44px; height: 44px; padding: 0; flex-shrink: 0;
             border: none; background: transparent; cursor: pointer;
             border-radius: var(--r-md); color: var(--text-light);
             align-items: center; justify-content: center;
         }
-        .mobile-more-btn:hover { background: var(--hover-bg); color: var(--text); }
+        .toolbar .mobile-more-btn:hover { background: var(--hover-bg); color: var(--text); }
         .mobile-more-glyph { font-size: 22px; line-height: 1; }
 
         /* Fixed bottom navigation bar. */
@@ -6789,7 +6805,7 @@
         @media (max-width: 1024px) {
             :root { --bottom-bar-h: calc(76px + env(safe-area-inset-bottom, 0px)); }
             .bottom-bar { display: flex; }
-            .mobile-more-btn { display: flex; }
+            .toolbar .mobile-more-btn { display: flex; }
             /* Canvas ends above the bar so nothing hides behind it. */
             #tree-container { bottom: var(--bottom-bar-h); }
             /* Zoom + minimap card sits above the bar. */

@@ -120,6 +120,151 @@ test('toolbar regimes have no duplicated or missing controls at any width', asyn
     }
 });
 
+/**
+ * Regression guard for the ~1000–1100px "Letopis" regressions. The original
+ * spec (above) only checked `offsetWidth > 0` at a handful of widths in en-US,
+ * so it missed three real defects:
+ *   1. the view tabs being present in the DOM but clipped/pushed off-screen
+ *      (an element with width can still be outside the viewport, or covered),
+ *   2. the switcher un-folding non-monotonically while shrinking,
+ *   3. the ⋯ trigger rendering as a solid primary-green square (a generic
+ *      `.toolbar button { background: var(--primary) }` beating a low-specificity
+ *      ghost rule) — never caught because colour was never asserted.
+ * These tests sweep finely, in cs-CZ (the widest labels), with a stressed
+ * toolbar, and assert geometry + colour, not mere presence.
+ */
+test.describe('view switcher — monotonic, in-viewport, ghost ⋯ (cs-CZ, stressed)', () => {
+    test.use({ locale: 'cs-CZ' });
+
+    async function primaryGreen(page: Page): Promise<string> {
+        return page.evaluate(() => {
+            const p = document.createElement('div');
+            p.style.background = 'var(--primary)';
+            document.body.appendChild(p);
+            const c = getComputedStyle(p).backgroundColor;
+            p.remove();
+            return c;
+        });
+    }
+
+    /** Geometry + colour of the view switcher and the visible ⋯ trigger. */
+    async function probeView(page: Page) {
+        return page.evaluate(() => {
+            const vw = window.innerWidth;
+            const shown = (el: Element | null): boolean => {
+                if (!el) return false;
+                const cs = getComputedStyle(el);
+                if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+                const r = el.getBoundingClientRect();
+                return r.width > 0 && r.height > 0;
+            };
+
+            const seg = document.getElementById('view-mode-segment');
+            const segShown = shown(seg);
+            let segInViewport = true;
+            let segTabsHit = true;
+            if (segShown && seg) {
+                const r = seg.getBoundingClientRect();
+                // The whole segment must sit inside the viewport, not clipped.
+                segInViewport = r.left >= -1 && r.right <= vw + 1 && r.top >= -1;
+                // Every tab must be the top-most element at its own centre — i.e.
+                // actually visible and clickable, not covered or off-screen.
+                for (const tab of Array.from(seg.querySelectorAll('button'))) {
+                    const tr = tab.getBoundingClientRect();
+                    if (tr.width === 0) continue;
+                    const cx = tr.left + tr.width / 2, cy = tr.top + tr.height / 2;
+                    if (cx < 0 || cx > vw || cy < 0) { segTabsHit = false; break; }
+                    const hit = document.elementFromPoint(cx, cy);
+                    if (!hit || !(hit === tab || tab.contains(hit))) { segTabsHit = false; break; }
+                }
+            }
+
+            const bbTabs = shown(document.getElementById('bb-view-family'));
+
+            // The ⋯ trigger currently on screen: desktop actions menu (>1024) or
+            // the mobile "More" button (≤1024).
+            const desktopDots = document.querySelector('.actions-menu-btn');
+            const mobileDots = document.querySelector('.mobile-more-btn');
+            const dots = shown(desktopDots) ? desktopDots : (shown(mobileDots) ? mobileDots : null);
+            const dotsBg = dots ? getComputedStyle(dots).backgroundColor : null;
+
+            return { vw, segShown, segInViewport, segTabsHit, bbTabs, dotsBg };
+        });
+    }
+
+    test('tabs stay in-viewport and hit-testable, fold exactly once, ⋯ never green', async ({ page }) => {
+        await page.setViewportSize({ width: 1600, height: 850 });
+        await openApp(page);
+        // The empty state already carries the full toolbar (segment, ⋯,
+        // add-person) and the bottom bar; no person needed. Creating one is
+        // avoided on purpose — the add-person helper keys off the English
+        // "Save" label and this context runs in cs-CZ.
+
+        // Stress every width-hungry toolbar element at once.
+        await page.evaluate(() => {
+            const name = document.getElementById('current-tree-name');
+            if (name) name.textContent = 'Velmi Dlouhy Nazev Rodokmenu Test XYZ';
+            const famBtn = document.getElementById('toolbar-family-btn');
+            if (famBtn) famBtn.style.display = '';
+            const fileBtn = document.getElementById('file-link-indicator');
+            if (fileBtn) fileBtn.style.display = '';
+        });
+
+        const green = await primaryGreen(page);
+
+        let sawFold = false;        // segment has disappeared at least once
+        let prevSegShown: boolean | null = null;
+
+        for (let w = 1600; w >= 360; w -= 40) {
+            await page.setViewportSize({ width: w, height: 850 });
+            await page.waitForTimeout(50);
+            const s = await probeView(page);
+            const at = `@${w}px`;
+
+            // Exactly one view surface, always.
+            expect(s.segShown !== s.bbTabs, `${at}: segment XOR bottom-bar tabs (seg=${s.segShown} bar=${s.bbTabs})`).toBe(true);
+
+            // The desktop segment, when shown, is fully on-screen and clickable.
+            if (s.segShown) {
+                expect(s.segInViewport, `${at}: segment fully within the viewport (not clipped/pushed off)`).toBe(true);
+                expect(s.segTabsHit, `${at}: every view tab is the top-most element at its centre`).toBe(true);
+            }
+
+            // Monotonic fold: once the segment folds away while shrinking it must
+            // never reappear on the surface.
+            if (prevSegShown === false && s.segShown === true) {
+                throw new Error(`${at}: view segment reappeared after folding — non-monotonic (oscillation)`);
+            }
+            if (prevSegShown === true && s.segShown === false) sawFold = true;
+            if (sawFold) {
+                expect(s.segShown, `${at}: segment stays folded once it has folded`).toBe(false);
+            }
+            prevSegShown = s.segShown;
+
+            // The ⋯ trigger is a ghost button, never the primary-green fill.
+            expect(s.dotsBg, `${at}: ⋯ trigger must not be primary-green`).not.toBe(green);
+        }
+
+        // Sanity: we actually observed the fold within the swept range.
+        expect(sawFold, 'the segment folded into the bottom bar somewhere in 360–1600px').toBe(true);
+    });
+
+    test('the mobile ⋯ stays ghost at rest, on hover, and when its sheet is open', async ({ page }) => {
+        await page.setViewportSize({ width: 900, height: 850 });
+        await openApp(page);
+        const green = await primaryGreen(page);
+        const dots = page.locator('.mobile-more-btn');
+
+        const bg = () => dots.evaluate((e) => getComputedStyle(e).backgroundColor);
+        expect(await bg(), 'resting ⋯ is not primary-green').not.toBe(green);
+        await dots.hover();
+        expect(await bg(), 'hovered ⋯ is not primary-green').not.toBe(green);
+        await dots.click();  // opens the More sheet
+        await page.waitForTimeout(50);
+        expect(await bg(), 'open-state ⋯ is not primary-green').not.toBe(green);
+    });
+});
+
 test.describe('the 1280 fold boundary', () => {
     test('at 1281 the standalone ⚙ and Actions label are out; at 1280 they fold in', async ({ page }) => {
         await openApp(page);
