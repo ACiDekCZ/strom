@@ -60,6 +60,29 @@ test('trees: rename and delete a tree from the tree manager', async ({ page }) =
     await expect(manager.locator('.tree-manager-item-name', { hasText: 'Temp Renamed' })).toHaveCount(0);
 });
 
+
+test('a hidden tree\u2019s row menu is not see-through', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    const original = (await page.locator('.tree-switcher-btn .tree-name').textContent())?.trim() || '';
+    await createTree(page, 'Branch H');   // creates + switches, manager open
+    const manager = page.locator('#tree-manager-modal');
+    await expect(manager).toBeVisible();
+
+    // Hide the original tree, then open ITS row menu: the dimmed row must not
+    // dim the menu (opacity composites over the whole subtree \u2014 the row
+    // undims while its menu is open).
+    const row = manager.locator('.tree-manager-item', { hasText: original }).first();
+    await row.locator('.tree-row-menu-btn').click();
+    await row.locator('.tree-row-menu-item', { hasText: 'Hide' }).click();
+    await expect(row).toHaveClass(/hidden-tree/);
+
+    await row.locator('.tree-row-menu-btn').click();
+    await expect(row.locator('.tree-row-menu')).toHaveClass(/open/);
+    const opacity = await row.evaluate(el => getComputedStyle(el).opacity);
+    expect(opacity).toBe('1');
+});
+
 test('tree manager: row menu groups actions; Open switches to the tree', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
