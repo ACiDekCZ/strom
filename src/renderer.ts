@@ -1330,11 +1330,77 @@ class TreeRendererClass {
         setTimeout(() => document.addEventListener('click', clear, true), 0);
     }
 
+    /**
+     * Map a generation offset relative to the focus person to a small-caps label.
+     * 0 = focus generation; negative = ancestors (drawn above), positive = descendants.
+     */
+    private generationLabel(offset: number): string {
+        const g = strings.generationLabels;
+        switch (offset) {
+            case -2: return g.grandparents;
+            case -1: return g.parents;
+            case 0: return g.focus;
+            case 1: return g.children;
+            case 2: return g.grandchildren;
+            default: return g.generationN(offset);
+        }
+    }
+
+    /**
+     * Draw faint horizontal generation guide rules across the tree with a
+     * small-caps label on the left of each band (PARENTS / FOCUS GENERATION /
+     * CHILDREN …). Rendered into the same transformed SVG layer as the tree
+     * lines, so the guides pan and zoom together with the cards.
+     */
+    private renderGenerationGuides(svg: SVGSVGElement): void {
+        if (this.viewMode !== 'family' && this.viewMode !== 'descendants') return;
+        if (!this.focusPersonId || this.positions.size === 0) return;
+        const focusPos = this.positions.get(this.focusPersonId);
+        if (!focusPos) return;
+        const step = this.config.cardHeight + this.config.verticalGap;
+        if (step <= 0) return;
+
+        // Distinct band tops (Y) and the overall horizontal extent.
+        const bandYs = new Set<number>();
+        let minX = Infinity, maxX = -Infinity;
+        for (const pos of this.positions.values()) {
+            bandYs.add(Math.round(pos.y));
+            if (pos.x < minX) minX = pos.x;
+            if (pos.x + this.config.cardWidth > maxX) maxX = pos.x + this.config.cardWidth;
+        }
+        if (!isFinite(minX)) return;
+
+        const pad = 48;
+        const lineLeft = minX - pad;
+        const lineRight = maxX + pad;
+        const labelX = minX - 18;
+        const ns = 'http://www.w3.org/2000/svg';
+
+        for (const bandY of Array.from(bandYs).sort((a, b) => a - b)) {
+            const offset = Math.round((bandY - focusPos.y) / step);
+            // Boundary rule just above the band.
+            const boundaryY = bandY - this.config.verticalGap / 2;
+            this.drawLine(svg, lineLeft, boundaryY, lineRight, boundaryY, { className: 'gen-guide-line' });
+            // Left-hand small-caps label, centred on the band row.
+            const text = document.createElementNS(ns, 'text');
+            text.setAttribute('x', String(labelX));
+            text.setAttribute('y', String(bandY + this.config.cardHeight / 2));
+            text.setAttribute('class', 'gen-guide-label');
+            text.setAttribute('text-anchor', 'end');
+            text.setAttribute('dominant-baseline', 'middle');
+            text.textContent = this.generationLabel(offset);
+            svg.appendChild(text);
+        }
+    }
+
     private renderLines(svg: SVGSVGElement): void {
         // In debug mode with step < 7, don't render lines (only boxes)
         const skipLines = this.debugOptions?.enabled && this.debugOptions.step < 7;
 
         if (!skipLines) {
+            // Generation guides sit behind everything (appended first).
+            this.renderGenerationGuides(svg);
+
             // PHASE 1: Draw spouse lines from layout engine
             // Collect all card X ranges at each Y for gap detection
             const cardGap = 4; // px gap before/after intermediate cards

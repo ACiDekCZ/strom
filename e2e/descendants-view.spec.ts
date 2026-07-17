@@ -163,13 +163,14 @@ test('view switcher: the selected segment is visibly highlighted in dark theme',
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 
     await page.locator('#view-mode-descendants').click();
-    // The active segment must not fall back to the generic dark button colour
-    // (regression guard: the .active rule used to be overridden in dark theme
-    // by the equal-specificity generic dark rule that came later in source).
-    const bg = (sel: string) => page.locator(sel).evaluate(el => getComputedStyle(el).backgroundColor);
-    const activeBg = await bg('#view-mode-descendants');
-    const inactiveBg = await bg('#view-mode-family');
-    expect(activeBg).not.toBe(inactiveBg);
+    // The active tab is marked by a copper underline (border-bottom) and copper
+    // text — it must stay visibly distinct from inactive tabs in the dark theme.
+    // (Letopis phase 3 replaced the filled-background segment with underline
+    // tabs, so this guard now reads the active indicator, not the background.)
+    const underline = (sel: string) => page.locator(sel).evaluate(el => getComputedStyle(el).borderBottomColor);
+    const activeUnderline = await underline('#view-mode-descendants');
+    const inactiveUnderline = await underline('#view-mode-family');
+    expect(activeUnderline).not.toBe(inactiveUnderline);
 
     await page.evaluate(() => window.Strom.SettingsManager.setTheme('system'));
     await page.locator('#view-mode-family').click();

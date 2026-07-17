@@ -154,9 +154,9 @@
         .toolbar {
             position: fixed;
             top: 0; left: 0; right: 0;
-            height: 50px;
-            background: var(--card-bg);
-            box-shadow: var(--shadow-sm);
+            height: 56px;
+            background: var(--toolbar-bg);
+            border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
             padding: 0 16px;
@@ -164,25 +164,35 @@
             z-index: 100;
         }
 
-        .toolbar h1 {
-            font-size: 18px;
+        /* Wordmark: serif "Strom" + a copper dot (replaces the tree emoji). */
+        .toolbar h1.app-wordmark {
+            font-size: 20px;
             font-weight: 600;
-            margin-right: 16px;
+            margin-right: 8px;
+            line-height: 1;
         }
-
         .app-logo {
             cursor: pointer;
-            transition: transform 0.2s;
-            display: inline-block;
+            display: inline-flex;
+            align-items: baseline;
+            color: var(--text);
+            letter-spacing: 0.01em;
         }
-        .app-logo:hover {
-            transform: scale(1.2);
+        .app-logo .wordmark-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+            margin-left: 3px;
+            align-self: flex-end;
+            margin-bottom: 3px;
         }
+        .app-logo:hover { color: var(--primary); }
 
         .toolbar button {
             padding: 8px 14px;
             border: none;
-            border-radius: 6px;
+            border-radius: var(--r-md);
             background: var(--primary);
             color: white;
             font-size: 13px;
@@ -190,11 +200,20 @@
             transition: background 0.2s;
         }
         .toolbar button:hover { background: var(--primary-dark); }
+        /* Ghost buttons (⋯ actions, settings): transparent, hairline on hover. */
         .toolbar button.secondary {
-            background: #e0e0e0;
-            color: var(--text);
+            background: transparent;
+            color: var(--text-light);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
-        .toolbar button.secondary:hover { background: #d0d0d0; }
+        .toolbar button.secondary:hover { background: var(--hover-bg); color: var(--text); }
+        .toolbar button.secondary svg { display: block; }
+
+        /* Primary "＋ Add person" button. */
+        .btn-add-person { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+        .btn-add-person .btn-add-glyph { font-size: 16px; line-height: 1; font-weight: 400; }
 
         /* Round add person button (tablet/mobile) */
         .add-person-round {
@@ -258,31 +277,30 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            padding: 6px 12px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            background: white;
+            padding: 7px 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-pill);
+            background: transparent;
+            color: var(--text);
             cursor: pointer;
             font-size: 13px;
-            transition: all 0.2s;
+            transition: background 0.2s, border-color 0.2s;
             max-width: 200px;
         }
         .tree-switcher-btn:hover {
             border-color: var(--primary);
-            background: color-mix(in srgb, var(--primary) 5%, transparent);
-        }
-        .tree-switcher-btn .tree-icon {
-            font-size: 16px;
+            background: var(--hover-bg);
         }
         .tree-switcher-btn .tree-name {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            max-width: 120px;
+            max-width: 130px;
         }
         .tree-switcher-btn .tree-dropdown-arrow {
             color: var(--text-light);
-            font-size: 10px;
+            flex-shrink: 0;
+            display: block;
         }
         .tree-switcher-dropdown {
             position: absolute;
@@ -422,20 +440,38 @@
         .search-container {
             position: relative;
             margin-right: auto;
-            width: 220px;
+            flex: 0 1 300px;
+            min-width: 120px;
         }
-        /* Toolbar search picker styling */
-        #toolbar-search-picker .person-picker-input {
-            padding: 8px 32px 8px 12px;
-            font-size: 13px;
+        /* The search field is a pill: magnifier · input · "/" chip · filter. */
+        .search-row {
+            display: flex; align-items: center; gap: 6px;
+            height: 38px; padding: 0 8px 0 12px;
+            border: 1px solid var(--border); border-radius: var(--r-pill);
+            background: var(--surface);
+            transition: border-color 0.2s;
+        }
+        .search-row:focus-within { border-color: var(--primary); }
+        .search-magnifier { flex-shrink: 0; color: var(--text-faint); display: block; }
+        .search-row #toolbar-search-picker { flex: 1; min-width: 0; }
+        /* Toolbar search input: borderless, transparent — the pill is the frame. */
+        .toolbar #toolbar-search-picker .person-picker-input {
+            padding: 6px 4px; font-size: 13px;
+            border: none; background: transparent; border-radius: 0;
+        }
+        .toolbar #toolbar-search-picker .person-picker-input:focus { border: none; }
+        .toolbar #toolbar-search-picker .person-picker-toggle { right: 2px; }
+        .search-shortcut {
+            flex-shrink: 0; font-family: var(--font-sans); font-size: 11px;
+            color: var(--text-faint); background: var(--surface-2);
+            border: 1px solid var(--border); border-radius: var(--r-sm);
+            padding: 1px 6px; line-height: 1.5; min-width: 15px; text-align: center;
         }
         /* Search filters */
-        .search-row { display: flex; align-items: stretch; gap: 6px; }
-        .search-row #toolbar-search-picker { flex: 1; min-width: 0; }
         .search-filter-toggle {
-            flex-shrink: 0; border: 1px solid var(--border-color, #ccc); border-radius: 6px;
-            background: var(--card-bg, #fff); cursor: pointer; padding: 0 10px; font-size: 15px;
-            color: var(--text-light);
+            flex-shrink: 0; border: none; border-radius: var(--r-sm);
+            background: transparent; cursor: pointer; padding: 4px 6px; font-size: 15px;
+            color: var(--text-faint);
             display: flex; align-items: center; justify-content: center;
         }
         .search-filter-toggle svg { display: block; }
@@ -477,17 +513,13 @@
                 border-radius: 10px 10px 0 0; box-shadow: var(--shadow-lg);
             }
         }
-        .toolbar #toolbar-search-picker .person-picker-toggle {
-            font-size: 10px;
-            background: transparent;
-            color: var(--text-light);
-            padding: 4px;
-            border-radius: 6px;
-        }
-        .toolbar #toolbar-search-picker .person-picker-toggle:hover {
-            background: rgba(128,128,128,0.2);
-            color: var(--text);
-        }
+        /* The pill carries its own magnifier + "/" chip — the picker's built-in
+           dropdown caret is redundant here, so hide it in the toolbar. */
+        .toolbar #toolbar-search-picker .person-picker-toggle { display: none; }
+        /* Keep the toolbar filter toggle a ghost even under the dark theme
+           (the shared dark rule paints the filters-panel toggle, not this one). */
+        .toolbar .search-filter-toggle,
+        [data-theme="dark"] .toolbar .search-filter-toggle { background: transparent; border: none; }
         .search-no-results {
             padding: 12px;
             text-align: center;
@@ -502,7 +534,7 @@
         /* ==================== TREE CONTAINER ==================== */
         #tree-container {
             position: absolute;
-            top: 50px; left: 0; right: 0; bottom: 0;
+            top: 56px; left: 0; right: 0; bottom: 0;
             overflow: hidden;
             cursor: grab;
             /* Our JS drives pan/pinch — stop the browser from panning/zooming
@@ -527,6 +559,20 @@
         #tree-lines path {
             stroke: var(--line-color);
             stroke-width: 1.5;
+        }
+        /* Generation guide rules + small-caps band labels (behind the tree). */
+        #tree-lines line.gen-guide-line {
+            stroke: var(--gen-rule);
+            stroke-width: 1;
+        }
+        #tree-lines text.gen-guide-label {
+            fill: var(--text-faint);
+            font-family: var(--font-sans);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.14em;
+            pointer-events: none;
+            user-select: none;
         }
 
         /* ==================== PERSON CARD ==================== */
@@ -575,31 +621,46 @@
         .person-card.branch-maternal::before { background: var(--branch-maternal); }
         .person-card.branch-descendant::before { background: var(--branch-descendant); }
 
-        /* Branch legend (bottom-left, above the minimap when present) */
-        .branch-legend {
+        /* Legend pill (bottom-left): gender rings, plus branch swatches when on.
+           Informational only — never intercepts pointer events. */
+        .tree-legend {
             position: fixed;
             left: 24px;
             bottom: 24px;
             display: flex;
-            flex-direction: column;
-            gap: 5px;
-            padding: 8px 10px;
-            background: color-mix(in srgb, var(--card-bg) 88%, transparent);
-            border: 1px solid var(--border-color, rgba(0,0,0,0.1));
-            border-radius: 8px;
+            align-items: center;
+            gap: 14px;
+            padding: 8px 14px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-pill);
             box-shadow: var(--shadow-sm);
             font-size: 12px;
+            color: var(--text-light);
+            pointer-events: none;
             z-index: 90;
         }
+        .legend-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+        /* Gender rings mirror the card avatar: a 2px coloured ring, hollow. */
+        .legend-ring {
+            width: 14px; height: 14px; border-radius: 50%;
+            background: var(--avatar-bg); flex-shrink: 0;
+            box-sizing: border-box;
+        }
+        .legend-ring-male { border: 2px solid var(--male); }
+        .legend-ring-female { border: 2px solid var(--female); }
+        /* Branch swatches: an inline sub-group, shown only with branch colours. */
+        .branch-legend-group { display: none; align-items: center; gap: 14px; }
         .branch-legend-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-        .branch-swatch { width: 12px; height: 12px; border-radius: 6px; flex-shrink: 0; }
+        .branch-swatch { width: 12px; height: 12px; border-radius: var(--r-sm); flex-shrink: 0; }
         .swatch-paternal { background: var(--branch-paternal); }
         .swatch-maternal { background: var(--branch-maternal); }
         .swatch-descendant { background: var(--branch-descendant); }
         @media (max-width: 500px) {
-            .branch-legend { left: 12px; bottom: 12px; font-size: 11px; padding: 6px 8px; }
+            .tree-legend { left: 12px; bottom: 12px; font-size: 11px; padding: 6px 10px; gap: 10px; }
+            .branch-legend-group { gap: 10px; }
         }
-        @media print { .branch-legend { display: none !important; } }
+        @media print { .tree-legend { display: none !important; } }
 
         /* Interactive tour: dimmed spotlight overlay + bubble */
         .tour-overlay { position: fixed; inset: 0; z-index: 5000; pointer-events: none; display: none; }
@@ -1198,18 +1259,6 @@
             background: #555;
         }
         /* Dark mode: focus controls */
-        [data-theme="dark"] .focus-controls {
-            background: rgba(42, 42, 42, 0.85);
-        }
-        [data-theme="dark"] .focus-count {
-            background: #444;
-            color: var(--text-light);
-        }
-        [data-theme="dark"] .focus-depth select {
-            background: #3a3a3a;
-            color: var(--text);
-            border-color: #555;
-        }
         /* Dark mode: zoom controls */
         [data-theme="dark"] .zoom-controls button {
             background: var(--card-bg);
@@ -2650,7 +2699,7 @@
         /* ==================== EMBEDDED MODE ==================== */
         .embedded-mode-banner {
             position: fixed;
-            top: 50px;
+            top: 56px;
             left: 0;
             right: 0;
             background: #fff3cd;
@@ -2876,52 +2925,63 @@
         }
 
         /* ==================== ZOOM CONTROLS ==================== */
-        .zoom-controls {
+        /* Zoom + minimap: one card, bottom-right. Minimap on top, a row of
+           four ghost buttons below. When the minimap is off (setting or no
+           overflow), the card shows only the button row. */
+        .control-block {
             position: fixed;
             bottom: 24px;
             right: 24px;
+            z-index: 100;
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            z-index: 100;
+            gap: 8px;
+            align-items: stretch;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-lg);
+            box-shadow: var(--shadow-sm);
+            padding: 8px;
+        }
+        .zoom-controls {
+            display: flex;
+            flex-direction: row;
+            gap: 4px;
+            justify-content: space-between;
         }
         .zoom-controls button {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
+            flex: 1;
+            width: 40px;
+            height: 40px;
+            border-radius: var(--r-md);
             border: none;
-            background: var(--card-bg);
-            box-shadow: var(--shadow-sm);
-            font-size: 22px;
+            background: transparent;
+            color: var(--text-light);
+            font-size: 20px;
             cursor: pointer;
-            transition: transform 0.15s, box-shadow 0.15s, background 0.1s;
+            transition: background 0.15s, color 0.15s;
             -webkit-tap-highlight-color: transparent;
             touch-action: manipulation;
             user-select: none;
         }
         .zoom-controls button:hover {
-            transform: scale(1.1);
-            box-shadow: var(--shadow-sm);
+            background: var(--hover-bg);
+            color: var(--text);
         }
         .zoom-controls button:active {
-            transform: scale(0.95);
             background: var(--primary);
             color: white;
         }
 
-        /* Overview minimap (sits above the zoom controls, bottom-right) */
+        /* Overview minimap (top of the control block). */
         .minimap-panel {
-            position: fixed;
-            bottom: 24px;
-            right: 84px;
             width: 180px;
             height: 120px;
-            border-radius: 10px;
+            border-radius: var(--r-md);
             overflow: hidden;
-            background: color-mix(in srgb, var(--card-bg) 82%, transparent);
-            box-shadow: var(--shadow-sm);
-            border: 1px solid var(--border-color, rgba(0,0,0,0.1));
-            z-index: 99;
+            background: var(--surface-2);
+            border: 1px solid var(--accent);
+            box-sizing: border-box;
         }
         .minimap-panel canvas {
             display: block;
@@ -2930,11 +2990,29 @@
             cursor: pointer;
             touch-action: none;
         }
-        /* Tablet: keep it but tuck it into the corner above the controls. */
-        @media (max-width: 900px) {
-            .minimap-panel { bottom: 84px; right: 24px; }
+        /* Mobile: the block drops its card chrome; the zoom buttons return to a
+           floating vertical stack (Phase 6 owns the final mobile treatment). */
+        @media (max-width: 600px) {
+            .control-block {
+                display: contents;
+            }
+            .zoom-controls {
+                position: fixed;
+                bottom: 16px;
+                right: 16px;
+                flex-direction: column;
+                gap: 8px;
+                z-index: 100;
+            }
+            .zoom-controls button {
+                width: 48px;
+                height: 48px;
+                border-radius: 50%;
+                background: var(--surface);
+                box-shadow: var(--shadow-sm);
+                font-size: 24px;
+            }
         }
-        /* Mobile: never shown (JS also guards), but hide defensively. */
         @media (max-width: 500px) {
             .minimap-panel { display: none !important; }
         }
@@ -3585,73 +3663,87 @@
             opacity: 0.4;
         }
 
+        /* Focus chip: the DESKTOP home for the name, person count and
+           generation up/down selects. A pill under the toolbar, top-left.
+           On tablet the same controls live inline in .toolbar-focus; on mobile
+           this chip is re-anchored near the top (see the mobile media query).
+           JS toggles .hidden when a focus person is (de)selected. */
         .focus-controls {
             position: fixed;
-            top: 60px;
-            left: 50%;
-            transform: translateX(-50%);
-            /* The floating focus bar (name + generation depth controls) is the
-               DESKTOP home for the generation up/down selects. On tablet the
-               same controls live inline in .toolbar-focus, on mobile this bar
-               is re-anchored near the top. JS toggles .hidden when a focus
-               person is (de)selected — so the bar is laid out by default and
-               only hidden while there is nothing focused. */
+            top: 64px;
+            left: 16px;
             display: flex;
             align-items: center;
-            gap: 16px;
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            padding: 10px 20px;
-            border-radius: 10px;
+            gap: 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 6px 8px 6px 14px;
+            border-radius: var(--r-pill);
             box-shadow: var(--shadow-sm);
-            /* Sit BELOW the toolbar (z-index 100) and its dropdowns. The toolbar
-               is a stacking context, so its dropdowns' z-index:200 is confined
-               inside it — a root-level bar above z-100 would paint over an open
-               tree-switcher / actions dropdown and swallow its clicks. Physical
-               gap (top:60 vs toolbar 0–50) keeps the bar visible regardless. */
+            font-size: 13px;
+            /* Sit BELOW the toolbar (z-index 100) and its dropdowns. */
             z-index: 50;
         }
-        /* No focus person → JS adds .hidden; keep it hidden at every width.
-           (Higher specificity than the base + mobile display rules so it wins
-           whether or not those carry !important.) */
+        /* No focus person → JS adds .hidden; keep it hidden at every width. */
         .focus-controls.hidden { display: none !important; }
         /* Descendants view uses its own badge (root name + exit) as the context
-           UI at every width — the floating focus bar would just duplicate it. */
+           UI at every width — the focus chip would just duplicate it. */
         body.descendants-view .focus-controls { display: none !important; }
+        /* Standalone views (map/timeline/fan) carry their own top-left controls. */
+        body.standalone-view .focus-controls { display: none !important; }
         .focus-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
             font-size: 13px;
             color: var(--text);
         }
+        .focus-label { color: var(--text-faint); }
         .focus-info strong {
-            color: var(--primary);
+            color: var(--text);
+            font-weight: 600;
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .focus-count {
-            margin-left: 12px;
             padding: 2px 8px;
-            background: #e0e0e0;
-            border-radius: 10px;
+            background: var(--surface-2);
+            border-radius: var(--r-pill);
             font-size: 11px;
             color: var(--text-light);
         }
         .focus-depth {
             display: flex;
-            gap: 12px;
+            gap: 8px;
             font-size: 12px;
             color: var(--text-light);
         }
         .focus-depth label {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 4px;
         }
         .focus-depth select {
-            padding: 4px 8px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
+            padding: 3px 6px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-sm);
+            background: var(--surface);
+            color: var(--text);
             font-size: 12px;
             cursor: pointer;
         }
+        .focus-clear {
+            flex-shrink: 0;
+            width: 26px; height: 26px;
+            display: inline-flex; align-items: center; justify-content: center;
+            border: none; border-radius: 50%;
+            background: transparent; color: var(--text-light);
+            font-size: 18px; line-height: 1; cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        .focus-clear:hover { background: var(--hover-bg); color: var(--text); }
         .focus-controls .btn-export-focus {
             padding: 8px 14px;
             border: none;
@@ -3843,26 +3935,31 @@
         .desktop-only { display: flex; }
         .mobile-only { display: none !important; }
 
-        /* Family / Descendants view segment */
-        .view-mode-segment { display: inline-flex; border: 1px solid var(--border-color, #ccc); border-radius: 6px; overflow: hidden; }
-        .view-mode-segment button {
-            border: none; background: var(--card-bg, #fff); color: var(--text, #333);
-            padding: 6px 10px; font-size: 12px; cursor: pointer;
+        /* Family / Descendants view tabs — full-height, copper underline on the
+           active tab. margin-left:auto pushes the tabs (+ ⋯/settings/add) right. */
+        .view-mode-segment {
+            display: inline-flex; align-self: stretch; align-items: stretch;
+            margin-left: auto;
         }
-        .view-mode-segment button + button { border-left: 1px solid var(--border-color, #ccc); }
-        .view-mode-segment button.active { background: var(--primary); color: #fff; }
-        [data-theme="dark"] .view-mode-segment { border-color: #444; }
-        /* Dark theme: the active-state rule above has the same specificity as
-           the generic dark button rule but comes earlier, so it would lose.
-           Re-assert the selected highlight with a dark-scoped .active rule. */
-        [data-theme="dark"] .view-mode-segment button.active { background: var(--primary); color: #fff; }
+        .view-mode-segment button {
+            border: none; background: transparent; color: var(--text-light);
+            padding: 0 14px; font-size: 13px; cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: color 0.15s, border-color 0.15s;
+        }
+        .view-mode-segment button:hover { color: var(--text); }
+        .view-mode-segment button.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+            font-weight: 600;
+        }
         /* Descendants badge bar */
         .collab-bar {
-            position: fixed; top: 58px; left: 50%; transform: translateX(-50%); z-index: 95;
+            position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 95;
         }
         /* Below the standalone-file banner when it is shown (embedded copies). */
-        body:has(#embedded-mode-banner.visible) .collab-bar { top: 118px; }
-        body:has(#embedded-mode-banner.visible) .collab-badge { top: 118px; }
+        body:has(#embedded-mode-banner.visible) .collab-bar { top: 124px; }
+        body:has(#embedded-mode-banner.visible) .collab-badge { top: 124px; }
         .collab-bar {
             display: flex; align-items: center; gap: 10px;
             background: var(--color-forest, #1a5a2f); background: #2d6a4f; color: #fff;
@@ -3874,7 +3971,7 @@
         .collab-bar .collab-send { background: #fff; color: #2d6a4f; font-weight: 600; }
         .collab-bar .collab-hide { background: rgba(255,255,255,0.18); color: #fff; }
         .collab-badge {
-            position: fixed; top: 58px; right: 12px; z-index: 95;
+            position: fixed; top: 64px; right: 12px; z-index: 95;
             width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
             background: #2d6a4f; color: #fff; font-size: 17px; box-shadow: var(--shadow-sm);
         }
@@ -3893,7 +3990,7 @@
         }
 
         .descendants-badge {
-            position: fixed; top: 58px; left: 50%; transform: translateX(-50%); z-index: 90;
+            position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 90;
             display: flex; align-items: center; gap: 10px;
             background: var(--primary); color: #fff;
             padding: 6px 8px 6px 14px; border-radius: 999px; box-shadow: var(--shadow-sm);
@@ -3976,11 +4073,13 @@
         /* Nothing but the tree and the caption on screen. */
         body.slideshow-mode .toolbar,
         body.slideshow-mode .zoom-controls,
+        body.slideshow-mode .control-block,
         body.slideshow-mode .focus-nav-btn,
         body.slideshow-mode #focus-controls,
         body.slideshow-mode .minimap-panel,
         body.slideshow-mode #descendants-badge,
         body.slideshow-mode .branch-legend,
+        body.slideshow-mode .tree-legend,
         body.slideshow-mode .toast,
         body.slideshow-mode .tour-offer,
         body.slideshow-mode .pwa-update,
@@ -4082,7 +4181,7 @@
         /* Mobile menu */
         .mobile-menu {
             position: fixed;
-            top: 50px;
+            top: 56px;
             right: 0;
             background: var(--card-bg);
             box-shadow: var(--shadow-lg);
@@ -6926,12 +7025,12 @@
         #poster-print { display: none; }
 
         @media print {
-            .toolbar, .zoom-controls, .add-btn, .mobile-menu,
+            .toolbar, .zoom-controls, .control-block, .add-btn, .mobile-menu,
             .context-menu, .modal-overlay, .rel-link-icon,
             .hidden-partners-btn, .hidden-families-btn,
             .cross-tree-badge, .branch-tab, .badge-tooltip,
             .card-tooltip, .collapse-chain-btn, .fan-controls,
-            .tree-tabs, #empty-state { display: none !important; }
+            .tree-tabs, .tree-legend, #empty-state { display: none !important; }
 
             /* Fan chart prints as-is (its container scrolls on screen only) */
             .fan-container { position: relative !important; overflow: visible !important; }
@@ -6978,12 +7077,26 @@
 </head>
 <body>
     <div class="toolbar">
-        <h1><span class="app-logo" onclick="window.Strom.UI.showAboutDialog()" data-i18n-title="about.title">🌳</span> <span class="toolbar-title" data-i18n="toolbar.title"></span></h1>
+        <h1 class="app-wordmark"><span class="app-logo" onclick="window.Strom.UI.showAboutDialog()" data-i18n-title="about.title">Strom<span class="wordmark-dot" aria-hidden="true"></span></span></h1>
         <span id="offline-indicator" class="offline-indicator" style="display:none;" data-i18n="pwa.offline"></span>
-        <button id="file-link-indicator" class="file-link-indicator" style="display:none;" onclick="window.Strom.UI.saveActiveTreeToFile()">💾</button>
+        <button id="file-link-indicator" class="file-link-indicator" style="display:none;" onclick="window.Strom.UI.saveActiveTreeToFile()" data-i18n-title="fileAccess.saveToFile"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button>
+
+        <!-- Tree Switcher (responsive - compact on mobile/tablet) -->
+        <div class="tree-switcher">
+            <button class="tree-switcher-btn" onclick="window.Strom.UI.toggleTreeSwitcher()">
+                <span id="current-tree-name" class="tree-name">...</span>
+                <svg class="tree-dropdown-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div id="tree-switcher-dropdown" class="tree-switcher-dropdown">
+                <!-- Tree list rendered dynamically -->
+            </div>
+        </div>
+
         <div class="search-container">
             <div class="search-row">
+                <svg class="search-magnifier" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
                 <div id="toolbar-search-picker"></div>
+                <kbd class="search-shortcut" aria-hidden="true" data-i18n-title="search.shortcutAria">/</kbd>
                 <button type="button" id="search-filter-toggle" class="search-filter-toggle" onclick="window.Strom.UI.toggleSearchFilters()" data-i18n-title="searchFilters.toggle"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8.5V19l-4 2.5v-8L3 5z"/></svg></button>
             </div>
             <div id="search-filters" class="search-filters" style="display:none;">
@@ -7036,28 +7149,7 @@
             </div>
         </div>
 
-        <!-- Tree Switcher (responsive - compact on mobile/tablet) -->
-        <div class="tree-switcher">
-            <button class="tree-switcher-btn" onclick="window.Strom.UI.toggleTreeSwitcher()">
-                <span class="tree-icon">🌳</span>
-                <span id="current-tree-name" class="tree-name">...</span>
-                <span class="tree-dropdown-arrow">▾</span>
-            </button>
-            <div id="tree-switcher-dropdown" class="tree-switcher-dropdown">
-                <!-- Tree list rendered dynamically -->
-            </div>
-        </div>
-
-        <!-- Desktop buttons -->
-        <div class="toolbar-buttons desktop-only">
-            <button onclick="window.Strom.UI.showAddPersonModal()" data-i18n="toolbar.addPerson"></button>
-            <button id="toolbar-family-btn" style="display:none;" onclick="window.Strom.UI.startFamilyWizardFromToolbar()" data-i18n="familyWizard.title"></button>
-        </div>
-
-        <!-- Tablet add person (round +) -->
-        <button class="add-person-round" onclick="window.Strom.UI.showAddPersonModal()" title="Add Person" data-i18n-title="toolbar.addPerson">+</button>
-
-        <!-- Family / Descendants view segment (desktop) -->
+        <!-- Family / Descendants view tabs (desktop) — pushed to the right -->
         <div class="view-mode-segment desktop-only" id="view-mode-segment">
             <button id="view-mode-family" class="active" onclick="window.Strom.UI.setDisplayViewMode('family')" data-i18n="viewModeSwitch.family"></button>
             <button id="view-mode-descendants" onclick="window.Strom.UI.setDisplayViewMode('descendants')" data-i18n="viewModeSwitch.descendants"></button>
@@ -7100,9 +7192,16 @@
                 </div>
             </div>
         </div>
-        <button class="secondary desktop-only actions-toolbar-settings" onclick="window.Strom.UI.showSettingsDialog()" data-i18n-title="settings.title">⚙</button>
+        <button class="secondary desktop-only actions-toolbar-settings" onclick="window.Strom.UI.showSettingsDialog()" data-i18n-title="settings.title" data-i18n-aria-label="settings.title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 
-        <!-- Settings button (desktop) -->
+        <!-- Add-person (desktop primary) + family wizard, rightmost -->
+        <div class="toolbar-buttons desktop-only">
+            <button class="btn-add-person" onclick="window.Strom.UI.showAddPersonModal()"><span class="btn-add-glyph" aria-hidden="true">＋</span> <span data-i18n="toolbar.addPerson"></span></button>
+            <button id="toolbar-family-btn" style="display:none;" onclick="window.Strom.UI.startFamilyWizardFromToolbar()" data-i18n="familyWizard.title"></button>
+        </div>
+
+        <!-- Tablet add person (round +) -->
+        <button class="add-person-round" onclick="window.Strom.UI.showAddPersonModal()" title="Add Person" data-i18n-title="toolbar.addPerson">+</button>
 
         <!-- Mobile hamburger -->
         <button class="hamburger-btn mobile-only" onclick="window.Strom.UI.toggleMobileMenu()">☰</button>
@@ -7198,16 +7297,18 @@
         <div class="slideshow-hint" data-i18n="slideshow.hint"></div>
     </div>
 
-    <div class="zoom-controls">
-        <button onclick="window.Strom.ZoomPan.zoomIn()" data-i18n-title="zoomControls.zoomIn">+</button>
-        <button onclick="window.Strom.ZoomPan.zoomOut()" data-i18n-title="zoomControls.zoomOut">−</button>
-        <button onclick="window.Strom.ZoomPan.reset()" data-i18n-title="zoomControls.reset">⟲</button>
-        <button onclick="window.Strom.ZoomPan.fitToScreen()" data-i18n-title="zoomControls.fitToScreen">⛶</button>
-    </div>
-
-    <!-- Overview minimap (shown only for trees that overflow the viewport) -->
-    <div id="minimap-panel" class="minimap-panel" style="display:none;" data-i18n-title="minimap.title">
-        <canvas id="minimap-canvas" width="180" height="120"></canvas>
+    <!-- Zoom + minimap control block (bottom-right) -->
+    <div class="control-block">
+        <!-- Overview minimap (shown only for trees that overflow the viewport) -->
+        <div id="minimap-panel" class="minimap-panel" style="display:none;" data-i18n-title="minimap.title">
+            <canvas id="minimap-canvas" width="180" height="120"></canvas>
+        </div>
+        <div class="zoom-controls">
+            <button onclick="window.Strom.ZoomPan.zoomIn()" data-i18n-title="zoomControls.zoomIn">+</button>
+            <button onclick="window.Strom.ZoomPan.zoomOut()" data-i18n-title="zoomControls.zoomOut">−</button>
+            <button onclick="window.Strom.ZoomPan.reset()" data-i18n-title="zoomControls.reset">⟲</button>
+            <button onclick="window.Strom.ZoomPan.fitToScreen()" data-i18n-title="zoomControls.fitToScreen">⛶</button>
+        </div>
     </div>
 
     <!-- Interactive tour overlay (spotlight + bubble) -->
@@ -7223,23 +7324,28 @@
         </div>
     </div>
 
-    <!-- Branch colour legend (shown only when branch colours are enabled) -->
-    <div id="branch-legend" class="branch-legend" style="display:none;">
-        <span class="branch-legend-item"><span class="branch-swatch swatch-paternal"></span><span data-i18n="branchColors.legendPaternal"></span></span>
-        <span class="branch-legend-item"><span class="branch-swatch swatch-maternal"></span><span data-i18n="branchColors.legendMaternal"></span></span>
-        <span class="branch-legend-item"><span class="branch-swatch swatch-descendant"></span><span data-i18n="branchColors.legendDescendant"></span></span>
+    <!-- Legend pill (bottom-left): gender rings always; branch swatches opt-in -->
+    <div id="tree-legend" class="tree-legend" style="display:none;">
+        <span class="legend-item"><span class="legend-ring legend-ring-male"></span><span data-i18n="gender.male"></span></span>
+        <span class="legend-item"><span class="legend-ring legend-ring-female"></span><span data-i18n="gender.female"></span></span>
+        <span id="branch-legend" class="branch-legend-group" style="display:none;">
+            <span class="branch-legend-item"><span class="branch-swatch swatch-paternal"></span><span data-i18n="branchColors.legendPaternal"></span></span>
+            <span class="branch-legend-item"><span class="branch-swatch swatch-maternal"></span><span data-i18n="branchColors.legendMaternal"></span></span>
+            <span class="branch-legend-item"><span class="branch-swatch swatch-descendant"></span><span data-i18n="branchColors.legendDescendant"></span></span>
+        </span>
     </div>
 
-    <!-- Focus Mode Controls -->
+    <!-- Focus chip (top-left, under the toolbar) -->
     <div id="focus-controls" class="focus-controls hidden">
         <div class="focus-info">
+            <span class="focus-label" data-i18n="focus.focusedOn"></span>
             <strong id="focus-name" onclick="window.Strom.ZoomPan.centerOnFocusWithContext()" style="cursor:pointer;" data-i18n-title="uiTips.centerOnFocus"></strong>
             <span id="focus-person-count" class="focus-count" onclick="window.Strom.UI.showActiveTreeStats()" style="cursor:pointer;" data-i18n-title="uiTips.showStats"></span>
         </div>
         <div class="focus-depth">
             <label>
-                <span>↑</span>
-                <select id="focus-depth-up" onchange="window.Strom.TreeRenderer.setFocusDepth(parseInt(this.value), parseInt(document.getElementById('focus-depth-down').value))">
+                <span aria-hidden="true">↑</span>
+                <select id="focus-depth-up" data-i18n-title="focus.generationsUp" onchange="window.Strom.TreeRenderer.setFocusDepth(parseInt(this.value), parseInt(document.getElementById('focus-depth-down').value))">
                     <option value="1">1</option>
                     <option value="2">2</option>
                     <option value="3" selected>3</option>
@@ -7248,8 +7354,8 @@
                 </select>
             </label>
             <label>
-                <span>↓</span>
-                <select id="focus-depth-down" onchange="window.Strom.TreeRenderer.setFocusDepth(parseInt(document.getElementById('focus-depth-up').value), parseInt(this.value))">
+                <span aria-hidden="true">↓</span>
+                <select id="focus-depth-down" data-i18n-title="focus.generationsDown" onchange="window.Strom.TreeRenderer.setFocusDepth(parseInt(document.getElementById('focus-depth-up').value), parseInt(this.value))">
                     <option value="1">1</option>
                     <option value="2">2</option>
                     <option value="3" selected>3</option>
@@ -7258,6 +7364,7 @@
                 </select>
             </label>
         </div>
+        <button type="button" class="focus-clear" onclick="window.Strom.ZoomPan.fitToScreen()" data-i18n-title="focus.showAll" data-i18n-aria-label="focus.showAll">&times;</button>
     </div>
 
     <!-- Person Modal -->

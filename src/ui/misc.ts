@@ -308,6 +308,10 @@ export const miscMethods = uiModule({
         const mode = TreeRenderer.getViewMode();
         // Mobile CSS hides the focus bar under the descendants badge.
         document.body.classList.toggle('descendants-view', mode === 'descendants');
+        // Standalone views (map/timeline/fan) have their own top-left controls;
+        // the tree focus chip does not apply there and must not overlap them.
+        document.body.classList.toggle('standalone-view',
+            mode === 'map' || mode === 'timeline' || mode === 'fan');
         for (const m of ['family', 'descendants', 'timeline', 'fan', 'map']) {
             document.getElementById(`view-mode-${m}`)?.classList.toggle('active', mode === m);
             document.getElementById(`mm-view-${m}`)?.classList.toggle('active', mode === m);
@@ -344,9 +348,16 @@ export const miscMethods = uiModule({
 
         // Branch-colour legend: only when the setting is on and cards are
         // actually shown (family/descendants — not timeline, not fan).
+        const cardsShown = mode === 'family' || mode === 'descendants';
+        // The legend pill (gender rings) shows whenever cards are on screen; the
+        // branch swatches inside it stay an opt-in sub-group.
+        const treeLegend = document.getElementById('tree-legend');
+        if (treeLegend) {
+            const hasPersons = DataManager.getAllPersons().length > 0;
+            treeLegend.style.display = (cardsShown && hasPersons) ? 'flex' : 'none';
+        }
         const legend = document.getElementById('branch-legend');
         if (legend) {
-            const cardsShown = mode === 'family' || mode === 'descendants';
             legend.style.display = (cardsShown && SettingsManager.isBranchColorsEnabled()
                 && SettingsManager.isBranchLegendEnabled()) ? 'flex' : 'none';
         }
@@ -610,6 +621,14 @@ export const miscMethods = uiModule({
             // Skip shortcuts when focus is in input/textarea/select
             const activeEl = document.activeElement;
             if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) return;
+
+            // "/" focuses the toolbar search (only when not typing — the guard
+            // above already returned for inputs/textareas/selects).
+            if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                e.preventDefault();
+                this.toolbarSearchPicker?.focusInput();
+                return;
+            }
 
             // Ctrl/Cmd+Z: undo, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y: redo
             if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {

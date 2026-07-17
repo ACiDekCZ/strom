@@ -743,6 +743,16 @@ const stringsEN = {
         personCount: (visible: number, total: number) => `${visible} of ${total} persons`
     },
 
+    // Generation guide labels (small-caps rules on the canvas, relative to focus)
+    generationLabels: {
+        grandparents: 'GRANDPARENTS',
+        parents: 'PARENTS',
+        focus: 'FOCUS GENERATION',
+        children: 'CHILDREN',
+        grandchildren: 'GRANDCHILDREN',
+        generationN: (offset: number) => `GENERATION ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`,
+    },
+
     // Branch tabs (family context navigation)
     branchTabs: {
         viewParents: 'View as child (show parents)',
@@ -755,7 +765,9 @@ const stringsEN = {
         placeholder: 'Search person...',
         noResults: 'No results',
         multipleResults: 'Multiple results found',
-        selectPerson: 'Select person'
+        selectPerson: 'Select person',
+        shortcutHint: '/',
+        shortcutAria: 'Press / to search',
     },
 
     // Search filters
@@ -2283,6 +2295,16 @@ const stringsCZ: StringsType = {
         personCount: (visible: number, total: number) => `${visible} z ${total} osob`
     },
 
+    // Generation guide labels (small-caps rules on the canvas, relative to focus)
+    generationLabels: {
+        grandparents: 'PRARODIČE',
+        parents: 'RODIČE',
+        focus: 'ZAMĚŘENÁ GENERACE',
+        children: 'DĚTI',
+        grandchildren: 'VNOUČATA',
+        generationN: (offset: number) => `GENERACE ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`,
+    },
+
     // Branch tabs (family context navigation)
     branchTabs: {
         viewParents: 'Zobrazit jako dítě (ukázat rodiče)',
@@ -2295,7 +2317,9 @@ const stringsCZ: StringsType = {
         placeholder: 'Hledat osobu...',
         noResults: 'Nic nenalezeno',
         multipleResults: 'Nalezeno více výsledků',
-        selectPerson: 'Vyberte osobu'
+        selectPerson: 'Vyberte osobu',
+        shortcutHint: '/',
+        shortcutAria: 'Stiskněte / pro hledání',
     },
 
     // Search filters
