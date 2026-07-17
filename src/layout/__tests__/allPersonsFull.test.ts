@@ -47,6 +47,8 @@ const DEFAULT_FIXTURES = [
     'etalon-descendant-partner-ancestors',
     'etalon-incomplete-data',
     'etalon-stress-all',
+    // Development demo tree (fictional; see scripts/generate-devel-demo.ts).
+    'devel-demo',
 ];
 const FIXTURES = (process.env.FIXTURES || DEFAULT_FIXTURES.join(','))
     .split(',')
