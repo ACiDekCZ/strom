@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, card } from './helpers';
+import { openApp, createFirstPerson, addRelation, card } from './helpers';
 
 /**
  * Round 4 card geometry (§1) + staged long-name fitting (§2).
@@ -135,4 +135,33 @@ test('compact shrinks a long name to the 12.5px floor as one line before ellipsi
     await expect.poll(() => nameFontPx(page, 'Maximiliana')).toBe(12.5);
     expect(await nameLineCount(page, 'Maximiliana')).toBe(0);
     expect(await nameEllipsized(page, 'Maximiliana')).toBe(true);
+});
+
+test('a sub-pixel overflow shrinks the name instead of clipping it (Maria Paroulková)', async ({ page }) => {
+    // "Maria Paroulková" measures 128.34px at 15px serif — a third of a pixel
+    // over the detailed card's 128px column. The browser ellipsizes on ANY
+    // layout overflow, but the integer scrollWidth rounds it away (and never
+    // reports below the box width), so the old fitting pass left the name at
+    // 15px reading "Maria Paroulko…". The fix measures fractional Range rects.
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Výšek', { birthDate: '1871' });
+    await addRelation(page, 'Jan', 'partner', 'Maria', 'Paroulková', 'female');
+    await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
+
+    const c = card(page, 'Maria');
+    await expect(c).toBeVisible();
+    await settleFitting(page);
+
+    // The invariant that actually matters: no single-line name may carry a
+    // fractional overflow — that is exactly the state the ellipsis clips.
+    await expect.poll(() => c.locator('.name-text').evaluate((n) => {
+        const range = document.createRange();
+        range.selectNodeContents(n);
+        let contentW = 0;
+        for (const r of range.getClientRects()) contentW = Math.max(contentW, r.width);
+        return contentW <= n.getBoundingClientRect().width + 0.05;
+    })).toBe(true);
+    // And she got there by shrinking, not by losing letters.
+    expect(await nameFontPx(page, 'Maria')).toBeLessThan(15);
+    await expect(c.locator('.name-text')).toHaveAttribute('title', 'Maria Paroulková');
 });

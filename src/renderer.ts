@@ -1412,7 +1412,20 @@ class TreeRendererClass {
 
             const avail = nameEl.clientWidth;
             if (avail === 0) return;                                 // detached card
-            const fits = (): boolean => textEl.scrollWidth <= avail + 0.5;
+            // Fractional measurement: the ellipsis triggers on ANY layout
+            // overflow, even sub-pixel ("Maria Paroulková" is 128.34px in a
+            // 128px column — clipped to "Maria Paroulko…"), while the integer
+            // scrollWidth rounds that overflow away AND never reports below the
+            // box width. Range rects give the true glyph width; both sides come
+            // from the same (possibly zoom-transformed) space, so the
+            // comparison holds at any canvas scale.
+            const fits = (): boolean => {
+                const range = document.createRange();
+                range.selectNodeContents(textEl);
+                let contentW = 0;
+                for (const r of range.getClientRects()) contentW = Math.max(contentW, r.width);
+                return contentW <= textEl.getBoundingClientRect().width + 0.01;
+            };
 
             if (fits()) return;                                      // step 0: 15px
             nameEl.classList.add('name-fit-1');                      // step 1: 14px
