@@ -3505,7 +3505,13 @@
             top: 60px;
             left: 50%;
             transform: translateX(-50%);
-            display: none;
+            /* The floating focus bar (name + generation depth controls) is the
+               DESKTOP home for the generation up/down selects. On tablet the
+               same controls live inline in .toolbar-focus, on mobile this bar
+               is re-anchored near the top. JS toggles .hidden when a focus
+               person is (de)selected — so the bar is laid out by default and
+               only hidden while there is nothing focused. */
+            display: flex;
             align-items: center;
             gap: 16px;
             background: rgba(255, 255, 255, 0.85);
@@ -3514,8 +3520,20 @@
             padding: 10px 20px;
             border-radius: 10px;
             box-shadow: 0 4px 16px var(--shadow);
-            z-index: 150;
+            /* Sit BELOW the toolbar (z-index 100) and its dropdowns. The toolbar
+               is a stacking context, so its dropdowns' z-index:200 is confined
+               inside it — a root-level bar above z-100 would paint over an open
+               tree-switcher / actions dropdown and swallow its clicks. Physical
+               gap (top:60 vs toolbar 0–50) keeps the bar visible regardless. */
+            z-index: 50;
         }
+        /* No focus person → JS adds .hidden; keep it hidden at every width.
+           (Higher specificity than the base + mobile display rules so it wins
+           whether or not those carry !important.) */
+        .focus-controls.hidden { display: none !important; }
+        /* Descendants view uses its own badge (root name + exit) as the context
+           UI at every width — the floating focus bar would just duplicate it. */
+        body.descendants-view .focus-controls { display: none !important; }
         .focus-info {
             font-size: 13px;
             color: var(--text);
@@ -6028,6 +6046,12 @@
             }
             /* The ⋯ actions menu is desktop-only; the hamburger covers it here. */
             .actions-menu {
+                display: none !important;
+            }
+            /* The desktop view-mode segment is duplicated by the hamburger's
+               mobile-view-row here — hide it so the five views live in exactly
+               one place (the hamburger) once the hamburger regime starts. */
+            #view-mode-segment {
                 display: none !important;
             }
             .hamburger-btn {
