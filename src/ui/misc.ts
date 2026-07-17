@@ -719,7 +719,7 @@ export const miscMethods = uiModule({
             html += `
                 <div class="validation-section">
                     <div class="validation-section-title errors">
-                        ❌ ${strings.validation.errors} (${result.errors.length})
+                        ${strings.validation.errors} (${result.errors.length})
                     </div>
                     ${result.errors.map(err => `
                         <div class="validation-item">${this.formatValidationMessage(err)}</div>
@@ -733,7 +733,7 @@ export const miscMethods = uiModule({
             html += `
                 <div class="validation-section">
                     <div class="validation-section-title warnings">
-                        ⚠️ ${strings.validation.warnings} (${result.warnings.length})
+                        ${strings.validation.warnings} (${result.warnings.length})
                     </div>
                     ${result.warnings.map(warn => `
                         <div class="validation-item">${this.formatValidationMessage(warn)}</div>

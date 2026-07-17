@@ -68,7 +68,8 @@ const stringsEN = {
         title: 'Welcome to Strom',
         subtitle: 'Start building your family tree',
         addFirst: 'Add First Person',
-        importFromFile: 'I have data elsewhere (GEDCOM from MyHeritage, Ancestry…)'
+        importFromFile: 'I have data elsewhere (GEDCOM from MyHeritage, Ancestry…)',
+        youCard: 'you?'
     },
 
     demo: {
@@ -1640,7 +1641,8 @@ const stringsCZ: StringsType = {
         title: 'Vítejte ve Stromu',
         subtitle: 'Začněte tvořit svůj rodokmen',
         addFirst: 'Přidat první osobu',
-        importFromFile: 'Mám data jinde (GEDCOM z MyHeritage, Ancestry…)'
+        importFromFile: 'Mám data jinde (GEDCOM z MyHeritage, Ancestry…)',
+        youCard: 'vy?'
     },
 
     demo: {

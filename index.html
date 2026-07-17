@@ -38,6 +38,8 @@
             --accent: #b0703c;        /* copper — active tab, sections, TODAY, minimap viewport */
             --danger: #a8574a;
             --warning: #d0a23c;       /* pending merge */
+            --pending: #d0a23c;       /* unfinished merge state (dashed) */
+            --chart-soft: #c9d8cc;    /* lighter shade for single-hue charts */
 
             /* gender (avatar ring only) */
             --male: #5b7f9e;
@@ -108,6 +110,8 @@
             --accent: #c98d59;
             --danger: #c97b6e;
             --warning: #d8b25e;
+            --pending: #d8b25e;
+            --chart-soft: #3a4a3f;
 
             --male: #7da3c4;
             --female: #c49290;
@@ -1025,15 +1029,16 @@
         /* Settings modal */
         .settings-modal {
             min-width: 300px;
-            max-width: 360px;
+            max-width: 380px;
         }
         .settings-section {
             margin-bottom: 20px;
         }
         .settings-label {
             display: block;
-            font-weight: 500;
-            margin-bottom: 12px;
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 10px;
             color: var(--text);
         }
         .settings-options {
@@ -1041,18 +1046,64 @@
             flex-direction: column;
             gap: 10px;
         }
+        /* Appearance / Language render as a horizontal segment. The native input
+           stays in the flow (transparent, covering its cell) so it remains
+           clickable and checkable — e2e drives real radios here. */
+        .settings-section:has(input[name="theme"]) .settings-options,
+        .settings-section:has(input[name="language"]) .settings-options {
+            flex-direction: row;
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
+            overflow: hidden;
+            gap: 0;
+            background: var(--surface-2);
+        }
+        .settings-section:has(input[name="theme"]) .settings-radio,
+        .settings-section:has(input[name="language"]) .settings-radio {
+            position: relative;
+            flex: 1;
+            justify-content: center;
+            padding: 9px 8px;
+            border: none;
+            border-radius: 0;
+            background: transparent;
+        }
+        .settings-section:has(input[name="theme"]) .settings-radio + .settings-radio,
+        .settings-section:has(input[name="language"]) .settings-radio + .settings-radio {
+            border-left: 1px solid var(--border);
+        }
+        .settings-section:has(input[name="theme"]) .settings-radio input[type="radio"],
+        .settings-section:has(input[name="language"]) .settings-radio input[type="radio"] {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+        .settings-section:has(input[name="theme"]) .settings-radio:has(input:checked),
+        .settings-section:has(input[name="language"]) .settings-radio:has(input:checked) {
+            background: var(--primary);
+        }
+        .settings-section:has(input[name="theme"]) .settings-radio:has(input:checked) span,
+        .settings-section:has(input[name="language"]) .settings-radio:has(input:checked) span {
+            color: #fff;
+            font-weight: 600;
+        }
+        /* Plain radio rows (default person, default tree, etc.). */
         .settings-radio {
             display: flex;
             align-items: center;
             gap: 10px;
             padding: 10px 12px;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
             cursor: pointer;
             transition: all 0.15s;
         }
         .settings-radio:hover {
-            background: #f5f5f5;
+            background: var(--hover-bg);
             border-color: var(--primary);
         }
         .settings-radio input[type="radio"] {
@@ -1064,46 +1115,67 @@
             font-size: 14px;
             color: var(--text);
         }
+        /* Feature rows: hint on the left, a toggle switch on the right. */
         .settings-checkbox {
             display: flex;
+            flex-direction: row-reverse;
+            justify-content: space-between;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
             padding: 10px 12px;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
             cursor: pointer;
             transition: all 0.15s;
         }
         .settings-checkbox:hover {
-            background: #f5f5f5;
+            background: var(--hover-bg);
             border-color: var(--primary);
         }
-        .settings-checkbox input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            accent-color: var(--primary);
-        }
         .settings-checkbox span {
+            flex: 1;
             font-size: 14px;
             color: var(--text);
+        }
+        /* Switch styling on the real checkbox — stays actionable for e2e. */
+        .settings-checkbox input[type="checkbox"] {
+            appearance: none;
+            -webkit-appearance: none;
+            flex-shrink: 0;
+            width: 38px;
+            height: 22px;
+            margin: 0;
+            border-radius: var(--r-pill);
+            background: var(--border);
+            border: 1px solid var(--border);
+            position: relative;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .settings-checkbox input[type="checkbox"]::before {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--surface);
+            box-shadow: var(--shadow-sm);
+            transition: transform 0.15s;
+        }
+        .settings-checkbox input[type="checkbox"]:checked {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+        .settings-checkbox input[type="checkbox"]:checked::before {
+            transform: translateX(16px);
         }
         .settings-hint {
             font-size: 12px;
             color: var(--text-light);
             margin-top: 10px;
             line-height: 1.4;
-        }
-        [data-theme="dark"] .settings-radio {
-            border-color: #444;
-        }
-        [data-theme="dark"] .settings-radio:hover {
-            background: #3a3a3a;
-        }
-        [data-theme="dark"] .settings-checkbox {
-            border-color: #444;
-        }
-        [data-theme="dark"] .settings-checkbox:hover {
-            background: #3a3a3a;
         }
         [data-theme="dark"] .radio-option {
             background: #3a3a3a;
@@ -1272,33 +1344,7 @@
         [data-theme="dark"] .modal {
             background: var(--card-bg);
         }
-        /* Dark mode: tree manager items */
-        [data-theme="dark"] .tree-manager-item {
-            background: #3a3a3a;
-            border-color: #555;
-        }
-        [data-theme="dark"] .tree-manager-item.active {
-            border-color: var(--primary);
-            background: #2a4a5a;
-        }
-        [data-theme="dark"] .tree-manager-item-actions button {
-            background: #444;
-            border-color: #555;
-            color: var(--text);
-        }
-        [data-theme="dark"] .tree-manager-item-actions button:hover {
-            background: #555;
-            border-color: var(--primary);
-            color: var(--primary);
-        }
-        [data-theme="dark"] .tree-manager-item-actions button.danger {
-            background: #444;
-            color: #ff6b6b;
-        }
-        [data-theme="dark"] .tree-manager-item-actions button.danger:hover {
-            background: #4a2a2a;
-            border-color: #ff6b6b;
-        }
+        /* Tree-manager items are fully tokenized — no dark override needed. */
         /* Dark mode: secondary buttons in modal */
         [data-theme="dark"] .modal button.secondary {
             background: #444;
@@ -1368,15 +1414,7 @@
         [data-theme="dark"] .person-picker-item.selected {
             background: #3a4a5a;
         }
-        /* Dark mode: context menu */
-        [data-theme="dark"] .context-menu {
-            background: var(--card-bg);
-            border-color: #444;
-        }
-        [data-theme="dark"] .context-menu button:hover,
-        [data-theme="dark"] .context-menu-item:hover {
-            background: #3a3a3a;
-        }
+        /* Context menu is fully tokenized — no dark override needed. */
 
         /* Mobile bottom sheet (touch context menu) */
         .bottom-sheet-overlay {
@@ -1406,16 +1444,6 @@
         .bottom-sheet-item:active { background: rgba(128,128,128,0.15); }
         .bottom-sheet-item.danger { color: var(--danger, #c0392b); }
         .bottom-sheet-icon { font-size: 20px; width: 24px; text-align: center; flex-shrink: 0; }
-        [data-theme="dark"] .context-menu .danger:hover,
-        [data-theme="dark"] .context-menu-item.danger:hover {
-            background: #4a2a2a;
-        }
-        [data-theme="dark"] .context-menu-item:active {
-            background: #2a2a2a;
-        }
-        [data-theme="dark"] .context-menu-divider {
-            background: #444;
-        }
         /* Dark mode: branch tabs */
         [data-theme="dark"] .branch-tabs button {
             background: #3a3a3a;
@@ -2728,37 +2756,99 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            text-align: center;
+            display: flex;
+            align-items: center;
+            gap: 56px;
             color: var(--text-light);
         }
-        .empty-state h2 {
-            font-size: 24px;
-            margin-bottom: 10px;
-            color: var(--text);
+        /* Left: ghost dashed cards hinting at a tree, with a central "you?" card. */
+        .empty-state-ghosts {
+            position: relative;
+            width: 260px;
+            height: 200px;
+            flex-shrink: 0;
         }
-        .empty-state p { margin-bottom: 16px; }
-        .empty-state button {
-            display: block;
-            margin: 0 auto 12px auto;
-            padding: 14px 28px;
-            border: none;
-            border-radius: 10px;
-            background: var(--primary);
-            color: white;
-            font-size: 16px;
-            cursor: pointer;
-            transition: background 0.2s;
+        .es-ghost {
+            position: absolute;
+            width: 120px;
+            height: 46px;
+            border: 1.5px dashed var(--border);
+            border-radius: var(--r-lg);
+            background: color-mix(in srgb, var(--surface) 50%, transparent);
         }
-        .empty-state button:hover { background: var(--primary-dark); }
-        .empty-state button.secondary {
-            background: transparent;
-            border: 1px solid var(--text-light);
-            color: var(--text);
-        }
-        .empty-state button.secondary:hover {
+        .es-ghost-tl { top: 6px; left: 0; }
+        .es-ghost-tr { top: 6px; right: 0; }
+        .es-ghost-you {
+            top: 108px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-style: dashed;
             border-color: var(--primary);
             color: var(--primary);
+            font-family: var(--font-serif);
+            font-size: 15px;
+        }
+        /* Connectors from the "you?" card up to the two ancestor ghosts. */
+        .empty-state-ghosts::before,
+        .empty-state-ghosts::after {
+            content: '';
+            position: absolute;
+            top: 52px;
+            width: 60px;
+            height: 56px;
+            border-top: 1.5px dashed var(--border);
+            pointer-events: none;
+        }
+        .empty-state-ghosts::before { left: 60px; border-left: 1.5px dashed var(--border); border-radius: 8px 0 0 0; }
+        .empty-state-ghosts::after { right: 60px; border-right: 1.5px dashed var(--border); border-radius: 0 8px 0 0; }
+        .empty-state-text { max-width: 320px; }
+        .empty-state h2 {
+            font-family: var(--font-serif);
+            font-size: 26px;
+            margin-bottom: 8px;
+            color: var(--text);
+        }
+        .empty-state p {
+            margin-bottom: 20px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .empty-state-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+        .empty-state button {
+            padding: 12px 24px;
+            border: 1px solid transparent;
+            border-radius: var(--r-md);
+            background: var(--primary);
+            color: white;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .empty-state button.primary:hover { background: var(--primary-dark); }
+        .empty-state button.ghost {
             background: transparent;
+            border-color: var(--border);
+            color: var(--text);
+        }
+        .empty-state button.ghost:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .empty-state button.link {
+            background: transparent;
+            border: none;
+            color: var(--primary);
+            padding: 4px 0;
+            font-weight: 500;
+        }
+        .empty-state button.link:hover { text-decoration: underline; }
+        @media (max-width: 700px) {
+            .empty-state { flex-direction: column; gap: 28px; text-align: center; }
+            .empty-state-ghosts { display: none; }
+            .empty-state-actions { align-items: center; }
         }
 
         /* ==================== NEWER VERSION WARNING ==================== */
@@ -3208,23 +3298,52 @@
             .minimap-panel { display: none !important; }
         }
 
-        /* Anniversaries panel */
-        .anniversaries-list { display: flex; flex-direction: column; gap: 4px; }
+        /* Anniversaries panel — "on this day" card with a copper left rim. */
+        .anniversaries-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 4px 4px 4px 14px;
+            border-left: 3px solid var(--accent);
+            background: var(--surface-2);
+            border-radius: 0 var(--r-lg) var(--r-lg) 0;
+        }
         .anniversary-row {
             display: flex;
             align-items: center;
             gap: 10px;
             padding: 9px 10px;
-            border-radius: 8px;
+            border-radius: var(--r-md);
             cursor: pointer;
             transition: background 0.12s;
         }
         .anniversary-row:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); }
-        .anniversary-icon { font-size: 18px; flex-shrink: 0; }
-        .anniversary-text { flex: 1; font-size: 14px; color: var(--text-color); }
-        .anniversary-when { font-size: 12px; color: var(--text-light); white-space: nowrap; }
+        .anniversary-text { flex: 1; font-family: var(--font-serif); font-size: 15px; color: var(--text); }
+        .anniversary-when {
+            font-size: 11px;
+            font-variant-numeric: tabular-nums;
+            color: var(--text-light);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 2px 9px;
+            border-radius: var(--r-pill);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        /* Solid-copper TODAY chip. The copper is darkened in light mode so white
+           text clears 4.5:1; in dark mode the copper is already light, so the
+           text flips dark instead (contrast can't be met by a token alone). */
+        .anniversary-when.today {
+            background: color-mix(in srgb, var(--accent) 85%, #000);
+            border-color: transparent;
+            color: #fff;
+            font-weight: 600;
+        }
+        [data-theme="dark"] .anniversary-when.today {
+            background: var(--accent);
+            color: #26241f;
+        }
         .anniversaries-empty { padding: 20px 8px 24px; color: var(--text-light); font-style: italic; text-align: center; }
-        .anniversaries-empty-icon { font-size: 30px; margin-bottom: 8px; opacity: 0.55; font-style: normal; }
         .sources-empty-block { padding: 20px 8px 24px; text-align: center; }
         .sources-empty-icon { font-size: 30px; margin-bottom: 8px; opacity: 0.55; font-style: normal; }
 
@@ -3246,7 +3365,8 @@
             animation: otd-in 0.25s ease;
         }
         .otd-card.active { display: flex; }
-        .otd-emoji { font-size: 22px; flex-shrink: 0; }
+        /* Copper left rim ties the card to the anniversaries "on this day" motif. */
+        .otd-card-rim { border-left: 3px solid var(--accent); }
         .otd-text { font-size: 14px; color: var(--text-color); cursor: pointer; line-height: 1.35; }
         .otd-text:hover { color: var(--primary); }
         .otd-close {
@@ -3979,33 +4099,48 @@
             from { opacity: 0; transform: scale(0.95); }
             to { opacity: 1; transform: scale(1); }
         }
+        /* Header names the person the menu acts on (serif). */
+        .context-menu-header {
+            font-family: var(--font-serif);
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            padding: 8px 16px 10px;
+            margin-bottom: 4px;
+            border-bottom: 1px solid var(--divider);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 260px;
+        }
         .context-menu-item {
-            padding: 12px 16px;
+            padding: 10px 16px;
             cursor: pointer;
             display: flex;
             align-items: center;
             gap: 10px;
             font-size: 14px;
+            color: var(--text);
             transition: background 0.15s;
             -webkit-tap-highlight-color: transparent;
             touch-action: manipulation;
             user-select: none;
         }
         .context-menu-item:hover {
-            background: #f0f0f0;
+            background: var(--hover-bg);
         }
         .context-menu-item:active {
-            background: #e0e0e0;
+            background: color-mix(in srgb, var(--primary) 12%, transparent);
         }
         .context-menu-item.danger {
-            color: #e53935;
+            color: var(--danger);
         }
         .context-menu-item.danger:hover {
-            background: #ffebee;
+            background: color-mix(in srgb, var(--danger) 12%, transparent);
         }
         .context-menu-divider {
             height: 1px;
-            background: #e0e0e0;
+            background: var(--divider);
             margin: 6px 0;
         }
 
@@ -4064,9 +4199,20 @@
             font-size: 24px;
             line-height: 1;
         }
-        #confirmation-modal.dialog-info h2 .dialog-icon { color: var(--primary); }
-        #confirmation-modal.dialog-warning h2 .dialog-icon { color: #f0a030; }
-        #confirmation-modal.dialog-error h2 .dialog-icon { color: #dc3545; }
+        /* Alert severity as a colored dot (replaces the old emoji). */
+        #confirmation-modal h2 .dialog-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            background: var(--primary);
+        }
+        #confirmation-modal.dialog-info h2 .dialog-icon,
+        #confirmation-modal.dialog-info h2 .dialog-dot { color: var(--primary); background: var(--primary); }
+        #confirmation-modal.dialog-warning h2 .dialog-icon,
+        #confirmation-modal.dialog-warning h2 .dialog-dot { color: var(--warning); background: var(--warning); }
+        #confirmation-modal.dialog-error h2 .dialog-icon,
+        #confirmation-modal.dialog-error h2 .dialog-dot { color: var(--danger); background: var(--danger); }
         #confirmation-modal.dialog-confirm h2 .dialog-icon { color: var(--primary); }
         #confirmation-modal .confirm-message {
             font-size: 14px;
@@ -4168,7 +4314,23 @@
         }
         .share-welcome { text-align: center; }
         .share-welcome h2 { margin: 8px 0 4px; }
-        .share-welcome-icon { font-size: 40px; }
+        /* Wordmark motif in place of a hero emoji: serif name + copper dot. */
+        .share-welcome-icon {
+            font-family: var(--font-serif);
+            font-size: 26px;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .share-welcome-icon::after {
+            content: '';
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            margin-left: 3px;
+            border-radius: 50%;
+            background: var(--accent);
+            vertical-align: baseline;
+        }
         .share-welcome-counts { color: var(--text-secondary, #777); font-size: 13.5px; margin-bottom: 8px; }
         .share-message {
             margin: 10px auto 4px; padding: 10px 14px; max-width: 420px;
@@ -5181,16 +5343,21 @@
             padding: 12px 0;
         }
         .tree-badge {
-            font-size: 11px;
-            padding: 1px 8px;
-            border-radius: 10px;
-            background: var(--hover-bg, #f1f1ee);
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 2px 9px;
+            border-radius: var(--r-pill);
+            background: var(--surface-2);
+            border: 1px solid var(--border);
             color: var(--text-light);
             white-space: nowrap;
             flex-shrink: 0;
         }
         .tree-badge.active-badge {
             background: var(--primary);
+            border-color: var(--primary);
             color: #fff;
         }
         .tree-manager-item-name.clickable { cursor: pointer; }
@@ -5227,41 +5394,37 @@
         }
         .tree-row-menu.open { display: block; }
         .tree-row-menu-item {
-            /* Icon column + label column: emoji have ragged widths, a grid
-               keeps every label starting at the same x. */
-            display: grid;
-            grid-template-columns: 22px 1fr;
-            align-items: center;
-            column-gap: 8px;
+            /* Text-only rows (Letopis design): no icon column. */
+            display: block;
             width: 100%;
-            padding: 8px 10px;
+            padding: 8px 12px;
             border: none;
             background: none;
-            border-radius: 6px;
+            border-radius: var(--r-sm);
             font-size: 13px;
             text-align: left;
             cursor: pointer;
             color: var(--text);
         }
         .tree-row-menu-item:hover { background: var(--hover-bg, #f1f1ee); }
-        .tree-row-menu-item.danger { color: var(--danger, #c0392b); }
-        .tree-row-menu-item .btn-icon {
-            font-size: 14px;
-            justify-self: center;
-            text-align: center;
-            line-height: 1;
+        .tree-row-menu-item.danger { color: var(--danger); }
+        /* A hairline separates action groups within the menu. */
+        .tree-row-menu-item.tree-row-menu-divider {
+            border-top: 1px solid var(--divider);
+            margin-top: 4px;
+            padding-top: 10px;
         }
         .tree-manager-item {
-            padding: 12px;
+            padding: 12px 14px;
             margin-bottom: 8px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 2px solid transparent;
+            background: var(--surface-2);
+            border-radius: var(--r-lg);
+            border: 1px solid var(--border);
             transition: all 0.15s;
         }
         .tree-manager-item.active {
             border-color: var(--primary);
-            background: color-mix(in srgb, var(--primary) 5%, transparent);
+            background: color-mix(in srgb, var(--primary) 6%, var(--surface));
         }
         .tree-manager-item-header {
             display: flex;
@@ -5273,7 +5436,7 @@
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: #ccc;
+            background: var(--text-ghost);
             flex-shrink: 0;
         }
         .tree-manager-item.active .tree-manager-item-indicator {
@@ -5281,16 +5444,12 @@
         }
         .tree-manager-item.pending-merge {
             border-style: dashed;
-            background: rgba(255, 193, 7, 0.05);
+            border-color: var(--pending);
+            background: color-mix(in srgb, var(--pending) 8%, var(--surface));
         }
-        .tree-manager-item.pending-merge .tree-manager-item-indicator {
-            background: #ffc107;
-        }
+        .tree-manager-item.pending-merge .tree-manager-item-indicator,
         .tree-manager-item.pending-merge .tree-manager-item-indicator.pending {
-            background: #ffc107;
-        }
-        [data-theme="dark"] .tree-manager-item.pending-merge {
-            background: rgba(255, 193, 7, 0.1);
+            background: var(--pending);
         }
         .tree-manager-item.hidden-tree {
             opacity: 0.7;
@@ -5306,8 +5465,9 @@
         }
         .tree-manager-item-name {
             flex: 1;
-            font-weight: 500;
-            font-size: 14px;
+            font-family: var(--font-serif);
+            font-weight: 600;
+            font-size: 16px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -5333,9 +5493,10 @@
             padding: 6px 10px;
             font-size: 12px;
             font-weight: 500;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
+            background: var(--surface);
+            color: var(--text);
             cursor: pointer;
             transition: all 0.15s;
             min-width: 36px;
@@ -5350,13 +5511,15 @@
             border-color: var(--primary);
             color: var(--primary);
         }
+        /* Text-only action buttons (pending merges): a touch wider than icons. */
+        .tree-manager-item-actions button.tree-text-action { padding: 6px 12px; }
         .tree-manager-item-actions button.danger {
-            background: white;
-            color: #e53935;
+            background: var(--surface);
+            color: var(--danger);
         }
         .tree-manager-item-actions button.danger:hover {
-            border-color: #e53935;
-            background: #ffebee;
+            border-color: var(--danger);
+            background: color-mix(in srgb, var(--danger) 10%, var(--surface));
         }
         /* Desktop: footer shows icon + text, items show only icons */
         .tree-manager-footer .btn-icon {
@@ -5415,21 +5578,25 @@
             justify-content: space-around;
             text-align: center;
             padding: 16px 24px;
-            background: linear-gradient(135deg, var(--primary), #7aba7a);
-            border-radius: 10px;
-            color: white;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--r-lg);
+            color: var(--text);
         }
         .tree-stats-header-item {
             flex: 1;
         }
         .tree-stats-header-value {
             font-size: 32px;
-            font-weight: 700;
+            font-weight: 600;
             line-height: 1.1;
+            color: var(--primary);
         }
         .tree-stats-header-label {
             font-size: 11px;
-            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-light);
         }
         .tree-stats-header-value.tree-stats-header-span { font-size: 20px; padding-top: 8px; }
 
@@ -5446,10 +5613,11 @@
         }
         .stats-split-bar span { height: 100%; flex: 1; }
         .stats-split-bar span:first-child { flex: none; }
-        .stats-split-male { background: #5b8def; }
-        .stats-split-female { background: #e08bb0; }
-        .stats-split-living { background: var(--primary, #4a7c59); }
-        .stats-split-deceased { background: #9aa0a6; }
+        /* Single-hue split: full green vs. the soft shade. */
+        .stats-split-male { background: var(--primary); }
+        .stats-split-female { background: var(--chart-soft); }
+        .stats-split-living { background: var(--primary); }
+        .stats-split-deceased { background: var(--chart-soft); }
 
         /* Completeness progress bars. */
         .stats-progress { display: flex; align-items: center; gap: 10px; padding: 4px 0; font-size: 13px; }
@@ -5458,7 +5626,8 @@
             flex: 1.1; height: 8px; border-radius: 6px;
             background: rgba(128,128,128,0.18); overflow: hidden;
         }
-        .stats-progress-fill { display: block; height: 100%; border-radius: 6px; background: var(--primary, #4a7c59); }
+        .stats-progress-fill { display: block; height: 100%; border-radius: 6px; background: var(--primary); }
+        .stats-progress-fill.low { background: var(--accent); }
         .stats-progress .pct { width: 42px; text-align: right; font-weight: 600; font-size: 12px; }
 
         /* Family records as highlight cards. */
@@ -5481,25 +5650,20 @@
             .tree-stats-header-item { flex-basis: 45%; }
         }
         .tree-stats-section {
-            background: #f8f8f8;
-            border-radius: 8px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--r-lg);
             padding: 10px 12px;
-        }
-        [data-theme="dark"] .tree-stats-section {
-            background: #2a2a2a;
         }
         .tree-stats-section-title {
             font-size: 11px;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.3px;
-            color: var(--text-light);
+            letter-spacing: 0.08em;
+            color: var(--accent);
             margin-bottom: 6px;
             padding-bottom: 4px;
-            border-bottom: 1px solid #e0e0e0;
-        }
-        [data-theme="dark"] .tree-stats-section-title {
-            border-bottom-color: #444;
+            border-bottom: 1px solid var(--divider);
         }
         /* Visual family statistics (collapsible) */
         .tree-stats-family-summary {
@@ -5535,7 +5699,8 @@
             font-size: 11px;
             fill: var(--text-light);
         }
-        .stats-bar-chart .stats-bar-rect { fill: var(--primary); }
+        .stats-bar-chart .stats-bar-rect { fill: var(--chart-soft); }
+        .stats-bar-chart .stats-bar-rect.hi { fill: var(--primary); }
         .stats-empty {
             font-size: 12px;
             font-style: italic;
@@ -5701,6 +5866,16 @@
             font-size: 16px;
             flex-shrink: 0;
         }
+        /* Severity dot replaces the old emoji; colour comes from the row class. */
+        .validation-issue-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            background: var(--danger);
+        }
+        .validation-issue.warning .validation-issue-dot { background: var(--warning); }
+        .validation-issue.info .validation-issue-dot { background: var(--accent); }
         .validation-issue-content {
             flex: 1;
             min-width: 0;
@@ -7464,11 +7639,20 @@
             <div id="fan-chart" class="fan-chart"></div>
         </div>
         <div class="empty-state" id="empty-state">
-            <h2 data-i18n="emptyState.title"></h2>
-            <p data-i18n="emptyState.subtitle"></p>
-            <button onclick="window.Strom.UI.showAddPersonModal()" data-i18n="emptyState.addFirst"></button>
-            <button class="secondary" onclick="window.Strom.UI.showImportFileDialog()" data-i18n="emptyState.importFromFile"></button>
-            <button class="secondary" onclick="window.Strom.UI.loadDemoTree()" data-i18n="demo.tryDemo"></button>
+            <div class="empty-state-ghosts" aria-hidden="true">
+                <div class="es-ghost es-ghost-tl"></div>
+                <div class="es-ghost es-ghost-tr"></div>
+                <div class="es-ghost es-ghost-you"><span data-i18n="emptyState.youCard"></span></div>
+            </div>
+            <div class="empty-state-text">
+                <h2 data-i18n="emptyState.title"></h2>
+                <p data-i18n="emptyState.subtitle"></p>
+                <div class="empty-state-actions">
+                    <button class="primary" onclick="window.Strom.UI.showAddPersonModal()" data-i18n="emptyState.addFirst"></button>
+                    <button class="ghost" onclick="window.Strom.UI.showImportFileDialog()" data-i18n="emptyState.importFromFile"></button>
+                    <button class="link" onclick="window.Strom.UI.loadDemoTree()"><span data-i18n="demo.tryDemo"></span><span class="es-arrow" aria-hidden="true"> &rarr;</span></button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -8212,8 +8396,7 @@
     </div>
 
     <!-- "On this day" card (shown once per tree per day) -->
-    <div id="otd-card" class="otd-card">
-        <span class="otd-emoji">📅</span>
+    <div id="otd-card" class="otd-card otd-card-rim">
         <span id="otd-text" class="otd-text" onclick="window.Strom.UI.focusOnThisDay()"></span>
         <button class="otd-close" onclick="window.Strom.UI.dismissOnThisDay()" aria-label="Close">&times;</button>
     </div>
@@ -8245,76 +8428,65 @@
             </div>
             <div class="menu-options">
                 <button class="menu-option active-tree-only" onclick="window.Strom.UI.closeExportDialog(); window.Strom.UI.showShareDialog()">
-                    <span class="option-icon">📩</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="share.dialogTitle"></span>
                         <span class="option-desc" data-i18n="share.menuDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.exportTargetTreeJSON()">
-                    <span class="option-icon">💾</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="menu.exportJson"></span>
                         <span class="option-desc" data-i18n="menu.exportJsonDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option fsa-only active-tree-only" onclick="window.Strom.UI.attachSaveToFile()">
-                    <span class="option-icon">💾</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="fileAccess.saveToFile"></span>
                         <span class="option-desc" data-i18n="fileAccess.saveToFileDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option fsa-linked-only active-tree-only" onclick="window.Strom.UI.closeExportDialog(); window.Strom.UI.unlinkActiveTreeFile()">
-                    <span class="option-icon">⛓️‍💥</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="fileAccess.unlink"></span>
                     </span>
                 </button>
                 <button class="menu-option active-tree-only" id="export-focus-btn" onclick="window.Strom.UI.exportFocusedJSON()">
-                    <span class="option-icon">💾</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="menu.exportFocus"></span>
                         <span class="option-desc" data-i18n="menu.exportFocusDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option active-tree-only" id="make-tree-from-view-btn" onclick="window.Strom.UI.makeTreeFromCurrentView()">
-                    <span class="option-icon">✂️</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="menu.makeTreeFromView"></span>
                         <span class="option-desc" data-i18n="menu.makeTreeFromViewDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.exportTargetTreeApp()">
-                    <span class="option-icon">📦</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="menu.exportApp"></span>
                         <span class="option-desc" data-i18n="menu.exportAppDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.exportTargetTreeGedcom()">
-                    <span class="option-icon">🌳</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="menu.exportGedcom"></span>
                         <span class="option-desc" data-i18n="menu.exportGedcomDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.exportTargetTreeCsv()">
-                    <span class="option-icon">📑</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="csv.menuTitle"></span>
                         <span class="option-desc" data-i18n="csv.menuDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option active-tree-only" onclick="window.Strom.UI.showPosterDialog()">
-                    <span class="option-icon">🖼️</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="poster.title"></span>
                         <span class="option-desc" data-i18n="poster.description"></span>
                     </span>
                 </button>
                 <button class="menu-option active-tree-only" onclick="window.Strom.UI.showBookDialog()">
-                    <span class="option-icon">📖</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="book.title"></span>
                         <span class="option-desc" data-i18n="book.menuDesc"></span>
@@ -8403,21 +8575,18 @@
             </div>
             <div class="menu-options">
                 <button class="menu-option" onclick="window.Strom.UI.exportPosterSvg()">
-                    <span class="option-icon">🖼️</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="poster.svg"></span>
                         <span class="option-desc" data-i18n="poster.svgDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.exportPosterPng()">
-                    <span class="option-icon">📷</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="poster.png"></span>
                         <span class="option-desc" data-i18n="poster.pngDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.printPosterPdf()">
-                    <span class="option-icon">🖨️</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="poster.pdf"></span>
                         <span class="option-desc" data-i18n="poster.pdfDesc"></span>
@@ -8439,21 +8608,18 @@
             </div>
             <div class="menu-options">
                 <button class="menu-option" onclick="document.getElementById('file-input').click(); window.Strom.UI.closeImportDialog()">
-                    <span class="option-icon">📄</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="menu.importJson"></span>
                         <span class="option-desc" data-i18n="menu.importJsonDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option fsa-only" onclick="window.Strom.UI.closeImportDialog(); window.Strom.UI.openFromFile()">
-                    <span class="option-icon">⤒</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="fileAccess.openFromFile"></span>
                         <span class="option-desc" data-i18n="fileAccess.openFromFileDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.startGedcomImportPlain(); window.Strom.UI.closeImportDialog()">
-                    <span class="option-icon">🌳</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="menu.importGedcom"></span>
                         <span class="option-desc" data-i18n="menu.importGedcomDesc"></span>
@@ -8522,21 +8688,18 @@
             <div class="menu-options" id="gedcom-options">
                 <!-- Normal options (hidden when importing to current tree) -->
                 <button id="gedcom-new-tree-btn" class="menu-option" onclick="window.Strom.UI.importGedcomAsNewTree()">
-                    <span class="option-icon">🌳</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="gedcom.importAsNew"></span>
                         <span class="option-desc" data-i18n="gedcom.importAsNewDesc"></span>
                     </span>
                 </button>
                 <button id="gedcom-merge-btn" class="menu-option" onclick="window.Strom.UI.mergeGedcomWithExisting()">
-                    <span class="option-icon">🔀</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="gedcom.mergeExisting"></span>
                         <span class="option-desc" data-i18n="gedcom.mergeExistingDesc"></span>
                     </span>
                 </button>
                 <button id="gedcom-save-json-btn" class="menu-option" onclick="window.Strom.UI.downloadGedcomAsJson()">
-                    <span class="option-icon">💾</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="gedcom.saveAsJson"></span>
                         <span class="option-desc" data-i18n="gedcom.saveAsJsonDesc"></span>
@@ -8544,7 +8707,6 @@
                 </button>
                 <!-- Insert to current tree option (shown only when importing to current tree) -->
                 <button id="gedcom-insert-btn" class="menu-option" style="display: none;" onclick="window.Strom.UI.importGedcomAsNewTree()">
-                    <span class="option-icon">📥</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="gedcom.insertToTree"></span>
                         <span class="option-desc" data-i18n="gedcom.insertToTreeDesc"></span>
@@ -8567,13 +8729,11 @@
             <p class="save-current-message" data-i18n="saveCurrent.message"></p>
             <div class="menu-options">
                 <button class="menu-option" onclick="window.Strom.DataManager.exportJSON(); window.Strom.UI.closeSaveCurrentDialog()">
-                    <span class="option-icon">💾</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="saveCurrent.exportJson"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.exportCurrentTreeApp()">
-                    <span class="option-icon">📦</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="saveCurrent.exportApp"></span>
                     </span>
@@ -8812,13 +8972,13 @@
             </div>
             <div class="tree-manager-footer">
                 <button class="primary edit-only" onclick="window.Strom.UI.showNewTreeMenu()">
-                    <span class="btn-icon">🌳</span><span class="btn-text" data-i18n="treeManager.newTree">New Tree</span>
+                    <span class="btn-icon" aria-hidden="true">+</span><span class="btn-text" data-i18n="treeManager.newTree">New Tree</span>
                 </button>
                 <button class="secondary edit-only" onclick="window.Strom.UI.showDefaultTreeDialog()" data-i18n-title="treeManager.defaultTree">
-                    <span class="btn-icon">⭐</span><span class="btn-text" data-i18n="treeManager.defaultTree">Default Tree</span>
+                    <span class="btn-text" data-i18n="treeManager.defaultTree">Default Tree</span>
                 </button>
                 <button class="secondary" onclick="window.Strom.UI.showExportAllDialog()" data-i18n-title="treeManager.exportAll">
-                    <span class="btn-icon">💾</span><span class="btn-text" data-i18n="treeManager.exportAll">Export All</span>
+                    <span class="btn-text" data-i18n="treeManager.exportAll">Export All</span>
                 </button>
                 <button class="secondary tree-manager-close" onclick="window.Strom.UI.closeTreeManagerDialog()">
                     <span class="btn-text" data-i18n="buttons.close">Close</span>
@@ -9035,42 +9195,36 @@
             </div>
             <div class="menu-options">
                 <button class="menu-option" onclick="window.Strom.UI.showNewTreeDialog()">
-                    <span class="option-icon">📄</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="treeManager.emptyTree"></span>
                         <span class="option-desc" data-i18n="treeManager.emptyTreeDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.startJsonImportFromManager()">
-                    <span class="option-icon">📥</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="treeManager.fromJson"></span>
                         <span class="option-desc" data-i18n="treeManager.fromJsonDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.loadDemoTree()">
-                    <span class="option-icon">🏰</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="demo.tryDemo"></span>
                         <span class="option-desc" data-i18n="demo.tryDemoDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.startGedcomImportFromManager()">
-                    <span class="option-icon">🌳</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="treeManager.fromGedcom"></span>
                         <span class="option-desc" data-i18n="treeManager.fromGedcomDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.startHtmlImportFromManager()">
-                    <span class="option-icon">📦</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="treeManager.fromHtml"></span>
                         <span class="option-desc" data-i18n="treeManager.fromHtmlDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.createTreeFromFocus()">
-                    <span class="option-icon">🎯</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="treeManager.fromFocus"></span>
                         <span class="option-desc" data-i18n="treeManager.fromFocusDesc"></span>
@@ -9089,21 +9243,18 @@
             </div>
             <div class="menu-options">
                 <button class="menu-option" onclick="window.Strom.UI.importJsonToCurrentTree()">
-                    <span class="option-icon">📥</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="treeManager.fromJson"></span>
                         <span class="option-desc" data-i18n="treeManager.fromJsonDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.importGedcomToCurrentTree()">
-                    <span class="option-icon">🌳</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="treeManager.fromGedcom"></span>
                         <span class="option-desc" data-i18n="treeManager.fromGedcomDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.importHtmlToCurrentTree()">
-                    <span class="option-icon">📦</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="treeManager.fromHtml"></span>
                         <span class="option-desc" data-i18n="treeManager.fromHtmlDesc"></span>
@@ -9122,14 +9273,12 @@
             </div>
             <div class="menu-options">
                 <button class="menu-option" onclick="window.Strom.UI.exportAllAsJson()">
-                    <span class="option-icon">💾</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="treeManager.exportAllJson"></span>
                         <span class="option-desc" data-i18n="treeManager.exportAllJsonDesc"></span>
                     </span>
                 </button>
                 <button class="menu-option" onclick="window.Strom.UI.exportAllTreesApp()">
-                    <span class="option-icon">📦</span>
                     <span class="option-text">
                         <span class="option-title" data-i18n="treeManager.exportAllApp"></span>
                         <span class="option-desc" data-i18n="treeManager.exportAllAppDesc"></span>
@@ -9387,7 +9536,7 @@
     <!-- Recipient welcome (opened shared file) -->
     <div class="modal-overlay" id="share-welcome-modal">
         <div class="modal share-welcome">
-            <div class="share-welcome-icon">🌳</div>
+            <div class="share-welcome-icon">Strom</div>
             <h2 id="share-welcome-title"></h2>
             <div id="share-welcome-counts" class="share-welcome-counts"></div>
             <blockquote id="share-welcome-message" class="share-message"></blockquote>
@@ -9401,7 +9550,7 @@
     <!-- Sender: a relative returned the tree -->
     <div class="modal-overlay" id="share-reply-modal">
         <div class="modal share-welcome">
-            <div class="share-welcome-icon">📩</div>
+            <div class="share-welcome-icon">Strom</div>
             <h2 id="share-reply-title"></h2>
             <p id="share-reply-intro" class="modal-description"></p>
             <blockquote id="share-reply-message" class="share-message"></blockquote>

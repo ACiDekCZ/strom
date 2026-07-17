@@ -147,13 +147,20 @@ export const contextMenuMethods = uiModule({
 
         const menu = document.createElement('div');
         menu.className = 'context-menu';
+        // Header names the person the menu acts on (serif, per the Letopis design).
+        const person = DataManager.getPerson(personId);
+        const personName = person ? `${person.firstName} ${person.lastName}`.trim() : '';
+        const header = personName
+            ? `<div class="context-menu-header">${this.escapeHtml(personName)}</div>`
+            : '';
         // NB: keep the class value out of the attribute as a whole variable —
         // interpolating a `${... ? ... : ...}` directly inside class="context-menu…"
         // confuses the self-export HTML cleaner's regex once minified.
-        menu.innerHTML = actions.map(a => {
+        // Items are text-only here (the mobile bottom sheet keeps the glyphs).
+        menu.innerHTML = header + actions.map(a => {
             const cls = a.danger ? 'context-menu-item danger' : 'context-menu-item';
             const divider = a.divider ? '<div class="context-menu-divider"></div>' : '';
-            return `${divider}<div class="${cls}" data-action="${a.action}"><span class="icon">${a.icon}</span> ${a.label}</div>`;
+            return `${divider}<div class="${cls}" data-action="${a.action}">${a.label}</div>`;
         }).join('');
 
         // Position menu near click (adjusted after DOM insert)

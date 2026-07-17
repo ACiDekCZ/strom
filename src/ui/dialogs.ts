@@ -65,15 +65,14 @@ export const dialogsMethods = uiModule({
             // Set dialog type class
             modal.className = 'modal-overlay dialog-' + type;
 
-            // Set icon based on type
-            const icons = { info: 'ℹ️', warning: '⚠️', error: '❌' };
+            // Severity now reads from the dialog's type class + a colored dot.
             const titles = {
                 info: strings.dialog.info,
                 warning: strings.dialog.warning,
                 error: strings.dialog.error
             };
 
-            titleEl.innerHTML = `<span class="dialog-icon">${icons[type]}</span>${title || titles[type]}`;
+            titleEl.innerHTML = `<span class="dialog-dot" aria-hidden="true"></span>${title || titles[type]}`;
             messageEl.textContent = message;
 
             // Hide options (not used for alert)
@@ -121,7 +120,7 @@ export const dialogsMethods = uiModule({
             // Set dialog type class
             modal.className = 'modal-overlay dialog-confirm';
 
-            titleEl.innerHTML = `<span class="dialog-icon">❓</span>${title || strings.dialog.confirm}`;
+            titleEl.textContent = title || strings.dialog.confirm;
             messageEl.textContent = message;
 
             // Hide options (not used for simple confirm)
@@ -193,7 +192,7 @@ export const dialogsMethods = uiModule({
             // Set dialog type class
             modal.className = 'modal-overlay dialog-prompt';
 
-            titleEl.innerHTML = `<span class="dialog-icon">✏️</span>${strings.dialog.confirm}`;
+            titleEl.textContent = strings.dialog.confirm;
             messageEl.textContent = message;
 
             // Add input field in options area

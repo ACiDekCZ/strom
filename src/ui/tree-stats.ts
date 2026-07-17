@@ -5,7 +5,6 @@
 
 import { DataManager, auditPersonName } from '../data.js';
 import { upcomingAnniversaries } from '../anniversaries.js';
-import { ANNIVERSARY_ICON } from './anniversaries-ui.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -71,13 +70,16 @@ function svgBarChart(rows: { label: string; value: number; display?: string }[])
     const barW = W - barX - valueW;
     const H = rows.length * rowH;
     const max = Math.max(1, ...rows.map(r => r.value));
+    // Single-hue chart: soft bars, the tallest column highlighted in full green.
+    const maxValue = Math.max(...rows.map(r => r.value));
     const bars = rows.map((r, i) => {
         const y = i * rowH;
         const w = Math.max(r.value > 0 ? 2 : 0, (r.value / max) * barW);
         const shown = r.display ?? String(r.value);
+        const hi = r.value === maxValue && maxValue > 0 ? ' hi' : '';
         return `
             <text x="0" y="${y + 16}" class="stats-bar-label">${escXml(r.label)}</text>
-            <rect x="${barX}" y="${y + 5}" width="${w.toFixed(1)}" height="14" rx="2" class="stats-bar-rect"></rect>
+            <rect x="${barX}" y="${y + 5}" width="${w.toFixed(1)}" height="14" rx="2" class="stats-bar-rect${hi}"></rect>
             <text x="${W}" y="${y + 16}" text-anchor="end" class="stats-bar-value">${escXml(shown)}</text>`;
     }).join('');
     return `<svg class="stats-bar-chart" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img">${bars}</svg>`;
@@ -261,7 +263,6 @@ export const treeStatsMethods = uiModule({
         if (result.issues.length === 0) {
             return `
                 <div class="validation-passed">
-                    <div class="validation-passed-icon">✅</div>
                     <div class="validation-passed-text">${s.validationPassed}</div>
                 </div>
             `;
@@ -277,9 +278,9 @@ export const treeStatsMethods = uiModule({
 
         let html = `
             <div class="validation-summary">
-                ${result.stats.errors > 0 ? `<span class="validation-count error">❌ ${result.stats.errors} ${s.validationErrors}</span>` : ''}
-                ${result.stats.warnings > 0 ? `<span class="validation-count warning">⚠️ ${result.stats.warnings} ${s.validationWarnings}</span>` : ''}
-                ${result.stats.infos > 0 ? `<span class="validation-count info">ℹ️ ${result.stats.infos} ${s.validationInfos}</span>` : ''}
+                ${result.stats.errors > 0 ? `<span class="validation-count error">${result.stats.errors} ${s.validationErrors}</span>` : ''}
+                ${result.stats.warnings > 0 ? `<span class="validation-count warning">${result.stats.warnings} ${s.validationWarnings}</span>` : ''}
+                ${result.stats.infos > 0 ? `<span class="validation-count info">${result.stats.infos} ${s.validationInfos}</span>` : ''}
                 ${fixableCount > 0 ? `<button class="validation-fix-all-btn">${s.valFixAll} (${fixableCount})</button>` : ''}
             </div>
             <div class="validation-issues">
@@ -334,7 +335,8 @@ export const treeStatsMethods = uiModule({
         };
 
         const renderIssue = (issue: ValidationIssue, issueIdx: number) => {
-            const icon = issue.severity === 'error' ? '❌' : issue.severity === 'warning' ? '⚠️' : 'ℹ️';
+            // Severity now reads from the colored dot + the row's severity class.
+            const icon = '';
             const translatedMessage = translateIssueType(issue.type);
             const isFixable = DataManager.isFixableIssue(issue);
 
@@ -351,7 +353,7 @@ export const treeStatsMethods = uiModule({
 
             return `
                 <div class="validation-issue ${issue.severity}">
-                    <span class="validation-issue-icon">${icon}</span>
+                    <span class="validation-issue-dot" aria-hidden="true"></span>${icon}
                     <div class="validation-issue-content">
                         <div class="validation-issue-message">${this.escapeHtml(translatedMessage)}</div>
                         ${issue.detail ? `<div class="validation-issue-detail">${this.escapeHtml(issue.detail)}</div>` : ''}
@@ -485,10 +487,11 @@ export const treeStatsMethods = uiModule({
                 </div>`;
         };
 
+        // Below 50 % the fill turns copper (--accent) to flag a thin spot.
         const progress = (label: string, pct: number): string => `
             <div class="stats-progress">
                 <span class="label">${label}</span>
-                <span class="stats-progress-track"><span class="stats-progress-fill" style="width:${pct}%"></span></span>
+                <span class="stats-progress-track"><span class="stats-progress-fill${pct < 50 ? ' low' : ''}" style="width:${pct}%"></span></span>
                 <span class="pct">${pct}%</span>
             </div>`;
 
@@ -559,7 +562,7 @@ export const treeStatsMethods = uiModule({
                 </div>` : ''}
                 ${mediaWarn ? `
                 <div class="tree-stats-row tree-stats-warning">
-                    <span class="label">⚠️ ${s.statsMediaWarning}</span>
+                    <span class="label">${s.statsMediaWarning}</span>
                 </div>` : ''}
             </div>
 
@@ -618,10 +621,9 @@ export const treeStatsMethods = uiModule({
             ? svgBarChart(stats.birthsByMonth.map(m => ({ label: st.months[m.month - 1], value: m.count })))
             : notEnough));
 
-        // Records as highlight cards.
-        const card = (icon: string, label: string, value: string): string => `
+        // Records as highlight cards (text-only per the Letopis design).
+        const card = (label: string, value: string): string => `
             <div class="stats-record-card">
-                <span class="stats-record-icon">${icon}</span>
                 <div class="stats-record-text">
                     <div class="stats-record-label">${label}</div>
                     <div class="stats-record-value">${value}</div>
@@ -629,15 +631,15 @@ export const treeStatsMethods = uiModule({
             </div>`;
         const cards: string[] = [];
         if (stats.oldest) {
-            cards.push(card('\u{1F3C6}', st.oldest, `${escXml(stats.oldest.name)} · ${stats.oldest.years} ${st.years}`));
+            cards.push(card(st.oldest, `${escXml(stats.oldest.name)} · ${stats.oldest.years} ${st.years}`));
         }
         if (stats.longestMarriage) {
-            cards.push(card('\u{1F48D}', st.longestMarriage, `${escXml(stats.longestMarriage.names)} · ${stats.longestMarriage.years} ${st.years}`));
+            cards.push(card(st.longestMarriage, `${escXml(stats.longestMarriage.names)} · ${stats.longestMarriage.years} ${st.years}`));
         }
         if (stats.largestFamily) {
-            cards.push(card('\u{1F46A}', st.largestFamily, `${escXml(stats.largestFamily.names)} · ${st.childrenCount(stats.largestFamily.count)}`));
+            cards.push(card(st.largestFamily, `${escXml(stats.largestFamily.names)} · ${st.childrenCount(stats.largestFamily.count)}`));
         }
-        cards.push(card('\u{1F4CA}', strings.treeManager.statsAvgChildren, avgChildren));
+        cards.push(card(strings.treeManager.statsAvgChildren, avgChildren));
         blocks.push(`<div class="stats-record-cards">${cards.join('')}</div>`);
 
         return blocks.join('');
@@ -667,7 +669,6 @@ export const treeStatsMethods = uiModule({
             const todayClass = item.daysUntil === 0 ? ' tree-stats-anniversary-today' : '';
             return `
                 <div class="tree-stats-anniversary${todayClass}">
-                    <span class="tree-stats-anniversary-icon">${ANNIVERSARY_ICON[item.type]}</span>
                     <div class="tree-stats-anniversary-info">
                         <div class="tree-stats-anniversary-name">${this.escapeHtml(label)}</div>
                     </div>

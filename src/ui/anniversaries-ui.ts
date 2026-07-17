@@ -17,14 +17,6 @@ import {
 } from '../anniversaries.js';
 import { uiModule } from './module.js';
 
-export const ANNIVERSARY_ICON: Record<Anniversary['type'], string> = {
-    'birthday': '🎂',
-    'wedding': '💍',
-    'birth-milestone': '🌟',
-    'death-milestone': '🕯️',
-    'death': '🕯️',
-};
-
 function personName(p?: Person): string {
     return p ? `${p.firstName} ${p.lastName}`.trim() : '';
 }
@@ -43,18 +35,19 @@ export const anniversariesUiMethods = uiModule({
         const a = strings.anniversaries;
 
         list.innerHTML = items.length === 0
-            ? `<div class="anniversaries-empty"><div class="anniversaries-empty-icon">🎂</div>${a.empty}</div>`
+            ? `<div class="anniversaries-empty">${a.empty}</div>`
             : items.map(item => {
                 const names = item.personIds.map(id => personName(data.persons[id as PersonId]));
                 const label = this.anniversaryLabel(item, names);
                 const when = item.daysUntil === 0 ? a.today
                     : item.daysUntil === 1 ? a.tomorrow : a.inDays(item.daysUntil);
+                // TODAY reads as a solid copper chip; other dates stay quiet.
+                const chipCls = item.daysUntil === 0 ? 'anniversary-when today' : 'anniversary-when';
                 // Person ids come from data files (JSON import) — escape them too.
                 const onclick = `window.Strom.UI.focusPersonFromAnniversary('${this.escapeHtml(item.personIds[0])}')`;
                 return `<div class="anniversary-row" onclick="${onclick}">
-                    <span class="anniversary-icon">${ANNIVERSARY_ICON[item.type]}</span>
                     <span class="anniversary-text">${this.escapeHtml(label)}</span>
-                    <span class="anniversary-when">${this.escapeHtml(when)}</span>
+                    <span class="${chipCls}">${this.escapeHtml(when)}</span>
                 </div>`;
             }).join('');
 

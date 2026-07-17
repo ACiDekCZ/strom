@@ -119,7 +119,7 @@ export const treeManagementMethods = uiModule({
                 html += `
                     <div class="tree-switcher-divider"></div>
                     <div class="tree-switcher-action" onclick="window.Strom.UI.showTreeManagerDialog()">
-                        <span>⚙</span> ${strings.treeManager.manageTreesTitle}...
+                        ${strings.treeManager.manageTreesTitle}...
                     </div>
                 `;
 
@@ -159,7 +159,7 @@ export const treeManagementMethods = uiModule({
         html += `
             <div class="tree-switcher-divider"></div>
             <div class="tree-switcher-action" onclick="window.Strom.UI.showTreeManagerDialog()">
-                <span>⚙</span> ${strings.treeManager.manageTreesTitle}...
+                ${strings.treeManager.manageTreesTitle}...
             </div>
         `;
 
@@ -346,12 +346,12 @@ export const treeManagementMethods = uiModule({
             let defaultPersonDisplay = '';
 
             if (defaultPersonSetting === LAST_FOCUSED) {
-                defaultPersonDisplay = `⭐ ${strings.treeManager.defaultPersonLastFocused}`;
+                defaultPersonDisplay = strings.treeManager.defaultPersonLastFocused;
             } else if (defaultPersonSetting && treeData?.persons[defaultPersonSetting]) {
                 const person = treeData.persons[defaultPersonSetting];
                 const birthYear = person.birthDate ? person.birthDate.split('-')[0] : '';
                 const name = `${person.firstName} ${person.lastName}`.trim();
-                defaultPersonDisplay = birthYear ? `⭐ ${name} (*${birthYear})` : `⭐ ${name}`;
+                defaultPersonDisplay = birthYear ? `${name} (*${birthYear})` : name;
             }
             // If undefined, don't show anything (first person is implicit default)
 
@@ -359,18 +359,19 @@ export const treeManagementMethods = uiModule({
             const visibilityLabel = tree.isHidden ? s.showTree : s.hideTree;
             const lockLabel = tree.isLocked ? strings.lock.unlockTree : strings.lock.lockTree;
 
-            // Status as explicit badges — an icon glued to the name was easy to
-            // miss and its meaning unclear.
+            // Status as explicit text chips — a leading glyph was easy to miss
+            // and its meaning unclear. Active reads green, hidden/locked gray.
             const badges =
                 (isActive ? `<span class="tree-badge active-badge">${s.activeBadge}</span>` : '') +
-                (tree.isLocked ? `<span class="tree-badge">🔒 ${s.lockedBadge}</span>` : '') +
-                (tree.isHidden ? `<span class="tree-badge">🙈 ${s.hiddenBadge}</span>` : '');
+                (tree.isLocked ? `<span class="tree-badge">${s.lockedBadge}</span>` : '') +
+                (tree.isHidden ? `<span class="tree-badge">${s.hiddenBadge}</span>` : '');
 
-            const menuItem = (onclick: string, icon: string, label: string, cls = '') =>
-                `<button class="tree-row-menu-item ${cls}" onclick="${onclick}"><span class="btn-icon">${icon}</span>${label}</button>`;
+            // Row menu items are text-only per the Letopis design (no emoji).
+            const menuItem = (onclick: string, label: string, cls = '') =>
+                `<button class="tree-row-menu-item ${cls}" onclick="${onclick}">${label}</button>`;
 
             const auditItem = (AuditLogManager.isEnabled() || await AuditLogManager.hasEntries(tree.id))
-                ? menuItem(`window.Strom.UI.showAuditLogDialog('${tree.id}', 'tree-manager-modal')`, '📋', strings.auditLog.viewLog)
+                ? menuItem(`window.Strom.UI.showAuditLogDialog('${tree.id}', 'tree-manager-modal')`, strings.auditLog.viewLog)
                 : '';
 
             html += `
@@ -387,24 +388,24 @@ export const treeManagementMethods = uiModule({
                     </div>
                     <div class="tree-manager-item-actions">
                         <button class="tree-open-btn" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${s.open}</button>
-                        <button onclick="window.Strom.UI.showTreeStatsDialog('${tree.id}', 'tree-manager-modal')" data-tip="${s.stats}"><span class="btn-icon">📊</span><span class="btn-text">${s.stats}</span></button>
-                        <button onclick="window.Strom.UI.showTreeValidationDialog('${tree.id}', 'tree-manager-modal')" data-tip="${s.validate}"><span class="btn-icon">🩺</span><span class="btn-text">${s.validate}</span></button>
-                        <button onclick="window.Strom.UI.showExportDialogFromManager('${tree.id}')" data-tip="${s.export}"><span class="btn-icon">💾</span><span class="btn-text">${s.export}</span></button>
                         <div class="tree-row-menu-wrap">
                             <button class="tree-row-menu-btn" data-tip="${s.moreActions}">⋯</button>
                             <div class="tree-row-menu">
-                                ${menuItem(`window.Strom.UI.showRenameTreeDialog('${tree.id}', 'tree-manager-modal')`, '✏️', s.rename, 'edit-only')}
-                                ${menuItem(`window.Strom.UI.showDefaultPersonDialog('${tree.id}', 'tree-manager-modal')`, '⭐', s.defaultPerson, 'edit-only')}
-                                ${menuItem(`window.Strom.UI.showSnapshotsDialog('${tree.id}', 'tree-manager-modal')`, '🕑', strings.snapshots.menu, 'edit-only')}
-                                ${isActive ? menuItem(`window.Strom.UI.showPlacesManager(undefined, 'tree-manager-modal')`, '📍', strings.map.placesTitle, 'edit-only') : ''}
-                                ${isActive ? menuItem(`window.Strom.UI.showSurnamesDialog('tree-manager-modal')`, '🔤', strings.surnames.menu, 'edit-only') : ''}
-                                ${menuItem(`window.Strom.UI.showSplitDialog('${tree.id}', 'tree-manager-modal')`, '✂️', strings.split.menu, 'edit-only')}
+                                ${menuItem(`window.Strom.UI.showTreeStatsDialog('${tree.id}', 'tree-manager-modal')`, s.stats)}
+                                ${menuItem(`window.Strom.UI.showTreeValidationDialog('${tree.id}', 'tree-manager-modal')`, s.validate)}
+                                ${menuItem(`window.Strom.UI.showExportDialogFromManager('${tree.id}')`, s.export)}
+                                ${menuItem(`window.Strom.UI.showRenameTreeDialog('${tree.id}', 'tree-manager-modal')`, s.rename, 'edit-only tree-row-menu-divider')}
+                                ${menuItem(`window.Strom.UI.showDefaultPersonDialog('${tree.id}', 'tree-manager-modal')`, s.defaultPerson, 'edit-only')}
+                                ${menuItem(`window.Strom.UI.showSnapshotsDialog('${tree.id}', 'tree-manager-modal')`, strings.snapshots.menu, 'edit-only')}
+                                ${isActive ? menuItem(`window.Strom.UI.showPlacesManager(undefined, 'tree-manager-modal')`, strings.map.placesTitle, 'edit-only') : ''}
+                                ${isActive ? menuItem(`window.Strom.UI.showSurnamesDialog('tree-manager-modal')`, strings.surnames.menu, 'edit-only') : ''}
+                                ${menuItem(`window.Strom.UI.showSplitDialog('${tree.id}', 'tree-manager-modal')`, strings.split.menu, 'edit-only')}
                                 ${auditItem}
-                                ${menuItem(`window.Strom.UI.duplicateTree('${tree.id}')`, '⧉', s.duplicate, 'edit-only')}
-                                ${menuItem(`window.Strom.UI.showMergeTreesDialog('${tree.id}', 'tree-manager-modal')`, '🔀', s.mergeInto, 'edit-only')}
-                                ${menuItem(`window.Strom.UI.toggleTreeVisibility('${tree.id}')`, tree.isHidden ? '👁' : '🙈', visibilityLabel, 'edit-only')}
-                                ${menuItem(`window.Strom.UI.toggleTreeLock('${tree.id}')`, tree.isLocked ? '🔓' : '🔒', lockLabel, 'edit-only')}
-                                ${menuItem(`window.Strom.UI.confirmDeleteTree('${tree.id}')`, '🗑', s.delete, 'danger edit-only')}
+                                ${menuItem(`window.Strom.UI.duplicateTree('${tree.id}')`, s.duplicate, 'edit-only')}
+                                ${menuItem(`window.Strom.UI.showMergeTreesDialog('${tree.id}', 'tree-manager-modal')`, s.mergeInto, 'edit-only')}
+                                ${menuItem(`window.Strom.UI.toggleTreeVisibility('${tree.id}')`, visibilityLabel, 'edit-only')}
+                                ${menuItem(`window.Strom.UI.toggleTreeLock('${tree.id}')`, lockLabel, 'edit-only')}
+                                ${menuItem(`window.Strom.UI.confirmDeleteTree('${tree.id}')`, s.delete, 'danger edit-only tree-row-menu-divider')}
                             </div>
                         </div>
                     </div>
@@ -451,9 +452,9 @@ export const treeManagementMethods = uiModule({
                         <span class="tree-manager-item-size">${date}</span>
                     </div>
                     <div class="tree-manager-item-actions">
-                        <button class="edit-only" onclick="window.Strom.UI.resumePendingMergeFromManager('${session.id}')" data-tip="${strings.merge.resume}"><span class="btn-icon">▶️</span><span class="btn-text">${strings.merge.resume}</span></button>
-                        <button class="edit-only" onclick="window.Strom.UI.renamePendingMergeFromManager('${session.id}', '${escapedName}')" data-tip="${strings.treeManager.rename}"><span class="btn-icon">✏️</span><span class="btn-text">${strings.treeManager.rename}</span></button>
-                        <button class="danger edit-only" onclick="window.Strom.UI.discardPendingMergeFromManager('${session.id}', '${escapedName}')" data-tip="${strings.merge.discard}"><span class="btn-icon">❌</span><span class="btn-text">${strings.merge.discard}</span></button>
+                        <button class="tree-open-btn edit-only" onclick="window.Strom.UI.resumePendingMergeFromManager('${session.id}')">${strings.merge.resume}</button>
+                        <button class="edit-only tree-text-action" onclick="window.Strom.UI.renamePendingMergeFromManager('${session.id}', '${escapedName}')">${strings.treeManager.rename}</button>
+                        <button class="danger edit-only tree-text-action" onclick="window.Strom.UI.discardPendingMergeFromManager('${session.id}', '${escapedName}')">${strings.merge.discard}</button>
                     </div>
                 </div>
             `;
