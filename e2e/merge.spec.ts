@@ -90,3 +90,44 @@ test('tree merge wizard matches a shared person and merges without duplicates', 
     await expect(wizard.locator('.merge-step.active')).toHaveCount(1);
     await expect(wizard.locator('.merge-step.active')).toHaveText(/Review matches/);
 });
+
+test('merge wizard warns up-front when an input tree has validation errors', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Seed', 'Person');
+
+    // A valid target tree and a source tree with a seeded error: a father that
+    // does not list his child back (missingChildRef, error severity).
+    const ids = await page.evaluate(() => {
+        const TM = window.Strom.TreeManager;
+        const targetId = TM.createTree('Target Tree');
+        TM.saveTreeData(targetId, {
+            persons: {
+                t_a: { id: 't_a', firstName: 'Anna', lastName: 'Valid', gender: 'female', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] },
+            },
+            partnerships: {},
+        });
+        const sourceId = TM.createTree('Source Tree');
+        TM.saveTreeData(sourceId, {
+            persons: {
+                s_dad: { id: 's_dad', firstName: 'Josef', lastName: 'Broken', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] },
+                s_kid: { id: 's_kid', firstName: 'Karel', lastName: 'Broken', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: ['s_dad'], childIds: [] },
+            },
+            partnerships: {},
+        });
+        return { targetId, sourceId };
+    });
+
+    await page.evaluate((id) => window.Strom.UI.showMergeTreesDialog(id), ids.sourceId);
+    const pick = page.locator('#merge-trees-modal');
+    await expect(pick).toBeVisible();
+    await page.evaluate((id) => window.Strom.UI.selectMergeTarget(id), ids.targetId);
+    await pick.locator('#merge-trees-btn').click();
+
+    const wizard = page.locator('#merge-modal');
+    await expect(wizard).toBeVisible();
+    // The non-blocking pre-merge banner shows (and the merge is still runnable).
+    const banner = page.locator('#merge-validation-banner');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText(/issue/i);
+    await expect(wizard.locator('.merge-actions .primary')).toBeEnabled();
+});

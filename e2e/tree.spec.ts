@@ -77,10 +77,15 @@ test('a hidden tree\u2019s row menu is not see-through', async ({ page }) => {
     await row.locator('.tree-row-menu-item', { hasText: 'Hide' }).click();
     await expect(row).toHaveClass(/hidden-tree/);
 
-    await row.locator('.tree-row-menu-btn').click();
-    await expect(row.locator('.tree-row-menu')).toHaveClass(/open/);
-    const opacity = await row.evaluate(el => getComputedStyle(el).opacity);
-    expect(opacity).toBe('1');
+    // The manager list re-renders asynchronously (per-row stats); a late
+    // re-render can swap the DOM and close the menu between our click and the
+    // style read. Poll: re-open if needed, then require the undimmed row.
+    await expect.poll(async () => {
+        const open = await row.locator('.tree-row-menu')
+            .evaluate(el => el.classList.contains('open')).catch(() => false);
+        if (!open) await row.locator('.tree-row-menu-btn').click();
+        return row.evaluate(el => getComputedStyle(el).opacity);
+    }).toBe('1');
 });
 
 test('tree manager: row menu groups actions; Open switches to the tree', async ({ page }) => {

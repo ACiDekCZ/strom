@@ -83,4 +83,65 @@ describe('isChangePacket', () => {
         expect(isChangePacket({ kind: 'strom-changes' })).toBe(false);               // no baseExportId
         expect(isChangePacket(null)).toBe(false);
     });
+
+    it('accepts both v1 and v2 format versions', () => {
+        expect(isChangePacket({ kind: 'strom-changes', formatVersion: 1, baseExportId: 'X' })).toBe(true);
+        expect(isChangePacket({ kind: 'strom-changes', formatVersion: 2, baseExportId: 'X' })).toBe(true);
+        expect(isChangePacket({ kind: 'strom-changes', formatVersion: 3, baseExportId: 'X' })).toBe(false);
+    });
+});
+
+describe('tree-level registries travel in the packet (Fix 3)', () => {
+    it('a relative who adds a place coordinate and a surname group sends both', () => {
+        const base = clone(comprehensive);
+        const current = clone(comprehensive);
+        // The relative geocodes a place and groups two spellings.
+        current.places = { ...(current.places ?? {}), kolin: { lat: 50.0281, lon: 15.2003, label: 'Kolín' } };
+        current.surnameVariants = [...(current.surnameVariants ?? []), ['Víšek', 'Vyšek']];
+
+        const packet = buildChangePacket(base, current, META);
+        expect(isEmptyPacket(packet)).toBe(false);
+        expect(packet.formatVersion).toBe(2);
+        expect(packet.places?.changed.kolin).toBeDefined();
+        expect(packet.surnameVariants).toContainEqual(['Víšek', 'Vyšek']);
+
+        const rebuilt = applyChangePacket(base, packet);
+        expect(rebuilt.places?.kolin).toEqual({ lat: 50.0281, lon: 15.2003, label: 'Kolín' });
+        expect(rebuilt.surnameVariants).toContainEqual(['Víšek', 'Vyšek']);
+    });
+
+    it('a place removed by the relative is removed on apply', () => {
+        const base = clone(comprehensive);
+        base.places = { kolin: { lat: 50.0281, lon: 15.2003, label: 'Kolín' } };
+        const current = clone(base);
+        delete current.places!.kolin;
+
+        const packet = buildChangePacket(base, current, META);
+        expect(packet.places?.removedKeys).toContain('kolin');
+        const rebuilt = applyChangePacket(base, packet);
+        expect(rebuilt.places?.kolin).toBeUndefined();
+    });
+
+    it('unioning a group into an overlapping baseline group keeps transitivity', () => {
+        const base = clone(comprehensive);
+        base.surnameVariants = [['Vyšek', 'Wischek']];
+        const current = clone(base);
+        current.surnameVariants = [['Vyšek', 'Wischek'], ['Víšek', 'Vyšek']];
+
+        const packet = buildChangePacket(base, current, META);
+        const rebuilt = applyChangePacket(base, packet);
+        // Víšek, Vyšek and Wischek must all end up in ONE group.
+        const group = (rebuilt.surnameVariants ?? []).find(g => g.some(n => n === 'Víšek'));
+        expect(group).toBeDefined();
+        expect(group).toEqual(expect.arrayContaining(['Víšek', 'Vyšek', 'Wischek']));
+    });
+
+    it('a person-only packet stays v1 (older apps still apply it)', () => {
+        const base = clone(comprehensive);
+        const current = clone(comprehensive);
+        (Object.values(current.persons)[0] as { firstName: string }).firstName = 'CHANGED';
+        const packet = buildChangePacket(base, current, META);
+        expect(packet.formatVersion).toBe(1);
+        expect(packet.places).toBeUndefined();
+    });
 });

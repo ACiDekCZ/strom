@@ -1003,6 +1003,17 @@ const stringsEN = {
         suggestedPrecise: 'suggested — more precise date',
         suggestedComplete: 'suggested — more complete value',
 
+        // Photo conflict (two different portraits — shown as thumbnails in the dialog)
+        photoConflict: 'two different photos',
+
+        // Validation around the merge (non-blocking)
+        preValidationWarning: (existing: number, incoming: number) =>
+            `Existing tree has ${existing} issue${existing === 1 ? '' : 's'}, incoming ${incoming} — merging will carry them over.`,
+        preValidationHint: 'You can fix them first via validation.',
+        newIssuesTitle: 'Merge introduced new issues',
+        newIssues: (n: number) =>
+            `Merge introduced ${n} new issue${n === 1 ? '' : 's'} — open validation?`,
+
         // Manual match dialog
         incomingPerson: 'Incoming person:',
 
@@ -2512,6 +2523,17 @@ const stringsCZ: StringsType = {
         pendingGate: (n: number) => `${n} ${n === 1 ? 'nejistá shoda zůstala nerozhodnutá' : n < 5 ? 'nejisté shody zůstaly nerozhodnuté' : 'nejistých shod zůstalo nerozhodnutých'} — tito lidé se naimportují jako SAMOSTATNÉ osoby (sloučit je můžeš i později). Pokračovat?`,
         suggestedPrecise: 'navrženo — přesnější datum',
         suggestedComplete: 'navrženo — úplnější hodnota',
+
+        // Photo conflict (dvě různé fotografie — v dialogu zobrazeny jako náhledy)
+        photoConflict: 'dvě různé fotografie',
+
+        // Validace kolem sloučení (neblokující)
+        preValidationWarning: (existing: number, incoming: number) =>
+            `Stávající strom má ${existing} ${existing === 1 ? 'problém' : existing < 5 ? 'problémy' : 'problémů'}, příchozí ${incoming} — sloučením se přenesou dál.`,
+        preValidationHint: 'Můžete je nejdřív opravit přes validaci.',
+        newIssuesTitle: 'Sloučení přineslo nové problémy',
+        newIssues: (n: number) =>
+            `Sloučení přineslo ${n} ${n === 1 ? 'nový problém' : n < 5 ? 'nové problémy' : 'nových problémů'} — otevřít validaci?`,
 
         // Manual match dialog
         incomingPerson: 'Příchozí osoba:',

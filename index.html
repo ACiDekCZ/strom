@@ -4590,6 +4590,31 @@
             margin-bottom: 12px;
             line-height: 1.4;
         }
+        .merge-validation-banner {
+            font-size: 13px;
+            line-height: 1.4;
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: #fff4e5;
+            border: 1px solid #f0c886;
+            color: #8a5a00;
+        }
+        [data-theme="dark"] .merge-validation-banner {
+            background: #3a2e15;
+            border-color: #6b551f;
+            color: #e6c477;
+        }
+        .merge-validation-banner-hint {
+            opacity: 0.85;
+        }
+        .conflict-photo {
+            max-width: 72px;
+            max-height: 72px;
+            border-radius: 4px;
+            object-fit: cover;
+            vertical-align: middle;
+        }
         .merge-progress {
             display: flex;
             gap: 8px;
@@ -8033,6 +8058,7 @@
                 <button class="close-btn" onclick="window.Strom.MergerUI.closeMergeModal()">&times;</button>
             </div>
             <p id="merge-wizard-explanation" class="merge-wizard-explanation" data-i18n="merge.wizardExplanation"></p>
+            <div id="merge-validation-banner" class="merge-validation-banner" style="display:none"></div>
             <div class="merge-progress">
                 <span id="merge-step-review" class="merge-step active" data-i18n="merge.stepReview">1. Review matches</span>
                 <span id="merge-step-resolve" class="merge-step" data-i18n="merge.stepResolve">2. Resolve conflicts</span>

@@ -197,3 +197,91 @@ describe('conflict suggestions (suggestResolution + detectConflicts)', () => {
         expect(existing.birthDate).toBe('1880-05-15');
     });
 });
+
+describe('mergePersonData carries fields the audit found dropped', () => {
+    it('fills photo (+ original name), notes, question, refn, isDeceased when missing', () => {
+        const existing = person('e1', 'Jan', 'Novák');
+        const incoming = person('i1', 'Jan', 'Novák', {
+            photo: 'data:image/jpeg;base64,AAA', photoOriginalName: 'jan.jpg',
+            notes: 'Farmer', question: 'When born?', refn: 'box 12', isDeceased: true,
+        });
+        mergePersonData(existing, incoming, []);
+        expect(existing.photo).toBe('data:image/jpeg;base64,AAA');
+        expect(existing.photoOriginalName).toBe('jan.jpg');
+        expect(existing.notes).toBe('Farmer');
+        expect(existing.question).toBe('When born?');
+        expect(existing.refn).toBe('box 12');
+        expect(existing.isDeceased).toBe(true);
+    });
+
+    it('concatenates notes when both sides wrote a different one', () => {
+        const existing = person('e1', 'Jan', 'Novák', { notes: 'Existing note' });
+        const incoming = person('i1', 'Jan', 'Novák', { notes: 'Incoming note' });
+        mergePersonData(existing, incoming, []);
+        expect(existing.notes).toContain('Existing note');
+        expect(existing.notes).toContain('Incoming note');
+    });
+
+    it('detects a photo conflict when both have a different photo (no auto-pick)', () => {
+        const conflicts = detectConflicts(
+            person('e1', 'Jan', 'Novák', { photo: 'data:image/jpeg;base64,AAA' }),
+            person('i1', 'Jan', 'Novák', { photo: 'data:image/jpeg;base64,BBB' }),
+        );
+        const pc = conflicts.find(c => c.field === 'photo');
+        expect(pc).toBeDefined();
+        expect(pc!.resolution).toBe('keep_existing');
+    });
+
+    it('resolving a photo conflict to the import pulls the photo AND its original name', () => {
+        const existing = person('e1', 'Jan', 'Novák', { photo: 'data:image/jpeg;base64,AAA', photoOriginalName: 'old.jpg' });
+        const incoming = person('i1', 'Jan', 'Novák', { photo: 'data:image/jpeg;base64,BBB', photoOriginalName: 'new.jpg' });
+        const conflicts = detectConflicts(existing, incoming);
+        conflicts.find(c => c.field === 'photo')!.resolution = 'use_incoming';
+        mergePersonData(existing, incoming, conflicts);
+        expect(existing.photo).toBe('data:image/jpeg;base64,BBB');
+        expect(existing.photoOriginalName).toBe('new.jpg');
+    });
+});
+
+describe('name conflict keeps the losing spelling as a variant (Fix 2)', () => {
+    it('appends the losing surname spelling (Víšek/Vyšek) on keep_existing', () => {
+        const existing = person('e1', 'Josef', 'Víšek');
+        const incoming = person('i1', 'Josef', 'Vyšek');
+        const conflicts = detectConflicts(existing, incoming);
+        // Default is keep_existing (the two spellings do not contain one another).
+        mergePersonData(existing, incoming, conflicts);
+        expect(existing.lastName).toBe('Víšek');
+        expect(existing.nameVariants).toContain('Vyšek');
+    });
+
+    it('appends the losing surname (Víšek/Vyšek) on use_incoming too', () => {
+        const existing = person('e1', 'Josef', 'Vyšek');
+        const incoming = person('i1', 'Josef', 'Víšek');
+        const conflicts = detectConflicts(existing, incoming);
+        conflicts.find(c => c.field === 'lastName')!.resolution = 'use_incoming';
+        mergePersonData(existing, incoming, conflicts);
+        expect(existing.lastName).toBe('Víšek');
+        expect(existing.nameVariants).toContain('Vyšek');
+    });
+
+    it('keeps both spellings for Elsa Charlotta Voigtová / Elsa Voigt', () => {
+        const existing = person('e1', 'Elsa Charlotta', 'Voigtová', { gender: 'female' });
+        const incoming = person('i1', 'Elsa', 'Voigt', { gender: 'female' });
+        const conflicts = detectConflicts(existing, incoming);
+        mergePersonData(existing, incoming, conflicts);
+        // The more complete spellings win; the shorter ones survive as variants,
+        // so the next import of "Elsa Voigt" matches this person again.
+        expect(existing.firstName).toBe('Elsa Charlotta');
+        expect(existing.lastName).toBe('Voigtová');
+        expect(existing.nameVariants).toContain('Elsa');
+        expect(existing.nameVariants).toContain('Voigt');
+    });
+
+    it('adds nothing when the two spellings differ only in case/diacritics', () => {
+        const existing = person('e1', 'Jan', 'Novák');
+        const incoming = person('i1', 'Jan', 'Novak');
+        const conflicts = detectConflicts(existing, incoming);
+        mergePersonData(existing, incoming, conflicts);
+        expect(existing.nameVariants ?? []).not.toContain('Novak');
+    });
+});

@@ -14,7 +14,7 @@ import {
     generatePersonId,
     generatePartnershipId
 } from '../types.js';
-import { addSurnameGroup } from '../surnames.js';
+import { addSurnameGroup, surnameKey } from '../surnames.js';
 import {
     MergeState,
     MergeResult,
@@ -324,6 +324,10 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         // Update parent-child relationships for merged persons
         updateRelationships(mergedData, state, mapping);
 
+        // Guarantee childIds/parentIds are symmetric and partnership children
+        // agree with parentIds — no dangling or one-sided links survive.
+        enforceRelationshipSymmetry(mergedData);
+
         // No participant may point outside the merged tree: whoever did not
         // come along stays by name (snapshotted during remap), never as a
         // dangling id.
@@ -416,6 +420,23 @@ function deepCloneStromData(data: StromData): StromData {
 }
 
 /**
+ * Record the spelling that lost a first/last-name conflict as a name variant,
+ * so a later import of the same source matches this person under that spelling
+ * instead of adding a duplicate. Skips empty/'?' values and anything already
+ * present (case/diacritics-insensitive), including the winning spelling itself.
+ */
+function addLosingNameVariant(existing: Person, winner: string, loser: string): void {
+    const v = loser.trim();
+    if (!v || v === '?') return;
+    const key = surnameKey(v);
+    if (!key || key === surnameKey(winner)) return;
+    const have = new Set<string>([surnameKey(existing.firstName), surnameKey(existing.lastName)]);
+    for (const nv of existing.nameVariants ?? []) have.add(surnameKey(nv));
+    if (have.has(key)) return;
+    (existing.nameVariants ??= []).push(v);
+}
+
+/**
  * Merge person data according to conflict resolutions
  */
 export function mergePersonData(
@@ -439,34 +460,72 @@ export function mergePersonData(
         existing.deathPlace = incoming.deathPlace;
     }
 
+    // Photo: fill only when we have none. photoOriginalName always rides along
+    // with the photo it names — never on its own. When BOTH sides have a
+    // (different) photo it is a conflict (see detectConflicts) the user resolves.
+    if (!existing.photo && incoming.photo) {
+        existing.photo = incoming.photo;
+        if (incoming.photoOriginalName) existing.photoOriginalName = incoming.photoOriginalName;
+    }
+
+    // Open question / reference number / death-status: fill when missing.
+    if (!existing.question && incoming.question) existing.question = incoming.question;
+    if (!existing.refn && incoming.refn) existing.refn = incoming.refn;
+    if (existing.isDeceased === undefined && incoming.isDeceased !== undefined) {
+        existing.isDeceased = incoming.isDeceased;
+    }
+
+    // Notes: keep both. Genealogy notes are cheap to store and expensive to
+    // re-research, so when both sides wrote something different we concatenate
+    // rather than silently drop the incoming note.
+    if (incoming.notes && incoming.notes.trim()) {
+        if (!existing.notes || !existing.notes.trim()) {
+            existing.notes = incoming.notes;
+        } else if (existing.notes.trim() !== incoming.notes.trim()) {
+            existing.notes = `${existing.notes}\n---\n${incoming.notes}`;
+        }
+    }
+
     // Apply conflict resolutions
     for (const conflict of conflicts) {
-        if (conflict.resolution === 'use_incoming') {
-            switch (conflict.field) {
-                case 'firstName':
-                    existing.firstName = incoming.firstName;
-                    break;
-                case 'lastName':
-                    existing.lastName = incoming.lastName;
-                    break;
-                case 'birthDate':
-                    existing.birthDate = incoming.birthDate;
-                    break;
-                case 'birthPlace':
-                    existing.birthPlace = incoming.birthPlace;
-                    break;
-                case 'deathDate':
-                    existing.deathDate = incoming.deathDate;
-                    break;
-                case 'deathPlace':
-                    existing.deathPlace = incoming.deathPlace;
-                    break;
-                case 'gender':
-                    existing.gender = incoming.gender;
-                    break;
+        const useIncoming = conflict.resolution === 'use_incoming';
+        switch (conflict.field) {
+            case 'firstName':
+            case 'lastName': {
+                // The spelling that LOSES the conflict is not thrown away: it is
+                // recorded as a name variant so the next import of the same
+                // source matches this person again instead of re-adding them.
+                // Compared case/diacritics-insensitively (surnameKey), so
+                // "Novák" vs "Novak" adds nothing.
+                const winner = (useIncoming ? conflict.incomingValue : conflict.existingValue) ?? '';
+                const loser = (useIncoming ? conflict.existingValue : conflict.incomingValue) ?? '';
+                if (useIncoming) {
+                    if (conflict.field === 'firstName') existing.firstName = incoming.firstName;
+                    else existing.lastName = incoming.lastName;
+                }
+                addLosingNameVariant(existing, winner, loser);
+                break;
             }
+            case 'photo':
+                if (useIncoming) {
+                    existing.photo = incoming.photo;
+                    // photoOriginalName always travels WITH the photo it names.
+                    if (incoming.photoOriginalName) existing.photoOriginalName = incoming.photoOriginalName;
+                    else delete existing.photoOriginalName;
+                }
+                break;
+            default:
+                if (useIncoming) {
+                    switch (conflict.field) {
+                        case 'birthDate': existing.birthDate = incoming.birthDate; break;
+                        case 'birthPlace': existing.birthPlace = incoming.birthPlace; break;
+                        case 'deathDate': existing.deathDate = incoming.deathDate; break;
+                        case 'deathPlace': existing.deathPlace = incoming.deathPlace; break;
+                        case 'gender': existing.gender = incoming.gender; break;
+                    }
+                }
         }
-        // 'keep_existing' - do nothing
+        // 'keep_existing' on non-name fields - do nothing
     }
 
     // Merge life events: union by id, keeping the existing event on id clash.
@@ -572,6 +631,76 @@ function mergePartnershipData(existing: Partnership, incoming: Partnership): voi
     }
     if (!existing.note && incoming.note) {
         existing.note = incoming.note;
+    }
+    // Source citations: union like persons' sourceIds — a marriage record cited
+    // on either side is evidence for the union and must survive the merge.
+    if (incoming.sourceIds && incoming.sourceIds.length > 0) {
+        const merged = new Set([...(existing.sourceIds ?? []), ...incoming.sourceIds]);
+        existing.sourceIds = [...merged];
+    }
+    // status is required, so a well-formed partnership always has one; fill only
+    // if the existing side somehow lacks it. isPrimary is deliberately left
+    // alone — which union shows first is the existing tree's own arrangement.
+    if (!existing.status && incoming.status) {
+        existing.status = incoming.status;
+    }
+}
+
+/**
+ * After a merge, parent/child links can be left one-sided: the by-hand build
+ * adds a child to a parent's childIds but the child already has two parents and
+ * cannot take a third, so the reverse link is never written. That asymmetry is
+ * exactly what the validator reports as missingParentRef / partnershipChildMismatch.
+ *
+ * The honest rule: a child that already has two parents does not gain a third —
+ * so the surplus link is dropped on BOTH sides. We take parentIds (capped at 2,
+ * dangling/self entries removed) as the source of truth and rebuild childIds
+ * from it, which makes every parent↔child link mutual by construction. Then
+ * each partnership keeps only the children that list BOTH partners as parents.
+ */
+function enforceRelationshipSymmetry(data: StromData): void {
+    const persons = data.persons;
+
+    for (const person of Object.values(persons)) {
+        const seen = new Set<PersonId>();
+        const valid: PersonId[] = [];
+        for (const pid of person.parentIds) {
+            if (pid === person.id) continue;              // never self-parent
+            if (!persons[pid] || seen.has(pid)) continue; // drop dangling / dup
+            seen.add(pid);
+            valid.push(pid);
+        }
+        person.parentIds = valid.slice(0, 2);             // a child has at most 2 parents
+        // Drop parentRelTypes entries for parents that no longer apply.
+        if (person.parentRelTypes) {
+            for (const key of Object.keys(person.parentRelTypes) as PersonId[]) {
+                if (!person.parentIds.includes(key)) delete person.parentRelTypes[key];
+            }
+        }
+    }
+
+    // childIds is derived from parentIds: C ∈ P.childIds ⇔ P ∈ C.parentIds.
+    const childrenOf = new Map<PersonId, PersonId[]>();
+    for (const person of Object.values(persons)) {
+        for (const pid of person.parentIds) {
+            const list = childrenOf.get(pid) ?? childrenOf.set(pid, []).get(pid)!;
+            list.push(person.id);
+        }
+    }
+    for (const person of Object.values(persons)) {
+        person.childIds = childrenOf.get(person.id) ?? [];
+    }
+
+    // A partnership may only list children that acknowledge BOTH partners as
+    // parents, or the validator flags partnershipChildMismatch.
+    for (const partnership of Object.values(data.partnerships)) {
+        const kept = partnership.childIds.filter(cid => {
+            const child = persons[cid];
+            return !!child
+                && child.parentIds.includes(partnership.person1Id)
+                && child.parentIds.includes(partnership.person2Id);
+        });
+        partnership.childIds = [...new Set(kept)];
     }
 }
 

@@ -26,6 +26,7 @@ import {
 } from './matching.js';
 import { executeMerge, deleteBackup, AUTO_CONFIRM_SCORE } from './executor.js';
 import { AuditLogManager } from '../audit-log.js';
+import { validateTreeData, ValidationResult } from '../validation.js';
 import { PersonPicker } from '../person-picker.js';
 import {
     saveCurrentMerge,
@@ -382,7 +383,29 @@ class MergerUIClass {
         if (!modal) return;
 
         this.renderModalContent();
+        this.renderValidationBanner();
         modal.classList.add('active');
+    }
+
+    /**
+     * Non-blocking pre-merge warning: if either tree already has error-severity
+     * issues, they will be carried into the merged tree. We say so and hint at
+     * fixing them first, but never block the merge.
+     */
+    private renderValidationBanner(): void {
+        const banner = document.getElementById('merge-validation-banner');
+        if (!banner || !this.mergeState) return;
+        const existingErrors = validateTreeData(this.mergeState.existingData).stats.errors;
+        const incomingErrors = validateTreeData(this.mergeState.incomingData).stats.errors;
+        if (existingErrors === 0 && incomingErrors === 0) {
+            banner.style.display = 'none';
+            banner.innerHTML = '';
+            return;
+        }
+        banner.style.display = '';
+        banner.innerHTML =
+            `<span class="merge-validation-banner-msg">⚠ ${this.escapeHtml(strings.merge.preValidationWarning(existingErrors, incomingErrors))}</span>`
+            + ` <span class="merge-validation-banner-hint">${this.escapeHtml(strings.merge.preValidationHint)}</span>`;
     }
 
     /**
@@ -756,6 +779,11 @@ class MergerUIClass {
             <div class="merge-item-conflicts">
                 ${conflicts.map(c => {
                     const fieldLabel = strings.labels[c.field as keyof typeof strings.labels] || c.field;
+                    // Never spell out a photo's data URL in the compact summary —
+                    // just say the portraits differ (the ⚠ + resolve dialog show them).
+                    if (c.field === 'photo') {
+                        return `<span class="conflict-field">${fieldLabel}: ${strings.merge.photoConflict}</span>`;
+                    }
                     return `<span class="conflict-field">${fieldLabel}: ${this.escapeHtml(c.existingValue || '—')} → ${this.escapeHtml(c.incomingValue || '—')}</span>`;
                 }).join('')}
                 ${more}
@@ -1071,11 +1099,6 @@ class MergerUIClass {
             titleEl.textContent = name ? `${strings.merge.conflicts}: ${name}` : strings.merge.conflicts;
         }
 
-        // Gender values display localized; everything else raw.
-        const displayVal = (field: string, v?: string): string => {
-            if (field === 'gender' && (v === 'male' || v === 'female')) return strings.gender[v];
-            return v || '—';
-        };
         const suggestedLabel = (c: typeof match.conflicts[number]): string => {
             if (!c.suggestedReason) return '';
             const text = c.suggestedReason === 'more_precise_date'
@@ -1091,14 +1114,14 @@ class MergerUIClass {
                     <label class="conflict-option">
                         <input type="radio" name="conflict-${conflict.field}" value="keep_existing"
                             ${conflict.resolution === 'keep_existing' ? 'checked' : ''}>
-                        <span class="conflict-value existing">${this.escapeHtml(displayVal(conflict.field, conflict.existingValue))}</span>
+                        <span class="conflict-value existing">${this.conflictValueHtml(conflict.field, conflict.existingValue)}</span>
                         <span class="conflict-badge existing">${strings.merge.keepExisting}</span>
                         ${conflict.resolution === 'keep_existing' ? suggestedLabel(conflict) : ''}
                     </label>
                     <label class="conflict-option">
                         <input type="radio" name="conflict-${conflict.field}" value="use_incoming"
                             ${conflict.resolution === 'use_incoming' ? 'checked' : ''}>
-                        <span class="conflict-value incoming">${this.escapeHtml(displayVal(conflict.field, conflict.incomingValue))}</span>
+                        <span class="conflict-value incoming">${this.conflictValueHtml(conflict.field, conflict.incomingValue)}</span>
                         <span class="conflict-badge incoming">${strings.merge.useImport}</span>
                         ${conflict.resolution === 'use_incoming' ? suggestedLabel(conflict) : ''}
                     </label>
@@ -1192,9 +1215,20 @@ class MergerUIClass {
 
         this.mergeState.phase = 'executing';
 
+        // Snapshot the issues that already exist in BOTH inputs, so we can tell
+        // afterwards whether the merge itself INTRODUCED anything new.
+        const preIssues = [
+            validateTreeData(this.mergeState.existingData),
+            validateTreeData(this.mergeState.incomingData),
+        ];
+
         const result = await executeMerge(this.mergeState);
 
         if (result.success) {
+            // Did the merge itself introduce new error/warning issues (beyond
+            // what the two inputs already carried)? Compared by issue type.
+            const newIssueCount = this.countNewMergeIssues(preIssues, validateTreeData(result.mergedData));
+
             // Create new tree with merged data
             const newTreeId = TreeManager.createTree(newTreeName);
             TreeManager.saveTreeData(newTreeId, result.mergedData);
@@ -1260,12 +1294,67 @@ class MergerUIClass {
                 UI.closeTreeManagerDialog();
             }
             // If user cancels (ESC), stay in tree manager
+
+            // If the merge introduced new issues, offer to open validation on
+            // the merged tree so the user can review (and fix) them right away.
+            if (newIssueCount > 0) {
+                const openValidation = await UI.showConfirm(
+                    strings.merge.newIssues(newIssueCount),
+                    strings.merge.newIssuesTitle
+                );
+                if (openValidation) {
+                    await UI.showTreeValidationDialog(newTreeId);
+                }
+            }
         } else {
             UI.showAlert(strings.merge.failed + '\n' + (result.errors?.join('\n') || ''), 'error');
         }
     }
 
     // ==================== HELPERS ====================
+
+    /**
+     * How many error/warning issues the RESULT has beyond what the inputs
+     * already had, counted per issue type (a merge that inherits an existing
+     * error is not "new"; a merge that manufactures one is). Info-level issues
+     * are ignored — they are hints, not defects, and merging naturally shuffles
+     * them (e.g. possible-duplicate suggestions).
+     */
+    private countNewMergeIssues(pre: ValidationResult[], post: ValidationResult): number {
+        const countByType = (results: ValidationResult[]): Map<string, number> => {
+            const m = new Map<string, number>();
+            for (const r of results) {
+                for (const issue of r.issues) {
+                    if (issue.severity === 'info') continue;
+                    m.set(issue.type, (m.get(issue.type) ?? 0) + 1);
+                }
+            }
+            return m;
+        };
+        const before = countByType(pre);
+        const after = countByType([post]);
+        let added = 0;
+        for (const [type, count] of after) {
+            added += Math.max(0, count - (before.get(type) ?? 0));
+        }
+        return added;
+    }
+
+    /**
+     * A conflict value rendered as safe HTML. Photos become a thumbnail (a
+     * data: URL is inert as an <img src>) so the dialog never dumps a data URL
+     * as text; gender is localized; everything else is escaped plain text.
+     */
+    private conflictValueHtml(field: string, v?: string): string {
+        if (field === 'photo') {
+            if (v && v.startsWith('data:')) {
+                return `<img class="conflict-photo" src="${this.escapeHtml(v)}" alt="${this.escapeHtml(strings.labels.photo)}">`;
+            }
+            return '—';
+        }
+        if (field === 'gender' && (v === 'male' || v === 'female')) return this.escapeHtml(strings.gender[v]);
+        return this.escapeHtml(v || '—');
+    }
 
     private escapeHtml(text: string): string {
         // Must also escape quotes: callers interpolate into HTML attributes.

@@ -985,6 +985,7 @@ export function suggestResolution(
         return { resolution: 'keep_existing' };
     }
     if (field === 'gender') return { resolution: 'keep_existing' };   // never auto-flip
+    if (field === 'photo') return { resolution: 'keep_existing' };    // two portraits — a human decides, no opinion
 
     const na = normalizeName(existingValue);
     const nb = normalizeName(incomingValue);
@@ -1004,7 +1005,11 @@ export function detectConflicts(existing: Person, incoming: Person): FieldConfli
         'birthDate',
         'birthPlace',
         'deathDate',
-        'deathPlace'
+        'deathPlace',
+        // Two different portraits cannot both be kept on one person — offer the
+        // choice instead of silently keeping one. The conflict dialog renders a
+        // thumbnail for this field, never the data URL as text.
+        'photo'
     ];
 
     for (const field of fieldsToCheck) {
