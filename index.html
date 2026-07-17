@@ -2531,6 +2531,197 @@
         }
         .modal button.danger:hover { background: #c62828; }
 
+        /* ==================== PERSON MODAL — Letopis ==================== */
+        .pm-modal {
+            background: var(--surface-modal);
+            padding: 0;
+            min-width: 460px;
+            max-width: 560px;
+            width: 560px;
+        }
+        .pm-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 20px 24px 16px;
+            border-bottom: 1px solid var(--divider);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--surface-modal);
+            border-radius: 14px 14px 0 0;
+        }
+        .pm-avatar {
+            flex: none;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: #f0e9da;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            box-shadow: 0 0 0 2px var(--male);
+        }
+        .pm-avatar.female { box-shadow: 0 0 0 2px var(--female); }
+        [data-theme="dark"] .pm-avatar { background: var(--surface-2); }
+        .pm-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .pm-avatar-initials {
+            font-family: var(--font-serif);
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--text-light);
+        }
+        .pm-header-text { flex: 1; min-width: 0; }
+        .pm-name {
+            font-family: var(--font-serif);
+            font-size: 23px;
+            font-weight: 600;
+            line-height: 1.2;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pm-context {
+            font-size: 12px;
+            color: var(--text-light);
+            margin-top: 3px;
+            font-variant-numeric: tabular-nums;
+        }
+        .pm-header .close-btn { flex: none; align-self: flex-start; }
+
+        .pm-modal > .pm-section,
+        .pm-modal > .expand-btn,
+        .pm-modal > #extended-fields { margin-left: 24px; margin-right: 24px; }
+        .pm-modal > .pm-section:first-of-type { margin-top: 20px; }
+
+        .pm-section { margin-bottom: 22px; }
+        .pm-section-head {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .pm-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--accent);
+        }
+        .pm-section-summary {
+            font-size: 12px;
+            color: var(--text-light);
+            font-variant-numeric: tabular-nums;
+        }
+        .pm-section .form-group { margin-bottom: 12px; }
+        .pm-section .form-group:last-child { margin-bottom: 0; }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .form-grid .form-group { margin-bottom: 0; }
+
+        /* Underlying <select> stays live for scripts/e2e but is visually hidden. */
+        .modal select.pm-hidden-select {
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            padding: 0 !important;
+            margin: -1px !important;
+            border: 0 !important;
+            opacity: 0;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            pointer-events: none;
+        }
+        .segment {
+            display: inline-flex;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--surface-2);
+        }
+        .segment-btn {
+            padding: 9px 24px;
+            border: none;
+            background: transparent;
+            color: var(--text-light);
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        .segment-btn + .segment-btn { border-left: 1px solid var(--border); }
+        .segment-btn.active { background: var(--primary); color: #fff; }
+        .segment-btn:disabled { cursor: default; opacity: 0.6; }
+
+        .pm-date-hint {
+            font-size: 11px;
+            /* --text-light (not --text-faint) to keep the hint ≥4.5:1 on the
+               modal surface in both themes. */
+            color: var(--text-light);
+            margin-top: 5px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .pm-footer {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 8px 0 0;
+            padding: 16px 24px;
+            background: var(--surface-2);
+            border-top: 1px solid var(--divider);
+            border-radius: 0 0 14px 14px;
+            position: sticky;
+            bottom: 0;
+        }
+        .modal button.pm-delete-link {
+            margin-right: auto;
+            background: transparent;
+            color: var(--danger);
+            padding: 8px 0;
+            font-size: 13px;
+        }
+        .modal button.pm-delete-link:hover { text-decoration: underline; background: transparent; }
+
+        /* Shell pattern shared by the other form modals (event, source, relation). */
+        .form-modal { background: var(--surface-modal); }
+        .form-modal > h2 {
+            font-size: 20px;
+            border-bottom: 1px solid var(--divider);
+            padding-bottom: 12px;
+            margin: 0 0 18px;
+        }
+        .form-modal .buttons {
+            border-top: 1px solid var(--divider);
+            margin: 20px -24px -24px;
+            padding: 16px 24px;
+            background: var(--surface-2);
+            border-radius: 0 0 14px 14px;
+        }
+
+        @media (max-width: 500px) {
+            .pm-modal { min-width: 0; width: 100%; max-width: 100vw; padding: 0; }
+            .form-grid { grid-template-columns: 1fr; }
+            .modal .pm-footer {
+                position: sticky;
+                bottom: 0;
+                background: var(--surface-2);
+                padding: 14px 16px;
+                margin: 8px 0 0;
+            }
+            .pm-modal > .pm-section,
+            .pm-modal > .expand-btn,
+            .pm-modal > #extended-fields { margin-left: 16px; margin-right: 16px; }
+            .pm-header { padding: 16px; }
+            .form-modal .buttons { margin: 20px -16px -16px; padding: 14px 16px; }
+        }
+
         /* ==================== EMPTY STATE ==================== */
         .empty-state {
             position: absolute;
@@ -7369,111 +7560,160 @@
 
     <!-- Person Modal -->
     <div class="modal-overlay" id="person-modal">
-        <div class="modal">
-            <div class="modal-header">
-                <h2 id="modal-title" data-i18n="personModal.addTitle"></h2>
+        <div class="modal pm-modal">
+            <div class="pm-header">
+                <div class="pm-avatar male" id="pm-avatar"></div>
+                <div class="pm-header-text">
+                    <div class="pm-name" id="pm-name"></div>
+                    <div class="pm-context" id="modal-title"></div>
+                </div>
                 <button class="close-btn" onclick="window.Strom.UI.closeModal()">&times;</button>
             </div>
-            <div class="form-group">
-                <label data-i18n="labels.firstName"></label>
-                <input type="text" id="input-firstname" data-i18n-placeholder="placeholders.firstName" autocomplete="off">
+
+            <div class="pm-section">
+                <div class="pm-section-head"><span class="pm-section-title" data-i18n="personModal.sectionBasic"></span></div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label data-i18n="labels.firstName"></label>
+                        <input type="text" id="input-firstname" data-i18n-placeholder="placeholders.firstName" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label id="lastname-label" data-i18n="labels.lastName"></label>
+                        <input type="text" id="input-lastname" data-i18n-placeholder="placeholders.lastName" autocomplete="off">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="labels.gender"></label>
+                    <div class="segment gender-segment" id="gender-segment" role="group">
+                        <button type="button" class="segment-btn" data-gender="male" onclick="window.Strom.UI.setGenderFromSegment('male')" data-i18n="gender.male"></button>
+                        <button type="button" class="segment-btn" data-gender="female" onclick="window.Strom.UI.setGenderFromSegment('female')" data-i18n="gender.female"></button>
+                    </div>
+                    <select id="input-gender" class="pm-hidden-select" tabindex="-1" aria-hidden="true">
+                        <option value="male" data-i18n="gender.male"></option>
+                        <option value="female" data-i18n="gender.female"></option>
+                    </select>
+                </div>
             </div>
-            <div class="form-group">
-                <label id="lastname-label" data-i18n="labels.lastName"></label>
-                <input type="text" id="input-lastname" data-i18n-placeholder="placeholders.lastName" autocomplete="off">
+
+            <div class="pm-section">
+                <div class="pm-section-head"><span class="pm-section-title" data-i18n="personModal.sectionBirth"></span></div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label data-i18n="labels.birthDate"></label>
+                        <input type="text" class="flex-date" id="input-birthdate" autocomplete="off" data-i18n-placeholder="placeholders.flexDate" inputmode="text">
+                        <div class="pm-date-hint" data-i18n="personModal.dateHint"></div>
+                        <div id="birthdate-estimate" class="field-hint" style="display:none;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="labels.birthPlace"></label>
+                        <input type="text" id="input-birthplace" autocomplete="off" list="places-datalist">
+                    </div>
+                </div>
+                <div id="duplicate-suggest-person" class="duplicate-suggest" style="display:none;"></div>
             </div>
-            <div class="form-group">
-                <label data-i18n="labels.gender"></label>
-                <select id="input-gender">
-                    <option value="male" data-i18n="gender.male"></option>
-                    <option value="female" data-i18n="gender.female"></option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label data-i18n="labels.birthDate"></label>
-                <input type="text" class="flex-date" id="input-birthdate" autocomplete="off" data-i18n-placeholder="placeholders.flexDate" inputmode="text">
-                <div id="birthdate-estimate" class="field-hint" style="display:none;"></div>
-            </div>
-            <div id="duplicate-suggest-person" class="duplicate-suggest" style="display:none;"></div>
-            <div class="form-group">
-                <label data-i18n="labels.birthPlace"></label>
-                <input type="text" id="input-birthplace" autocomplete="off" list="places-datalist">
-            </div>
+
             <button type="button" class="expand-btn" id="expand-details">
                 <span class="expand-icon">▶</span> <span data-i18n="labels.moreInfo">More Info</span>
             </button>
             <div id="extended-fields" class="extended-fields">
-                <div class="form-row">
-                    <div class="form-group half">
-                        <label data-i18n="labels.deathDate"></label>
-                        <input type="text" class="flex-date" id="input-deathdate" autocomplete="off" data-i18n-placeholder="placeholders.flexDate" inputmode="text">
+                <div class="pm-section" id="pm-relations-section" style="display:none;">
+                    <div class="pm-section-head">
+                        <span class="pm-section-title" data-i18n="personModal.sectionRelations"></span>
+                        <span class="pm-section-summary" id="pm-sum-relations"></span>
                     </div>
-                    <div class="form-group half">
-                        <label data-i18n="labels.deathPlace"></label>
-                        <input type="text" id="input-deathplace" autocomplete="off" list="places-datalist">
+                    <button type="button" class="link-relationships-btn" id="link-relationships" style="display:none;">
+                        <span data-i18n="buttons.manageRelationships">Manage Relationships</span>
+                    </button>
+                </div>
+
+                <div class="pm-section">
+                    <div class="pm-section-head">
+                        <span class="pm-section-title" data-i18n="personModal.sectionDeathEvents"></span>
+                        <span class="pm-section-summary" id="pm-sum-deathevents"></span>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label data-i18n="labels.deathDate"></label>
+                            <input type="text" class="flex-date" id="input-deathdate" autocomplete="off" data-i18n-placeholder="placeholders.flexDate" inputmode="text">
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="labels.deathPlace"></label>
+                            <input type="text" id="input-deathplace" autocomplete="off" list="places-datalist">
+                        </div>
+                    </div>
+                    <div class="form-group" id="input-deceased-group">
+                        <label class="settings-checkbox">
+                            <input type="checkbox" id="input-is-deceased">
+                            <span data-i18n="labels.deceased"></span>
+                        </label>
+                    </div>
+                    <div class="form-group" id="events-section">
+                        <label data-i18n="events.title"></label>
+                        <div id="events-list" class="events-list"></div>
+                        <button type="button" class="secondary" id="btn-add-event" onclick="window.Strom.UI.showAddEventModal()" data-i18n="events.add"></button>
                     </div>
                 </div>
-                <div class="form-group" id="name-variants-group">
-                    <label data-i18n="labels.nameVariants"></label>
-                    <input type="text" id="input-name-variants" autocomplete="off" data-i18n-placeholder="placeholders.nameVariants">
-                    <p class="field-hint" data-i18n="labels.nameVariantsHint"></p>
+
+                <div class="pm-section" id="pm-section-research">
+                    <div class="pm-section-head">
+                        <span class="pm-section-title" data-i18n="personModal.sectionSources"></span>
+                        <span class="pm-section-summary" id="pm-sum-sources"></span>
+                    </div>
+                    <div class="form-group" id="name-variants-group">
+                        <label data-i18n="labels.nameVariants"></label>
+                        <input type="text" id="input-name-variants" autocomplete="off" data-i18n-placeholder="placeholders.nameVariants">
+                        <p class="field-hint" data-i18n="labels.nameVariantsHint"></p>
+                    </div>
+                    <div class="form-group" id="refn-group">
+                        <label data-i18n="labels.refn"></label>
+                        <input type="text" id="input-refn" autocomplete="off" data-i18n-placeholder="placeholders.refn">
+                    </div>
+                    <div class="form-group" id="question-group">
+                        <label data-i18n="labels.question"></label>
+                        <input type="text" id="input-question" autocomplete="off" data-i18n-placeholder="placeholders.question">
+                    </div>
+                    <div class="form-group" id="person-sources-section">
+                        <label data-i18n="sources.sectionTitle"></label>
+                        <div id="person-sources-chips" class="sources-chips"></div>
+                        <button type="button" class="secondary" id="btn-cite-person" onclick="window.Strom.UI.showSourcePickerForPerson()" data-i18n="sources.cite"></button>
+                    </div>
+                    <div class="form-group" id="attachments-section">
+                        <label data-i18n="attachments.title"></label>
+                        <div id="attachments-list" class="attachments-list"></div>
+                        <div id="attachments-total" class="attachments-total"></div>
+                        <input type="file" id="input-attachment" accept="image/jpeg,image/png,application/pdf" style="display:none" onchange="window.Strom.UI.handleAttachmentInput(event)">
+                        <button type="button" class="secondary" id="btn-add-attachment" onclick="document.getElementById('input-attachment').click()" data-i18n="attachments.add"></button>
+                    </div>
                 </div>
-                <div class="form-group" id="refn-group">
-                    <label data-i18n="labels.refn"></label>
-                    <input type="text" id="input-refn" autocomplete="off" data-i18n-placeholder="placeholders.refn">
-                </div>
-                <div class="form-group" id="question-group">
-                    <label data-i18n="labels.question"></label>
-                    <input type="text" id="input-question" autocomplete="off" data-i18n-placeholder="placeholders.question">
-                </div>
-                <div class="form-group">
-                    <label data-i18n="labels.notes"></label>
-                    <textarea id="input-notes" rows="3" autocomplete="off"></textarea>
-                </div>
-                <div class="form-group" id="events-section">
-                    <label data-i18n="events.title"></label>
-                    <div id="events-list" class="events-list"></div>
-                    <button type="button" class="secondary" id="btn-add-event" onclick="window.Strom.UI.showAddEventModal()" data-i18n="events.add"></button>
-                </div>
-                <div class="form-group" id="person-sources-section">
-                    <label data-i18n="sources.sectionTitle"></label>
-                    <div id="person-sources-chips" class="sources-chips"></div>
-                    <button type="button" class="secondary" id="btn-cite-person" onclick="window.Strom.UI.showSourcePickerForPerson()" data-i18n="sources.cite"></button>
-                </div>
-                <div class="form-group" id="attachments-section">
-                    <label data-i18n="attachments.title"></label>
-                    <div id="attachments-list" class="attachments-list"></div>
-                    <div id="attachments-total" class="attachments-total"></div>
-                    <input type="file" id="input-attachment" accept="image/jpeg,image/png,application/pdf" style="display:none" onchange="window.Strom.UI.handleAttachmentInput(event)">
-                    <button type="button" class="secondary" id="btn-add-attachment" onclick="document.getElementById('input-attachment').click()" data-i18n="attachments.add"></button>
-                </div>
-                <div class="form-group" id="input-deceased-group">
-                    <label class="settings-checkbox">
-                        <input type="checkbox" id="input-is-deceased">
-                        <span data-i18n="labels.deceased"></span>
-                    </label>
-                </div>
-                <div class="form-group">
-                    <label data-i18n="labels.photo"></label>
-                    <div class="photo-editor">
-                        <div class="photo-preview" id="photo-preview"></div>
-                        <div class="photo-actions">
-                            <input type="file" id="input-photo" accept="image/*" style="display:none" onchange="window.Strom.UI.handlePhotoInput(event)">
-                            <button type="button" class="secondary" onclick="document.getElementById('input-photo').click()" data-i18n="labels.photoChoose"></button>
-                            <button type="button" class="secondary photo-rotate-btn" id="photo-rotate-left" style="display:none" onclick="window.Strom.UI.rotatePersonPhoto(-1)" data-i18n-title="labels.photoRotateLeft">↺</button>
-                            <button type="button" class="secondary photo-rotate-btn" id="photo-rotate-right" style="display:none" onclick="window.Strom.UI.rotatePersonPhoto(1)" data-i18n-title="labels.photoRotateRight">↻</button>
-                            <button type="button" class="secondary" id="photo-remove-btn" onclick="window.Strom.UI.removePersonPhoto()" data-i18n="labels.photoRemove"></button>
-                            <span class="photo-size" id="photo-size"></span>
+
+                <div class="pm-section">
+                    <div class="pm-section-head">
+                        <span class="pm-section-title" data-i18n="personModal.sectionPhotoNotes"></span>
+                        <span class="pm-section-summary" id="pm-sum-photonotes"></span>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="labels.notes"></label>
+                        <textarea id="input-notes" rows="3" autocomplete="off"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="labels.photo"></label>
+                        <div class="photo-editor">
+                            <div class="photo-preview" id="photo-preview"></div>
+                            <div class="photo-actions">
+                                <input type="file" id="input-photo" accept="image/*" style="display:none" onchange="window.Strom.UI.handlePhotoInput(event)">
+                                <button type="button" class="secondary" onclick="document.getElementById('input-photo').click()" data-i18n="labels.photoChoose"></button>
+                                <button type="button" class="secondary photo-rotate-btn" id="photo-rotate-left" style="display:none" onclick="window.Strom.UI.rotatePersonPhoto(-1)" data-i18n-title="labels.photoRotateLeft">↺</button>
+                                <button type="button" class="secondary photo-rotate-btn" id="photo-rotate-right" style="display:none" onclick="window.Strom.UI.rotatePersonPhoto(1)" data-i18n-title="labels.photoRotateRight">↻</button>
+                                <button type="button" class="secondary" id="photo-remove-btn" onclick="window.Strom.UI.removePersonPhoto()" data-i18n="labels.photoRemove"></button>
+                                <span class="photo-size" id="photo-size"></span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-            <button type="button" class="link-relationships-btn" id="link-relationships" style="display:none;">
-                &#128279; <span data-i18n="buttons.manageRelationships">Manage Relationships</span>
-            </button>
-            <div class="buttons">
-                <button class="danger" id="btn-delete" style="display:none;" onclick="window.Strom.UI.deletePerson()" data-i18n="buttons.delete"></button>
-                <button class="secondary" id="btn-merge" style="display:none;" onclick="window.Strom.UI.mergePersonFromModal()">&#128279; <span data-i18n="personMerge.mergeWith"></span>...</button>
+            <div class="buttons pm-footer">
+                <button class="pm-delete-link" id="btn-delete" style="display:none;" onclick="window.Strom.UI.deletePerson()" data-i18n="personModal.deletePerson"></button>
+                <button class="secondary" id="btn-merge" style="display:none;" onclick="window.Strom.UI.mergePersonFromModal()"><span data-i18n="personMerge.mergeWith"></span>...</button>
                 <button class="secondary" onclick="window.Strom.UI.closeModal()" data-i18n="buttons.cancel"></button>
                 <button class="primary" id="btn-save" onclick="window.Strom.UI.savePerson()" data-i18n="buttons.save"></button>
             </div>
@@ -7482,7 +7722,7 @@
 
     <!-- Event Editor Modal -->
     <div class="modal-overlay" id="event-editor-modal">
-        <div class="modal">
+        <div class="modal form-modal">
             <h2 id="event-editor-title" data-i18n="events.addTitle"></h2>
             <div class="form-group">
                 <label data-i18n="events.type"></label>
@@ -7540,7 +7780,7 @@
 
     <!-- Source Editor Modal -->
     <div class="modal-overlay" id="source-editor-modal">
-        <div class="modal">
+        <div class="modal form-modal">
             <h2 id="source-editor-title" data-i18n="sources.addTitle"></h2>
             <div class="form-group">
                 <label data-i18n="sources.fieldTitle"></label>
@@ -7608,7 +7848,7 @@
 
     <!-- Relation Modal -->
     <div class="modal-overlay" id="relation-modal">
-        <div class="modal">
+        <div class="modal form-modal">
             <h2 id="relation-title"></h2>
             <div id="rel-other-parent" class="form-group" style="display:none;">
                 <label id="rel-other-parent-label"></label>
@@ -7946,7 +8186,7 @@
 
     <!-- Family wizard: add a whole family in one step -->
     <div class="modal-overlay" id="family-wizard-modal">
-        <div class="modal family-wizard-modal">
+        <div class="modal family-wizard-modal form-modal">
             <div class="modal-header">
                 <h2 data-i18n="familyWizard.title"></h2>
                 <button class="close-btn" onclick="window.Strom.UI.closeFamilyWizard()">&times;</button>

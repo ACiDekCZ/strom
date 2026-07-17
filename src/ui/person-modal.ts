@@ -79,9 +79,12 @@ export const personModalMethods = uiModule({
         if (notesInput) notesInput.readOnly = false;
         if (saveBtn) saveBtn.style.display = '';
 
-        title.textContent = strings.personModal.addTitle;
+        this.updatePersonModalHeader(null, strings.personModal.addTitle);
         deleteBtn.style.display = 'none';
         if (mergeBtn) mergeBtn.style.display = 'none';
+        // Relationships need a saved person; hide the whole section while adding.
+        const relSectionAdd = document.getElementById('pm-relations-section');
+        if (relSectionAdd) relSectionAdd.style.display = 'none';
         firstNameInput.value = '';
         lastNameInput.value = '';
         genderSelect.value = 'male';
@@ -184,10 +187,116 @@ export const personModalMethods = uiModule({
                     ? strings.placeholders.maidenName
                     : strings.placeholders.lastName;
             }
+            // Keep the Male/Female segment and the header avatar ring in step.
+            this.syncGenderSegment();
         };
 
         genderSelect.onchange = updateLastnameLabel;
         updateLastnameLabel();
+    },
+
+    /**
+     * Gender is edited through a Male/Female segment, but the underlying
+     * <select id="input-gender"> stays in the DOM (visually hidden, still
+     * focusable/selectable) so every script and e2e test that reads or sets it
+     * keeps working. Clicking a segment button drives the select and fires a
+     * change event, which loops back through syncGenderSegment().
+     */
+    setGenderFromSegment(gender: Gender): void {
+        const sel = document.getElementById('input-gender') as HTMLSelectElement | null;
+        if (!sel || sel.disabled) return;
+        sel.value = gender;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+
+    /** Reflect the select's value/disabled state onto the segment buttons. */
+    syncGenderSegment(): void {
+        const sel = document.getElementById('input-gender') as HTMLSelectElement | null;
+        const seg = document.getElementById('gender-segment');
+        if (sel && seg) {
+            seg.querySelectorAll('.segment-btn').forEach((b) => {
+                const btn = b as HTMLButtonElement;
+                btn.classList.toggle('active', btn.dataset.gender === sel.value);
+                btn.disabled = sel.disabled;
+            });
+        }
+        this.updateHeaderAvatar();
+    },
+
+    /** Compose the modal header: name (serif), context line and avatar. */
+    updatePersonModalHeader(person: Person | null, modeTitle: string): void {
+        const nameEl = document.getElementById('pm-name');
+        const ctxEl = document.getElementById('modal-title');
+        const first = (document.getElementById('input-firstname') as HTMLInputElement | null)?.value.trim() || '';
+        const last = (document.getElementById('input-lastname') as HTMLInputElement | null)?.value.trim() || '';
+        const full = `${first} ${last}`.trim();
+        if (nameEl) nameEl.textContent = full || strings.personModal.newPersonName;
+        if (ctxEl) {
+            const summary = this.personBirthSummary(person);
+            ctxEl.textContent = summary ? `${modeTitle} · ${summary}` : modeTitle;
+        }
+        this.updateHeaderAvatar();
+    },
+
+    /** "* 1958 Praha" — a compact birth line for the header context. */
+    personBirthSummary(person: Person | null): string {
+        if (!person) return '';
+        const year = person.birthDate ? person.birthDate.split('-')[0] : '';
+        const place = person.birthPlace || '';
+        if (!year && !place) return '';
+        return `* ${[year, place].filter(Boolean).join(' ')}`;
+    },
+
+    /** Redraw the 56px header avatar from the current gender/name/photo. */
+    updateHeaderAvatar(): void {
+        const avatar = document.getElementById('pm-avatar');
+        if (!avatar) return;
+        const gender = (document.getElementById('input-gender') as HTMLSelectElement | null)?.value || 'male';
+        avatar.classList.toggle('female', gender === 'female');
+        avatar.classList.toggle('male', gender !== 'female');
+        const first = (document.getElementById('input-firstname') as HTMLInputElement | null)?.value.trim() || '';
+        const last = (document.getElementById('input-lastname') as HTMLInputElement | null)?.value.trim() || '';
+        const photo = (document.querySelector('#photo-preview img') as HTMLImageElement | null)?.getAttribute('src');
+        if (photo) {
+            avatar.innerHTML = `<img src="${photo}" alt="">`;
+        } else {
+            const initials = ((first[0] || '') + (last[0] || '')).toUpperCase();
+            avatar.innerHTML = `<span class="pm-avatar-initials">${initials || '?'}</span>`;
+        }
+    },
+
+    /** Fill the small copper section summaries from the person's data. */
+    updatePersonSummaries(person: Person): void {
+        const S = strings.personModal;
+        const set = (id: string, parts: string[]) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = `— ${parts.length ? parts.join(', ') : S.sumNone}`;
+        };
+
+        const relParts: string[] = [];
+        if (person.parentIds?.length) relParts.push(S.sumParents);
+        const partnerCount = DataManager.getPartners(person.id).length;
+        if (partnerCount) relParts.push(S.sumPartners(partnerCount));
+        if (person.childIds?.length) relParts.push(S.sumChildren(person.childIds.length));
+        set('pm-sum-relations', relParts);
+
+        const deathParts: string[] = [];
+        if (person.deathDate) deathParts.push(S.sumDeceased);
+        const eventCount = person.events?.length || 0;
+        if (eventCount) deathParts.push(S.sumEvents(eventCount));
+        set('pm-sum-deathevents', deathParts);
+
+        const sourceParts: string[] = [];
+        const citeCount = person.sourceIds?.length || 0;
+        const scanCount = person.attachments?.length || 0;
+        if (citeCount) sourceParts.push(S.sumCitations(citeCount));
+        if (scanCount) sourceParts.push(S.sumScans(scanCount));
+        set('pm-sum-sources', sourceParts);
+
+        const photoNoteParts: string[] = [];
+        if (person.photo) photoNoteParts.push(S.sumPhoto);
+        if (person.notes?.trim()) photoNoteParts.push(S.sumNote);
+        set('pm-sum-photonotes', photoNoteParts);
     },
 
     setupDateInputs(): void {
@@ -237,6 +346,11 @@ export const personModalMethods = uiModule({
             const el = document.getElementById(id);
             if (el) el.style.display = (advanced || hasValue) ? '' : 'none';
         }
+        // Hide the whole "Sources and attachments" section when nothing in it is
+        // shown, so the copper header never sits above an empty block.
+        const anyResearch = advanced || Object.values(filled).some(Boolean);
+        const research = document.getElementById('pm-section-research');
+        if (research) research.style.display = anyResearch ? '' : 'none';
     },
 
     /**
@@ -294,7 +408,9 @@ export const personModalMethods = uiModule({
 
         if (!modal || !title || !deleteBtn || !firstNameInput || !lastNameInput || !genderSelect) return;
 
-        title.textContent = person.isPlaceholder ? strings.personModal.completeTitle : strings.personModal.editTitle;
+        this.updatePersonModalHeader(
+            person,
+            person.isPlaceholder ? strings.personModal.completeTitle : strings.personModal.editTitle);
         deleteBtn.style.display = 'block';
         if (mergeBtn) mergeBtn.style.display = 'block';
         firstNameInput.value = person.isPlaceholder ? '' : person.firstName;
@@ -348,7 +464,9 @@ export const personModalMethods = uiModule({
         // Editing shows the whole record — no list of fields to keep in sync.
         this.setupExpandButton(false);
 
-        // Show link-relationships button
+        // Show the relationships section (summary + manage button)
+        const relSection = document.getElementById('pm-relations-section');
+        if (relSection) relSection.style.display = '';
         const linkRelBtn = document.getElementById('link-relationships');
         if (linkRelBtn) {
             linkRelBtn.style.display = 'block';
@@ -377,7 +495,10 @@ export const personModalMethods = uiModule({
             deleteBtn.style.display = 'none';
             if (mergeBtn) mergeBtn.style.display = 'none';
             if (linkRelBtn) linkRelBtn.style.display = 'none';
+            const relSectionLocked = document.getElementById('pm-relations-section');
+            if (relSectionLocked) relSectionLocked.style.display = 'none';
         }
+        this.syncGenderSegment();
 
         // Life events section: visible for existing persons, list rendered fresh.
         const eventsSection = document.getElementById('events-section');
@@ -399,6 +520,9 @@ export const personModalMethods = uiModule({
         // LAST: the lines above switch sources/attachments on for edit mode, so
         // deciding what a research field should do has to come after them.
         this.applyAdvancedFieldVisibility(person);
+
+        // Live section summaries (— rodiče, 1 partnerka, 2 děti …).
+        this.updatePersonSummaries(person);
 
         // Editing an existing person → no duplicate suggestions.
         this.disableDuplicateSuggest('person');
@@ -452,6 +576,8 @@ export const personModalMethods = uiModule({
             if (b) b.style.display = dataUrl ? '' : 'none';
         }
         if (sizeEl) sizeEl.textContent = dataUrl ? `${Math.round(dataUrlByteSize(dataUrl) / 1024)} kB` : '';
+        // Mirror the photo into the header avatar (falls back to initials).
+        this.updateHeaderAvatar();
     },
 
     /** Rotate the previewed photo 90° (saved only when the modal is saved). */
