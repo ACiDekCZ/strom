@@ -269,9 +269,9 @@ class Builder {
         const parent = this.persons[parentId];
         const phId = `${parentId}_ph`;
         this.person(phId, {
-            firstName: '?', lastName: '',
+            first: '?', last: '',
             gender: parent.gender === 'male' ? 'female' : 'male',
-            isPlaceholder: true,
+            placeholder: true,
         });
         const unionId = this.marry(parentId, phId, {});
         this.kids(unionId, childIds);

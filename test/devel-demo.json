@@ -137,8 +137,10 @@
     },
     "katerina_berankova_ph": {
       "id": "katerina_berankova_ph",
+      "firstName": "?",
+      "lastName": "",
       "gender": "male",
-      "isPlaceholder": false,
+      "isPlaceholder": true,
       "partnerships": [
         "u_katerina_berankova_ph_katerina_berankova"
       ],
@@ -925,8 +927,10 @@
     },
     "ludmila_dvorakova_ph": {
       "id": "ludmila_dvorakova_ph",
+      "firstName": "?",
+      "lastName": "",
       "gender": "male",
-      "isPlaceholder": false,
+      "isPlaceholder": true,
       "partnerships": [
         "u_ludmila_dvorakova_ph_ludmila_dvorakova"
       ],
