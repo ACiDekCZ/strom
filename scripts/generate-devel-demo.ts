@@ -257,12 +257,24 @@ class Builder {
         }
     }
 
-    /** Single known parent (one parentId, no partnership). */
+    /**
+     * Single known parent. Mirrors what the app itself does when a child is
+     * added to a person with no partner (relation-modal 'child' branch): a
+     * PLACEHOLDER partner + partnership is created, because subgraph selection
+     * and layout descend through unions — a bare parentIds link with no union
+     * renders the parent alone (found the hard way: importing this fixture
+     * showed "1 z 67 osob").
+     */
     singleKids(parentId: string, childIds: string[]): void {
-        for (const c of childIds) {
-            this.persons[parentId].childIds.push(c);
-            this.persons[c].parentIds = [parentId];
-        }
+        const parent = this.persons[parentId];
+        const phId = `${parentId}_ph`;
+        this.person(phId, {
+            firstName: '?', lastName: '',
+            gender: parent.gender === 'male' ? 'female' : 'male',
+            isPlaceholder: true,
+        });
+        const unionId = this.marry(parentId, phId, {});
+        this.kids(unionId, childIds);
     }
 
     event(personId: string, ev: {

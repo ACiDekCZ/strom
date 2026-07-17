@@ -7,7 +7,9 @@
       "lastName": "Beránková",
       "gender": "female",
       "isPlaceholder": false,
-      "partnerships": [],
+      "partnerships": [
+        "u_katerina_berankova_ph_katerina_berankova"
+      ],
       "parentIds": [],
       "childIds": [
         "anna_dvorakova"
@@ -117,6 +119,7 @@
         "u_vaclav_dvorak_anna_dvorakova"
       ],
       "parentIds": [
+        "katerina_berankova_ph",
         "katerina_berankova"
       ],
       "childIds": [
@@ -131,6 +134,18 @@
       "question": "Odkud pocházela její matka Kateřina a kdo byl Annin otec?",
       "photoOriginalName": "anna_dvorakova.jpg",
       "photo": "data:image/jpeg;base64,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"
+    },
+    "katerina_berankova_ph": {
+      "id": "katerina_berankova_ph",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_katerina_berankova_ph_katerina_berankova"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "anna_dvorakova"
+      ]
     },
     "josef_dvorak": {
       "id": "josef_dvorak",
@@ -477,7 +492,9 @@
       "lastName": "Dvořáková",
       "gender": "female",
       "isPlaceholder": false,
-      "partnerships": [],
+      "partnerships": [
+        "u_ludmila_dvorakova_ph_ludmila_dvorakova"
+      ],
       "parentIds": [
         "josef_dvorak",
         "frantiska_dvorakova"
@@ -895,6 +912,7 @@
         "u_zdenek_dvorak_marie_horackova"
       ],
       "parentIds": [
+        "ludmila_dvorakova_ph",
         "ludmila_dvorakova"
       ],
       "childIds": [
@@ -904,6 +922,18 @@
       "birthPlace": "Kutná Hora",
       "notes": "Vychován matkou Ludmilou; otec neznámý.",
       "isDeceased": true
+    },
+    "ludmila_dvorakova_ph": {
+      "id": "ludmila_dvorakova_ph",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_ludmila_dvorakova_ph_ludmila_dvorakova"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "zdenek_dvorak"
+      ]
     },
     "frantisek_benes": {
       "id": "frantisek_benes",
@@ -1610,6 +1640,15 @@
     }
   },
   "partnerships": {
+    "u_katerina_berankova_ph_katerina_berankova": {
+      "id": "u_katerina_berankova_ph_katerina_berankova",
+      "person1Id": "katerina_berankova_ph",
+      "person2Id": "katerina_berankova",
+      "childIds": [
+        "anna_dvorakova"
+      ],
+      "status": "married"
+    },
     "u_vaclav_dvorak_anna_dvorakova": {
       "id": "u_vaclav_dvorak_anna_dvorakova",
       "person1Id": "vaclav_dvorak",
@@ -1766,6 +1805,15 @@
         "src_kronika"
       ],
       "isPrimary": true
+    },
+    "u_ludmila_dvorakova_ph_ludmila_dvorakova": {
+      "id": "u_ludmila_dvorakova_ph_ludmila_dvorakova",
+      "person1Id": "ludmila_dvorakova_ph",
+      "person2Id": "ludmila_dvorakova",
+      "childIds": [
+        "zdenek_dvorak"
+      ],
+      "status": "married"
     },
     "u_frantisek_benes_vera_bendova": {
       "id": "u_frantisek_benes_vera_bendova",
