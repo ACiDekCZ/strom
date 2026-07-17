@@ -4889,9 +4889,12 @@
         }
         /* Opacity composites over the whole subtree — the row menu lives inside
            the row, so a dimmed hidden tree made its ⋯ menu see-through. While
-           the menu is open, undim the row (the focus is the menu anyway). */
+           the menu is open, undim the row (the focus is the menu anyway).
+           Without transition: the row's `transition: all` would fade the menu
+           in over 150 ms, and a menu must appear instantly. */
         .tree-manager-item.hidden-tree:has(.tree-row-menu.open) {
             opacity: 1;
+            transition: none;
         }
         .tree-manager-item-name {
             flex: 1;
