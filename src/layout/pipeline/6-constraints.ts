@@ -692,6 +692,19 @@ function transferAncestorTreeToBlocks(
  * Prune tree nodes whose blocks were already positioned by an earlier tree
  * (shared ancestors in a pedigree collapse belong to the first tree).
  */
+/** Collect the block ids of every union in an ancestor tree into `out`. */
+function collectTreeBlockIds(
+    node: AncestorNode | null,
+    unionToBlock: Map<UnionId, FamilyBlockId>,
+    out: Set<FamilyBlockId>
+): void {
+    if (!node) return;
+    const blockId = unionToBlock.get(node.unionId);
+    if (blockId) out.add(blockId);
+    collectTreeBlockIds(node.hSubtree, unionToBlock, out);
+    collectTreeBlockIds(node.wSubtree, unionToBlock, out);
+}
+
 function pruneClaimedTreeNodes(
     node: AncestorNode | null,
     claimed: Set<FamilyBlockId>,
@@ -911,9 +924,18 @@ function runPhaseBIndependentTrees(
         // by a higher-priority anchor's tree
         const hTree = pruneClaimedTreeNodes(
             buildAncestorTree(anchorHusbandId, -2, model, minGen), claimed, unionToBlock);
+        // A cousin marriage shares ancestors WITHIN one anchor: the same union
+        // sits in both partners' trees, so the wife's tree must also prune
+        // everything the husband's tree already carries. Claims are only
+        // recorded at transfer time, which is too late — without this the
+        // shared (possibly chain-wide) union inflates the wife-tree width and
+        // its edge-aligned placement shoves her direct parents far right of
+        // her own card (devel-demo: Alois+Růžena landed ~1600px from Vlasta).
+        const hClaims = new Set(claimed);
+        collectTreeBlockIds(hTree, unionToBlock, hClaims);
         const wTree = anchorWifeId
             ? pruneClaimedTreeNodes(
-                buildAncestorTree(anchorWifeId, -2, model, minGen), claimed, unionToBlock)
+                buildAncestorTree(anchorWifeId, -2, model, minGen), hClaims, unionToBlock)
             : null;
         if (!hTree && !wTree) continue;
 
@@ -943,12 +965,24 @@ function runPhaseBIndependentTrees(
             }
         }
 
+        const dbg = (globalThis as unknown as { __PHB_DEBUG?: boolean }).__PHB_DEBUG;
+        const stamp = (label: string): void => {
+            if (!dbg) return;
+            console.log(`[PHB:${label}] anchor=${anchorBlock.id} hW=${hWidth.toFixed(0)} wW=${wWidth.toFixed(0)}`
+                + ` h=[${findTreeMinX(hTree, config).toFixed(0)},${findTreeMaxX(hTree, config).toFixed(0)}]`
+                + ` w=[${findTreeMinX(wTree, config).toFixed(0)},${findTreeMaxX(wTree, config).toFixed(0)}]`
+                + ` wCenter=${wTree ? wTree.xCenter.toFixed(0) : '-'}`);
+        };
+        stamp('placed');
+
         // Enforce H/W boundaries for ALL couples in each tree
         enforceAllBoundariesUntilConvergence(hTree, config);
         enforceAllBoundariesUntilConvergence(wTree, config);
+        stamp('bounds');
 
         // Resolve any overlap between the couple's own two trees
         resolveAncestorTreeOverlap(hTree, wTree, config);
+        stamp('overlap');
 
         // V-fan side ownership above the focus couple: the ENTIRE ancestry of
         // each focus-couple partner stays on that partner's side of the couple
