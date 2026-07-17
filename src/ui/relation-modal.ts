@@ -22,6 +22,7 @@ import {
     LastFocusedMarker
 } from '../types.js';
 import { strings } from '../strings.js';
+import { normalizeDateInput } from '../dates.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -167,6 +168,9 @@ export const relationModalMethods = uiModule({
         (document.getElementById('rel-birthplace') as HTMLInputElement).value = '';
         (document.getElementById('rel-deathdate') as HTMLInputElement).value = '';
         (document.getElementById('rel-deathplace') as HTMLInputElement).value = '';
+        // Refresh flex-date styling (clear any stale .invalid/.has-value from a
+        // previous open) now that the values were reset programmatically.
+        this.setupDateInputs();
 
         // Reset extended fields - collapse by default
         const expandBtn = document.getElementById('rel-expand-btn');
@@ -346,9 +350,19 @@ export const relationModalMethods = uiModule({
             const firstName = (document.getElementById('rel-firstname') as HTMLInputElement)?.value.trim() || '';
             const lastName = (document.getElementById('rel-lastname') as HTMLInputElement)?.value.trim() || '';
             const gender = ((document.getElementById('rel-gender') as HTMLSelectElement)?.value || 'male') as Gender;
-            const birthDate = (document.getElementById('rel-birthdate') as HTMLInputElement)?.value || undefined;
+            // Flex-date normalization mirrors the person modal: null means the
+            // text did not parse — block the save and point the user back.
+            const birthDateRaw = normalizeDateInput((document.getElementById('rel-birthdate') as HTMLInputElement)?.value || '');
+            const deathDateRaw = normalizeDateInput((document.getElementById('rel-deathdate') as HTMLInputElement)?.value || '');
+            if (birthDateRaw === null || deathDateRaw === null) {
+                this.clearDialogStack();
+                this.pushDialog('relation-modal');
+                this.showAlert(strings.personModal.invalidDate, 'warning');
+                return;
+            }
+            const birthDate = birthDateRaw || undefined;
             const birthPlace = (document.getElementById('rel-birthplace') as HTMLInputElement)?.value.trim() || undefined;
-            const deathDate = (document.getElementById('rel-deathdate') as HTMLInputElement)?.value || undefined;
+            const deathDate = deathDateRaw || undefined;
             const deathPlace = (document.getElementById('rel-deathplace') as HTMLInputElement)?.value.trim() || undefined;
 
             // Begin batch before person creation to suppress individual audit logs

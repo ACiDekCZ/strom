@@ -300,20 +300,13 @@ export const personModalMethods = uiModule({
     },
 
     setupDateInputs(): void {
-        // Flex-date text inputs: live validation (red border while the value
-        // doesn't parse) + 'has-value' class for placeholder styling
-        const dateInputs = document.querySelectorAll('.modal input[type="date"], .modal input.flex-date');
+        // Flex-date text inputs (person modal + add-relation modal): live
+        // validation — red border while the value doesn't parse.
+        const dateInputs = document.querySelectorAll('.modal input.flex-date');
         dateInputs.forEach(input => {
             const dateInput = input as HTMLInputElement;
             const updateClass = () => {
-                if (dateInput.value) {
-                    dateInput.classList.add('has-value');
-                } else {
-                    dateInput.classList.remove('has-value');
-                }
-                if (dateInput.classList.contains('flex-date')) {
-                    dateInput.classList.toggle('invalid', !isValidDateInput(dateInput.value));
-                }
+                dateInput.classList.toggle('invalid', !isValidDateInput(dateInput.value));
             };
             dateInput.addEventListener('change', updateClass);
             dateInput.addEventListener('input', updateClass);
