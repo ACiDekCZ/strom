@@ -352,15 +352,18 @@ export const miscMethods = uiModule({
         const familyBtn = document.getElementById('toolbar-family-btn');
         if (familyBtn) familyBtn.style.display = SettingsManager.isFamilyButtonEnabled() ? '' : 'none';
 
-        // Branch-colour legend: only when the setting is on and cards are
-        // actually shown (family/descendants — not timeline, not fan).
+        // Legend pill: ONE setting governs the whole pill (the existing
+        // branch-legend toggle) — gender rings and branch swatches share it.
+        // A permanently visible gender legend next to a hidden branch legend
+        // read as an inconsistency (user feedback); the rings explain
+        // themselves after a first look anyway. Only when cards are actually
+        // shown (family/descendants — not timeline, not fan).
         const cardsShown = mode === 'family' || mode === 'descendants';
-        // The legend pill (gender rings) shows whenever cards are on screen; the
-        // branch swatches inside it stay an opt-in sub-group.
         const treeLegend = document.getElementById('tree-legend');
         if (treeLegend) {
             const hasPersons = DataManager.getAllPersons().length > 0;
-            treeLegend.style.display = (cardsShown && hasPersons) ? 'flex' : 'none';
+            treeLegend.style.display = (cardsShown && hasPersons
+                && SettingsManager.isBranchLegendEnabled()) ? 'flex' : 'none';
         }
         const legend = document.getElementById('branch-legend');
         if (legend) {

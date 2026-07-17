@@ -297,8 +297,8 @@ const stringsEN = {
     // Branch colour coding
     branchColors: {
         settingLabel: 'Branch colours',
-        legendLabel: 'Colour legend',
-        legendHint: 'Show the branch-colour legend over the tree',
+        legendLabel: 'Tree legend',
+        legendHint: 'Show the legend over the tree (gender rings, branch colours)',
         settingHint: 'Colour cards by branch relative to the focus person',
         legendPaternal: 'Paternal',
         legendMaternal: 'Maternal',
@@ -1888,8 +1888,8 @@ const stringsCZ: StringsType = {
     // Branch colour coding
     branchColors: {
         settingLabel: 'Barvy větví',
-        legendLabel: 'Legenda barev',
-        legendHint: 'Zobrazovat legendu barev větví nad stromem',
+        legendLabel: 'Legenda stromu',
+        legendHint: 'Zobrazovat legendu nad stromem (prstence pohlaví, barvy větví)',
         settingHint: 'Obarvit karty podle větve vzhledem k fokus osobě',
         legendPaternal: 'Otcovská',
         legendMaternal: 'Mateřská',
