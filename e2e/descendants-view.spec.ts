@@ -195,16 +195,14 @@ test.describe('mobile', () => {
         await expect(page.locator('#focus-controls')).toBeVisible();
     });
 
-    test('mobile menu: the selected view row button carries .active', async ({ page }) => {
+    test('bottom bar: the selected view tab carries .active', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
         await cardAction(page, 'Jan', 'focus');
 
-        // Pick a mode, then reopen the menu (clicking a row also closes it).
-        await page.locator('.hamburger-btn').click();
-        await page.locator('#mm-view-timeline').click();
-        await page.locator('.hamburger-btn').click();
-        await expect(page.locator('#mm-view-timeline')).toHaveClass(/active/);
-        await expect(page.locator('#mm-view-family')).not.toHaveClass(/active/);
+        // Pick a view from the bottom bar; the tab lights up.
+        await page.locator('#bb-view-timeline').click();
+        await expect(page.locator('#bb-view-timeline')).toHaveClass(/active/);
+        await expect(page.locator('#bb-view-family')).not.toHaveClass(/active/);
     });
 });

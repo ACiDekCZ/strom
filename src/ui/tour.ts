@@ -25,17 +25,17 @@ export interface TourStepDef {
 }
 
 // Each step lists candidate selectors; the first VISIBLE one is spotlighted.
-// Later candidates are the mobile equivalents (hamburger when a desktop-only
-// control is hidden).
+// Later candidates are the mobile equivalents (the bottom bar / its FAB when a
+// desktop-only control is hidden).
 const TOUR_STEPS: TourStepDef[] = [
     { key: 'step1', selectors: ['.person-card.focused', '.person-card'] },
     { key: 'step2', selectors: ['.person-card.focused', '.person-card'], reveal: true, pad: 18, skipOnCoarse: true },
-    { key: 'step3', selectors: ['.toolbar-buttons button', '.add-person-round', '.hamburger-btn'] },
+    { key: 'step3', selectors: ['.toolbar-buttons button', '.bottom-bar-fab'] },
     { key: 'step4', selectors: ['#focus-controls', '#toolbar-focus-name'] },
-    { key: 'step5', selectors: ['#view-mode-segment', '.hamburger-btn'] },
+    { key: 'step5', selectors: ['#view-mode-segment', '.bottom-bar'] },
     { key: 'step6', selectors: ['.zoom-controls'] },
-    { key: 'step7', selectors: ['#toolbar-search-picker', '.hamburger-btn'] },
-    { key: 'step8', selectors: ['.tree-switcher-btn', '.hamburger-btn'] },
+    { key: 'step7', selectors: ['#toolbar-search-picker'] },
+    { key: 'step8', selectors: ['.tree-switcher-btn', '.bottom-bar-more'] },
 ];
 
 function isCoarse(): boolean {

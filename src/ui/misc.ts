@@ -314,8 +314,13 @@ export const miscMethods = uiModule({
             mode === 'map' || mode === 'timeline' || mode === 'fan');
         for (const m of ['family', 'descendants', 'timeline', 'fan', 'map']) {
             document.getElementById(`view-mode-${m}`)?.classList.toggle('active', mode === m);
-            document.getElementById(`mm-view-${m}`)?.classList.toggle('active', mode === m);
         }
+        // Mobile bottom bar: three primary view tabs plus "More" (fan/map live
+        // in the More sheet, so More lights up while either is active).
+        document.getElementById('bb-view-family')?.classList.toggle('active', mode === 'family');
+        document.getElementById('bb-view-descendants')?.classList.toggle('active', mode === 'descendants');
+        document.getElementById('bb-view-timeline')?.classList.toggle('active', mode === 'timeline');
+        document.getElementById('bb-view-more')?.classList.toggle('active', mode === 'fan' || mode === 'map');
 
         const badge = document.getElementById('descendants-badge');
         const text = document.getElementById('descendants-badge-text');
@@ -343,8 +348,6 @@ export const miscMethods = uiModule({
         // Toolbar "Add family" shortcut (opt-in setting).
         const familyBtn = document.getElementById('toolbar-family-btn');
         if (familyBtn) familyBtn.style.display = SettingsManager.isFamilyButtonEnabled() ? '' : 'none';
-        const mmFamilyBtn = document.getElementById('mm-family-btn');
-        if (mmFamilyBtn) mmFamilyBtn.style.display = SettingsManager.isFamilyButtonEnabled() ? '' : 'none';
 
         // Branch-colour legend: only when the setting is on and cards are
         // actually shown (family/descendants — not timeline, not fan).
@@ -376,27 +379,26 @@ export const miscMethods = uiModule({
 
     // ---- MENUS ----
     /**
-     * The three floating toolbar menus — the hamburger, the tree switcher and
-     * the desktop ⋯ actions menu — are mutually exclusive: opening one closes
-     * the others. Called at the top of each toggle so a second one never layers
-     * on top of the first (a user once saw the hamburger and the switcher
-     * dropdown open together on mobile).
+     * The three toolbar overlays — the mobile "More" (Více) bottom sheet, the
+     * tree switcher and the desktop ⋯ actions menu — are mutually exclusive:
+     * opening one closes the others. Called at the top of each toggle so a
+     * second one never layers on top of the first (a user once saw the old
+     * hamburger and the switcher dropdown open together on mobile).
      */
-    closeAllMenusExcept(which: 'mobile' | 'switcher' | 'actions'): void {
-        if (which !== 'mobile') document.getElementById('mobile-menu')?.classList.remove('active');
+    closeAllMenusExcept(which: 'sheet' | 'switcher' | 'actions'): void {
+        if (which !== 'sheet') this.hideBottomSheet();
         if (which !== 'switcher') document.getElementById('tree-switcher-dropdown')?.classList.remove('active');
         if (which !== 'actions') document.getElementById('actions-menu-dropdown')?.classList.remove('active');
     },
 
-    // ---- MOBILE MENU ----
-    toggleMobileMenu(): void {
-        this.closeAllMenusExcept('mobile');
-        const menu = document.getElementById('mobile-menu');
-        menu?.classList.toggle('active');
-    },
-
+    // ---- MOBILE "MORE" MENU ----
+    /**
+     * Legacy alias kept so action methods can defensively close the mobile menu
+     * after they fire. The hamburger is gone; the mobile menu is now the "More"
+     * bottom sheet, so closing it means dismissing that sheet.
+     */
     closeMobileMenu(): void {
-        document.getElementById('mobile-menu')?.classList.remove('active');
+        this.hideBottomSheet();
     },
 
     // ---- KEYBOARD SHORTCUTS ----
@@ -423,8 +425,13 @@ export const miscMethods = uiModule({
                     this.endTour();
                     return;
                 }
-                // Floating toolbar menus (not modals) close first and only
-                // themselves: the desktop ⋯ actions menu and the tree switcher.
+                // Floating overlays (not modals) close first and only
+                // themselves: the mobile "More" sheet, the desktop ⋯ actions
+                // menu and the tree switcher.
+                if (this.bottomSheet) {
+                    this.hideBottomSheet();
+                    return;
+                }
                 const actionsMenu = document.getElementById('actions-menu-dropdown');
                 if (actionsMenu?.classList.contains('active')) {
                     this.closeActionsMenu();

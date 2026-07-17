@@ -82,17 +82,23 @@ test('Kekule numbers are off by default, drawn when enabled, always in the toolt
 test.describe('mobile', () => {
     test.use({ viewport: { width: 390, height: 844 } });
 
-    test('all four views are reachable from the hamburger menu', async ({ page }) => {
+    test('the primary views live on the bottom bar; Fan opens from the More sheet', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
-        await page.locator('.hamburger-btn').click();
-        for (const m of ['family', 'descendants', 'timeline', 'fan']) {
-            await expect(page.locator(`#mm-view-${m}`)).toBeVisible();
+
+        // The three primary views are bottom-bar tabs.
+        for (const m of ['family', 'descendants', 'timeline']) {
+            await expect(page.locator(`#bb-view-${m}`)).toBeVisible();
         }
-        await page.locator('#mm-view-fan').click();
+        // Fan lives in the More sheet.
+        await page.locator('#bb-view-more').click();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Fan' }).click();
         await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
-        // The menu marks the active view on reopen.
-        await page.locator('.hamburger-btn').click();
-        await expect(page.locator('#mm-view-fan')).toHaveClass(/active/);
+
+        // The bottom bar marks "More" active while a sheet view (fan) is shown.
+        await expect(page.locator('#bb-view-more')).toHaveClass(/active/);
+        // Reopening the sheet marks the Fan row active.
+        await page.locator('#bb-view-more').click();
+        await expect(page.locator('.bottom-sheet-menu .bottom-sheet-item.active', { hasText: 'Fan' })).toBeVisible();
     });
 });

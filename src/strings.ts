@@ -60,7 +60,8 @@ const stringsEN = {
         addPerson: '+ Add Person',
         export: 'Export',
         import: 'Import',
-        newTree: 'New Tree'
+        newTree: 'New Tree',
+        more: 'More'
     },
 
     // Empty state
@@ -1633,7 +1634,8 @@ const stringsCZ: StringsType = {
         addPerson: '+ Přidat osobu',
         export: 'Export',
         import: 'Import',
-        newTree: 'Nový strom'
+        newTree: 'Nový strom',
+        more: 'Více'
     },
 
     // Empty state

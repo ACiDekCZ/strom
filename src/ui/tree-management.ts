@@ -155,7 +155,7 @@ export const treeManagementMethods = uiModule({
         }
 
         // The switcher is trees only now: view/tree actions moved to the ⋯
-        // actions menu (desktop) and the grouped hamburger (≤900).
+        // actions menu (desktop) and the mobile "More" sheet (≤1024).
         html += `
             <div class="tree-switcher-divider"></div>
             <div class="tree-switcher-action" onclick="window.Strom.UI.showTreeManagerDialog()">
@@ -168,24 +168,23 @@ export const treeManagementMethods = uiModule({
 
     /**
      * Refresh the anniversaries signal on whichever action trigger is visible:
-     * a dot on the desktop ⋯ button and the mobile hamburger, plus the count
-     * badge inside both action menus. Driven by updateTreeSwitcher(), which is
-     * already called wherever the count can change.
+     * a dot on the desktop ⋯ button and the mobile bottom-bar "More" tab, plus
+     * the count badge inside the desktop actions menu. The mobile "More" sheet
+     * is built on demand, so its badge is rendered when the sheet opens. Driven
+     * by updateTreeSwitcher(), called wherever the count can change.
      */
     refreshActionMenuBadges(): void {
         const count = this.anniversaryBadgeCount();
         // Small dot on the triggers so the signal survives the menu move.
-        for (const id of ['actions-menu-dot', 'hamburger-dot']) {
+        for (const id of ['actions-menu-dot', 'bottom-bar-more-dot']) {
             const dot = document.getElementById(id);
             if (dot) dot.style.display = count > 0 ? 'block' : 'none';
         }
-        // Count badge inside the menus (desktop ⋯ menu + hamburger).
-        for (const id of ['actions-ann-badge', 'mm-ann-badge']) {
-            const badge = document.getElementById(id);
-            if (badge) {
-                badge.textContent = count > 0 ? String(count) : '';
-                badge.style.display = count > 0 ? 'inline-flex' : 'none';
-            }
+        // Count badge inside the desktop ⋯ actions menu.
+        const badge = document.getElementById('actions-ann-badge');
+        if (badge) {
+            badge.textContent = count > 0 ? String(count) : '';
+            badge.style.display = count > 0 ? 'inline-flex' : 'none';
         }
     },
 

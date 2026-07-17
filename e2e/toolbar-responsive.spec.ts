@@ -6,18 +6,19 @@ import { openApp, createFirstPerson } from './helpers.js';
  * the 1024px tablet boundary (the app's real boundary — CLAUDE.md's generic
  * "three modes / 900px" note does not apply to this toolbar):
  *
- *   > 1024  desktop  : the view-mode segment is shown, the hamburger hidden,
- *                      the ⋯ actions menu present, generation controls live in
- *                      the floating focus bar. At > 1280 the standalone ⚙ and
- *                      "Actions" label appear; at ≤ 1280 they fold into ⋯.
- *   ≤ 1024  hamburger: the segment is hidden (views live in the hamburger's
- *                      view row), the ⋯ menu is hidden (its items live in the
- *                      hamburger), generation controls live inline in
- *                      .toolbar-focus (600–1024) or the floating bar (≤ 600).
+ *   > 1024  desktop   : the view-mode segment is shown, the bottom bar hidden,
+ *                       the ⋯ actions menu present, generation controls live in
+ *                       the floating focus bar. At > 1280 the standalone ⚙ and
+ *                       "Actions" label appear; at ≤ 1280 they fold into ⋯.
+ *   ≤ 1024  bottom bar : the segment is hidden (views live on the bottom bar's
+ *                        tabs), the desktop ⋯ menu is hidden (its items live in
+ *                        the "More" sheet, opened by the bottom-bar "More" tab
+ *                        and the top-bar ⋯), generation controls live inline in
+ *                        .toolbar-focus (600–1024) or the floating chip (≤ 600).
  *
  * Invariants asserted at every probed width:
- *   1. exactly one view surface — segment XOR hamburger,
- *   2. exactly one Settings entry point,
+ *   1. exactly one view surface — segment XOR bottom-bar tabs,
+ *   2. exactly one Settings entry point (standalone ⚙ / folded ⋯ / More sheet),
  *   3. exactly one generation-depth control surface (never zero),
  *   4. no toolbar child clips past the toolbar's left/right edge — stressed
  *      with a long tree name and the opt-in family-wizard button enabled.
@@ -39,19 +40,20 @@ async function probe(page: Page) {
             !!el && getComputedStyle(el).display !== 'none';
 
         const segment = shown(document.getElementById('view-mode-segment'));
-        const hamburger = shown(document.querySelector('.hamburger-btn'));
-        const viewRowInHamburger = !!document.getElementById('mm-view-family');
+        // The bottom bar replaces the old hamburger across the ≤1024 regime.
+        const bottomBarTabs = shown(document.getElementById('bb-view-family'));
 
         // Settings entry points (exactly one must be active):
         //  - standalone ⚙ (> 1280)
         //  - the ⚙ item folded into the ⋯ actions menu (1024 < w ≤ 1280)
-        //  - the hamburger (≤ 1024)
+        //  - the bottom-bar "More" tab → the More sheet, which carries Settings (≤ 1024)
         const standaloneSettings = displayed(document.querySelector('.actions-toolbar-settings'));
         const actionsMenuPresent = displayed(document.querySelector('.actions-menu'));
         const foldedSettings = actionsMenuPresent
             && displayed(document.querySelector('.actions-menu-settings'));
+        const moreSheetHome = shown(document.getElementById('bb-view-more'));
         const settingsSurfaces =
-            (standaloneSettings ? 1 : 0) + (foldedSettings ? 1 : 0) + (hamburger ? 1 : 0);
+            (standaloneSettings ? 1 : 0) + (foldedSettings ? 1 : 0) + (moreSheetHome ? 1 : 0);
 
         // Generation-depth controls: inline (.toolbar-focus) or floating bar.
         const toolbarDepth = shown(document.getElementById('toolbar-depth-up'));
@@ -72,8 +74,8 @@ async function probe(page: Page) {
         }
 
         return {
-            segment, hamburger, viewRowInHamburger,
-            settingsSurfaces, standaloneSettings, foldedSettings,
+            segment, bottomBarTabs,
+            settingsSurfaces, standaloneSettings, foldedSettings, moreSheetHome,
             depthSurfaces, toolbarDepth, floatingDepth, clipped,
         };
     });
@@ -88,10 +90,8 @@ test('toolbar regimes have no duplicated or missing controls at any width', asyn
     await page.evaluate(() => {
         const name = document.getElementById('current-tree-name');
         if (name) name.textContent = 'Velmi Dlouhy Nazev Rodokmenu Test XYZ';
-        for (const id of ['toolbar-family-btn', 'mm-family-btn']) {
-            const b = document.getElementById(id);
-            if (b) b.style.display = '';
-        }
+        const famBtn = document.getElementById('toolbar-family-btn');
+        if (famBtn) famBtn.style.display = '';
     });
 
     for (const w of WIDTHS) {
@@ -101,12 +101,12 @@ test('toolbar regimes have no duplicated or missing controls at any width', asyn
         const at = `@${w}px`;
 
         // 1. Exactly one view surface.
-        expect(s.segment !== s.hamburger, `${at}: segment XOR hamburger (seg=${s.segment} ham=${s.hamburger})`).toBe(true);
+        expect(s.segment !== s.bottomBarTabs, `${at}: segment XOR bottom-bar tabs (seg=${s.segment} bar=${s.bottomBarTabs})`).toBe(true);
         if (w > 1024) {
             expect(s.segment, `${at}: desktop shows the segment`).toBe(true);
         } else {
-            expect(s.hamburger, `${at}: hamburger regime shows the hamburger`).toBe(true);
-            expect(s.viewRowInHamburger, `${at}: hamburger carries the view row`).toBe(true);
+            expect(s.bottomBarTabs, `${at}: mobile regime shows the bottom-bar tabs`).toBe(true);
+            expect(s.moreSheetHome, `${at}: bottom bar carries the "More" tab`).toBe(true);
         }
 
         // 2. Exactly one Settings entry point.

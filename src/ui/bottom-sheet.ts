@@ -7,6 +7,8 @@
 
 import { PersonId } from '../types.js';
 import { uiModule } from './module.js';
+import { strings } from '../strings.js';
+import { TreeRenderer } from '../renderer.js';
 
 /** Coarse pointer = touch device; used to gate touch-only behaviour. */
 export function isCoarsePointer(): boolean {
@@ -93,6 +95,155 @@ export const bottomSheetMethods = uiModule({
             this.bottomSheet.remove();
             this.bottomSheet = null;
         }
+    },
+
+    /**
+     * The mobile "More" (Více) navigation sheet — the successor to the removed
+     * hamburger menu. A menu variant of the bottom sheet: section headers plus
+     * flat action rows (no emoji), the same overlay + swipe-to-dismiss chrome as
+     * the person action sheet. Opened from the bottom-bar "More" tab and the top
+     * bar's ⋯ button. Gating mirrors the old hamburger (edit-only items drop in
+     * view mode; save-to-file only when the File System Access API is available).
+     */
+    showMoreMenuSheet(): void {
+        this.hideBottomSheet();
+        this.closeAllMenusExcept('sheet');
+
+        const s = strings;
+        const isView = document.body.classList.contains('view-mode');
+        const isFsa = document.body.classList.contains('fsa-supported');
+        const mode = TreeRenderer.getViewMode();
+
+        interface MenuRow { label: string; run: () => void; danger?: boolean; badge?: number; active?: boolean; }
+        interface MenuBlock { header: string; rows: MenuRow[]; pair?: MenuRow[]; }
+        const blocks: MenuBlock[] = [];
+
+        // Views that do not have a bottom-bar tab of their own.
+        blocks.push({ header: s.menu.sectionView, rows: [
+            { label: s.viewModeSwitch.fan, run: () => this.setDisplayViewMode('fan'), active: mode === 'fan' },
+            { label: s.viewModeSwitch.map, run: () => this.setDisplayViewMode('map'), active: mode === 'map' },
+        ] });
+
+        // Current view actions.
+        const current: MenuRow[] = [
+            { label: s.menu.poster, run: () => this.showPosterDialog() },
+            { label: s.menu.exportSelection, run: () => this.exportFocusedJSON() },
+        ];
+        if (!isView) {
+            current.push({ label: s.menu.makeTreeFromView, run: () => this.makeTreeFromCurrentView() });
+            current.push({ label: s.menu.mergeViewInto, run: () => this.mergeViewInto() });
+        }
+        current.push({ label: s.slideshow.menu, run: () => this.startSlideshow() });
+        blocks.push({ header: s.menu.sectionCurrentView, rows: current });
+
+        // Tree actions.
+        const tree: MenuRow[] = [
+            { label: s.anniversaries.menu, run: () => this.showAnniversariesDialog(), badge: this.anniversaryBadgeCount() },
+        ];
+        if (isFsa) tree.push({ label: s.fileAccess.saveToFile, run: () => this.attachSaveToFile() });
+        if (!isView) tree.push({ label: s.treeManager.manageTreesTitle, run: () => this.showTreeManagerDialog() });
+        blocks.push({ header: s.menu.sectionTree, rows: tree });
+
+        // Edits (dropped entirely in read-only view mode).
+        if (!isView) {
+            blocks.push({
+                header: s.menu.sectionEdits,
+                rows: [{ label: s.familyWizard.title, run: () => this.startFamilyWizardFromToolbar() }],
+                pair: [
+                    { label: s.undo.undo, run: () => this.performUndo() },
+                    { label: s.undo.redo, run: () => this.performRedo() },
+                ],
+            });
+        }
+
+        // App.
+        blocks.push({ header: s.menu.sectionApp, rows: [
+            { label: s.settings.title, run: () => this.showSettingsDialog() },
+        ] });
+
+        const overlay = document.createElement('div');
+        overlay.className = 'bottom-sheet-overlay';
+        const sheet = document.createElement('div');
+        sheet.className = 'bottom-sheet bottom-sheet-menu';
+        sheet.setAttribute('role', 'menu');
+
+        const handle = document.createElement('div');
+        handle.className = 'bottom-sheet-handle';
+        sheet.appendChild(handle);
+
+        const title = document.createElement('div');
+        title.className = 'bottom-sheet-menu-title';
+        title.textContent = s.mobileMenu.more;
+        sheet.appendChild(title);
+
+        const list = document.createElement('div');
+        list.className = 'bottom-sheet-items';
+        sheet.appendChild(list);
+
+        const makeButton = (row: MenuRow): HTMLButtonElement => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'bottom-sheet-item' + (row.danger ? ' danger' : '') + (row.active ? ' active' : '');
+            const label = document.createElement('span');
+            label.className = 'bottom-sheet-label';
+            label.textContent = row.label;
+            btn.appendChild(label);
+            if (row.badge && row.badge > 0) {
+                const badge = document.createElement('span');
+                badge.className = 'tree-switcher-badge';
+                badge.textContent = String(row.badge);
+                btn.appendChild(badge);
+            }
+            btn.addEventListener('click', () => {
+                this.hideBottomSheet();
+                row.run();
+            });
+            return btn;
+        };
+
+        for (const block of blocks) {
+            const header = document.createElement('div');
+            header.className = 'bottom-sheet-section';
+            header.textContent = block.header;
+            list.appendChild(header);
+            for (const row of block.rows) list.appendChild(makeButton(row));
+            if (block.pair) {
+                const pairRow = document.createElement('div');
+                pairRow.className = 'bottom-sheet-pair';
+                for (const row of block.pair) pairRow.appendChild(makeButton(row));
+                list.appendChild(pairRow);
+            }
+        }
+
+        overlay.appendChild(sheet);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this.hideBottomSheet();
+        });
+
+        // Swipe-down to dismiss (mirrors the person sheet).
+        let dragStartY = 0;
+        let dragging = false;
+        sheet.addEventListener('touchstart', (e) => {
+            dragStartY = e.touches[0].clientY;
+            dragging = true;
+            sheet.style.transition = 'none';
+        }, { passive: true });
+        sheet.addEventListener('touchmove', (e) => {
+            if (!dragging) return;
+            const dy = e.touches[0].clientY - dragStartY;
+            if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
+        }, { passive: true });
+        sheet.addEventListener('touchend', (e) => {
+            dragging = false;
+            sheet.style.transition = '';
+            const dy = e.changedTouches[0].clientY - dragStartY;
+            if (dy > SWIPE_CLOSE_PX) this.hideBottomSheet();
+            else sheet.style.transform = '';
+        });
+
+        document.body.appendChild(overlay);
+        this.bottomSheet = overlay;
+        requestAnimationFrame(() => overlay.classList.add('active'));
     },
 
     /**

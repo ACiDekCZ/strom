@@ -30,7 +30,7 @@ export function cleanDynamicState(html: string): string {
 }
 
 function cleanDynamicMarkup(html: string): string {
-    const elementsToClean = ['modal-overlay', 'mobile-menu', 'tree-switcher-dropdown'];
+    const elementsToClean = ['modal-overlay', 'tree-switcher-dropdown'];
 
     let result = html;
     for (const element of elementsToClean) {

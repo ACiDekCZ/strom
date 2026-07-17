@@ -97,21 +97,81 @@ test('a single tap on a card opens the bottom sheet (first tap = person menu)', 
     await expect(page.locator('.context-menu')).toHaveCount(0);
 });
 
-test('the hamburger menu exposes the current-view actions (poster, export selection)', async ({ page }) => {
+test('the bottom bar carries the three primary views + a raised FAB', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
-    await page.evaluate(() => window.Strom.UI.toggleMobileMenu());
-    const menu = page.locator('#mobile-menu');
-    await expect(menu).toHaveClass(/active/);
+    const bar = page.locator('#bottom-bar');
+    await expect(bar).toBeVisible();
+    // Three primary view tabs live on the bar (fan/map moved to the More sheet).
+    for (const id of ['bb-view-family', 'bb-view-descendants', 'bb-view-timeline', 'bb-view-more']) {
+        await expect(page.locator(`#${id}`)).toBeVisible();
+    }
+    // The old hamburger is gone.
+    await expect(page.locator('.hamburger-btn')).toHaveCount(0);
+    await expect(page.locator('#mobile-menu')).toHaveCount(0);
 
-    // The hamburger is grouped under non-interactive section headers now.
-    await expect(menu.locator('.menu-section-header', { hasText: 'Current view' })).toBeVisible();
-    await expect(menu.locator('.menu-section-header', { hasText: /^View$/ })).toBeVisible();
-    await expect(menu.locator('button', { hasText: 'Poster' })).toBeVisible();
-    await expect(menu.locator('button', { hasText: 'Export this view' })).toBeVisible();
+    // The central FAB opens the add-person modal.
+    await page.locator('#bottom-bar-fab').tap();
+    await expect(page.locator('#person-modal')).toBeVisible();
+});
 
-    // Poster… opens the view-aware poster dialog.
-    await menu.locator('button', { hasText: 'Poster' }).click();
+test('a bottom-bar tab switches the view and lights up copper', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    await page.locator('#bb-view-timeline').tap();
+    await expect(page.locator('#bb-view-timeline')).toHaveClass(/active/);
+    await expect(page.locator('#bb-view-family')).not.toHaveClass(/active/);
+    // Timeline view is now on screen.
+    await expect(page.locator('#timeline-container')).toBeVisible();
+});
+
+test('the "More" sheet exposes the remaining views and the current-view actions', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    // Open the More sheet from the bottom bar.
+    await page.locator('#bb-view-more').tap();
+    const sheet = page.locator('.bottom-sheet-menu');
+    await expect(sheet).toBeVisible();
+
+    // Section headers (grouped, no emoji) and key items are present.
+    await expect(sheet.locator('.bottom-sheet-section', { hasText: 'Current view' })).toBeVisible();
+    await expect(sheet.locator('.bottom-sheet-section', { hasText: /^View$/ })).toBeVisible();
+    await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Fan' })).toBeVisible();
+    await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Map' })).toBeVisible();
+    await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Export this view' })).toBeVisible();
+
+    // Poster… opens the view-aware poster dialog and closes the sheet.
+    await sheet.locator('.bottom-sheet-item', { hasText: 'Poster' }).click();
     await expect(page.locator('#poster-modal')).toBeVisible();
+    await expect(page.locator('.bottom-sheet-menu')).toHaveCount(0);
+});
+
+test('the top bar ⋯ opens the same "More" sheet', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    await page.locator('.mobile-more-btn').tap();
+    await expect(page.locator('.bottom-sheet-menu')).toBeVisible();
+});
+
+test('bottom-bar tabs, the FAB and sheet rows meet the 44px touch target', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    for (const sel of ['#bb-view-family', '#bb-view-descendants', '#bb-view-timeline', '#bb-view-more']) {
+        const box = (await page.locator(sel).boundingBox())!;
+        expect(box.height, `${sel} height`).toBeGreaterThanOrEqual(44);
+    }
+    const fab = (await page.locator('#bottom-bar-fab').boundingBox())!;
+    expect(fab.width).toBeGreaterThanOrEqual(44);
+    expect(fab.height).toBeGreaterThanOrEqual(44);
+
+    // Sheet rows are at least 48px tall.
+    await page.locator('#bb-view-more').tap();
+    const row = page.locator('.bottom-sheet-menu .bottom-sheet-item').first();
+    const rowBox = (await row.boundingBox())!;
+    expect(rowBox.height).toBeGreaterThanOrEqual(44);
 });
