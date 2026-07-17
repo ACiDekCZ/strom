@@ -819,9 +819,6 @@ class TreeRendererClass {
     }
 
     private async renderCards(canvas: HTMLElement): Promise<void> {
-        // Pre-compute presumed deceased set
-        const presumedDeceased = this.computePresumedDeceased();
-
         // Get all trees for cross-tree matching (only if not in view mode)
         const allTrees = await this.getAllTreesForCrossTreeMatching();
         const currentTreeId = DataManager.getCurrentTreeId();
@@ -906,10 +903,9 @@ class TreeRendererClass {
             } else {
                 classes += ' ' + person.gender;
             }
-            // Photo avatar shifts the text right; without a photo the card is
-            // rendered exactly as before (no avatar element, no class). Nothing
-            // stands in for a missing photo here: most people in a tree — every
-            // ancestor — will never have one, and the slot costs 40% of a card.
+            // The avatar circle is always present in normal/detailed density
+            // (initials by default); a photo just fills it instead. `has-photo`
+            // marks the photo case for styling/tests.
             if (person.photo && SettingsManager.getCardDensity() !== 'compact') {
                 classes += ' has-photo';
             }
@@ -957,21 +953,12 @@ class TreeRendererClass {
             UI.attachCardLongPress(card, id);
 
             const displayName = person.firstName || '?';
-            const isDeceased = presumedDeceased.has(id);
 
             // Always display person's own lastName (maiden name for women)
             const displaySurname = person.lastName;
 
-            // Format birth date - both full date and year only
-            let birthYear = '';
-            let birthFull = '';
-            if (person.birthDate) {
-                birthYear = displayYear(person.birthDate);
-                const formatted = formatFlexDate(person.birthDate);
-                if (formatted !== birthYear) {
-                    birthFull = formatted;
-                }
-            }
+            // Birth year for the card meta row (the year range replaces the dagger).
+            const birthYear = person.birthDate ? displayYear(person.birthDate) : '';
 
             // Check for hidden partners (partners not in the visible/rendered set)
             let hiddenPartnersCount = 0;
@@ -1109,22 +1096,43 @@ class TreeRendererClass {
 
             const isLocked = DataManager.isPersonLocked(id);
 
-            // Density decides what fits: compact = names only (no dates/photo),
-            // detailed = + birth place and age.
+            // Density decides what fits: compact = names only (no avatar/meta),
+            // normal = avatar + name + life-year meta, detailed = + occupation & age.
             const density = SettingsManager.getCardDensity();
-            const showPhoto = density !== 'compact' && !!person.photo;
+            // Placeholders are a dashed frame with no avatar (nothing to depict).
+            const showAvatar = density !== 'compact' && !person.isPlaceholder;
+            const showPhoto = showAvatar && !!person.photo;
             const cardAge = density === 'detailed' ? this.calculateAge(person) : null;
-            const place = density === 'detailed' ? (person.birthPlace ?? '') : '';
             const trade = density === 'detailed' ? (this.occupationOf(person) ?? '') : '';
 
+            // Full name on one row (never shrunk — overflow ellipsizes).
+            const fullName = `${displayName} ${displaySurname}`.trim();
+            // Avatar initials (first name + surname), used when there is no photo.
+            const initials = ((displayName[0] || '?') + (displaySurname[0] || '')).toUpperCase();
+
+            // Meta row (row 2): life-year range + birth place. The year range now
+            // carries the "deceased" cue (the † dagger is gone from the name row):
+            // a dead person reads "1902 – 1968", a living one "* 1958".
+            const deathYear = person.deathDate ? displayYear(person.deathDate) : '';
+            let metaYears = '';
+            if (deathYear) metaYears = `${birthYear || '?'} – ${deathYear}`;
+            else if (birthYear) metaYears = `* ${birthYear}`;
+            const metaPlace = person.birthPlace?.trim() ?? '';
+            const metaText = [metaYears, metaPlace].filter(Boolean).join(' · ');
+
+            const avatarInner = showPhoto
+                ? `<img src="${person.photo}" alt="">`
+                : `<span class="avatar-initials">${this.escapeHtml(initials)}</span>`;
+
             html += `
-                ${showPhoto ? `<div class="card-avatar"><img src="${person.photo}" alt=""></div>` : ''}
-                <div class="name"><span class="name-text">${this.escapeHtml(displayName)}</span>${isDeceased ? '<span class="deceased-marker">†</span>' : ''}</div>
-                <div class="surname">${this.escapeHtml(displaySurname)}</div>
-                ${density !== 'compact' && birthYear ? `<div class="birth-date"><span class="date-year">${birthYear}</span>${birthFull ? `<span class="date-full">${birthFull}</span>` : ''}</div>` : ''}
-                ${place ? `<div class="card-place">${this.escapeHtml(place)}</div>` : ''}
-                ${trade ? `<div class="card-trade">${this.escapeHtml(trade)}</div>` : ''}
-                ${cardAge !== null ? `<div class="card-age">${strings.tooltip.age}: ${cardAge}</div>` : ''}
+                ${showAvatar ? `<div class="card-avatar">${avatarInner}</div>` : ''}
+                <div class="card-body">
+                    <div class="name"><span class="name-text">${this.escapeHtml(fullName)}</span></div>
+                    ${density !== 'compact' && metaText ? `<div class="birth-date">${this.escapeHtml(metaText)}</div>` : ''}
+                    ${trade ? `<div class="card-trade">${this.escapeHtml(trade)}</div>` : ''}
+                    ${cardAge !== null ? `<div class="card-age">${strings.tooltip.age}: ${cardAge}</div>` : ''}
+                </div>
+                ${this.focusPersonId && id === this.focusPersonId ? `<span class="focus-badge">${strings.card.focusBadge}</span>` : ''}
                 ${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">&#128274;</span>` : ''}
                 ${!isLocked ? `<button class="rel-link-icon" data-action="relationships" title="${strings.buttons.manageRelationships}">&#128279;</button>` : ''}
             `;
@@ -1283,20 +1291,8 @@ class TreeRendererClass {
 
             canvas.appendChild(card);
         }
-
-        // Fit names on the NEXT frame: measuring immediately can race a
-        // concurrent render or catch the canvas mid-layout, leaving some
-        // cards unshrunk (reported on a live tree: one card ellipsized at
-        // full size while its neighbours were fitted).
-        requestAnimationFrame(() => this.fitCardNames(canvas));
     }
 
-    /**
-     * Long names: shrink the font (two steps) before falling back to the CSS
-     * ellipsis, so full names stay readable on the fixed-size cards. One pass
-     * after all cards are in the DOM (needs real text measurements). When the
-     * canvas is not measurable yet (hidden / zero width), retry a few frames.
-     */
     /**
      * What this person did. Occupation is an event (it changes over a life:
      * apprentice, journeyman, master), so for a one-line summary take the last
@@ -1306,22 +1302,6 @@ class TreeRendererClass {
         const jobs = (person.events ?? []).filter(e => e.type === 'occupation' && e.note?.trim());
         if (jobs.length === 0) return null;
         return sortLifeEvents(jobs)[jobs.length - 1].note?.trim() ?? null;
-    }
-
-    private fitCardNames(canvas: HTMLElement, attempt = 0): void {
-        if (canvas.clientWidth === 0 && attempt < 5) {
-            requestAnimationFrame(() => this.fitCardNames(canvas, attempt + 1));
-            return;
-        }
-        const texts = canvas.querySelectorAll<HTMLElement>(
-            '.person-card .name-text, .person-card .surname');
-        texts.forEach(el => {
-            if (el.clientWidth === 0) return;           // detached/hidden card
-            el.classList.remove('fit-tight', 'fit-tighter');
-            if (el.scrollWidth <= el.clientWidth) return;
-            el.classList.add('fit-tight');
-            if (el.scrollWidth > el.clientWidth) el.classList.add('fit-tighter');
-        });
     }
 
     /** True when the person is currently rendered on the canvas. */

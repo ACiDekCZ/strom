@@ -14,19 +14,26 @@ import { displayYear } from './dates.js';
 export type PosterLayout = Pick<LayoutResult, 'positions' | 'connections' | 'spouseLines'>;
 
 /** Light-theme colors matching the on-canvas card styles. */
+// "Letopis" poster palette (parity with the on-screen light theme). Cards are
+// the neutral surface with a hairline border; gender is the avatar RING, not a
+// card fill. Tree lines use the same muted --line-color as the app.
 const COLORS = {
-    male: { fill: '#e3f2fd', stroke: '#90caf9' },
-    female: { fill: '#fce4ec', stroke: '#f48fb1' },
-    placeholder: { fill: '#f5f5f5', stroke: '#999999' },
-    line: '#333333',
-    spouse: '#666666',
-    text: '#333333',
-    textLight: '#666666',
-    footer: '#888888',
+    male: '#5b7f9e',        // avatar ring
+    female: '#a1706e',      // avatar ring
+    placeholderRing: '#b8ae99',
+    cardBg: '#fffdf8',
+    cardBorder: '#ddd4c2',
+    avatarBg: '#f0e9da',
+    initials: '#5c5546',
+    line: '#b8ae99',
+    spouse: '#8a8272',
+    text: '#2b2822',
+    textLight: '#5c5546',
+    footer: '#8a8272',
     background: '#ffffff',
 };
 
-const FONT = "'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+const FONT = "'Source Serif 4', Georgia, 'Times New Roman', serif";
 const PADDING = 40;
 export const FOOTER_HEIGHT = 44;
 
@@ -259,9 +266,12 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
     for (const [personId, pos] of entries) {
         const person = data.persons[personId];
         const isPlaceholder = person?.isPlaceholder;
-        const palette = isPlaceholder ? COLORS.placeholder : (person?.gender === 'male' ? COLORS.male : COLORS.female);
+        const ring = isPlaceholder ? COLORS.placeholderRing
+            : (person?.gender === 'male' ? COLORS.male : COLORS.female);
 
-        out.push(`<rect x="${pos.x.toFixed(1)}" y="${pos.y.toFixed(1)}" width="${cw}" height="${ch}" rx="8" fill="${palette.fill}" stroke="${palette.stroke}" stroke-width="1.5"/>`);
+        // "Letopis" card: neutral surface, hairline border (dashed for placeholders).
+        const borderDash = isPlaceholder ? ' stroke-dasharray="4,3"' : '';
+        out.push(`<rect x="${pos.x.toFixed(1)}" y="${pos.y.toFixed(1)}" width="${cw}" height="${ch}" rx="8" fill="${COLORS.cardBg}" stroke="${COLORS.cardBorder}" stroke-width="1"${borderDash}/>`);
 
         // Branch colour stripe (matches the on-screen ::before bar)
         const branch = options.branchMap?.get(personId);
@@ -270,30 +280,42 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             out.push(`<rect x="${(pos.x + 1).toFixed(1)}" y="${(pos.y + 4).toFixed(1)}" width="4" height="${(ch - 8).toFixed(0)}" rx="2" fill="${stripeColor}"/>`);
         }
 
-        if (person) {
-            // Photo avatar shifts the text right, like on screen.
+        if (person && !isPlaceholder) {
+            // Avatar: gender-ring circle with a photo or initials (like on screen).
+            const cxAv = pos.x + 12 + 19;
+            const cyAv = pos.y + ch / 2;
             const hasPhoto = !!person.photo;
             if (hasPhoto) {
-                const cxAv = pos.x + 28;
-                const cyAv = pos.y + ch / 2;
                 const clipId = `av${clipCounter++}`;
-                out.push(`<clipPath id="${clipId}"><circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="20"/></clipPath>`);
-                out.push(`<image href="${escapeXml(person.photo!)}" x="${(cxAv - 20).toFixed(1)}" y="${(cyAv - 20).toFixed(1)}" width="40" height="40" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
+                out.push(`<clipPath id="${clipId}"><circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="19"/></clipPath>`);
+                out.push(`<image href="${escapeXml(person.photo!)}" x="${(cxAv - 19).toFixed(1)}" y="${(cyAv - 19).toFixed(1)}" width="38" height="38" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
+                out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="19" fill="none" stroke="${ring}" stroke-width="2"/>`);
+            } else {
+                const initials = ((person.firstName?.[0] || '?') + (person.lastName?.[0] || '')).toUpperCase();
+                out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="19" fill="${COLORS.avatarBg}" stroke="${ring}" stroke-width="2"/>`);
+                out.push(`<text x="${cxAv.toFixed(1)}" y="${(cyAv + 5).toFixed(1)}" text-anchor="middle" font-size="14" font-weight="600" fill="${COLORS.initials}">${escapeXml(initials)}</text>`);
             }
-            const contentX = hasPhoto ? pos.x + 52 : pos.x + 12;
-            const contentW = hasPhoto ? cw - 52 - 12 : cw - 24;
+
+            // Text column right of the avatar.
+            const contentX = pos.x + 12 + 38 + 10;
+            const contentW = cw - (contentX - pos.x) - 12;
             const cx = contentX + contentW / 2;
 
-            const deceased = options.deceasedSet?.has(personId) ? ' †' : '';
-            const firstName = (person.firstName || '?') + deceased;
-            const surname = person.lastName || '';
-            const year = displayYear(person.birthDate);
-            out.push(fittedText(firstName, cx, pos.y + 24, contentW, [14, 12, 10.5], true, COLORS.text));
-            if (surname) {
-                out.push(fittedText(surname, cx, pos.y + 40, contentW, [12, 10.5, 9.5], false, COLORS.textLight));
-            }
-            if (year) {
-                out.push(`<text x="${cx.toFixed(1)}" y="${(pos.y + 56).toFixed(1)}" text-anchor="middle" font-size="11" fill="${COLORS.textLight}">${escapeXml(year)}</text>`);
+            const fullName = `${person.firstName || '?'} ${person.lastName || ''}`.trim();
+            // Meta row: life-year range + place; the range carries the deceased cue.
+            const birthY = displayYear(person.birthDate);
+            const deathY = displayYear(person.deathDate);
+            const isDeceasedP = !!options.deceasedSet?.has(personId);
+            let metaYears = '';
+            if (deathY) metaYears = `${birthY || '?'} – ${deathY}`;
+            else if (birthY) metaYears = isDeceasedP ? `${birthY} †` : `* ${birthY}`;
+            else if (isDeceasedP) metaYears = '†';
+            const metaPlace = person.birthPlace?.trim() || '';
+            const meta = [metaYears, metaPlace].filter(Boolean).join(' · ');
+
+            out.push(fittedText(fullName, cx, pos.y + 28, contentW, [15, 13, 11], true, COLORS.text));
+            if (meta) {
+                out.push(fittedText(meta, cx, pos.y + 45, contentW, [11, 10, 9], false, COLORS.textLight));
             }
         }
     }

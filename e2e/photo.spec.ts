@@ -21,12 +21,13 @@ test('photo: uploading shows an avatar on the card; removing it clears the avata
     await modal.getByRole('button', { name: 'Save' }).click();
     await expect(modal).toBeHidden();
 
-    // Nothing stands in for it on the card: most people in a tree never have a
-    // photo, and the slot costs 40% of the card's width.
+    // The photo goes, but the avatar circle stays and falls back to initials
+    // (the "Letopis" card always carries an avatar in normal/detailed density).
     await expect(card(page, 'Jan')).not.toHaveClass(/has-photo/);
-    await expect(card(page, 'Jan').locator('.card-avatar')).toHaveCount(0);
+    await expect(card(page, 'Jan').locator('.card-avatar img')).toHaveCount(0);
+    await expect(card(page, 'Jan').locator('.card-avatar .avatar-initials')).toBeVisible();
     await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
-    await expect(card(page, 'Jan').locator('.card-avatar')).toHaveCount(0);
+    await expect(card(page, 'Jan').locator('.card-avatar .avatar-initials')).toBeVisible();
 });
 
 test('photo: rotate buttons are available and the photo survives rotation + save', async ({ page }) => {

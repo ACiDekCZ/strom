@@ -409,16 +409,18 @@ export type CardDensity = 'compact' | 'normal' | 'detailed';
  * MUST match the CSS for .person-card at each density.
  */
 export const CARD_SIZE: Record<CardDensity, Pick<LayoutConfig, 'cardWidth' | 'cardHeight'>> = {
-    compact: { cardWidth: 120, cardHeight: 40 },
-    normal: { cardWidth: 130, cardHeight: 65 },
-    // 98, not 85: the detailed card carries an occupation line when there is
-    // one. MUST match the CSS below.
-    detailed: { cardWidth: 150, cardHeight: 98 },
+    // "Letopis" card: a 38px avatar + a two-row text column (name + meta).
+    // compact drops the avatar and meta (names only), so it is shorter and
+    // narrower; detailed keeps the extra occupation/age lines, so it is taller.
+    // MUST match the CSS for .person-card at each density.
+    compact: { cardWidth: 150, cardHeight: 44 },
+    normal: { cardWidth: 172, cardHeight: 64 },
+    detailed: { cardWidth: 200, cardHeight: 100 },
 };
 
 export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
-    cardWidth: 130,
-    cardHeight: 65,
+    cardWidth: 172,
+    cardHeight: 64,
     horizontalGap: 15,
     verticalGap: 80,
     partnerGap: 12,

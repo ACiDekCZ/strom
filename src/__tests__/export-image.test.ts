@@ -42,7 +42,8 @@ describe('computeBounds', () => {
     it('covers all cards (top-left to bottom-right)', () => {
         const l = layout({ a: { x: 0, y: 0 }, b: { x: 200, y: 300 } });
         const b = computeBounds(l);
-        expect(b).toEqual({ minX: 0, minY: 0, maxX: 330, maxY: 365, width: 330, height: 365 });
+        // Card box is 172x64 (Letopis normal): b at (200,300) → 372 x 364.
+        expect(b).toEqual({ minX: 0, minY: 0, maxX: 372, maxY: 364, width: 372, height: 364 });
     });
     it('is all-zero for an empty layout', () => {
         expect(computeBounds({ positions: new Map(), connections: [], spouseLines: [] }).width).toBe(0);
@@ -57,17 +58,17 @@ describe('buildTreeSvg', () => {
         expect(svg.trimEnd().endsWith('</svg>')).toBe(true);
         // Two rounded card rects (rx="8"); the background rect has no rx.
         expect((svg.match(/rx="8"/g) || []).length).toBe(2);
-        // Gender colors present.
-        expect(svg).toContain('#e3f2fd'); // male fill
-        expect(svg).toContain('#fce4ec'); // female fill
+        // Cards are the neutral surface; gender is the avatar RING colour.
+        expect(svg).toContain('#fffdf8'); // card surface
+        expect(svg).toContain('#5b7f9e'); // male ring
+        expect(svg).toContain('#a1706e'); // female ring
     });
 
-    it('renders names, surnames and birth year via displayYear', () => {
+    it('renders the full name and birth year via displayYear', () => {
         const data = makeData(person('a', { firstName: 'Jan', lastName: 'Novák', birthDate: '~1880-06' }));
         const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 } }));
-        expect(svg).toContain('>Jan<');
-        expect(svg).toContain('>Novák<');
-        expect(svg).toContain('>~1880<'); // displayYear keeps the qualifier, drops month
+        expect(svg).toContain('>Jan Novák<');   // full name on one row
+        expect(svg).toContain('~1880');          // meta: "* ~1880" (qualifier kept, month dropped)
     });
 
     it('escapes XML special characters in names', () => {
@@ -124,7 +125,7 @@ describe('buildTreeSvg', () => {
         const data = makeData(person('a', { firstName: 'Maximilian Alexander Wolfgang Amadeus' } as never));
         const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 } }));
         expect(svg).toContain('lengthAdjust="spacingAndGlyphs"');
-        expect(svg).not.toContain('font-size="14" font-weight="600" fill="#333333">Maximilian Alexander');
+        expect(svg).not.toContain('font-size="15" font-weight="600" fill="#2b2822">Maximilian Alexander');
     });
 });
 

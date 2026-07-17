@@ -26,8 +26,9 @@ test('every density sizes the cards, tells the layout, and never overlaps', asyn
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Henry VIII')).toBeVisible();
 
-    // Detailed is 98 tall since it carries an occupation line (see CARD_SIZE).
-    const expected = { compact: [120, 40], normal: [130, 65], detailed: [150, 98] } as const;
+    // "Letopis" card boxes (see CARD_SIZE): normal 172x64, compact names-only,
+    // detailed taller for the occupation/age lines.
+    const expected = { compact: [150, 44], normal: [172, 64], detailed: [200, 100] } as const;
     for (const d of ['compact', 'normal', 'detailed'] as const) {
         await page.evaluate((den) => window.Strom.UI.setCardDensity(den), d);
         await expect.poll(() => page.evaluate(() => document.body.dataset.cardDensity)).toBe(d);
@@ -47,7 +48,7 @@ test('every density sizes the cards, tells the layout, and never overlaps', asyn
     }
 });
 
-test('compact hides years and the deceased dagger; detailed adds place and age', async ({ page }) => {
+test('compact hides the meta row; normal and detailed show life years, place and age', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Henry VIII')).toBeVisible();
@@ -57,17 +58,18 @@ test('compact hides years and the deceased dagger; detailed adds place and age',
         if (p) dm.updatePerson(p.id, { birthPlace: 'Greenwich Palace' });
     });
 
+    // Compact: names only, no meta row.
     await page.evaluate(() => window.Strom.UI.setCardDensity('compact'));
     await expect(card(page, 'Henry VIII').locator('.birth-date')).toHaveCount(0);
-    await expect(card(page, 'Henry VIII').locator('.deceased-marker')).toBeHidden();
-    await expect(card(page, 'Henry VIII').locator('.card-place')).toHaveCount(0);
 
+    // Normal: meta row carries the life-year range and the birth place.
     await page.evaluate(() => window.Strom.UI.setCardDensity('normal'));
     await expect(card(page, 'Henry VIII').locator('.birth-date')).toHaveCount(1);
-    await expect(card(page, 'Henry VIII').locator('.card-place')).toHaveCount(0);
+    await expect(card(page, 'Henry VIII').locator('.birth-date')).toContainText('Greenwich Palace');
 
+    // Detailed: keeps the meta row and adds the age line.
     await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
-    await expect(card(page, 'Henry VIII').locator('.card-place')).toHaveText('Greenwich Palace');
+    await expect(card(page, 'Henry VIII').locator('.birth-date')).toContainText('Greenwich Palace');
     await expect(card(page, 'Henry VIII').locator('.card-age')).toContainText(/\d/);
 });
 

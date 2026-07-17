@@ -107,15 +107,17 @@ test('deleting the last person returns the empty state', async ({ page }) => {
     expect(await realPersonCount(page)).toBe(0);
 });
 
-test('a long first name shrinks to fit the card instead of truncating', async ({ page }) => {
+test('a long name is clamped with an ellipsis, never overflowing the card', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Johannes Jacobus', 'Habsburg');
 
+    // The name is never shrunk (the fit-tight mechanism was removed); it clips
+    // with the CSS ellipsis and stays inside the card's width.
     const nameText = card(page, 'Johannes').locator('.name-text');
-    await expect(nameText).toHaveClass(/fit-tight/);
-    // The full name stays readable (not cut off): no horizontal overflow left.
-    const fits = await nameText.evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
-    expect(fits).toBe(true);
+    await expect(nameText).not.toHaveClass(/fit-tight/);
+    const cardW = (await card(page, 'Johannes').boundingBox())!.width;
+    const nameW = (await nameText.boundingBox())!.width;
+    expect(nameW).toBeLessThanOrEqual(cardW);
 });
 
 test('birth-date estimate hint fills an approximate year from other dates (K11)', async ({ page }) => {

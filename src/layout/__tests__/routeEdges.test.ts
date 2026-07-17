@@ -120,9 +120,9 @@ describe('routeEdges - bus routing', () => {
         });
 
         it('bus Y values are correctly computed based on generation', () => {
-            // With minGen=-1:
-            // For gen -1 -> 0: parentY=50, parentBottom=115, childTop=195, busY=155
-            // For gen 0 -> 1: parentY=195, parentBottom=260, childTop=340, busY=300
+            // With minGen=-1 (cardHeight 64, verticalGap 80):
+            // For gen -1 -> 0: parentY=50, parentBottom=114, childTop=194, busY=154
+            // For gen 0 -> 1: parentY=194, parentBottom=258, childTop=338, busY=298
             const connections = routed.connections;
             const unionGen = getUnionGen();
             const minGen = getMinGen();
@@ -134,10 +134,10 @@ describe('routeEdges - bus routing', () => {
                 const parentGen = unionGen.get(conn.unionId);
                 if (parentGen === -1) {
                     // grandparents -> parents bus
-                    expect(conn.branchY).toBeCloseTo(155, 1);
+                    expect(conn.branchY).toBeCloseTo(154, 1);
                 } else if (parentGen === 0) {
                     // parents -> children bus
-                    expect(conn.branchY).toBeCloseTo(300, 1);
+                    expect(conn.branchY).toBeCloseTo(298, 1);
                 }
             }
         });

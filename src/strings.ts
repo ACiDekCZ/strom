@@ -668,6 +668,9 @@ const stringsEN = {
     },
 
     // Buttons
+    card: {
+        focusBadge: 'FOCUS',
+    },
     buttons: {
         save: 'Save',
         cancel: 'Cancel',
@@ -2205,6 +2208,9 @@ const stringsCZ: StringsType = {
     },
 
     // Buttons
+    card: {
+        focusBadge: 'FOKUS',
+    },
     buttons: {
         save: 'Uložit',
         cancel: 'Zrušit',

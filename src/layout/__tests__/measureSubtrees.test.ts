@@ -2,8 +2,8 @@
  * measureSubtrees Unit Tests
  *
  * Tests that measureSubtrees correctly computes widths:
- * - personWidth = always cardWidth (130)
- * - unionWidth = cardWidth*2 + partnerGap for couples (272), cardWidth for single (130)
+ * - personWidth = always cardWidth (172)
+ * - unionWidth = cardWidth*2 + partnerGap for couples (356), cardWidth for single (172)
  * - subtreeWidth = max(unionWidth, childrenTotalWidth)
  * - Width grows with number of children and tree depth
  */
@@ -23,11 +23,11 @@ describe('measureSubtrees', () => {
 
     // Config values for calculations
     const config = DEFAULT_LAYOUT_CONFIG;
-    const cardWidth = config.cardWidth;           // 130
+    const cardWidth = config.cardWidth;           // 172
     const partnerGap = config.partnerGap;         // 12
     const horizontalGap = config.horizontalGap;   // 15
-    const coupleWidth = cardWidth * 2 + partnerGap;  // 272
-    const singleWidth = cardWidth;                   // 130
+    const coupleWidth = cardWidth * 2 + partnerGap;  // 356
+    const singleWidth = cardWidth;                   // 172
 
     // All person IDs from fixture
     const ALL_PERSON_IDS = [
@@ -282,29 +282,30 @@ describe('measureSubtrees', () => {
     });
 
     describe('concrete values', () => {
-        it('union1kid has expected subtreeWidth (272)', () => {
-            // union1kid: couple width = 272, child c1 is single = 130
-            // subtreeWidth = max(272, 130) = 272
+        it('union1kid has expected subtreeWidth (coupleWidth)', () => {
+            // union1kid: couple width = coupleWidth, child c1 is single = singleWidth
+            // subtreeWidth = max(coupleWidth, singleWidth) = coupleWidth (356)
             const union1kid = findUnionByPartnership('part_1kid' as PartnershipId);
             expect(union1kid).toBeDefined();
 
             const subtreeWidth = measured.subtreeWidth.get(union1kid!);
-            expect(subtreeWidth).toBe(272);
+            expect(subtreeWidth).toBe(coupleWidth);
         });
 
-        it('union3kids has expected subtreeWidth (562)', () => {
-            // union3kids: couple width = 272
+        it('union3kids has expected subtreeWidth (children span)', () => {
+            // union3kids: couple width = coupleWidth
             // children:
-            //   c2: single, no children -> subtreeWidth = 130
-            //   c3+c3p: couple (272), child gc1 (130) -> subtreeWidth = max(272, 130) = 272
-            //   c4: single, no children -> subtreeWidth = 130
-            // childrenTotalWidth = 130 + 272 + 130 + 2*15 = 562
-            // subtreeWidth = max(272, 562) = 562
+            //   c2: single, no children -> subtreeWidth = singleWidth
+            //   c3+c3p: couple, child gc1 -> subtreeWidth = max(coupleWidth, singleWidth) = coupleWidth
+            //   c4: single, no children -> subtreeWidth = singleWidth
+            // childrenTotalWidth = singleWidth + coupleWidth + singleWidth + 2*horizontalGap = 730
+            // subtreeWidth = max(coupleWidth, childrenTotalWidth) = 730
             const union3kids = findUnionByPartnership('part_3kids' as PartnershipId);
             expect(union3kids).toBeDefined();
 
+            const expectedChildrenWidth = singleWidth + coupleWidth + singleWidth + 2 * horizontalGap;
             const subtreeWidth = measured.subtreeWidth.get(union3kids!);
-            expect(subtreeWidth).toBe(562);
+            expect(subtreeWidth).toBe(Math.max(coupleWidth, expectedChildrenWidth));
         });
     });
 
