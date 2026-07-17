@@ -45,9 +45,24 @@ import { SettingsManager } from './settings.js';
 import { extractSubtree } from './subtree.js';
 import { buildFanModel, buildFanSvg } from './fan-chart.js';
 
+/**
+ * One generation band's world-space geometry, consumed by the sticky HTML
+ * label overlay (src/ui/gen-labels.ts). All Y values are in canvas/world
+ * coordinates; the overlay projects them to the screen on every pan/zoom.
+ */
+export interface GenerationBand {
+    label: string;
+    rowCenterY: number;   // where the label sits when the row is on screen
+    bandTopY: number;     // top boundary of the band's span
+    bandBottomY: number;  // bottom boundary of the band's span
+}
+
 class TreeRendererClass {
     private config = DEFAULT_LAYOUT_CONFIG;
     private positions = new Map<PersonId, Position>();
+
+    /** Generation bands for the sticky label overlay (rebuilt each render). */
+    private generationBands: GenerationBand[] = [];
 
     // Connections for line rendering from layout engine
     private connections: Connection[] = [];
@@ -140,6 +155,7 @@ class TreeRendererClass {
         svg.innerHTML = '';
         this.positions.clear();
         this.connections = [];
+        this.generationBands = [];
 
         const persons = DataManager.getAllPersons();
         if (persons.length === 0) {
@@ -249,6 +265,7 @@ class TreeRendererClass {
                 this.updateFocusUI();
                 UI.updateViewModeUI?.();
                 UI.updateMinimap?.();  // hidden outside the tree canvas
+                UI.updateGenLabels?.();  // clears labels for standalone views
                 return;
             }
         }
@@ -265,6 +282,8 @@ class TreeRendererClass {
         UI.updateViewModeUI?.();
         // Refresh the overview minimap for the new layout.
         UI.updateMinimap?.();
+        // Rebuild the sticky generation-label overlay for the new layout.
+        UI.updateGenLabels?.();
     }
 
     // ============= Focus Mode Methods =============
@@ -1137,18 +1156,23 @@ class TreeRendererClass {
                 ${!isLocked ? `<button class="rel-link-icon" data-action="relationships" title="${strings.buttons.manageRelationships}">&#128279;</button>` : ''}
             `;
 
-            // Add buttons based on context (hidden for locked persons)
+            // Add buttons based on context (hidden for locked persons). Each
+            // rests as a small circle and expands into a labelled pill on hover
+            // (see .add-btn CSS). The former left "sibling" tab is retired — the
+            // action stays available in the card's context menu.
             if (!isLocked) {
+                const addTab = (dir: string, action: string, title: string, label: string): string =>
+                    `<button class="add-btn ${dir}" data-action="${action}" title="${title}">`
+                    + `<span class="add-btn-glyph">+</span>`
+                    + `<span class="add-btn-label">${label}</span></button>`;
                 // Top: Add parent (if < 2 parents)
                 if (person.parentIds.length < 2) {
-                    html += `<button class="add-btn top" data-action="parent" title="${strings.contextMenu.addParent}">+</button>`;
+                    html += addTab('top', 'parent', strings.contextMenu.addParent, strings.card.addTabParent);
                 }
                 // Right: Add partner
-                html += `<button class="add-btn right" data-action="partner" title="${strings.contextMenu.addPartner}">+</button>`;
+                html += addTab('right', 'partner', strings.contextMenu.addPartner, strings.card.addTabPartner);
                 // Bottom: Add child
-                html += `<button class="add-btn bottom" data-action="child" title="${strings.contextMenu.addChild}">+</button>`;
-                // Left: Add sibling
-                html += `<button class="add-btn left" data-action="sibling" title="${strings.contextMenu.addSibling}">+</button>`;
+                html += addTab('bottom', 'child', strings.contextMenu.addChild, strings.card.addTabChild);
             }
 
             // Add cross-tree badge if person exists in other trees
@@ -1347,12 +1371,15 @@ class TreeRendererClass {
     }
 
     /**
-     * Draw faint horizontal generation guide rules across the tree with a
-     * small-caps label on the left of each band (PARENTS / FOCUS GENERATION /
-     * CHILDREN …). Rendered into the same transformed SVG layer as the tree
-     * lines, so the guides pan and zoom together with the cards.
+     * Draw faint horizontal generation guide rules across the tree. The rules
+     * stay in the transformed SVG layer (they pan and zoom with the cards). The
+     * band LABELS are no longer drawn here — they live in a fixed HTML overlay
+     * (see src/ui/gen-labels.ts) so they stick to the left edge while the tree
+     * scrolls underneath. This method records each band's world geometry into
+     * `generationBands` for that overlay to project.
      */
     private renderGenerationGuides(svg: SVGSVGElement): void {
+        this.generationBands = [];
         if (this.viewMode !== 'family' && this.viewMode !== 'descendants') return;
         if (!this.focusPersonId || this.positions.size === 0) return;
         const focusPos = this.positions.get(this.focusPersonId);
@@ -1373,23 +1400,20 @@ class TreeRendererClass {
         const pad = 48;
         const lineLeft = minX - pad;
         const lineRight = maxX + pad;
-        const labelX = minX - 18;
-        const ns = 'http://www.w3.org/2000/svg';
+        const halfGap = this.config.verticalGap / 2;
 
         for (const bandY of Array.from(bandYs).sort((a, b) => a - b)) {
             const offset = Math.round((bandY - focusPos.y) / step);
             // Boundary rule just above the band.
-            const boundaryY = bandY - this.config.verticalGap / 2;
+            const boundaryY = bandY - halfGap;
             this.drawLine(svg, lineLeft, boundaryY, lineRight, boundaryY, { className: 'gen-guide-line' });
-            // Left-hand small-caps label, centred on the band row.
-            const text = document.createElementNS(ns, 'text');
-            text.setAttribute('x', String(labelX));
-            text.setAttribute('y', String(bandY + this.config.cardHeight / 2));
-            text.setAttribute('class', 'gen-guide-label');
-            text.setAttribute('text-anchor', 'end');
-            text.setAttribute('dominant-baseline', 'middle');
-            text.textContent = this.generationLabel(offset);
-            svg.appendChild(text);
+            // Record the band for the sticky HTML label overlay.
+            this.generationBands.push({
+                label: this.generationLabel(offset),
+                rowCenterY: bandY + this.config.cardHeight / 2,
+                bandTopY: bandY - halfGap,
+                bandBottomY: bandY + this.config.cardHeight + halfGap,
+            });
         }
     }
 
@@ -1807,6 +1831,11 @@ class TreeRendererClass {
     // Public getter for visible person IDs
     getVisiblePersonIds(): Set<PersonId> {
         return new Set(this.positions.keys());
+    }
+
+    /** Generation bands for the sticky label overlay (empty outside family/descendants). */
+    getGenerationBands(): GenerationBand[] {
+        return this.generationBands;
     }
 }
 

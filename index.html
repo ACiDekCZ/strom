@@ -28,13 +28,14 @@
             /* text */
             --text: #2b2822;
             --text-light: #5c5546;
-            --text-faint: #8a8272;
-            --text-ghost: #a39880;
+            --text-faint: #746c5c;    /* 5.1:1 on --surface */
+            --text-ghost: #a39880;    /* decorative/placeholder only */
 
             /* brand colours */
             --primary: #3f6b4f;       /* green — primary actions, focus */
             --primary-dark: #2d5340;  /* hover */
             --primary-soft: #e6efe8;  /* chip/avatar focus background */
+            --on-primary: #ffffff;    /* text/glyphs on a --primary fill */
             --accent: #b0703c;        /* copper — active tab, sections, TODAY, minimap viewport */
             --danger: #a8574a;
             --warning: #d0a23c;       /* pending merge */
@@ -101,12 +102,13 @@
 
             --text: #e8e3d6;
             --text-light: #a89f8d;
-            --text-faint: #7d766a;
+            --text-faint: #9a927f;    /* 4.6:1 on dark --surface */
             --text-ghost: #6d675c;
 
             --primary: #6f9c7f;
             --primary-dark: #85b295;
             --primary-soft: #33403a;
+            --on-primary: #1c1a15;    /* dark ink on the lighter dark-mode green */
             --accent: #c98d59;
             --danger: #c97b6e;
             --warning: #d8b25e;
@@ -198,7 +200,7 @@
             border: none;
             border-radius: var(--r-md);
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
             font-size: 13px;
             cursor: pointer;
             transition: background 0.2s;
@@ -232,7 +234,7 @@
             justify-content: center;
             border-radius: 50%;
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
             border: none;
             cursor: pointer;
         }
@@ -279,7 +281,7 @@
         }
         /* Ghost pill (ZADANI §4): transparent fill, hairline border, --text.
            Scoped under .toolbar so it outranks the generic
-           ".toolbar button { background: var(--primary); color: white }" rule
+           ".toolbar button { background: var(--primary); color: var(--on-primary) }" rule
            that was painting it as a solid green pill. Token-driven so it works
            in both themes without a separate dark override. */
         .toolbar .tree-switcher-btn {
@@ -387,7 +389,7 @@
             padding: 0 5px;
             border-radius: 999px;
             background: var(--primary);
-            color: #fff;
+            color: var(--on-primary);
             font-size: 11px;
             font-weight: 600;
             display: inline-flex;
@@ -495,7 +497,7 @@
             display: flex; align-items: center; justify-content: center;
         }
         .search-filter-toggle svg { display: block; }
-        .search-filter-toggle.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .search-filter-toggle.active { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
         .search-filters {
             /* Absolutely positioned dropdown: the panel must NOT grow the
                search container in-flow — the fixed-height toolbar centers its
@@ -590,15 +592,44 @@
             stroke: var(--gen-rule);
             stroke-width: 1;
         }
-        #tree-lines text.gen-guide-label {
-            fill: var(--text-faint);
+        /* Sticky generation labels — an HTML overlay pinned to the left edge,
+           OUTSIDE the pan/zoom transform (the guide LINES stay in the SVG and
+           scroll). Positioned by src/ui/gen-labels.ts on every transform change. */
+        .gen-labels {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            opacity: 1;
+            transition: opacity 0.15s;
+            z-index: 4;
+        }
+        /* Dimmed while the tree is actively panning/zooming. */
+        .gen-labels.panning { opacity: 0.6; }
+        /* Left fade so the labels stay readable over cards behind them. */
+        .gen-labels::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; bottom: 0;
+            width: 150px;
+            background: linear-gradient(90deg, var(--bg) 55%, transparent);
+            pointer-events: none;
+        }
+        .gen-label {
+            position: absolute;
+            left: 20px;
+            transform: translateY(-50%);
+            white-space: nowrap;
             font-family: var(--font-sans);
             font-size: 11px;
             font-weight: 600;
             letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--text-faint);
             pointer-events: none;
             user-select: none;
         }
+        .gen-label-arrow { margin-right: 4px; font-weight: 700; }
 
         /* ==================== PERSON CARD ==================== */
         .person-card {
@@ -720,7 +751,7 @@
             cursor: pointer; font-size: 13px; padding: 6px 8px;
         }
         .tour-next {
-            border: none; background: var(--primary); color: #fff;
+            border: none; background: var(--primary); color: var(--on-primary);
             border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer;
         }
         @media (max-width: 500px) {
@@ -741,7 +772,7 @@
         }
         .tour-offer.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         .tour-offer-btn {
-            border: none; background: var(--primary); color: #fff;
+            border: none; background: var(--primary); color: var(--on-primary);
             border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
         }
         .tour-offer-close {
@@ -879,43 +910,73 @@
         /* Fonts scale naturally with zoom transform - no hiding needed */
 
         /* ==================== ADD BUTTONS ==================== */
+        /* Resting: an 18px circle on the card's edge. On hover the button grows
+           into a labelled pill (＋ parent / ＋ partner / ＋ child). It is
+           absolutely positioned with white-space: nowrap, so expanding never
+           reflows the card; a raised z-index keeps it above neighbours. */
         .add-btn {
             position: absolute;
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            border: none;
-            background: var(--primary);
-            color: white;
-            font-size: 16px;
-            font-weight: bold;
+            box-sizing: border-box;
+            height: 18px;
+            min-width: 18px;
+            border-radius: var(--r-pill);
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--primary);
+            font-family: var(--font-sans);
+            font-size: 12px;
+            font-weight: 600;
             cursor: pointer;
             display: none;
             align-items: center;
             justify-content: center;
+            padding: 0;
+            overflow: hidden;
+            white-space: nowrap;
+            box-shadow: var(--shadow-sm);
             z-index: 10;
             line-height: 1;
-            transition: transform 0.15s, background 0.15s;
+            transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s, padding 0.15s;
+        }
+        .add-btn-glyph {
+            font-size: 13px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        .add-btn-label {
+            display: inline-block;
+            max-width: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: max-width 0.15s, opacity 0.15s, margin-left 0.15s;
         }
         /* Hover-reveal only on devices with a real pointer. On touch, revealing
            content on :hover would swallow the first tap (iOS), breaking the
            "first tap opens the person menu" behavior. */
         @media (hover: hover) {
-            .person-card:hover .add-btn { display: flex; }
+            .person-card:hover .add-btn { display: inline-flex; }
         }
         .add-btn:hover {
-            background: var(--primary-dark);
-            transform: scale(1.15);
+            height: auto;
+            min-height: 18px;
+            background: var(--primary);
+            color: var(--on-primary);
+            border-color: var(--primary);
+            padding: 4px 12px 4px 8px;
+            box-shadow: 0 2px 8px rgba(63,107,79,0.3);
+            z-index: 30;
+        }
+        .add-btn:hover .add-btn-label {
+            max-width: 120px;
+            opacity: 1;
+            margin-left: 3px;
         }
 
-        .add-btn.top { top: -11px; left: 50%; transform: translateX(-50%); }
-        .add-btn.bottom { bottom: -11px; left: 50%; transform: translateX(-50%); }
-        .add-btn.left { left: -11px; top: 50%; transform: translateY(-50%); }
-        .add-btn.right { right: -11px; top: 50%; transform: translateY(-50%); }
-        .add-btn.top:hover { transform: translateX(-50%) scale(1.15); }
-        .add-btn.bottom:hover { transform: translateX(-50%) scale(1.15); }
-        .add-btn.left:hover { transform: translateY(-50%) scale(1.15); }
-        .add-btn.right:hover { transform: translateY(-50%) scale(1.15); }
+        .add-btn.top { top: -9px; left: 50%; transform: translateX(-50%); }
+        .add-btn.bottom { bottom: -9px; left: 50%; transform: translateX(-50%); }
+        /* Right tab pins its left edge near the card's right edge, so the pill
+           grows away from the card (rightward) rather than over it. */
+        .add-btn.right { left: 100%; top: 50%; transform: translate(-9px, -50%); }
 
         /* ==================== MODAL ==================== */
         .modal-overlay {
@@ -1541,7 +1602,7 @@
         [data-theme="dark"] .merge-tabs .merge-tab.active {
             background: var(--primary);
             border-color: var(--primary);
-            color: white;
+            color: var(--on-primary);
         }
         [data-theme="dark"] .merge-item {
             border-bottom-color: #444;
@@ -1593,7 +1654,7 @@
         }
         [data-theme="dark"] .merge-wizard-steps span.active {
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
         }
         [data-theme="dark"] .merge-manual-person {
             background: #3a3a3a;
@@ -1663,7 +1724,7 @@
         #toggle-link-mode.active {
             background: var(--primary);
             border-color: var(--primary);
-            color: white;
+            color: var(--on-primary);
         }
         .close-btn {
             width: 32px;
@@ -1867,7 +1928,7 @@
         }
         .rel-link-icon:hover {
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
         }
 
         /* Hidden relationship indicators - above card on left side (mirror of branch tabs on right) */
@@ -1919,24 +1980,35 @@
             bottom: 100%;
             left: 50%;
             transform: translateX(-50%);
-            margin-bottom: 4px;
-            background: rgba(0,0,0,0.85);
-            border: none;
-            border-radius: 6px;
-            padding: 8px 10px;
+            margin-bottom: 8px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
             min-width: 150px;
             max-width: 240px;
-            box-shadow: var(--shadow-sm);
-            font-size: 11px;
+            box-shadow: var(--shadow-lg);
+            font-family: var(--font-sans);
+            font-size: 12px;
             font-weight: normal;
-            color: #f0f0f0;
+            color: var(--text-light);
             text-align: left;
             white-space: normal;
             z-index: 9999;
         }
-        [data-theme="dark"] .badge-tooltip {
-            background: rgba(240,240,240,0.92);
-            color: #1a1a1a;
+        .badge-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            width: 8px;
+            height: 8px;
+            margin-left: -4px;
+            margin-top: -5px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            transform: rotate(45deg);
         }
         .hidden-partners-btn:hover .badge-tooltip,
         .hidden-families-btn:hover .badge-tooltip,
@@ -1945,32 +2017,30 @@
         }
         .badge-tooltip-header {
             font-weight: 600;
-            margin-bottom: 4px;
-            color: #bbb;
-        }
-        [data-theme="dark"] .badge-tooltip-header {
-            color: #666;
+            font-size: 10.5px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            color: var(--accent);
         }
         .badge-tooltip-item {
-            padding: 2px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.15);
-            line-height: 1.3;
-        }
-        [data-theme="dark"] .badge-tooltip-item {
-            border-bottom-color: rgba(0,0,0,0.1);
+            padding: 4px 0;
+            border-bottom: 1px solid var(--divider);
+            line-height: 1.4;
         }
         .badge-tooltip-item:last-child {
             border-bottom: none;
         }
         .badge-tooltip-name {
-            font-weight: 500;
+            font-family: var(--font-serif);
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
         }
         .badge-tooltip-detail {
-            color: #aaa;
-            font-size: 10px;
-        }
-        [data-theme="dark"] .badge-tooltip-detail {
-            color: #666;
+            color: var(--text-faint);
+            font-size: 11px;
+            font-variant-numeric: tabular-nums;
         }
 
         /* ==================== CROSS-TREE BADGE ==================== */
@@ -2009,64 +2079,67 @@
             bottom: 100%;
             right: 50%;
             transform: translateX(50%);
-            margin-bottom: 4px;
-            background: rgba(0,0,0,0.85);
-            border: none;
-            border-radius: 6px;
-            padding: 8px 10px;
+            margin-bottom: 8px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
             min-width: 150px;
             max-width: 220px;
-            box-shadow: var(--shadow-sm);
-            font-size: 11px;
+            box-shadow: var(--shadow-lg);
+            font-family: var(--font-sans);
+            font-size: 12px;
             font-weight: normal;
-            color: #f0f0f0;
+            color: var(--text-light);
             text-align: left;
             white-space: normal;
             z-index: 9999;
         }
-        [data-theme="dark"] .cross-tree-badge .cross-tree-tooltip {
-            background: rgba(240,240,240,0.92);
-            color: #1a1a1a;
+        .cross-tree-badge .cross-tree-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            width: 8px;
+            height: 8px;
+            margin-left: -4px;
+            margin-top: -5px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            transform: rotate(45deg);
         }
         .cross-tree-badge:hover .cross-tree-tooltip {
             display: block;
         }
         .cross-tree-tooltip-header {
             font-weight: 600;
-            margin-bottom: 4px;
-            color: #bbb;
-        }
-        [data-theme="dark"] .cross-tree-tooltip-header {
-            color: #666;
+            font-size: 10.5px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            color: var(--accent);
         }
         .cross-tree-tooltip-item {
-            padding: 2px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.15);
-        }
-        [data-theme="dark"] .cross-tree-tooltip-item {
-            border-bottom-color: rgba(0,0,0,0.1);
+            padding: 4px 0;
+            border-bottom: 1px solid var(--divider);
         }
         .cross-tree-tooltip-item:last-child {
             border-bottom: none;
         }
         .cross-tree-tooltip-tree {
-            font-weight: 500;
+            font-weight: 600;
+            color: var(--text);
         }
         .cross-tree-tooltip-person {
-            color: #aaa;
-            font-size: 10px;
-        }
-        [data-theme="dark"] .cross-tree-tooltip-person {
-            color: #666;
+            color: var(--text-faint);
+            font-size: 11px;
         }
         .cross-tree-tooltip-hint {
             margin-top: 6px;
-            font-size: 10px;
-            color: #aaa;
+            font-size: 11px;
+            color: var(--text-faint);
             font-style: italic;
-        }
-        [data-theme="dark"] .cross-tree-tooltip-hint {
-            color: #666;
         }
 
         /* Cross-tree chooser: floating menu shown when a badge has >1 match.
@@ -2330,7 +2403,7 @@
             font-size: 13px; cursor: pointer;
         }
         .modal button.surname-chip.picked {
-            background: var(--primary, #4a7c59); border-color: var(--primary, #4a7c59); color: #fff;
+            background: var(--primary, #4a7c59); border-color: var(--primary, #4a7c59); color: var(--on-primary);
         }
         .surname-chip-count { font-size: 11px; opacity: 0.7; }
         .surnames-add-row { display: flex; gap: 6px; margin-bottom: 10px; }
@@ -2428,7 +2501,7 @@
             text-align: left;
             cursor: pointer;
         }
-        .place-candidate:hover { background: var(--primary, #4a7c59); color: #fff; }
+        .place-candidate:hover { background: var(--primary, #4a7c59); color: var(--on-primary); }
         .map-popup-fix {
             width: 100%;
             margin-top: 10px;
@@ -2484,7 +2557,7 @@
             line-height: 1;
             white-space: nowrap;
         }
-        .participant-btn.linked { background: var(--primary, #4a7c59); color: #fff; }
+        .participant-btn.linked { background: var(--primary, #4a7c59); color: var(--on-primary); }
         /* Mobile: one field per line beats five squeezed into 300px. */
         @media (max-width: 500px) {
             .participant-row {
@@ -2578,7 +2651,7 @@
         }
         .modal button.primary {
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
         }
         .modal button.primary:hover { background: var(--primary-dark); }
         .modal button.secondary {
@@ -2718,7 +2791,7 @@
             transition: background 0.15s, color 0.15s;
         }
         .segment-btn + .segment-btn { border-left: 1px solid var(--border); }
-        .segment-btn.active { background: var(--primary); color: #fff; }
+        .segment-btn.active { background: var(--primary); color: var(--on-primary); }
         .segment-btn:disabled { cursor: default; opacity: 0.6; }
 
         .pm-date-hint {
@@ -2856,7 +2929,7 @@
             border: 1px solid transparent;
             border-radius: var(--r-md);
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
             font-size: 15px;
             cursor: pointer;
             transition: all 0.2s;
@@ -2935,7 +3008,7 @@
             left: 0;
             right: 0;
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
             padding: 12px 20px;
             display: none;
             align-items: center;
@@ -3177,7 +3250,7 @@
             display: inline-block;
             padding: 10px 16px;
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
             border-radius: 6px;
             text-decoration: none;
             font-size: 14px;
@@ -3283,7 +3356,7 @@
         }
         .zoom-controls button:active {
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
         }
 
         /* Overview minimap (top of the control block). */
@@ -3482,7 +3555,7 @@
         }
         .pwa-update.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         .pwa-update-btn {
-            border: none; background: var(--primary); color: #fff;
+            border: none; background: var(--primary); color: var(--on-primary);
             border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
         }
         .pwa-update-close {
@@ -3519,7 +3592,7 @@
         .family-offer.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         .family-offer button { pointer-events: auto; }
         .family-offer-btn {
-            border: none; background: var(--primary); color: #fff;
+            border: none; background: var(--primary); color: var(--on-primary);
             border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
         }
         .family-offer-close {
@@ -3695,7 +3768,7 @@
             border-radius: 999px;
             border: 2px solid #fff;
             background: var(--primary, #4a7c59);
-            color: #fff;
+            color: var(--on-primary);
             font-size: 12px;
             font-weight: 600;
             box-shadow: var(--shadow-sm);
@@ -3750,7 +3823,7 @@
             color: var(--text-color, #222);
             font-size: 13px;
         }
-        .map-scope button.active { background: var(--primary, #4a7c59); color: #fff; }
+        .map-scope button.active { background: var(--primary, #4a7c59); color: var(--on-primary); }
         /* One-time notice shown instead of the map (tiles come from OSM). */
         .map-tiles-notice {
             position: absolute;
@@ -3837,7 +3910,7 @@
             font-size: 12px;
             cursor: pointer;
         }
-        .map-popup-person:hover { background: var(--primary, #4a7c59); color: #fff; }
+        .map-popup-person:hover { background: var(--primary, #4a7c59); color: var(--on-primary); }
 
         /* Tablet: the map is the whole screen, so keep chrome smaller. */
         @media (max-width: 900px) {
@@ -3989,7 +4062,7 @@
             padding: 1px 7px;
             border-radius: var(--r-pill);
             background: var(--primary);
-            color: #fff;
+            color: var(--on-primary);
             font-family: var(--font-sans);
             font-size: 10px;
             font-weight: 600;
@@ -4095,7 +4168,7 @@
             border: none;
             border-radius: 6px;
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
             font-size: 13px;
             cursor: pointer;
             transition: background 0.2s;
@@ -4387,7 +4460,7 @@
         .descendants-badge {
             position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 90;
             display: flex; align-items: center; gap: 10px;
-            background: var(--primary); color: #fff;
+            background: var(--primary); color: var(--on-primary);
             padding: 6px 8px 6px 14px; border-radius: 999px; box-shadow: var(--shadow-sm);
             font-size: 13px; max-width: 90vw;
         }
@@ -4612,7 +4685,7 @@
             width: 56px; height: 56px; align-self: center;
             margin: 0 4px;
             border: none; border-radius: 50%;
-            background: var(--primary); color: #fff;
+            background: var(--primary); color: var(--on-primary);
             box-shadow: var(--shadow-lg);
             cursor: pointer;
             display: flex; align-items: center; justify-content: center;
@@ -4792,7 +4865,7 @@
         .merge-tab.active {
             background: var(--primary);
             border-color: var(--primary);
-            color: white;
+            color: var(--on-primary);
         }
         .tab-count {
             display: inline-block;
@@ -4863,7 +4936,7 @@
         }
         .merge-item-status.new {
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
         }
         .merge-item-status.pending {
             background: #ffa000;
@@ -5309,7 +5382,7 @@
         }
         .merge-step.active {
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
         }
         .merge-step.complete {
             background: transparent;
@@ -5409,7 +5482,7 @@
         .tree-badge.active-badge {
             background: var(--primary);
             border-color: var(--primary);
-            color: #fff;
+            color: var(--on-primary);
         }
         .tree-manager-item-name.clickable { cursor: pointer; }
         .tree-manager-item-name.clickable:hover { color: var(--primary); text-decoration: underline; }
@@ -5420,7 +5493,7 @@
         }
         .tree-open-btn {
             background: var(--primary) !important;
-            color: #fff !important;
+            color: var(--on-primary) !important;
             border-color: var(--primary) !important;
             font-weight: 600;
             padding: 6px 14px !important;
@@ -5969,7 +6042,7 @@
         }
         .validation-fix-btn:hover {
             background: var(--primary);
-            color: #fff;
+            color: var(--on-primary);
         }
         .validation-fix-all-btn {
             padding: 4px 12px;
@@ -5977,7 +6050,7 @@
             font-weight: 500;
             border: 1px solid var(--primary);
             background: var(--primary);
-            color: #fff;
+            color: var(--on-primary);
             border-radius: 6px;
             cursor: pointer;
             white-space: nowrap;
@@ -6243,7 +6316,7 @@
         }
         .tree-preview-zoom-btn:hover {
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
         }
         .tree-preview-zoom-btn:active {
             transform: scale(0.95);
@@ -6513,7 +6586,7 @@
         }
         .btn-resume {
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
         }
         .btn-resume:hover {
             background: var(--primary-dark);
@@ -7140,7 +7213,7 @@
         }
         .debug-step-badge {
             background: var(--primary);
-            color: white;
+            color: var(--on-primary);
             padding: 6px 12px;
             border-radius: 6px;
             font-weight: 500;
@@ -7421,25 +7494,42 @@
         [data-theme="dark"] .duplicate-suggest-item button { background: #2a2a2a; border-color: #555; }
 
         /* Card tooltip */
+        /* Unified hover-tooltip surface (shared with .badge-tooltip and
+           .cross-tree-tooltip): parchment surface, hairline border, one arrow.
+           Theme is carried entirely by tokens — no dark-mode override needed. */
         .card-tooltip {
             display: none;
             position: absolute;
             bottom: calc(100% + 30px);
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0,0,0,0.85);
-            color: #f0f0f0;
-            padding: 6px 10px;
-            border-radius: 6px;
-            font-size: 11px;
-            line-height: 1.4;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text-light);
+            padding: 10px 14px;
+            border-radius: 8px;
+            box-shadow: var(--shadow-lg);
+            font-family: var(--font-sans);
+            font-size: 12px;
+            line-height: 1.5;
+            font-variant-numeric: tabular-nums;
             white-space: nowrap;
             z-index: 1000;
             pointer-events: none;
         }
-        [data-theme="dark"] .card-tooltip {
-            background: rgba(240,240,240,0.92);
-            color: #1a1a1a;
+        .card-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            width: 8px;
+            height: 8px;
+            margin-left: -4px;
+            margin-top: -5px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            transform: rotate(45deg);
         }
         @media (hover: hover) {
             .person-card:hover .card-tooltip { display: block; }
@@ -7459,7 +7549,7 @@
             .hidden-partners-btn, .hidden-families-btn,
             .cross-tree-badge, .branch-tab, .badge-tooltip,
             .card-tooltip, .collapse-chain-btn, .fan-controls,
-            .tree-tabs, .tree-legend, #empty-state { display: none !important; }
+            .tree-tabs, .tree-legend, .gen-labels, #empty-state { display: none !important; }
 
             /* Fan chart prints as-is (its container scrolls on screen only) */
             .fan-container { position: relative !important; overflow: visible !important; }
@@ -7679,6 +7769,9 @@
         <div id="tree-canvas">
             <svg id="tree-lines"></svg>
         </div>
+        <!-- Sticky generation labels: fixed to the left edge, outside the
+             pan/zoom transform. Populated + projected by src/ui/gen-labels.ts. -->
+        <div id="gen-labels" class="gen-labels" aria-hidden="true"></div>
         <div id="timeline-container" class="timeline-container"></div>
         <div id="map-container" class="map-container"></div>
         <div id="fan-container" class="fan-container">
@@ -8231,6 +8324,15 @@
                     <label class="settings-checkbox">
                         <input type="checkbox" id="minimap-toggle" onchange="window.Strom.UI.toggleMinimap(this.checked)">
                         <span data-i18n="minimap.settingHint"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <label class="settings-label" data-i18n="genLabels.settingLabel"></label>
+                <div class="settings-options">
+                    <label class="settings-checkbox">
+                        <input type="checkbox" id="gen-labels-toggle" onchange="window.Strom.UI.toggleGenLabels(this.checked)">
+                        <span data-i18n="genLabels.settingHint"></span>
                     </label>
                 </div>
             </div>

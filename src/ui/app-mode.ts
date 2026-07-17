@@ -666,6 +666,11 @@ export const appModeMethods = uiModule({
         this.updateMinimap();
     },
 
+    toggleGenLabels(enabled: boolean): void {
+        SettingsManager.setGenLabels(enabled);
+        this.updateGenLabels();
+    },
+
     toggleZoomControls(enabled: boolean): void {
         SettingsManager.setZoomControls(enabled);
         this.updateViewModeUI(); // owns the zoom-controls visibility

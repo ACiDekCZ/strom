@@ -5,7 +5,7 @@
 
 import { DataManager, auditPersonName } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
-import { TreeRenderer } from '../renderer.js';
+import { TreeRenderer, GenerationBand } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { TreePreview, TreeCompare } from '../tree-preview.js';
 import {
@@ -70,6 +70,7 @@ import { exportImageMethods } from './export-image-ui.js';
 import { bookUiMethods } from './book-ui.js';
 import { snapshotsUiMethods } from './snapshots-ui.js';
 import { minimapMethods, MinimapTransform, WorldBox } from './minimap.js';
+import { genLabelsMethods } from './gen-labels.js';
 import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { slideshowMethods } from './slideshow.js';
 import { mapMethods, MapScope } from './map-ui.js';
@@ -240,6 +241,10 @@ export class UIClass {
     minimapBox: WorldBox | null = null;
     minimapDragging = false;
     minimapViewportTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Sticky generation labels: live row elements + the "stopped panning" timer.
+    genLabelEls: { row: HTMLElement; text: HTMLElement; arrow: HTMLElement; band: GenerationBand }[] = [];
+    genLabelsPanTimer: ReturnType<typeof setTimeout> | null = null;
 }
 
 // ---- Module composition ----
@@ -342,6 +347,10 @@ Object.assign(UIClass.prototype, snapshotsUiMethods);
 type MinimapMethods = typeof minimapMethods;
 export interface UIClass extends MinimapMethods {}
 Object.assign(UIClass.prototype, minimapMethods);
+
+type GenLabelsMethods = typeof genLabelsMethods;
+export interface UIClass extends GenLabelsMethods {}
+Object.assign(UIClass.prototype, genLabelsMethods);
 
 type AnniversariesUiMethods = typeof anniversariesUiMethods;
 export interface UIClass extends AnniversariesUiMethods {}

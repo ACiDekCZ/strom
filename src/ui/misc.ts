@@ -251,6 +251,9 @@ export const miscMethods = uiModule({
         const minimapToggle = document.getElementById('minimap-toggle') as HTMLInputElement | null;
         if (minimapToggle) minimapToggle.checked = SettingsManager.isMinimapEnabled();
 
+        const genLabelsToggle = document.getElementById('gen-labels-toggle') as HTMLInputElement | null;
+        if (genLabelsToggle) genLabelsToggle.checked = SettingsManager.isGenLabelsEnabled();
+
         const zoomControlsToggle = document.getElementById('zoom-controls-toggle') as HTMLInputElement | null;
         if (zoomControlsToggle) zoomControlsToggle.checked = SettingsManager.isZoomControlsEnabled();
 

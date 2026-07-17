@@ -288,6 +288,12 @@ const stringsEN = {
         settingHint: 'Show an overview minimap for large trees',
     },
 
+    // Sticky generation labels
+    genLabels: {
+        settingLabel: 'Generation labels',
+        settingHint: 'Pin generation names to the left edge of the canvas',
+    },
+
     // Branch colour coding
     branchColors: {
         settingLabel: 'Branch colours',
@@ -695,6 +701,10 @@ const stringsEN = {
     // Buttons
     card: {
         focusBadge: 'FOCUS',
+        // Short one-word labels for the hover add-tab pills.
+        addTabParent: 'parent',
+        addTabPartner: 'partner',
+        addTabChild: 'child',
     },
     buttons: {
         save: 'Save',
@@ -1864,6 +1874,12 @@ const stringsCZ: StringsType = {
         settingHint: 'Zobrazovat přehledovou minimapu u velkých stromů',
     },
 
+    // Sticky generation labels
+    genLabels: {
+        settingLabel: 'Popisky generací',
+        settingHint: 'Připnout názvy generací k levému okraji plátna',
+    },
+
     // Branch colour coding
     branchColors: {
         settingLabel: 'Barvy větví',
@@ -2272,6 +2288,10 @@ const stringsCZ: StringsType = {
     // Buttons
     card: {
         focusBadge: 'FOKUS',
+        // Short one-word labels for the hover add-tab pills.
+        addTabParent: 'rodič',
+        addTabPartner: 'partner',
+        addTabChild: 'dítě',
     },
     buttons: {
         save: 'Uložit',

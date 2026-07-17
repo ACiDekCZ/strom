@@ -195,6 +195,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Overview minimap (wires ZoomPan.onChange + canvas handlers)
     UI.initMinimap();
 
+    // Sticky generation labels (wires ZoomPan.onChange + resize)
+    UI.initGenLabels();
+
     // Set up TreeRenderer getter for ZoomPan (for centering on reset)
     setTreeRendererGetter(() => TreeRenderer);
 

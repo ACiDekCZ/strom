@@ -93,6 +93,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Sticky generation labels default ON (undefined = enabled). */
+    isGenLabelsEnabled(): boolean {
+        return this.settings.genLabels !== false;
+    }
+
+    setGenLabels(enabled: boolean): void {
+        this.settings.genLabels = enabled;
+        this.save();
+    }
+
     /** Floating zoom buttons default ON (undefined = enabled). */
     /**
      * Has the user allowed the map to look place names up online? Default is
