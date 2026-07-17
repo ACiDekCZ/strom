@@ -636,13 +636,18 @@
             position: absolute;
             background: var(--surface);
             border-radius: var(--r-lg);
-            padding: 0 12px;
-            width: 172px;
+            /* 188x64 box. Text column = 188 - 2(border) - 18(padding) - 34(avatar)
+               - 8(gap) = 126px, which fits the acceptance name "Kateřina Výšková"
+               (125.75px at 15px Source Serif) unshrunk. The spec's 125px figure
+               omitted the 1px border; padding 9px reclaims it and the 8px gap
+               clears the last sub-pixel. */
+            padding: 0 9px;
+            width: 188px;
             height: 64px;
             box-sizing: border-box;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             text-align: left;
             box-shadow: var(--shadow-sm);
             cursor: pointer;
@@ -796,8 +801,8 @@
            Gender colours the 2px ring; the disc itself is the neutral --avatar-bg. */
         .card-avatar {
             flex: 0 0 auto;
-            width: 38px;
-            height: 38px;
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
             overflow: hidden;
             background: var(--avatar-bg);
@@ -817,7 +822,7 @@
         }
         .avatar-initials {
             font-family: var(--font-serif);
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 600;
             line-height: 1;
             color: var(--text-light);
@@ -876,8 +881,11 @@
             color: var(--primary, #4a7c59); font: inherit; text-decoration: underline;
         }
 
-        /* Row 1: full name, Source Serif 15px/600. Never shrunk — overflow
-           ellipsizes (the old fit-tight/fit-tighter mechanism was removed). */
+        /* Row 1: full name, Source Serif 15px/600. Staged fitting (JS measures
+           once per render, see fitCardNames): step 0 = 15px; step 1 shrinks to
+           14 then 13px (floor); step 2 breaks the name over two 12.5px lines and
+           shortens the meta to years only; step 3 (last resort) ellipsizes the
+           surname line. The full name always stays in the title/tooltip. */
         .person-card .name {
             max-width: 100%;
             min-width: 0;
@@ -888,6 +896,23 @@
             font-size: 15px;
             line-height: 1.15;
             color: var(--text);
+            display: block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+        /* Step 1: single-line font shrink. Floor is 13px — never smaller. */
+        .person-card .name.name-fit-1 .name-text { font-size: 14px; }
+        .person-card .name.name-fit-13 .name-text { font-size: 13px; }
+        /* Step 2: two lines (given name / surname), 12.5px. Each line clips and,
+           when it alone overflows, ellipsizes (step 3). */
+        .person-card .name.name-fit-2lines .name-text {
+            white-space: normal;
+            font-size: 12.5px;
+            line-height: 1.15;
+        }
+        .person-card .name.name-fit-2lines .name-line {
             display: block;
             white-space: nowrap;
             overflow: hidden;
@@ -905,6 +930,9 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        /* Meta shrinks to 10.5px (years only) when the name goes two-line, so
+           both rows still fit the unchanged 64px card. */
+        .person-card .birth-date.meta-short { font-size: 10.5px; }
 
         /* ==================== ZOOM-LEVEL RESPONSIVE ==================== */
         /* Fonts scale naturally with zoom transform - no hiding needed */
@@ -1539,27 +1567,8 @@
             flex: 1; justify-content: center;
             background: var(--surface-2); border-radius: var(--r-md);
         }
-        /* Dark mode: branch tabs */
-        [data-theme="dark"] .branch-tabs button {
-            background: #3a3a3a;
-            border-color: #555;
-            color: var(--text);
-        }
-        [data-theme="dark"] .branch-tabs button:hover {
-            background: #444;
-        }
-        [data-theme="dark"] .branch-tabs button.active {
-            background: var(--primary);
-            border-color: var(--primary);
-        }
-        /* Dark mode: hidden partners indicator */
-        [data-theme="dark"] .hidden-partners {
-            background: #444;
-            color: var(--text-light);
-        }
-        [data-theme="dark"] .hidden-partners:hover {
-            background: #555;
-        }
+        /* Card nav pills are theme-aware by token (var(--surface)/--border/
+           --accent/--text-light) — no dark-mode overrides needed. */
         /* Dark mode: relationships panel */
         [data-theme="dark"] .relationships-panel {
             background: var(--card-bg);
@@ -1931,46 +1940,72 @@
             color: var(--on-primary);
         }
 
-        /* Hidden relationship indicators - above card on left side (mirror of branch tabs on right) */
+        /* Hidden relationship indicators (∞ partners, ⌂ families) — bottom-left
+           of the card, opposite the cross-tree badge on the bottom-right. */
         .hidden-indicators {
             position: absolute;
-            top: -22px;
-            left: 25%;
-            transform: translateX(-50%);
+            bottom: -22px;
+            left: 12px;
             display: flex;
             gap: 4px;
             z-index: 5;
         }
+        /* ==================== CARD NAV PILLS ==================== */
+        /* One pill shape for every card-edge affordance: branch tabs (hidden
+           parents/siblings/children), hidden partners (∞), hidden families (⌂)
+           and the cross-tree badge (⇄). A copper glyph plus a small count or
+           label on the neutral surface — no Material colours, theme-aware by
+           token in both light and dark. */
+        .branch-tab,
         .hidden-partners-btn,
-        .hidden-families-btn {
-            min-width: 24px;
-            height: 16px;
-            padding: 0 6px;
-            border: none;
-            border-radius: 8px;
-            color: white;
-            font-size: 9px;
-            font-weight: bold;
+        .hidden-families-btn,
+        .cross-tree-badge {
+            height: 18px;
+            box-sizing: border-box;
+            padding: 0 7px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--surface);
+            box-shadow: var(--shadow-sm);
+            color: var(--text-light);
+            font-family: var(--font-sans);
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1;
             cursor: pointer;
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            justify-content: center;
-            transition: all 0.15s;
-            line-height: 16px;
+            gap: 3px;
+            white-space: nowrap;
+            transition: transform 0.15s, background 0.15s, border-color 0.15s;
         }
-        .hidden-partners-btn {
-            background: #ff9800;
-        }
-        .hidden-partners-btn:hover {
-            background: #f57c00;
-            transform: translateY(-2px);
-        }
-        .hidden-families-btn {
-            background: #9c27b0;
-        }
+        .branch-tab:hover,
+        .hidden-partners-btn:hover,
         .hidden-families-btn:hover {
-            background: #7b1fa2;
-            transform: translateY(-2px);
+            transform: translateY(-1px);
+        }
+        .branch-tab .pill-glyph,
+        .hidden-partners-btn .pill-glyph,
+        .hidden-families-btn .pill-glyph,
+        .cross-tree-badge .pill-glyph {
+            color: var(--accent);
+            font-size: 11px;
+            line-height: 1;
+        }
+        .pill-count,
+        .pill-text {
+            color: var(--text-light);
+            font-size: 10px;
+            font-weight: 600;
+        }
+        /* Active branch tab: a filled primary pill, no copper glyph. */
+        .branch-tab.active {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+        .branch-tab.active .pill-glyph,
+        .branch-tab.active .pill-text {
+            color: var(--on-primary);
         }
 
         /* Shared badge tooltip (used by hidden-partners, hidden-families, branch-tab ◆) */
@@ -2045,21 +2080,15 @@
 
         /* ==================== CROSS-TREE BADGE ==================== */
         /* Badge showing person exists in other trees - positioned below card */
+        /* Cross-tree badge inherits the unified pill shape above; here only its
+           position (below the card, right side) and the fade-in animation. */
         .cross-tree-badge {
             position: absolute;
             bottom: -22px;
             right: 25%;
             transform: translateX(50%);
-            background: #4caf50;
-            color: white;
-            font-size: 10px;
-            font-weight: bold;
-            padding: 2px 6px;
-            border-radius: 10px;
-            cursor: pointer;
             opacity: 0;
             animation: crossTreeFadeIn 0.3s ease forwards;
-            transition: transform 0.15s, background 0.15s;
             z-index: 5;
         }
         @keyframes crossTreeFadeIn {
@@ -2067,8 +2096,7 @@
             to { opacity: 1; transform: translateX(50%) scale(1); }
         }
         .cross-tree-badge:hover {
-            background: #388e3c;
-            transform: translateX(50%) scale(1.1);
+            transform: translateX(50%) translateY(-1px);
             z-index: 9999;
         }
 
@@ -2209,61 +2237,20 @@
         }
 
         /* ==================== BRANCH TABS (ouška) ==================== */
-        /* Small tabs above person card for navigating between family contexts */
+        /* Branch-navigation pills, top-right of the card (the top centre stays
+           free for the "+" generation tab). Shape comes from the unified pill
+           rules above; here only the group's placement. */
         .branch-tabs {
             position: absolute;
             top: -22px;
-            left: 75%;
-            transform: translateX(-50%);
+            right: 12px;
             display: flex;
             gap: 4px;
             z-index: 5;
         }
-        .branch-tab {
-            min-width: 24px;
-            height: 16px;
-            border: none;
-            border-radius: 8px;
-            background: #b0bec5;
-            cursor: pointer;
-            transition: all 0.15s;
-            font-size: 9px;
-            padding: 0 6px;
-            color: #555;
-            line-height: 16px;
-            letter-spacing: 1px;
-        }
-        .branch-tab:hover {
-            background: #bbb;
-            transform: translateY(-2px);
-        }
-        .branch-tab.active {
-            background: var(--primary);
-        }
         .branch-tab.active:hover {
             background: var(--primary-dark);
-        }
-        /* Left tab = navigate to parents (birth family) */
-        .branch-tab.tab-parents {
-            background: #b0bec5;
-        }
-        .branch-tab.tab-parents:hover {
-            background: #90a4ae;
-        }
-        /* Right tab = navigate to own family (current view when focused on this person) */
-        .branch-tab.tab-family {
-            background: #b0bec5;
-        }
-        .branch-tab.tab-family:hover {
-            background: #90a4ae;
-        }
-        .branch-tab.tab-family.active {
-            background: var(--primary);
-        }
-        /* Branch tabs are always visible (no hover needed) */
-        /* Tooltip for branch tabs */
-        .branch-tab[title] {
-            position: relative;
+            border-color: var(--primary-dark);
         }
 
         .modal .form-group { margin-bottom: 16px; }
@@ -4048,6 +4035,12 @@
         .person-card.focused {
             border-color: var(--primary);
             border-width: 2px;
+            /* The 2px focus border sits INSIDE the same box (box-sizing:
+               border-box), so the outer 188x64 never changes. Trim 1px of
+               horizontal padding (9->8) so the text column keeps the exact
+               126px width it has on a normal card — focus must not reflow the
+               name. */
+            padding: 0 8px;
             box-shadow: var(--shadow-focus);
             transform: scale(1.05);
         }
@@ -4770,7 +4763,7 @@
             color: var(--primary);
         }
         .gedcom-stats .number.skipped {
-            color: #ff9800;
+            color: var(--warning);
         }
         .gedcom-stats .label {
             font-size: 12px;
@@ -4836,10 +4829,10 @@
             font-weight: 600;
         }
         .merge-stat.highlight .merge-stat-value {
-            color: #4caf50;
+            color: var(--primary);
         }
         .merge-stat.warning .merge-stat-value {
-            color: #ff9800;
+            color: var(--warning);
         }
         .merge-stat.new .merge-stat-value {
             color: var(--primary);
@@ -4927,7 +4920,7 @@
             flex-shrink: 0;
         }
         .merge-item-status.confirmed {
-            background: #4caf50;
+            background: var(--primary);
             color: white;
         }
         .merge-item-status.rejected {
@@ -4986,7 +4979,7 @@
             color: var(--primary);
         }
         .conflict-indicator {
-            color: #ff9800;
+            color: var(--warning);
             font-size: 14px;
         }
         .merge-item-conflicts {
@@ -5020,8 +5013,8 @@
             border-color: var(--primary);
         }
         .merge-btn-confirm.active {
-            background: #4caf50;
-            border-color: #4caf50;
+            background: var(--primary);
+            border-color: var(--primary);
             color: white;
         }
         .merge-btn-reject.active {
@@ -5324,7 +5317,7 @@
             color: #e53935;
         }
         .validation-section-title.warnings {
-            color: #ff9800;
+            color: var(--warning);
         }
         .validation-item {
             padding: 6px 12px;
@@ -5386,8 +5379,8 @@
         }
         .merge-step.complete {
             background: transparent;
-            border: 1px solid #4caf50;
-            color: #4caf50;
+            border: 1px solid var(--primary);
+            color: var(--primary);
             padding: 5px 11px;
         }
         .merge-step.complete::before { content: '✓ '; }
@@ -5406,7 +5399,7 @@
         /* Merge resolve button */
         .merge-btn-resolve {
             background: #fff3e0 !important;
-            border-color: #ff9800 !important;
+            border-color: var(--warning) !important;
             color: #ef6c00 !important;
         }
         .merge-btn-resolve:hover {

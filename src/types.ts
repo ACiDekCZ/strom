@@ -414,16 +414,21 @@ export const CARD_SIZE: Record<CardDensity, Pick<LayoutConfig, 'cardWidth' | 'ca
     // narrower; detailed keeps the extra occupation/age lines, so it is taller.
     // MUST match the CSS for .person-card at each density.
     compact: { cardWidth: 150, cardHeight: 44 },
-    normal: { cardWidth: 172, cardHeight: 64 },
+    normal: { cardWidth: 188, cardHeight: 64 },
     detailed: { cardWidth: 200, cardHeight: 100 },
 };
 
 export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
-    cardWidth: 172,
+    cardWidth: 188,
     cardHeight: 64,
-    horizontalGap: 15,
+    horizontalGap: 31,
     verticalGap: 80,
-    partnerGap: 12,
+    // Kept comfortably above horizontalGap/2 (the overlap-check minGap): the
+    // +16 horizontalGap bump for the 188px card pushed minGap to 15.5. Couples
+    // sit partnerGap apart and V-fan ancestor trees lean to ~partnerGap-1.5 at
+    // their inner leaves, so 18 keeps every partner/inner-leaf pair a real,
+    // valid distance apart.
+    partnerGap: 18,
     padding: 50,
     minEdgeClearance: 14
 };

@@ -275,6 +275,8 @@ class TreeRendererClass {
         await this.renderCards(canvas);
         this.renderLines(svg);
         this.updateSVGSize(svg);
+        // Fit long names once, after the cards are in the DOM and measurable.
+        requestAnimationFrame(() => this.fitCardNames(canvas));
 
         // Update focus UI (shows panel with focused person name, generation controls)
         this.updateFocusUI();
@@ -1046,7 +1048,7 @@ class TreeRendererClass {
                         const year = p.birthDate ? p.birthDate.split('-')[0] : '';
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
                     }).join('');
-                    html += `<button class="branch-tab" data-action="focus-parent">▲<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenParentsTooltip}</div>${parentItems}</div></button>`;
+                    html += `<button class="branch-tab" data-action="focus-parent"><span class="pill-glyph">◂</span><span class="pill-text">${strings.focus.branchTabParents}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenParentsTooltip}</div>${parentItems}</div></button>`;
                 }
                 if (hasHiddenSiblings) {
                     const hiddenSiblings = siblings.filter(s => !this.positions.has(s.id));
@@ -1055,7 +1057,7 @@ class TreeRendererClass {
                         const year = s.birthDate ? s.birthDate.split('-')[0] : '';
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
                     }).join('');
-                    html += `<button class="branch-tab" data-action="focus-sibling">◆<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${siblingItems}</div></button>`;
+                    html += `<button class="branch-tab" data-action="focus-sibling"><span class="pill-glyph">◆</span><span class="pill-text">${strings.focus.branchTabSiblings}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${siblingItems}</div></button>`;
                 }
                 if (hasHiddenChildren) {
                     const hiddenChildren = person.childIds
@@ -1067,7 +1069,7 @@ class TreeRendererClass {
                         const year = c.birthDate ? c.birthDate.split('-')[0] : '';
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
                     }).join('');
-                    html += `<button class="branch-tab" data-action="focus-child">▼<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenChildrenTooltip}</div>${childItems}</div></button>`;
+                    html += `<button class="branch-tab" data-action="focus-child"><span class="pill-glyph">▸</span><span class="pill-text">${strings.focus.branchTabChildren}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenChildrenTooltip}</div>${childItems}</div></button>`;
                 }
                 html += `</div>`;
             }
@@ -1084,7 +1086,7 @@ class TreeRendererClass {
                         const year = p.birthDate ? p.birthDate.split('-')[0] : '';
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
                     }).join('');
-                    html += `<button class="hidden-partners-btn" data-action="focus">+${hiddenPartnersCount}<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenPartnersTooltip}</div>${partnerItems}</div></button>`;
+                    html += `<button class="hidden-partners-btn" data-action="focus"><span class="pill-glyph">∞</span><span class="pill-count">${hiddenPartnersCount}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenPartnersTooltip}</div>${partnerItems}</div></button>`;
                 }
                 if (hiddenFamiliesCount > 0) {
                     // Build rich tooltip with hidden families (partner + children)
@@ -1108,7 +1110,7 @@ class TreeRendererClass {
                                 });
                             return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(partnerName)}</span>${partnerYear ? `<span class="badge-tooltip-detail"> *${partnerYear}</span>` : ''}<div class="badge-tooltip-detail">${childLabels.join(', ')}</div></div>`;
                         }).join('');
-                    html += `<button class="hidden-families-btn" data-action="focus">👨‍👩‍👧<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenFamiliesTooltip}</div>${hiddenFamilyItems}</div></button>`;
+                    html += `<button class="hidden-families-btn" data-action="focus"><span class="pill-glyph">⌂</span><span class="pill-count">${hiddenFamiliesCount}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenFamiliesTooltip}</div>${hiddenFamilyItems}</div></button>`;
                 }
                 html += `</div>`;
             }
@@ -1146,8 +1148,8 @@ class TreeRendererClass {
             html += `
                 ${showAvatar ? `<div class="card-avatar">${avatarInner}</div>` : ''}
                 <div class="card-body">
-                    <div class="name"><span class="name-text">${this.escapeHtml(fullName)}</span></div>
-                    ${density !== 'compact' && metaText ? `<div class="birth-date">${this.escapeHtml(metaText)}</div>` : ''}
+                    <div class="name"><span class="name-text" title="${this.escapeHtml(fullName)}" data-given="${this.escapeHtml(displayName)}" data-surname="${this.escapeHtml(displaySurname)}">${this.escapeHtml(fullName)}</span></div>
+                    ${density !== 'compact' && metaText ? `<div class="birth-date" data-years="${this.escapeHtml(metaYears)}">${this.escapeHtml(metaText)}</div>` : ''}
                     ${trade ? `<div class="card-trade">${this.escapeHtml(trade)}</div>` : ''}
                     ${cardAge !== null ? `<div class="card-age">${strings.tooltip.age}: ${cardAge}</div>` : ''}
                 </div>
@@ -1189,7 +1191,7 @@ class TreeRendererClass {
                     const moreCount = crossTreeMatches.length > 5 ? crossTreeMatches.length - 5 : 0;
 
                     html += `<div class="cross-tree-badge" data-person-id="${id}" title="${strings.crossTree.badgeTitle(crossTreeMatches.length)}">
-                        +${crossTreeMatches.length}
+                        <span class="pill-glyph">⇄</span><span class="pill-count">${crossTreeMatches.length}</span>
                         <div class="cross-tree-tooltip">
                             <div class="cross-tree-tooltip-header">${strings.crossTree.tooltipHeader}</div>
                             ${tooltipItems}
@@ -1326,6 +1328,82 @@ class TreeRendererClass {
         const jobs = (person.events ?? []).filter(e => e.type === 'occupation' && e.note?.trim());
         if (jobs.length === 0) return null;
         return sortLifeEvents(jobs)[jobs.length - 1].note?.trim() ?? null;
+    }
+
+    /**
+     * Staged long-name fitting against the card's text column. Runs ONCE per
+     * render pass (from a single requestAnimationFrame after the cards are in
+     * the DOM), never per frame. When the canvas is not measurable yet (hidden
+     * or zero width) it retries for a few frames — the only measurability
+     * lesson kept from the old fit-tight mechanism.
+     *
+     * Steps (see the .name-fit-* CSS): 0 = 15px; 1 = 14px then 13px (floor);
+     * 2 = two lines (given name / surname, 12.5px) plus the meta shortened to
+     * years only; 3 = ellipsis on whichever line still overflows. The full name
+     * always stays in the name-text title attribute.
+     */
+    private fitCardNames(canvas: HTMLElement, attempt = 0): void {
+        if (canvas.clientWidth === 0 && attempt < 5) {
+            requestAnimationFrame(() => this.fitCardNames(canvas, attempt + 1));
+            return;
+        }
+        const names = canvas.querySelectorAll<HTMLElement>('.person-card .name');
+        names.forEach(nameEl => {
+            const textEl = nameEl.querySelector<HTMLElement>('.name-text');
+            if (!textEl) return;
+
+            const given = textEl.dataset.given ?? '';
+            const surname = textEl.dataset.surname ?? '';
+            const full = `${given} ${surname}`.trim();
+
+            // Start from a clean single-line state (idempotent across retries).
+            nameEl.classList.remove('name-fit-1', 'name-fit-13', 'name-fit-2lines');
+            if (textEl.dataset.split === '1') {
+                textEl.textContent = full;
+                delete textEl.dataset.split;
+            }
+            const card = nameEl.closest('.person-card');
+            const meta = card?.querySelector<HTMLElement>('.birth-date') ?? null;
+            if (meta) {
+                meta.classList.remove('meta-short');
+                if (meta.dataset.full !== undefined) {
+                    meta.textContent = meta.dataset.full;
+                    delete meta.dataset.full;
+                }
+            }
+
+            const avail = nameEl.clientWidth;
+            if (avail === 0) return;                                 // detached card
+            const fits = (): boolean => textEl.scrollWidth <= avail + 0.5;
+
+            if (fits()) return;                                      // step 0: 15px
+            nameEl.classList.add('name-fit-1');                      // step 1: 14px
+            if (fits()) return;
+            nameEl.classList.remove('name-fit-1');
+            nameEl.classList.add('name-fit-13');                     // step 1: 13px floor
+            if (fits()) return;
+
+            // Step 2: two lines (break between given name and surname) + years-only meta.
+            nameEl.classList.remove('name-fit-13');
+            nameEl.classList.add('name-fit-2lines');
+            const givenSpan = document.createElement('span');
+            givenSpan.className = 'name-line name-given';
+            givenSpan.textContent = given;
+            const surnameSpan = document.createElement('span');
+            surnameSpan.className = 'name-line name-surname';
+            surnameSpan.textContent = surname;
+            textEl.textContent = '';
+            textEl.appendChild(givenSpan);
+            textEl.appendChild(surnameSpan);
+            textEl.dataset.split = '1';
+            if (meta && meta.dataset.years !== undefined) {
+                meta.dataset.full = meta.textContent ?? '';
+                meta.textContent = meta.dataset.years;
+                meta.classList.add('meta-short');
+            }
+            // Step 3 (ellipsis on an overflowing line) is handled by the
+            // .name-line { text-overflow: ellipsis } CSS.
+        });
     }
 
     /** True when the person is currently rendered on the canvas. */

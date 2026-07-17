@@ -281,24 +281,25 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
         }
 
         if (person && !isPlaceholder) {
-            // Avatar: gender-ring circle with a photo or initials (like on screen).
-            const cxAv = pos.x + 12 + 19;
+            // Avatar: gender-ring circle with a photo or initials (like on
+            // screen). 34px avatar (r=17), 10px left padding — matches the CSS.
+            const cxAv = pos.x + 10 + 17;
             const cyAv = pos.y + ch / 2;
             const hasPhoto = !!person.photo;
             if (hasPhoto) {
                 const clipId = `av${clipCounter++}`;
-                out.push(`<clipPath id="${clipId}"><circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="19"/></clipPath>`);
-                out.push(`<image href="${escapeXml(person.photo!)}" x="${(cxAv - 19).toFixed(1)}" y="${(cyAv - 19).toFixed(1)}" width="38" height="38" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
-                out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="19" fill="none" stroke="${ring}" stroke-width="2"/>`);
+                out.push(`<clipPath id="${clipId}"><circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="17"/></clipPath>`);
+                out.push(`<image href="${escapeXml(person.photo!)}" x="${(cxAv - 17).toFixed(1)}" y="${(cyAv - 17).toFixed(1)}" width="34" height="34" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
+                out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="17" fill="none" stroke="${ring}" stroke-width="2"/>`);
             } else {
                 const initials = ((person.firstName?.[0] || '?') + (person.lastName?.[0] || '')).toUpperCase();
-                out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="19" fill="${COLORS.avatarBg}" stroke="${ring}" stroke-width="2"/>`);
-                out.push(`<text x="${cxAv.toFixed(1)}" y="${(cyAv + 5).toFixed(1)}" text-anchor="middle" font-size="14" font-weight="600" fill="${COLORS.initials}">${escapeXml(initials)}</text>`);
+                out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="17" fill="${COLORS.avatarBg}" stroke="${ring}" stroke-width="2"/>`);
+                out.push(`<text x="${cxAv.toFixed(1)}" y="${(cyAv + 4).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="600" fill="${COLORS.initials}">${escapeXml(initials)}</text>`);
             }
 
-            // Text column right of the avatar.
-            const contentX = pos.x + 12 + 38 + 10;
-            const contentW = cw - (contentX - pos.x) - 12;
+            // Text column right of the avatar (10px padding + 34px avatar + 9px gap).
+            const contentX = pos.x + 10 + 34 + 9;
+            const contentW = cw - (contentX - pos.x) - 10;
             const cx = contentX + contentW / 2;
 
             const fullName = `${person.firstName || '?'} ${person.lastName || ''}`.trim();

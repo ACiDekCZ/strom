@@ -42,8 +42,8 @@ describe('computeBounds', () => {
     it('covers all cards (top-left to bottom-right)', () => {
         const l = layout({ a: { x: 0, y: 0 }, b: { x: 200, y: 300 } });
         const b = computeBounds(l);
-        // Card box is 172x64 (Letopis normal): b at (200,300) → 372 x 364.
-        expect(b).toEqual({ minX: 0, minY: 0, maxX: 372, maxY: 364, width: 372, height: 364 });
+        // Card box is 188x64 (Letopis normal): b at (200,300) → 388 x 364.
+        expect(b).toEqual({ minX: 0, minY: 0, maxX: 388, maxY: 364, width: 388, height: 364 });
     });
     it('is all-zero for an empty layout', () => {
         expect(computeBounds({ positions: new Map(), connections: [], spouseLines: [] }).width).toBe(0);

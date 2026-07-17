@@ -775,6 +775,10 @@ const stringsEN = {
         hiddenSiblingsTooltip: 'Siblings',
         hiddenParentsTooltip: 'Parents',
         hiddenChildrenTooltip: 'Children',
+        // Short labels inside the card branch-tab pills (glyph + text).
+        branchTabParents: 'parents',
+        branchTabSiblings: 'siblings',
+        branchTabChildren: 'family',
         personCount: (visible: number, total: number) => `${visible} of ${total} persons`
     },
 
@@ -2363,6 +2367,10 @@ const stringsCZ: StringsType = {
         hiddenSiblingsTooltip: 'Sourozenci',
         hiddenParentsTooltip: 'Rodiče',
         hiddenChildrenTooltip: 'Děti',
+        // Short labels inside the card branch-tab pills (glyph + text).
+        branchTabParents: 'rodiče',
+        branchTabSiblings: 'sourozenci',
+        branchTabChildren: 'rodina',
         personCount: (visible: number, total: number) => `${visible} z ${total} osob`
     },
 
