@@ -1131,6 +1131,25 @@ export function calculateMergeStats(state: MergeState): MergeStats {
     const lowConfidence = state.matches.filter(m => m.confidence === 'low').length;
     const withConflicts = state.matches.filter(m => m.conflicts.length > 0).length;
 
+    // How many incoming persons the user chose to skip (independent of updateOnly).
+    let skipped = 0;
+    for (const decision of state.decisions.values()) {
+        if (decision.type === 'skip') skipped++;
+    }
+
+    // Truthful "will add N new persons" count. updateOnly adds nothing; per-match
+    // skip and manual matches never add. An unmatched person with no decision is
+    // added as new; a rejected match ("not the same person") is added as new.
+    let willAdd = 0;
+    if (!state.updateOnly) {
+        for (const id of state.unmatchedIncoming) {
+            if (!state.decisions.has(id)) willAdd++;
+        }
+        for (const match of state.matches) {
+            if (state.decisions.get(match.incomingId)?.type === 'reject') willAdd++;
+        }
+    }
+
     return {
         total: Object.keys(state.incomingData.persons).length,
         matched: state.matches.length,
@@ -1138,7 +1157,9 @@ export function calculateMergeStats(state: MergeState): MergeStats {
         mediumConfidence,
         lowConfidence,
         unmatched: state.unmatchedIncoming.length,
-        withConflicts
+        withConflicts,
+        willAdd,
+        skipped
     };
 }
 
@@ -1148,7 +1169,7 @@ export function calculateMergeStats(state: MergeState): MergeStats {
 export function updateMatchDecision(
     state: MergeState,
     incomingId: PersonId,
-    decision: 'confirm' | 'reject' | { type: 'manual_match'; targetId: PersonId }
+    decision: 'confirm' | 'reject' | 'skip' | { type: 'manual_match'; targetId: PersonId }
 ): void {
     if (typeof decision === 'string') {
         state.decisions.set(incomingId, { type: decision });

@@ -91,6 +91,84 @@ test('tree merge wizard matches a shared person and merges without duplicates', 
     await expect(wizard.locator('.merge-step.active')).toHaveText(/Review matches/);
 });
 
+test('merge wizard: update-only toggle drops "New" to 0, and a match row can be skipped', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Seed', 'Person');
+
+    // Target has Anna; source has the same Anna (a match) plus a new Bob.
+    const ids = await page.evaluate(() => {
+        const TM = window.Strom.TreeManager;
+        const targetId = TM.createTree('Target');
+        TM.saveTreeData(targetId, {
+            persons: {
+                t_anna: { id: 't_anna', firstName: 'Anna', lastName: 'Sdilena', gender: 'female', isPlaceholder: false, birthDate: '1900-01-01', partnerships: [], parentIds: [], childIds: [] },
+            },
+            partnerships: {},
+        });
+        const sourceId = TM.createTree('Source');
+        TM.saveTreeData(sourceId, {
+            persons: {
+                s_anna: { id: 's_anna', firstName: 'Anna', lastName: 'Sdilena', gender: 'female', isPlaceholder: false, birthDate: '1900-01-01', partnerships: [], parentIds: [], childIds: [] },
+                s_bob: { id: 's_bob', firstName: 'Bob', lastName: 'Novy', gender: 'male', isPlaceholder: false, birthDate: '1930-01-01', partnerships: [], parentIds: [], childIds: [] },
+            },
+            partnerships: {},
+        });
+        return { targetId, sourceId };
+    });
+
+    await page.evaluate((id) => window.Strom.UI.showMergeTreesDialog(id), ids.sourceId);
+    const pick = page.locator('#merge-trees-modal');
+    await expect(pick).toBeVisible();
+    await page.evaluate((id) => window.Strom.UI.selectMergeTarget(id), ids.targetId);
+    await pick.locator('#merge-trees-btn').click();
+
+    const wizard = page.locator('#merge-modal');
+    await expect(wizard).toBeVisible();
+
+    // Bob is the only unmatched new person → "New" = 1.
+    await expect(wizard.locator('#merge-stat-new')).toHaveText('1');
+
+    // Flip "update existing only" → nothing new will be added (stat truthfully 0).
+    const toggle = page.locator('#merge-update-only-toggle');
+    await expect(toggle).toBeVisible();
+    await toggle.check();
+    await expect(wizard.locator('#merge-stat-new')).toHaveText('0');
+    await toggle.uncheck();
+    await expect(wizard.locator('#merge-stat-new')).toHaveText('1');
+
+    // The Anna match row can be skipped (neither merged nor added).
+    const matchRow = wizard.locator('#merge-match-list .merge-item').filter({ hasText: 'Anna' }).first();
+    await expect(matchRow).toBeVisible();
+    await matchRow.locator('.merge-btn-skip').click();
+    await expect(matchRow).toHaveClass(/skipped/);
+    await expect(wizard.locator('#merge-stat-skipped')).toHaveText('1');
+});
+
+test('actions menu "Merge this view into…" opens the target picker', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    // A second tree to serve as the merge target (createTree does not switch).
+    await page.evaluate(() => {
+        const TM = window.Strom.TreeManager;
+        const id = TM.createTree('Other Tree');
+        TM.saveTreeData(id, {
+            persons: { o1: { id: 'o1', firstName: 'Eva', lastName: 'Jina', gender: 'female', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] } },
+            partnerships: {},
+        });
+    });
+
+    // Open the ⋯ actions menu and click the new action.
+    await page.locator('.actions-menu-btn').click();
+    const action = page.locator('#actions-menu-dropdown .tree-switcher-action').filter({ hasText: 'Merge this view into' });
+    await expect(action).toBeVisible();
+    await action.click();
+
+    // The target picker opens; the active tree is excluded, the other offered.
+    await expect(page.locator('#merge-trees-modal')).toBeVisible();
+    await expect(page.locator('#merge-trees-options')).toContainText('Other Tree');
+});
+
 test('merge wizard warns up-front when an input tree has validation errors', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Seed', 'Person');

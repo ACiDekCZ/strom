@@ -30,6 +30,8 @@ export interface SerializableMergeState {
     decisions: Array<[PersonId, MatchDecision]>;
     conflictResolutions: Array<[PersonId, FieldConflict[]]>;
     phase: MergePhase;
+    /** "Update existing only" mode (Primitive 1). Optional: old sessions lack it. */
+    updateOnly?: boolean;
 }
 
 /** Saved merge session metadata */
@@ -61,7 +63,8 @@ function serializeState(state: MergeState): SerializableMergeState {
         unmatchedIncoming: state.unmatchedIncoming,
         decisions: Array.from(state.decisions.entries()),
         conflictResolutions: Array.from(state.conflictResolutions.entries()),
-        phase: state.phase
+        phase: state.phase,
+        updateOnly: state.updateOnly
     };
 }
 
@@ -74,7 +77,9 @@ function deserializeState(serialized: SerializableMergeState): MergeState {
         unmatchedIncoming: serialized.unmatchedIncoming,
         decisions: new Map(serialized.decisions),
         conflictResolutions: new Map(serialized.conflictResolutions),
-        phase: serialized.phase
+        phase: serialized.phase,
+        // Old saved sessions predate the flag → default to normal mode.
+        updateOnly: serialized.updateOnly ?? false
     };
 }
 

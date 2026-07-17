@@ -163,6 +163,12 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
 
         let mergedCount = 0;
         let addedCount = 0;
+        // Incoming persons the user chose to skip (Primitive 2). Counted for the
+        // completion summary; these are never merged nor added by construction.
+        let skippedCount = 0;
+        for (const decision of state.decisions.values()) {
+            if (decision.type === 'skip') skippedCount++;
+        }
 
         // Process confirmed matches - merge person data
         for (const match of state.matches) {
@@ -185,8 +191,19 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             // Rejected matches are added as new persons below
         }
 
-        // Add rejected matches and unmatched persons as new
-        const toAdd: PersonId[] = [
+        // Which incoming persons get added as NEW persons.
+        //
+        // Two independent gates decide this:
+        //  - updateOnly (Primitive 1): the whole-import toggle. When on, nothing
+        //    is added — only matched persons are enriched. The placeholder block
+        //    and the partnership loop below key off `toAdd`/added persons, so an
+        //    empty toAdd also keeps their referenced placeholders and member-
+        //    incomplete partnerships out at the source (not left for
+        //    enforceRelationshipSymmetry to sweep up).
+        //  - per-match skip (Primitive 2): "don't bring this person at all".
+        //    A skipped incoming person is neither merged nor added, regardless of
+        //    updateOnly. rejected still means "import as a NEW separate person".
+        const toAdd: PersonId[] = state.updateOnly ? [] : [
             ...state.matches
                 .filter(m => {
                     const decision = state.decisions.get(m.incomingId);
@@ -195,7 +212,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 .map(m => m.incomingId),
             ...state.unmatchedIncoming.filter(id => {
                 const decision = state.decisions.get(id);
-                return decision?.type !== 'manual_match';
+                return decision?.type !== 'manual_match' && decision?.type !== 'skip';
             })
         ];
 
@@ -351,6 +368,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             stats: {
                 merged: mergedCount,
                 added: addedCount,
+                skipped: skippedCount,
                 partnerships: Object.keys(mergedData.partnerships).length
             },
             backupKey
@@ -361,7 +379,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
         return {
             success: false,
             mergedData: state.existingData,
-            stats: { merged: 0, added: 0, partnerships: 0 },
+            stats: { merged: 0, added: 0, skipped: 0, partnerships: 0 },
             errors: [String(error)]
         };
     }

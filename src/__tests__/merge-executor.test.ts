@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { executeMerge } from '../merge/executor.js';
+import { calculateMergeStats } from '../merge/matching.js';
 import { validateTreeData } from '../validation.js';
 import { StorageManager } from '../storage.js';
 import { MergeState, PersonMatch } from '../merge/types.js';
@@ -125,5 +126,133 @@ describe('executeMerge unions partnership sourceIds (Fix 4)', () => {
         const union = result.mergedData.partnerships['U1' as PartnershipId];
         expect(union.sourceIds).toContain('s1');
         expect(union.sourceIds).toContain('s2');
+    });
+});
+
+const OFFENDING = [
+    'missingParentRef', 'missingChildRef', 'partnershipChildMismatch',
+    'orphanedParentRef', 'orphanedChildRef', 'orphanedPartnershipChildRef',
+    'tooManyParents',
+];
+
+describe('executeMerge "update existing only" mode (Primitive 1)', () => {
+    // Existing tree: only Josef. Incoming brings the same Josef (to enrich) plus
+    // a brand-new wife Marie, their child Karel, and their union.
+    function buildState(updateOnly: boolean): MergeState {
+        const A = P('A', 'Josef', 'Novák', { birthDate: '1900' });
+        const existingData = tree([A]);
+
+        const iA = P('iA', 'Josef', 'Novák', { birthDate: '1900', birthPlace: 'Praha', partnerships: ['iU'] });
+        const iB = P('iB', 'Marie', 'Novák', { gender: 'female', birthDate: '1905', childIds: ['iC'], partnerships: ['iU'] });
+        const iC = P('iC', 'Karel', 'Novák', { birthDate: '1930', parentIds: ['iA', 'iB'] });
+        const incomingData = tree([iA, iB, iC], [U('iU', 'iA', 'iB', ['iC'])]);
+
+        return {
+            existingData, incomingData,
+            matches: [confirmedMatch(A, iA)],
+            unmatchedExisting: [], unmatchedIncoming: ['iB' as PersonId, 'iC' as PersonId],
+            decisions: new Map(), conflictResolutions: new Map(), phase: 'executing',
+            updateOnly,
+        };
+    }
+
+    it('enriches the matched person but adds no unmatched persons', async () => {
+        const state = buildState(true);
+        const result = await executeMerge(state);
+        expect(result.success).toBe(true);
+
+        const persons = Object.values(result.mergedData.persons);
+        // Only Josef survives; Marie and Karel are NOT added.
+        expect(persons).toHaveLength(1);
+        expect(persons.find(p => p.firstName === 'Marie')).toBeUndefined();
+        expect(persons.find(p => p.firstName === 'Karel')).toBeUndefined();
+        // Josef was enriched with the incoming birthPlace.
+        expect(result.mergedData.persons['A' as PersonId].birthPlace).toBe('Praha');
+        expect(result.stats.merged).toBe(1);
+        expect(result.stats.added).toBe(0);
+    });
+
+    it('skips partnerships whose members did not all arrive', async () => {
+        const state = buildState(true);
+        const result = await executeMerge(state);
+        // The incoming union depends on Marie, who was not added → no partnership.
+        expect(Object.keys(result.mergedData.partnerships)).toHaveLength(0);
+    });
+
+    it('leaves no dangling links (symmetry holds)', async () => {
+        const state = buildState(true);
+        const result = await executeMerge(state);
+        const offending = validateTreeData(result.mergedData).issues.filter(i => OFFENDING.includes(i.type));
+        expect(offending).toEqual([]);
+    });
+
+    it('normal mode (updateOnly=false) DOES add the new persons and union', async () => {
+        const state = buildState(false);
+        const result = await executeMerge(state);
+        const persons = Object.values(result.mergedData.persons);
+        expect(persons.find(p => p.firstName === 'Marie')).toBeDefined();
+        expect(persons.find(p => p.firstName === 'Karel')).toBeDefined();
+        expect(result.stats.added).toBe(2);
+        expect(Object.keys(result.mergedData.partnerships)).toHaveLength(1);
+    });
+});
+
+describe('executeMerge per-match skip decision (Primitive 2)', () => {
+    it('a skipped incoming person is neither merged nor added, and is counted', async () => {
+        const A = P('A', 'Josef', 'Novák', { birthDate: '1900' });
+        const existingData = tree([A]);
+
+        const iA = P('iA', 'Josef', 'Novák', { birthDate: '1900' });
+        const iMarie = P('iMarie', 'Marie', 'Novák', { gender: 'female', birthDate: '1905' });
+        const incomingData = tree([iA, iMarie]);
+
+        const state: MergeState = {
+            existingData, incomingData,
+            matches: [confirmedMatch(A, iA)],
+            unmatchedExisting: [], unmatchedIncoming: ['iMarie' as PersonId],
+            // Marie is explicitly skipped — don't bring her at all.
+            decisions: new Map([['iMarie' as PersonId, { type: 'skip' }]]),
+            conflictResolutions: new Map(), phase: 'executing',
+        };
+
+        const result = await executeMerge(state);
+        expect(result.success).toBe(true);
+        expect(Object.values(result.mergedData.persons).find(p => p.firstName === 'Marie')).toBeUndefined();
+        expect(result.stats.added).toBe(0);
+        expect(result.stats.skipped).toBe(1);
+    });
+
+    it('calculateMergeStats reflects skip: skipped counted, willAdd excludes it', async () => {
+        const A = P('A', 'Josef', 'Novák', { birthDate: '1900' });
+        const iA = P('iA', 'Josef', 'Novák', { birthDate: '1900' });
+        const iMarie = P('iMarie', 'Marie', 'Novák', { gender: 'female' });
+        const iPetr = P('iPetr', 'Petr', 'Novák', {});
+
+        const state: MergeState = {
+            existingData: tree([A]), incomingData: tree([iA, iMarie, iPetr]),
+            matches: [confirmedMatch(A, iA)],
+            unmatchedExisting: [], unmatchedIncoming: ['iMarie' as PersonId, 'iPetr' as PersonId],
+            decisions: new Map([['iMarie' as PersonId, { type: 'skip' }]]),
+            conflictResolutions: new Map(), phase: 'reviewing',
+        };
+
+        const stats = calculateMergeStats(state);
+        expect(stats.skipped).toBe(1);
+        // Petr (no decision) will be added; Marie (skip) will not.
+        expect(stats.willAdd).toBe(1);
+    });
+
+    it('updateOnly forces willAdd to 0 regardless of undecided unmatched', () => {
+        const A = P('A', 'Josef', 'Novák', { birthDate: '1900' });
+        const iA = P('iA', 'Josef', 'Novák', { birthDate: '1900' });
+        const iPetr = P('iPetr', 'Petr', 'Novák', {});
+        const state: MergeState = {
+            existingData: tree([A]), incomingData: tree([iA, iPetr]),
+            matches: [confirmedMatch(A, iA)],
+            unmatchedExisting: [], unmatchedIncoming: ['iPetr' as PersonId],
+            decisions: new Map(), conflictResolutions: new Map(), phase: 'reviewing',
+            updateOnly: true,
+        };
+        expect(calculateMergeStats(state).willAdd).toBe(0);
     });
 });

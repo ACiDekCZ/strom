@@ -63,10 +63,17 @@ export interface FieldConflict {
 
 // ==================== MERGE DECISIONS ====================
 
-/** User decision for a match */
+/**
+ * User decision for a match.
+ * - confirm: same person → merge incoming into the existing one
+ * - reject: NOT the same person → import the incoming person as a NEW person
+ * - skip: don't bring this incoming person at all (neither merged nor added)
+ * - manual_match: merge into a hand-picked existing person
+ */
 export type MatchDecision =
     | { type: 'confirm' }
     | { type: 'reject' }
+    | { type: 'skip' }
     | { type: 'manual_match'; targetId: PersonId };
 
 // ==================== MERGE STATE ====================
@@ -84,6 +91,14 @@ export interface MergeState {
     decisions: Map<PersonId, MatchDecision>;
     conflictResolutions: Map<PersonId, FieldConflict[]>;
     phase: MergePhase;
+    /**
+     * "Update existing only" mode. When true, the merge only enriches persons
+     * that matched (confirmed/manual) and adds NO unmatched/rejected incoming
+     * persons (nor placeholders/partnerships that would depend on them).
+     * Absent/false = normal mode (add new persons too). Old saved sessions
+     * without this field default to false.
+     */
+    updateOnly?: boolean;
 }
 
 // ==================== ID MAPPING ====================
@@ -103,6 +118,7 @@ export interface MergeResult {
     stats: {
         merged: number;        // Persons merged with existing
         added: number;         // New persons added
+        skipped: number;       // Incoming persons skipped (neither merged nor added)
         partnerships: number;  // Total partnerships in result
     };
     backupKey?: string;        // localStorage key for backup
@@ -123,4 +139,12 @@ export interface MergeStats {
     lowConfidence: number;
     unmatched: number;
     withConflicts: number;
+    /**
+     * Persons that will actually be ADDED as new given the current decisions
+     * and updateOnly mode (0 in updateOnly mode). Unlike `unmatched` (how many
+     * are listed for review), this is the truthful "will add N" number.
+     */
+    willAdd: number;
+    /** Incoming persons the user chose to skip (neither merged nor added). */
+    skipped: number;
 }

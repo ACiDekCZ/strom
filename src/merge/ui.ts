@@ -525,7 +525,31 @@ class MergerUIClass {
         if (existingCount) existingCount.textContent = String(Object.keys(this.mergeState!.existingData.persons).length);
         if (matchCount) matchCount.textContent = String(stats.matched);
         if (conflictCount) conflictCount.textContent = String(stats.withConflicts);
-        if (newCount) newCount.textContent = String(stats.unmatched);
+        // Truthful "will add N": drops to 0 in updateOnly mode, and per-match
+        // skip / manual matches don't count (see calculateMergeStats).
+        if (newCount) newCount.textContent = String(stats.willAdd);
+
+        // Skipped card only appears once at least one person is skipped.
+        const skippedCard = document.getElementById('merge-stat-skipped-card');
+        const skippedCount = document.getElementById('merge-stat-skipped');
+        if (skippedCard) skippedCard.style.display = stats.skipped > 0 ? '' : 'none';
+        if (skippedCount) skippedCount.textContent = String(stats.skipped);
+
+        // Reflect the persisted updateOnly flag on the toggle (matters on resume).
+        const updateOnlyToggle = document.getElementById('merge-update-only-toggle') as HTMLInputElement | null;
+        if (updateOnlyToggle) updateOnlyToggle.checked = !!this.mergeState!.updateOnly;
+    }
+
+    /**
+     * Toggle "update existing only" mode (Primitive 1). Flipping it re-renders
+     * so the stats ("will add N") tell the truth immediately, and marks the
+     * session dirty so the flag is auto-saved.
+     */
+    toggleUpdateOnly(checked: boolean): void {
+        if (!this.mergeState) return;
+        this.mergeState.updateOnly = checked;
+        this.markUnsavedChanges();
+        this.renderModalContent();
     }
 
     /**
@@ -673,8 +697,10 @@ class MergerUIClass {
         const match = item as PersonMatch;
         const decision = this.mergeState?.decisions.get(match.incomingId);
 
-        // Determine status: confirmed, rejected, or pending (needs review)
-        // Score >= 50 is pre-confirmed, score < 50 requires explicit user action
+        // Determine status: confirmed, rejected, skipped, or pending (needs review)
+        // Score >= 50 is pre-confirmed, score < 50 requires explicit user action.
+        // Skip is independent: the incoming person is neither merged nor added.
+        const isSkipped = decision?.type === 'skip';
         const isConfirmed = decision?.type === 'confirm' || (!decision && match.score >= 50);
         const isRejected = decision?.type === 'reject';
         const isPending = !decision && match.score < 50; // Needs user review
@@ -705,12 +731,15 @@ class MergerUIClass {
             ? `<button class="merge-btn-resolve" data-action="resolve">${strings.merge.resolveConflicts}</button>`
             : '';
 
+        const statusClass = isSkipped ? 'skipped' : isConfirmed ? 'confirmed' : isRejected ? 'rejected' : 'pending';
+        const statusSymbol = isSkipped ? '⊘' : isConfirmed ? '✓' : isRejected ? '✗' : '?';
+
         return `
-            <div class="merge-item ${isConfirmed ? 'confirmed' : ''} ${isRejected ? 'rejected' : ''} ${isPending ? 'pending' : ''}"
+            <div class="merge-item ${isConfirmed ? 'confirmed' : ''} ${isRejected ? 'rejected' : ''} ${isSkipped ? 'skipped' : ''} ${isPending ? 'pending' : ''}"
                  data-index="${index}" data-incoming-id="${match.incomingId}">
                 <div class="merge-item-header">
-                    <span class="merge-item-status ${isConfirmed ? 'confirmed' : isRejected ? 'rejected' : 'pending'}">
-                        ${isConfirmed ? '✓' : isRejected ? '✗' : '?'}
+                    <span class="merge-item-status ${statusClass}">
+                        ${statusSymbol}
                     </span>
                     <span class="merge-item-names">
                         ${this.escapeHtml(existingInfo)} ↔ ${this.escapeHtml(incomingInfo)}
@@ -729,6 +758,9 @@ class MergerUIClass {
                     <button class="merge-btn-reject ${isRejected ? 'active' : ''}" data-action="reject">
                         ${strings.merge.reject}
                     </button>
+                    <button class="merge-btn-skip ${isSkipped ? 'active' : ''}" data-action="skip" title="${this.escapeHtml(strings.merge.skipTooltip)}">
+                        ${strings.merge.skip}
+                    </button>
                     <button class="merge-btn-change" data-action="change">
                         ${strings.merge.changeMatch}
                     </button>
@@ -746,19 +778,30 @@ class MergerUIClass {
      */
     private renderUnmatchedItem(person: Person, personId: PersonId, index: number): string {
         const info = this.formatPersonInfo(person);
+        const isSkipped = this.mergeState?.decisions.get(personId)?.type === 'skip';
+
+        // In updateOnly mode every unmatched person is left out anyway; the badge
+        // says so, and per-person skip is redundant (but harmless) there.
+        const willBeAdded = !isSkipped && !this.mergeState?.updateOnly;
+        const badge = willBeAdded
+            ? `<span class="merge-item-badge new" title="${strings.merge.newPersonTooltip}">${strings.merge.newPerson}</span>`
+            : `<span class="merge-item-badge skipped" title="${this.escapeHtml(strings.merge.skipTooltip)}">${strings.merge.skipped}</span>`;
 
         return `
-            <div class="merge-item unmatched" data-index="${index}" data-incoming-id="${personId}">
+            <div class="merge-item unmatched ${isSkipped ? 'skipped' : ''}" data-index="${index}" data-incoming-id="${personId}">
                 <div class="merge-item-header">
-                    <span class="merge-item-status new">+</span>
+                    <span class="merge-item-status ${isSkipped ? 'skipped' : 'new'}">${isSkipped ? '⊘' : '+'}</span>
                     <span class="merge-item-names">
                         ${this.escapeHtml(info)}
                     </span>
-                    <span class="merge-item-badge new" title="${strings.merge.newPersonTooltip}">${strings.merge.newPerson}</span>
+                    ${badge}
                 </div>
                 <div class="merge-item-actions">
                     <button class="merge-btn-change" data-action="manual">
                         ${strings.merge.manualMatch}
+                    </button>
+                    <button class="merge-btn-skip ${isSkipped ? 'active' : ''}" data-action="skip" title="${this.escapeHtml(strings.merge.skipTooltip)}">
+                        ${isSkipped ? strings.merge.unskip : strings.merge.skip}
                     </button>
                     <button class="merge-btn-preview" data-action="preview" title="${strings.treePreview.preview}">
                         👁
@@ -808,7 +851,7 @@ class MergerUIClass {
         if (!listContainer) return;
 
         // Action buttons
-        listContainer.querySelectorAll('.merge-btn-confirm, .merge-btn-reject, .merge-btn-change, .merge-btn-resolve, .merge-btn-preview').forEach(btn => {
+        listContainer.querySelectorAll('.merge-btn-confirm, .merge-btn-reject, .merge-btn-skip, .merge-btn-change, .merge-btn-resolve, .merge-btn-preview').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const item = (e.target as HTMLElement).closest('.merge-item');
@@ -848,6 +891,19 @@ class MergerUIClass {
                 updateMatchDecision(this.mergeState, incomingId, 'reject');
                 this.markUnsavedChanges();
                 break;
+            case 'skip': {
+                // Toggle skip. Unlike reject (import as a NEW separate person),
+                // skip drops the incoming person entirely. Clicking an already
+                // skipped row un-skips it back to its default (undecided) state.
+                const current = this.mergeState.decisions.get(incomingId);
+                if (current?.type === 'skip') {
+                    this.mergeState.decisions.delete(incomingId);
+                } else {
+                    updateMatchDecision(this.mergeState, incomingId, 'skip');
+                }
+                this.markUnsavedChanges();
+                break;
+            }
             case 'change':
             case 'manual':
                 this.showManualMatchDialog(incomingId);
@@ -1264,7 +1320,8 @@ class MergerUIClass {
             this.openedFromTreeManager = false;
 
             // Show success message and offer to switch to new tree
-            const stats = strings.merge.stats(result.stats.merged, result.stats.added);
+            const stats = strings.merge.stats(result.stats.merged, result.stats.added)
+                + (result.stats.skipped > 0 ? `\n${strings.merge.skippedCount(result.stats.skipped)}` : '');
 
             // Dispatch event to update tree list
             window.dispatchEvent(new CustomEvent('strom:merge-session-changed'));

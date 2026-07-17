@@ -4335,6 +4335,63 @@
             border-color: #e53935;
             color: white;
         }
+        .merge-btn-skip.active {
+            background: #757575;
+            border-color: #757575;
+            color: white;
+        }
+        .merge-item.skipped {
+            background: #f0f0f0;
+            opacity: 0.6;
+        }
+        [data-theme="dark"] .merge-item.skipped {
+            background: #262626;
+        }
+        .merge-item-status.skipped {
+            background: #757575;
+            color: white;
+        }
+        .merge-item-badge.skipped {
+            background: #e0e0e0;
+            color: #616161;
+        }
+        [data-theme="dark"] .merge-item-badge.skipped {
+            background: #3a3a3a;
+            color: #bbb;
+        }
+        .merge-stat.skipped .merge-stat-label { color: #616161; }
+        .merge-stat.skipped .merge-stat-value { color: #616161; }
+        /* "Update existing only" toggle */
+        .merge-update-only {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 8px 12px;
+            margin: 0 0 10px;
+            background: #f5f5f5;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        [data-theme="dark"] .merge-update-only {
+            background: #2a2a2a;
+        }
+        .merge-update-only input {
+            margin-top: 2px;
+            flex-shrink: 0;
+        }
+        .merge-update-only-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .merge-update-only-label {
+            font-weight: 600;
+        }
+        .merge-update-only-hint {
+            font-size: 11px;
+            color: var(--text-light);
+        }
         .merge-empty {
             padding: 40px;
             text-align: center;
@@ -6899,6 +6956,9 @@
                 <div class="tree-switcher-action edit-only" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.makeTreeFromCurrentView()">
                     <span>✂️</span> <span data-i18n="menu.makeTreeFromView"></span>
                 </div>
+                <div class="tree-switcher-action edit-only" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.mergeViewInto()">
+                    <span>🔀</span> <span data-i18n="menu.mergeViewInto"></span>
+                </div>
                 <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.startSlideshow()">
                     <span>📺</span> <span data-i18n="slideshow.menu"></span>
                 </div>
@@ -6941,6 +7001,7 @@
         <button onclick="window.Strom.UI.showPosterDialog(); window.Strom.UI.closeMobileMenu()">🖼️ <span data-i18n="menu.poster"></span></button>
         <button onclick="window.Strom.UI.exportFocusedJSON(); window.Strom.UI.closeMobileMenu()">📤 <span data-i18n="menu.exportSelection"></span></button>
         <button class="edit-only" onclick="window.Strom.UI.makeTreeFromCurrentView(); window.Strom.UI.closeMobileMenu()">✂️ <span data-i18n="menu.makeTreeFromView"></span></button>
+        <button class="edit-only" onclick="window.Strom.UI.mergeViewInto(); window.Strom.UI.closeMobileMenu()">🔀 <span data-i18n="menu.mergeViewInto"></span></button>
         <button onclick="window.Strom.UI.startSlideshow(); window.Strom.UI.closeMobileMenu()">📺 <span data-i18n="slideshow.menu"></span></button>
         <div class="menu-section-header" data-i18n="menu.sectionTree"></div>
         <button onclick="window.Strom.UI.showAnniversariesDialog(); window.Strom.UI.closeMobileMenu()">🎂 <span data-i18n="anniversaries.menu"></span><span id="mm-ann-badge" class="tree-switcher-badge" style="display:none;"></span></button>
@@ -8085,7 +8146,18 @@
                     <span class="merge-stat-label">+ <span data-i18n="merge.statsNew">New</span></span>
                     <span class="merge-stat-value" id="merge-stat-new">0</span>
                 </div>
+                <div class="merge-stat skipped" id="merge-stat-skipped-card" style="display:none;">
+                    <span class="merge-stat-label">⊘ <span data-i18n="merge.statsSkipped">Skipped</span></span>
+                    <span class="merge-stat-value" id="merge-stat-skipped">0</span>
+                </div>
             </div>
+            <label class="merge-update-only" id="merge-update-only-row">
+                <input type="checkbox" id="merge-update-only-toggle" onchange="window.Strom.MergerUI.toggleUpdateOnly(this.checked)">
+                <span class="merge-update-only-text">
+                    <span class="merge-update-only-label" data-i18n="merge.updateOnlyLabel">Only update existing people (don't add new)</span>
+                    <span class="merge-update-only-hint" data-i18n="merge.updateOnlyHint">Enrich matched people from the import, but add no new persons.</span>
+                </span>
+            </label>
             <div class="merge-tabs">
                 <button class="merge-tab active" data-filter="all" onclick="window.Strom.MergerUI.setFilter('all')" data-i18n="merge.tabAll">All</button>
                 <button class="merge-tab" data-filter="high" onclick="window.Strom.MergerUI.setFilter('high')">

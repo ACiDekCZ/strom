@@ -100,6 +100,11 @@ export class UIClass {
     duplicateTreeId: TreeId | null = null;
     mergeSourceTreeId: TreeId | null = null;
     mergeTargetTreeId: TreeId | null = null;
+    // In-memory source for "Merge this view into…" (Primitive 3): the extracted
+    // subtree of the current view. When set, the merge-trees picker targets it
+    // instead of a source tree. Cleared when the picker closes.
+    mergeViewSourceData: StromData | null = null;
+    mergeViewSourceLabel: string | undefined = undefined;
     importTreeData: StromData | null = null;
     exportTargetTreeId: TreeId | null = null;
     defaultPersonTreeId: TreeId | null = null;
