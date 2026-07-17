@@ -21,7 +21,11 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import { DataManager, migrateData } from '../data.js';
+import { validateJsonImport } from '../merge/validation.js';
+import { validateTreeData } from '../validation.js';
 import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
@@ -117,6 +121,143 @@ describe('migrateData keeps every StromData field', () => {
             partnerships: { [UNION]: { id: UNION, person1Id: BOB, person2Id: ALICE, childIds: [] } },
         };
         expect(migrateData(old).partnerships[UNION].status).toBe('married');
+    });
+});
+
+
+// ==================== validateJsonImport ====================
+
+/**
+ * Importing a JSON file is a COPY of that file: every field the file carried
+ * must land in the tree, focus fields included (unlike merge, which starts a
+ * fresh combined tree). This is the fourth place data was copied by hand and
+ * quietly lost — validateJsonImport once rebuilt the tree from an ancient
+ * whitelist (id/name/gender + birth/death only), throwing away photos, notes,
+ * events, sources, attachments and every tree-level registry, corrupting even
+ * the app's own export→import roundtrip. It now routes through migrateData;
+ * this guard keeps it that way.
+ */
+describe('validateJsonImport keeps every StromData field', () => {
+    const full = fullTree();
+
+    // version is re-stamped on save, so an import is where an old version number
+    // is meant to disappear; every other field is a faithful copy of the file.
+    const CARRIED = (Object.keys(full) as (keyof StromData)[]).filter(k => k !== 'version');
+
+    it('carries every field through an import', () => {
+        const result = validateJsonImport(JSON.stringify(full));
+        expect(result.valid).toBe(true);
+        expect(result.data).toBeDefined();
+        // Field by field, so a failure names the one that was dropped.
+        for (const key of CARRIED) {
+            expect({ [key]: result.data![key] }).toEqual({ [key]: full[key] });
+        }
+    });
+
+    it('drops nothing and invents nothing', () => {
+        const result = validateJsonImport(JSON.stringify(full));
+        expect(Object.keys(result.data!).sort()).toEqual([...CARRIED].sort());
+    });
+});
+
+describe('validateJsonImport repairs dangling references it carries', () => {
+    // A file whose links point at persons/partnerships that are not present.
+    // migrateData carries them faithfully, so the import step must repair them,
+    // or validateTreeData would reject the freshly imported tree.
+    function treeWithDanglingRefs(): unknown {
+        const ghost = toPersonId('p_ghost');
+        const ghostUnion = toPartnershipId('u_ghost');
+        return {
+            version: STROM_DATA_VERSION,
+            persons: {
+                [ALICE]: {
+                    ...person(ALICE, 'Alice'),
+                    parentIds: [ghost],                 // dangling parent
+                    childIds: [ghost],                  // dangling child
+                    partnerships: [UNION, ghostUnion],  // dangling partnership
+                    parentRelTypes: { [ghost]: 'adoptive' },
+                    events: [{
+                        id: 'e1', type: 'baptism',
+                        participants: [
+                            { role: 'godparent', personId: ghost },       // dangling link
+                            { role: 'godparent', name: 'Written Name' },  // pure name, kept
+                        ],
+                    }],
+                },
+                [BOB]: person(BOB, 'Bob'),
+            },
+            partnerships: {
+                [UNION]: partnership(),
+                [ghostUnion]: { id: ghostUnion, person1Id: ALICE, person2Id: ghost, childIds: [ghost], status: 'married' },
+            },
+        };
+    }
+
+    it('drops every dangling ref and reports a warning for each', () => {
+        const result = validateJsonImport(JSON.stringify(treeWithDanglingRefs()));
+        expect(result.valid).toBe(true);
+        const kinds = result.warnings.map(w => w.split(':')[0]);
+        expect(kinds).toContain('invalidParentRef');
+        expect(kinds).toContain('invalidChildRef');
+        expect(kinds).toContain('invalidPartnershipRef');
+        expect(kinds).toContain('invalidParticipantRef');
+        expect(kinds).toContain('invalidPerson2Ref');
+    });
+
+    it('produces a tree validateTreeData accepts without orphan-ref errors', () => {
+        const result = validateJsonImport(JSON.stringify(treeWithDanglingRefs()));
+        const orphanTypes = new Set([
+            'orphanedParentRef', 'orphanedChildRef', 'orphanedPartnershipRef',
+            'orphanedParticipantRef', 'orphanedPartnerRef', 'orphanedPartnershipChildRef',
+        ]);
+        const orphans = validateTreeData(result.data!).issues.filter(i => orphanTypes.has(i.type));
+        expect(orphans).toEqual([]);
+        // The written participant name (no personId) is preserved.
+        const alice = result.data!.persons[ALICE];
+        expect(alice.events?.[0].participants?.some(p => p.name === 'Written Name')).toBe(true);
+    });
+});
+
+// ==================== real fixture regression ====================
+
+/**
+ * The bug was found forensically on a real export: importing it dropped photos,
+ * notes, life events, sources, places, surnameVariants and defaultPersonId.
+ * This drives the real file through the actual import entry point and asserts
+ * the rich content survives. The fixture is committed; skip gracefully if a
+ * checkout somehow lacks it (matches the layout harness convention).
+ */
+describe('validateJsonImport on the real devel-demo fixture', () => {
+    const path = join(process.cwd(), 'test', 'devel-demo.json');
+    const maybe = existsSync(path) ? it : it.skip;
+
+    maybe('carries the whole tree — photos, notes, events, registries', () => {
+        const result = validateJsonImport(readFileSync(path, 'utf-8'));
+        expect(result.valid).toBe(true);
+        const data = result.data!;
+
+        const withPhoto = Object.values(data.persons).filter(p => p.photo);
+        expect(withPhoto.length).toBe(18);
+
+        expect(data.defaultPersonId).toBe('pavel_dvorak');
+
+        const josef = data.persons[toPersonId('josef_dvorak')];
+        expect(josef).toBeDefined();
+        expect(josef.notes && josef.notes.length).toBeGreaterThan(0);
+
+        // At least one event carries participants (godparents / witnesses).
+        const eventsWithParticipants = Object.values(data.persons)
+            .flatMap(p => p.events ?? [])
+            .filter(e => (e.participants ?? []).length > 0);
+        expect(eventsWithParticipants.length).toBeGreaterThan(0);
+
+        expect(Object.keys(data.sources ?? {}).length).toBeGreaterThan(0);
+        expect(Object.keys(data.places ?? {}).length).toBeGreaterThan(0);
+        expect((data.surnameVariants ?? []).length).toBeGreaterThan(0);
+
+        // A clean real export must import without orphan-ref errors.
+        const orphans = validateTreeData(data).issues.filter(i => i.type.startsWith('orphaned'));
+        expect(orphans).toEqual([]);
     });
 });
 

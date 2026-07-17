@@ -34,6 +34,35 @@ test('JSON round-trip: export a 3-person tree, re-import it as a new tree', asyn
     expect(await personCount(page)).toBe(3);
 });
 
+test('JSON import carries rich fields: photo, note and a life event survive the real file path', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Seed', 'Person');
+
+    // Import through the actual <input type=file> the user drives, as a new tree.
+    await importJsonAsNewTree(page, 'e2e/fixtures/rich-person.json', 'Rich');
+    await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Rich');
+    await expect(card(page, 'Bohumil')).toBeVisible();
+
+    // The rich content that a hand-built importer used to drop is all present.
+    const rich = await page.evaluate(() => {
+        const p = window.Strom.DataManager.getAllPersons()
+            .find((x: { firstName: string }) => x.firstName === 'Bohumil') as {
+                notes?: string; photo?: string;
+                events?: { type: string; participants?: { name?: string }[] }[];
+            } | undefined;
+        return {
+            hasNote: !!p?.notes && p.notes.length > 0,
+            hasPhoto: !!p?.photo && p.photo.startsWith('data:image'),
+            eventType: p?.events?.[0]?.type,
+            godparent: p?.events?.[0]?.participants?.[0]?.name,
+        };
+    });
+    expect(rich.hasNote).toBe(true);
+    expect(rich.hasPhoto).toBe(true);
+    expect(rich.eventType).toBe('baptism');
+    expect(rich.godparent).toBe('Josef Kmotr');
+});
+
 test('importing as a new tree leaves the existing tree untouched', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Solo', 'Original'); // unique name (fixtures use "Jan")

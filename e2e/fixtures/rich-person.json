@@ -1,0 +1,31 @@
+{
+  "version": 5,
+  "persons": {
+    "p_rich": {
+      "id": "p_rich",
+      "firstName": "Bohumil",
+      "lastName": "Rich",
+      "gender": "male",
+      "birthDate": "1888-03-04",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [],
+      "childIds": [],
+      "notes": "Blacksmith in Kolin; kept detailed workshop ledgers.",
+      "photo": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQAY3Y2wAAAAAElFTkSuQmCC",
+      "photoOriginalName": "bohumil.png",
+      "events": [
+        {
+          "id": "ev_baptism",
+          "type": "baptism",
+          "date": "1888-03-06",
+          "place": "Kolin",
+          "participants": [
+            { "role": "godparent", "name": "Josef Kmotr" }
+          ]
+        }
+      ]
+    }
+  },
+  "partnerships": {}
+}
