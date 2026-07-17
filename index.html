@@ -539,9 +539,12 @@
            dropdown caret is redundant here, so hide it in the toolbar. */
         .toolbar #toolbar-search-picker .person-picker-toggle { display: none; }
         /* Keep the toolbar filter toggle a ghost even under the dark theme
-           (the shared dark rule paints the filters-panel toggle, not this one). */
-        .toolbar .search-filter-toggle,
-        [data-theme="dark"] .toolbar .search-filter-toggle { background: transparent; border: none; }
+           (the shared dark rule paints the filters-panel toggle, not this one).
+           :not(.active): this later rule ties with `.active` on specificity and
+           would strip the active green fill — leaving --on-primary (white) on a
+           transparent background, an invisible icon (user report). */
+        .toolbar .search-filter-toggle:not(.active),
+        [data-theme="dark"] .toolbar .search-filter-toggle:not(.active) { background: transparent; border: none; }
         /* The generic ".toolbar button { color: white }" rule outranks the
            single-class toggle selector and painted the funnel white (invisible
            on the cream pill). Reassert a legible resting colour at higher

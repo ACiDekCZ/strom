@@ -67,3 +67,20 @@ test('filter panel opens fully on screen below the toolbar and Escape closes it'
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
 });
+
+test('the filter toggle stays visible when active (green fill, light icon)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    const toggle = page.locator('#search-filter-toggle');
+
+    // Resting: legible ghost (not white-on-cream).
+    const restBg = await toggle.evaluate(el => getComputedStyle(el).backgroundColor);
+    expect(restBg).toBe('rgba(0, 0, 0, 0)');
+
+    // Active: the green fill must actually apply (a later ghost rule used to
+    // strip it, leaving a white icon on a transparent background).
+    await toggle.click();
+    await expect(toggle).toHaveClass(/active/);
+    const activeBg = await toggle.evaluate(el => getComputedStyle(el).backgroundColor);
+    expect(activeBg).not.toBe('rgba(0, 0, 0, 0)');
+});
