@@ -28,7 +28,7 @@ test('the field says it is the occupation, not a note', async ({ page }) => {
     await expect(label).toHaveText('Note');
 });
 
-test('the card and tooltip show the trade someone ended up with', async ({ page }) => {
+test('the detailed card shows the trade someone ended up with', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
     await page.evaluate(() => {
@@ -43,10 +43,6 @@ test('the card and tooltip show the trade someone ended up with', async ({ page 
     await expect(card(page, 'Jan').locator('.card-trade')).toHaveText('kovář');
     await expect(card(page, 'Jan')).toContainText('kovář');
     await expect(card(page, 'Jan')).not.toContainText('učeň');
-
-    // The tooltip carries it at every density — it used to show it nowhere.
-    await page.evaluate(() => window.Strom.UI.setCardDensity('normal'));
-    await expect(card(page, 'Jan').locator('.card-tooltip')).toContainText('kovář');
 });
 
 test('a person with no trade recorded gets no empty line', async ({ page }) => {

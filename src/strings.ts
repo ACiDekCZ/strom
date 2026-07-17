@@ -474,7 +474,13 @@ const stringsEN = {
         age: 'Age',
         born: 'Born',
         died: 'Died',
-        notes: 'Notes'
+        notes: 'Notes',
+        // Age in parentheses on the death line of the hover card.
+        yearsOld: (age: number) => `(${age} ${age === 1 ? 'year' : 'years'})`,
+        // Child count on the relationship line of the hover card.
+        childrenCount: (n: number) => `${n} ${n === 1 ? 'child' : 'children'}`,
+        // Footer of the hover card: the real desktop gesture (click opens the menu).
+        gestureHint: 'Click to open the menu',
     },
 
     // Placeholders
@@ -700,7 +706,6 @@ const stringsEN = {
 
     // Buttons
     card: {
-        focusBadge: 'FOCUS',
         // Short one-word labels for the hover add-tab pills.
         addTabParent: 'parent',
         addTabPartner: 'partner',
@@ -2069,7 +2074,13 @@ const stringsCZ: StringsType = {
         age: 'Věk',
         born: 'Narozen/a',
         died: 'Zemřel/a',
-        notes: 'Poznámky'
+        notes: 'Poznámky',
+        // Age in parentheses on the death line of the hover card.
+        yearsOld: (age: number) => `(${age} ${age === 1 ? 'rok' : age >= 2 && age <= 4 ? 'roky' : 'let'})`,
+        // Child count on the relationship line of the hover card.
+        childrenCount: (n: number) => `${n} ${n === 1 ? 'dítě' : n >= 2 && n <= 4 ? 'děti' : 'dětí'}`,
+        // Footer of the hover card: the real desktop gesture (click opens the menu).
+        gestureHint: 'Klik otevře nabídku',
     },
 
     // Placeholders
@@ -2296,7 +2307,6 @@ const stringsCZ: StringsType = {
 
     // Buttons
     card: {
-        focusBadge: 'FOKUS',
         // Short one-word labels for the hover add-tab pills.
         addTabParent: 'rodič',
         addTabPartner: 'partner',

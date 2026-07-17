@@ -949,7 +949,7 @@
            absolutely positioned with white-space: nowrap, so expanding never
            reflows the card; a raised z-index keeps it above neighbours. */
         .add-btn {
-            position: absolute;
+            position: relative;
             box-sizing: border-box;
             height: 18px;
             min-width: 18px;
@@ -1006,11 +1006,44 @@
             margin-left: 3px;
         }
 
-        .add-btn.top { top: -9px; left: 50%; transform: translateX(-50%); }
-        .add-btn.bottom { bottom: -9px; left: 50%; transform: translateX(-50%); }
-        /* Right tab pins its left edge near the card's right edge, so the pill
-           grows away from the card (rightward) rather than over it. */
-        .add-btn.right { left: 100%; top: 50%; transform: translate(-9px, -50%); }
+        /* Position of every add tab now comes from its card-edge container
+           (.edge-top-left / .edge-right-center / .edge-bottom-center); the
+           .top/.right/.bottom classes are kept only as direction markers. */
+
+        /* ==================== CARD EDGE SLOTS ==================== */
+        /* One flex row per card edge. Items flow with a 4px gap on an 18px row
+           centred on the edge (±9px). The container never intercepts pointer
+           events (so the gaps between pills don't steal a click meant for the
+           card); its children re-enable them. Each edge is anchored by ONE side
+           so hover items grow AWAY from the card and never reflow their
+           always-visible neighbours (the branch tabs stay pinned to the card's
+           top-right corner while the chain appears/expands to their left). */
+        .card-edge {
+            position: absolute;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            height: 18px;
+            pointer-events: none;
+            z-index: 6;
+        }
+        .card-edge > * { pointer-events: auto; }
+        .edge-top-left     { top: -9px; left: 12px; }
+        .edge-top-right    { top: -9px; right: 12px; }
+        .edge-bottom-left  { bottom: -9px; left: 12px; }
+        .edge-bottom-right { bottom: -9px; right: 12px; }
+        .edge-right-center { top: 50%; left: 100%; transform: translate(-9px, -50%); }
+        .edge-bottom-center{ bottom: -9px; left: 50%; transform: translateX(-50%); }
+
+        /* Collision budget: the card is only 188px wide, so a fully expanded
+           "＋ parent" pill on the left and the branch-tabs+chain group on the
+           right cannot both fit. When the left add pill is hovered (the user is
+           aiming to add), the right navigation group briefly yields. */
+        .person-card:has(.edge-top-left .add-btn:hover) .edge-top-right {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.12s;
+        }
 
         /* ==================== MODAL ==================== */
         .modal-overlay {
@@ -1928,10 +1961,8 @@
            card also carries branch tabs (top-right at -22, right 12) the chain
            shifts to right 40 so the two never touch. */
         .rel-link-icon {
-            position: absolute;
+            position: relative;
             box-sizing: border-box;
-            top: -9px;
-            right: 12px;
             height: 18px;
             min-width: 18px;
             border-radius: var(--r-pill);
@@ -1965,8 +1996,6 @@
             font-weight: 600;
             transition: max-width 0.15s, opacity 0.15s, margin-left 0.15s;
         }
-        /* Shift off the branch-tabs column when the card carries both. */
-        .person-card:has(.branch-tabs) .rel-link-icon { right: 40px; }
         @media (hover: hover) {
             .person-card:hover .rel-link-icon { display: inline-flex; }
         }
@@ -1986,16 +2015,6 @@
             margin-left: 3px;
         }
 
-        /* Hidden relationship indicators (∞ partners, ⌂ families) — bottom-left
-           of the card, opposite the cross-tree badge on the bottom-right. */
-        .hidden-indicators {
-            position: absolute;
-            bottom: -22px;
-            left: 12px;
-            display: flex;
-            gap: 4px;
-            z-index: 5;
-        }
         /* ==================== CARD NAV PILLS ==================== */
         /* One pill shape for every card-edge affordance: branch tabs (hidden
            parents/siblings/children), hidden partners (∞), hidden families (⌂)
@@ -2125,24 +2144,20 @@
         }
 
         /* ==================== CROSS-TREE BADGE ==================== */
-        /* Badge showing person exists in other trees - positioned below card */
-        /* Cross-tree badge inherits the unified pill shape above; here only its
-           position (below the card, right side) and the fade-in animation. */
+        /* Badge showing the person exists in other trees. It lives in the
+           bottom-right edge slot (see .edge-bottom-right); here only the unified
+           pill shape, a fade-in, and the hover lift. */
         .cross-tree-badge {
-            position: absolute;
-            bottom: -22px;
-            right: 25%;
-            transform: translateX(50%);
+            position: relative;
             opacity: 0;
             animation: crossTreeFadeIn 0.3s ease forwards;
-            z-index: 5;
         }
         @keyframes crossTreeFadeIn {
-            from { opacity: 0; transform: translateX(50%) scale(0.8); }
-            to { opacity: 1; transform: translateX(50%) scale(1); }
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
         }
         .cross-tree-badge:hover {
-            transform: translateX(50%) translateY(-1px);
+            transform: translateY(-1px);
             z-index: 9999;
         }
 
@@ -2282,18 +2297,8 @@
             }
         }
 
-        /* ==================== BRANCH TABS (ouška) ==================== */
-        /* Branch-navigation pills, top-right of the card (the top centre stays
-           free for the "+" generation tab). Shape comes from the unified pill
-           rules above; here only the group's placement. */
-        .branch-tabs {
-            position: absolute;
-            top: -22px;
-            right: 12px;
-            display: flex;
-            gap: 4px;
-            z-index: 5;
-        }
+        /* Branch-navigation pills live in the top-right edge slot (see
+           .edge-top-right). Shape comes from the unified pill rules above. */
         .branch-tab.active:hover {
             background: var(--primary-dark);
             border-color: var(--primary-dark);
@@ -4095,23 +4100,17 @@
         .person-card.focused:hover {
             transform: scale(1.07);
         }
-        /* "FOCUS" pill, top-right corner of the focused card. */
-        .focus-badge {
-            position: absolute;
-            top: -8px;
-            right: 8px;
-            padding: 1px 7px;
-            border-radius: var(--r-pill);
-            background: var(--primary);
-            color: var(--on-primary);
-            font-family: var(--font-sans);
-            font-size: 10px;
-            font-weight: 600;
-            letter-spacing: 0.06em;
-            line-height: 1.4;
-            box-shadow: var(--shadow-sm);
-            pointer-events: none;
-            z-index: 11;
+        /* The focused card no longer wears a "FOCUS" pill (the fact is already
+           carried by the green border, the focus shadow, and the top-left focus
+           chip). Instead it turns green where identity lives: the avatar ring
+           takes --primary in place of the gender colour, and the name is set in
+           --primary. Gender stays legible from the ∞ relationship line and the
+           hover card, per the spec's preference for simplicity over a dual ring. */
+        .person-card.focused .card-avatar {
+            border-color: var(--primary);
+        }
+        .person-card.focused .name .name-text {
+            color: var(--primary);
         }
 
         /* Search highlight: hits glow (copper), everyone else dims. Class-only. */
@@ -7554,7 +7553,6 @@
            .cross-tree-tooltip): parchment surface, hairline border, one arrow.
            Theme is carried entirely by tokens — no dark-mode override needed. */
         .card-tooltip {
-            display: none;
             position: absolute;
             bottom: calc(100% + 30px);
             left: 50%;
@@ -7572,6 +7570,28 @@
             white-space: nowrap;
             z-index: 1000;
             pointer-events: none;
+            /* Appear only after a 500ms dwell (so sweeping across the tree does
+               not flicker every card); disappear instantly. */
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0s, visibility 0s;
+        }
+        .card-tooltip .tt-name {
+            font-family: var(--font-serif);
+            font-size: 14.5px;
+            font-weight: 600;
+            color: var(--text);
+            line-height: 1.25;
+            margin-bottom: 4px;
+        }
+        .card-tooltip .tt-line { color: var(--text-light); }
+        .card-tooltip .tt-rel { color: var(--text-faint); }
+        .card-tooltip .tt-foot {
+            margin-top: 6px;
+            padding-top: 5px;
+            border-top: 1px solid var(--divider);
+            font-size: 11px;
+            color: var(--text-ghost);
         }
         .card-tooltip::after {
             content: '';
@@ -7587,13 +7607,36 @@
             border-bottom: 1px solid var(--border);
             transform: rotate(45deg);
         }
-        @media (hover: hover) {
-            .person-card:hover .card-tooltip { display: block; }
+        /* Flip below the card when there is no room above (near the viewport top).
+           TreeRenderer toggles .tooltip-below after measuring on hover. */
+        .person-card.tooltip-below .card-tooltip {
+            bottom: auto;
+            top: calc(100% + 30px);
         }
-        .person-card:has(button:hover) .card-tooltip,
-        .person-card:has(.rel-link-icon:hover) .card-tooltip,
-        .person-card:has(.cross-tree-badge:hover) .card-tooltip { display: none !important; }
-        @media (max-width: 900px) { .card-tooltip { display: none !important; } }
+        .person-card.tooltip-below .card-tooltip::after {
+            top: auto;
+            bottom: 100%;
+            margin-top: 0;
+            margin-bottom: -5px;
+            border: none;
+            border-left: 1px solid var(--border);
+            border-top: 1px solid var(--border);
+        }
+        @media (hover: hover) {
+            .person-card:hover .card-tooltip {
+                opacity: 1;
+                visibility: visible;
+                transition: opacity 0.12s ease 0.5s, visibility 0s linear 0.5s;
+            }
+        }
+        /* Hovering any card-edge pill (add tabs, branch tabs, chain, hidden
+           indicators, cross-tree) suppresses the default hover card. */
+        .person-card:has(.card-edge *:hover) .card-tooltip {
+            opacity: 0 !important;
+            visibility: hidden !important;
+            transition: none !important;
+        }
+        @media (max-width: 900px) { .card-tooltip { visibility: hidden !important; } }
 
         /* Print CSS */
         /* Tiled poster print container: hidden on screen, shown only while printing. */
@@ -7601,7 +7644,7 @@
 
         @media print {
             .toolbar, .bottom-bar, .zoom-controls, .control-block, .add-btn,
-            .context-menu, .modal-overlay, .rel-link-icon,
+            .context-menu, .modal-overlay, .rel-link-icon, .card-edge,
             .hidden-partners-btn, .hidden-families-btn,
             .cross-tree-badge, .branch-tab, .badge-tooltip,
             .card-tooltip, .collapse-chain-btn, .fan-controls,

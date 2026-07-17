@@ -1036,9 +1036,10 @@ class TreeRendererClass {
             // changes nothing inside the filtered view. Skip them entirely.
             const showHiddenBadges = this.viewMode !== 'descendants';
 
-            // Add branch tabs - separate button for each direction (displayed side by side)
+            // Branch tabs (top-right edge slot): one pill per hidden direction.
+            // Built into a string here; assembled into the edge container below.
+            let branchTabsHtml = '';
             if (showHiddenBadges && (hasHiddenParents || hasHiddenChildren || hasHiddenSiblings)) {
-                html += `<div class="branch-tabs">`;
                 if (hasHiddenParents) {
                     const hiddenParents = person.parentIds
                         .filter(pid => !this.positions.has(pid))
@@ -1049,7 +1050,7 @@ class TreeRendererClass {
                         const year = p.birthDate ? p.birthDate.split('-')[0] : '';
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
                     }).join('');
-                    html += `<button class="branch-tab" data-action="focus-parent"><span class="pill-glyph">◂</span><span class="pill-text">${strings.focus.branchTabParents}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenParentsTooltip}</div>${parentItems}</div></button>`;
+                    branchTabsHtml += `<button class="branch-tab" data-action="focus-parent"><span class="pill-glyph">◂</span><span class="pill-text">${strings.focus.branchTabParents}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenParentsTooltip}</div>${parentItems}</div></button>`;
                 }
                 if (hasHiddenSiblings) {
                     const hiddenSiblings = siblings.filter(s => !this.positions.has(s.id));
@@ -1058,7 +1059,7 @@ class TreeRendererClass {
                         const year = s.birthDate ? s.birthDate.split('-')[0] : '';
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
                     }).join('');
-                    html += `<button class="branch-tab" data-action="focus-sibling"><span class="pill-glyph">◆</span><span class="pill-text">${strings.focus.branchTabSiblings}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${siblingItems}</div></button>`;
+                    branchTabsHtml += `<button class="branch-tab" data-action="focus-sibling"><span class="pill-glyph">◆</span><span class="pill-text">${strings.focus.branchTabSiblings}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${siblingItems}</div></button>`;
                 }
                 if (hasHiddenChildren) {
                     const hiddenChildren = person.childIds
@@ -1070,15 +1071,14 @@ class TreeRendererClass {
                         const year = c.birthDate ? c.birthDate.split('-')[0] : '';
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
                     }).join('');
-                    html += `<button class="branch-tab" data-action="focus-child"><span class="pill-glyph">▸</span><span class="pill-text">${strings.focus.branchTabChildren}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenChildrenTooltip}</div>${childItems}</div></button>`;
+                    branchTabsHtml += `<button class="branch-tab" data-action="focus-child"><span class="pill-glyph">▸</span><span class="pill-text">${strings.focus.branchTabChildren}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenChildrenTooltip}</div>${childItems}</div></button>`;
                 }
-                html += `</div>`;
             }
 
-            // Add hidden relationship indicators (above card on left, mirror of branch tabs)
-            // Gen >= -1 persons are auto-expanded, so badges only appear for ancestors (gen <= -2)
+            // Hidden relationship indicators (bottom-left edge slot): ∞ partners, ⌂ families.
+            // Gen >= -1 persons are auto-expanded, so these only appear for ancestors (gen <= -2).
+            let hiddenIndicatorsHtml = '';
             if (showHiddenBadges && (hiddenPartnersCount > 0 || hiddenFamiliesCount > 0)) {
-                html += `<div class="hidden-indicators">`;
                 if (hiddenPartnersCount > 0) {
                     // Build rich tooltip with list of hidden partners
                     const hiddenPartners = allPartners.filter(p => !this.positions.has(p.id));
@@ -1087,7 +1087,7 @@ class TreeRendererClass {
                         const year = p.birthDate ? p.birthDate.split('-')[0] : '';
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
                     }).join('');
-                    html += `<button class="hidden-partners-btn" data-action="focus"><span class="pill-glyph">∞</span><span class="pill-count">${hiddenPartnersCount}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenPartnersTooltip}</div>${partnerItems}</div></button>`;
+                    hiddenIndicatorsHtml += `<button class="hidden-partners-btn" data-action="focus"><span class="pill-glyph">∞</span><span class="pill-count">${hiddenPartnersCount}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenPartnersTooltip}</div>${partnerItems}</div></button>`;
                 }
                 if (hiddenFamiliesCount > 0) {
                     // Build rich tooltip with hidden families (partner + children)
@@ -1111,9 +1111,8 @@ class TreeRendererClass {
                                 });
                             return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(partnerName)}</span>${partnerYear ? `<span class="badge-tooltip-detail"> *${partnerYear}</span>` : ''}<div class="badge-tooltip-detail">${childLabels.join(', ')}</div></div>`;
                         }).join('');
-                    html += `<button class="hidden-families-btn" data-action="focus"><span class="pill-glyph">⌂</span><span class="pill-count">${hiddenFamiliesCount}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenFamiliesTooltip}</div>${hiddenFamilyItems}</div></button>`;
+                    hiddenIndicatorsHtml += `<button class="hidden-families-btn" data-action="focus"><span class="pill-glyph">⌂</span><span class="pill-count">${hiddenFamiliesCount}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenFamiliesTooltip}</div>${hiddenFamilyItems}</div></button>`;
                 }
-                html += `</div>`;
             }
 
             const isLocked = DataManager.isPersonLocked(id);
@@ -1160,32 +1159,34 @@ class TreeRendererClass {
                     ${trade ? `<div class="card-trade">${this.escapeHtml(trade)}</div>` : ''}
                     ${density === 'detailed' && metaPlace ? `<div class="card-place">${this.escapeHtml(metaPlace)}</div>` : ''}
                 </div>
-                ${this.focusPersonId && id === this.focusPersonId ? `<span class="focus-badge">${strings.card.focusBadge}</span>` : ''}
                 ${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">&#128274;</span>` : ''}
-                ${!isLocked ? `<button class="rel-link-icon" data-action="relationships" title="${strings.buttons.manageRelationships}" aria-label="${strings.buttons.manageRelationships}"><span class="rel-link-glyph">${chainLinkSvg({ stroke: 'currentColor', size: 11, strokeWidth: 3 })}</span><span class="rel-link-label">${strings.card.relTab}</span></button>` : ''}
             `;
 
-            // Add buttons based on context (hidden for locked persons). Each
-            // rests as a small circle and expands into a labelled pill on hover
-            // (see .add-btn CSS). The former left "sibling" tab is retired — the
-            // action stays available in the card's context menu.
-            if (!isLocked) {
-                const addTab = (dir: string, action: string, title: string, label: string): string =>
-                    `<button class="add-btn ${dir}" data-action="${action}" title="${title}">`
-                    + `<span class="add-btn-glyph">+</span>`
-                    + `<span class="add-btn-label">${label}</span></button>`;
-                // Top: Add parent (if < 2 parents)
-                if (person.parentIds.length < 2) {
-                    html += addTab('top', 'parent', strings.contextMenu.addParent, strings.card.addTabParent);
-                }
-                // Right: Add partner
-                html += addTab('right', 'partner', strings.contextMenu.addPartner, strings.card.addTabPartner);
-                // Bottom: Add child
-                html += addTab('bottom', 'child', strings.contextMenu.addChild, strings.card.addTabChild);
-            }
+            // Chain-link "relations" tab — lives in the top-right edge slot,
+            // to the LEFT of the branch tabs so those (always visible, pinned to
+            // the card's right corner) never shift when the chain appears or
+            // expands on hover.
+            const chainHtml = !isLocked
+                ? `<button class="rel-link-icon" data-action="relationships" title="${strings.buttons.manageRelationships}" aria-label="${strings.buttons.manageRelationships}"><span class="rel-link-glyph">${chainLinkSvg({ stroke: 'currentColor', size: 11, strokeWidth: 3 })}</span><span class="rel-link-label">${strings.card.relTab}</span></button>`
+                : '';
 
-            // Add cross-tree badge if person exists in other trees
+            // Add tabs (hidden for locked persons). Each rests as a small circle
+            // and expands into a labelled pill on hover. The former left "sibling"
+            // tab is retired — the action stays available in the context menu.
+            const addTab = (dir: string, action: string, title: string, label: string): string =>
+                `<button class="add-btn ${dir}" data-action="${action}" title="${title}">`
+                + `<span class="add-btn-glyph">+</span>`
+                + `<span class="add-btn-label">${label}</span></button>`;
+            const parentAddHtml = (!isLocked && person.parentIds.length < 2)
+                ? addTab('top', 'parent', strings.contextMenu.addParent, strings.card.addTabParent) : '';
+            const partnerAddHtml = !isLocked
+                ? addTab('right', 'partner', strings.contextMenu.addPartner, strings.card.addTabPartner) : '';
+            const childAddHtml = !isLocked
+                ? addTab('bottom', 'child', strings.contextMenu.addChild, strings.card.addTabChild) : '';
+
+            // Cross-tree badge (bottom-right edge slot) if the person exists elsewhere.
             let crossTreeMatches: CrossTree.CrossTreeMatch[] = [];
+            let crossTreeHtml = '';
             if (allTrees && currentTreeId && !person.isPlaceholder) {
                 crossTreeMatches = CrossTree.findCrossTreeMatches(currentTreeId, person, allTrees);
                 if (crossTreeMatches.length > 0) {
@@ -1197,7 +1198,7 @@ class TreeRendererClass {
                     ).join('');
                     const moreCount = crossTreeMatches.length > 5 ? crossTreeMatches.length - 5 : 0;
 
-                    html += `<div class="cross-tree-badge" data-person-id="${id}" title="${strings.crossTree.badgeTitle(crossTreeMatches.length)}">
+                    crossTreeHtml = `<div class="cross-tree-badge" data-person-id="${id}" title="${strings.crossTree.badgeTitle(crossTreeMatches.length)}">
                         <span class="pill-glyph">⇄</span><span class="pill-count">${crossTreeMatches.length}</span>
                         <div class="cross-tree-tooltip">
                             <div class="cross-tree-tooltip-header">${strings.crossTree.tooltipHeader}</div>
@@ -1209,56 +1210,86 @@ class TreeRendererClass {
                 }
             }
 
-            // Build tooltip content.
-            //
-            // Date and place are shown independently: knowing the village but
-            // not the date is ordinary in parish work (a damaged register, an
-            // entry you have not found yet), and requiring the date hid the
-            // place completely — a person with only places got no tooltip at all.
-            const tooltipLines: string[] = [];
-            const event = (mark: string, date: string | undefined, place: string | undefined): void => {
-                if (!date && !place) return;
-                const parts = [date ? this.formatDateFull(date) : '', place ? this.escapeHtml(place) : ''];
-                tooltipLines.push(`${mark} ${parts.filter(Boolean).join(', ')}`);
-            };
-            event('*', person.birthDate, person.birthPlace);
-            event('†', person.deathDate, person.deathPlace);
+            // Assemble one flex container per card edge. Containers are
+            // pointer-events:none (children re-enable auto) so the gaps between
+            // pills never steal a click meant for the card.
+            if (parentAddHtml) html += `<div class="card-edge edge-top-left">${parentAddHtml}</div>`;
+            if (chainHtml || branchTabsHtml) html += `<div class="card-edge edge-top-right">${chainHtml}${branchTabsHtml}</div>`;
+            if (hiddenIndicatorsHtml) html += `<div class="card-edge edge-bottom-left">${hiddenIndicatorsHtml}</div>`;
+            if (crossTreeHtml) html += `<div class="card-edge edge-bottom-right">${crossTreeHtml}</div>`;
+            if (partnerAddHtml) html += `<div class="card-edge edge-right-center">${partnerAddHtml}</div>`;
+            if (childAddHtml) html += `<div class="card-edge edge-bottom-center">${childAddHtml}</div>`;
 
-            const age = this.calculateAge(person);
-            if (age !== null) {
-                tooltipLines.push(`${strings.tooltip.age}: ${age}`);
+            // Default hover tooltip (round 6): a fixed 5-part structure —
+            //   1. full name (serif)
+            //   2. * birth date, place
+            //   3. † death date, place (age)   [deceased only]
+            //   4. ∞ primary partner · N children   [when either exists]
+            //   5. footer: the real card gesture
+            // Date and place are shown independently: knowing the village but not
+            // the date is ordinary in parish work (a damaged register, an entry
+            // not yet found). The tooltip is skipped entirely when there is no
+            // life detail to show (a bare name gets no hover card).
+            const ttBirthDate = person.birthDate ? this.formatDateFull(person.birthDate) : '';
+            const ttBirthPlace = person.birthPlace?.trim() ?? '';
+            let ttBirthLine = '';
+            if (ttBirthDate || ttBirthPlace) {
+                ttBirthLine = `* ${[ttBirthDate, ttBirthPlace].filter(Boolean).join(', ')}`;
             }
-            const tooltipTrade = this.occupationOf(person);
-            if (tooltipTrade) tooltipLines.push(`${strings.events.types.occupation}: ${this.escapeHtml(tooltipTrade)}`);
-            // How the registers spell the name — the reason the variants exist.
-            if (person.nameVariants?.length) {
-                // A short label here: the form's "Other spellings of the name"
-                // is a heading, too long for a hover.
-                tooltipLines.push(`${strings.tooltip.alsoWritten}: ${this.escapeHtml(person.nameVariants.join(', '))}`);
+
+            const ttDeathDate = person.deathDate ? this.formatDateFull(person.deathDate) : '';
+            const ttDeathPlace = person.deathPlace?.trim() ?? '';
+            let ttDeathLine = '';
+            if (ttDeathDate || ttDeathPlace) {
+                const ttAge = this.calculateAge(person);
+                const agePart = ttAge !== null ? ` ${strings.tooltip.yearsOld(ttAge)}` : '';
+                ttDeathLine = `† ${[ttDeathDate, ttDeathPlace].filter(Boolean).join(', ')}${agePart}`;
             }
-            if (person.question?.trim()) {
-                tooltipLines.push(`❓ ${this.escapeHtml(person.question.trim())}`);
+
+            // Relationship summary: the primary (first) partnership's partner and
+            // the person's total children count. Either alone is enough to show.
+            let ttRelLine = '';
+            let ttPartnerName = '';
+            const primaryPartnership = partnerships[0];
+            if (primaryPartnership) {
+                const ppid = primaryPartnership.person1Id === id ? primaryPartnership.person2Id : primaryPartnership.person1Id;
+                const pp = DataManager.getPerson(ppid);
+                if (pp) ttPartnerName = `${pp.firstName || '?'} ${pp.lastName || ''}`.trim();
             }
-            for (const p of partnerships) {
-                const partnerId = p.person1Id === id ? p.person2Id : p.person1Id;
-                const partner = DataManager.getPerson(partnerId);
-                if (partner) {
-                    const partnerName = `${partner.firstName || '?'} ${partner.lastName || ''}`.trim();
-                    const statusLabel = strings.partnershipStatus[p.status];
-                    const startYear = p.startDate ? ` (${p.startDate.split('-')[0]})` : '';
-                    tooltipLines.push(`${statusLabel}: ${this.escapeHtml(partnerName)}${startYear}`);
-                }
+            const ttChildCount = person.childIds.length;
+            if (ttPartnerName || ttChildCount > 0) {
+                const bits: string[] = [];
+                if (ttPartnerName) bits.push(`∞ ${this.escapeHtml(ttPartnerName)}`);
+                if (ttChildCount > 0) bits.push(strings.tooltip.childrenCount(ttChildCount));
+                ttRelLine = bits.join(' · ');
             }
-            if (person.notes) {
-                const truncated = person.notes.length > 100 ? person.notes.substring(0, 100) + '...' : person.notes;
-                tooltipLines.push(`${strings.tooltip.notes}: ${this.escapeHtml(truncated)}`);
-            }
-            if (tooltipLines.length > 0 || person.photo) {
-                const tooltipPhoto = person.photo ? `<img class="card-tooltip-photo" src="${person.photo}" alt="">` : '';
-                html += `<div class="card-tooltip">${tooltipPhoto}${tooltipLines.join('<br>')}</div>`;
+
+            if (ttBirthLine || ttDeathLine || ttRelLine) {
+                const rows = [
+                    `<div class="tt-name">${this.escapeHtml(fullName)}</div>`,
+                    ttBirthLine ? `<div class="tt-line">${this.escapeHtml(ttBirthLine)}</div>` : '',
+                    ttDeathLine ? `<div class="tt-line">${this.escapeHtml(ttDeathLine)}</div>` : '',
+                    ttRelLine ? `<div class="tt-line tt-rel">${ttRelLine}</div>` : '',
+                    `<div class="tt-foot">${strings.tooltip.gestureHint}</div>`,
+                ].filter(Boolean).join('');
+                html += `<div class="card-tooltip">${rows}</div>`;
             }
 
             card.innerHTML = html;
+
+            // Tooltip flip: the default hover card sits ~30px above the card, but
+            // near the top of the viewport it would be clipped. On first hover we
+            // measure the (already-laid-out, visibility-hidden) tooltip and flip it
+            // below the card when there is not enough room above. getBoundingClientRect
+            // is in screen space, so pan/zoom transforms are accounted for.
+            const tooltipEl = card.querySelector<HTMLElement>('.card-tooltip');
+            if (tooltipEl) {
+                card.addEventListener('mouseenter', () => {
+                    const cardTop = card.getBoundingClientRect().top;
+                    const needed = tooltipEl.offsetHeight + 30;
+                    card.classList.toggle('tooltip-below', cardTop - needed < 4);
+                });
+            }
 
             // Attach event listeners for branch tabs - all focus on this person
             const branchTabs = card.querySelectorAll('.branch-tab');

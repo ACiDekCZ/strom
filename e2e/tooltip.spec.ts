@@ -32,7 +32,10 @@ test('date and place read as one line when both are known', async ({ page }) => 
     expect(await tip(page, 'Jan').textContent()).toMatch(/\*.*1880.*Kolín/);
 });
 
-test('it carries what was added to a person today', async ({ page }) => {
+test('it shows the life span and the age it worked out to', async ({ page }) => {
+    // The hover card is a fixed summary now (name, birth, death, family). The
+    // richer detail — trade, name spellings, open questions — lives in the
+    // person modal, not the hover.
     await openApp(page);
     await createFirstPerson(page, 'Josef', 'Víšek', { birthDate: '1783' });
     await page.evaluate(() => {
@@ -44,13 +47,14 @@ test('it carries what was added to a person today', async ({ page }) => {
     });
 
     const text = await tip(page, 'Josef').textContent();
-    expect(text).toContain('kovář');          // the trade
-    expect(text).toContain('Wischek');        // how the registers spell him
-    expect(text).toContain('Kdo byli rodiče?'); // the open question
+    expect(text).toContain('1783');           // born
+    expect(text).toContain('1850');           // died
     expect(text).toMatch(/67/);               // age, from the two dates
 });
 
-test('a partner shows with the marriage year', async ({ page }) => {
+test('a partner shows on the relationship line', async ({ page }) => {
+    // The hover card names the primary partner; the marriage year and status
+    // belong to the modal, not the summary.
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
     await addRelation(page, 'Jan', 'partner', 'Marie', 'Novakova', 'female');
@@ -61,7 +65,6 @@ test('a partner shows with the marriage year', async ({ page }) => {
         window.Strom.TreeRenderer.render();
     });
     await expect(tip(page, 'Jan')).toContainText('Marie Novakova');
-    await expect(tip(page, 'Jan')).toContainText('1905');
 });
 
 test('nothing to say means no tooltip', async ({ page }) => {
