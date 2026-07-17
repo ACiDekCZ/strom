@@ -18,7 +18,13 @@ import { SettingsManager } from '../settings.js';
 import { uiModule } from './module.js';
 
 // Below this zoom the labels are noise on a distant tree — hide them.
-const MIN_SCALE_SHOW = 0.6;
+/**
+ * Hide the labels only when generation bands get too CRAMPED on screen to
+ * label usefully. A raw scale threshold (the spec's 0.6) tripped one zoom
+ * step from the default view, because fit-to-screen already works below
+ * scale 1 on any real tree — the honest measure is the projected band pitch.
+ */
+const MIN_BAND_PITCH_PX = 56;
 // Padding from the container's top edge for a pinned label.
 const EDGE_PAD = 10;
 // Half the label height, so a top-pinned row shows fully.
@@ -93,8 +99,12 @@ export const genLabelsMethods = uiModule({
         const { scale, ty } = ZoomPan.getTransform();
         const { height } = ZoomPan.getViewportSize();
 
-        // Hide the whole overlay on a far-out zoom.
-        if (scale < MIN_SCALE_SHOW || height <= 0) {
+        // Hide the whole overlay when bands are too cramped to label (screen
+        // pitch of one generation row), not at an arbitrary zoom scale.
+        const worldPitch = els.length > 1
+            ? (els[els.length - 1].band.rowCenterY - els[0].band.rowCenterY) / (els.length - 1)
+            : els[0].band.bandBottomY - els[0].band.bandTopY;
+        if (worldPitch * scale < MIN_BAND_PITCH_PX || height <= 0) {
             overlay.style.display = 'none';
             return;
         }
