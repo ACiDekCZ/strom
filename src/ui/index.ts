@@ -37,7 +37,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, ViewMode } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
@@ -161,6 +161,12 @@ export class UIClass {
     slideshowStops: PersonId[] = [];
     slideshowIndex = 0;
     slideshowTimer: number | null = null;
+    /**
+     * View mode to restore when the slideshow ends. Set only when the show was
+     * started from a standalone view (fan/timeline/map), which has no person
+     * cards to fly to; null means the show ran in the view it started in.
+     */
+    slideshowReturnView: ViewMode | null = null;
 
     // Map view. mapCenter null = not framed yet (the next draw fits the places).
     mapScope: MapScope = 'view';

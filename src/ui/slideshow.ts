@@ -14,7 +14,7 @@ import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings } from '../strings.js';
-import { PersonId, Person } from '../types.js';
+import { PersonId, Person, STANDALONE_VIEWS } from '../types.js';
 import { formatFlexDate } from '../dates.js';
 import { uiModule } from './module.js';
 
@@ -51,10 +51,27 @@ export const slideshowMethods = uiModule({
         return !!(person.notes?.trim() || person.photo);
     },
 
-    startSlideshow(): void {
+    async startSlideshow(): Promise<void> {
+        // Standalone views (fan/timeline/map) draw into their own container and
+        // leave the tree canvas empty — there are no `.person-card` elements to
+        // fly to or spotlight, so the show would play over a blank screen. Run
+        // it in the Family view instead (real cards + positions) and remember
+        // where to return when it ends. Started from family/descendants, the
+        // cards already exist, so nothing is switched (slideshowReturnView null).
+        this.slideshowReturnView = null;
+        const startView = TreeRenderer.getViewMode();
+        if (STANDALONE_VIEWS.includes(startView)) {
+            this.slideshowReturnView = startView;
+            TreeRenderer.presetViewMode('family');
+            // The show reads positions/cards from the render — wait for it.
+            await TreeRenderer.renderAsync();
+            this.showToast(strings.slideshow.runsInFamily);
+        }
+
         const stops = this.buildSlideshowStops();
         if (stops.length < 2) {
             this.showToast(strings.slideshow.needMore);
+            this.restoreSlideshowView();
             return;
         }
         this.closeMobileMenu?.();
@@ -83,6 +100,19 @@ export const slideshowMethods = uiModule({
         // Leave the user where the tour ended, framed as usual.
         const current = this.slideshowStops[this.slideshowIndex];
         if (current) TreeRenderer.setFocus(current);
+        // If the show borrowed the Family view from a standalone view, hand it back.
+        this.restoreSlideshowView();
+    },
+
+    /**
+     * Return to the view the slideshow was started from, if it borrowed the
+     * Family view (only standalone views set slideshowReturnView). A no-op
+     * otherwise, so it is safe to call on every exit path.
+     */
+    restoreSlideshowView(): void {
+        const view = this.slideshowReturnView;
+        this.slideshowReturnView = null;
+        if (view) TreeRenderer.setViewMode(view);
     },
 
     /** Fly to the current stop, show its caption and schedule the next one. */

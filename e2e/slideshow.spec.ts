@@ -38,6 +38,33 @@ test('slideshow spotlights each stop, hides the chrome and is keyboard driven', 
     await expect(page.locator('.person-card.slideshow-current')).toHaveCount(0);
 });
 
+test('slideshow started from the fan view runs in Family and restores the fan on exit', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Henry VIII')).toBeVisible();
+
+    // Enter a standalone view (fan) — it draws into its own container and the
+    // tree canvas (with the person cards) is hidden.
+    await page.locator('#view-mode-fan').click();
+    await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
+    expect(await page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('fan');
+
+    // Starting the show from the fan view switches to Family (so it has cards
+    // to fly to) and tells the user with a toast.
+    await page.evaluate(() => window.Strom.UI.startSlideshow());
+    await expect(page.locator('.toast')).toContainText(/Family view/i);
+    await expect(page.locator('body')).toHaveClass(/slideshow-mode/);
+    expect(await page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('family');
+    // The show actually plays: exactly one card is spotlighted.
+    await expect.poll(() => page.locator('.person-card.slideshow-current').count()).toBe(1);
+
+    // Leaving restores the fan view the user came from.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('body')).not.toHaveClass(/slideshow-mode/);
+    await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
+    expect(await page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('fan');
+});
+
 test('slideshow needs at least two visible people', async ({ page }) => {
     await openApp(page);
     await page.evaluate(() => window.Strom.UI.showAddPersonModal());
