@@ -80,6 +80,22 @@ test('tree manager: row menu groups actions; Open switches to the tree', async (
     await otherRow.locator('.tree-row-menu-btn').click();
     const menu = otherRow.locator('.tree-row-menu');
     await expect(menu).toHaveClass(/open/);
+
+    // The open menu must be a solid overlay (the modal must not show through
+    // it) in BOTH themes. getComputedStyle reports the declared colour, so we
+    // assert a non-transparent background-color.
+    const lightBg = await menu.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(lightBg).not.toBe('rgba(0, 0, 0, 0)');
+    expect(lightBg).not.toBe('transparent');
+    expect(lightBg).toBe('rgb(255, 255, 255)');
+
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    const darkBg = await menu.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(darkBg).not.toBe('rgba(0, 0, 0, 0)');
+    expect(darkBg).not.toBe('transparent');
+    expect(darkBg).toBe('rgb(45, 45, 45)');
+    await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+
     await menu.locator('.tree-row-menu-item', { hasText: 'Rename' }).click();
     const renameDialog = page.locator('#rename-tree-modal');
     await expect(renameDialog).toBeVisible();
