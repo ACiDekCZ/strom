@@ -379,7 +379,15 @@ function buildDemo(): Builder {
     b.person('josef_dvorak', {
         first: 'Josef', last: 'Dvořák', gender: 'male',
         birth: '1879-03-02', birthPlace: 'Kutná Hora', death: '1945-11-20', deathPlace: 'Kolín',
-        notes: 'Kovář, dílna v Kolíně. Ovdověl 1912, znovu se oženil 1914.',
+        notes: 'Kovář, dílna v Kolíně u mostu — převzatá po mistru Práchenském, '
+            + 'u něhož se vyučil. Rodinná kronika vypráví, že za velké povodně 1908 '
+            + 'vynosil měchy a nářadí do patra a týden pak koval na dvoře pod plachtou. '
+            + 'Ovdověl 1912; podruhé se oženil 1914 s Františkou Svobodovou, která do '
+            + 'domu přinesla vinohrad po otci. Dva odstavce poznámky tu jsou schválně: '
+            + 'kniha rodu má ukázat, jak se dlouhý text láme přes stránky.\n\n'
+            + 'Za první války byl kvůli řemeslu zproštěn odvodu; kul podkovy pro '
+            + 'vojenskou správu a po večerech prý tajně i rasovací nože pro sousedy. '
+            + 'Dílnu předal synovi Bohumilovi roku 1936 a dožil u dcery Věry v Kolíně.',
         refn: 'KH-207', photo: true, sourceIds: ['src_kh_matrika_n'],
     });
     b.person('frantisek_dvorak', {
@@ -687,7 +695,12 @@ function buildDemo(): Builder {
     b.person('eva_pokorna', {
         first: 'Eva', last: 'Dvořáková', gender: 'female',
         birth: '1961-03-08', birthPlace: 'Kutná Hora',
-        notes: 'Ovdověla 2003, znovu se provdala 2007.', photo: true,
+        notes: 'Učitelka v Kutné Hoře; třicet let vedla školní kroniku, z níž rodina '
+            + 'čerpá půlku svých historek. Ovdověla 2003 — Stanislav se nevrátil z '
+            + 'houbařské výpravy na Šumavě a našli ho až po dvou dnech; zápis v kronice '
+            + 'o tom mlčí, jen je u toho týdne založený suchý hřib. Znovu se provdala '
+            + '2007; svatba byla tichá, jen s dětmi a svědky u oběda v Poděbradech.',
+        photo: true,
     });
     b.person('tomas_dvorak', {
         first: 'Tomáš', last: 'Dvořák', gender: 'male',

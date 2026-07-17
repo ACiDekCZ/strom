@@ -316,7 +316,10 @@
         .tree-switcher-dropdown {
             position: absolute;
             top: 100%;
-            right: 0;
+            /* Anchor LEFT: the switcher pill sits near the screen's left edge
+               since the Letopis toolbar — a right-anchored dropdown grew off
+               screen (user report). Growing rightward always has room. */
+            left: 0;
             margin-top: 4px;
             min-width: 220px;
             background: white;
