@@ -381,12 +381,32 @@ function computeAncestorTreeWidth(
     if (!node) return 0;
 
     // Couple width: 2 cards + gap for couple, 1 card for single.
-    // A chain block (couple + appendage extra spouses) is wider — use its
-    // actual coupleWidth so neighbors reserve enough space.
+    // A chain block (couple + appendage extra spouses) is wider — but its
+    // measured coupleWidth also reserves slots for the children of the union
+    // we entered the chain THROUGH (computeChainCoupleWidth serves descendant
+    // chains, where children hang beneath). Here those children are the next
+    // Phase-B generation, already counted by the tree recursion — taking the
+    // block value verbatim double-counts them and drags the whole tree
+    // sideways (devel-demo: Josef's 3-card chain claimed 3356px and exiled
+    // Bohumil+Josefína ~1000px left of Karel). Use the chain's card row plus
+    // slot growth for OTHER unions' children only, which do hang below.
     const blockId = unionToBlock?.get(node.unionId);
     const block = blockId ? blocks?.get(blockId) : undefined;
     if (block?.chainInfo) {
-        node.coupleWidth = block.coupleWidth;
+        const persons = block.chainInfo.personOrder.length;
+        let chainW = persons * config.cardWidth + (persons - 1) * config.partnerGap;
+        for (const [uid, kidIds] of block.chainInfo.unionChildBlockIds) {
+            if (uid === node.unionId) continue;
+            let kidsW = 0;
+            for (const kid of kidIds) {
+                const kb = blocks?.get(kid);
+                if (kb) kidsW += kb.width;
+            }
+            if (kidIds.length > 1) kidsW += (kidIds.length - 1) * config.horizontalGap;
+            // The extra partner's slot grows from one card to their subtree.
+            chainW += Math.max(0, kidsW - config.cardWidth);
+        }
+        node.coupleWidth = chainW;
     } else {
         node.coupleWidth = node.wifeId
             ? config.cardWidth * 2 + config.partnerGap
@@ -974,6 +994,16 @@ function runPhaseBIndependentTrees(
                 + ` wCenter=${wTree ? wTree.xCenter.toFixed(0) : '-'}`);
         };
         stamp('placed');
+        if (dbg) {
+            const dump = (n: AncestorNode | null, side: string, depth: number): void => {
+                if (!n) return;
+                console.log(`[PHB:tree] ${'  '.repeat(depth)}${side} union=${n.unionId} coupleW=${n.coupleWidth.toFixed(0)} width=${n.width.toFixed(0)} x=${n.xCenter.toFixed(0)}`);
+                dump(n.hSubtree, 'h', depth + 1);
+                dump(n.wSubtree, 'w', depth + 1);
+            };
+            dump(hTree, 'H', 0);
+            dump(wTree, 'W', 0);
+        }
 
         // Enforce H/W boundaries for ALL couples in each tree
         enforceAllBoundariesUntilConvergence(hTree, config);

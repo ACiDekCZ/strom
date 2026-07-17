@@ -57,6 +57,13 @@ describe('cousin-marriage anchor trees (devel-demo: Karel × Vlasta are first co
         // headroom — the broken state was ~1584px adrift.
         expect(Math.abs(coupleCenter - vlasta)).toBeLessThan(350);
 
+        // Karel's side mirrors it: his parents hug his card edge instead of
+        // being dragged away by the chain's descendant-slot width (that bug
+        // put Bohumil+Josefína ~1000px left of Karel).
+        const karel = centerOf(result, 'karel_dvorak');
+        const bohumilCouple = (centerOf(result, 'bohumil_dvorak') + centerOf(result, 'josefina_dvorakova')) / 2;
+        expect(Math.abs(bohumilCouple - karel)).toBeLessThan(350);
+
         // And the shared grandparents (Josef's chain) exist exactly once, on
         // the husband's side — still part of the layout, never duplicated.
         expect(result.positions.has('josef_dvorak' as PersonId)).toBe(true);
