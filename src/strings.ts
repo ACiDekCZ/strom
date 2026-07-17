@@ -16,7 +16,9 @@ const stringsEN = {
     // Toolbar
     toolbar: {
         title: 'Strom',
-        addPerson: '+ Add Person',
+        // The "+" affordance is drawn by the button markup (glyph span), so the
+        // label itself carries no leading plus — avoids a double plus.
+        addPerson: 'Add Person',
         export: 'Export ▾',
         import: 'Import ▾',
         newTree: 'New Tree'
@@ -57,7 +59,7 @@ const stringsEN = {
 
     // Mobile menu
     mobileMenu: {
-        addPerson: '+ Add Person',
+        addPerson: 'Add Person',
         export: 'Export',
         import: 'Import',
         newTree: 'New Tree',
@@ -1590,7 +1592,9 @@ const stringsCZ: StringsType = {
     // Toolbar
     toolbar: {
         title: 'Strom',
-        addPerson: '+ Přidat osobu',
+        // The "+" affordance is drawn by the button markup (glyph span), so the
+        // label itself carries no leading plus — avoids a double plus.
+        addPerson: 'Přidat osobu',
         export: 'Export ▾',
         import: 'Import ▾',
         newTree: 'Nový strom'
@@ -1631,7 +1635,7 @@ const stringsCZ: StringsType = {
 
     // Mobile menu
     mobileMenu: {
-        addPerson: '+ Přidat osobu',
+        addPerson: 'Přidat osobu',
         export: 'Export',
         import: 'Import',
         newTree: 'Nový strom',

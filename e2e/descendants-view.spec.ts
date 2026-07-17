@@ -172,6 +172,14 @@ test('view switcher: the selected segment is visibly highlighted in dark theme',
     const inactiveUnderline = await underline('#view-mode-family');
     expect(activeUnderline).not.toBe(inactiveUnderline);
 
+    // Hovering an underline tab must NOT restore the legacy filled-segment
+    // background (that produced dark hover text on a dark-green fill). The
+    // hover keeps a transparent background so the light text stays legible.
+    const family = page.locator('#view-mode-family');
+    await family.hover();
+    const familyHoverBg = await family.evaluate(el => getComputedStyle(el).backgroundColor);
+    expect(familyHoverBg).toBe('rgba(0, 0, 0, 0)');
+
     await page.evaluate(() => window.Strom.SettingsManager.setTheme('system'));
     await page.locator('#view-mode-family').click();
 });

@@ -277,7 +277,12 @@
         .tree-switcher {
             position: relative;
         }
-        .tree-switcher-btn {
+        /* Ghost pill (ZADANI §4): transparent fill, hairline border, --text.
+           Scoped under .toolbar so it outranks the generic
+           ".toolbar button { background: var(--primary); color: white }" rule
+           that was painting it as a solid green pill. Token-driven so it works
+           in both themes without a separate dark override. */
+        .toolbar .tree-switcher-btn {
             display: flex;
             align-items: center;
             gap: 6px;
@@ -291,9 +296,9 @@
             transition: background 0.2s, border-color 0.2s;
             max-width: 200px;
         }
-        .tree-switcher-btn:hover {
+        .toolbar .tree-switcher-btn:hover {
             border-color: var(--primary);
-            background: var(--hover-bg);
+            background: var(--surface-2);
         }
         .tree-switcher-btn .tree-name {
             overflow: hidden;
@@ -404,11 +409,20 @@
            The standalone ⚙ follows the same budget — on narrow toolbars it
            folds into the actions menu (divider + Settings at the bottom). */
         .actions-menu-label { display: inline; }
-        .actions-menu-btn .actions-menu-dots { margin-left: 6px; opacity: 0.7; }
+        /* Wide toolbars (>1280px): the word carries its own menu affordance —
+           the same small chevron the tree-switcher pill uses — and the ⋯ dots
+           (the collapsed-state icon) are redundant, so they hide. */
+        .actions-menu-btn .actions-menu-chevron {
+            margin-left: 5px; color: var(--text-light);
+            flex-shrink: 0; vertical-align: middle; display: inline-block;
+        }
+        .actions-menu-btn .actions-menu-dots { display: none; }
         .actions-menu-settings { display: none; }
         @media (max-width: 1280px) {
+            /* Tight toolbars: fall back to the ⋯-only trigger. */
             .actions-menu-label { display: none; }
-            .actions-menu-btn .actions-menu-dots { margin-left: 0; opacity: 1; }
+            .actions-menu-btn .actions-menu-chevron { display: none; }
+            .actions-menu-btn .actions-menu-dots { display: inline; margin-left: 0; opacity: 1; }
             .actions-toolbar-settings { display: none !important; }
             .actions-menu-settings { display: block; }
         }
@@ -467,7 +481,9 @@
         .toolbar #toolbar-search-picker .person-picker-toggle { right: 2px; }
         .search-shortcut {
             flex-shrink: 0; font-family: var(--font-sans); font-size: 11px;
-            color: var(--text-faint); background: var(--surface-2);
+            /* --text-light (not --text-faint) so the "/" hint clears 4.5:1 on
+               the --surface-2 chip in both themes. */
+            color: var(--text-light); background: var(--surface-2);
             border: 1px solid var(--border); border-radius: var(--r-sm);
             padding: 1px 6px; line-height: 1.5; min-width: 15px; text-align: center;
         }
@@ -524,6 +540,11 @@
            (the shared dark rule paints the filters-panel toggle, not this one). */
         .toolbar .search-filter-toggle,
         [data-theme="dark"] .toolbar .search-filter-toggle { background: transparent; border: none; }
+        /* The generic ".toolbar button { color: white }" rule outranks the
+           single-class toggle selector and painted the funnel white (invisible
+           on the cream pill). Reassert a legible resting colour at higher
+           specificity; the .active state keeps its own white-on-primary. */
+        .toolbar .search-filter-toggle:not(.active) { color: var(--text-light); }
         .search-no-results {
             padding: 12px;
             text-align: center;
@@ -1253,14 +1274,9 @@
             }
         }
 
-        /* Dark mode overrides for various elements */
-        [data-theme="dark"] .tree-switcher-btn {
-            background: var(--card-bg);
-            border-color: #444;
-        }
-        [data-theme="dark"] .tree-switcher-btn:hover {
-            background: #3a3a3a;
-        }
+        /* Dark mode overrides for various elements.
+           (The tree-switcher pill needs none — its ghost styling above is
+           token-driven and already correct in the dark theme.) */
         [data-theme="dark"] .tree-switcher-dropdown {
             background: var(--card-bg);
             border-color: #444;
@@ -4303,12 +4319,19 @@
             border-bottom: 2px solid transparent;
             transition: color 0.15s, border-color 0.15s;
         }
-        .view-mode-segment button:hover { color: var(--text); }
+        /* The underline tabs must stay flat on hover. The generic
+           ".toolbar button:hover { background: var(--primary-dark) }" rule
+           otherwise painted a dark-green fill behind the dark hover text
+           (dark-on-dark) — reassert a transparent background here. */
+        .view-mode-segment button:hover { color: var(--text); background: transparent; }
         .view-mode-segment button.active {
             color: var(--accent);
             border-bottom-color: var(--accent);
             font-weight: 600;
         }
+        /* Hovering the active tab keeps its copper indicator, not the flat
+           hover text colour. */
+        .view-mode-segment button.active:hover { color: var(--accent); background: transparent; }
         /* Descendants badge bar */
         .collab-bar {
             position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 95;
@@ -7566,7 +7589,7 @@
 
         <!-- Actions menu (⋯) — desktop only; the mobile ⋯ + "More" sheet cover smaller screens -->
         <div class="actions-menu desktop-only">
-            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span></button>
+            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><svg class="actions-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span></button>
             <div id="actions-menu-dropdown" class="tree-switcher-dropdown actions-menu-dropdown">
                 <div class="menu-section-header" data-i18n="menu.sectionCurrentView"></div>
                 <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showPosterDialog()">
