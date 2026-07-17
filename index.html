@@ -293,6 +293,19 @@
         .actions-menu-btn {
             position: relative;
         }
+        /* A word beats three dots where there is room: show the "Actions"
+           label on wide toolbars, fall back to ⋯ alone when space is tight.
+           The standalone ⚙ follows the same budget — on narrow toolbars it
+           folds into the actions menu (divider + Settings at the bottom). */
+        .actions-menu-label { display: inline; }
+        .actions-menu-btn .actions-menu-dots { margin-left: 6px; opacity: 0.7; }
+        .actions-menu-settings { display: none; }
+        @media (max-width: 1280px) {
+            .actions-menu-label { display: none; }
+            .actions-menu-btn .actions-menu-dots { margin-left: 0; opacity: 1; }
+            .actions-toolbar-settings { display: none !important; }
+            .actions-menu-settings { display: block; }
+        }
         /* Small dot on the ⋯ trigger so the anniversaries signal survives the
            move out of the tree switcher. */
         .actions-menu-dot {
@@ -6947,7 +6960,7 @@
 
         <!-- Actions menu (⋯) — desktop only; hamburger covers smaller screens -->
         <div class="actions-menu desktop-only">
-            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions">⋯<span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span></button>
+            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span></button>
             <div id="actions-menu-dropdown" class="tree-switcher-dropdown actions-menu-dropdown">
                 <div class="menu-section-header" data-i18n="menu.sectionCurrentView"></div>
                 <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showPosterDialog()">
@@ -6973,11 +6986,15 @@
                 <div class="tree-switcher-action fsa-only" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.attachSaveToFile()">
                     <span>💾</span> <span data-i18n="fileAccess.saveToFile"></span>
                 </div>
+                <div class="tree-switcher-divider actions-menu-settings"></div>
+                <div class="tree-switcher-action actions-menu-settings" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showSettingsDialog()">
+                    <span>⚙</span> <span data-i18n="settings.title"></span>
+                </div>
             </div>
         </div>
+        <button class="secondary desktop-only actions-toolbar-settings" onclick="window.Strom.UI.showSettingsDialog()" data-i18n-title="settings.title">⚙</button>
 
         <!-- Settings button (desktop) -->
-        <button class="secondary desktop-only" onclick="window.Strom.UI.showSettingsDialog()" data-i18n-title="settings.title">⚙</button>
 
         <!-- Mobile hamburger -->
         <button class="hamburger-btn mobile-only" onclick="window.Strom.UI.toggleMobileMenu()">☰</button>
