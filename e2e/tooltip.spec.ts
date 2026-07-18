@@ -128,8 +128,14 @@ test('the photo bubble widens for its text instead of collapsing to a sliver', a
     });
 
     // The bubble earns a real width (roughly the ~280px cap), not a sliver.
+    // The lower bound is the real regression guard (a sliver measured ~64px).
+    // The upper bound keeps generous headroom over the 280px cap: an unbreakable
+    // long name (e.g. "Bartoloměj") has a min-content wider than the column, so
+    // the bubble overflows the cap by a few px, and that overflow varies with the
+    // platform's font metrics (macOS ~280, CI Linux ~287). It still firmly fails
+    // if the cap logic breaks and the tooltip runs away wide.
     expect(m.bubbleWidth).toBeGreaterThanOrEqual(240);
-    expect(m.bubbleWidth).toBeLessThanOrEqual(281);
+    expect(m.bubbleWidth).toBeLessThanOrEqual(305);
     // The text column beside the 56px photo keeps a usable width (a collapsed
     // one-word-per-line sliver measured ~64px here).
     expect(m.bodyWidth).toBeGreaterThanOrEqual(120);
