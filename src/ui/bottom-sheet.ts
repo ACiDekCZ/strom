@@ -8,6 +8,7 @@
 import { PersonId } from '../types.js';
 import { uiModule } from './module.js';
 import { strings } from '../strings.js';
+import { SettingsManager } from '../settings.js';
 import { TreeRenderer } from '../renderer.js';
 
 /** Coarse pointer = touch device; used to gate touch-only behaviour. */
@@ -140,6 +141,8 @@ export const bottomSheetMethods = uiModule({
         const tree: MenuRow[] = [
             { label: s.anniversaries.menu, run: () => this.showAnniversariesDialog(), badge: this.anniversaryBadgeCount() },
         ];
+        // "Change history" row is only offered when the audit log is enabled.
+        if (SettingsManager.isAuditLogEnabled()) tree.push({ label: s.auditLog.viewLog, run: () => this.showAuditLogDialog() });
         if (isFsa) tree.push({ label: s.fileAccess.saveToFile, run: () => this.attachSaveToFile() });
         if (!isView) tree.push({ label: s.treeManager.manageTreesTitle, run: () => this.showTreeManagerDialog() });
         blocks.push({ header: s.menu.sectionTree, rows: tree });

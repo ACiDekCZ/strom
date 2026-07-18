@@ -186,6 +186,9 @@ export const treeManagementMethods = uiModule({
             badge.textContent = count > 0 ? String(count) : '';
             badge.style.display = count > 0 ? 'inline-flex' : 'none';
         }
+        // "Change history" row is only offered when the audit log is enabled.
+        const auditRow = document.getElementById('actions-audit-row');
+        if (auditRow) auditRow.style.display = SettingsManager.isAuditLogEnabled() ? '' : 'none';
         this.refreshActionsUndoRedo();
     },
 
