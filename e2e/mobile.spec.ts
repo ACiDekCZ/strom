@@ -149,6 +149,65 @@ test('the "More" sheet exposes the remaining views and the current-view actions'
     await expect(page.locator('.bottom-sheet-menu')).toHaveCount(0);
 });
 
+test('the "More" sheet mirrors the desktop actions menu: Undo/Redo pair, then Current view, then the prominent Tree row', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    await page.locator('#bb-view-more').tap();
+    const sheet = page.locator('.bottom-sheet-menu');
+    await expect(sheet).toBeVisible();
+
+    // The Undo/Redo pair is the compact first group (no section header above it).
+    const pair = sheet.locator('.bottom-sheet-pair');
+    await expect(pair).toBeVisible();
+    await expect(pair.locator('.bottom-sheet-item', { hasText: 'Undo' })).toBeVisible();
+    await expect(pair.locator('.bottom-sheet-item', { hasText: 'Redo' })).toBeVisible();
+
+    // Section headers appear in the desktop order: Current view, then View, Edits, App.
+    const headers = await sheet.locator('.bottom-sheet-section').allTextContents();
+    expect(headers).toEqual(['Current view', 'View', 'Edits', 'App']);
+
+    // The prominent "Tree: {name}" row sits directly after the Current view group,
+    // carries the active tree's name and a trailing chevron (a submenu opener).
+    const treeRow = sheet.locator('.bottom-sheet-tree-row');
+    await expect(treeRow).toBeVisible();
+    await expect(treeRow.locator('.bottom-sheet-tree-name')).toHaveText('My Family Tree');
+    await expect(treeRow.locator('.bottom-sheet-tree-chevron')).toBeVisible();
+
+    // It is above the fold on a 390x844 phone (visible without scrolling) —
+    // wait for the slide-up transition to settle before measuring.
+    await page.waitForTimeout(350);
+    await expect(treeRow).toBeInViewport({ ratio: 1 });
+
+    // The old top-level "Manage Trees" duplicate is gone — it now lives only in
+    // the second-level tree sheet.
+    await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Manage Trees' })).toHaveCount(0);
+});
+
+test('tapping the Tree row opens the second-level tree sheet with the full desktop submenu', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    await page.locator('#bb-view-more').tap();
+    await page.locator('.bottom-sheet-tree-row').click();
+
+    // Second-level sheet, titled "Tree: {name}".
+    const tree = page.locator('.bottom-sheet-menu');
+    await expect(tree).toBeVisible();
+    await expect(tree.locator('.bottom-sheet-menu-title')).toContainText('My Family Tree');
+
+    // Every whole-tree action from the desktop submenu is present (all except
+    // Delete, which stays in the tree manager).
+    for (const label of ['Rename', 'Duplicate', 'Merge into', 'Split into families',
+        'Statistics', 'Validate', 'Family book', 'Export', 'Anniversaries', 'Hide', 'Manage Trees']) {
+        await expect(tree.locator('.bottom-sheet-item', { hasText: label }).first()).toBeVisible();
+    }
+
+    // Manage Trees opens the tree manager (proves the second-level rows dispatch).
+    await tree.locator('.bottom-sheet-item', { hasText: 'Manage Trees' }).click();
+    await expect(page.locator('#tree-manager-modal')).toHaveClass(/active/);
+});
+
 test('the top bar ⋯ opens the same "More" sheet', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');

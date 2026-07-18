@@ -1656,6 +1656,21 @@
             flex: 1; justify-content: center;
             background: var(--surface-2); border-radius: var(--r-md);
         }
+        /* The prominent "Strom: {name}" row — mirrors the desktop .actions-tree-row:
+           tinted background, text-light prefix, serif 600 name, trailing chevron.
+           It reads as a distinct submenu opener, not just another action. */
+        .bottom-sheet-menu .bottom-sheet-tree-row {
+            background: var(--hover-bg); border-radius: var(--r-md, 10px);
+            margin: 6px 4px; min-height: 56px; gap: 6px; justify-content: flex-start;
+        }
+        .bottom-sheet-tree-prefix { color: var(--text-light); flex-shrink: 0; }
+        .bottom-sheet-tree-name {
+            font-family: var(--font-serif); font-weight: 600; color: var(--text);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+        }
+        .bottom-sheet-tree-chevron {
+            margin-left: auto; color: var(--text-light); flex-shrink: 0; font-size: 22px; line-height: 1;
+        }
         /* Card nav pills are theme-aware by token (var(--surface)/--border/
            --accent/--text-light) — no dark-mode overrides needed. */
         /* Dark mode: relationships panel */

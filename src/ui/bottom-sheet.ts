@@ -15,7 +15,10 @@ import { DataManager } from '../data.js';
 
 /** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
 interface MenuRow { label: string; run: () => void; danger?: boolean; badge?: number; active?: boolean; }
-interface MenuBlock { header: string; rows: MenuRow[]; pair?: MenuRow[]; }
+/** The prominent "Strom: {name}" row that opens the second-level tree sheet
+ *  (serif name + chevron + tinted background — mirrors the desktop submenu row). */
+interface TreeRow { prefix: string; name: string; run: () => void; badge?: number; }
+interface MenuBlock { header?: string; rows: MenuRow[]; pair?: MenuRow[]; treeRow?: TreeRow; }
 
 /** Coarse pointer = touch device; used to gate touch-only behaviour. */
 export function isCoarsePointer(): boolean {
@@ -106,11 +109,16 @@ export const bottomSheetMethods = uiModule({
 
     /**
      * The mobile "More" (Více) navigation sheet — the successor to the removed
-     * hamburger menu. A menu variant of the bottom sheet: section headers plus
-     * flat action rows (no emoji), the same overlay + swipe-to-dismiss chrome as
-     * the person action sheet. Opened from the bottom-bar "More" tab and the top
-     * bar's ⋯ button. Gating mirrors the old hamburger (edit-only items drop in
-     * view mode; save-to-file only when the File System Access API is available).
+     * hamburger menu. It MIRRORS the desktop ⋯ actions menu (index.html
+     * #actions-menu-dropdown): a compact Undo/Redo pair on top, the "Current
+     * view" section, then the prominent "Strom: {name}" row that opens the
+     * second-level tree sheet (the counterpart of the desktop submenu), and
+     * finally the global rows. Two mobile-only groups have no desktop actions-
+     * menu equivalent because desktop reaches them elsewhere: the extra views
+     * (Fan/Map — no bottom-bar tab) and Add family (no toolbar button on the
+     * bar); they sit below the tree row so the important rows stay above the
+     * fold. Opened from the bottom-bar "More" tab and the top bar's ⋯ button.
+     * Gating mirrors the desktop menu (edit-only rows drop in read-only view).
      */
     showMoreMenuSheet(): void {
         this.hideBottomSheet();
@@ -122,13 +130,16 @@ export const bottomSheetMethods = uiModule({
 
         const blocks: MenuBlock[] = [];
 
-        // Views that do not have a bottom-bar tab of their own.
-        blocks.push({ header: s.menu.sectionView, rows: [
-            { label: s.viewModeSwitch.fan, run: () => this.setDisplayViewMode('fan'), active: mode === 'fan' },
-            { label: s.viewModeSwitch.map, run: () => this.setDisplayViewMode('map'), active: mode === 'map' },
-        ] });
+        // 1) Undo / Redo — compact first group, like the top of the desktop menu
+        //    (edit-only; the sheet is the mobile home for these beyond the toast).
+        if (!isView) {
+            blocks.push({ rows: [], pair: [
+                { label: s.undo.undo, run: () => this.performUndo() },
+                { label: s.undo.redo, run: () => this.performRedo() },
+            ] });
+        }
 
-        // Current view actions.
+        // 2) Current view actions (mirrors the desktop "Current view" section).
         const current: MenuRow[] = [
             { label: s.menu.poster, run: () => this.showPosterDialog() },
             { label: s.menu.exportSelection, run: () => this.exportFocusedJSON() },
@@ -140,39 +151,37 @@ export const bottomSheetMethods = uiModule({
         current.push({ label: s.slideshow.menu, run: () => this.startSlideshow() });
         blocks.push({ header: s.menu.sectionCurrentView, rows: current });
 
-        // Tree actions all live behind the "Strom: {name}" second-level sheet
-        // (the mobile counterpart of the desktop submenu) — Anniversaries, Change
-        // history and Save-to-file moved in there too. Nothing to manage per-tree
-        // in read-only view mode, so the whole section is dropped there.
+        // 3) The prominent "Strom: {name}" row — every whole-tree action lives
+        //    behind it (the mobile counterpart of the desktop submenu, incl. the
+        //    anniversaries badge). Nothing to manage per-tree in read-only view.
         if (!isView) {
             const active = TreeManager.getActiveTreeMetadata();
-            const tree: MenuRow[] = [];
             if (active) {
-                tree.push({
-                    label: `${s.menu.treeActions} ${active.name}`,
+                blocks.push({ rows: [], treeRow: {
+                    prefix: s.menu.treeActions,
+                    name: active.name,
                     run: () => this.showTreeActionsSheet(),
-                    // The anniversaries dot rides the top row so a pending
-                    // notice shows without opening the second level.
+                    // The dot rides the top row so a pending notice shows
+                    // without opening the second level.
                     badge: this.anniversaryBadgeCount(),
-                });
+                } });
             }
-            tree.push({ label: s.treeManager.manageTreesTitle, run: () => this.showTreeManagerDialog() });
-            blocks.push({ header: s.menu.sectionTree, rows: tree });
         }
 
-        // Edits (dropped entirely in read-only view mode).
+        // 4) Extra views (Fan/Map) — no bottom-bar tab of their own.
+        blocks.push({ header: s.menu.sectionView, rows: [
+            { label: s.viewModeSwitch.fan, run: () => this.setDisplayViewMode('fan'), active: mode === 'fan' },
+            { label: s.viewModeSwitch.map, run: () => this.setDisplayViewMode('map'), active: mode === 'map' },
+        ] });
+
+        // 5) Edits with no bottom-bar home (dropped in read-only view mode).
         if (!isView) {
-            blocks.push({
-                header: s.menu.sectionEdits,
-                rows: [{ label: s.familyWizard.title, run: () => this.startFamilyWizardFromToolbar() }],
-                pair: [
-                    { label: s.undo.undo, run: () => this.performUndo() },
-                    { label: s.undo.redo, run: () => this.performRedo() },
-                ],
-            });
+            blocks.push({ header: s.menu.sectionEdits, rows: [
+                { label: s.familyWizard.title, run: () => this.startFamilyWizardFromToolbar() },
+            ] });
         }
 
-        // App.
+        // 6) App / global rows.
         blocks.push({ header: s.menu.sectionApp, rows: [
             { label: s.settings.title, run: () => this.showSettingsDialog() },
         ] });
@@ -261,12 +270,46 @@ export const bottomSheetMethods = uiModule({
             return btn;
         };
 
+        const makeTreeButton = (row: TreeRow): HTMLButtonElement => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'bottom-sheet-item bottom-sheet-tree-row';
+            btn.setAttribute('aria-haspopup', 'true');
+            const prefix = document.createElement('span');
+            prefix.className = 'bottom-sheet-tree-prefix';
+            prefix.textContent = row.prefix;
+            const name = document.createElement('span');
+            name.className = 'bottom-sheet-tree-name';
+            name.textContent = row.name;
+            btn.appendChild(prefix);
+            btn.appendChild(name);
+            if (row.badge && row.badge > 0) {
+                const badge = document.createElement('span');
+                badge.className = 'tree-switcher-badge';
+                badge.textContent = String(row.badge);
+                btn.appendChild(badge);
+            }
+            const chevron = document.createElement('span');
+            chevron.className = 'bottom-sheet-tree-chevron';
+            chevron.setAttribute('aria-hidden', 'true');
+            chevron.textContent = '›'; // ›
+            btn.appendChild(chevron);
+            btn.addEventListener('click', () => {
+                this.hideBottomSheet();
+                row.run();
+            });
+            return btn;
+        };
+
         for (const block of blocks) {
-            const header = document.createElement('div');
-            header.className = 'bottom-sheet-section';
-            header.textContent = block.header;
-            list.appendChild(header);
+            if (block.header) {
+                const header = document.createElement('div');
+                header.className = 'bottom-sheet-section';
+                header.textContent = block.header;
+                list.appendChild(header);
+            }
             for (const row of block.rows) list.appendChild(makeButton(row));
+            if (block.treeRow) list.appendChild(makeTreeButton(block.treeRow));
             if (block.pair) {
                 const pairRow = document.createElement('div');
                 pairRow.className = 'bottom-sheet-pair';
