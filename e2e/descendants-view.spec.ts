@@ -245,3 +245,80 @@ test.describe('mobile', () => {
         await expect(page.locator('#bb-view-family')).not.toHaveClass(/active/);
     });
 });
+
+test.describe('mobile: descendants framing (no left clip)', () => {
+    // The Czech sample tree (Přemyslids) rooted at Bořivoj I. reproduces the
+    // exact bug: a chart far wider than a 390px phone. The old framing centred
+    // the full content box, which — because deep descendant rows sprawl right —
+    // shoved the focus (top generation) off the left edge.
+    test.use({ locale: 'cs-CZ', viewport: { width: 390, height: 844 } });
+
+    test('wide descendants chart keeps the focus / top generation visible at the left', async ({ page }) => {
+        await page.goto('/strom.html');
+        await expect(page.locator('.toolbar')).toBeVisible();
+
+        // Real user path: empty-state "Try a sample tree" link (cs → Přemyslids).
+        await page.locator('#empty-state button.link').click();
+        await expect(page.locator('.person-card').first()).toBeVisible();
+
+        // Focus Bořivoj I. (the reported root), then enter Potomci via the
+        // actual mobile bottom-bar tab — the exact sequence the user reported.
+        const focusFirst = await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const b = dm.getAllPersons().find((p: { firstName: string }) => p.firstName.startsWith('Bořivoj I'));
+            window.Strom.TreeRenderer.setFocus(b!.id);
+            return b!.firstName;
+        });
+        expect(focusFirst).toContain('Bořivoj');
+        await page.locator('#bb-view-descendants').click();
+        await expect(page.locator('#descendants-badge')).toBeVisible();
+
+        // Poll the focus card's screen-left until the async render + re-frame
+        // has settled (stable across two reads), rather than trusting a timeout.
+        const readFocusX = () => page.evaluate(() => {
+            const cont = document.getElementById('tree-container')!.getBoundingClientRect();
+            const f = document.querySelector('.person-card.focused') as HTMLElement | null;
+            if (!f) return NaN;
+            return f.getBoundingClientRect().left - cont.left;
+        });
+        await expect.poll(readFocusX, { timeout: 5000 }).not.toBeNaN();
+        let prev = Number.NaN;
+        for (let i = 0; i < 40; i++) {
+            const cur = await readFocusX();
+            if (Number.isFinite(cur) && Math.abs(cur - prev) < 0.5) break;
+            prev = cur;
+            await page.waitForTimeout(100);
+        }
+
+        const geom = await page.evaluate(() => {
+            const cont = document.getElementById('tree-container')!.getBoundingClientRect();
+            let minX = Infinity, maxX = -Infinity;
+            let focusX = NaN, focusRight = NaN;
+            document.querySelectorAll('.person-card').forEach((el) => {
+                const r = (el as HTMLElement).getBoundingClientRect();
+                minX = Math.min(minX, r.left - cont.left);
+                maxX = Math.max(maxX, r.right - cont.left);
+                if (el.classList.contains('focused')) { focusX = r.left - cont.left; focusRight = r.right - cont.left; }
+            });
+            return { viewW: cont.width, minX, maxX, chartW: maxX - minX, focusX, focusRight };
+        });
+
+        const MARGIN = 16;
+        // The focus card must be WHOLE inside the viewport — both its left and
+        // right edges on-screen (before the fix its left sat at x ≈ -1308).
+        expect(geom.focusX).toBeGreaterThanOrEqual(0);
+        expect(geom.focusRight).toBeLessThanOrEqual(geom.viewW);
+
+        if (geom.chartW <= geom.viewW - 2 * MARGIN) {
+            // Chart fits: no card may be clipped on either side.
+            expect(geom.minX).toBeGreaterThanOrEqual(0);
+            expect(geom.maxX).toBeLessThanOrEqual(geom.viewW);
+        } else {
+            // Chart is wider than the viewport: the top generation's left edge
+            // is anchored near the left margin (focus visible), and the content
+            // fills the viewport — no empty gutter on the right.
+            expect(geom.focusX).toBeLessThanOrEqual(MARGIN + 4);
+            expect(geom.maxX).toBeGreaterThan(geom.viewW - MARGIN);
+        }
+    });
+});

@@ -722,7 +722,9 @@ export const appModeMethods = uiModule({
     /** Badge toggle in the descendants view: flip ad hoc and re-render. */
     toggleDescendantsFullFamilies(): void {
         TreeRenderer.setDescendantsFullFamilies(!TreeRenderer.isDescendantsFullFamilies());
-        TreeRenderer.render();
+        // The chart width changes markedly when step-families appear/vanish, so
+        // re-frame once the new cards are in the DOM (keeps the focus visible).
+        void TreeRenderer.renderAsync().then(() => TreeRenderer.centerForViewMode());
         this.updateViewModeUI(); // badge count + toggle state
     },
 

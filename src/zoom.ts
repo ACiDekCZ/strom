@@ -475,6 +475,17 @@ class ZoomPanClass {
      * floating bar overlapping the top (the descendants badge); a chart
      * shorter than the viewport is centered in the remaining space instead of
      * being pinned under the bar.
+     *
+     * Horizontal framing:
+     * - When the chart is NARROWER than the viewport it is centered on its
+     *   content bounding box and clamped so no card is ever clipped.
+     * - When the chart is WIDER than the viewport, centering the full bounding
+     *   box would shove the top generation (the focus) off the left edge,
+     *   because deep descendant rows sprawl far to the right and drag the box
+     *   centre with them. Instead we anchor the LEFT edge of the top
+     *   generation near the left margin so the focus is always the first thing
+     *   read, then clamp so the content still fills the viewport (no empty
+     *   gutter appears on either side).
      */
     centerTreeTopKeepScale(): void {
         const container = document.getElementById('tree-container');
@@ -494,6 +505,18 @@ class ZoomPanClass {
             maxY = Math.max(maxY, top + card.offsetHeight);
         });
 
+        // Left edge of the top generation (the focus row): cards sharing the
+        // topmost Y band. Used as the horizontal anchor for wide charts.
+        const TOP_BAND_TOL = 2;
+        let topMinX = Infinity;
+        cards.forEach(card => {
+            const top = parseFloat(card.style.top) || 0;
+            if (top <= minY + TOP_BAND_TOL) {
+                topMinX = Math.min(topMinX, parseFloat(card.style.left) || 0);
+            }
+        });
+        if (!isFinite(topMinX)) topMinX = minX;
+
         const containerRect = container.getBoundingClientRect();
         const MARGIN = 16;
         let topLimit = MARGIN;
@@ -507,8 +530,30 @@ class ZoomPanClass {
         const availH = container.clientHeight - topLimit - MARGIN;
         const top = treeH < availH ? topLimit + (availH - treeH) / 2 : topLimit;
 
-        const treeCenterX = (minX + maxX) / 2;
-        this.tx = container.clientWidth / 2 - treeCenterX * this.scale;
+        const viewW = container.clientWidth;
+        const scaledW = (maxX - minX) * this.scale;
+        const availW = viewW - 2 * MARGIN;
+
+        let tx: number;
+        if (scaledW <= availW) {
+            // Fits: centre the content box, then clamp as a safety net so no
+            // card ever pokes past the left/right margin.
+            tx = viewW / 2 - ((minX + maxX) / 2) * this.scale;
+            const leftScreen = minX * this.scale + tx;
+            if (leftScreen < MARGIN) tx += MARGIN - leftScreen;
+            const rightScreen = maxX * this.scale + tx;
+            if (rightScreen > viewW - MARGIN) tx -= rightScreen - (viewW - MARGIN);
+        } else {
+            // Wider than the viewport: anchor the top generation's left edge at
+            // the margin, then clamp into the valid pan range so the content
+            // keeps filling the viewport (no empty gutter on either side).
+            tx = MARGIN - topMinX * this.scale;
+            const minTx = (viewW - MARGIN) - maxX * this.scale; // right edge at right margin
+            const maxTx = MARGIN - minX * this.scale;           // left edge at left margin
+            tx = Math.min(Math.max(tx, minTx), maxTx);
+        }
+
+        this.tx = tx;
         this.ty = top - minY * this.scale;
         this.apply();
     }
