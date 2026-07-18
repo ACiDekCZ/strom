@@ -24,6 +24,7 @@ import {
 import { strings } from '../strings.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import { compressPhoto, dataUrlByteSize, rotatePhotoDataUrl } from '../photo.js';
+import { personInitials } from '../initials.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -260,7 +261,7 @@ export const personModalMethods = uiModule({
         if (photo) {
             avatar.innerHTML = `<img src="${photo}" alt="">`;
         } else {
-            const initials = ((first[0] || '') + (last[0] || '')).toUpperCase();
+            const initials = personInitials(first, last);
             avatar.innerHTML = `<span class="pm-avatar-initials">${initials || '?'}</span>`;
         }
     },

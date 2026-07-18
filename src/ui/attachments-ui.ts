@@ -32,6 +32,14 @@ function isImage(att: Attachment): boolean {
     return att.mimeType.startsWith('image/');
 }
 
+/**
+ * Capture-phase Escape handler for the fullscreen image preview. Registered
+ * only while the overlay is open so that Escape closes ONLY the preview and
+ * never falls through to close the underlying edit modal. Kept at module scope
+ * so it can be removed on close (no leaks / double-handling).
+ */
+let attachmentOverlayEscHandler: ((e: KeyboardEvent) => void) | null = null;
+
 /** Convert a data URL to a Blob (for opening PDFs via an object URL). */
 function dataUrlToBlob(dataUrl: string): Blob {
     const comma = dataUrl.indexOf(',');
@@ -149,6 +157,19 @@ export const attachmentsMethods = uiModule({
             const overlay = document.getElementById('attachment-overlay');
             if (img) img.src = att.dataUrl;
             overlay?.classList.add('active');
+            // Escape closes only the preview — capture-phase + stopPropagation so
+            // it never reaches the global handler that would close the edit modal.
+            if (!attachmentOverlayEscHandler) {
+                attachmentOverlayEscHandler = (e: KeyboardEvent) => {
+                    if (e.key !== 'Escape') return;
+                    if (!document.getElementById('attachment-overlay')?.classList.contains('active')) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    this.closeAttachmentOverlay();
+                };
+                document.addEventListener('keydown', attachmentOverlayEscHandler, true);
+            }
         } else {
             const url = URL.createObjectURL(dataUrlToBlob(att.dataUrl));
             window.open(url, '_blank');
@@ -161,6 +182,10 @@ export const attachmentsMethods = uiModule({
         document.getElementById('attachment-overlay')?.classList.remove('active');
         const img = document.getElementById('attachment-overlay-img') as HTMLImageElement | null;
         if (img) img.src = '';
+        if (attachmentOverlayEscHandler) {
+            document.removeEventListener('keydown', attachmentOverlayEscHandler, true);
+            attachmentOverlayEscHandler = null;
+        }
     },
 
     updateAttachmentNoteFromInput(attachmentId: string, note: string): void {

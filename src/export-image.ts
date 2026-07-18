@@ -9,6 +9,7 @@
 import { StromData, LayoutConfig, DEFAULT_LAYOUT_CONFIG, PartnershipStatus } from './types.js';
 import { LayoutResult } from './layout/pipeline/types.js';
 import { displayYear } from './dates.js';
+import { personInitials } from './initials.js';
 
 /** The subset of a LayoutResult the poster needs (no diagnostics required). */
 export type PosterLayout = Pick<LayoutResult, 'positions' | 'connections' | 'spouseLines'>;
@@ -292,7 +293,7 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
                 out.push(`<image href="${escapeXml(person.photo!)}" x="${(cxAv - 17).toFixed(1)}" y="${(cyAv - 17).toFixed(1)}" width="34" height="34" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
                 out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="17" fill="none" stroke="${ring}" stroke-width="2"/>`);
             } else {
-                const initials = ((person.firstName?.[0] || '?') + (person.lastName?.[0] || '')).toUpperCase();
+                const initials = personInitials(person.firstName, person.lastName) || '?';
                 out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="17" fill="${COLORS.avatarBg}" stroke="${ring}" stroke-width="2"/>`);
                 out.push(`<text x="${cxAv.toFixed(1)}" y="${(cyAv + 4).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="600" fill="${COLORS.initials}">${escapeXml(initials)}</text>`);
             }

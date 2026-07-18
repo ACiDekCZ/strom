@@ -16,6 +16,7 @@ import { formatFlexDate, yearOf } from './dates.js';
 import { sortLifeEvents } from './events.js';
 import { assignGenerations } from './generations.js';
 import { getStringsForLang } from './strings.js';
+import { personInitials } from './initials.js';
 
 export interface BookOptions {
     title?: string;
@@ -153,7 +154,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     // Photo (circular) or initials.
     const photoImg = (p: Person) => p.photo
         ? `<img class="book-portrait" src="${esc(p.photo)}" alt="">`
-        : `<div class="book-portrait book-portrait-empty">${esc((p.firstName[0] ?? '') + (p.lastName[0] ?? ''))}</div>`;
+        : `<div class="book-portrait book-portrait-empty">${esc(personInitials(p.firstName, p.lastName))}</div>`;
 
     // A person medallion. `cite(id)` returns a footnote-marker string for a
     // source id, collecting per-chapter footnotes as a side effect.

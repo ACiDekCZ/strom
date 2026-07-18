@@ -43,6 +43,7 @@ import { classifyBranches, Branch } from './branch-colors.js';
 import { presumedDeceasedSet, isLivingPerson } from './privacy.js';
 import { placeList } from './places.js';
 import { SettingsManager } from './settings.js';
+import { personInitials } from './initials.js';
 import { extractSubtree } from './subtree.js';
 import { buildFanModel, buildFanSvg } from './fan-chart.js';
 
@@ -1129,7 +1130,7 @@ class TreeRendererClass {
             // Full name on one row (never shrunk — overflow ellipsizes).
             const fullName = `${displayName} ${displaySurname}`.trim();
             // Avatar initials (first name + surname), used when there is no photo.
-            const initials = ((displayName[0] || '?') + (displaySurname[0] || '')).toUpperCase();
+            const initials = personInitials(displayName, displaySurname) || '?';
 
             // Meta row (row 2): life-year range. The year range carries the
             // "deceased" cue (the † dagger is gone from the name row): a dead
