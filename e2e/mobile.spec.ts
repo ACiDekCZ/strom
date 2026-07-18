@@ -141,7 +141,7 @@ test('the "More" sheet exposes the remaining views and the current-view actions'
     await expect(sheet.locator('.bottom-sheet-section', { hasText: /^View$/ })).toBeVisible();
     await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Fan' })).toBeVisible();
     await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Map' })).toBeVisible();
-    await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Export this view' })).toBeVisible();
+    await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Export' })).toBeVisible();
 
     // Poster… opens the view-aware poster dialog and closes the sheet.
     await sheet.locator('.bottom-sheet-item', { hasText: 'Poster' }).click();

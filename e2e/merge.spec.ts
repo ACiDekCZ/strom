@@ -144,7 +144,7 @@ test('merge wizard: update-only toggle drops "New" to 0, and a match row can be 
     await expect(wizard.locator('#merge-stat-skipped')).toHaveText('1');
 });
 
-test('actions menu "Merge this view into…" opens the target picker', async ({ page }) => {
+test('actions menu "Merge into…" (current view) opens the target picker', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
@@ -158,9 +158,10 @@ test('actions menu "Merge this view into…" opens the target picker', async ({ 
         });
     });
 
-    // Open the ⋯ actions menu and click the new action.
+    // Open the ⋯ actions menu and click the current-view merge action (a direct
+    // child of the dropdown — the submenu's whole-tree "Merge into…" is nested).
     await page.locator('.actions-menu-btn').click();
-    const action = page.locator('#actions-menu-dropdown .tree-switcher-action').filter({ hasText: 'Merge this view into' });
+    const action = page.locator('#actions-menu-dropdown > .tree-switcher-action').filter({ hasText: 'Merge into' });
     await expect(action).toBeVisible();
     await action.click();
 

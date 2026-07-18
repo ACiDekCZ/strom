@@ -481,6 +481,8 @@
             background: white; border: 1px solid #ddd;
             border-radius: 10px; box-shadow: var(--shadow-lg);
             padding: 4px 0; z-index: 210; display: none;
+            /* The submenu now carries every whole-tree action — keep it on-screen. */
+            max-height: calc(100vh - 90px); overflow-y: auto;
         }
         .actions-tree-wrap:hover > .actions-tree-submenu,
         .actions-tree-wrap.submenu-open > .actions-tree-submenu { display: block; }
@@ -8027,10 +8029,7 @@
                     <span data-i18n="menu.exportSelection"></span>
                 </div>
                 <div class="tree-switcher-action edit-only" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.makeTreeFromCurrentView()">
-                    <span data-i18n="menu.makeTreeFromView"></span>
-                </div>
-                <div class="tree-switcher-action edit-only" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showSplitFamiliesDialog()">
-                    <span data-i18n="menu.splitFamilies"></span>
+                    <span data-i18n="menu.makeTree"></span>
                 </div>
                 <div class="tree-switcher-action edit-only" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.mergeViewInto()">
                     <span data-i18n="menu.mergeViewInto"></span>
@@ -8038,26 +8037,15 @@
                 <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.startSlideshow()">
                     <span data-i18n="slideshow.menu"></span>
                 </div>
-                <div class="menu-section-header" data-i18n="menu.sectionTree"></div>
-                <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showAnniversariesDialog()">
-                    <span data-i18n="anniversaries.menu"></span>
-                    <span id="actions-ann-badge" class="tree-switcher-badge" style="display:none;"></span>
-                </div>
-                <div id="actions-audit-row" class="tree-switcher-action" style="display:none;" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showAuditLogDialog()">
-                    <span data-i18n="auditLog.viewLog"></span>
-                </div>
-                <div class="tree-switcher-action fsa-only" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.attachSaveToFile()">
-                    <span data-i18n="fileAccess.saveToFile"></span>
-                </div>
-                <div class="tree-switcher-divider actions-menu-settings"></div>
-                <div class="tree-switcher-action actions-menu-settings" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showSettingsDialog()">
-                    <span data-i18n="settings.title"></span>
-                </div>
                 <div class="tree-switcher-divider"></div>
+                <!-- "Strom: {name}" — every whole-tree action lives here (all except
+                     Delete, which stays in the tree manager). Anniversaries, Change
+                     history and Save-to-file moved in from the old "Tree" section. -->
                 <div class="actions-tree-wrap" id="actions-tree-wrap">
                     <div class="tree-switcher-action actions-tree-row" id="actions-tree-row" role="menuitem" tabindex="0" aria-haspopup="true" aria-expanded="false" onclick="window.Strom.UI.toggleActionsTreeSubmenu()">
                         <span class="actions-tree-prefix" data-i18n="menu.treeActions"></span>
                         <span class="actions-tree-name" id="actions-tree-name"></span>
+                        <span id="actions-tree-row-dot" style="display:none; width:8px; height:8px; border-radius:50%; background:#e0555a; margin-left:6px; flex-shrink:0;"></span>
                         <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
                     </div>
                     <div class="actions-tree-submenu" id="actions-tree-submenu" role="menu">
@@ -8070,14 +8058,45 @@
                         <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionMergeInto()">
                             <span data-i18n="treeManager.mergeInto"></span>
                         </div>
+                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionSplitFamilies()">
+                            <span data-i18n="menu.splitFamilies"></span>
+                        </div>
+                        <div class="tree-switcher-divider"></div>
                         <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionStats()">
                             <span data-i18n="treeManager.stats"></span>
                         </div>
+                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionValidate()">
+                            <span data-i18n="treeManager.validate"></span>
+                        </div>
+                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionBook()">
+                            <span data-i18n="book.menu"></span>
+                        </div>
+                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionExport()">
+                            <span data-i18n="menu.export"></span>
+                        </div>
+                        <div class="tree-switcher-action fsa-only" role="menuitem" onclick="window.Strom.UI.treeActionSaveToFile()">
+                            <span data-i18n="fileAccess.saveToFile"></span>
+                        </div>
                         <div class="tree-switcher-divider"></div>
+                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionAnniversaries()">
+                            <span data-i18n="anniversaries.menu"></span>
+                            <span id="actions-tree-ann-badge" class="tree-switcher-badge" style="display:none;"></span>
+                        </div>
+                        <div class="tree-switcher-action" id="actions-tree-audit-row" style="display:none;" role="menuitem" onclick="window.Strom.UI.treeActionAudit()">
+                            <span data-i18n="auditLog.viewLog"></span>
+                        </div>
+                        <div class="tree-switcher-divider"></div>
+                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionHide()">
+                            <span data-i18n="treeManager.hide"></span>
+                        </div>
                         <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionManager()">
                             <span data-i18n="treeManager.manageTreesTitle"></span>
                         </div>
                     </div>
+                </div>
+                <div class="tree-switcher-divider actions-menu-settings"></div>
+                <div class="tree-switcher-action actions-menu-settings" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showSettingsDialog()">
+                    <span data-i18n="settings.title"></span>
                 </div>
             </div>
         </div>

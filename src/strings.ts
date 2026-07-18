@@ -31,12 +31,13 @@ const stringsEN = {
         exportJson: 'Export JSON',
         exportJsonDesc: 'Download data as JSON file',
         exportFocus: 'Export this view',
-        exportSelection: 'Export this view',
+        exportSelection: 'Export',
         poster: 'Poster…',
+        makeTree: 'Make a tree',
         makeTreeFromView: 'Make a tree from this view',
         makeTreeFromViewDesc: 'Create a new tree in the app from the shown people',
         splitFamilies: 'Split into families…',
-        mergeViewInto: 'Merge this view into…',
+        mergeViewInto: 'Merge into…',
         actions: 'Actions',
         treeActions: 'Tree:',
         sectionCurrentView: 'Current view',
@@ -173,6 +174,11 @@ const stringsEN = {
         keepsOriginal: 'The original tree is left exactly as it is. The new trees stay linked across their shared people — delete any you do not want in Manage trees.',
         done: (count: number) => count === 1 ? '1 tree created' : `${count} trees created`,
         tooSmall: 'Show a family or descendants view first, then split it into families.',
+        // Person-picker step (splitting a tree that is not the one on screen —
+        // no live view to seed the first family, so the user names the person).
+        pickerTitle: 'Split into families — starting person',
+        pickerIntro: 'Pick the person this split starts from. The first family grows around them; the rest are found by following the relatives that lead out of it.',
+        pickerConfirm: 'Continue',
     },
 
     advanced: {
@@ -1329,6 +1335,9 @@ const stringsEN = {
         // Tree visibility
         showTree: 'Show tree',
         hideTree: 'Hide tree',
+        // Short label for the "Tree: {name}" submenu, where the header already
+        // names the tree (no need to repeat the noun).
+        hide: 'Hide',
         showTreeHint: 'Show tree',
         hideTreeHint: 'Hide tree',
         hiddenLabel: '(hidden)'
@@ -1667,12 +1676,13 @@ const stringsCZ: StringsType = {
         exportJson: 'Export JSON',
         exportJsonDesc: 'Stáhnout data jako JSON soubor',
         exportFocus: 'Export aktuálního pohledu',
-        exportSelection: 'Export aktuálního pohledu',
+        exportSelection: 'Export',
         poster: 'Plakát…',
+        makeTree: 'Vytvořit strom',
         makeTreeFromView: 'Vytvořit strom z aktuálního pohledu',
         makeTreeFromViewDesc: 'Ze zobrazených osob vytvořit nový strom přímo v aplikaci',
         splitFamilies: 'Rozdělit na rodiny…',
-        mergeViewInto: 'Sloučit tento pohled do…',
+        mergeViewInto: 'Sloučit do…',
         actions: 'Akce',
         treeActions: 'Strom:',
         sectionCurrentView: 'Aktuální pohled',
@@ -1809,6 +1819,11 @@ const stringsCZ: StringsType = {
         keepsOriginal: 'Původní strom zůstává přesně tak, jak je. Nové stromy zůstávají propojené přes společné osoby — nechtěné smažte ve Správě stromů.',
         done: (count: number) => count === 1 ? 'Vytvořen 1 strom' : `Vytvořeno ${count} ${count < 5 ? 'stromy' : 'stromů'}`,
         tooSmall: 'Nejdřív zobrazte pohled Rodina nebo Potomci, pak jej rozdělte na rodiny.',
+        // Výběr osoby (dělíme strom, který není zobrazený — není živý pohled,
+        // který by první rodinu určil, tak osobu zadá uživatel).
+        pickerTitle: 'Rozdělit na rodiny — výchozí osoba',
+        pickerIntro: 'Vyberte osobu, od které se dělení začne. Kolem ní vyroste první rodina; ostatní se najdou sledováním příbuzných, kteří z ní vedou ven.',
+        pickerConfirm: 'Pokračovat',
     },
 
     advanced: {
@@ -2970,6 +2985,9 @@ const stringsCZ: StringsType = {
         // Tree visibility
         showTree: 'Zobrazovat strom',
         hideTree: 'Nezobrazovat strom',
+        // Short label for the "Strom: {name}" submenu, where the header already
+        // names the tree (no need to repeat the noun).
+        hide: 'Skrýt',
         showTreeHint: 'Zobrazit strom',
         hideTreeHint: 'Skrýt strom',
         hiddenLabel: '(skrytý)'

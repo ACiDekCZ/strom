@@ -188,19 +188,21 @@ export const treeManagementMethods = uiModule({
      */
     refreshActionMenuBadges(): void {
         const count = this.anniversaryBadgeCount();
-        // Small dot on the triggers so the signal survives the menu move.
-        for (const id of ['actions-menu-dot', 'bottom-bar-more-dot']) {
+        // Small dot on the triggers so the signal survives the menu move — the ⋯
+        // button, the mobile "More" tab, and the "Strom:" submenu row (so a
+        // pending anniversary is visible even while the submenu is closed).
+        for (const id of ['actions-menu-dot', 'bottom-bar-more-dot', 'actions-tree-row-dot']) {
             const dot = document.getElementById(id);
             if (dot) dot.style.display = count > 0 ? 'block' : 'none';
         }
-        // Count badge inside the desktop ⋯ actions menu.
-        const badge = document.getElementById('actions-ann-badge');
+        // Count badge on the Anniversaries row inside the "Strom:" submenu.
+        const badge = document.getElementById('actions-tree-ann-badge');
         if (badge) {
             badge.textContent = count > 0 ? String(count) : '';
             badge.style.display = count > 0 ? 'inline-flex' : 'none';
         }
         // "Change history" row is only offered when the audit log is enabled.
-        const auditRow = document.getElementById('actions-audit-row');
+        const auditRow = document.getElementById('actions-tree-audit-row');
         if (auditRow) auditRow.style.display = SettingsManager.isAuditLogEnabled() ? '' : 'none';
         this.refreshActionsUndoRedo();
     },
@@ -290,8 +292,8 @@ export const treeManagementMethods = uiModule({
         document.getElementById('actions-tree-row')?.setAttribute('aria-expanded', 'false');
     },
 
-    // The five "Tree:" submenu actions reuse the tree-manager's own functions
-    // (no duplicated logic) against the ACTIVE tree, resolved at click time.
+    // The "Tree:" submenu actions reuse the app's own functions (no duplicated
+    // logic) against the ACTIVE tree, resolved at click time.
     treeActionRename(): void {
         const id = TreeManager.getActiveTreeId();
         this.closeActionsMenu();
@@ -310,6 +312,47 @@ export const treeManagementMethods = uiModule({
     treeActionStats(): void {
         this.closeActionsMenu();
         this.showActiveTreeStats();
+    },
+    treeActionValidate(): void {
+        const id = TreeManager.getActiveTreeId();
+        this.closeActionsMenu();
+        if (id) this.showTreeValidationDialog(id);
+    },
+    treeActionBook(): void {
+        this.closeActionsMenu();
+        this.showBookDialog();
+    },
+    treeActionExport(): void {
+        // The whole-tree export hub for the active tree (JSON / App / GEDCOM /
+        // CSV / Poster / Book / Share). The current-view "Export" in the section
+        // above stays view-scoped; context tells them apart.
+        this.closeActionsMenu();
+        this.showExportDialog();
+    },
+    treeActionSaveToFile(): void {
+        this.closeActionsMenu();
+        this.attachSaveToFile();
+    },
+    treeActionAnniversaries(): void {
+        this.closeActionsMenu();
+        this.showAnniversariesDialog();
+    },
+    treeActionAudit(): void {
+        this.closeActionsMenu();
+        this.showAuditLogDialog();
+    },
+    treeActionSplitFamilies(): void {
+        // WYSIWYG: the active tree IS the live view, so no person picker — the
+        // first family is exactly what is on screen (same as before the move).
+        this.closeActionsMenu();
+        this.showSplitFamiliesDialog();
+    },
+    treeActionHide(): void {
+        const id = TreeManager.getActiveTreeId();
+        this.closeActionsMenu();
+        // Hiding the active tree switches to another visible one; the last
+        // visible tree cannot be hidden (handled inside toggleTreeVisibility).
+        if (id) void this.toggleTreeVisibility(id);
     },
     treeActionManager(): void {
         this.closeActionsMenu();
@@ -513,6 +556,7 @@ export const treeManagementMethods = uiModule({
                                 ${isActive ? menuItem(`window.Strom.UI.showPlacesManager(undefined, 'tree-manager-modal')`, strings.map.placesTitle, 'edit-only') : ''}
                                 ${isActive ? menuItem(`window.Strom.UI.showSurnamesDialog('tree-manager-modal')`, strings.surnames.menu, 'edit-only') : ''}
                                 ${menuItem(`window.Strom.UI.showSplitDialog('${tree.id}', 'tree-manager-modal')`, strings.split.menu, 'edit-only')}
+                                ${menuItem(`window.Strom.UI.showSplitFamiliesPickerDialog('${tree.id}', 'tree-manager-modal')`, strings.menu.splitFamilies, 'edit-only')}
                                 ${auditItem}
                                 ${menuItem(`window.Strom.UI.duplicateTree('${tree.id}')`, s.duplicate, 'edit-only')}
                                 ${menuItem(`window.Strom.UI.showMergeTreesDialog('${tree.id}', 'tree-manager-modal')`, s.mergeInto, 'edit-only')}

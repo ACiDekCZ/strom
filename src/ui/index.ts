@@ -201,8 +201,20 @@ export class UIClass {
     splitTreeId: TreeId | null = null;
     splitComponents: TreeComponent[] = [];
     splitParentDialog: string | null = null;
-    // "Split into families" (N4): the proposed families for the open dialog.
+    // "Split into families" (N4): the proposed families for the open dialog and
+    // the data/tree they were computed from (the active tree for the WYSIWYG
+    // path, any tree for the tree-manager path — hence a stored source, not
+    // always DataManager.getData()).
     splitFamiliesComponents: import('../split-families.js').FamilyComponent[] = [];
+    splitFamiliesData: StromData | null = null;
+    splitFamiliesTreeId: TreeId | null = null;
+    splitFamiliesParentDialog: string | null = null;
+    /** True only for the live-view path, where the first family badge ("your
+     *  current view") is meaningful. */
+    splitFamiliesWysiwyg = false;
+    /** Person picker for the tree-manager "starting person" step. */
+    splitFamiliesPicker: import('../person-picker.js').PersonPicker | null = null;
+    splitFamiliesPickerParent: string | null = null;
     /** When the source editor was opened from the picker, cite the new source. */
     citeSourceAfterCreate = false;
 

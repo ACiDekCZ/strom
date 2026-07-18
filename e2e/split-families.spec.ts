@@ -108,3 +108,48 @@ test('creating the checked families leaves the original alone and links them', a
     await page.evaluate(async () => { await window.Strom.TreeRenderer.renderAsync?.(); });
     await expect(page.locator('.cross-tree-badge').first()).toBeVisible({ timeout: 10000 });
 });
+
+test('tree manager row: split picks a starting person (prefilled) and splits a non-active tree', async ({ page }) => {
+    await loadShallowView(page);   // imports the Novák tree (active), default person = me
+    // A second tree makes the Novák tree NON-active — the split has no live view.
+    await page.evaluate(() => window.Strom.DataManager.createNewTree('Jiný strom'));
+
+    // Open the tree manager and the Novák row's ⋯ menu → "Split into families…".
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    const row = page.locator('.tree-manager-item', { hasText: 'Rodina Novákových' });
+    await row.locator('.tree-row-menu-btn').click();
+    await row.locator('.tree-row-menu-item', { hasText: 'Split into families' }).click();
+
+    // The person picker opens, prefilled with the tree's default person (Petr).
+    const picker = page.locator('#split-fam-picker-modal');
+    await expect(picker).toBeVisible();
+    await expect(picker.locator('.person-picker-input')).toHaveValue(/Petr Novák/);
+
+    // Continue → the components dialog runs against THAT tree at default 3/3.
+    await picker.getByRole('button', { name: 'Continue' }).click();
+    const modal = page.locator('#split-families-modal');
+    await expect(modal).toBeVisible();
+    // No live view here, so no "your current view" badge.
+    await expect(modal).not.toContainText('Your current view');
+    const rows = modal.locator('.splitfam-row');
+    await expect(rows).toHaveCount(2);   // Petr's family + Eva's parents
+
+    await page.getByRole('button', { name: 'Create 2 trees' }).click();
+    await expect(modal).toBeHidden();
+
+    const names = await page.evaluate(() => window.Strom.TreeManager.getTrees()
+        .map((t: { name: string }) => t.name));
+    expect(names).toContain('Petr Novák family');
+    expect(names).toContain('Eva Nováková family');
+    expect(names).toContain('Rodina Novákových');   // original untouched
+
+    // The user stays on the tree they had active — the split did not switch it.
+    const [active, other] = await page.evaluate(() => {
+        const trees = window.Strom.TreeManager.getTrees();
+        return [
+            window.Strom.TreeManager.getActiveTreeId(),
+            trees.find((t: { name: string }) => t.name === 'Jiný strom')?.id,
+        ];
+    });
+    expect(active).toBe(other);
+});

@@ -469,8 +469,23 @@ export const miscMethods = uiModule({
                     this.hideBottomSheet();
                     return;
                 }
+                // A tree-manager row ⋯ menu is a floating menu inside the modal:
+                // Escape closes it first (and only it), leaving the manager open;
+                // the next Escape falls through to close the manager itself.
+                const openRowMenu = document.querySelector('.tree-row-menu.open');
+                if (openRowMenu) {
+                    openRowMenu.classList.remove('open');
+                    return;
+                }
                 const actionsMenu = document.getElementById('actions-menu-dropdown');
                 if (actionsMenu?.classList.contains('active')) {
+                    // The "Strom:" submenu (a flyout) closes first; the next
+                    // Escape closes the whole actions menu.
+                    const treeWrap = document.getElementById('actions-tree-wrap');
+                    if (treeWrap?.classList.contains('submenu-open')) {
+                        this.closeActionsTreeSubmenu();
+                        return;
+                    }
                     this.closeActionsMenu();
                     return;
                 }

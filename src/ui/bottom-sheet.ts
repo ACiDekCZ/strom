@@ -118,7 +118,6 @@ export const bottomSheetMethods = uiModule({
 
         const s = strings;
         const isView = document.body.classList.contains('view-mode');
-        const isFsa = document.body.classList.contains('fsa-supported');
         const mode = TreeRenderer.getViewMode();
 
         const blocks: MenuBlock[] = [];
@@ -135,32 +134,31 @@ export const bottomSheetMethods = uiModule({
             { label: s.menu.exportSelection, run: () => this.exportFocusedJSON() },
         ];
         if (!isView) {
-            current.push({ label: s.menu.makeTreeFromView, run: () => this.makeTreeFromCurrentView() });
-            current.push({ label: s.menu.splitFamilies, run: () => this.showSplitFamiliesDialog() });
+            current.push({ label: s.menu.makeTree, run: () => this.makeTreeFromCurrentView() });
             current.push({ label: s.menu.mergeViewInto, run: () => this.mergeViewInto() });
         }
         current.push({ label: s.slideshow.menu, run: () => this.startSlideshow() });
         blocks.push({ header: s.menu.sectionCurrentView, rows: current });
 
-        // Tree actions.
-        const tree: MenuRow[] = [
-            { label: s.anniversaries.menu, run: () => this.showAnniversariesDialog(), badge: this.anniversaryBadgeCount() },
-        ];
-        // "Change history" row is only offered when the audit log is enabled.
-        if (SettingsManager.isAuditLogEnabled()) tree.push({ label: s.auditLog.viewLog, run: () => this.showAuditLogDialog() });
-        if (isFsa) tree.push({ label: s.fileAccess.saveToFile, run: () => this.attachSaveToFile() });
+        // Tree actions all live behind the "Strom: {name}" second-level sheet
+        // (the mobile counterpart of the desktop submenu) — Anniversaries, Change
+        // history and Save-to-file moved in there too. Nothing to manage per-tree
+        // in read-only view mode, so the whole section is dropped there.
         if (!isView) {
-            // "Strom: {name}" → second-level sheet with the tree-manager actions.
             const active = TreeManager.getActiveTreeMetadata();
+            const tree: MenuRow[] = [];
             if (active) {
                 tree.push({
                     label: `${s.menu.treeActions} ${active.name}`,
                     run: () => this.showTreeActionsSheet(),
+                    // The anniversaries dot rides the top row so a pending
+                    // notice shows without opening the second level.
+                    badge: this.anniversaryBadgeCount(),
                 });
             }
             tree.push({ label: s.treeManager.manageTreesTitle, run: () => this.showTreeManagerDialog() });
+            blocks.push({ header: s.menu.sectionTree, rows: tree });
         }
-        blocks.push({ header: s.menu.sectionTree, rows: tree });
 
         // Edits (dropped entirely in read-only view mode).
         if (!isView) {
@@ -184,22 +182,34 @@ export const bottomSheetMethods = uiModule({
 
     /**
      * The second-level "Strom: {name}" sheet (mobile counterpart of the desktop
-     * ⋯ actions submenu): the SAME tree-manager actions, minus Delete/Hide which
-     * stay in the tree manager. Reuses the shared menu-sheet chrome.
+     * ⋯ actions submenu): every whole-tree action, mirroring the desktop submenu
+     * — all except Delete, which stays in the tree manager. Reuses the shared
+     * menu-sheet chrome; gating (fsa / audit) matches the desktop rows.
      */
     showTreeActionsSheet(): void {
         const s = strings;
         const active = TreeManager.getActiveTreeMetadata();
         const id = TreeManager.getActiveTreeId();
         if (!active || !id || DataManager.isViewMode()) return;
+        const isFsa = document.body.classList.contains('fsa-supported');
 
         const rows: MenuRow[] = [
             { label: s.treeManager.rename, run: () => this.showRenameTreeDialog(id) },
             { label: s.treeManager.duplicate, run: () => this.duplicateTree(id) },
             { label: s.treeManager.mergeInto, run: () => this.showMergeTreesDialog(id) },
+            // WYSIWYG: the active tree IS the live view, so no person picker.
+            { label: s.menu.splitFamilies, run: () => this.showSplitFamiliesDialog() },
             { label: s.treeManager.stats, run: () => this.showActiveTreeStats() },
-            { label: s.treeManager.manageTreesTitle, run: () => this.showTreeManagerDialog() },
+            { label: s.treeManager.validate, run: () => void this.showTreeValidationDialog(id) },
+            { label: s.book.menu, run: () => this.showBookDialog() },
+            { label: s.menu.export, run: () => this.showExportDialog() },
         ];
+        if (isFsa) rows.push({ label: s.fileAccess.saveToFile, run: () => this.attachSaveToFile() });
+        rows.push({ label: s.anniversaries.menu, run: () => this.showAnniversariesDialog(), badge: this.anniversaryBadgeCount() });
+        if (SettingsManager.isAuditLogEnabled()) rows.push({ label: s.auditLog.viewLog, run: () => this.showAuditLogDialog() });
+        rows.push({ label: s.treeManager.hide, run: () => void this.toggleTreeVisibility(id) });
+        rows.push({ label: s.treeManager.manageTreesTitle, run: () => this.showTreeManagerDialog() });
+
         this.presentMenuSheet(`${s.menu.treeActions} ${active.name}`, [
             { header: s.menu.sectionTree, rows },
         ]);
