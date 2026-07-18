@@ -1385,67 +1385,65 @@
             max-width: 550px;
             width: 90vw;
         }
-        .audit-log-meta {
-            font-size: 12px;
-            color: var(--text-light);
-            margin-bottom: 8px;
-        }
+        /* Header: serif title + "{tree} · {n} entries" subtitle (Letopis). */
+        .audit-log-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .audit-log-subtitle { font-size: 12px; color: var(--text-faint); }
+        /* A plain divided list — no boxed frame. */
         .audit-log-list {
             max-height: 60vh;
             overflow-y: auto;
-            border: 1px solid #e0e0e0;
-            border-radius: 6px;
-            margin-bottom: 12px;
+            margin: 4px 0 0;
         }
+        /* Day group header: copper small-caps (like the person modal sections). */
+        .audit-log-day {
+            font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+            text-transform: uppercase; color: var(--accent);
+            padding: 16px 2px 6px;
+        }
+        .audit-log-day:first-child { padding-top: 4px; }
         .audit-log-entry {
             display: flex;
             align-items: baseline;
-            gap: 8px;
-            padding: 8px 10px;
-            border-bottom: 1px solid #f0f0f0;
-            font-size: 13px;
+            gap: 10px;
+            padding: 9px 2px;
+            border-bottom: 1px solid var(--divider);
+            font-size: 13.5px;
+            line-height: 1.45;
         }
-        .audit-log-entry:last-child {
-            border-bottom: none;
-        }
+        .audit-log-entry:last-child { border-bottom: none; }
         .audit-log-time {
-            color: var(--text-light);
-            font-size: 11px;
+            color: var(--text-faint);
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
             white-space: nowrap;
-            min-width: 110px;
+            min-width: 38px;
         }
         .audit-log-icon {
-            font-weight: bold;
-            width: 16px;
-            text-align: center;
-            flex-shrink: 0;
+            width: 16px; flex-shrink: 0;
+            display: inline-flex; align-items: center; justify-content: center;
+            position: relative; top: 2px;  /* nudge the 14px mark onto the text baseline */
         }
-        .audit-log-desc {
-            flex: 1;
-            word-break: break-word;
-        }
+        .audit-log-icon svg { display: block; }
+        .audit-log-icon.accent { color: var(--accent); }
+        .audit-log-icon.primary { color: var(--primary); }
+        .audit-log-icon.danger { color: var(--danger); }
+        .audit-log-icon.muted { color: var(--text-light); }
+        .audit-log-desc { flex: 1; color: var(--text); word-break: break-word; }
         .audit-log-empty {
             text-align: center;
-            color: var(--text-light);
-            padding: 24px;
+            color: var(--text-faint);
+            padding: 32px 24px;
         }
-        [data-theme="dark"] .audit-log-list {
-            border-color: #444;
-        }
-        [data-theme="dark"] .audit-log-entry {
-            border-bottom-color: #333;
-        }
+        /* Footer mirrors the person modal: Clear as a danger text link on the
+           left, Export (ghost) + Close (primary) on the right. */
+        .audit-log-footer { margin: 12px -24px -24px; }
+        .audit-log-footer button:disabled { opacity: 0.45; cursor: not-allowed; }
+        .audit-log-footer .pm-delete-link:disabled { color: var(--text-faint); text-decoration: none; }
         @media (max-width: 500px) {
-            .audit-log-modal {
-                min-width: auto;
-            }
-            .audit-log-entry {
-                flex-wrap: wrap;
-            }
-            .audit-log-time {
-                width: 100%;
-                min-width: auto;
-            }
+            .audit-log-modal { min-width: auto; }
+            .audit-log-entry { flex-wrap: wrap; }
+            .audit-log-time { width: 100%; min-width: auto; }
+            .audit-log-footer { margin: 12px -16px -16px; }
         }
 
         /* Dark mode overrides for various elements.
@@ -2552,9 +2550,10 @@
         .splitfam-modal .splitfam-check { width: auto; margin: 0; flex-shrink: 0; }
         .splitfam-thumb {
             width: 132px; height: 84px;
-            border: 1px solid var(--border-color, #ddd);
+            min-height: 0;
+            border: 1px solid var(--border);
             border-radius: 6px;
-            background: var(--card-bg, #fff);
+            background: var(--surface-2);
             overflow: hidden;
             display: flex; align-items: center; justify-content: center;
         }
@@ -2581,21 +2580,23 @@
         .splitfam-summary { font-size: 12px; color: var(--text-light); }
         .splitfam-footer-buttons { display: flex; gap: 8px; }
 
-        /* Reusable static tree thumbnail (also usable elsewhere). */
-        .tree-thumb { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-        .tree-thumb-stage { position: relative; width: 100%; max-height: 100%; }
-        .tree-thumb-lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-        .tree-thumb-line { stroke: var(--line-color, #b7b2a8); stroke-width: 2; fill: none; }
-        .tree-thumb-line.couple { stroke: var(--primary, #4a7c59); }
-        .tree-thumb-card {
-            position: absolute; border-radius: 2px;
-            background: var(--card-bg, #fff);
-            border: 1px solid var(--border-color, #ccc);
+        /* Reusable static tree thumbnail (also usable elsewhere). One SVG that
+           always fits the box via a xMidYMid-meet viewBox — never balloons. */
+        .tree-thumb { position: relative; width: 100%; height: 100%; }
+        .tree-thumb-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+        .tree-thumb-line {
+            stroke: var(--line-color, #b7b2a8); stroke-width: 1; fill: none;
+            vector-effect: non-scaling-stroke;
         }
-        .tree-thumb-card.male { background: var(--male); border-color: var(--male-border, var(--male)); }
-        .tree-thumb-card.female { background: var(--female); border-color: var(--female-border, var(--female)); }
-        .tree-thumb-card.placeholder { background: var(--bg-color, #eee); border-style: dashed; }
-        .tree-thumb-card.focused { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .tree-thumb-line.couple { stroke: var(--primary); stroke-width: 1.4; }
+        .tree-thumb-card {
+            fill: var(--surface); stroke: var(--border); stroke-width: 1;
+            vector-effect: non-scaling-stroke;
+        }
+        .tree-thumb-card.male { stroke: var(--male); stroke-width: 1.4; }
+        .tree-thumb-card.female { stroke: var(--female); stroke-width: 1.4; }
+        .tree-thumb-card.placeholder { fill: var(--surface-2); stroke-dasharray: 3 2; }
+        .tree-thumb-card.focused { stroke: var(--primary); stroke-width: 2; }
 
         @media (max-width: 900px) { .splitfam-modal { max-width: 94vw; } }
         @media (max-width: 500px) {
@@ -2609,6 +2610,9 @@
         .places-modal { max-width: 580px; }
         .places-intro { margin: 4px 0 14px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
         .places-list { display: flex; flex-direction: column; gap: 10px; max-height: 52vh; overflow-y: auto; }
+        /* Footer: housekeeping (clean orphans) on the left, Close on the right. */
+        .places-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .places-clean-orphans:disabled { opacity: 0.45; cursor: not-allowed; }
         .place-row {
             padding: 10px 12px;
             border: 1px solid var(--border-color, #ddd);
@@ -2875,6 +2879,10 @@
         .pm-modal > .expand-btn,
         .pm-modal > #extended-fields { margin-left: 24px; margin-right: 24px; }
         .pm-modal > .pm-section:first-of-type { margin-top: 20px; }
+        /* The expander is width:100% for the relation modal; inside the person
+           modal it sits between 24px side margins, so let those margins size it
+           (block + auto) instead of adding 100% on top of them → no h-overflow. */
+        .pm-modal > .expand-btn { display: block; width: auto; box-sizing: border-box; }
 
         .pm-section { margin-bottom: 22px; }
         .pm-section-head {
@@ -6405,23 +6413,35 @@
         /* ==================== TREE PREVIEW OVERLAY ==================== */
         .tree-preview-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.85);
+            inset: 0;
+            /* Its own backdrop, above the dialog that opened it (z 500 > 200). */
+            background: rgba(20, 16, 8, 0.55);
             z-index: 500;
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
             animation: fadeIn 0.2s ease;
+        }
+        /* The paper modal surface the preview lives in (Letopis framing). */
+        .tree-preview-panel {
+            display: flex;
+            flex-direction: column;
+            width: min(1080px, 100%);
+            height: min(760px, 100%);
+            background: var(--surface-modal);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
         }
         .tree-preview-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 12px 20px;
-            background: var(--card-bg);
-            border-bottom: 1px solid var(--shadow);
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
             flex-shrink: 0;
         }
         .tree-preview-info {
@@ -6430,6 +6450,7 @@
             gap: 2px;
         }
         .tree-preview-title {
+            font-family: var(--font-serif);
             font-size: 16px;
             font-weight: 600;
             color: var(--text);
@@ -6461,6 +6482,7 @@
             position: relative;
             overflow: hidden;
             touch-action: none;
+            background: var(--surface-2);
         }
         .tree-preview-canvas {
             position: absolute;
@@ -6492,8 +6514,8 @@
             align-items: center;
             justify-content: space-between;
             padding: 10px 20px;
-            background: var(--card-bg);
-            border-top: 1px solid var(--shadow);
+            background: var(--surface);
+            border-top: 1px solid var(--border);
             flex-shrink: 0;
         }
         .tree-preview-focus-info {
@@ -6534,19 +6556,25 @@
             transform: scale(0.95);
         }
 
-        /* Preview person cards */
+        /* Preview person cards — the Letopis card: paper surface + hairline
+           border, gender carried by the ring colour (not a fill), serif name.
+           Reads the same in light and dark; no glow in dark mode. */
         .tree-preview-card {
             position: absolute;
             width: 120px;
             height: 60px;
-            background: var(--card-bg);
+            background: var(--surface);
             border-radius: 8px;
             padding: 6px 8px;
             box-sizing: border-box;
             text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             box-shadow: var(--shadow-sm);
             cursor: pointer;
-            border: 2px solid transparent;
+            border: 1px solid var(--border);
             transition: transform 0.15s, box-shadow 0.15s;
             -webkit-tap-highlight-color: transparent;
             touch-action: manipulation;
@@ -6560,28 +6588,32 @@
             transform: scale(0.98);
         }
         .tree-preview-card.male {
-            background: var(--male);
-            border-color: var(--male-border);
+            border-color: var(--male);
+            box-shadow: inset 0 0 0 1px var(--male), var(--shadow-sm);
         }
         .tree-preview-card.female {
-            background: var(--female);
-            border-color: var(--female-border);
+            border-color: var(--female);
+            box-shadow: inset 0 0 0 1px var(--female), var(--shadow-sm);
         }
         .tree-preview-card.placeholder {
-            background: var(--placeholder-bg);
-            border-color: var(--placeholder-border);
+            background: var(--surface-2);
+            border-color: var(--border);
             border-style: dashed;
+            box-shadow: none;
         }
         .tree-preview-card.focused {
-            box-shadow: 0 0 0 3px var(--primary), 0 4px 12px var(--shadow);
+            border-color: var(--primary);
+            box-shadow: inset 0 0 0 2px var(--primary), var(--shadow-sm);
         }
         .preview-card-name {
+            font-family: var(--font-serif);
             font-size: 13px;
             font-weight: 600;
             color: var(--text);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            max-width: 100%;
         }
         .preview-card-surname {
             font-size: 11px;
@@ -6712,6 +6744,13 @@
 
         /* Mobile responsive for preview */
         @media (max-width: 600px) {
+            .tree-preview-overlay { padding: 0; }
+            .tree-preview-panel {
+                width: 100%;
+                height: 100%;
+                border: none;
+                border-radius: 0;
+            }
             .tree-preview-header {
                 padding: 10px 16px;
             }
@@ -8956,17 +8995,17 @@
     <div class="modal-overlay" id="audit-log-modal">
         <div class="modal audit-log-modal">
             <div class="modal-header">
-                <h2 class="audit-log-title-text" data-i18n="auditLog.title"></h2>
+                <div class="audit-log-heading">
+                    <h2 class="audit-log-title-text" data-i18n="auditLog.title"></h2>
+                    <div class="audit-log-subtitle" id="audit-log-count"></div>
+                </div>
                 <button class="close-btn" onclick="window.Strom.UI.closeAuditLogDialog()">&times;</button>
             </div>
-            <div class="audit-log-meta">
-                <span id="audit-log-count"></span>
-            </div>
             <div class="audit-log-list" id="audit-log-list"></div>
-            <div class="modal-actions">
-                <button class="secondary" onclick="window.Strom.UI.exportAuditLogTxt()" data-i18n="auditLog.exportTxt"></button>
-                <button class="danger" onclick="window.Strom.UI.clearAuditLog()" data-i18n="auditLog.clear"></button>
-                <button class="secondary" onclick="window.Strom.UI.closeAuditLogDialog()" data-i18n="buttons.close"></button>
+            <div class="pm-footer audit-log-footer">
+                <button class="pm-delete-link" id="audit-log-clear" onclick="window.Strom.UI.clearAuditLog()" data-i18n="auditLog.clear"></button>
+                <button class="secondary" id="audit-log-export" onclick="window.Strom.UI.exportAuditLogTxt()" data-i18n="auditLog.exportTxt"></button>
+                <button class="primary" onclick="window.Strom.UI.closeAuditLogDialog()" data-i18n="buttons.close"></button>
             </div>
         </div>
     </div>

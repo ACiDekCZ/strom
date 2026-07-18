@@ -21,7 +21,7 @@ import {
     LAST_FOCUSED,
     LastFocusedMarker
 } from '../types.js';
-import { strings } from '../strings.js';
+import { strings, getCurrentLanguage } from '../strings.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -756,12 +756,10 @@ export const appModeMethods = uiModule({
         // Store target tree id for clear action
         modal.dataset.treeId = targetTreeId;
 
-        // Set tree name in header
+        // The title stays the plain "Change history"; the tree name and the
+        // entry count live in the subtitle, set while rendering the entries.
         const titleEl = modal.querySelector('.audit-log-title-text');
-        const treeMeta = TreeManager.getTreeMetadata(targetTreeId);
-        if (titleEl && treeMeta) {
-            titleEl.textContent = `${strings.auditLog.title} — ${treeMeta.name}`;
-        }
+        if (titleEl) titleEl.textContent = strings.auditLog.title;
 
         this.renderAuditLogEntries(targetTreeId);
 
@@ -780,42 +778,94 @@ export const appModeMethods = uiModule({
         if (!listEl) return;
 
         const log = await AuditLogManager.load(treeId);
+        const treeName = TreeManager.getTreeMetadata(treeId)?.name ?? '';
 
-        if (log.entries.length === 0) {
+        // Subtitle: "{tree} · {n} entries" (the standalone count row is gone).
+        const subtitleEl = document.getElementById('audit-log-count');
+        if (subtitleEl) {
+            const count = strings.auditLog.entries(log.entries.length);
+            subtitleEl.textContent = treeName ? `${treeName} · ${count}` : count;
+        }
+
+        // Export/clear act on the log; there is nothing to do when it is empty.
+        const clearBtn = document.getElementById('audit-log-clear') as HTMLButtonElement | null;
+        const exportBtn = document.getElementById('audit-log-export') as HTMLButtonElement | null;
+        const isEmpty = log.entries.length === 0;
+        if (clearBtn) clearBtn.disabled = isEmpty;
+        if (exportBtn) exportBtn.disabled = isEmpty;
+
+        if (isEmpty) {
             listEl.innerHTML = `<div class="audit-log-empty">${strings.auditLog.empty}</div>`;
-            const countEl = document.getElementById('audit-log-count');
-            if (countEl) countEl.textContent = strings.auditLog.entries(0);
             return;
         }
 
-        const countEl = document.getElementById('audit-log-count');
-        if (countEl) countEl.textContent = strings.auditLog.entries(log.entries.length);
-
-        // Render newest first
+        // Newest first, grouped under a day header (Today / Yesterday / date).
         const entries = [...log.entries].reverse();
         let html = '';
+        let lastDayKey = '';
         for (const entry of entries) {
             const date = new Date(entry.t);
-            const timeStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-            // Icon based on action type
-            let icon = '+';
-            if (entry.a.includes('update')) icon = '✎';
-            else if (entry.a.includes('delete') || entry.a.includes('remove')) icon = '−';
-            else if (entry.a.includes('merge')) icon = '⇄';
-            else if (entry.a === 'data.clear') icon = '!';
-            else if (entry.a === 'data.load' || entry.a === 'data.import') icon = '↓';
-
+            const dayKey = this.auditLogDayKey(date);
+            if (dayKey !== lastDayKey) {
+                html += `<div class="audit-log-day">${this.escapeHtml(this.auditLogDayLabel(date))}</div>`;
+                lastDayKey = dayKey;
+            }
+            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const { glyph, cls } = this.auditLogGlyph(entry.a);
             html += `
                 <div class="audit-log-entry">
                     <span class="audit-log-time">${this.escapeHtml(timeStr)}</span>
-                    <span class="audit-log-icon">${icon}</span>
+                    <span class="audit-log-icon ${cls}">${glyph}</span>
                     <span class="audit-log-desc">${this.escapeHtml(entry.d)}</span>
                 </div>
             `;
         }
 
         listEl.innerHTML = html;
+    },
+
+    /** Local-midnight key so entries on the same calendar day group together. */
+    auditLogDayKey(date: Date): string {
+        return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    },
+
+    /** "Today" / "Yesterday" / a localised day-and-month (e.g. "15 July"). */
+    auditLogDayLabel(date: Date): string {
+        const now = new Date();
+        const key = this.auditLogDayKey(date);
+        if (key === this.auditLogDayKey(now)) return strings.auditLog.today;
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        if (key === this.auditLogDayKey(yesterday)) return strings.auditLog.yesterday;
+        const locale = getCurrentLanguage() === 'cs' ? 'cs-CZ' : 'en-US';
+        const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' };
+        if (date.getFullYear() !== now.getFullYear()) opts.year = 'numeric';
+        return date.toLocaleDateString(locale, opts);
+    },
+
+    /** Action → inline SVG glyph + a colour class. Inline SVG (not a font glyph)
+     *  so the mark is monochrome and obeys `color` in every browser — a bare
+     *  ✎/⇄/↓ renders as a colour emoji on macOS/iOS and ignores CSS colour.
+     *  Shapes keep the established mapping: pencil ＋ − ⇄ ! ↓. */
+    auditLogGlyph(action: string): { glyph: string; cls: string } {
+        const svg = (paths: string): string =>
+            `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+        if (action.includes('update')) {  // pencil
+            return { glyph: svg('<path d="M4 20l4-.8L19 8.2a2 2 0 0 0-2.8-2.8L3.8 16z"/><path d="M14 7l3 3"/>'), cls: 'accent' };
+        }
+        if (action.includes('delete') || action.includes('remove') || action.includes('clean')) {  // minus
+            return { glyph: svg('<path d="M5 12h14"/>'), cls: 'danger' };
+        }
+        if (action.includes('merge')) {  // ⇄
+            return { glyph: svg('<path d="M4 9h13M14 6l3 3-3 3"/><path d="M20 15H7M10 12l-3 3 3 3"/>'), cls: 'muted' };
+        }
+        if (action === 'data.clear') {  // !
+            return { glyph: svg('<path d="M12 4v9"/><path d="M12 18h.01"/>'), cls: 'danger' };
+        }
+        if (action === 'data.load' || action === 'data.import') {  // ↓
+            return { glyph: svg('<path d="M12 4v14M6 12l6 6 6-6"/>'), cls: 'muted' };
+        }
+        return { glyph: svg('<path d="M12 5v14M5 12h14"/>'), cls: 'primary' };  // ＋
     },
 
     closeAuditLogDialog(): void {

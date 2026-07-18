@@ -91,6 +91,19 @@ export function placesWithVariants(data: StromData): PlaceUsage[] {
 }
 
 /**
+ * Place keys that hold coordinates in `data.places` but are no longer written
+ * on ANY person (birth/death place), event place or partnership start place —
+ * geocache left behind after the last place-bearing record was edited or the
+ * person deleted. `collectPlaces` is the single source of truth for "referenced"
+ * (same fields the picker/map read), so this stays in sync with the data model.
+ */
+export function orphanedPlaceKeys(data: StromData): string[] {
+    if (!data.places) return [];
+    const referenced = collectPlaces(data);
+    return Object.keys(data.places).filter(key => !referenced.has(key));
+}
+
+/**
  * Rewrite every occurrence of the places matching `fromKey` to `to`. Mutates a
  * COPY and returns it plus how many fields changed, so callers can run it
  * through the normal mutation/undo path.

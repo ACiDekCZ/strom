@@ -36,7 +36,7 @@ import { isEncrypted, EncryptedData } from './crypto.js';
 import * as CrossTree from './cross-tree.js';
 import { AuditLogManager } from './audit-log.js';
 import { extractSubtree } from './subtree.js';
-import { collectPlaces, renamePlace, placeKey } from './places.js';
+import { collectPlaces, renamePlace, placeKey, orphanedPlaceKeys } from './places.js';
 import { StorageManager } from './storage.js';
 import { surnameForms, addSurnameGroup, removeSurnameGroup } from './surnames.js';
 import { createSnapshot, getSnapshotJson, SnapshotReason } from './snapshots.js';
@@ -1001,6 +1001,27 @@ class DataManagerClass {
         delete places[key];
         this.data.places = places;
         this.commitMutation(strings.undo.clearPlaceGeo);
+    }
+
+    /**
+     * Drop coordinate entries for places nothing in the tree refers to any more
+     * (see orphanedPlaceKeys). Housekeeping after edits/deletes leave stale
+     * geocache behind. Normal mutation path: one undo step, one audit entry,
+     * the Undo toast. Returns how many were removed.
+     */
+    clearOrphanPlaces(): number {
+        const orphans = orphanedPlaceKeys(this.data);
+        if (orphans.length === 0) return 0;
+        this.beginMutation();
+        const places = { ...this.data.places };
+        for (const key of orphans) delete places[key];
+        this.data.places = places;
+        this.commitMutation(strings.undo.cleanOrphanPlaces(orphans.length));
+        if (this.currentTreeId) {
+            AuditLogManager.log(this.currentTreeId, 'place.clean',
+                strings.auditLog.cleanedOrphanPlaces(orphans.length));
+        }
+        return orphans.length;
     }
 
     // ==================== GETTERS ====================

@@ -450,6 +450,18 @@ export const miscMethods = uiModule({
                 return;
             }
             if (e.key === 'Escape') {
+                // The tree preview / comparison overlays sit above every dialog
+                // (z-index 500). Escape closes the preview FIRST, leaving the
+                // dialog that opened it (e.g. "Split into families") untouched;
+                // a second Escape then falls through to that dialog.
+                if (TreePreview.isOpen()) {
+                    TreePreview.close();
+                    return;
+                }
+                if (TreeCompare.isOpen()) {
+                    TreeCompare.close();
+                    return;
+                }
                 // The cross-tree chooser (a floating menu, not a modal) closes
                 // first and ONLY itself — it must not fall through to the
                 // dialog-stack handling below.

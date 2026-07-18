@@ -54,3 +54,43 @@ test('a place written two ways is flagged and unified by the Fix button', async 
     });
     expect(places[0]).toBe(places[1]);   // same spelling now
 });
+
+test('the places manager cleans up orphaned coordinates (undoable)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const jan = dm.getAllPersons()[0];
+        dm.updatePerson(jan.id, { birthPlace: 'Kolín' });
+        // One live pin (Kolín, Jan's birthplace) + one orphan pin (Praha —
+        // nobody in the tree writes Praha any more).
+        dm.setPlaceGeos(new Map([
+            ['kolin', { lat: 50.0, lon: 15.2, label: 'Kolín' }],
+            ['praha', { lat: 50.08, lon: 14.42, label: 'Praha' }],
+        ]));
+        window.Strom.TreeRenderer.render();
+    });
+
+    await page.evaluate(() => window.Strom.UI.showPlacesManager());
+    const modal = page.locator('#places-modal');
+    await expect(modal).toBeVisible();
+
+    // The footer offers the cleanup with the orphan count.
+    const cleanBtn = page.locator('#places-clean-orphans');
+    await expect(cleanBtn).toBeEnabled();
+    await expect(cleanBtn).toContainText('(1)');
+
+    await cleanBtn.click();
+    await page.locator('#confirmation-modal #confirm-ok-btn').click();
+
+    // Only the orphan is gone; the live pin stays.
+    await expect.poll(() => page.evaluate(() =>
+        Object.keys(window.Strom.DataManager.getData().places || {}).sort()
+    )).toEqual(['kolin']);
+
+    // Undo restores the orphan (it went through the normal mutation path).
+    await page.evaluate(() => window.Strom.DataManager.undo());
+    await expect.poll(() => page.evaluate(() =>
+        Object.keys(window.Strom.DataManager.getData().places || {}).sort()
+    )).toEqual(['kolin', 'praha']);
+});

@@ -68,6 +68,48 @@ test('the dialog lists the focus family first, then the families that branch off
     await expect(rows.first().locator('.splitfam-name')).toHaveValue('Petr Novák family');
 });
 
+test('every family row shows a non-empty tree thumbnail, and Preview opens a framed overlay Esc closes first', async ({ page }) => {
+    await loadShallowView(page);
+    await page.evaluate(() => window.Strom.UI.showSplitFamiliesDialog());
+
+    const modal = page.locator('#split-families-modal');
+    await expect(modal).toBeVisible();
+    const rows = modal.locator('.splitfam-row');
+    await expect(rows).toHaveCount(3);
+
+    // Every row's thumbnail actually draws its mini-tree: one fitted SVG with a
+    // node (rect) per person — not an empty box. (The old bug left every row but
+    // the first as an empty black box.)
+    const thumbs = modal.locator('.splitfam-thumb');
+    const count = await thumbs.count();
+    expect(count).toBe(3);
+    for (let i = 0; i < count; i++) {
+        const nodes = await thumbs.nth(i).locator('.tree-thumb-svg .tree-thumb-card').count();
+        expect(nodes, `thumbnail ${i} should have drawn nodes`).toBeGreaterThan(0);
+    }
+
+    // Preview opens inside its OWN framed modal surface (a bordered, rounded
+    // panel on its own backdrop), not floating cards over the dimmed dialog.
+    await modal.locator('.splitfam-preview-btn').first().click();
+    const panel = page.locator('.tree-preview-panel');
+    await expect(panel).toBeVisible();
+    const frame = await panel.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { radius: parseFloat(cs.borderTopLeftRadius), border: parseFloat(cs.borderTopWidth) };
+    });
+    expect(frame.radius).toBeGreaterThan(0);
+    expect(frame.border).toBeGreaterThan(0);
+    await expect(page.locator('.tree-preview-card').first()).toBeVisible();
+
+    // Escape closes the preview FIRST — the split dialog underneath stays open.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.tree-preview-overlay')).toHaveCount(0);
+    await expect(modal).toBeVisible();
+    // A second Escape then closes the dialog itself.
+    await page.keyboard.press('Escape');
+    await expect(modal).toBeHidden();
+});
+
 test('creating the checked families leaves the original alone and links them', async ({ page }) => {
     await loadShallowView(page);
     const before = await page.evaluate(() => window.Strom.DataManager.getAllPersons().length);

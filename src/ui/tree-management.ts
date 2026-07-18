@@ -523,8 +523,8 @@ export const treeManagementMethods = uiModule({
                 (tree.isHidden ? `<span class="tree-badge">${s.hiddenBadge}</span>` : '');
 
             // Row menu items are text-only per the Letopis design (no emoji).
-            const menuItem = (onclick: string, label: string, cls = '') =>
-                `<button class="tree-row-menu-item ${cls}" onclick="${onclick}">${label}</button>`;
+            const menuItem = (onclick: string, label: string, cls = '', title = '') =>
+                `<button class="tree-row-menu-item ${cls}" onclick="${onclick}"${title ? ` title="${this.escapeHtml(title)}"` : ''}>${label}</button>`;
 
             const auditItem = (AuditLogManager.isEnabled() || await AuditLogManager.hasEntries(tree.id))
                 ? menuItem(`window.Strom.UI.showAuditLogDialog('${tree.id}', 'tree-manager-modal')`, strings.auditLog.viewLog)
@@ -555,8 +555,8 @@ export const treeManagementMethods = uiModule({
                                 ${menuItem(`window.Strom.UI.showSnapshotsDialog('${tree.id}', 'tree-manager-modal')`, strings.snapshots.menu, 'edit-only')}
                                 ${isActive ? menuItem(`window.Strom.UI.showPlacesManager(undefined, 'tree-manager-modal')`, strings.map.placesTitle, 'edit-only') : ''}
                                 ${isActive ? menuItem(`window.Strom.UI.showSurnamesDialog('tree-manager-modal')`, strings.surnames.menu, 'edit-only') : ''}
-                                ${menuItem(`window.Strom.UI.showSplitDialog('${tree.id}', 'tree-manager-modal')`, strings.split.menu, 'edit-only')}
-                                ${menuItem(`window.Strom.UI.showSplitFamiliesPickerDialog('${tree.id}', 'tree-manager-modal')`, strings.menu.splitFamilies, 'edit-only')}
+                                ${menuItem(`window.Strom.UI.showSplitFamiliesPickerDialog('${tree.id}', 'tree-manager-modal')`, strings.menu.splitFamilies, 'edit-only', strings.menu.splitFamiliesHint)}
+                                ${menuItem(`window.Strom.UI.showSplitDialog('${tree.id}', 'tree-manager-modal')`, strings.split.menu, 'edit-only', strings.split.menuHint)}
                                 ${auditItem}
                                 ${menuItem(`window.Strom.UI.duplicateTree('${tree.id}')`, s.duplicate, 'edit-only')}
                                 ${menuItem(`window.Strom.UI.showMergeTreesDialog('${tree.id}', 'tree-manager-modal')`, s.mergeInto, 'edit-only')}

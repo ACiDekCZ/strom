@@ -462,6 +462,7 @@ export type AuditAction =
     | 'attachment.remove'
     | 'attachment.update'
     | 'parentRel.update'
+    | 'place.clean'
     | 'undo'
     | 'redo';
 

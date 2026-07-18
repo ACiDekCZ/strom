@@ -134,25 +134,27 @@ class TreePreviewClass {
         const overlay = document.createElement('div');
         overlay.className = 'tree-preview-overlay';
         overlay.innerHTML = `
-            <div class="tree-preview-header">
-                <div class="tree-preview-info">
-                    <div class="tree-preview-title">${this.options?.title || s?.title || 'Tree Preview'}</div>
-                    ${this.options?.subtitle ? `<div class="tree-preview-subtitle">${this.options.subtitle}</div>` : ''}
+            <div class="tree-preview-panel">
+                <div class="tree-preview-header">
+                    <div class="tree-preview-info">
+                        <div class="tree-preview-title">${this.options?.title || s?.title || 'Tree Preview'}</div>
+                        ${this.options?.subtitle ? `<div class="tree-preview-subtitle">${this.options.subtitle}</div>` : ''}
+                    </div>
+                    <button class="tree-preview-close" title="${s?.close || 'Close'}">×</button>
                 </div>
-                <button class="tree-preview-close" title="${s?.close || 'Close'}">×</button>
-            </div>
-            <div class="tree-preview-container">
-                <div class="tree-preview-canvas"></div>
-                <svg class="tree-preview-lines"></svg>
-            </div>
-            <div class="tree-preview-footer">
-                <div class="tree-preview-focus-info">
-                    <span class="tree-preview-focus-label">${s?.focusedOn || 'Focused on'}:</span>
-                    <span class="tree-preview-focus-name"></span>
+                <div class="tree-preview-container">
+                    <div class="tree-preview-canvas"></div>
+                    <svg class="tree-preview-lines"></svg>
                 </div>
-                <div class="tree-preview-zoom-controls">
-                    <button class="tree-preview-zoom-btn" data-action="out">−</button>
-                    <button class="tree-preview-zoom-btn" data-action="in">+</button>
+                <div class="tree-preview-footer">
+                    <div class="tree-preview-focus-info">
+                        <span class="tree-preview-focus-label">${s?.focusedOn || 'Focused on'}:</span>
+                        <span class="tree-preview-focus-name"></span>
+                    </div>
+                    <div class="tree-preview-zoom-controls">
+                        <button class="tree-preview-zoom-btn" data-action="out">−</button>
+                        <button class="tree-preview-zoom-btn" data-action="in">+</button>
+                    </div>
                 </div>
             </div>
         `;
@@ -161,24 +163,15 @@ class TreePreviewClass {
         const closeBtn = overlay.querySelector('.tree-preview-close') as HTMLElement;
         closeBtn.addEventListener('click', () => this.close());
 
-        // Click outside to close
+        // Click outside the panel (on the backdrop) closes the preview.
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) {
                 this.close();
             }
         });
 
-        // Escape key to close - use capture to intercept before other handlers
-        const escHandler = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && this.isOpen()) {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                this.close();
-                document.removeEventListener('keydown', escHandler, true);
-            }
-        };
-        document.addEventListener('keydown', escHandler, true);
+        // Escape is handled centrally in the UI keydown cascade (misc.ts), so it
+        // closes the preview first and leaves the dialog underneath it open.
 
         // Zoom controls
         overlay.querySelectorAll('.tree-preview-zoom-btn').forEach(btn => {
@@ -688,17 +681,7 @@ class TreeCompareClass {
         const closeBtn = overlay.querySelector('.tree-preview-close') as HTMLElement;
         closeBtn.addEventListener('click', () => this.close());
 
-        // Escape key to close - use capture to intercept before other handlers
-        const escHandler = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && this.isOpen()) {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                this.close();
-                document.removeEventListener('keydown', escHandler, true);
-            }
-        };
-        document.addEventListener('keydown', escHandler, true);
+        // Escape is handled centrally in the UI keydown cascade (misc.ts).
 
         // Zoom controls for each pane
         overlay.querySelectorAll('.tree-compare-pane').forEach(paneEl => {
@@ -1142,6 +1125,12 @@ export const TreeCompare = new TreeCompareClass();
  * layout engine and card/line marks as the full preview above, scaled to fit
  * the box. Used by the "Split into families" dialog to show each proposed tree
  * at a glance. Reuses computeLayout so a thumbnail always matches the real view.
+ *
+ * The whole thumbnail is ONE SVG (cards as <rect>, lines as <line>) with a
+ * `xMidYMid meet` viewBox, so it always fits the fixed box in both dimensions —
+ * no matter how wide or how tall the family is — instead of the box ballooning
+ * to the tree's aspect. Strokes are non-scaling so a portrait deep-ancestry line
+ * and a wide focus family read at the same weight.
  */
 export function renderTreeThumbnail(
     container: HTMLElement,
@@ -1165,7 +1154,8 @@ export function renderTreeThumbnail(
     container.classList.add('tree-thumb');
     if (layout.positions.size === 0) return;
 
-    // World bounds of the laid-out cards.
+    // World bounds of the laid-out cards, with a little breathing room so the
+    // outermost cards/strokes are not flush against the box edge.
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const pos of layout.positions.values()) {
         minX = Math.min(minX, pos.x);
@@ -1173,17 +1163,18 @@ export function renderTreeThumbnail(
         maxX = Math.max(maxX, pos.x + config.cardWidth);
         maxY = Math.max(maxY, pos.y + config.cardHeight);
     }
+    const pad = 10;
+    minX -= pad; minY -= pad; maxX += pad; maxY += pad;
     const worldW = Math.max(1, maxX - minX);
     const worldH = Math.max(1, maxY - minY);
 
-    const stage = document.createElement('div');
-    stage.className = 'tree-thumb-stage';
     const svgNs = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgNs, 'svg');
-    svg.setAttribute('class', 'tree-thumb-lines');
+    svg.setAttribute('class', 'tree-thumb-svg');
     svg.setAttribute('viewBox', `${minX} ${minY} ${worldW} ${worldH}`);
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
+    // Lines first, so opaque cards drawn afterwards cover their own endpoints.
     const addLine = (x1: number, y1: number, x2: number, y2: number, cls: string): void => {
         const l = document.createElementNS(svgNs, 'line');
         l.setAttribute('x1', String(x1)); l.setAttribute('y1', String(y1));
@@ -1198,23 +1189,22 @@ export function renderTreeThumbnail(
         addLine(c.branchLeftX, c.branchY, c.branchRightX, c.branchY, 'tree-thumb-line');
         for (const d of c.drops) addLine(d.x, c.branchY, d.x, d.bottomY, 'tree-thumb-line');
     }
-    stage.appendChild(svg);
 
-    // Cards positioned in the same world coordinates via a percentage map.
+    // Cards as rects in the same world coordinates. Gender is the ring colour;
+    // the body is the paper surface — the Letopis card, shrunk.
     for (const [personId, pos] of layout.positions) {
         const person = options.data.persons[personId];
         if (!person) continue;
-        const card = document.createElement('div');
-        card.className = 'tree-thumb-card ' + (person.isPlaceholder ? 'placeholder' : person.gender)
-            + (personId === options.focusPersonId ? ' focused' : '');
-        card.style.left = `${((pos.x - minX) / worldW) * 100}%`;
-        card.style.top = `${((pos.y - minY) / worldH) * 100}%`;
-        card.style.width = `${(config.cardWidth / worldW) * 100}%`;
-        card.style.height = `${(config.cardHeight / worldH) * 100}%`;
-        stage.appendChild(card);
+        const rect = document.createElementNS(svgNs, 'rect');
+        rect.setAttribute('x', String(pos.x));
+        rect.setAttribute('y', String(pos.y));
+        rect.setAttribute('width', String(config.cardWidth));
+        rect.setAttribute('height', String(config.cardHeight));
+        rect.setAttribute('rx', '7');
+        rect.setAttribute('class', 'tree-thumb-card ' + (person.isPlaceholder ? 'placeholder' : person.gender)
+            + (personId === options.focusPersonId ? ' focused' : ''));
+        svg.appendChild(rect);
     }
 
-    // Match the stage's aspect ratio to the world so cards/lines stay aligned.
-    stage.style.aspectRatio = `${worldW} / ${worldH}`;
-    container.appendChild(stage);
+    container.appendChild(svg);
 }

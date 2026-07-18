@@ -9,6 +9,18 @@ function realPersonCount(page: Page): Promise<number> {
     );
 }
 
+test('the add-person modal opens without a horizontal scrollbar', async ({ page }) => {
+    await openApp(page);
+    // Empty-state "Add person" opens the modal fresh.
+    await page.locator('#empty-state button').first().click();
+    const modal = personModal(page);
+    await expect(modal).toBeVisible();
+    // Nothing inside may overflow the modal's width (the expander used to be
+    // width:100% *plus* 24px side margins → a 48px horizontal scrollbar).
+    const overflow = await modal.locator('.modal').evaluate((m) => m.scrollWidth - m.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+});
+
 test('a created person persists across a page reload', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');

@@ -25,7 +25,7 @@ test('a tree with two unrelated families can be split into two trees', async ({ 
 
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     await page.locator('.tree-row-menu-btn').first().click();
-    await page.locator('.tree-row-menu-item', { hasText: 'Split by families' }).click();
+    await page.locator('.tree-row-menu-item', { hasText: 'Separate disconnected parts' }).click();
     await expect(page.locator('#split-modal')).toBeVisible();
 
     // Both families are listed, biggest first, named after their surname.
@@ -57,7 +57,7 @@ test('a connected tree offers nothing to split', async ({ page }) => {
 
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     await page.locator('.tree-row-menu-btn').first().click();
-    await page.locator('.tree-row-menu-item', { hasText: 'Split by families' }).click();
+    await page.locator('.tree-row-menu-item', { hasText: 'Separate disconnected parts' }).click();
 
     // One family: say so plainly rather than showing a pointless list.
     await expect(page.locator('#split-modal')).toContainText('one family here');
@@ -116,7 +116,7 @@ test('importing a file with several families offers to split it', async ({ page 
     // The split has been in the tree manager all along; nobody goes looking for
     // a thing they do not know they need. This is the moment they think about it.
     await expect(page.getByText(/families that nothing connects/i)).toBeVisible({ timeout: 10000 });
-    await page.getByRole('button', { name: 'Split by families' }).click();
+    await page.getByRole('button', { name: 'Separate disconnected parts…' }).click();
     await expect(page.locator('#split-modal')).toBeVisible();
     await expect(page.locator('.split-row')).toHaveCount(2);
 });

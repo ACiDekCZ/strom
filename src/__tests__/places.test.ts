@@ -4,7 +4,7 @@
  * one place; renaming rewrites every field that used it.
  */
 import { describe, it, expect } from 'vitest';
-import { placeKey, collectPlaces, placeList, placesWithVariants, renamePlace } from '../places.js';
+import { placeKey, collectPlaces, placeList, placesWithVariants, renamePlace, orphanedPlaceKeys } from '../places.js';
 import { StromData, Person, PersonId, PartnershipId } from '../types.js';
 
 function person(id: string, o: Partial<Person> = {}): Person {
@@ -98,5 +98,43 @@ describe('renamePlace', () => {
         expect(out.persons['a' as PersonId].deathPlace).toBe('Praha');   // untouched
         // the source data is not mutated
         expect(data.persons['a' as PersonId].birthPlace).toBe('decin');
+    });
+});
+
+describe('orphanedPlaceKeys', () => {
+    // A tree where Brno is used (a birth) but data.places also carries an old
+    // pin for Praha that no record mentions any more (a deleted person's place).
+    function withPlaces(): StromData {
+        const data = tree([person('a', { birthPlace: 'Brno' })]);
+        data.places = {
+            [placeKey('Brno')]: { lat: 49.2, lon: 16.6, label: 'Brno' },
+            [placeKey('Praha')]: { lat: 50.08, lon: 14.42, label: 'Praha' },
+            [placeKey('Wien')]: { lat: 48.2, lon: 16.37, label: 'Wien' },
+        };
+        return data;
+    }
+
+    it('reports only place keys nothing in the tree still references', () => {
+        const data = withPlaces();
+        const orphans = orphanedPlaceKeys(data).sort();
+        expect(orphans).toEqual([placeKey('Praha'), placeKey('Wien')].sort());
+        expect(orphans).not.toContain(placeKey('Brno'));   // Brno is a live birthplace
+    });
+
+    it('counts a wedding place and an event place as live references', () => {
+        const data = tree([
+            person('a', { events: [{ id: 'e1', type: 'residence', place: 'Plzeň' }] }),
+            person('b'),
+        ], 'Tábor');
+        data.places = {
+            [placeKey('Plzeň')]: { lat: 49.7, lon: 13.4 },
+            [placeKey('Tábor')]: { lat: 49.4, lon: 14.7 },
+            [placeKey('Ghost')]: { lat: 0, lon: 0 },
+        };
+        expect(orphanedPlaceKeys(data)).toEqual([placeKey('Ghost')]);
+    });
+
+    it('returns nothing when there is no places registry', () => {
+        expect(orphanedPlaceKeys(tree([person('a', { birthPlace: 'Brno' })]))).toEqual([]);
     });
 });

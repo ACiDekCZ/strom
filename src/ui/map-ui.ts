@@ -19,7 +19,7 @@ import { TreeRenderer } from '../renderer.js';
 import { SettingsManager } from '../settings.js';
 import { strings } from '../strings.js';
 import { PersonId, PlaceGeo } from '../types.js';
-import { collectPlaces, PlaceUsage } from '../places.js';
+import { collectPlaces, orphanedPlaceKeys, PlaceUsage } from '../places.js';
 import {
     fitBounds, panCenter, pinchZoomStep, pointInViewport, tileUrl, tilesForViewport, zoomAround,
     TILE_ATTRIBUTION, TILE_ATTRIBUTION_URL,
@@ -572,6 +572,10 @@ export const mapMethods = uiModule({
             this.showToast(strings.map.noPlacesAtAll);
             return;
         }
+        // Coordinate entries no person/event/partnership refers to any more. They
+        // never appear as rows (the list is built from used places), so the
+        // footer action is the only handle on them.
+        const orphanCount = orphanedPlaceKeys(DataManager.getData()).length;
         this.closeMapPopup();
 
         document.getElementById('places-modal')?.remove();
@@ -588,7 +592,9 @@ export const mapMethods = uiModule({
                 <div class="places-list">
                     ${places.map(p => this.renderPlaceRow(p)).join('')}
                 </div>
-                <div class="modal-buttons">
+                <div class="modal-buttons places-footer">
+                    <button type="button" class="secondary places-clean-orphans" id="places-clean-orphans"
+                        ${orphanCount === 0 ? 'disabled' : ''}>${strings.map.cleanOrphans(orphanCount)}</button>
                     <button type="button" class="secondary" id="places-close">${strings.buttons.close}</button>
                 </div>
             </div>`;
@@ -598,6 +604,7 @@ export const mapMethods = uiModule({
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
         (overlay.querySelector('#places-close') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#places-close-x') as HTMLButtonElement).onclick = close;
+        (overlay.querySelector('#places-clean-orphans') as HTMLButtonElement).onclick = () => void this.cleanOrphanPlaces();
         overlay.querySelectorAll('.place-row').forEach(row => this.bindPlaceRow(row as HTMLElement));
 
         if (focusKey) {
@@ -700,6 +707,18 @@ export const mapMethods = uiModule({
 
     removePlacePin(key: string): void {
         DataManager.clearPlaceGeo(key);
+        this.refreshPlacesManager();
+    },
+
+    /** Sweep coordinate entries nothing in the tree points at any more. Confirms
+     *  with the count, then deletes via the normal mutation path (undo + audit
+     *  + Undo toast) and redraws the manager. */
+    async cleanOrphanPlaces(): Promise<void> {
+        const count = orphanedPlaceKeys(DataManager.getData()).length;
+        if (count === 0) return;
+        if (!await this.showConfirm(strings.map.cleanOrphansConfirm(count))) return;
+        const removed = DataManager.clearOrphanPlaces();
+        if (removed > 0) this.showToast(strings.map.cleanOrphansDone(removed));
         this.refreshPlacesManager();
     },
 
