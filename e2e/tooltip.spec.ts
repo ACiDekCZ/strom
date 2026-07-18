@@ -94,3 +94,46 @@ test('the hover card gains a photo column when the person has one, none otherwis
     const src = await tip(page, 'Jan').locator('.tt-photo').getAttribute('src');
     expect(src).toMatch(/^data:image\//);
 });
+
+test('the photo bubble widens for its text instead of collapsing to a sliver', async ({ page }) => {
+    // Regression guard (round 9): the has-photo tooltip is position:absolute, so
+    // its shrink-to-fit width was clamped by the narrow card underneath it — the
+    // flex text column collapsed to one word per line and a phantom gap opened
+    // beside the photo. width:max-content (capped at 280px) fixes it.
+    const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQAY3Y2wAAAAAElFTkSuQmCC';
+    await openApp(page);
+    await createFirstPerson(page, 'Bartoloměj', 'Nepomucký', { birthDate: '1783-06-15', birthPlace: 'Kutná Hora' });
+    await page.evaluate((photo) => {
+        const dm = window.Strom.DataManager;
+        const id = dm.getAllPersons()[0].id;
+        // Enough text (birth + death, both with a place) that a sliver-wide
+        // column would visibly break every word onto its own line.
+        dm.updatePerson(id, { photo, deathDate: '1850-11-20', deathPlace: 'Kolín' });
+        window.Strom.TreeRenderer.render();
+    }, PNG);
+
+    const t = tip(page, 'Bartoloměj');
+    await expect(t).toHaveClass(/has-photo/);
+
+    const m = await t.evaluate((el: HTMLElement) => {
+        const bubble = el.getBoundingClientRect();
+        const body = el.querySelector('.tt-body') as HTMLElement;
+        const lineHeights = Array.from(el.querySelectorAll('.tt-line, .tt-name'))
+            .map((l) => (l as HTMLElement).getBoundingClientRect().height);
+        return {
+            bubbleWidth: bubble.width,
+            bodyWidth: body.getBoundingClientRect().width,
+            maxLineHeight: Math.max(...lineHeights),
+        };
+    });
+
+    // The bubble earns a real width (roughly the ~280px cap), not a sliver.
+    expect(m.bubbleWidth).toBeGreaterThanOrEqual(240);
+    expect(m.bubbleWidth).toBeLessThanOrEqual(281);
+    // The text column beside the 56px photo keeps a usable width (a collapsed
+    // one-word-per-line sliver measured ~64px here).
+    expect(m.bodyWidth).toBeGreaterThanOrEqual(120);
+    // No line wraps into a tall stack — ~3 lines at 12px/1.5 is ~54px; the
+    // regression produced ~76px (four words stacked) per line.
+    expect(m.maxLineHeight).toBeLessThanOrEqual(60);
+});

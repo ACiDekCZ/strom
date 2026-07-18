@@ -7830,13 +7830,26 @@
             transition: opacity 0s, visibility 0s;
         }
         /* With a photo (round 9): a 56×56 thumbnail column on the left, the text
-           beside it (gap 12). The pill widens to ~280px so lines can wrap. */
+           beside it (gap 12). The pill widens to ~280px so lines can wrap.
+           width:max-content is load-bearing — the tooltip is position:absolute,
+           so its shrink-to-fit width is otherwise clamped by the (narrow) card
+           it sits on, collapsing the flex text column to one word per line and
+           leaving a phantom gap beside the photo. max-content sizes the bubble
+           to its own text (then max-width caps it at 280px so lines wrap). */
         .card-tooltip.has-photo {
             display: flex;
             align-items: flex-start;
             gap: 12px;
+            width: max-content;
             max-width: 280px;
             white-space: normal;
+        }
+        /* The text column takes the remaining width and wraps within it, rather
+           than shrinking to its longest word (min-width:0 keeps flex from
+           forcing the whole bubble wider than max-width). */
+        .card-tooltip.has-photo .tt-body {
+            flex: 1 1 auto;
+            min-width: 0;
         }
         .card-tooltip .tt-photo {
             flex-shrink: 0;
