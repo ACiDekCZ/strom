@@ -201,6 +201,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Set up TreeRenderer getter for ZoomPan (for centering on reset)
     setTreeRendererGetter(() => TreeRenderer);
 
+    // CSS :has() fallback for older Safari (toast stacking). No-op elsewhere.
+    UI.initHasFallback();
+
     // Initialize keyboard shortcuts
     UI.initKeyboard();
 

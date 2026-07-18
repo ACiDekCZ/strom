@@ -11,7 +11,20 @@
  * foster→foster); 'step' has no GEDCOM equivalent and exports without PEDI.
  */
 
-import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole } from './types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo } from './types.js';
+import { placeKey } from './places.js';
+
+/**
+ * Header NOTE marker under which surname-variant groups are written. GEDCOM has
+ * no standard structure for "these spellings mean one family" (surnameVariants),
+ * so — rather than invent a custom tag — the groups ride in a plain header NOTE,
+ * which every reader keeps. The marker lets our own importer round-trip them;
+ * other tools simply show a human-readable note. Kept in sync with the parser,
+ * which imports this constant.
+ */
+export const SURNAME_GROUPS_MARKER = 'Strom surname-variant groups';
+/** Separates spellings within one group inside the header NOTE. */
+export const SURNAME_GROUP_SEP = ' | ';
 
 /**
  * LifeEvent type -> GEDCOM tag. Types with no GEDCOM equivalent ('military',
@@ -85,6 +98,37 @@ function formatGedcomDate(isoDate: string | undefined): string | null {
     } else {
         // Year only: YYYY
         return `${prefix}${year}`;
+    }
+}
+
+/**
+ * A coordinate as GEDCOM 5.5.1 wants it: a hemisphere letter then the magnitude.
+ * Latitude uses N/S, longitude E/W. Trailing zeros are trimmed so 50.088 stays
+ * "50.088" rather than "50.088000", and a whole degree comes out as "14".
+ */
+function trimCoord(magnitude: number): string {
+    return magnitude.toFixed(6).replace(/\.?0+$/, '') || '0';
+}
+function formatGedcomLat(lat: number): string {
+    return (lat >= 0 ? 'N' : 'S') + trimCoord(Math.abs(lat));
+}
+function formatGedcomLon(lon: number): string {
+    return (lon >= 0 ? 'E' : 'W') + trimCoord(Math.abs(lon));
+}
+
+/**
+ * Emit `level PLAC <place>` and, when the tree has coordinates for that place
+ * (data.places, keyed by placeKey), the standard MAP > LATI/LONG substructure
+ * one level deeper. This is what lets the map's geocache survive a round-trip
+ * and travel to other genealogy tools.
+ */
+function pushPlace(lines: string[], level: number, place: string, places?: Record<string, PlaceGeo>): void {
+    lines.push(`${level} PLAC ${escapeGedcomText(place)}`);
+    const geo = places?.[placeKey(place)];
+    if (geo && Number.isFinite(geo.lat) && Number.isFinite(geo.lon)) {
+        lines.push(`${level + 1} MAP`);
+        lines.push(`${level + 2} LATI ${formatGedcomLat(geo.lat)}`);
+        lines.push(`${level + 2} LONG ${formatGedcomLon(geo.lon)}`);
     }
 }
 
@@ -227,6 +271,18 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
     lines.push('2 FORM LINEAGE-LINKED');
     lines.push('1 CHAR UTF-8');
 
+    // Surname-variant groups: no GEDCOM structure fits "these spellings mean one
+    // family", so they ride in a header NOTE (standard, kept by every reader).
+    // The marker line lets our own importer read them back; the group lines are
+    // human-readable on their own.
+    const surnameGroups = (data.surnameVariants ?? []).filter(g => g.length >= 2);
+    if (surnameGroups.length > 0) {
+        lines.push(`1 NOTE ${SURNAME_GROUPS_MARKER}`);
+        for (const group of surnameGroups) {
+            lines.push(`2 CONT ${escapeGedcomText(group.join(SURNAME_GROUP_SEP))}`);
+        }
+    }
+
     // ==================== SUBMITTER ====================
     lines.push('0 @SUBM1@ SUBM');
     lines.push(`1 NAME ${escapeGedcomText(treeName || 'Strom User')}`);
@@ -263,7 +319,7 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
                 if (date) lines.push(`2 DATE ${date}`);
             }
             if (person.birthPlace) {
-                lines.push(`2 PLAC ${escapeGedcomText(person.birthPlace)}`);
+                pushPlace(lines, 2, person.birthPlace, data.places);
             }
         }
 
@@ -275,7 +331,7 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
                 if (date) lines.push(`2 DATE ${date}`);
             }
             if (person.deathPlace) {
-                lines.push(`2 PLAC ${escapeGedcomText(person.deathPlace)}`);
+                pushPlace(lines, 2, person.deathPlace, data.places);
             }
         }
 
@@ -304,7 +360,7 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
                 if (date) lines.push(`2 DATE ${date}`);
             }
             if (event.place) {
-                lines.push(`2 PLAC ${escapeGedcomText(event.place)}`);
+                pushPlace(lines, 2, event.place, data.places);
             }
             if (event.note && event.type !== 'occupation') {
                 pushNote(lines, 2, event.note);
@@ -432,7 +488,7 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
                 if (date) lines.push(`2 DATE ${date}`);
             }
             if (partnership.startPlace) {
-                lines.push(`2 PLAC ${escapeGedcomText(partnership.startPlace)}`);
+                pushPlace(lines, 2, partnership.startPlace, data.places);
             }
         }
 

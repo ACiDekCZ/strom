@@ -127,31 +127,64 @@ export function zoomAround(center: PlaceGeo, zoom: number, nextZoom: number, anc
     return { center: unproject(c2, z2), zoom: z2 };
 }
 
+/** Wrap any longitude into the standard [-180, 180) range. */
+export function normalizeLon(lon: number): number {
+    return ((lon + 180) % 360 + 360) % 360 - 180;
+}
+
+/**
+ * Put a set of longitudes into one contiguous frame so a cluster that straddles
+ * the ±180° meridian (Alaska at -179°, Siberia at +179°) is measured across its
+ * true 2° width, not the 358° the raw numbers suggest. The empty ocean is the
+ * LARGEST gap around the circle; everything on the far side of it from the
+ * cluster is lifted by 360° so the whole cluster reads as an ascending run.
+ * With no antimeridian crossing the largest gap is the ordinary wrap-around and
+ * nothing shifts — identical to plain longitudes.
+ */
+export function unwrapLongitudes(raw: number[]): number[] {
+    const norm = raw.map(normalizeLon);
+    if (norm.length < 2) return norm;
+    const sorted = [...norm].sort((a, b) => a - b);
+    // Start with the wrap-around gap (last point up to the first, +360).
+    let maxGap = sorted[0] + 360 - sorted[sorted.length - 1];
+    let reference = sorted[0];   // first point after that gap
+    for (let i = 1; i < sorted.length; i++) {
+        const gap = sorted[i] - sorted[i - 1];
+        if (gap > maxGap) { maxGap = gap; reference = sorted[i]; }
+    }
+    // Points west of the cluster's start sit across the meridian — lift them.
+    return norm.map(lon => (lon < reference ? lon + 360 : lon));
+}
+
 /**
  * Frame all `points` in a `width`×`height` viewport. A single point gets a
  * sensible town-level zoom rather than the maximum, so it keeps some context.
+ * Longitudes are unwrapped first so a set spanning the ±180° meridian frames
+ * tightly instead of zooming out to the whole world.
  */
 export function fitBounds(points: PlaceGeo[], width: number, height: number, padding = 60): { center: PlaceGeo; zoom: number } {
     if (points.length === 0) return { center: { lat: 50, lon: 15 }, zoom: MIN_ZOOM };
     if (points.length === 1) return { center: points[0], zoom: 11 };
 
     const lats = points.map(p => clamp(p.lat, -MAX_LAT, MAX_LAT));
-    const lons = points.map(p => p.lon);
-    const center = unproject(
-        {
-            x: (project({ lat: 0, lon: Math.min(...lons) }, 0).x + project({ lat: 0, lon: Math.max(...lons) }, 0).x) / 2,
-            y: (project({ lat: Math.min(...lats), lon: 0 }, 0).y + project({ lat: Math.max(...lats), lon: 0 }, 0).y) / 2,
-        },
-        0,
-    );
+    const lons = unwrapLongitudes(points.map(p => p.lon));
+    const minLon = Math.min(...lons);
+    const maxLon = Math.max(...lons);
+    const center: PlaceGeo = {
+        // Latitude is a Mercator (non-linear) midpoint; longitude is linear, so
+        // the plain average of the unwrapped span is right — rewrapped to a real
+        // coordinate afterwards.
+        lat: unproject({ x: 0, y: (project({ lat: Math.min(...lats), lon: 0 }, 0).y + project({ lat: Math.max(...lats), lon: 0 }, 0).y) / 2 }, 0).lat,
+        lon: normalizeLon((minLon + maxLon) / 2),
+    };
 
     // Largest zoom where the whole span still fits inside the padded viewport.
     const usableW = Math.max(50, width - padding * 2);
     const usableH = Math.max(50, height - padding * 2);
     let best = MIN_ZOOM;
     for (let z = MIN_ZOOM; z <= MAX_ZOOM; z++) {
-        const xs = points.map(p => project(p, z).x);
-        const ys = points.map(p => project(p, z).y);
+        const xs = lons.map(lon => project({ lat: 0, lon }, z).x);
+        const ys = lats.map(lat => project({ lat, lon: 0 }, z).y);
         if (Math.max(...xs) - Math.min(...xs) > usableW) break;
         if (Math.max(...ys) - Math.min(...ys) > usableH) break;
         best = z;

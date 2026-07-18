@@ -67,19 +67,40 @@ export const familyWizardMethods = uiModule({
     showFamilyOffer(personId: PersonId): void {
         document.querySelector('.family-offer')?.remove();
         const fw = strings.familyWizard;
+        // Full-width, click-transparent container (pointer-events: none) so it
+        // never blocks the canvas; only the visible pill inside takes clicks.
         const el = document.createElement('div');
         el.className = 'family-offer';
-        el.innerHTML = `<span>${this.escapeHtml(fw.continuePrompt)}</span>`
+        const pill = document.createElement('div');
+        pill.className = 'family-offer-pill';
+        pill.innerHTML = `<span>${this.escapeHtml(fw.continuePrompt)}</span>`
             + `<button type="button" class="family-offer-btn">${this.escapeHtml(fw.continueYes)}</button>`
             + `<button type="button" class="family-offer-close" aria-label="close">&times;</button>`;
-        el.querySelector('.family-offer-btn')!.addEventListener('click', () => {
-            el.remove();
+        el.appendChild(pill);
+
+        let done = false;
+        const close = (): void => { if (done) return; done = true; clearInterval(timer); el.remove(); };
+        pill.querySelector('.family-offer-btn')!.addEventListener('click', () => {
+            close();
             this.showFamilyWizard(personId);
         });
-        el.querySelector('.family-offer-close')!.addEventListener('click', () => el.remove());
+        pill.querySelector('.family-offer-close')!.addEventListener('click', close);
         document.body.appendChild(el);
         requestAnimationFrame(() => el.classList.add('show'));
-        setTimeout(() => el.remove(), 12000);
+
+        // 12s of VISIBLE time. The offer is hidden while a dialog covers it
+        // (CSS display:none) or the tab is in the background — that time must
+        // not count, or the offer is gone the moment the user returns to it.
+        // getClientRects() is empty exactly when an ancestor is display:none.
+        let remaining = 12000;
+        const tickMs = 250;
+        const timer = setInterval(() => {
+            if (!document.body.contains(el)) { clearInterval(timer); return; }
+            const hidden = document.hidden || el.getClientRects().length === 0;
+            if (hidden) return;
+            remaining -= tickMs;
+            if (remaining <= 0) close();
+        }, tickMs);
     },
 
     /** One editable person row. `partner` also carries a wedding-year field. */

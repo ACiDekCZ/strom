@@ -969,6 +969,24 @@ const stringsEN = {
         mediaNoMatch: 'None of the selected files match the referenced names.',
     },
 
+    // Notes the GEDCOM importer writes into the data itself (persisted). Built
+    // in the app's CURRENT language at import time — English source above.
+    gedcomNotes: {
+        altBirth: 'Birth (alternative record)',
+        altDeath: 'Death (alternative record)',
+        remarriage: (divorced: string, married: string) => `Divorced ${divorced}, married again ${married}`,
+        remarriageNoDate: (married: string) => `Divorced, married again ${married}`,
+        engagement: (date: string) => `Engagement: ${date}`,
+        association: (name: string, label: string) => `Association: ${name} (${label})`,
+        email: (value: string) => `E-mail: ${value}`,
+        adoptedChild: 'adopted child',
+        fosterChild: 'foster child',
+        child: 'child',
+        parentAnd: ' and ',
+        alsoRecorded: (kind: string, parents: string) => `Also recorded as ${kind} of ${parents}.`,
+        alsoRecordedNoParents: (kind: string) => `Also recorded as ${kind} in another family.`,
+    },
+
     // Save current data dialog
     saveCurrent: {
         title: 'Save Current Data?',
@@ -2627,6 +2645,24 @@ const stringsCZ: StringsType = {
         downloading: (done: number, total: number) => `Stahuji fotky… ${done}/${total}`,
         mediaAttached: (matched: number, total: number) => `Napojeno ${matched} z ${total} odkazovaných souborů.`,
         mediaNoMatch: 'Žádný z vybraných souborů neodpovídá odkazovaným názvům.',
+    },
+
+    // Poznámky, které importér GEDCOM zapisuje přímo do dat (uloží se). Sestaveny
+    // v AKTUÁLNÍM jazyce aplikace v okamžiku importu.
+    gedcomNotes: {
+        altBirth: 'Narození (alternativní záznam)',
+        altDeath: 'Úmrtí (alternativní záznam)',
+        remarriage: (divorced: string, married: string) => `Rozvod ${divorced}, nový sňatek ${married}`,
+        remarriageNoDate: (married: string) => `Rozvod, nový sňatek ${married}`,
+        engagement: (date: string) => `Zásnuby: ${date}`,
+        association: (name: string, label: string) => `Vztah: ${name} (${label})`,
+        email: (value: string) => `E-mail: ${value}`,
+        adoptedChild: 'osvojené dítě',
+        fosterChild: 'dítě v pěstounské péči',
+        child: 'dítě',
+        parentAnd: ' a ',
+        alsoRecorded: (kind: string, parents: string) => `Rovněž zapsáno jako ${kind} rodičů ${parents}.`,
+        alsoRecordedNoParents: (kind: string) => `Rovněž zapsáno jako ${kind} v jiné rodině.`,
     },
 
     // Save current data dialog

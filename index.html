@@ -3743,11 +3743,24 @@
            top of that dialog's Save/Cancel row on a phone. While a dialog is
            open the offer has nothing to say — get out of the way. */
         body:has(.modal-overlay.active) .family-offer { display: none; }
+        /* Fallback for browsers without :has() (older Safari): a body class kept
+           in sync by JS (see initHasFallback). No effect where :has() works. */
+        @supports not (selector(:has(*))) {
+            body.has-active-modal .family-offer { display: none; }
+        }
+        /* Container spans the width and is click-transparent — it must never
+           intercept a canvas drag/click. Only the visible pill inside is live. */
         .family-offer {
             position: fixed;
             bottom: 24px;
-            left: 50%;
-            transform: translateX(-50%) translateY(10px);
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            z-index: 250;
+            pointer-events: none;
+        }
+        .family-offer-pill {
             display: flex;
             align-items: center;
             gap: 10px;
@@ -3756,15 +3769,14 @@
             border: 1px solid var(--border-color, rgba(0,0,0,0.1));
             border-radius: 10px;
             box-shadow: var(--shadow-sm);
-            z-index: 250;
             font-size: 14px;
             opacity: 0;
+            transform: translateY(10px);
             transition: opacity 0.2s, transform 0.2s;
-            /* Never intercept canvas drags/clicks — only the buttons are active. */
-            pointer-events: none;
+            /* The pill is the only live surface — clicks on it don't fall through. */
+            pointer-events: auto;
         }
-        .family-offer.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-        .family-offer button { pointer-events: auto; }
+        .family-offer.show .family-offer-pill { opacity: 1; transform: translateY(0); }
         .family-offer-btn {
             border: none; background: var(--primary); color: var(--on-primary);
             border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
@@ -6846,10 +6858,18 @@
         body:has(.modal-overlay.active) .undo-toast { display: none; }
         /* Lift the family offer above the undo toast when both are showing. */
         body:has(.undo-toast) .family-offer { bottom: 84px; }
+        /* :has() fallback (older Safari) — body classes kept in sync by JS. */
+        @supports not (selector(:has(*))) {
+            body.has-active-modal .undo-toast { display: none; }
+            body.has-undo-toast .family-offer { bottom: 84px; }
+        }
         /* Mobile regime (bottom bar ≤1024px): sit above the bar. */
         @media (max-width: 1024px) {
             .undo-toast { bottom: calc(var(--bottom-bar-h) + 12px); }
             body:has(.undo-toast) .family-offer { bottom: calc(var(--bottom-bar-h) + 72px); }
+            @supports not (selector(:has(*))) {
+                body.has-undo-toast .family-offer { bottom: calc(var(--bottom-bar-h) + 72px); }
+            }
         }
         /* Phone (<500px): full width minus 24px, no centre transform. */
         @media (max-width: 500px) {

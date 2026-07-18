@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    fitBounds, panCenter, pinchZoomStep, pointInViewport, project, tileUrl, tilesForViewport, unproject, zoomAround,
+    fitBounds, normalizeLon, panCenter, pinchZoomStep, pointInViewport, project, tileUrl, tilesForViewport, unproject, unwrapLongitudes, zoomAround,
     MAX_ZOOM, MIN_ZOOM, PINCH_ZOOM_IN_RATIO, PINCH_ZOOM_OUT_RATIO, TILE_SIZE,
 } from '../map.js';
 
@@ -220,5 +220,45 @@ describe('fitBounds', () => {
         const fit = fitBounds([], 800, 600);
         expect(Number.isFinite(fit.center.lat)).toBe(true);
         expect(fit.zoom).toBe(MIN_ZOOM);
+    });
+
+    it('frames a ±180° meridian-spanning cluster tightly, not the whole world', () => {
+        // Bering Strait: Siberia at +179°, Alaska at -179° — 2° apart, not 358°.
+        const spanning = fitBounds([{ lat: 65, lon: 179 }, { lat: 64, lon: -179 }], 800, 600);
+        const wide = fitBounds([{ lat: 65, lon: 179 }, { lat: 64, lon: -90 }], 800, 600);
+        expect(spanning.zoom).toBeGreaterThan(wide.zoom + 3);
+        // The centre sits on the meridian, not back near longitude 0.
+        expect(Math.abs(Math.abs(spanning.center.lon) - 180)).toBeLessThan(1);
+    });
+
+    it('gives a spanning cluster the same zoom as an equal non-spanning span', () => {
+        const spanning = fitBounds([{ lat: 65, lon: 179 }, { lat: 64, lon: -179 }], 800, 600);
+        const normal = fitBounds([{ lat: 65, lon: 1 }, { lat: 64, lon: 3 }], 800, 600);
+        expect(spanning.zoom).toBe(normal.zoom);
+    });
+});
+
+describe('longitude helpers', () => {
+    it('wraps longitudes into [-180, 180)', () => {
+        expect(normalizeLon(14.4)).toBeCloseTo(14.4, 9);
+        expect(normalizeLon(190)).toBeCloseTo(-170, 9);
+        expect(normalizeLon(-190)).toBeCloseTo(170, 9);
+        expect(normalizeLon(180)).toBeCloseTo(-180, 9);
+        expect(normalizeLon(540)).toBeCloseTo(-180, 9);
+    });
+
+    it('leaves an ordinary (non-spanning) set of longitudes untouched', () => {
+        const out = unwrapLongitudes([14.4, -0.13, 2.35]);
+        expect(out[0]).toBeCloseTo(14.4, 9);
+        expect(out[1]).toBeCloseTo(-0.13, 9);
+        expect(out[2]).toBeCloseTo(2.35, 9);
+    });
+
+    it('lifts the far side of the meridian so the cluster is contiguous', () => {
+        const out = unwrapLongitudes([179, -179]);
+        expect(Math.max(...out) - Math.min(...out)).toBeCloseTo(2, 9);
+        // A genuinely wide pair keeps its true span.
+        const wide = unwrapLongitudes([179, -90]);
+        expect(Math.max(...wide) - Math.min(...wide)).toBeCloseTo(91, 9);
     });
 });

@@ -33,9 +33,13 @@ import {
     toPartnershipId,
     generateLifeEventId,
     generateParticipantId,
-    generateSourceId
+    generateSourceId,
+    PlaceGeo
 } from './types';
 import { dateSortKey } from './dates';
+import { placeKey } from './places';
+import { strings } from './strings';
+import { SURNAME_GROUPS_MARKER, SURNAME_GROUP_SEP } from './ged-exporter';
 
 /**
  * RELA text -> role. Other programs write these freely ("Godparent", "godmother",
@@ -180,6 +184,10 @@ export interface ParsedGedcom {
     repositories: Map<string, string>;
     /** Tags our data model cannot represent, with occurrence counts. */
     droppedTags: Map<string, number>;
+    /** Coordinates read from PLAC > MAP > LATI/LONG, keyed by placeKey(). */
+    places: Map<string, PlaceGeo>;
+    /** Surname-variant groups read from the header NOTE (see exporter marker). */
+    surnameGroups: string[][];
 }
 
 /** Result of GEDCOM to Strom conversion */
@@ -472,8 +480,8 @@ const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', '
  * the rest are kept as labelled CUSTOM events — 'birth'/'death' event types are
  * reserved for the date fields (validation flags them as a data-entry mistake).
  */
-const ALT_BIRTH_LABEL = 'Birth (alternative record)';
-const ALT_DEATH_LABEL = 'Death (alternative record)';
+// Labels are read from strings at USE time (not module load) so the note lands
+// in the app's current language — see each call site.
 
 const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'REPO', 'HEAD', 'TRLR', 'SUBM', 'SUBN']);
 
@@ -554,10 +562,25 @@ function applyUnionOutcome(partnership: Partnership, fam: GedcomFamily): void {
     if (outcome.remarriage) {
         const { divorced, married } = outcome.remarriage;
         const line = divorced
-            ? `Divorced ${divorced}, married again ${married}`
-            : `Divorced, married again ${married}`;
+            ? strings.gedcomNotes.remarriage(divorced, married)
+            : strings.gedcomNotes.remarriageNoDate(married);
         partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
     }
+}
+
+/**
+ * A GEDCOM 5.5.1 coordinate ("N50.088", "W14.421") or a bare signed number back
+ * to a plain degree value. Returns null for anything unparseable so a malformed
+ * MAP block is skipped rather than poisoning the place with NaN.
+ */
+function parseGedcomCoord(raw: string): number | null {
+    const m = /^([NSEW])?\s*(-?\d+(?:\.\d+)?)$/i.exec(raw.trim());
+    if (!m) return null;
+    let value = parseFloat(m[2]);
+    if (!Number.isFinite(value)) return null;
+    const hemi = m[1]?.toUpperCase();
+    if (hemi === 'S' || hemi === 'W') value = -value;
+    return value;
 }
 
 export function parseGedcom(content: string): ParsedGedcom {
@@ -600,6 +623,15 @@ export function parseGedcom(content: string): ParsedGedcom {
     let currentCitationId: string | null = null;
     /** 0 @Rx@ REPO record currently open. */
     let currentRepoId: string | null = null;
+    /** Coordinates gathered from PLAC > MAP > LATI/LONG, keyed by placeKey(). */
+    const placeCoords = new Map<string, PlaceGeo>();
+    /** The PLAC value a MAP substructure is currently describing. */
+    let currentPlaceValue: string | null = null;
+    /** Inside the 0 HEAD record (its NOTE may carry surname-variant groups). */
+    let inHeader = false;
+    /** The current header NOTE is the surname-groups marker note. */
+    let inSurnameNote = false;
+    const surnameGroups: string[][] = [];
 
     for (const line of lines) {
         const match = line.match(/^(\d+)\s+(@\w+@|\w+)\s*(.*)?$/);
@@ -609,6 +641,25 @@ export function parseGedcom(content: string): ParsedGedcom {
         const tag = match[2];
         // GEDCOM escapes a literal '@' as '@@' (pointers never contain it).
         const value = (match[3] || '').trim().replace(/@@/g, '@');
+
+        // Place coordinates ride under a PLAC as MAP > LATI/LONG. They can hang
+        // off a person's birth/death, an event or a marriage, so they are read
+        // here — before the per-record dispatch — against the most recent PLAC.
+        if (level <= 1) currentPlaceValue = null;
+        if (level === 2 && tag === 'PLAC' && value) currentPlaceValue = value;
+        if ((level === 3 && tag === 'MAP')
+            || (level === 4 && (tag === 'LATI' || tag === 'LONG'))) {
+            if (level === 4 && currentPlaceValue) {
+                const coord = parseGedcomCoord(value);
+                if (coord !== null) {
+                    const key = placeKey(currentPlaceValue);
+                    const entry = placeCoords.get(key) ?? { lat: NaN, lon: NaN, label: currentPlaceValue };
+                    if (tag === 'LATI') entry.lat = coord; else entry.lon = coord;
+                    placeCoords.set(key, entry);
+                }
+            }
+            continue;
+        }
 
         if (level === 0) {
             // What KIND of record this is comes from the type word, never from
@@ -692,7 +743,21 @@ export function parseGedcom(content: string): ParsedGedcom {
             currentMedia = null;
             currentMediaSubTag = null;
             currentCitationId = null;
+            currentPlaceValue = null;
+            inHeader = recordType === 'HEAD';
+            inSurnameNote = false;
             if (recordType !== 'REPO') currentRepoId = null;
+        } else if (inHeader) {
+            // Header sub-lines. The only one we read is the surname-groups NOTE
+            // (see the exporter's SURNAME_GROUPS_MARKER); everything else in the
+            // header is bookkeeping the data model does not carry.
+            if (level === 1) {
+                inSurnameNote = tag === 'NOTE' && value.trim() === SURNAME_GROUPS_MARKER;
+            } else if (level === 2 && inSurnameNote && (tag === 'CONT' || tag === 'CONC')) {
+                const group = value.split(SURNAME_GROUP_SEP.trim())
+                    .map(s => s.trim()).filter(Boolean);
+                if (group.length >= 2) surnameGroups.push(group);
+            }
         } else if (currentRepoId !== null && level === 1 && tag === 'NAME') {
             repositories.set(currentRepoId, value);
         } else if (currentType === 'SOUR' && currentSource) {
@@ -775,7 +840,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             // fills the primary fields, duplicates become
                             // events so the alternative place/date survives.
                             if (indi.birthSeen) {
-                                const ev: RawEvent = { type: 'custom', customLabel: ALT_BIRTH_LABEL };
+                                const ev: RawEvent = { type: 'custom', customLabel: strings.gedcomNotes.altBirth };
                                 indi.events.push(ev);
                                 currentEvent = ev;
                                 currentSubTag = '_DUP';
@@ -787,7 +852,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             // A bare 'DEAT Y' (no date) still means deceased.
                             indi.deceased = true;
                             if (indi.deathSeen) {
-                                const ev: RawEvent = { type: 'custom', customLabel: ALT_DEATH_LABEL };
+                                const ev: RawEvent = { type: 'custom', customLabel: strings.gedcomNotes.altDeath };
                                 indi.events.push(ev);
                                 currentEvent = ev;
                                 currentSubTag = '_DUP';
@@ -902,7 +967,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 ? `${currentEvent.note}\n${value}` : value;
                         } else if (tag === 'EMAIL' && value) {
                             // MyHeritage keeps contact e-mail under RESI.
-                            const line = `E-mail: ${value}`;
+                            const line = strings.gedcomNotes.email(value);
                             currentEvent.note = currentEvent.note
                                 ? `${currentEvent.note}\n${line}` : line;
                         } else if (tag === 'ASSO' && value) {
@@ -980,7 +1045,13 @@ export function parseGedcom(content: string): ParsedGedcom {
         }
     }
 
-    return { individuals, families, sources, repositories, droppedTags };
+    // Keep only places whose MAP carried BOTH a latitude and a longitude.
+    const places = new Map<string, PlaceGeo>();
+    for (const [key, geo] of placeCoords) {
+        if (Number.isFinite(geo.lat) && Number.isFinite(geo.lon)) places.set(key, geo);
+    }
+
+    return { individuals, families, sources, repositories, droppedTags, places, surnameGroups };
 }
 
 // ==================== CONVERTER ====================
@@ -1126,7 +1197,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 const other = individuals.get(asso.ref!);
                 const name = `${other?.firstName ?? ''} ${other?.lastName ?? ''}`.trim() || '?';
                 const label = asso.rela?.trim() || role;
-                const line = `Association: ${name} (${label})`
+                const line = strings.gedcomNotes.association(name, label)
                     + (asso.note ? ` — ${asso.note}` : '');
                 person.notes = person.notes ? `${person.notes}\n${line}` : line;
             }
@@ -1249,7 +1320,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         applyUnionOutcome(partnership, fam);
 
         if (fam.engagementDate && fam.engagementDate !== '?') {
-            const line = `Engagement: ${fam.engagementDate}`;
+            const line = strings.gedcomNotes.engagement(fam.engagementDate);
             partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
         }
 
@@ -1366,7 +1437,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         applyUnionOutcome(partnership, fam);
 
         if (fam.engagementDate && fam.engagementDate !== '?') {
-            const line = `Engagement: ${fam.engagementDate}`;
+            const line = strings.gedcomNotes.engagement(fam.engagementDate);
             partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
         }
 
@@ -1448,12 +1519,13 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 .map(p => `${p.firstName} ${p.lastName}`.trim())
                 .filter(Boolean);
 
+            const gn = strings.gedcomNotes;
             const pedi = pediFor(childGedId, gedFamId);
-            const kind = pedi === 'adopted' ? 'adopted child'
-                : pedi === 'foster' ? 'foster child' : 'child';
+            const kind = pedi === 'adopted' ? gn.adoptedChild
+                : pedi === 'foster' ? gn.fosterChild : gn.child;
             const line = parentNames.length > 0
-                ? `Also recorded as ${kind} of ${parentNames.join(' and ')}.`
-                : `Also recorded as ${kind} in another family.`;
+                ? gn.alsoRecorded(kind, parentNames.join(gn.parentAnd))
+                : gn.alsoRecordedNoParents(kind);
 
             const child = persons[childId];
             child.notes = child.notes ? `${child.notes}\n${line}` : line;
@@ -1466,7 +1538,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         data: {
             persons,
             partnerships,
-            ...(Object.keys(sources).length > 0 ? { sources } : {})
+            ...(Object.keys(sources).length > 0 ? { sources } : {}),
+            ...(gedcom.places.size > 0 ? { places: Object.fromEntries(gedcom.places) } : {}),
+            ...(gedcom.surnameGroups.length > 0 ? { surnameVariants: gedcom.surnameGroups } : {})
         },
         stats: {
             otherFamilyLinks,
