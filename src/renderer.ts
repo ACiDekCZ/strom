@@ -1983,6 +1983,21 @@ class TreeRendererClass {
     getGenerationBands(): GenerationBand[] {
         return this.generationBands;
     }
+
+    /**
+     * World-space rectangles of every rendered card. The sticky label overlay
+     * (src/ui/gen-labels.ts) projects these to the screen to fade out any band
+     * label a card has panned over — cards always take precedence over labels.
+     */
+    getCardWorldRects(): { x: number; y: number; w: number; h: number }[] {
+        const w = this.config.cardWidth;
+        const h = this.config.cardHeight;
+        const rects: { x: number; y: number; w: number; h: number }[] = [];
+        for (const pos of this.positions.values()) {
+            rects.push({ x: pos.x, y: pos.y, w, h });
+        }
+        return rects;
+    }
 }
 
 export const TreeRenderer = new TreeRendererClass();

@@ -96,7 +96,7 @@ export const genLabelsMethods = uiModule({
             return;
         }
 
-        const { scale, ty } = ZoomPan.getTransform();
+        const { scale, tx, ty } = ZoomPan.getTransform();
         const { height } = ZoomPan.getViewportSize();
 
         // Hide the whole overlay when bands are too cramped to label (screen
@@ -109,6 +109,18 @@ export const genLabelsMethods = uiModule({
             return;
         }
         overlay.style.display = 'block';
+
+        // Cards take precedence over labels: project every card rect to screen
+        // space (same coordinate system the labels use — container-relative),
+        // so a label a card has panned over can fade out instead of printing on
+        // top of the person. A handful of labels × a few hundred cards of plain
+        // arithmetic per transform change — cheap enough to run inline.
+        const cardRects = TreeRenderer.getCardWorldRects().map(r => ({
+            left: r.x * scale + tx,
+            top: r.y * scale + ty,
+            right: (r.x + r.w) * scale + tx,
+            bottom: (r.y + r.h) * scale + ty,
+        }));
 
         for (const { row, arrow, band } of els) {
             const rowY = band.rowCenterY * scale + ty;
@@ -138,6 +150,20 @@ export const genLabelsMethods = uiModule({
             row.style.display = '';
             row.style.top = `${centerY}px`;
             arrow.style.display = pinned ? '' : 'none';
+
+            // Fade the label out if any card covers it. The row keeps its
+            // 'display' so opacity can transition (see .gen-label.covered CSS);
+            // its measured screen box is read AFTER the top write above.
+            const labelLeft = row.offsetLeft;
+            const labelWidth = row.offsetWidth;
+            const halfH = row.offsetHeight / 2;
+            const lLeft = labelLeft;
+            const lRight = labelLeft + labelWidth;
+            const lTop = centerY - halfH;
+            const lBottom = centerY + halfH;
+            const covered = cardRects.some(c =>
+                c.left < lRight && c.right > lLeft && c.top < lBottom && c.bottom > lTop);
+            row.classList.toggle('covered', covered);
         }
     },
 });

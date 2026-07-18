@@ -680,7 +680,13 @@
             color: var(--text-faint);
             pointer-events: none;
             user-select: none;
+            opacity: 1;
+            transition: opacity 0.15s;
         }
+        /* Cards take precedence: a label a card has panned over fades out
+           (gen-labels.ts toggles this), so the band name never prints on top
+           of a person. It reappears once the card moves away. */
+        .gen-label.covered { opacity: 0; }
         .gen-label-arrow { margin-right: 4px; font-weight: 700; }
 
         /* ==================== PERSON CARD ==================== */
