@@ -35,6 +35,7 @@ const stringsEN = {
         poster: 'Poster…',
         makeTreeFromView: 'Make a tree from this view',
         makeTreeFromViewDesc: 'Create a new tree in the app from the shown people',
+        splitFamilies: 'Split into families…',
         mergeViewInto: 'Merge this view into…',
         actions: 'Actions',
         treeActions: 'Tree:',
@@ -157,6 +158,21 @@ const stringsEN = {
         selected: (count: number) => `Split off ${count}`,
         keepsOriginal: 'The original tree stays as it is — delete it yourself once you are happy with the split.',
         done: (count: number) => `${count} trees created. The original is untouched.`,
+    },
+    splitFamilies: {
+        title: 'Split into families',
+        intro: 'Every family this tree holds, seen from the person you are looking at. The first is your current view; the rest were found by following the relatives that lead out of it. Each person ends up in exactly one tree.',
+        familyName: (name: string) => `${name} family`,
+        yourView: 'Your current view',
+        persons: (count: number) => count === 1 ? '1 person' : `${count} people`,
+        namePlaceholder: 'Tree name',
+        preview: 'Preview',
+        summary: (trees: number, persons: number) => `${trees} trees · ${persons} people · 100% covered`,
+        create: (count: number) => count === 1 ? 'Create 1 tree' : `Create ${count} trees`,
+        cancel: 'Cancel',
+        keepsOriginal: 'The original tree is left exactly as it is. The new trees stay linked across their shared people — delete any you do not want in Manage trees.',
+        done: (count: number) => count === 1 ? '1 tree created' : `${count} trees created`,
+        tooSmall: 'Show a family or descendants view first, then split it into families.',
     },
 
     advanced: {
@@ -1516,6 +1532,8 @@ const stringsEN = {
         addedPartner: (person: string, partner: string) => `Added partner: ${person} & ${partner}`,
         // Tree merge
         treeMerge: (merged: number, added: number, source: string) => `Tree merge from "${source}": ${merged} merged, ${added} added`,
+        // Split into families
+        splitFamilies: (trees: number, persons: number) => `Split into ${trees} family trees (${persons} people)`,
         // Auto-repair
         repairedIssue: (desc: string) => `Auto-repair: ${desc}`,
         restoredBackup: 'Restored a backup',
@@ -1653,6 +1671,7 @@ const stringsCZ: StringsType = {
         poster: 'Plakát…',
         makeTreeFromView: 'Vytvořit strom z aktuálního pohledu',
         makeTreeFromViewDesc: 'Ze zobrazených osob vytvořit nový strom přímo v aplikaci',
+        splitFamilies: 'Rozdělit na rodiny…',
         mergeViewInto: 'Sloučit tento pohled do…',
         actions: 'Akce',
         treeActions: 'Strom:',
@@ -1775,6 +1794,21 @@ const stringsCZ: StringsType = {
         selected: (count: number) => `Vyčlenit ${count}`,
         keepsOriginal: 'Původní strom zůstává, jak je — smažte si ho sami, až budete s rozdělením spokojení.',
         done: (count: number) => `Vytvořeno ${count} stromů. Původní je nedotčený.`,
+    },
+    splitFamilies: {
+        title: 'Rozdělit na rodiny',
+        intro: 'Všechny rodiny v tomto stromu z pohledu osoby, kterou máte zobrazenou. První je váš aktuální pohled, další se našly sledováním příbuzných, kteří z něj vedou ven. Každá osoba skončí právě v jednom stromu.',
+        familyName: (name: string) => `Rodina ${name}`,
+        yourView: 'Váš aktuální pohled',
+        persons: (count: number) => count === 1 ? '1 osoba' : (count < 5 ? `${count} osoby` : `${count} osob`),
+        namePlaceholder: 'Název stromu',
+        preview: 'Náhled',
+        summary: (trees: number, persons: number) => `${trees} ${trees < 5 ? 'stromy' : 'stromů'} · ${persons} osob · pokrytí 100 %`,
+        create: (count: number) => count === 1 ? 'Vytvořit 1 strom' : `Vytvořit ${count} ${count < 5 ? 'stromy' : 'stromů'}`,
+        cancel: 'Zrušit',
+        keepsOriginal: 'Původní strom zůstává přesně tak, jak je. Nové stromy zůstávají propojené přes společné osoby — nechtěné smažte ve Správě stromů.',
+        done: (count: number) => count === 1 ? 'Vytvořen 1 strom' : `Vytvořeno ${count} ${count < 5 ? 'stromy' : 'stromů'}`,
+        tooSmall: 'Nejdřív zobrazte pohled Rodina nebo Potomci, pak jej rozdělte na rodiny.',
     },
 
     advanced: {
@@ -3139,6 +3173,8 @@ const stringsCZ: StringsType = {
         addedPartner: (person: string, partner: string) => `Přidán partner: ${person} & ${partner}`,
         // Tree merge
         treeMerge: (merged: number, added: number, source: string) => `Sloučení stromů z "${source}": ${merged} sloučeno, ${added} přidáno`,
+        // Split into families
+        splitFamilies: (trees: number, persons: number) => `Rozděleno na ${trees} rodinné stromy (${persons} osob)`,
         // Auto-repair
         repairedIssue: (desc: string) => `Automatická oprava: ${desc}`,
         restoredBackup: 'Obnovena záloha',

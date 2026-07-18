@@ -75,6 +75,7 @@ import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { slideshowMethods } from './slideshow.js';
 import { mapMethods, MapScope } from './map-ui.js';
 import { splitMethods } from './split-ui.js';
+import { splitFamiliesMethods } from './split-families-ui.js';
 import { surnamesMethods } from './surnames-ui.js';
 import { shareUiMethods } from './share-ui.js';
 import { familyWizardMethods } from './family-wizard.js';
@@ -200,6 +201,8 @@ export class UIClass {
     splitTreeId: TreeId | null = null;
     splitComponents: TreeComponent[] = [];
     splitParentDialog: string | null = null;
+    // "Split into families" (N4): the proposed families for the open dialog.
+    splitFamiliesComponents: import('../split-families.js').FamilyComponent[] = [];
     /** When the source editor was opened from the picker, cite the new source. */
     citeSourceAfterCreate = false;
 
@@ -377,6 +380,10 @@ Object.assign(UIClass.prototype, mapMethods);
 type SplitMethods = typeof splitMethods;
 export interface UIClass extends SplitMethods {}
 Object.assign(UIClass.prototype, splitMethods);
+
+type SplitFamiliesMethods = typeof splitFamiliesMethods;
+export interface UIClass extends SplitFamiliesMethods {}
+Object.assign(UIClass.prototype, splitFamiliesMethods);
 
 type SurnamesMethods = typeof surnamesMethods;
 export interface UIClass extends SurnamesMethods {}

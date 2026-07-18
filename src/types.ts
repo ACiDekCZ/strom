@@ -445,6 +445,7 @@ export type AuditAction =
     | 'parentChild.add'
     | 'parentChild.remove'
     | 'persons.merge'
+    | 'tree.split'
     | 'data.clear'
     | 'data.load'
     | 'data.import'

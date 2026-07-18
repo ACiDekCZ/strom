@@ -136,6 +136,7 @@ export const bottomSheetMethods = uiModule({
         ];
         if (!isView) {
             current.push({ label: s.menu.makeTreeFromView, run: () => this.makeTreeFromCurrentView() });
+            current.push({ label: s.menu.splitFamilies, run: () => this.showSplitFamiliesDialog() });
             current.push({ label: s.menu.mergeViewInto, run: () => this.mergeViewInto() });
         }
         current.push({ label: s.slideshow.menu, run: () => this.startSlideshow() });

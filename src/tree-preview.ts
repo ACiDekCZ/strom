@@ -1136,3 +1136,85 @@ class TreeCompareClass {
 
 export const TreePreview = new TreePreviewClass();
 export const TreeCompare = new TreeCompareClass();
+
+/**
+ * Draw a small, non-interactive tree thumbnail into `container` — the same
+ * layout engine and card/line marks as the full preview above, scaled to fit
+ * the box. Used by the "Split into families" dialog to show each proposed tree
+ * at a glance. Reuses computeLayout so a thumbnail always matches the real view.
+ */
+export function renderTreeThumbnail(
+    container: HTMLElement,
+    options: { data: StromData; focusPersonId: PersonId; depthUp?: number; depthDown?: number }
+): void {
+    const depthUp = options.depthUp ?? 2;
+    const depthDown = options.depthDown ?? 2;
+    const config: LayoutConfig = {
+        ...DEFAULT_LAYOUT_CONFIG,
+        cardWidth: 110, cardHeight: 54, horizontalGap: 16, verticalGap: 66,
+    };
+    const policy: SelectionPolicy = {
+        ancestorDepth: depthUp, descendantDepth: depthDown,
+        includeAuntsUncles: false, includeCousins: false,
+    };
+    const layout: LayoutResult = computeLayout(new StromLayoutEngine(), {
+        data: options.data, focusPersonId: options.focusPersonId, policy, config,
+    });
+
+    container.innerHTML = '';
+    container.classList.add('tree-thumb');
+    if (layout.positions.size === 0) return;
+
+    // World bounds of the laid-out cards.
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const pos of layout.positions.values()) {
+        minX = Math.min(minX, pos.x);
+        minY = Math.min(minY, pos.y);
+        maxX = Math.max(maxX, pos.x + config.cardWidth);
+        maxY = Math.max(maxY, pos.y + config.cardHeight);
+    }
+    const worldW = Math.max(1, maxX - minX);
+    const worldH = Math.max(1, maxY - minY);
+
+    const stage = document.createElement('div');
+    stage.className = 'tree-thumb-stage';
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNs, 'svg');
+    svg.setAttribute('class', 'tree-thumb-lines');
+    svg.setAttribute('viewBox', `${minX} ${minY} ${worldW} ${worldH}`);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+    const addLine = (x1: number, y1: number, x2: number, y2: number, cls: string): void => {
+        const l = document.createElementNS(svgNs, 'line');
+        l.setAttribute('x1', String(x1)); l.setAttribute('y1', String(y1));
+        l.setAttribute('x2', String(x2)); l.setAttribute('y2', String(y2));
+        l.setAttribute('class', cls);
+        svg.appendChild(l);
+    };
+    for (const s of layout.spouseLines) addLine(s.xMin, s.y, s.xMax, s.y, 'tree-thumb-line couple');
+    for (const c of layout.connections) {
+        addLine(c.stemX, c.stemTopY, c.stemX, c.stemBottomY, 'tree-thumb-line');
+        if (c.connectorFromX !== c.connectorToX) addLine(c.connectorFromX, c.connectorY, c.connectorToX, c.connectorY, 'tree-thumb-line');
+        addLine(c.branchLeftX, c.branchY, c.branchRightX, c.branchY, 'tree-thumb-line');
+        for (const d of c.drops) addLine(d.x, c.branchY, d.x, d.bottomY, 'tree-thumb-line');
+    }
+    stage.appendChild(svg);
+
+    // Cards positioned in the same world coordinates via a percentage map.
+    for (const [personId, pos] of layout.positions) {
+        const person = options.data.persons[personId];
+        if (!person) continue;
+        const card = document.createElement('div');
+        card.className = 'tree-thumb-card ' + (person.isPlaceholder ? 'placeholder' : person.gender)
+            + (personId === options.focusPersonId ? ' focused' : '');
+        card.style.left = `${((pos.x - minX) / worldW) * 100}%`;
+        card.style.top = `${((pos.y - minY) / worldH) * 100}%`;
+        card.style.width = `${(config.cardWidth / worldW) * 100}%`;
+        card.style.height = `${(config.cardHeight / worldH) * 100}%`;
+        stage.appendChild(card);
+    }
+
+    // Match the stage's aspect ratio to the world so cards/lines stay aligned.
+    stage.style.aspectRatio = `${worldW} / ${worldH}`;
+    container.appendChild(stage);
+}

@@ -33,6 +33,7 @@ import { executeMerge } from '../merge/executor.js';
 import { MergeState } from '../merge/types.js';
 import { StorageManager } from '../storage.js';
 import { extractSubtree } from '../subtree.js';
+import { decomposeIntoFamilies, seedIdsFor } from '../split-families.js';
 import {
     StromData, Person, Partnership, PersonId, PartnershipId, TreeId,
     toPersonId, toPartnershipId, LAST_FOCUSED, STROM_DATA_VERSION,
@@ -448,5 +449,35 @@ describe('split (extractSubtree) keeps every tree-level field', () => {
         const out = extractSubtree(full, new Set([ALICE, BOB]));
         expect(out.places?.['kolin']).toBeDefined();
         expect(out.places?.['praha']).toBeUndefined();
+    });
+});
+
+/**
+ * "Split into families" (N4) makes each family's tree the very same way as the
+ * hand-built split above: decompose, then extractSubtree over the family's seed
+ * ids (its persons plus the connector anchor). This guards that path — every
+ * tree-level field must survive the pass, exactly like the import section.
+ */
+describe('split into families keeps every tree-level field per component', () => {
+    it('carries registries, sources and the connector anchor through a component', () => {
+        const full = fullTree();
+        const components = decomposeIntoFamilies(full, ALICE, {
+            ancestorDepth: 2, descendantDepth: 2, includeAuntsUncles: true, includeCousins: true,
+        });
+        // One connected couple → a single family covering both.
+        const seen = new Set<PersonId>();
+        for (const c of components) c.personIds.forEach(id => seen.add(id));
+        expect(seen).toEqual(new Set([ALICE, BOB]));
+
+        // The path that builds each new tree.
+        const out = extractSubtree(full, seedIdsFor(components[0]));
+        const carried = (Object.keys(full) as (keyof StromData)[])
+            .filter(k => !FOCUS_FIELDS.includes(k) && k !== 'version');
+        for (const key of carried) {
+            expect({ [key]: out[key] }).toBeDefined();
+        }
+        expect(out.places?.['kolin']).toEqual(full.places['kolin']);
+        expect(out.surnameVariants).toEqual(full.surnameVariants);
+        expect(out.sources?.['s1']).toBeDefined();
     });
 });
