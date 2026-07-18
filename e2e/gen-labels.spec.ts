@@ -66,3 +66,48 @@ test('a card panned over a generation label fades it — cards take precedence',
     expect(res.overlaps).toBeGreaterThan(0);
     expect(res.coveredWrong).toBe(0);
 });
+
+test('no left-fade veil: the focus card at the left edge keeps full opacity', async ({ page }) => {
+    // Reproduces the reported bug: on a phone the descendants chart's focus card
+    // (top generation, pinned near the left margin) looked washed out because an
+    // opaque gen-labels left-fade gradient (.gen-labels::before) painted over it.
+    // That veil is gone — readability is handled by hiding covered labels — so
+    // the focus card must render at full opacity with no overlay above it.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/strom.html');
+    await expect(page.locator('.toolbar')).toBeVisible();
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(page.locator('.person-card').first()).toBeVisible();
+
+    // Focus the first root person and enter the descendants view (mobile tab).
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const root = dm.getAllPersons()[0];
+        window.Strom.TreeRenderer.setFocus(root.id);
+    });
+    await page.locator('#bb-view-descendants').click();
+    await expect(page.locator('#descendants-badge')).toBeVisible();
+
+    const focus = page.locator('.person-card.focused');
+    await expect(focus).toBeVisible();
+
+    // The focus card itself carries no translucency.
+    await expect(focus).toHaveCSS('opacity', '1');
+
+    // The gen-labels overlay generates no ::before veil at all.
+    const veilContent = await page.evaluate(() => {
+        const overlay = document.getElementById('gen-labels')!;
+        return getComputedStyle(overlay, '::before').content;
+    });
+    expect(veilContent).toBe('none');
+
+    // No hit-testable overlay sits above the focus card's centre — the point
+    // resolves to the card (or one of its children), never a covering layer.
+    const onCard = await page.evaluate(() => {
+        const f = document.querySelector('.person-card.focused') as HTMLElement;
+        const r = f.getBoundingClientRect();
+        const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return !!el && (el === f || f.contains(el));
+    });
+    expect(onCard).toBe(true);
+});

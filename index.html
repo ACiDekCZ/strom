@@ -658,15 +658,10 @@
         }
         /* Dimmed while the tree is actively panning/zooming. */
         .gen-labels.panning { opacity: 0.6; }
-        /* Left fade so the labels stay readable over cards behind them. */
-        .gen-labels::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; bottom: 0;
-            width: 150px;
-            background: linear-gradient(90deg, var(--bg) 55%, transparent);
-            pointer-events: none;
-        }
+        /* No left-fade veil over the cards: readability is handled by hiding
+           each label a card covers (.gen-label.covered), so a card panned to the
+           left edge must never be washed out by an overlay gradient. Labels sit
+           in the empty band gutter and stay legible on their own. */
         .gen-label {
             position: absolute;
             left: 20px;
