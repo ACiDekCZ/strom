@@ -37,6 +37,7 @@ const stringsEN = {
         makeTreeFromViewDesc: 'Create a new tree in the app from the shown people',
         mergeViewInto: 'Merge this view into…',
         actions: 'Actions',
+        treeActions: 'Tree:',
         sectionCurrentView: 'Current view',
         sectionTree: 'Tree',
         sectionEdits: 'Edits',
@@ -539,8 +540,18 @@ const stringsEN = {
         map: 'Map',
         toggle: 'Family / descendants view',
         back: 'Back to family view',
-        badge: (name: string, count: number) => `Descendants: ${name} (${count})`,
-        fullFamilies: "Show partners' whole families (step-children)",
+        badgeLabel: 'Descendants:',
+        badgeCount: (count: number) => count === 1 ? '1 person' : `${count} people`,
+        bloodOnly: {
+            label: 'Blood only',
+            short: 'Blood',
+            hint: 'Show partners and step-families too',
+        },
+        fullFamilies: {
+            label: 'Whole families',
+            short: 'Families',
+            hint: 'Show only blood descendants',
+        },
         settingLabel: 'Descendants view',
         settingHint: "Show partners' whole families by default (their other unions and step-children, de-emphasized)",
     },
@@ -1644,6 +1655,7 @@ const stringsCZ: StringsType = {
         makeTreeFromViewDesc: 'Ze zobrazených osob vytvořit nový strom přímo v aplikaci',
         mergeViewInto: 'Sloučit tento pohled do…',
         actions: 'Akce',
+        treeActions: 'Strom:',
         sectionCurrentView: 'Aktuální pohled',
         sectionTree: 'Strom',
         sectionEdits: 'Úpravy',
@@ -2146,8 +2158,22 @@ const stringsCZ: StringsType = {
         map: 'Mapa',
         toggle: 'Pohled rodina / potomci',
         back: 'Zpět na rodinný pohled',
-        badge: (name: string, count: number) => `Potomci: ${name} (${count})`,
-        fullFamilies: 'Zobrazit celé rodiny partnerů (nevlastní děti)',
+        badgeLabel: 'Potomci:',
+        badgeCount: (count: number) => {
+            if (count === 1) return '1 osoba';
+            if (count >= 2 && count <= 4) return `${count} osoby`;
+            return `${count} osob`;
+        },
+        bloodOnly: {
+            label: 'Jen pokrevní',
+            short: 'Pokrevní',
+            hint: 'Zobrazit i partnery a nevlastní rodiny',
+        },
+        fullFamilies: {
+            label: 'Úplné rodiny',
+            short: 'Rodiny',
+            hint: 'Zobrazit jen pokrevní potomky',
+        },
         settingLabel: 'Pohled Potomci',
         settingHint: 'Výchozí zobrazení celých rodin partnerů (jejich další svazky a nevlastní děti, znevýrazněně)',
     },

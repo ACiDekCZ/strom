@@ -66,7 +66,20 @@ export const treeManagementMethods = uiModule({
             if (actions?.classList.contains('active') &&
                 !actions.contains(e.target as Node) &&
                 !actionsBtn?.contains(e.target as Node)) {
-                actions.classList.remove('active');
+                this.closeActionsMenu();
+            }
+        });
+
+        // Keyboard for the "Tree:" submenu row: → opens, ← / Esc closes.
+        // (Esc still bubbles to the global handler that closes the whole menu.)
+        document.getElementById('actions-tree-row')?.addEventListener('keydown', (e) => {
+            const ev = e as KeyboardEvent;
+            if (ev.key === 'ArrowRight' || ev.key === 'Enter' || ev.key === ' ') {
+                ev.preventDefault();
+                this.openActionsTreeSubmenu();
+            } else if (ev.key === 'ArrowLeft') {
+                ev.preventDefault();
+                this.closeActionsTreeSubmenu();
             }
         });
     },
@@ -229,12 +242,78 @@ export const treeManagementMethods = uiModule({
         const dropdown = document.getElementById('actions-menu-dropdown');
         if (!dropdown) return;
         dropdown.classList.toggle('active');
-        if (dropdown.classList.contains('active')) this.refreshActionMenuBadges();
+        if (dropdown.classList.contains('active')) {
+            this.refreshActionMenuBadges();
+            this.updateActionsTreeRow();
+            this.closeActionsTreeSubmenu();
+        }
     },
 
-    /** Close the desktop ⋯ actions menu. */
+    /** Close the desktop ⋯ actions menu (and its "Tree:" submenu). */
     closeActionsMenu(): void {
+        this.closeActionsTreeSubmenu();
         document.getElementById('actions-menu-dropdown')?.classList.remove('active');
+    },
+
+    /** Fill the "Tree: {name}" row with the active tree's name; hide it when
+     *  there is no manageable storage tree (e.g. an exported read-only view). */
+    updateActionsTreeRow(): void {
+        const wrap = document.getElementById('actions-tree-wrap');
+        const nameEl = document.getElementById('actions-tree-name');
+        if (!wrap || !nameEl) return;
+        const active = DataManager.isViewMode() ? null : TreeManager.getActiveTreeMetadata();
+        if (!active) { wrap.style.display = 'none'; return; }
+        wrap.style.display = '';
+        nameEl.textContent = active.name;
+        nameEl.title = active.name;
+    },
+
+    /** The "Tree:" submenu opens on hover; click / →  toggles it for keyboard. */
+    toggleActionsTreeSubmenu(): void {
+        const wrap = document.getElementById('actions-tree-wrap');
+        if (!wrap) return;
+        if (wrap.classList.contains('submenu-open')) this.closeActionsTreeSubmenu();
+        else this.openActionsTreeSubmenu();
+    },
+
+    openActionsTreeSubmenu(): void {
+        const wrap = document.getElementById('actions-tree-wrap');
+        if (!wrap) return;
+        wrap.classList.add('submenu-open');
+        document.getElementById('actions-tree-row')?.setAttribute('aria-expanded', 'true');
+    },
+
+    closeActionsTreeSubmenu(): void {
+        const wrap = document.getElementById('actions-tree-wrap');
+        if (!wrap) return;
+        wrap.classList.remove('submenu-open');
+        document.getElementById('actions-tree-row')?.setAttribute('aria-expanded', 'false');
+    },
+
+    // The five "Tree:" submenu actions reuse the tree-manager's own functions
+    // (no duplicated logic) against the ACTIVE tree, resolved at click time.
+    treeActionRename(): void {
+        const id = TreeManager.getActiveTreeId();
+        this.closeActionsMenu();
+        if (id) this.showRenameTreeDialog(id);
+    },
+    treeActionDuplicate(): void {
+        const id = TreeManager.getActiveTreeId();
+        this.closeActionsMenu();
+        if (id) this.duplicateTree(id);
+    },
+    treeActionMergeInto(): void {
+        const id = TreeManager.getActiveTreeId();
+        this.closeActionsMenu();
+        if (id) this.showMergeTreesDialog(id);
+    },
+    treeActionStats(): void {
+        this.closeActionsMenu();
+        this.showActiveTreeStats();
+    },
+    treeActionManager(): void {
+        this.closeActionsMenu();
+        this.showTreeManagerDialog();
     },
 
     /**

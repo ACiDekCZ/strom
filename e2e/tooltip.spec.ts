@@ -72,3 +72,25 @@ test('nothing to say means no tooltip', async ({ page }) => {
     await createFirstPerson(page, 'Jan', 'Novak');
     await expect(card(page, 'Jan').locator('.card-tooltip')).toHaveCount(0);
 });
+
+test('the hover card gains a photo column when the person has one, none otherwise', async ({ page }) => {
+    const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQAY3Y2wAAAAAElFTkSuQmCC';
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
+
+    // No photo → no column at all (initials stay on the card, not the tooltip).
+    await expect(tip(page, 'Jan').locator('.tt-photo')).toHaveCount(0);
+    await expect(tip(page, 'Jan')).not.toHaveClass(/has-photo/);
+
+    // Add the same thumbnail the card avatar uses → a photo column appears.
+    await page.evaluate((photo) => {
+        const dm = window.Strom.DataManager;
+        dm.updatePerson(dm.getAllPersons()[0].id, { photo });
+        window.Strom.TreeRenderer.render();
+    }, PNG);
+
+    await expect(tip(page, 'Jan')).toHaveClass(/has-photo/);
+    await expect(tip(page, 'Jan').locator('.tt-photo')).toHaveCount(1);
+    const src = await tip(page, 'Jan').locator('.tt-photo').getAttribute('src');
+    expect(src).toMatch(/^data:image\//);
+});

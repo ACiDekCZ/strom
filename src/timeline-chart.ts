@@ -22,9 +22,14 @@ import {
 /** Axis-label band above the rows, and the right-hand plot padding. */
 const TOP = 40;
 const PAD_R = 16;
-/** Life-bar colours (mirror of the renderer's inline fills). */
-const BAR_MALE = '#8fb8de';
-const BAR_FEMALE = '#e8a0bf';
+/**
+ * Fallback life-bar colours — the light-theme `--male` / `--female` token
+ * values. Callers pass resolved colours (screen: the `var(--male/--female)`
+ * tokens directly; poster: hex read via getComputedStyle at export time);
+ * these apply only when a caller supplies none.
+ */
+const FALLBACK_MALE = '#5b7f9e';
+const FALLBACK_FEMALE = '#a1706e';
 
 /**
  * Light-theme timeline colours as concrete values, mirroring the `.tl-*` rules
@@ -57,6 +62,10 @@ export interface TimelineSvgOptions {
     focusId?: string | null;
     /** Search highlight/dim (screen only; the poster never dims content). */
     highlightIds?: ReadonlySet<string> | null;
+    /** Male life-bar fill. Screen: 'var(--male)'. Poster: resolved hex. */
+    maleColor?: string;
+    /** Female life-bar fill. Screen: 'var(--female)'. Poster: resolved hex. */
+    femaleColor?: string;
 }
 
 /** Localized label for an event dot's tooltip (mirror of the renderer). */
@@ -85,7 +94,9 @@ function rowSvg(
     const barY = y + (rowH - 14) / 2;
     const x1 = xOf(r.startYear), x2 = xOf(r.endYear);
     const w = Math.max(2, x2 - x1);
-    const color = r.gender === 'female' ? BAR_FEMALE : BAR_MALE;
+    const color = r.gender === 'female'
+        ? (opts.femaleColor ?? FALLBACK_FEMALE)
+        : (opts.maleColor ?? FALLBACK_MALE);
     const focused = r.personId === opts.focusId ? ' focused' : '';
     const highlight = opts.highlightIds
         ? (opts.highlightIds.has(r.personId) ? ' search-hit' : ' search-dim') : '';
@@ -158,12 +169,14 @@ export function buildTimelineSvg(model: TimelineModel, opts: TimelineSvgOptions)
     const rows = model.rows.map((r, i) => rowSvg(r, i, opts, xOf)).join('');
 
     // Fade-out gradients for bars with an unknown end (deceased, no death date).
+    const maleColor = opts.maleColor ?? FALLBACK_MALE;
+    const femaleColor = opts.femaleColor ?? FALLBACK_FEMALE;
     const fadeStops = (color: string) =>
         `<stop offset="0" stop-color="${color}" stop-opacity="0.85"/>`
         + `<stop offset="1" stop-color="${color}" stop-opacity="0"/>`;
     const defs = `<defs>`
-        + `<linearGradient id="tl-fade-male" x1="0" y1="0" x2="1" y2="0">${fadeStops(BAR_MALE)}</linearGradient>`
-        + `<linearGradient id="tl-fade-female" x1="0" y1="0" x2="1" y2="0">${fadeStops(BAR_FEMALE)}</linearGradient>`
+        + `<linearGradient id="tl-fade-male" x1="0" y1="0" x2="1" y2="0">${fadeStops(maleColor)}</linearGradient>`
+        + `<linearGradient id="tl-fade-female" x1="0" y1="0" x2="1" y2="0">${fadeStops(femaleColor)}</linearGradient>`
         + `</defs>`;
 
     const style = mode === 'poster' ? `<style>${TIMELINE_LIGHT_STYLE}</style>` : '';
@@ -226,13 +239,16 @@ export function timelinePosterGeometry(model: TimelineModel, hasFooter: boolean)
  * date). Reuses `posterFooterSvg` so the timeline shares the tree/fan footer.
  */
 export function buildTimelinePosterSvg(
-    model: TimelineModel, opts: Pick<TimelineSvgOptions, 'esc' | 'focusId'>, meta: PosterFooterMeta
+    model: TimelineModel,
+    opts: Pick<TimelineSvgOptions, 'esc' | 'focusId' | 'maleColor' | 'femaleColor'>,
+    meta: PosterFooterMeta
 ): string {
     const hasFooter = !!(meta.treeName || meta.viewLabel || meta.dateLabel);
     const g = timelinePosterGeometry(model, hasFooter);
 
     // Poster-safe timeline: self-contained colours, plain-text labels, no search
-    // dimming (the poster prints every row at full opacity).
+    // dimming (the poster prints every row at full opacity). Bar fills are the
+    // resolved gender tokens (var() cannot be rasterised without a CSS context).
     const inner = buildTimelineSvg(model, {
         esc: opts.esc,
         focusId: opts.focusId ?? null,
@@ -241,6 +257,8 @@ export function buildTimelinePosterSvg(
         rowH: POSTER_ROW_H,
         labelW: POSTER_LABEL_W,
         mode: 'poster',
+        maleColor: opts.maleColor,
+        femaleColor: opts.femaleColor,
     });
     // Embed the timeline as a nested SVG offset by the padding. buildTimelineSvg
     // already emits width="innerW" height="innerH" (== g.innerW/g.innerH), so we

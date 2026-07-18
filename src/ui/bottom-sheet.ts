@@ -10,6 +10,12 @@ import { uiModule } from './module.js';
 import { strings } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { TreeRenderer } from '../renderer.js';
+import { TreeManager } from '../tree-manager.js';
+import { DataManager } from '../data.js';
+
+/** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
+interface MenuRow { label: string; run: () => void; danger?: boolean; badge?: number; active?: boolean; }
+interface MenuBlock { header: string; rows: MenuRow[]; pair?: MenuRow[]; }
 
 /** Coarse pointer = touch device; used to gate touch-only behaviour. */
 export function isCoarsePointer(): boolean {
@@ -115,8 +121,6 @@ export const bottomSheetMethods = uiModule({
         const isFsa = document.body.classList.contains('fsa-supported');
         const mode = TreeRenderer.getViewMode();
 
-        interface MenuRow { label: string; run: () => void; danger?: boolean; badge?: number; active?: boolean; }
-        interface MenuBlock { header: string; rows: MenuRow[]; pair?: MenuRow[]; }
         const blocks: MenuBlock[] = [];
 
         // Views that do not have a bottom-bar tab of their own.
@@ -144,7 +148,17 @@ export const bottomSheetMethods = uiModule({
         // "Change history" row is only offered when the audit log is enabled.
         if (SettingsManager.isAuditLogEnabled()) tree.push({ label: s.auditLog.viewLog, run: () => this.showAuditLogDialog() });
         if (isFsa) tree.push({ label: s.fileAccess.saveToFile, run: () => this.attachSaveToFile() });
-        if (!isView) tree.push({ label: s.treeManager.manageTreesTitle, run: () => this.showTreeManagerDialog() });
+        if (!isView) {
+            // "Strom: {name}" → second-level sheet with the tree-manager actions.
+            const active = TreeManager.getActiveTreeMetadata();
+            if (active) {
+                tree.push({
+                    label: `${s.menu.treeActions} ${active.name}`,
+                    run: () => this.showTreeActionsSheet(),
+                });
+            }
+            tree.push({ label: s.treeManager.manageTreesTitle, run: () => this.showTreeManagerDialog() });
+        }
         blocks.push({ header: s.menu.sectionTree, rows: tree });
 
         // Edits (dropped entirely in read-only view mode).
@@ -164,6 +178,38 @@ export const bottomSheetMethods = uiModule({
             { label: s.settings.title, run: () => this.showSettingsDialog() },
         ] });
 
+        this.presentMenuSheet(s.mobileMenu.more, blocks);
+    },
+
+    /**
+     * The second-level "Strom: {name}" sheet (mobile counterpart of the desktop
+     * ⋯ actions submenu): the SAME tree-manager actions, minus Delete/Hide which
+     * stay in the tree manager. Reuses the shared menu-sheet chrome.
+     */
+    showTreeActionsSheet(): void {
+        const s = strings;
+        const active = TreeManager.getActiveTreeMetadata();
+        const id = TreeManager.getActiveTreeId();
+        if (!active || !id || DataManager.isViewMode()) return;
+
+        const rows: MenuRow[] = [
+            { label: s.treeManager.rename, run: () => this.showRenameTreeDialog(id) },
+            { label: s.treeManager.duplicate, run: () => this.duplicateTree(id) },
+            { label: s.treeManager.mergeInto, run: () => this.showMergeTreesDialog(id) },
+            { label: s.treeManager.stats, run: () => this.showActiveTreeStats() },
+            { label: s.treeManager.manageTreesTitle, run: () => this.showTreeManagerDialog() },
+        ];
+        this.presentMenuSheet(`${s.menu.treeActions} ${active.name}`, [
+            { header: s.menu.sectionTree, rows },
+        ]);
+    },
+
+    /**
+     * Build and show a menu-style bottom sheet from section blocks: section
+     * headers, flat action rows (no emoji), optional side-by-side "pair" row,
+     * overlay + swipe-to-dismiss chrome. Shared by the "More" and "Tree" sheets.
+     */
+    presentMenuSheet(titleText: string, blocks: MenuBlock[]): void {
         const overlay = document.createElement('div');
         overlay.className = 'bottom-sheet-overlay';
         const sheet = document.createElement('div');
@@ -176,7 +222,7 @@ export const bottomSheetMethods = uiModule({
 
         const title = document.createElement('div');
         title.className = 'bottom-sheet-menu-title';
-        title.textContent = s.mobileMenu.more;
+        title.textContent = titleText;
         sheet.appendChild(title);
 
         const list = document.createElement('div');

@@ -64,6 +64,22 @@ describe('buildTimelineSvg (screen mode)', () => {
         expect(svg).toContain('class="timeline-bar focused search-dim" data-person-id="b"');
         expect(svg).toContain('class="timeline-bar search-hit" data-person-id="c"');
     });
+
+    it('fills life-bars from the supplied gender tokens (theme-following on screen)', () => {
+        const d = fam();
+        const model = computeTimelineModel(d, ids(d), TODAY);
+        const svg = buildTimelineSvg(model, {
+            esc, width: 800, rowH: 30, labelW: 160, mode: 'screen',
+            maleColor: 'var(--male)', femaleColor: 'var(--female)',
+        });
+        expect(svg).toContain('fill="var(--male)"');
+        expect(svg).toContain('fill="var(--female)"');
+        // The fade gradients reuse the same tokens…
+        expect(svg).toContain('stop-color="var(--male)"');
+        // …and the retired pastel hexes are gone entirely.
+        expect(svg).not.toContain('#8fb8de');
+        expect(svg).not.toContain('#e8a0bf');
+    });
 });
 
 describe('buildTimelinePosterSvg', () => {
@@ -90,6 +106,19 @@ describe('buildTimelinePosterSvg', () => {
         // Poster labels are <text>, never <foreignObject> (canvas-safe PNG).
         expect(svg).not.toContain('<foreignObject');
         expect(svg).toContain('class="tl-name-txt"');
+    });
+
+    it('rasterises life-bars with the resolved gender hexes (no var, no old pastels)', () => {
+        const d = fam();
+        const model = computeTimelineModel(d, ids(d), TODAY);
+        const svg = buildTimelinePosterSvg(model, {
+            esc, maleColor: '#5b7f9e', femaleColor: '#a1706e',
+        }, {});
+        expect(svg).toContain('fill="#5b7f9e"');
+        expect(svg).toContain('stop-color="#a1706e"');
+        expect(svg).not.toContain('var(--');
+        expect(svg).not.toContain('#8fb8de');
+        expect(svg).not.toContain('#e8a0bf');
     });
 
     it('draws every row and the full time range (not the screen viewport)', () => {

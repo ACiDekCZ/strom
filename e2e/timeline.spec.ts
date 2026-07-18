@@ -30,6 +30,27 @@ test('timeline view shows life-bars and switches back to the family tree', async
     await expect(card(page, 'Henry VIII')).toBeVisible();
 });
 
+test('timeline life-bars fill from the gender tokens (--male / --female), not old pastels', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await page.locator('#view-mode-timeline').click();
+    await expect(page.locator('.timeline-bar').first()).toBeVisible();
+
+    // The on-screen bars carry the CSS token in their fill attribute — so they
+    // follow the theme — and never the retired pastel hexes.
+    const fills = await page.locator('.tl-bar-rect').evaluateAll(
+        els => els.map(el => el.getAttribute('fill')));
+    expect(fills.length).toBeGreaterThan(0);
+    for (const f of fills) {
+        expect(f === 'var(--male)' || f === 'var(--female)').toBeTruthy();
+    }
+
+    // Bars resolve to a non-empty, non-transparent colour in both themes.
+    const resolved = await page.locator('.tl-bar-rect').first().evaluate(
+        el => getComputedStyle(el).fill);
+    expect(resolved).not.toBe('');
+});
+
 test('timeline hides the floating zoom controls (it scrolls natively)', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1950' });

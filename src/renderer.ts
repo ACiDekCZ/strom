@@ -1273,7 +1273,13 @@ class TreeRendererClass {
                     ttRelLine ? `<div class="tt-line tt-rel">${ttRelLine}</div>` : '',
                     `<div class="tt-foot">${strings.tooltip.gestureHint}</div>`,
                 ].filter(Boolean).join('');
-                html += `<div class="card-tooltip">${rows}</div>`;
+                // A photo (round 9): reuse the SAME thumbnail the card avatar shows
+                // (person.photo) — no extra load, so the hover card never waits on
+                // a fresh fetch. No photo → no column at all (initials live on the
+                // card below the tooltip, not here).
+                const ttHasPhoto = !person.isPlaceholder && !!person.photo;
+                const ttPhoto = ttHasPhoto ? `<img class="tt-photo" src="${person.photo}" alt="">` : '';
+                html += `<div class="card-tooltip${ttHasPhoto ? ' has-photo' : ''}">${ttPhoto}<div class="tt-body">${rows}</div></div>`;
             }
 
             card.innerHTML = html;
@@ -1947,6 +1953,10 @@ class TreeRendererClass {
             mode: 'screen',
             focusId: this.focusPersonId,
             highlightIds: this.highlightIds ?? null,
+            // Screen SVG is inline in the DOM, so the gender tokens resolve
+            // themselves and follow the active theme.
+            maleColor: 'var(--male)',
+            femaleColor: 'var(--female)',
         });
 
         container.innerHTML = `${omitted}${empty}${svg}`;

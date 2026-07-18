@@ -128,9 +128,14 @@ function buildCurrentPoster(): PosterBuild | null {
         const ids = [...TreeRenderer.getPosterLayout().positions.keys()] as unknown as string[];
         const model = computeTimelineModel(data, ids, new Date().getFullYear());
         if (model.rows.length === 0) return null;
+        // Poster rasterises to PNG without a CSS context, so var(--male/--female)
+        // cannot resolve — read the concrete token values now (light fallback).
+        const rootStyle = getComputedStyle(document.documentElement);
         const svg = buildTimelinePosterSvg(model, {
             esc: escapeXml,
             focusId: TreeRenderer.getFocusPersonId(),
+            maleColor: rootStyle.getPropertyValue('--male').trim() || '#5b7f9e',
+            femaleColor: rootStyle.getPropertyValue('--female').trim() || '#a1706e',
         }, meta);
         const geom = timelinePosterGeometry(model, true);
         return { svg, widthPx: geom.width, heightPx: geom.height, hasContent: geom.hasContent };

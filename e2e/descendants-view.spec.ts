@@ -120,7 +120,7 @@ test('descendants view: step-relatives hidden by default, badge toggle shows the
     await expect(card(page, 'Milan')).toBeVisible();
     await expect(card(page, 'Romana')).toBeVisible();
     await expect(card(page, 'Lucie')).toBeHidden();
-    await expect(page.locator('#descendants-badge-text')).toContainText('(1)');
+    await expect(page.locator('.descendants-badge-count')).toContainText('1');
 
     // Badge toggle: whole families appear, step-relatives de-emphasized.
     await page.locator('#descendants-families-toggle').click();
@@ -128,11 +128,42 @@ test('descendants view: step-relatives hidden by default, badge toggle shows the
     await expect(card(page, 'Lucie')).toHaveClass(/indirect/);
     await expect(card(page, 'Martin')).toHaveClass(/indirect/);
     await expect(card(page, 'Romana')).not.toHaveClass(/indirect/);
-    await expect(page.locator('#descendants-badge-text')).toContainText('(1)');
+    await expect(page.locator('.descendants-badge-count')).toContainText('1');
 
     // Toggle back hides them again.
     await page.locator('#descendants-families-toggle').click();
     await expect(card(page, 'Lucie')).toBeHidden();
+});
+
+test('descendants badge: named state segment (no emoji) reflects blood-only ↔ whole families', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
+    await cardAction(page, 'Jan', 'focus');
+
+    await page.locator('#view-mode-descendants').click();
+    const seg = page.locator('#descendants-families-toggle');
+    await expect(seg).toBeVisible();
+
+    // No emoji survives the Letopis chip; the segment carries an SVG figure glyph.
+    await expect(seg.locator('svg.figures-glyph')).toHaveCount(1);
+    expect(await seg.textContent()).not.toMatch(/👪/);
+
+    // Default state (blood only): not active, the second figure is dotted.
+    await expect(seg).not.toHaveClass(/active/);
+    const bloodLabel = (await seg.locator('.descendants-seg-full').textContent())?.trim();
+    expect(bloodLabel && bloodLabel.length).toBeTruthy();
+    await expect(seg.locator('svg g[stroke-dasharray]')).toHaveCount(1);
+
+    // Switch to whole families: active pill, solid figures, label changes.
+    await seg.click();
+    await expect(seg).toHaveClass(/active/);
+    const fullLabel = (await seg.locator('.descendants-seg-full').textContent())?.trim();
+    expect(fullLabel).not.toBe(bloodLabel);
+    await expect(seg.locator('svg g[stroke-dasharray]')).toHaveCount(0);
+
+    // The tooltip/title always describes the current state's action.
+    expect((await seg.getAttribute('title'))?.length).toBeTruthy();
 });
 
 test('view switcher: the selected mode carries .active, the previous loses it', async ({ page }) => {

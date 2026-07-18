@@ -459,6 +459,35 @@
         .actions-menu-dropdown .menu-section-header:first-child { padding-top: 6px; }
         [data-theme="dark"] .menu-section-header { color: #8a8a8a; }
 
+        /* "Tree: {name}" submenu at the very bottom of the ⋯ actions menu. The
+           row carries a faint tinted background; the flyout opens to the LEFT
+           (the actions dropdown is right-anchored in the toolbar, so a right
+           flyout would leave the viewport — see round 9 notes). */
+        .actions-tree-wrap { position: relative; }
+        .actions-tree-row {
+            display: flex; align-items: center; gap: 6px;
+            background: var(--hover-bg);
+        }
+        .actions-tree-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .actions-tree-prefix { color: var(--text-light); flex-shrink: 0; }
+        .actions-tree-name {
+            font-family: var(--font-serif); font-weight: 600; color: var(--text);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+        }
+        .actions-tree-chevron { margin-left: auto; color: var(--text-light); flex-shrink: 0; font-size: 15px; }
+        .actions-tree-submenu {
+            position: absolute; top: -4px; right: 100%; margin-right: 3px;
+            min-width: 200px;
+            background: white; border: 1px solid #ddd;
+            border-radius: 10px; box-shadow: var(--shadow-lg);
+            padding: 4px 0; z-index: 210; display: none;
+        }
+        .actions-tree-wrap:hover > .actions-tree-submenu,
+        .actions-tree-wrap.submenu-open > .actions-tree-submenu { display: block; }
+        [data-theme="dark"] .actions-tree-submenu {
+            background: var(--card-bg); border-color: #444;
+        }
+
         /* Keyboard-shortcut chip inside menu rows (same pill as the search "/"). */
         .menu-shortcut-hint {
             margin-left: auto; flex-shrink: 0;
@@ -4511,21 +4540,51 @@
             .collab-bar { flex-wrap: wrap; justify-content: center; top: auto; bottom: calc(var(--bottom-bar-h) + 12px); }
         }
 
+        /* Descendants context chip — same paper pill as the focus chip
+           ("Focused on…"): surface, hairline border, soft shadow. */
         .descendants-badge {
             position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 90;
-            display: flex; align-items: center; gap: 10px;
-            background: var(--primary); color: var(--on-primary);
-            padding: 6px 8px 6px 14px; border-radius: 999px; box-shadow: var(--shadow-sm);
+            display: flex; align-items: center; gap: 8px;
+            background: var(--surface); color: var(--text);
+            border: 1px solid var(--border);
+            padding: 5px 6px 5px 14px; border-radius: 999px; box-shadow: var(--shadow-sm);
             font-size: 13px; max-width: 90vw;
         }
-        .descendants-badge #descendants-badge-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .descendants-badge button {
-            border: none; background: rgba(255,255,255,0.25); color: #fff; cursor: pointer;
-            width: 26px; height: 26px; border-radius: 50%; font-size: 16px; line-height: 1; flex-shrink: 0;
+        .descendants-badge-text {
+            display: flex; align-items: baseline; gap: 6px;
+            overflow: hidden; white-space: nowrap; min-width: 0;
         }
-        .descendants-badge button:hover { background: rgba(255,255,255,0.4); }
-        .descendants-badge #descendants-families-toggle { opacity: 0.55; font-size: 14px; }
-        .descendants-badge #descendants-families-toggle.active { opacity: 1; background: rgba(255,255,255,0.45); }
+        .descendants-badge-text .db-prefix { color: var(--text-faint); flex-shrink: 0; }
+        .descendants-badge-name {
+            font-family: var(--font-serif); font-weight: 600; color: var(--text);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+        }
+        .descendants-badge-count { color: var(--text-faint); flex-shrink: 0; }
+        /* Named state segment: ghost pill (blood-only) ↔ primary pill (whole
+           families). The label always describes the CURRENT state. */
+        .descendants-seg {
+            display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+            border: 1px solid var(--border); background: transparent; color: var(--text-light);
+            border-radius: 999px; padding: 3px 12px 3px 9px; cursor: pointer;
+            font-size: 12px; line-height: 1; white-space: nowrap;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+        .descendants-seg:hover { background: var(--hover-bg); }
+        .descendants-seg.active {
+            background: var(--primary); border-color: var(--primary); color: var(--on-primary);
+        }
+        .descendants-seg.active:hover { background: var(--primary-dark); }
+        .descendants-seg .figures-glyph { flex-shrink: 0; }
+        .descendants-seg-short { display: none; }
+        .descendants-close {
+            flex-shrink: 0; width: 26px; height: 26px;
+            display: inline-flex; align-items: center; justify-content: center;
+            border: 1px solid var(--border); border-radius: 50%;
+            background: transparent; color: var(--text-faint);
+            font-size: 16px; line-height: 1; cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        .descendants-close:hover { background: var(--hover-bg); color: var(--text); }
 
         /* Descendants view: step-relatives (partner's other families) are
            shown de-emphasized so the blood line stays dominant. */
@@ -7017,6 +7076,9 @@
                 top: 54px;
                 max-width: calc(100vw - 16px);
             }
+            /* Mobile: shorten the segment label ("blood" / "families"). */
+            .descendants-seg-full { display: none; }
+            .descendants-seg-short { display: inline; }
             .focus-controls.hidden {
                 display: none !important;
             }
@@ -7654,6 +7716,24 @@
             visibility: hidden;
             transition: opacity 0s, visibility 0s;
         }
+        /* With a photo (round 9): a 56×56 thumbnail column on the left, the text
+           beside it (gap 12). The pill widens to ~280px so lines can wrap. */
+        .card-tooltip.has-photo {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            max-width: 280px;
+            white-space: normal;
+        }
+        .card-tooltip .tt-photo {
+            flex-shrink: 0;
+            width: 56px;
+            height: 56px;
+            border-radius: 8px;
+            object-fit: cover;
+            display: block;
+        }
+        .card-tooltip .tt-body { min-width: 0; }
         .card-tooltip .tt-name {
             font-family: var(--font-serif);
             font-size: 14.5px;
@@ -7898,6 +7978,32 @@
                 <div class="tree-switcher-action actions-menu-settings" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showSettingsDialog()">
                     <span data-i18n="settings.title"></span>
                 </div>
+                <div class="tree-switcher-divider"></div>
+                <div class="actions-tree-wrap" id="actions-tree-wrap">
+                    <div class="tree-switcher-action actions-tree-row" id="actions-tree-row" role="menuitem" tabindex="0" aria-haspopup="true" aria-expanded="false" onclick="window.Strom.UI.toggleActionsTreeSubmenu()">
+                        <span class="actions-tree-prefix" data-i18n="menu.treeActions"></span>
+                        <span class="actions-tree-name" id="actions-tree-name"></span>
+                        <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
+                    </div>
+                    <div class="actions-tree-submenu" id="actions-tree-submenu" role="menu">
+                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionRename()">
+                            <span data-i18n="treeManager.rename"></span>
+                        </div>
+                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionDuplicate()">
+                            <span data-i18n="treeManager.duplicate"></span>
+                        </div>
+                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionMergeInto()">
+                            <span data-i18n="treeManager.mergeInto"></span>
+                        </div>
+                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionStats()">
+                            <span data-i18n="treeManager.stats"></span>
+                        </div>
+                        <div class="tree-switcher-divider"></div>
+                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionManager()">
+                            <span data-i18n="treeManager.manageTreesTitle"></span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         <button class="secondary desktop-only actions-toolbar-settings" onclick="window.Strom.UI.showSettingsDialog()" data-i18n-title="settings.title" data-i18n-aria-label="settings.title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -7949,9 +8055,13 @@
     <button id="collab-badge" class="collab-badge" style="display:none;" onclick="window.Strom.UI.showCollabBarFromBadge()">📩</button>
 
     <div id="descendants-badge" class="descendants-badge" style="display:none;">
-        <span id="descendants-badge-text"></span>
-        <button type="button" id="descendants-families-toggle" onclick="window.Strom.UI.toggleDescendantsFullFamilies()" data-i18n-title="viewModeSwitch.fullFamilies">👪</button>
-        <button type="button" onclick="window.Strom.UI.exitDescendantsView()" data-i18n-title="viewModeSwitch.back">&times;</button>
+        <span id="descendants-badge-text" class="descendants-badge-text"></span>
+        <button type="button" id="descendants-families-toggle" class="descendants-seg" onclick="window.Strom.UI.toggleDescendantsFullFamilies()">
+            <span class="descendants-seg-icon" aria-hidden="true"></span>
+            <span class="descendants-seg-label descendants-seg-full"></span>
+            <span class="descendants-seg-label descendants-seg-short"></span>
+        </button>
+        <button type="button" class="descendants-close" onclick="window.Strom.UI.exitDescendantsView()" data-i18n-title="viewModeSwitch.back" data-i18n-aria-label="viewModeSwitch.back">&times;</button>
     </div>
 
     <div id="tree-container">

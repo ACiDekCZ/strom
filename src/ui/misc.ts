@@ -42,6 +42,7 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { yearOf } from '../dates.js';
+import { twoFiguresSvg } from '../icons.js';
 
 export const miscMethods = uiModule({
     // ---- ABOUT DIALOG ----
@@ -328,12 +329,38 @@ export const miscMethods = uiModule({
         const badge = document.getElementById('descendants-badge');
         const text = document.getElementById('descendants-badge-text');
         if (mode === 'descendants') {
+            const vm = strings.viewModeSwitch;
             const focusId = TreeRenderer.getFocusPersonId();
             const person = focusId ? DataManager.getPerson(focusId) : null;
             const name = person ? `${person.firstName} ${person.lastName}`.trim() : '';
-            if (text) text.textContent = strings.viewModeSwitch.badge(name, TreeRenderer.getDescendantCount());
+            if (text) {
+                // Fixed structure: faint prefix, serif name, faint person count.
+                // Name/count via textContent so a person's name can never inject markup.
+                text.innerHTML = `<span class="db-prefix"></span>`
+                    + `<span class="descendants-badge-name"></span>`
+                    + `<span class="descendants-badge-count"></span>`;
+                (text.querySelector('.db-prefix') as HTMLElement).textContent = vm.badgeLabel;
+                (text.querySelector('.descendants-badge-name') as HTMLElement).textContent = name;
+                (text.querySelector('.descendants-badge-count') as HTMLElement).textContent =
+                    vm.badgeCount(TreeRenderer.getDescendantCount());
+            }
             const famToggle = document.getElementById('descendants-families-toggle');
-            famToggle?.classList.toggle('active', TreeRenderer.isDescendantsFullFamilies());
+            const isFull = TreeRenderer.isDescendantsFullFamilies();
+            famToggle?.classList.toggle('active', isFull);
+            if (famToggle) {
+                // The label names the CURRENT state; the tooltip explains the
+                // action the toggle would take. The second figure is dotted
+                // (excluded) while only the blood line is shown.
+                const state = isFull ? vm.fullFamilies : vm.bloodOnly;
+                const iconEl = famToggle.querySelector('.descendants-seg-icon');
+                if (iconEl) iconEl.innerHTML = twoFiguresSvg({ secondExcluded: !isFull });
+                const fullLabel = famToggle.querySelector('.descendants-seg-full');
+                const shortLabel = famToggle.querySelector('.descendants-seg-short');
+                if (fullLabel) fullLabel.textContent = state.label;
+                if (shortLabel) shortLabel.textContent = state.short;
+                famToggle.setAttribute('title', state.hint);
+                famToggle.setAttribute('aria-label', state.hint);
+            }
             if (badge) badge.style.display = 'flex';
         } else if (badge) {
             badge.style.display = 'none';
