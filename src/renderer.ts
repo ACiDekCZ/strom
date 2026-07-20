@@ -647,6 +647,8 @@ class TreeRendererClass {
         const toolbarFocusCount = document.getElementById('toolbar-focus-count');
         const toolbarDepthUp = document.getElementById('toolbar-depth-up') as HTMLSelectElement | null;
         const toolbarDepthDown = document.getElementById('toolbar-depth-down') as HTMLSelectElement | null;
+        // Descendants badge depth (↓ only — the chart forces ancestorDepth=0).
+        const descDepthDown = document.getElementById('descendants-depth-down') as HTMLSelectElement | null;
 
         if (!focusControls) return;
 
@@ -697,6 +699,8 @@ class TreeRendererClass {
             // Also update toolbar selects
             this.updateGenerationSelect(toolbarDepthUp, maxGen.up, this.focusDepthUp);
             this.updateGenerationSelect(toolbarDepthDown, maxGen.down, this.focusDepthDown);
+            // Descendants badge depth select (mirrors focus-depth-down).
+            this.updateGenerationSelect(descDepthDown, maxGen.down, this.focusDepthDown);
 
             focusControls.classList.remove('hidden');
         } else {

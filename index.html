@@ -250,7 +250,15 @@
             font-size: 12px;
             color: var(--text);
             margin-left: auto;
+            /* Text-bearing flex child: let the name ellipsize instead of pushing
+               the ⋯ trigger off the toolbar (ZADANI kolo 12 §4.4). */
+            min-width: 0;
         }
+        /* Descendants view has a single name bearer — the descendants badge.
+           Hide the toolbar focus at EVERY width it would otherwise appear
+           (only the 600-1024 tablet query shows it); !important outranks the
+           media-query display:flex without duplicating the rule per breakpoint. */
+        body.descendants-view .toolbar-focus { display: none !important; }
         .toolbar .toolbar-focus strong {
             font-weight: 600;
             max-width: 150px;
@@ -271,13 +279,16 @@
             padding: 2px 4px;
             font-size: 11px;
             border-radius: 6px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border);
             background: var(--bg);
         }
 
         /* ==================== TREE SWITCHER ==================== */
         .tree-switcher {
             position: relative;
+            /* Text-bearing flex child of the toolbar — allow the tree name to
+               ellipsize rather than overflow (ZADANI kolo 12 §4.4). */
+            min-width: 0;
         }
         /* Ghost pill (ZADANI §4): transparent fill, hairline border, --text.
            Scoped under .toolbar so it outranks the generic
@@ -322,8 +333,8 @@
             left: 0;
             margin-top: 4px;
             min-width: 220px;
-            background: white;
-            border: 1px solid #ddd;
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 10px;
             box-shadow: var(--shadow-lg);
             z-index: 200;
@@ -440,7 +451,7 @@
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: #e0555a;
+            background: var(--danger);
             box-shadow: 0 0 0 2px var(--bg, #fff);
         }
         .actions-menu-dropdown {
@@ -453,11 +464,10 @@
             font-weight: 700;
             letter-spacing: 0.06em;
             text-transform: uppercase;
-            color: var(--text-light, #999);
+            color: var(--text-faint);
             pointer-events: none;
         }
         .actions-menu-dropdown .menu-section-header:first-child { padding-top: 6px; }
-        [data-theme="dark"] .menu-section-header { color: #8a8a8a; }
 
         /* "Tree: {name}" submenu at the very bottom of the ⋯ actions menu. The
            row carries a faint tinted background; the flyout opens to the LEFT
@@ -478,7 +488,7 @@
         .actions-tree-submenu {
             position: absolute; top: -4px; right: 100%; margin-right: 3px;
             min-width: 200px;
-            background: white; border: 1px solid #ddd;
+            background: var(--surface); border: 1px solid var(--border);
             border-radius: 10px; box-shadow: var(--shadow-lg);
             padding: 4px 0; z-index: 210; display: none;
             /* The submenu now carries every whole-tree action — keep it on-screen. */
@@ -486,9 +496,6 @@
         }
         .actions-tree-wrap:hover > .actions-tree-submenu,
         .actions-tree-wrap.submenu-open > .actions-tree-submenu { display: block; }
-        [data-theme="dark"] .actions-tree-submenu {
-            background: var(--card-bg); border-color: #444;
-        }
 
         /* Keyboard-shortcut chip inside menu rows (same pill as the search "/"). */
         .menu-shortcut-hint {
@@ -511,6 +518,13 @@
             margin-right: auto;
             flex: 0 1 300px;
             min-width: 120px;
+        }
+        /* The "/" chip is a physical-keyboard focus hint — pointless on the
+           tablet/mobile regime, and dropping it (pill < ~150px there) frees the
+           input so it stays usable next to the magnifier + funnel (ZADANI kolo
+           12 §4.2; the funnel filter stays). */
+        @media (max-width: 1024px) {
+            .search-shortcut { display: none; }
         }
         /* The search field is a pill: magnifier · input · "/" chip · filter. */
         .search-row {
@@ -555,8 +569,8 @@
             /* Wide enough for its content (the status selects overflowed a
                narrow search box), but never wider than the viewport allows. */
             min-width: 100%; width: max-content; max-width: min(92vw, 460px);
-            padding: 10px; border: 1px solid var(--border-color, #ddd);
-            border-radius: 8px; background: var(--card-bg, #fff); box-shadow: var(--shadow-lg);
+            padding: 10px; border: 1px solid var(--border);
+            border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-lg);
             display: flex; flex-direction: column; gap: 6px;
         }
         .search-filters input, .search-filters select {
@@ -574,8 +588,6 @@
             body.search-filters-open .zoom-controls { display: none !important; }
         }
         .search-result-count { font-size: 12px; color: var(--text-secondary, #777); }
-        [data-theme="dark"] .search-filters,
-        [data-theme="dark"] .search-filter-toggle { background: #2a2a2a; border-color: #444; }
         /* Mobile: filters as a bottom sheet */
         @media (max-width: 500px) {
             .search-filters {
@@ -1462,10 +1474,6 @@
         /* Dark mode overrides for various elements.
            (The tree-switcher pill needs none — its ghost styling above is
            token-driven and already correct in the dark theme.) */
-        [data-theme="dark"] .tree-switcher-dropdown {
-            background: var(--card-bg);
-            border-color: #444;
-        }
         [data-theme="dark"] .tree-switcher-item {
             border-bottom-color: #444;
         }
@@ -4732,6 +4740,18 @@
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
         }
         .descendants-badge-count { color: var(--text-faint); flex-shrink: 0; }
+        /* Compact "↓ [n ▾]" depth control inside the badge (same select pattern
+           as the toolbar focus). flex-shrink:0 so the name ellipsizes first and
+           the badge never wraps. */
+        .descendants-depth {
+            display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+            color: var(--text-faint); font-size: 12px;
+        }
+        .descendants-depth-glyph { flex-shrink: 0; line-height: 1; }
+        .descendants-depth select {
+            padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--r-sm);
+            background: var(--surface); color: var(--text); font-size: 12px; cursor: pointer;
+        }
         /* Named state segment: ghost pill (blood-only) ↔ primary pill (whole
            families). The label always describes the CURRENT state. */
         .descendants-seg {
@@ -7306,6 +7326,17 @@
             }
         }
 
+        /* Lower tablet band (600-768px): the Family-view toolbar focus (name +
+           "9 z 69 osob" + two selects) plus wordmark, tree switcher and search
+           no longer fit. Drop the count, shorten the name, let search shrink —
+           nothing may wrap or push the ⋯ trigger off-screen (ZADANI kolo 12
+           §4.1). Descendants view already hides .toolbar-focus entirely. */
+        @media (min-width: 600px) and (max-width: 768px) {
+            .toolbar .toolbar-focus .focus-count { display: none; }
+            .toolbar .toolbar-focus strong { max-width: 100px; }
+            .search-container { min-width: 100px; }
+        }
+
         /* Mobile: show floating focus controls */
         @media (max-width: 600px) {
             .toolbar .toolbar-focus {
@@ -7340,6 +7371,14 @@
             /* Mobile: shorten the segment label ("blood" / "families"). */
             .descendants-seg-full { display: none; }
             .descendants-seg-short { display: inline; }
+            /* Touch target ≥44px for the depth select without growing the badge
+               row: min-height gives the 44px tap box, negative margins pull the
+               visible row back to its compact height (the overshoot lands in
+               empty canvas above/below the badge, not on neighbours). */
+            .descendants-depth select {
+                min-height: 44px;
+                margin-top: -9px; margin-bottom: -9px;
+            }
             .focus-controls.hidden {
                 display: none !important;
             }
@@ -7353,6 +7392,15 @@
             /* Top bar trims to 54px on a phone (rám 1g). */
             .toolbar { height: 54px; }
             #tree-container { top: 54px; }
+        }
+
+        /* Narrowest phones: the badge now carries prefix + name + count + depth
+           + families segment + close. Below ~430px that leaves the NAME (the
+           bearer) squeezed to nothing, so drop the textual "Descendants:" prefix
+           — the active bottom-bar tab and the figures glyph already signal the
+           view — and keep the name visible. The badge still never wraps. */
+        @media (max-width: 430px) {
+            .descendants-badge-text .db-prefix { display: none; }
         }
 
         @media (max-width: 500px) {
@@ -8265,7 +8313,7 @@
                     <div class="tree-switcher-action actions-tree-row" id="actions-tree-row" role="menuitem" tabindex="0" aria-haspopup="true" aria-expanded="false" onclick="window.Strom.UI.toggleActionsTreeSubmenu()">
                         <span class="actions-tree-prefix" data-i18n="menu.treeActions"></span>
                         <span class="actions-tree-name" id="actions-tree-name"></span>
-                        <span id="actions-tree-row-dot" style="display:none; width:8px; height:8px; border-radius:50%; background:#e0555a; margin-left:6px; flex-shrink:0;"></span>
+                        <span id="actions-tree-row-dot" style="display:none; width:8px; height:8px; border-radius:50%; background:var(--danger); margin-left:6px; flex-shrink:0;"></span>
                         <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
                     </div>
                     <div class="actions-tree-submenu" id="actions-tree-submenu" role="menu">
@@ -8370,6 +8418,14 @@
 
     <div id="descendants-badge" class="descendants-badge" style="display:none;">
         <span id="descendants-badge-text" class="descendants-badge-text"></span>
+        <!-- Descendant depth (generations down). The descendants chart forces
+             ancestorDepth=0, so only ↓ is meaningful here — ↑ is not carried.
+             Same select pattern as the toolbar focus; populated in renderer
+             updateFocusUI(). Passing the current up keeps Family view intact. -->
+        <div class="descendants-depth">
+            <span class="descendants-depth-glyph" aria-hidden="true">&#x2193;</span>
+            <select id="descendants-depth-down" data-i18n-title="focus.generationsDown" onchange="window.Strom.TreeRenderer.setFocusDepth(window.Strom.TreeRenderer.getFocusDepthUp(), parseInt(this.value))"></select>
+        </div>
         <button type="button" id="descendants-families-toggle" class="descendants-seg" onclick="window.Strom.UI.toggleDescendantsFullFamilies()">
             <span class="descendants-seg-icon" aria-hidden="true"></span>
             <span class="descendants-seg-label descendants-seg-full"></span>
