@@ -614,10 +614,6 @@ export const miscMethods = uiModule({
                         this.closeSplitFamiliesDialog();
                         return;
                     }
-                    if (currentDialog === 'split-fam-picker-modal') {
-                        this.closeSplitFamiliesPickerDialog(true);
-                        return;
-                    }
                     if (currentDialog === 'surnames-modal') {
                         this.closeSurnamesDialog();
                         return;

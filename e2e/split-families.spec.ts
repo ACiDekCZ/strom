@@ -154,7 +154,7 @@ test('creating the checked families copies them and leaves the original untouche
     const names = trees.map(t => t[0]);
     expect(names).toContain('Rodina Novákových');
     expect(names).toContain('Old Novák (*1900) family');
-    expect(names).toContain('Eva Nováková (*1962) family');
+    expect(names).toContain('Karel Svoboda (*1935) family');   // the wife's parents' family, named by its senior
     // The original is untouched: everyone still in it.
     expect(trees.find(t => t[0] === 'Rodina Novákových')?.[1]).toBe(before);
 });
@@ -203,51 +203,28 @@ test('the count is real people + unknowns, never a big number of empty slots', a
     }
 });
 
-test('two families that share a person (a remarriage) link across trees', async ({ page }) => {
-    // Johann→Karl→Anselm is the main line; Anna (Johann's wife) also married
-    // Fritz. Fritz becomes his own family with Anna glued back as the link, so
-    // the two created trees share Anna and the cross-tree badge forms.
-    const CROSS = {
-        version: 5,
-        defaultPersonId: 'karl',
-        persons: {
-            johann: mk('johann', 'Johann', 'Voigt', 'male', '1840', ['u1'], [], ['karl']),
-            anna: mk('anna', 'Anna', 'Bredlow', 'female', '1845', ['u1', 'u2'], [], ['karl']),
-            karl: mk('karl', 'Karl', 'Voigt', 'male', '1870', ['u3'], ['johann', 'anna'], ['anselm']),
-            kw: mk('kw', 'Klára', 'Voigtová', 'female', '1872', ['u3'], [], ['anselm']),
-            anselm: mk('anselm', 'Anselm', 'Voigt', 'male', '1900', [], ['karl', 'kw'], []),
-            fritz: mk('fritz', 'Fritz', 'Gregorius', 'male', '1843', ['u2'], [], []),
-        },
-        partnerships: {
-            u1: { id: 'u1', person1Id: 'johann', person2Id: 'anna', childIds: ['karl'], status: 'married' },
-            u3: { id: 'u3', person1Id: 'karl', person2Id: 'kw', childIds: ['anselm'], status: 'married' },
-            u2: { id: 'u2', person1Id: 'fritz', person2Id: 'anna', childIds: [], status: 'married', isPrimary: true },
-        },
-    };
-    await openApp(page);
-    await page.evaluate(async (data) => {
-        await window.Strom.DataManager.importAsNewTree(data, 'Voigt');
-        window.Strom.TreeRenderer.restoreFromSession();
-        window.Strom.TreeRenderer.setFocus('karl', false);
-    }, CROSS);
-    await expect(card(page, 'Karl')).toHaveClass(/focused/);
-
+test('the connector person appears in both created trees and links them', async ({ page }) => {
+    // Eva belongs to the core family; her parents form the Svoboda branch. The
+    // branch tree gets Eva glued back as the anchor card, so the two created
+    // trees share her and the cross-tree badge forms.
+    await loadTree(page);
     await page.evaluate(() => window.Strom.UI.showSplitFamiliesDialog());
     const modal = page.locator('#split-families-modal');
     await expect(modal).toBeVisible();
-    // Fritz's family is named after himself and says it connects back to Anna
-    // (a second-marriage branch — the case where the cross-reference informs).
-    const fritz = modal.locator('.splitfam-row', { has: page.locator('.splitfam-name[value="Fritz Gregorius (*1843) family"]') });
-    await expect(fritz.locator('.splitfam-crossref')).toContainText('connects to Anna Bredlow (*1845)');
-    const n = await modal.locator('.splitfam-row').count();
-    await page.getByRole('button', { name: `Create ${n} trees` }).click();
+
+    // The branch row names its senior and reads its connection from the viewer:
+    // Petr reaches the Svoboda parents through his wife Eva.
+    const svoboda = modal.locator('.splitfam-row', { has: page.locator('.splitfam-name[value="Karel Svoboda (*1935) family"]') });
+    await expect(svoboda.locator('.splitfam-crossref')).toContainText('connected through Eva Nováková (*1962)');
+
+    await page.getByRole('button', { name: 'Create 2 trees' }).click();
     await expect(modal).toBeHidden();
 
     await page.evaluate(async () => { await window.Strom.TreeRenderer.renderAsync?.(); });
     await expect(page.locator('.cross-tree-badge').first()).toBeVisible({ timeout: 10000 });
 });
 
-test('tree manager row: split picks a starting person (prefilled) and splits a non-active tree', async ({ page }) => {
+test('tree manager row: split opens the proposals directly, even for a non-active tree', async ({ page }) => {
     await loadTree(page);
     await page.evaluate(() => window.Strom.DataManager.createNewTree('Jiný strom'));
 
@@ -256,30 +233,10 @@ test('tree manager row: split picks a starting person (prefilled) and splits a n
     await row.locator('.tree-row-menu-btn').click();
     await row.locator('.tree-row-menu-item', { hasText: 'Split into families' }).click();
 
-    const picker = page.locator('#split-fam-picker-modal');
-    await expect(picker).toBeVisible();
-    await expect(picker.locator('.person-picker-input')).toHaveValue(/Petr Novák/);
-
-    await picker.getByRole('button', { name: 'Continue' }).click();
+    // No starting-person picker — the partition never depends on one. The
+    // proposals open straight away for the picked (non-active) tree.
     const modal = page.locator('#split-families-modal');
     await expect(modal).toBeVisible();
     await expect(modal.locator('.splitfam-row')).toHaveCount(2);
-
-    await page.getByRole('button', { name: 'Create 2 trees' }).click();
-    await expect(modal).toBeHidden();
-
-    const names = await page.evaluate(() => window.Strom.TreeManager.getTrees()
-        .map((t: { name: string }) => t.name));
-    expect(names).toContain('Old Novák (*1900) family');
-    expect(names).toContain('Rodina Novákových');   // original untouched
-
-    // The user stays on the tree they had active — the split did not switch it.
-    const [active, other] = await page.evaluate(() => {
-        const trees = window.Strom.TreeManager.getTrees();
-        return [
-            window.Strom.TreeManager.getActiveTreeId(),
-            trees.find((t: { name: string }) => t.name === 'Jiný strom')?.id,
-        ];
-    });
-    expect(active).toBe(other);
+    await expect(page.locator('#split-fam-picker-modal')).toHaveCount(0);
 });

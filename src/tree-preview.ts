@@ -22,6 +22,13 @@ export interface TreePreviewOptions {
     depthDown?: number;
     /** Title to display (optional) */
     title?: string;
+    /**
+     * Person the footer "Focused on:" line names initially. The RENDER focus
+     * (focusPersonId) may be a layout-driven choice (the member the whole
+     * family draws best from) — naming that person in the footer reads absurd
+     * ("Fokus na: Tomáš Pižl" for the Krepčík family). Once the user refocuses
+     * by hand, the footer follows their choice. */
+    focusDisplayId?: PersonId;
     /** Subtitle/source info (optional) */
     subtitle?: string;
     /** Callback when preview is closed */
@@ -178,6 +185,8 @@ class TreePreviewClass {
     private zoomState: PreviewZoomState = this.createInitialZoomState();
     private positions: Map<PersonId, { x: number; y: number }> = new Map();
     private currentFocusId: PersonId | null = null;
+    /** The user clicked a person to refocus — the footer follows them now. */
+    private userRefocused = false;
 
     private createInitialZoomState(): PreviewZoomState {
         return {
@@ -197,6 +206,7 @@ class TreePreviewClass {
      */
     show(options: TreePreviewOptions): void {
         this.options = options;
+        this.userRefocused = false;
         this.currentFocusId = options.focusPersonId;
         this.zoomState = this.createInitialZoomState();
 
@@ -454,7 +464,11 @@ class TreePreviewClass {
     private updateFocusInfo(): void {
         if (!this.overlay || !this.options || !this.currentFocusId) return;
 
-        const person = this.options.data.persons[this.currentFocusId];
+        const shownId = (!this.userRefocused && this.options.focusDisplayId
+            && this.options.data.persons[this.options.focusDisplayId])
+            ? this.options.focusDisplayId
+            : this.currentFocusId;
+        const person = this.options.data.persons[shownId];
         const nameEl = this.overlay.querySelector('.tree-preview-focus-name');
         if (nameEl && person) {
             nameEl.textContent = `${person.firstName || '?'} ${person.lastName || ''}`.trim();
@@ -465,6 +479,7 @@ class TreePreviewClass {
      * Refocus the preview on a different person
      */
     refocusOn(personId: PersonId): void {
+        this.userRefocused = true;
         if (!this.options) return;
 
         // Check if person exists in data

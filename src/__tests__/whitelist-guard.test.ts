@@ -461,9 +461,7 @@ describe('split (extractSubtree) keeps every tree-level field', () => {
 describe('split into families keeps every tree-level field per component', () => {
     it('carries registries, sources and the connector anchor through a component', () => {
         const full = fullTree();
-        const components = decomposeIntoFamilies(full, ALICE, {
-            ancestorDepth: 2, descendantDepth: 2, includeAuntsUncles: true, includeCousins: true,
-        });
+        const components = decomposeIntoFamilies(full, ALICE);
         // One connected couple → a single family covering both.
         const seen = new Set<PersonId>();
         for (const c of components) c.personIds.forEach(id => seen.add(id));

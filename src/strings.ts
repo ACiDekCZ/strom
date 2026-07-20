@@ -164,10 +164,10 @@ const stringsEN = {
     },
     splitFamilies: {
         title: 'Split into families',
-        intro: 'The families this tree contains — one per couple and their children. The same tree always splits the same way; the person you were looking at just decides which family is listed first. Every person ends up in exactly one tree.',
+        intro: 'The family branches this tree contains — the main line and the families that married into it. The same tree always splits the same way; the person you were looking at just decides which family is listed first and how the connections read. Every person ends up in exactly one tree.',
         familyName: (name: string) => `${name} family`,
         focusHere: 'Selected person',
-        connectsTo: (name: string) => `connects to ${name}`,
+        connectsTo: (name: string) => `connected through ${name}`,
         persons: (count: number) => count === 1 ? '1 person' : `${count} people`,
         // "3 people", "1 person + 8 unknown" — real people counted plainly, the
         // unknown (placeholder) relatives stated separately so a family that is
@@ -188,9 +188,6 @@ const stringsEN = {
         tooSmall: 'This tree holds only one family — there is nothing to split.',
         // Person-picker step (splitting a tree that is not the one on screen — no
         // live focus, so the user names the person whose family to list first).
-        pickerTitle: 'Split into families — starting person',
-        pickerIntro: 'Pick a person to start from. It does not change how the tree is split — only which family is listed first.',
-        pickerConfirm: 'Continue',
     },
 
     advanced: {
@@ -1935,10 +1932,10 @@ const stringsCZ: StringsType = {
     },
     splitFamilies: {
         title: 'Rozdělit na rodiny',
-        intro: 'Rodiny, které tento strom obsahuje — jedna na každý pár a jeho děti. Stejný strom se vždy rozdělí stejně; osoba, kterou máte zobrazenou, jen určí, která rodina je první. Každá osoba skončí právě v jednom stromu.',
+        intro: 'Rodové větve, které tento strom obsahuje — hlavní linie a rody, které se do ní přivdaly a přiženily. Stejný strom se vždy rozdělí stejně; osoba, kterou máte zobrazenou, jen určí, která rodina je první a odkud se čtou napojení. Každá osoba skončí právě v jednom stromu.',
         familyName: (name: string) => `Rodina ${name}`,
         focusHere: 'Zvolená osoba',
-        connectsTo: (name: string) => `napojeno na ${name}`,
+        connectsTo: (name: string) => `napojeno přes ${name}`,
         persons: (count: number) => count === 1 ? '1 osoba' : (count < 5 ? `${count} osoby` : `${count} osob`),
         // „3 osoby", „1 osoba + 8 neznámých" — skutečné osoby zvlášť, neznámí
         // (placeholder) příbuzní zvlášť, ať rodina plná neznámých nevypadá velká.
@@ -1961,9 +1958,6 @@ const stringsCZ: StringsType = {
         tooSmall: 'Tento strom obsahuje jen jednu rodinu — není co rozdělovat.',
         // Výběr osoby (dělíme strom, který není zobrazený — bez živého pohledu
         // uživatel zvolí osobu, jejíž rodina se vypíše první).
-        pickerTitle: 'Rozdělit na rodiny — výchozí osoba',
-        pickerIntro: 'Vyberte osobu, od které se má začít. Nemění to, jak se strom rozdělí — jen která rodina bude první.',
-        pickerConfirm: 'Pokračovat',
     },
 
     advanced: {

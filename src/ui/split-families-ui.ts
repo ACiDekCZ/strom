@@ -30,12 +30,8 @@ interface SplitFamiliesRun {
     treeId: TreeId;
     /** That tree's data (live for the active tree, loaded for any other). */
     data: StromData;
-    /** The person the split starts from. */
+    /** Presentation focus: orders the list, never changes the partition. */
     focusPersonId: PersonId;
-    ancestorDepth: number;
-    descendantDepth: number;
-    /** Live-view WYSIWYG override for the first family (active tree only). */
-    firstViewIds?: Set<PersonId>;
     /** Dialog to reopen on close (e.g. the tree manager). */
     parentDialogId?: string;
 }
@@ -79,17 +75,13 @@ export const splitFamiliesMethods = uiModule({
             treeId,
             data,
             focusPersonId: focus,
-            ancestorDepth: TreeRenderer.getFocusDepthUp(),
-            descendantDepth: TreeRenderer.getFocusDepthDown(),
-            firstViewIds: TreeRenderer.getVisiblePersonIds(),
         });
     },
 
     /**
-     * Tree-manager entry: the target tree may not be the active one and has no
-     * live focus, so a person-picker step comes first (prefilled with the tree's
-     * default person). Confirming runs the same decomposition at default 3/3
-     * depths — there is no live view to seed the first family here.
+     * Tree-manager entry: the partition never depends on a person (invariant
+     * #0), so no picker — open the proposals straight away. The tree's default
+     * person (or its first real member) just orders the list.
      */
     async showSplitFamiliesPickerDialog(treeId: string, parentDialogId?: string): Promise<void> {
         const id = treeId as TreeId;
@@ -103,86 +95,13 @@ export const splitFamiliesMethods = uiModule({
             this.showToast(strings.splitFamilies.tooSmall);
             return;
         }
-
-        // Prefill with the tree's default person, falling back to the first.
         const def = data.defaultPersonId;
-        const preId = (def && def !== LAST_FOCUSED && data.persons[def])
+        const focus = (def && def !== LAST_FOCUSED && data.persons[def])
             ? def
             : (persons[0].id as PersonId);
-
-        const s = strings.splitFamilies;
-        document.getElementById('split-fam-picker-modal')?.remove();
-        const overlay = document.createElement('div');
-        overlay.className = 'modal-overlay active';
-        overlay.id = 'split-fam-picker-modal';
-        overlay.innerHTML = `
-            <div class="modal">
-                <div class="modal-header">
-                    <h2>${s.pickerTitle}</h2>
-                    <button class="close-btn" id="split-fam-picker-x">&times;</button>
-                </div>
-                <p class="split-intro">${s.pickerIntro}</p>
-                <div id="split-fam-picker-container" style="margin: 8px 0 4px;"></div>
-                <div class="modal-buttons">
-                    <button type="button" class="secondary" id="split-fam-picker-cancel">${s.cancel}</button>
-                    <button type="button" class="primary" id="split-fam-picker-go">${s.pickerConfirm}</button>
-                </div>
-            </div>`;
-        document.body.appendChild(overlay);
-
-        this.splitFamiliesPicker?.destroy();
-        this.splitFamiliesPicker = new PersonPicker({
-            containerId: 'split-fam-picker-container',
-            onSelect: () => { /* selection read on confirm */ },
-            placeholder: strings.personPicker.placeholder,
-            persons,
-        });
-        this.splitFamiliesPicker.setValue(preId);
-        this.splitFamiliesPickerParent = parentDialogId ?? null;
-
-        overlay.onclick = (e) => { if (e.target === overlay) this.closeSplitFamiliesPickerDialog(true); };
-        (overlay.querySelector('#split-fam-picker-x') as HTMLButtonElement).onclick = () => this.closeSplitFamiliesPickerDialog(true);
-        (overlay.querySelector('#split-fam-picker-cancel') as HTMLButtonElement).onclick = () => this.closeSplitFamiliesPickerDialog(true);
-        (overlay.querySelector('#split-fam-picker-go') as HTMLButtonElement).onclick = () => {
-            const focus = (this.splitFamiliesPicker?.getValue() || preId) as PersonId;
-            // Tear down the picker WITHOUT reopening the parent — the components
-            // dialog takes over and carries the same parent for its own close.
-            this.closeSplitFamiliesPickerDialog(false);
-            this.openSplitFamiliesDialog({
-                treeId: id,
-                data,
-                focusPersonId: focus,
-                ancestorDepth: 3,
-                descendantDepth: 3,
-                parentDialogId,
-            });
-        };
-
-        this.clearDialogStack();
-        if (parentDialogId) {
-            this.pushDialog(parentDialogId);
-            this.closeDialogById(parentDialogId);
-        }
-        this.pushDialog('split-fam-picker-modal');
+        this.openSplitFamiliesDialog({ treeId: id, data, focusPersonId: focus, parentDialogId });
     },
 
-    /** Close the "starting person" picker, tearing down the picker instance.
-     *  On cancel (reopenParent) the parent dialog is restored; on confirm the
-     *  chained components dialog owns the parent instead. */
-    closeSplitFamiliesPickerDialog(reopenParent: boolean): void {
-        this.splitFamiliesPicker?.destroy();
-        this.splitFamiliesPicker = null;
-        document.getElementById('split-fam-picker-modal')?.remove();
-        this.dialogStack = this.dialogStack.filter(d => d !== 'split-fam-picker-modal');
-        const parent = this.splitFamiliesPickerParent;
-        this.splitFamiliesPickerParent = null;
-        if (reopenParent && parent) document.getElementById(parent)?.classList.add('active');
-    },
-
-    /**
-     * Shared core: decompose the given tree/data from the given focus, then show
-     * the same components dialog for every entry point.
-     */
     openSplitFamiliesDialog(run: SplitFamiliesRun): void {
         // The partition is focus-invariant: the same tree always yields the same
         // families, whoever the focus is. The focus only decides which family is
@@ -198,7 +117,6 @@ export const splitFamiliesMethods = uiModule({
         this.splitFamiliesComponents = components;
         this.splitFamiliesData = run.data;
         this.splitFamiliesTreeId = run.treeId;
-        this.splitFamiliesWysiwyg = !!run.firstViewIds;
         this.splitFamiliesParentDialog = run.parentDialogId ?? null;
         // Precompute each family's exact self-contained tree once: the count
         // line, the thumbnail and the full preview all read from this, so what
@@ -274,10 +192,11 @@ export const splitFamiliesMethods = uiModule({
         // presentation cue only (the partition itself never depends on it).
         const badge = component.isFirst
             ? `<span class="splitfam-badge">${s.focusHere}</span>` : '';
-        // The shared card that links this family up to a neighbouring one —
-        // shown only when it adds information (not when the family is already
-        // named after that very person, i.e. its own ancestral branch).
-        const c = component.connectorId;
+        // How this family connects, told from the VIEWER's side: the person the
+        // focus walks through to reach it (viaFromFocusId). Falls back to the
+        // carve connector; hidden when the family is named after that person or
+        // the link is a placeholder.
+        const c = component.viaFromFocusId ?? component.connectorId;
         const crossRef = (c != null && c !== component.nameAnchorId
             && this.splitFamiliesData?.persons[c] && !this.splitFamiliesData.persons[c].isPlaceholder)
             ? `<span class="splitfam-crossref">${this.escapeHtml(s.connectsTo(this.splitFamilyPersonLabel(c)))}</span>`
@@ -329,6 +248,7 @@ export const splitFamiliesMethods = uiModule({
             focusPersonId: this.splitFamiliesShown[index]?.renderFocus ?? component.defaultPersonId,
             wholeTree: true,
             title: this.readSplitFamilyName(index),
+            focusDisplayId: component.nameAnchorId,
         });
     },
 
@@ -423,7 +343,6 @@ export const splitFamiliesMethods = uiModule({
         this.splitFamiliesTreeId = null;
         this.splitFamiliesComponents = [];
         this.splitFamiliesShown = [];
-        this.splitFamiliesWysiwyg = false;
         if (parent) document.getElementById(parent)?.classList.add('active');
     },
 });

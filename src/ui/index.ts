@@ -235,10 +235,7 @@ export class UIClass {
         data: StromData; renderFocus: PersonId; ids: Set<PersonId>; real: number; unknown: number;
     }[] = [];
     /** Kept for state-reset symmetry (the old "your current view" badge). */
-    splitFamiliesWysiwyg = false;
     /** Person picker for the tree-manager "starting person" step. */
-    splitFamiliesPicker: import('../person-picker.js').PersonPicker | null = null;
-    splitFamiliesPickerParent: string | null = null;
     /** When the source editor was opened from the picker, cite the new source. */
     citeSourceAfterCreate = false;
 

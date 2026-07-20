@@ -109,12 +109,13 @@ describe('decomposeIntoFamilies — focus-invariant branch partition', () => {
         for (const id of ['wgpa', 'wgma', 'wdad', 'wmom', 'me', 'wife', 'kid']) {
             expect(core.personIds).toContain(P(id));
         }
-        // Me's own parents are the in-law ancestral branch, named after the
-        // connector (Me) whose blood line they are.
+        // Me's own parents are the in-law ancestral branch. The NAME belongs
+        // to the branch's own senior (the owner's rule: "Rodina X" reads as
+        // the family founded by X), the connector stays on the cross-reference.
         const parentsBranch = comps.find(c => c.personIds.includes(P('dad')))!;
         expect(parentsBranch).not.toBe(core);
         expect(parentsBranch.connectorId).toBe(P('me'));
-        expect(parentsBranch.nameAnchorId).toBe(P('me'));
+        expect(parentsBranch.nameAnchorId).toBe(P('dad'));
     });
 
     it('is clean, deterministic and lists the focus family first with its default person', () => {
@@ -141,14 +142,16 @@ describe('decomposeIntoFamilies — second marriage names its own spouse', () =>
         { ...union('u2', 'fritz', 'anna', []), isPrimary: false },
     ]);
 
-    it('gives Fritz his own family, named after himself, linked back to Anna', () => {
+    it('keeps a second husband in his wife\'s family (a mother stays with all her unions)', () => {
         expectFocusInvariant(remarriage);
         expectCleanPartition(remarriage, P('karl'));
         const comps = decomposeIntoFamilies(remarriage, P('karl'));
-        const fritz = comps.find(c => c.personIds.includes(P('fritz')))!;
-        expect(fritz.nameAnchorId).toBe(P('fritz'));       // his own name, not Anna's
-        expect(fritz.connectorId).toBe(P('anna'));         // links back to Anna
-        expect(comps.find(c => c.personIds.includes(P('anna')))).not.toBe(fritz);
+        const fam = comps.find(c => c.personIds.includes(P('fritz')))!;
+        // Fritz rides with Anna — her family holds both her unions.
+        expect(fam.personIds).toContain(P('anna'));
+        expect(fam.personIds).toContain(P('johann'));
+        // The family carries the lineage name (Johann, its senior), not Fritz's.
+        expect(fam.nameAnchorId).toBe(P('johann'));
     });
 });
 
