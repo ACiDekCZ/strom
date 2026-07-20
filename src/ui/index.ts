@@ -117,6 +117,10 @@ export class UIClass {
     passwordPromptCallback: ((password: string) => void) | null = null;
     passwordPromptCallbackManagesDialog: boolean = false;  // If true, callback handles dialog close
     exportPasswordCallback: ((password: string | null) => void) | null = null;
+    // Per-category byte sizes of the tree in the open export dialog, measured
+    // once when the dialog opens so toggling a content checkbox never
+    // re-stringifies the whole tree (see readExportContentSizes).
+    exportContentSizes: { base: number; photos: number; attachments: number; notes: number; sources: number } | null = null;
     pendingEncryptedData: EncryptedData | null = null;
     pendingEncryptedImport: EncryptedData | null = null;
 
@@ -196,6 +200,15 @@ export class UIClass {
     /** Places dialog: which places it lists, and what to return to on close. */
     placesManagerScope: MapScope = 'tree';
     placesManagerParent: string | null = null;
+
+    // Migration-over-time (P5): the time slider on the map. All in-memory —
+    // nothing is persisted (no settings key, no per-tree state).
+    mapTimeOn = false;
+    /** Year the slider currently sits on (cumulative: everything up to here). */
+    mapTimeYear = 0;
+    mapTimePlaying = false;
+    /** setInterval handle for playback, null when idle. Cleared on leave/toggle. */
+    mapTimeTimer: number | null = null;
 
     // Surname-spellings dialog: what is picked, and what to return to.
     surnamePicks: string[] = [];

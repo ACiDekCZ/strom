@@ -190,3 +190,157 @@ export function isEmptyPacket(packet: ChangePacket): boolean {
     return empty(packet.persons) && empty(packet.partnerships) && empty(packet.sources)
         && placesEmpty && surnamesEmpty;
 }
+
+// ==================== RECIPIENT-SIDE SUMMARY & DIRECT APPLY ====================
+//
+// The preview and the "Accept" path work against the recipient's CURRENT tree,
+// not the baseline: what the recipient actually gains depends on what they
+// already have. A packet re-opened after it was accepted therefore summarises
+// as empty (hasEffect === false) — honest idempotence.
+
+/** One modified person, with the human field labels that changed. */
+export interface ModifiedPersonSummary {
+    id: string;
+    name: string;
+    /** Keys into strings.labels, plus the sentinel 'fieldOther'. */
+    changedFieldKeys: string[];
+}
+
+/** What a change packet would actually do to a given tree (for the preview). */
+export interface PacketSummary {
+    newPersons: { id: string; name: string }[];
+    modifiedPersons: ModifiedPersonSummary[];
+    removedPersonCount: number;
+    newPartnershipCount: number;
+    modifiedPartnershipCount: number;
+    removedPartnershipCount: number;
+    sourceChangeCount: number;
+    /** Persons (new or updated) that gain a photo or an attachment. */
+    mediaCount: number;
+    placeCount: number;
+    surnameGroupCount: number;
+    hasEffect: boolean;
+}
+
+/** Person scalar fields shown by name in the preview (mapped to strings.labels). */
+const PREVIEW_FIELD_KEYS: (keyof Person)[] = [
+    'firstName', 'lastName', 'gender', 'birthDate', 'birthPlace',
+    'deathDate', 'deathPlace', 'notes', 'photo', 'refn', 'question',
+];
+
+function personLabel(p: Person): string {
+    const name = `${p.firstName} ${p.lastName}`.trim();
+    const year = p.birthDate?.split('-')[0] || '';
+    return year ? `${name} (*${year})` : name;
+}
+
+/** True when `after` carries a photo or attachment that `before` did not. */
+function gainedMedia(before: Person | undefined, after: Person): boolean {
+    if (after.photo && after.photo !== before?.photo) return true;
+    return (after.attachments?.length ?? 0) > (before?.attachments?.length ?? 0);
+}
+
+/** Which named fields (plus a generic 'fieldOther') differ between two persons. */
+function diffPersonFields(before: Person, after: Person): string[] {
+    const keys: string[] = [];
+    for (const f of PREVIEW_FIELD_KEYS) {
+        if (stableStringify(before[f]) !== stableStringify(after[f])) keys.push(f);
+    }
+    // Anything else (relations, events, attachments, sources, name variants…)
+    // rolls up into one honest "other details" marker.
+    const strip = (p: Person) => {
+        const c = { ...p } as Record<string, unknown>;
+        for (const f of PREVIEW_FIELD_KEYS) delete c[f as string];
+        return stableStringify(c);
+    };
+    if (strip(before) !== strip(after)) keys.push('fieldOther');
+    return keys;
+}
+
+/** Summarise a packet's effect on `current` (drives the preview + idempotence). */
+export function summarizeChangePacket(current: StromData, packet: ChangePacket): PacketSummary {
+    const curPersons = current.persons as Record<string, Person>;
+    const newPersons: { id: string; name: string }[] = [];
+    const modifiedPersons: ModifiedPersonSummary[] = [];
+    let mediaCount = 0;
+    for (const p of [...packet.persons.added, ...packet.persons.changed]) {
+        const before = curPersons[p.id];
+        if (!before) {
+            newPersons.push({ id: p.id, name: personLabel(p) });
+            if (gainedMedia(undefined, p)) mediaCount++;
+        } else if (stableStringify(before) !== stableStringify(p)) {
+            modifiedPersons.push({ id: p.id, name: personLabel(p), changedFieldKeys: diffPersonFields(before, p) });
+            if (gainedMedia(before, p)) mediaCount++;
+        }
+    }
+    const removedPersonCount = packet.persons.removedIds.filter(id => id in curPersons).length;
+
+    const curPart = current.partnerships as Record<string, Partnership>;
+    let newPartnershipCount = 0, modifiedPartnershipCount = 0;
+    for (const x of [...packet.partnerships.added, ...packet.partnerships.changed]) {
+        const before = curPart[x.id];
+        if (!before) newPartnershipCount++;
+        else if (stableStringify(before) !== stableStringify(x)) modifiedPartnershipCount++;
+    }
+    const removedPartnershipCount = packet.partnerships.removedIds.filter(id => id in curPart).length;
+
+    const curSrc = current.sources ?? {};
+    let sourceChangeCount = 0;
+    for (const x of [...packet.sources.added, ...packet.sources.changed]) {
+        const before = curSrc[x.id];
+        if (!before || stableStringify(before) !== stableStringify(x)) sourceChangeCount++;
+    }
+    sourceChangeCount += packet.sources.removedIds.filter(id => id in curSrc).length;
+
+    let placeCount = 0;
+    const curPlaces = current.places ?? {};
+    if (packet.places) {
+        for (const [k, v] of Object.entries(packet.places.changed)) {
+            if (stableStringify(curPlaces[k]) !== stableStringify(v)) placeCount++;
+        }
+        placeCount += packet.places.removedKeys.filter(k => k in curPlaces).length;
+    }
+
+    const surnameGroupCount = diffSurnameVariants(current.surnameVariants ?? [], packet.surnameVariants ?? []).length;
+
+    const hasEffect = newPersons.length > 0 || modifiedPersons.length > 0 || removedPersonCount > 0
+        || newPartnershipCount > 0 || modifiedPartnershipCount > 0 || removedPartnershipCount > 0
+        || sourceChangeCount > 0 || placeCount > 0 || surnameGroupCount > 0;
+
+    return {
+        newPersons, modifiedPersons, removedPersonCount,
+        newPartnershipCount, modifiedPartnershipCount, removedPartnershipCount,
+        sourceChangeCount, mediaCount, placeCount, surnameGroupCount, hasEffect,
+    };
+}
+
+/**
+ * Apply a packet straight onto an existing tree (the "Accept" path), preserving
+ * every field the packet does not touch (version, focus, etc.). Unlike
+ * applyChangePacket — which reconstructs an incoming tree from the baseline for
+ * the merge engine — this mutates the recipient's own tree in place.
+ */
+export function applyPacketOntoData(current: StromData, packet: ChangePacket): StromData {
+    const out: StromData = structuredClone(current);
+    out.persons = applyChanges(out.persons as Record<string, Person>, packet.persons) as Record<PersonId, Person>;
+    out.partnerships = applyChanges(out.partnerships as Record<string, Partnership>, packet.partnerships) as Record<PartnershipId, Partnership>;
+    out.sources = applyChanges(out.sources ?? {}, packet.sources);
+
+    if (packet.places) {
+        const places: Record<string, PlaceGeo> = { ...(out.places ?? {}) };
+        for (const [key, geo] of Object.entries(packet.places.changed)) places[key] = geo;
+        for (const key of packet.places.removedKeys) delete places[key];
+        out.places = Object.keys(places).length > 0 ? places : undefined;
+    }
+
+    if (packet.surnameVariants?.length) {
+        const acc: StromData = {
+            persons: {}, partnerships: {},
+            surnameVariants: out.surnameVariants ? structuredClone(out.surnameVariants) : [],
+        };
+        for (const group of packet.surnameVariants) acc.surnameVariants = addSurnameGroup(acc, group);
+        if (acc.surnameVariants && acc.surnameVariants.length > 0) out.surnameVariants = acc.surnameVariants;
+    }
+
+    return out;
+}

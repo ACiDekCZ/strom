@@ -118,7 +118,7 @@ export const importExportMethods = uiModule({
         this.closeExportDialog();
 
         this.showExportPasswordDialog(async (password: string | null) => {
-            await DataManager.exportTreeJSON(treeId, password, this.readExportPrivacyMode(), this.readExportStripPhotos());
+            await DataManager.exportTreeJSON(treeId, password, this.readExportPrivacyMode(), this.readExportContentOptions());
         });
     },
 
@@ -138,7 +138,7 @@ export const importExportMethods = uiModule({
         // Show export password dialog
         this.showExportPasswordDialog(async (password: string | null) => {
             const { AppExporter } = await import('../export.js');
-            await AppExporter.exportApp(treeId, password, this.readExportPrivacyMode(), this.readExportStripPhotos());
+            await AppExporter.exportApp(treeId, password, this.readExportPrivacyMode(), this.readExportContentOptions());
         }, false, { defaultPrivacy: 'initials' });
     },
 
@@ -216,7 +216,7 @@ export const importExportMethods = uiModule({
 
         this.showExportPasswordDialog(async (password: string | null) => {
             const { AppExporter } = await import('../export.js');
-            await AppExporter.exportApp(undefined, password, this.readExportPrivacyMode(), this.readExportStripPhotos());
+            await AppExporter.exportApp(undefined, password, this.readExportPrivacyMode(), this.readExportContentOptions());
         }, false, { defaultPrivacy: 'initials' });
     },
 
@@ -230,7 +230,7 @@ export const importExportMethods = uiModule({
         this.showExportPasswordDialog(async (password: string | null) => {
             const includeAuditLog = (document.getElementById('export-audit-log-toggle') as HTMLInputElement)?.checked || false;
             const { AppExporter } = await import('../export.js');
-            await AppExporter.exportAllAsApp(password, includeAuditLog, this.readExportPrivacyMode(), this.readExportStripPhotos());
+            await AppExporter.exportAllAsApp(password, includeAuditLog, this.readExportPrivacyMode(), this.readExportContentOptions());
         }, true, { defaultPrivacy: 'initials' });
     },
 
@@ -242,7 +242,7 @@ export const importExportMethods = uiModule({
 
         this.showExportPasswordDialog(async (password: string | null) => {
             const visibleIds = TreeRenderer.getVisiblePersonIds();
-            await DataManager.exportFocusedJSON(visibleIds, password, this.readExportPrivacyMode(), this.readExportStripPhotos());
+            await DataManager.exportFocusedJSON(visibleIds, password, this.readExportPrivacyMode(), this.readExportContentOptions());
         });
     },
 
@@ -1156,9 +1156,8 @@ export const importExportMethods = uiModule({
         this.showExportPasswordDialog(async (password: string | null) => {
             const includeAuditLog = (document.getElementById('export-audit-log-toggle') as HTMLInputElement)?.checked || false;
             const privacyMode = this.readExportPrivacyMode();
-            const dropMedia = this.readExportStripPhotos();
-            const { applyLivingPrivacy } = await import('../privacy.js');
-            const { stripMedia } = await import('../attachments.js');
+            const content = this.readExportContentOptions();
+            const { applyLivingPrivacy, applyContentOptions } = await import('../privacy.js');
             const trees = TreeManager.getTrees();
             const allData: Record<string, { name: string; data: StromData; auditLog?: AuditLog }> = {};
 
@@ -1166,7 +1165,7 @@ export const importExportMethods = uiModule({
                 const data = await TreeManager.getTreeData(tree.id);
                 if (data) {
                     let treeExport = applyLivingPrivacy(data, privacyMode);
-                    if (dropMedia) treeExport = stripMedia(treeExport);
+                    treeExport = applyContentOptions(treeExport, content);
                     const entry: { name: string; data: StromData; auditLog?: AuditLog } = {
                         name: tree.name,
                         data: treeExport

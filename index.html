@@ -3972,8 +3972,10 @@
         [data-theme="dark"] .map-container { background: #2a2a2a; }
         .map-container.map-dragging { cursor: grabbing; }
         .map-canvas { position: absolute; inset: 0; }
-        .map-tiles, .map-markers { position: absolute; inset: 0; }
+        .map-tiles, .map-markers, .map-lines { position: absolute; inset: 0; }
         .map-markers { pointer-events: none; }
+        /* Migration lines (P5): under the markers, never intercept a click. */
+        .map-lines { width: 100%; height: 100%; pointer-events: none; overflow: visible; }
         .map-tile {
             position: absolute;
             width: 256px;
@@ -4010,6 +4012,11 @@
             box-shadow: var(--shadow-sm);
         }
         .map-marker-dot:hover { transform: scale(1.12); }
+        /* Fresh: something happened here within the last ten years of the slider.
+           An accent ring outside the white border, driven purely by state. */
+        .map-marker-fresh .map-marker-dot {
+            box-shadow: 0 0 0 3px var(--primary, #4a7c59), var(--shadow-sm);
+        }
         .map-marker-label {
             position: absolute;
             top: calc(100% + 2px);
@@ -4042,6 +4049,8 @@
             border-radius: 8px;
             font-size: 16px;
         }
+        .map-time-toggle.active { background: var(--primary, #4a7c59); color: var(--on-primary); }
+        .map-time-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
         .map-scope {
             position: absolute;
             top: 12px;
@@ -4088,6 +4097,45 @@
         @media (max-width: 500px) {
             .map-tiles-notice-card { max-width: 94vw; padding: 14px 14px; }
             .map-tiles-notice-card button { width: 100%; min-height: 44px; }
+        }
+
+        /* Time slider (P5): a full-width bar sitting just ABOVE the status bar. */
+        .map-timebar {
+            position: absolute;
+            left: 50%;
+            bottom: 62px;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: min(560px, calc(100% - 32px));
+            padding: 8px 14px;
+            border-radius: 10px;
+            background: var(--card-bg, #fff);
+            box-shadow: var(--shadow-sm);
+        }
+        .map-timebar[hidden] { display: none; }
+        .map-time-play {
+            flex: 0 0 auto;
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            border: none;
+            border-radius: 8px;
+            background: var(--primary, #4a7c59);
+            color: var(--on-primary);
+            font-size: 18px;
+            cursor: pointer;
+        }
+        .map-time-range { flex: 1 1 auto; min-width: 0; height: 44px; cursor: pointer; accent-color: var(--primary, #4a7c59); }
+        .map-time-year {
+            flex: 0 0 auto;
+            min-width: 4ch;
+            text-align: right;
+            font-size: 15px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            color: var(--text-color, #222);
         }
 
         .map-status {
@@ -4173,6 +4221,18 @@
                 gap: 8px;
             }
             .map-status-text { flex-basis: 100%; text-align: center; font-size: 12px; }
+            /* Full width above the (possibly two-line) status bar; keep the play
+               button and grip at 44px touch targets, shrink only the year. */
+            .map-timebar {
+                left: 8px;
+                right: 8px;
+                bottom: 74px;
+                width: auto;
+                transform: none;
+                gap: 8px;
+                padding: 8px 10px;
+            }
+            .map-time-year { font-size: 13px; min-width: 3ch; }
         }
         /* Below 600px the focus bar floats across the top of the tree area (it
            still belongs here: its depth controls decide who is "in this view").
@@ -4528,6 +4588,83 @@
         #export-password-modal {
             z-index: 500;  /* Above other modals (200) */
         }
+        /* Granular export content section (R8): presets + four checkboxes + live
+           size estimate. Theme-aware via tokens; three responsive breakpoints. */
+        #export-content-section .content-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        #export-content-section .content-header label {
+            margin: 0;
+        }
+        #export-content-section .content-size {
+            font-size: 12px;
+            color: var(--text-light);
+            white-space: nowrap;
+        }
+        .content-presets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+        .content-preset {
+            flex: 1 1 auto;
+            padding: 6px 10px;
+            font-size: 12.5px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-pill);
+            background: var(--surface);
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .content-preset:hover {
+            border-color: var(--primary);
+        }
+        .content-preset.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+        }
+        .content-checks {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+        .content-check {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text);
+            transition: all 0.15s;
+        }
+        .content-check:hover {
+            background: var(--hover-bg);
+            border-color: var(--primary);
+        }
+        .content-check input {
+            flex-shrink: 0;
+        }
+        /* Mobile (<500px): presets and checkboxes each stack full width. */
+        @media (max-width: 499px) {
+            .content-presets { flex-direction: column; }
+            .content-checks { grid-template-columns: 1fr; }
+        }
+        /* Tablet (500-900px): checkboxes stay two-up, presets share the row. */
+        @media (min-width: 500px) and (max-width: 900px) {
+            .content-checks { grid-template-columns: 1fr 1fr; }
+        }
         #validation-modal {
             z-index: 500;  /* Above other modals (200) */
         }
@@ -4716,8 +4853,30 @@
             border-radius: 6px; font-style: italic; font-size: 14px; text-align: left; white-space: pre-wrap;
         }
         .share-welcome-buttons { justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+        /* Sender hint under the "only changes" scope option. */
+        .share-changes-hint { margin: 8px 0 0; font-size: 12.5px; color: var(--text-secondary, #777); line-height: 1.45; }
+        /* Recipient change-packet preview: stats chips + named person lists. */
+        .share-packet-body { text-align: left; max-height: 46vh; overflow-y: auto; margin: 8px 0 2px; }
+        .share-packet-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+        .share-packet-chip {
+            background: var(--hover-bg, #f4f1ea); color: var(--text);
+            border-radius: 999px; padding: 3px 11px; font-size: 12.5px; white-space: nowrap;
+        }
+        .share-packet-section { margin-bottom: 12px; }
+        .share-packet-section h3 {
+            font-size: 12px; margin: 0 0 4px; color: var(--text-secondary, #777);
+            text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+        }
+        .share-packet-section p { font-size: 13.5px; line-height: 1.5; margin: 0; }
+        .share-packet-section ul { margin: 0; padding-left: 18px; }
+        .share-packet-section li { font-size: 13.5px; line-height: 1.55; }
+        .share-packet-fields { color: var(--text-secondary, #777); }
         @media (max-width: 500px) {
             .collab-bar { flex-wrap: wrap; justify-content: center; top: auto; bottom: calc(var(--bottom-bar-h) + 12px); }
+            .share-packet-body { max-height: 40vh; }
+        }
+        @media (min-width: 500px) and (max-width: 900px) {
+            .share-packet-body { max-height: 50vh; }
         }
 
         /* Descendants context chip — same paper pill as the focus chip
@@ -10230,12 +10389,34 @@
                     <span data-i18n="auditLog.exportInclude"></span>
                 </label>
             </div>
-            <div id="export-photos-section" class="form-group" style="display: none;">
-                <label class="settings-checkbox" style="margin-top: 8px;">
-                    <input type="checkbox" id="export-strip-photos">
-                    <span data-i18n="privacy.stripPhotos"></span>
-                    <span class="photo-size" id="export-photo-size"></span>
-                </label>
+            <div id="export-content-section" class="form-group" style="display: none;">
+                <div class="content-header">
+                    <label data-i18n="privacy.contentLabel" data-i18n-title="privacy.contentTooltip">Content</label>
+                    <span class="content-size" id="export-content-size"></span>
+                </div>
+                <div class="content-presets" id="export-content-presets">
+                    <button type="button" class="content-preset" data-preset="complete" onclick="window.Strom.UI.applyExportPreset('complete')" data-i18n="privacy.presetComplete">Complete archive</button>
+                    <button type="button" class="content-preset" data-preset="small" onclick="window.Strom.UI.applyExportPreset('small')" data-i18n="privacy.presetSmall">Small file to send</button>
+                    <button type="button" class="content-preset" data-preset="skeleton" onclick="window.Strom.UI.applyExportPreset('skeleton')" data-i18n="privacy.presetSkeleton">Bare skeleton</button>
+                </div>
+                <div class="content-checks">
+                    <label class="content-check">
+                        <input type="checkbox" id="export-content-photos" onchange="window.Strom.UI.onExportContentChange()">
+                        <span data-i18n="privacy.contentPhotos">Photos</span>
+                    </label>
+                    <label class="content-check">
+                        <input type="checkbox" id="export-content-attachments" onchange="window.Strom.UI.onExportContentChange()">
+                        <span data-i18n="privacy.contentAttachments">Attachments &amp; documents</span>
+                    </label>
+                    <label class="content-check">
+                        <input type="checkbox" id="export-content-notes" onchange="window.Strom.UI.onExportContentChange()">
+                        <span data-i18n="privacy.contentNotes">Notes</span>
+                    </label>
+                    <label class="content-check">
+                        <input type="checkbox" id="export-content-sources" onchange="window.Strom.UI.onExportContentChange()">
+                        <span data-i18n="privacy.contentSources">Sources &amp; citations</span>
+                    </label>
+                </div>
             </div>
             <div class="buttons export-buttons">
                 <button class="secondary" onclick="window.Strom.UI.exportWithoutPassword()" data-i18n="encryption.exportWithoutPassword">Export without encryption</button>
@@ -10358,6 +10539,7 @@
                     <option value="branch" data-i18n="share.scopeBranch"></option>
                     <option id="share-scope-changes" value="changes" style="display:none;" data-i18n="shareDiff.scopeChanges"></option>
                 </select>
+                <p id="share-changes-hint" class="share-changes-hint" style="display:none;" data-i18n="shareDiff.changesHint"></p>
             </div>
             <div class="form-group">
                 <label data-i18n="share.senderNameLabel"></label>
@@ -10412,6 +10594,22 @@
                 <button type="button" class="secondary" onclick="window.Strom.UI.closeShareReplyDialog()" data-i18n="share.replyView"></button>
                 <button type="button" class="secondary" onclick="window.Strom.UI.shareReplyImport()" data-i18n="share.replyImport"></button>
                 <button type="button" class="primary" onclick="window.Strom.UI.shareReplyMerge()" data-i18n="share.replyMerge"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recipient: preview of an opened change packet (send only changes) -->
+    <div class="modal-overlay" id="share-packet-modal">
+        <div class="modal share-welcome">
+            <div class="share-welcome-icon">Strom</div>
+            <h2 id="share-packet-title"></h2>
+            <p id="share-packet-intro" class="modal-description"></p>
+            <blockquote id="share-packet-message" class="share-message"></blockquote>
+            <div id="share-packet-body" class="share-packet-body"></div>
+            <div class="buttons share-welcome-buttons">
+                <button type="button" class="secondary" onclick="window.Strom.UI.closeChangePacketPreview()" data-i18n="buttons.cancel"></button>
+                <button type="button" class="secondary" onclick="window.Strom.UI.reviewChangePacketInMerge()" data-i18n="shareDiff.reviewDetail"></button>
+                <button type="button" class="primary" onclick="window.Strom.UI.acceptChangePacket()" data-i18n="shareDiff.accept"></button>
             </div>
         </div>
     </div>

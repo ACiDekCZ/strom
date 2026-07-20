@@ -19,7 +19,9 @@ import { TreeRenderer } from '../renderer.js';
 import { SettingsManager } from '../settings.js';
 import { strings } from '../strings.js';
 import { PersonId, PlaceGeo } from '../types.js';
-import { collectPlaces, orphanedPlaceKeys, PlaceUsage } from '../places.js';
+import { collectPlaces, orphanedPlaceKeys, placeKey, PlaceUsage } from '../places.js';
+import { collectDatedPlacePoints, DatedPlaceHarvest } from '../map-time.js';
+import { yearOf } from '../dates.js';
 import {
     fitBounds, panCenter, pinchZoomStep, pointInViewport, tileUrl, tilesForViewport, zoomAround,
     TILE_ATTRIBUTION, TILE_ATTRIBUTION_URL,
@@ -73,6 +75,7 @@ export const mapMethods = uiModule({
             container.innerHTML = `
                 <div class="map-canvas">
                     <div class="map-tiles"></div>
+                    <svg class="map-lines" aria-hidden="true"></svg>
                     <div class="map-markers"></div>
                     <div class="map-popup" style="display:none;"></div>
                 </div>
@@ -83,16 +86,24 @@ export const mapMethods = uiModule({
                             aria-label="${strings.map.zoomOut}" title="${strings.map.zoomOut}">−</button>
                     <button type="button" class="map-fit" onclick="window.Strom.UI.fitMapToPlaces()"
                             aria-label="${strings.map.fit}" title="${strings.map.fit}">⤢</button>
+                    <button type="button" class="map-time-toggle" onclick="window.Strom.UI.toggleMapTime()"
+                            aria-pressed="false" aria-label="${strings.map.timeMode}" title="${strings.map.timeMode}">⏱</button>
                 </div>
                 <div class="map-scope">
                     <button type="button" id="map-scope-view" onclick="window.Strom.UI.setMapScope('view')">${strings.map.scopeView}</button>
                     <button type="button" id="map-scope-tree" onclick="window.Strom.UI.setMapScope('tree')">${strings.map.scopeTree}</button>
+                </div>
+                <div class="map-timebar" id="map-timebar" hidden>
+                    <button type="button" class="map-time-play" aria-label="${strings.map.timePlay}" title="${strings.map.timePlay}">⏵</button>
+                    <input type="range" class="map-time-range" aria-label="${strings.map.timeYear}" value="0" min="0" max="0">
+                    <span class="map-time-year">0</span>
                 </div>
                 <div class="map-status" id="map-status"></div>
                 <a class="map-attribution" href="${TILE_ATTRIBUTION_URL}" target="_blank" rel="noopener noreferrer">${TILE_ATTRIBUTION}</a>`;
             this.mapTileEls = new Map();  // fresh canvas: the old <img> refs are detached
             this.bindMapGestures(container);
             this.bindMapClicks(container);
+            this.bindMapTime(container);
         }
 
         document.getElementById('map-scope-view')?.classList.toggle('active', this.mapScope !== 'tree');
@@ -113,6 +124,7 @@ export const mapMethods = uiModule({
         if (!this.mapCenter && places.length > 0) this.fitMapToPlaces();
         if (!this.mapCenter) this.mapCenter = { lat: 50, lon: 15 };
 
+        this.renderMapTimeControls();
         this.drawMapTiles(container);
         this.drawMapMarkers(container, places);
         this.renderMapStatus(places);
@@ -144,6 +156,19 @@ export const mapMethods = uiModule({
                 <button type="button" class="secondary" onclick="window.Strom.UI.showPlacesManager()">${strings.map.managePlaces}</button>`;
             box.style.display = 'flex';
             return;
+        }
+
+        // In time mode, own up to places that carry no date and so cannot appear
+        // on the timeline — honesty instead of a silently emptier map.
+        if (this.mapTimeOn) {
+            const undated = this.mapTimeHarvest().undatedPlaceCount;
+            if (undated > 0) {
+                box.innerHTML = `
+                    <span class="map-status-text">${strings.map.timeUndated(undated)}</span>
+                    <button type="button" class="secondary" onclick="window.Strom.UI.showPlacesManager()">${strings.map.managePlaces}</button>`;
+                box.style.display = 'flex';
+                return;
+            }
         }
 
         const missing = this.mapMissingPlaces();
@@ -206,6 +231,13 @@ export const mapMethods = uiModule({
     drawMapMarkers(container: HTMLElement, places: MappedPlace[]): void {
         const layer = container.querySelector('.map-markers') as HTMLElement | null;
         if (!layer || !this.mapCenter) return;
+
+        // Time mode draws its own markers (cumulative, year-aware) plus the
+        // migration lines; the ordinary marker set is ignored while it is on.
+        if (this.mapTimeOn) { this.drawMapTimeLayer(container); return; }
+        const lines = container.querySelector('.map-lines') as SVGElement | null;
+        if (lines) lines.innerHTML = '';
+
         const { width, height } = this.mapViewportSize(container);
 
         layer.innerHTML = places.map(p => {
@@ -219,6 +251,253 @@ export const mapMethods = uiModule({
                     <span class="map-marker-label">${this.escapeHtml(p.usage.display)}</span>
                 </button>`;
         }).join('');
+    },
+
+    // ==================== MIGRATION OVER TIME (P5) ====================
+
+    /** The dated harvest for the map's current scope (view / whole tree). */
+    mapTimeHarvest(): DatedPlaceHarvest {
+        const data = DataManager.getData();
+        const filter: ReadonlySet<PersonId> | undefined =
+            this.mapScope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
+        return collectDatedPlacePoints(data, filter);
+    },
+
+    /**
+     * The dated points that actually have a pin, grouped per place and joined to
+     * their coordinates and display name. Places with no coordinates are dropped
+     * (nothing to draw) — matching the ordinary marker rule.
+     */
+    mapTimePlacesData(): { key: string; geo: PlaceGeo; display: string; points: { year: number; personId: PersonId }[] }[] {
+        const geoByKey = new Map(this.mapPlaces().map(m => [m.key, m]));
+        const byKey = new Map<string, { key: string; geo: PlaceGeo; display: string; points: { year: number; personId: PersonId }[] }>();
+        for (const pt of this.mapTimeHarvest().points) {
+            const base = geoByKey.get(pt.placeKey);
+            if (!base) continue;
+            let tp = byKey.get(pt.placeKey);
+            if (!tp) {
+                tp = { key: pt.placeKey, geo: base.geo, display: base.usage.display, points: [] };
+                byKey.set(pt.placeKey, tp);
+            }
+            tp.points.push({ year: pt.year, personId: pt.personId });
+        }
+        return [...byKey.values()];
+    },
+
+    /**
+     * Parent→child birthplace segments for a given year: the family's route
+     * across the land. Both birthplaces must have coordinates, both a parseable
+     * year, and differ. Siblings tracing the same route collapse to one line
+     * (keyed placeA→placeB) at the strongest opacity. Opacity fades with the
+     * child's age at year Y: 1.0 fresh, down to 0.15 at 60+ years.
+     */
+    mapMigrationSegments(year: number): { from: PlaceGeo; to: PlaceGeo; opacity: number }[] {
+        const data = DataManager.getData();
+        const places = data.places ?? {};
+        const filter: ReadonlySet<PersonId> | undefined =
+            this.mapScope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
+        const kept = (id: PersonId): boolean => !filter || filter.has(id);
+
+        const byKey = new Map<string, { from: PlaceGeo; to: PlaceGeo; opacity: number }>();
+        for (const child of Object.values(data.persons)) {
+            if (!kept(child.id)) continue;
+            const cYear = yearOf(child.birthDate);
+            const cRaw = child.birthPlace?.trim();
+            if (cYear === null || cYear > year || !cRaw) continue;
+            const cKey = placeKey(cRaw);
+            const cGeo = places[cKey];
+            if (!cGeo) continue;
+
+            for (const pid of child.parentIds) {
+                if (!kept(pid)) continue;
+                const parent = data.persons[pid];
+                const pRaw = parent?.birthPlace?.trim();
+                if (!parent || !pRaw || yearOf(parent.birthDate) === null) continue;
+                const pKey = placeKey(pRaw);
+                if (pKey === cKey) continue;
+                const pGeo = places[pKey];
+                if (!pGeo) continue;
+
+                const age = year - cYear;
+                const opacity = Math.max(0.15, 1 - (Math.max(0, age) / 60) * 0.85);
+                const segKey = `${pKey}->${cKey}`;
+                const existing = byKey.get(segKey);
+                if (!existing) byKey.set(segKey, { from: pGeo, to: cGeo, opacity });
+                else existing.opacity = Math.max(existing.opacity, opacity);
+            }
+        }
+        return [...byKey.values()];
+    },
+
+    /** Draw both the cumulative markers and the migration lines for the year. */
+    drawMapTimeLayer(container: HTMLElement): void {
+        const markers = container.querySelector('.map-markers') as HTMLElement | null;
+        const lines = container.querySelector('.map-lines') as SVGElement | null;
+        if (!markers || !this.mapCenter) return;
+        const { width, height } = this.mapViewportSize(container);
+        const year = this.mapTimeYear;
+
+        markers.innerHTML = this.mapTimePlacesData().map(tp => {
+            const upto = tp.points.filter(p => p.year <= year);
+            if (upto.length === 0) return '';
+            const persons = new Set(upto.map(p => p.personId)).size;
+            // "Fresh" = something happened here within the last ten years (Y−10, Y].
+            const fresh = upto.some(p => p.year > year - 10);
+            const at = pointInViewport(tp.geo, this.mapCenter!, this.mapZoom, width, height);
+            if (at.x < -200 || at.y < -200 || at.x > width + 200 || at.y > height + 200) return '';
+            return `
+                <button type="button" class="map-marker${fresh ? ' map-marker-fresh' : ''}" data-key="${this.escapeHtml(tp.key)}"
+                        style="left:${Math.round(at.x)}px; top:${Math.round(at.y)}px;">
+                    <span class="map-marker-dot">${persons}</span>
+                    <span class="map-marker-label">${this.escapeHtml(tp.display)}</span>
+                </button>`;
+        }).join('');
+
+        if (!lines) return;
+        const margin = 100;
+        const inView = (p: { x: number; y: number }): boolean =>
+            p.x >= -margin && p.y >= -margin && p.x <= width + margin && p.y <= height + margin;
+        const drawable = this.mapMigrationSegments(year)
+            .map(s => ({
+                a: pointInViewport(s.from, this.mapCenter!, this.mapZoom, width, height),
+                b: pointInViewport(s.to, this.mapCenter!, this.mapZoom, width, height),
+                opacity: s.opacity,
+            }))
+            // Density guard: keep only lines with an endpoint near the viewport,
+            // then a hard cap so a huge tree can never flood the SVG.
+            .filter(s => inView(s.a) || inView(s.b))
+            .sort((a, b) => b.opacity - a.opacity)
+            .slice(0, 400);
+        lines.innerHTML = drawable.map(s =>
+            `<line x1="${Math.round(s.a.x)}" y1="${Math.round(s.a.y)}" x2="${Math.round(s.b.x)}" y2="${Math.round(s.b.y)}"`
+            + ` stroke="var(--primary)" stroke-width="2" stroke-opacity="${s.opacity.toFixed(3)}" />`).join('');
+    },
+
+    /** Sync the toggle button, the timebar visibility and the slider bounds. */
+    renderMapTimeControls(): void {
+        const harvest = this.mapTimeHarvest();
+        const hasData = harvest.minYear !== null && harvest.maxYear !== null;
+        const toggle = document.querySelector('.map-time-toggle') as HTMLButtonElement | null;
+        if (toggle) {
+            // Nothing dated → the whole feature has nothing to show.
+            if (!hasData && this.mapTimeOn) this.setMapTimeOn(false);
+            toggle.disabled = !hasData;
+            toggle.setAttribute('aria-pressed', String(this.mapTimeOn));
+            toggle.classList.toggle('active', this.mapTimeOn);
+            toggle.title = hasData ? strings.map.timeMode : strings.map.timeModeEmpty;
+        }
+
+        const bar = document.getElementById('map-timebar');
+        if (bar) bar.hidden = !this.mapTimeOn;
+        if (!this.mapTimeOn || !hasData) return;
+
+        const range = document.querySelector('.map-time-range') as HTMLInputElement | null;
+        if (range) {
+            range.min = String(harvest.minYear);
+            range.max = String(harvest.maxYear);
+            // Keep the slider inside the (possibly re-scoped) range.
+            this.mapTimeYear = Math.min(harvest.maxYear!, Math.max(harvest.minYear!, this.mapTimeYear));
+            range.value = String(this.mapTimeYear);
+        }
+        this.updateMapTimeLabel();
+        this.updateMapTimePlayIcon();
+    },
+
+    updateMapTimeLabel(): void {
+        const label = document.querySelector('.map-time-year') as HTMLElement | null;
+        if (label) label.textContent = String(this.mapTimeYear);
+    },
+
+    updateMapTimePlayIcon(): void {
+        const play = document.querySelector('.map-time-play') as HTMLButtonElement | null;
+        if (!play) return;
+        play.textContent = this.mapTimePlaying ? '⏸' : '⏵';
+        const label = this.mapTimePlaying ? strings.map.timePause : strings.map.timePlay;
+        play.setAttribute('aria-label', label);
+        play.title = label;
+    },
+
+    /** Bind the timebar controls once, when the canvas is first built. */
+    bindMapTime(container: HTMLElement): void {
+        const range = container.querySelector('.map-time-range') as HTMLInputElement | null;
+        let queued = false;
+        const redraw = (): void => {
+            if (queued) return;
+            queued = true;
+            requestAnimationFrame(() => {
+                queued = false;
+                this.drawMapMarkers(container, []);
+            });
+        };
+        range?.addEventListener('input', () => {
+            this.mapTimeYear = Number(range.value);
+            this.updateMapTimeLabel();
+            redraw();   // rAF-throttled, same as panning
+        });
+        const play = container.querySelector('.map-time-play') as HTMLButtonElement | null;
+        play?.addEventListener('click', () => this.toggleMapTimePlay());
+    },
+
+    /** ⏱ toggle: reveal the timebar starting at the earliest year, or hide it. */
+    toggleMapTime(): void {
+        const harvest = this.mapTimeHarvest();
+        if (harvest.minYear === null) return;   // nothing dated (button is disabled)
+        if (!this.mapTimeOn) {
+            this.mapTimeYear = harvest.minYear;   // begin at the beginning of the story
+        }
+        this.setMapTimeOn(!this.mapTimeOn);
+    },
+
+    /** Turn the mode on/off, tidying playback and redrawing the map. */
+    setMapTimeOn(on: boolean): void {
+        this.mapTimeOn = on;
+        if (!on) this.stopMapTimePlay();
+        this.closeMapPopup();
+        const container = document.getElementById('map-container');
+        this.renderMapTimeControls();
+        if (container) this.drawMapMarkers(container, this.mapPlaces());
+        this.renderMapStatus(this.mapPlaces());
+    },
+
+    /** ⏵/⏸: step the year forward once every ~120ms until the last year. */
+    toggleMapTimePlay(): void {
+        if (this.mapTimePlaying) { this.stopMapTimePlay(); return; }
+        if (!this.mapTimeOn) return;
+        const harvest = this.mapTimeHarvest();
+        if (harvest.maxYear === null || harvest.minYear === null) return;
+        // Reaching the end and pressing play again replays from the start.
+        if (this.mapTimeYear >= harvest.maxYear) this.mapTimeYear = harvest.minYear;
+        this.mapTimePlaying = true;
+        this.updateMapTimePlayIcon();
+        this.mapTimeTimer = window.setInterval(() => {
+            const h = this.mapTimeHarvest();
+            const el = document.getElementById('map-container');
+            // Stop when the map is left, the mode is off, or the data is gone.
+            if (!this.mapTimeOn || !el || el.style.display === 'none' || h.maxYear === null) {
+                this.stopMapTimePlay();
+                return;
+            }
+            if (this.mapTimeYear >= h.maxYear) { this.stopMapTimePlay(); return; }
+            this.mapTimeYear++;
+            this.syncMapTimeControls();
+            this.drawMapMarkers(el, []);
+        }, 120);
+    },
+
+    stopMapTimePlay(): void {
+        if (this.mapTimeTimer !== null) {
+            clearInterval(this.mapTimeTimer);
+            this.mapTimeTimer = null;
+        }
+        this.mapTimePlaying = false;
+        this.updateMapTimePlayIcon();
+    },
+
+    /** Push the current year onto the slider and its label (playback tick). */
+    syncMapTimeControls(): void {
+        const range = document.querySelector('.map-time-range') as HTMLInputElement | null;
+        if (range) range.value = String(this.mapTimeYear);
+        this.updateMapTimeLabel();
     },
 
     /** One-time notice shown instead of the map until the user has read it. */
@@ -375,7 +654,7 @@ export const mapMethods = uiModule({
         };
 
         container.addEventListener('pointerdown', (e: PointerEvent) => {
-            if ((e.target as HTMLElement).closest('.map-marker, .map-popup, .map-controls, .map-scope, .map-status, .map-tiles-notice')) return;
+            if ((e.target as HTMLElement).closest('.map-marker, .map-popup, .map-controls, .map-scope, .map-status, .map-timebar, .map-tiles-notice')) return;
             pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
             try { container.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
             if (pointers.size === 1) {

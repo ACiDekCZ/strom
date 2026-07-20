@@ -22,7 +22,7 @@ import {
     LastFocusedMarker
 } from '../types.js';
 import { strings } from '../strings.js';
-import { PrivacyMode } from '../privacy.js';
+import { PrivacyMode, ContentOptions, ContentPreset, CONTENT_PRESETS, matchContentPreset, applyContentOptions } from '../privacy.js';
 import { totalPhotoBytes } from '../photo.js';
 import { totalAttachmentBytes } from '../attachments.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
@@ -441,15 +441,104 @@ export const encryptionUiMethods = uiModule({
         return (v === 'initials' || v === 'anonymous' || v === 'minimal') ? v : 'full';
     },
 
-    /** Whether the export dialog's "without photos" checkbox is ticked. */
-    readExportStripPhotos(): boolean {
-        return (document.getElementById('export-strip-photos') as HTMLInputElement | null)?.checked || false;
+    /** The four export-content checkboxes as a ContentOptions object. */
+    readExportContentOptions(): ContentOptions {
+        const on = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.checked ?? true;
+        return {
+            photos: on('export-content-photos'),
+            attachments: on('export-content-attachments'),
+            notes: on('export-content-notes'),
+            sources: on('export-content-sources'),
+        };
+    },
+
+    /** UTF-8 byte length of a string (data URLs are ASCII, notes may not be). */
+    byteLength(str: string): number {
+        return new TextEncoder().encode(str).length;
+    },
+
+    /**
+     * Measure the tree's export size ONCE per dialog-open, split by category, so
+     * the live estimate is a cheap addition afterwards. Photos/attachments come
+     * from their dedicated byte counters; notes and sources are measured with a
+     * single stringify pass over just those slices; `base` is the skeleton
+     * (everything stripped). Stored on `this.exportContentSizes`.
+     */
+    readExportContentSizes(data: StromData): void {
+        const notesSlice: unknown[] = [];
+        const sourcesSlice: unknown[] = [data.sources ?? null];
+        for (const person of Object.values(data.persons)) {
+            if (person.notes) notesSlice.push(person.notes);
+            if (person.sourceIds) sourcesSlice.push(person.sourceIds);
+            for (const ev of person.events ?? []) {
+                if (ev.note) notesSlice.push(ev.note);
+                if (ev.sourceIds) sourcesSlice.push(ev.sourceIds);
+                for (const part of ev.participants ?? []) if (part.note) notesSlice.push(part.note);
+            }
+            for (const att of person.attachments ?? []) if (att.sourceId) sourcesSlice.push(att.sourceId);
+        }
+        for (const partnership of Object.values(data.partnerships)) {
+            if (partnership.note) notesSlice.push(partnership.note);
+            if (partnership.sourceIds) sourcesSlice.push(partnership.sourceIds);
+        }
+        const base = this.byteLength(JSON.stringify(
+            applyContentOptions(data, { photos: false, attachments: false, notes: false, sources: false })));
+        this.exportContentSizes = {
+            base,
+            photos: totalPhotoBytes(data),
+            attachments: totalAttachmentBytes(data),
+            notes: this.byteLength(JSON.stringify(notesSlice)),
+            sources: this.byteLength(JSON.stringify(sourcesSlice)),
+        };
+    },
+
+    /** Recompute and show the estimated file size for the current checkbox state. */
+    updateExportSizeEstimate(): void {
+        const sizes = this.exportContentSizes;
+        const el = document.getElementById('export-content-size');
+        if (!sizes || !el) return;
+        const opts = this.readExportContentOptions();
+        const total = sizes.base
+            + (opts.photos ? sizes.photos : 0)
+            + (opts.attachments ? sizes.attachments : 0)
+            + (opts.notes ? sizes.notes : 0)
+            + (opts.sources ? sizes.sources : 0);
+        el.textContent = strings.privacy.contentEstimate(TreeManager.formatBytes(total));
+    },
+
+    /** Highlight the preset whose checkbox pattern matches the current state (if any). */
+    syncExportPresetHighlight(): void {
+        const active = matchContentPreset(this.readExportContentOptions());
+        document.querySelectorAll('#export-content-presets .content-preset').forEach(btn => {
+            btn.classList.toggle('active', (btn as HTMLElement).dataset.preset === active);
+        });
+    },
+
+    /** Apply a named preset to the four checkboxes, then refresh estimate + highlight. */
+    applyExportPreset(preset: ContentPreset): void {
+        const p = CONTENT_PRESETS[preset];
+        const set = (id: string, v: boolean) => {
+            const el = document.getElementById(id) as HTMLInputElement | null;
+            if (el) el.checked = v;
+        };
+        set('export-content-photos', p.photos);
+        set('export-content-attachments', p.attachments);
+        set('export-content-notes', p.notes);
+        set('export-content-sources', p.sources);
+        this.updateExportSizeEstimate();
+        this.syncExportPresetHighlight();
+    },
+
+    /** A single content checkbox changed: refresh the estimate and preset highlight. */
+    onExportContentChange(): void {
+        this.updateExportSizeEstimate();
+        this.syncExportPresetHighlight();
     },
 
     showExportPasswordDialog(
         callback: (password: string | null) => void,
         includeAuditLogOption = false,
-        options: { defaultPrivacy?: PrivacyMode; passwordless?: boolean } = {}
+        options: { defaultPrivacy?: PrivacyMode; passwordless?: boolean; content?: boolean } = {}
     ): void {
         this.exportPasswordCallback = callback;
 
@@ -467,15 +556,22 @@ export const encryptionUiMethods = uiModule({
         if (pwConfirmGroup) pwConfirmGroup.style.display = passwordless ? 'none' : '';
         if (encryptedBtn) encryptedBtn.style.display = passwordless ? 'none' : '';
 
-        // "Export without photos & attachments" — shown only when the active
-        // tree has any media (photos or attachments).
-        const photosSection = document.getElementById('export-photos-section');
-        const photoSizeEl = document.getElementById('export-photo-size');
-        const stripToggle = document.getElementById('export-strip-photos') as HTMLInputElement | null;
-        const mediaBytes = totalPhotoBytes(DataManager.getData()) + totalAttachmentBytes(DataManager.getData());
-        if (photosSection) photosSection.style.display = mediaBytes > 0 ? 'block' : 'none';
-        if (photoSizeEl) photoSizeEl.textContent = mediaBytes > 0 ? ` (${Math.round(mediaBytes / 1024)} kB)` : '';
-        if (stripToggle) stripToggle.checked = false;
+        // Granular "Content" section (photos / attachments / notes / sources).
+        // Formats that ignore content options (GEDCOM, CSV — passwordless) hide
+        // it; every archive/JSON/HTML export shows it, defaulting to all-on.
+        const contentSection = document.getElementById('export-content-section');
+        const showContent = options.content ?? !passwordless;
+        if (contentSection) contentSection.style.display = showContent ? 'block' : 'none';
+        if (showContent) {
+            for (const id of ['export-content-photos', 'export-content-attachments', 'export-content-notes', 'export-content-sources']) {
+                const el = document.getElementById(id) as HTMLInputElement | null;
+                if (el) el.checked = true;
+            }
+            // Per-category sizes computed once here; toggling never re-stringifies.
+            this.readExportContentSizes(DataManager.getData());
+            this.updateExportSizeEstimate();
+            this.syncExportPresetHighlight();
+        }
 
         const modal = document.getElementById('export-password-modal');
         const input = document.getElementById('export-password-input') as HTMLInputElement;

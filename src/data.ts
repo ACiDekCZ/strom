@@ -39,11 +39,11 @@ import { extractSubtree } from './subtree.js';
 import { collectPlaces, renamePlace, placeKey, orphanedPlaceKeys } from './places.js';
 import { StorageManager } from './storage.js';
 import { surnameForms, addSurnameGroup, removeSurnameGroup } from './surnames.js';
+import { ChangePacket, applyPacketOntoData } from './share-diff.js';
 import { createSnapshot, getSnapshotJson, SnapshotReason } from './snapshots.js';
 import { ValidationIssue } from './validation.js';
 import { UndoManager } from './undo.js';
-import { applyLivingPrivacy, PrivacyMode } from './privacy.js';
-import { stripMedia } from './attachments.js';
+import { applyLivingPrivacy, applyContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
 
 /** Extended updates for Partnership */
 type PartnershipUpdates = Partial<Pick<Partnership, 'status' | 'startDate' | 'startPlace' | 'endDate' | 'note' | 'isPrimary'>>;
@@ -2279,6 +2279,22 @@ class DataManagerClass {
     }
 
     /**
+     * Apply a collaboration change packet straight onto the current tree as a
+     * single undoable step (the "Accept" path). Goes through the same
+     * begin/commitMutation choke point as every other edit, so one Ctrl+Z
+     * reverts the whole acceptance. The caller surfaces its own result toast.
+     */
+    applyChangePacketDirect(packet: ChangePacket): void {
+        const sender = packet.senderName || strings.share.unknownSender;
+        this.beginMutation();
+        this.data = applyPacketOntoData(this.data, packet);
+        this.commitMutation(strings.undo.applyChanges(sender), true);
+        AuditLogManager.log(this.currentTreeId, 'data.import', strings.auditLog.appliedChanges(sender));
+        if (this.currentTreeId) CrossTree.invalidateCacheForTree(this.currentTreeId);
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
+    }
+
+    /**
      * Import data as a new tree
      * @param data The data to import
      * @param treeName Name for the new tree
@@ -2333,9 +2349,9 @@ class DataManagerClass {
 
     // ==================== EXPORT/IMPORT ====================
 
-    exportJSON(privacyMode: PrivacyMode = 'full', dropMedia = false): void {
+    exportJSON(privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): void {
         let out = applyLivingPrivacy(this.data, privacyMode);
-        if (dropMedia) out = stripMedia(out);
+        out = applyContentOptions(out, content);
         const dataStr = JSON.stringify(out, null, 2);
         const blob = new Blob([dataStr], { type: 'application/json' });
         const a = document.createElement('a');
@@ -2374,13 +2390,11 @@ class DataManagerClass {
         return json;
     }
 
-    async exportTreeJSON(treeId: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', dropMedia = false): Promise<void> {
+    async exportTreeJSON(treeId: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): Promise<void> {
         const rawTreeData = await TreeManager.getTreeData(treeId);
         if (!rawTreeData) return;
 
-        const treeData = dropMedia
-            ? stripMedia(applyLivingPrivacy(rawTreeData, privacyMode))
-            : applyLivingPrivacy(rawTreeData, privacyMode);
+        const treeData = applyContentOptions(applyLivingPrivacy(rawTreeData, privacyMode), content);
         // Ensure version is set
         treeData.version = STROM_DATA_VERSION;
 
@@ -2405,7 +2419,7 @@ class DataManagerClass {
         URL.revokeObjectURL(a.href);
     }
 
-    async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full', dropMedia = false): Promise<void> {
+    async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): Promise<void> {
         // Self-consistent slice (glue + cleaned relations + pruned sources),
         // shared with "make a tree from this view".
         const sliced = extractSubtree(this.data, visiblePersonIds);
@@ -2413,7 +2427,7 @@ class DataManagerClass {
             version: STROM_DATA_VERSION,
             ...sliced,
         }, privacyMode);
-        if (dropMedia) focusedData = stripMedia(focusedData);
+        focusedData = applyContentOptions(focusedData, content);
 
         let dataStr: string;
         if (password) {

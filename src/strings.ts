@@ -633,6 +633,13 @@ const stringsEN = {
         settingHint: 'Allows the map to send place names to a geocoding service. Coordinates already found stay in your tree.',
         tilesNotice: 'The map background is drawn from openstreetmap.org — loading it tells that server which area you are viewing, nothing more. Your family data stays in the app.',
         tilesNoticeOk: 'Show the map',
+        timeMode: 'Migration over time',
+        timeModeEmpty: 'Add dates (birth, death, events) to trace the family’s migration over time.',
+        timePlay: 'Play',
+        timePause: 'Pause',
+        timeYear: 'Year',
+        timeUndated: (n: number) =>
+            `${n} ${n === 1 ? 'place' : 'places'} without a date ${n === 1 ? 'is' : 'are'} not shown on the timeline.`,
     },
 
     fan: {
@@ -1448,10 +1455,29 @@ const stringsEN = {
     // Change packets (send only changes)
     shareDiff: {
         scopeChanges: 'Only the changes since the last share',
+        changesHint: 'This sends only your additions. Send the file back to whoever shared the tree with you.',
         packetSaved: 'Change file saved',
         noChanges: 'Nothing has changed since the last share',
         baselineMissing: 'The baseline for these changes is missing — ask for the whole file instead',
         treeNotFound: 'No matching tree for these changes — ask the sender for the whole file instead',
+        // Recipient preview of an opened change packet.
+        previewTitle: (sender: string) => `${sender} sent you changes`,
+        previewIntro: (tree: string) => tree ? `These additions update your tree “${tree}”.` : 'These additions update your tree.',
+        accept: 'Accept changes',
+        reviewDetail: 'Review in detail',
+        newPeople: (n: number) => `${n} new ${n === 1 ? 'person' : 'people'}`,
+        updatedPeople: (n: number) => `${n} updated`,
+        media: (n: number) => `${n} ${n === 1 ? 'photo or file' : 'photos or files'}`,
+        placesChip: (n: number) => `${n} ${n === 1 ? 'place' : 'places'}`,
+        surnameGroups: (n: number) => `${n} surname ${n === 1 ? 'link' : 'links'}`,
+        removed: (n: number) => `${n} removed`,
+        sectionNew: 'New people',
+        sectionUpdated: 'Updated people',
+        fieldOther: 'other details',
+        changedFields: (fields: string) => `changed: ${fields}`,
+        andMore: (n: number) => `+${n} more`,
+        applied: (added: number, updated: number) => `Applied — ${added} added, ${updated} updated`,
+        alreadyApplied: 'These changes are already in your tree — nothing to apply.',
     },
 
     // View Mode (embedded data)
@@ -1615,6 +1641,8 @@ const stringsEN = {
         addedPartner: (person: string, partner: string) => `Added partner: ${person} & ${partner}`,
         // Tree merge
         treeMerge: (merged: number, added: number, source: string) => `Tree merge from "${source}": ${merged} merged, ${added} added`,
+        // Change packet accepted (collaboration)
+        appliedChanges: (sender: string) => `Applied changes from ${sender}`,
         // Split into families
         splitFamilies: (trees: number, persons: number) => `Split into ${trees} family trees (${persons} people)`,
         // Auto-repair
@@ -1675,6 +1703,7 @@ const stringsEN = {
         removeAttachment: (name: string) => `removing attachment from ${name}`,
         editAttachment: (name: string) => `editing attachment of ${name}`,
         setParentRelType: (child: string) => `relationship type of ${child}`,
+        applyChanges: (sender: string) => `applying changes from ${sender}`,
         undone: (desc: string) => `Undone: ${desc}`,
         redone: (desc: string) => `Redone: ${desc}`,
         nothingToUndo: 'Nothing to undo',
@@ -1697,7 +1726,18 @@ const stringsEN = {
         modeInitials: 'Initials + birth year',
         modeAnonymous: 'Hide names',
         modeMinimal: 'Keep surname only',
-        stripPhotos: 'Export without photos & attachments'
+        stripPhotos: 'Export without photos & attachments',
+        // Granular export content (R8)
+        contentLabel: 'Content',
+        contentTooltip: 'Choose what travels with the file. The tree structure and names are always kept.',
+        contentEstimate: (size: string) => `Estimated size: ${size}`,
+        presetComplete: 'Complete archive',
+        presetSmall: 'Small file to send',
+        presetSkeleton: 'Bare skeleton',
+        contentPhotos: 'Photos',
+        contentAttachments: 'Attachments & documents',
+        contentNotes: 'Notes',
+        contentSources: 'Sources & citations'
     },
 
     // Poster export (SVG / PNG / tiled PDF)
@@ -2359,6 +2399,13 @@ const stringsCZ: StringsType = {
         settingHint: 'Umožní mapě odesílat názvy míst do geokódovací služby. Už dohledané souřadnice zůstávají ve vašem stromu.',
         tilesNotice: 'Podklad mapy se načítá z openstreetmap.org — načtení tomuto serveru prozradí jen to, jakou oblast si prohlížíte, nic víc. Data vaší rodiny zůstávají v aplikaci.',
         tilesNoticeOk: 'Zobrazit mapu',
+        timeMode: 'Migrace v čase',
+        timeModeEmpty: 'Doplňte data (narození, úmrtí, události) a uvidíte stěhování rodu v čase.',
+        timePlay: 'Přehrát',
+        timePause: 'Pozastavit',
+        timeYear: 'Rok',
+        timeUndated: (n: number) =>
+            `${n} ${n === 1 ? 'místo' : n < 5 ? 'místa' : 'míst'} bez data se na časové ose ${n === 1 ? 'nezobrazuje' : 'nezobrazují'}.`,
     },
 
     fan: {
@@ -3174,10 +3221,29 @@ const stringsCZ: StringsType = {
     // Change packets (send only changes)
     shareDiff: {
         scopeChanges: 'Jen změny od posledního sdílení',
+        changesHint: 'Pošle jen tvoje doplnění. Soubor pošli zpět tomu, kdo ti strom sdílel.',
         packetSaved: 'Soubor se změnami uložen',
         noChanges: 'Od posledního sdílení se nic nezměnilo',
         baselineMissing: 'Chybí baseline pro tyto změny — vyžádej si radši celý soubor',
         treeNotFound: 'Žádný odpovídající strom pro tyto změny — vyžádej si od odesílatele celý soubor',
+        // Náhled otevřeného souboru se změnami u příjemce.
+        previewTitle: (sender: string) => `${sender} ti poslal(a) změny`,
+        previewIntro: (tree: string) => tree ? `Tato doplnění upraví tvůj strom „${tree}“.` : 'Tato doplnění upraví tvůj strom.',
+        accept: 'Přijmout změny',
+        reviewDetail: 'Prohlédnout podrobně',
+        newPeople: (n: number) => `${n} ${n === 1 ? 'nová osoba' : (n >= 2 && n <= 4 ? 'nové osoby' : 'nových osob')}`,
+        updatedPeople: (n: number) => `${n} upraveno`,
+        media: (n: number) => `${n} ${n === 1 ? 'fotka nebo soubor' : (n >= 2 && n <= 4 ? 'fotky nebo soubory' : 'fotek nebo souborů')}`,
+        placesChip: (n: number) => `${n} ${n === 1 ? 'místo' : (n >= 2 && n <= 4 ? 'místa' : 'míst')}`,
+        surnameGroups: (n: number) => `${n} ${n === 1 ? 'propojení příjmení' : 'propojení příjmení'}`,
+        removed: (n: number) => `${n} odebráno`,
+        sectionNew: 'Nové osoby',
+        sectionUpdated: 'Upravené osoby',
+        fieldOther: 'další údaje',
+        changedFields: (fields: string) => `změněno: ${fields}`,
+        andMore: (n: number) => `+${n} dalších`,
+        applied: (added: number, updated: number) => `Přijato — ${added} přidáno, ${updated} upraveno`,
+        alreadyApplied: 'Tyto změny už ve tvém stromu jsou — není co přijmout.',
     },
 
     // View Mode (embedded data)
@@ -3341,6 +3407,7 @@ const stringsCZ: StringsType = {
         addedPartner: (person: string, partner: string) => `Přidán partner: ${person} & ${partner}`,
         // Tree merge
         treeMerge: (merged: number, added: number, source: string) => `Sloučení stromů z "${source}": ${merged} sloučeno, ${added} přidáno`,
+        appliedChanges: (sender: string) => `Přijaty změny od ${sender}`,
         // Split into families
         splitFamilies: (trees: number, persons: number) => `Rozděleno na ${trees} rodinné stromy (${persons} osob)`,
         // Auto-repair
@@ -3401,6 +3468,7 @@ const stringsCZ: StringsType = {
         removeAttachment: (name: string) => `odebrání přílohy u ${name}`,
         editAttachment: (name: string) => `úprava přílohy u ${name}`,
         setParentRelType: (child: string) => `typ vztahu u ${child}`,
+        applyChanges: (sender: string) => `přijetí změn od ${sender}`,
         undone: (desc: string) => `Vráceno: ${desc}`,
         redone: (desc: string) => `Znovu provedeno: ${desc}`,
         nothingToUndo: 'Není co vrátit',
@@ -3423,7 +3491,18 @@ const stringsCZ: StringsType = {
         modeInitials: 'Iniciály + rok narození',
         modeAnonymous: 'Skrýt jména',
         modeMinimal: 'Ponechat jen příjmení',
-        stripPhotos: 'Exportovat bez fotek a příloh'
+        stripPhotos: 'Exportovat bez fotek a příloh',
+        // Granular export content (R8)
+        contentLabel: 'Obsah',
+        contentTooltip: 'Vyber, co se uloží do souboru. Struktura stromu a jména zůstanou vždy zachována.',
+        contentEstimate: (size: string) => `Odhadovaná velikost: ${size}`,
+        presetComplete: 'Kompletní archiv',
+        presetSmall: 'Malý soubor k odeslání',
+        presetSkeleton: 'Jen kostra',
+        contentPhotos: 'Fotky',
+        contentAttachments: 'Přílohy a dokumenty',
+        contentNotes: 'Poznámky',
+        contentSources: 'Zdroje a citace'
     },
 
     // Poster export (SVG / PNG / tiled PDF)

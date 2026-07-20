@@ -8,8 +8,7 @@ import { strings } from './strings.js';
 import { TreeId, StromData, EmbeddedDataEnvelope, APP_VERSION, generateExportId } from './types.js';
 import { encrypt, EncryptedData } from './crypto.js';
 import { AuditLogManager } from './audit-log.js';
-import { applyLivingPrivacy, PrivacyMode } from './privacy.js';
-import { stripMedia } from './attachments.js';
+import { applyLivingPrivacy, applyContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
 
 /**
  * Clean dynamic UI state from HTML before export: drop 'active' from specific
@@ -93,7 +92,7 @@ class AppExporterClass {
      * @param treeId Optional tree ID to export (defaults to active tree)
      * @param password Optional password to encrypt the exported data
      */
-    async exportApp(treeId?: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', dropMedia = false, share?: ShareOptions): Promise<void> {
+    async exportApp(treeId?: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false, share?: ShareOptions): Promise<void> {
         // Export only works from built version (strom.html)
         if (!this.isBuiltVersion()) {
             UI.showAlert(strings.export.devModeNotSupported, 'warning');
@@ -118,7 +117,7 @@ class AppExporterClass {
                 return;
             }
             let data = applyLivingPrivacy(rawData, privacyMode);
-            if (dropMedia) data = stripMedia(data);
+            data = applyContentOptions(data, content);
 
             // Get tree metadata
             const treeMetadata = TreeManager.getTreeMetadata(targetTreeId);
@@ -174,7 +173,7 @@ class AppExporterClass {
      * @param password Optional password to encrypt the exported data
      * @param includeAuditLog Whether to include audit logs for all trees
      */
-    async exportAllAsApp(password?: string | null, includeAuditLog = false, privacyMode: PrivacyMode = 'full', dropMedia = false): Promise<void> {
+    async exportAllAsApp(password?: string | null, includeAuditLog = false, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): Promise<void> {
         // Export only works from built version (strom.html)
         if (!this.isBuiltVersion()) {
             UI.showAlert(strings.export.devModeNotSupported, 'warning');
@@ -193,7 +192,7 @@ class AppExporterClass {
                 const data = await TreeManager.getTreeData(tree.id);
                 if (data) {
                     let treeExport = applyLivingPrivacy(data, privacyMode);
-                    if (dropMedia) treeExport = stripMedia(treeExport);
+                    treeExport = applyContentOptions(treeExport, content);
                     allTreesData[tree.id] = {
                         name: tree.name,
                         data: treeExport,
@@ -207,7 +206,7 @@ class AppExporterClass {
             const activeTreeId = TreeManager.getActiveTreeId();
             const rawActiveData = activeTreeId ? await TreeManager.getTreeData(activeTreeId) : null;
             let activeData = rawActiveData ? applyLivingPrivacy(rawActiveData, privacyMode) : null;
-            if (activeData && dropMedia) activeData = stripMedia(activeData);
+            if (activeData) activeData = applyContentOptions(activeData, content);
             const activeTreeMeta = activeTreeId ? TreeManager.getTreeMetadata(activeTreeId) : null;
 
             // Generate export ID for the main tree
@@ -258,7 +257,7 @@ class AppExporterClass {
      * @param filename The filename for the export
      * @param password Optional password to encrypt the exported data
      */
-    async exportFocusAsApp(focusedData: StromData, filename: string, password?: string | null, privacyMode: PrivacyMode = 'full', dropMedia = false, share?: ShareOptions & { treeName?: string; trackTreeId?: TreeId }): Promise<void> {
+    async exportFocusAsApp(focusedData: StromData, filename: string, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false, share?: ShareOptions & { treeName?: string; trackTreeId?: TreeId }): Promise<void> {
         // Export only works from built version (strom.html)
         if (!this.isBuiltVersion()) {
             UI.showAlert(strings.export.devModeNotSupported, 'warning');
@@ -274,7 +273,7 @@ class AppExporterClass {
 
             // Prepare data for embedding (privacy filter, then optional encryption)
             let filteredData = applyLivingPrivacy(focusedData, privacyMode);
-            if (dropMedia) filteredData = stripMedia(filteredData);
+            filteredData = applyContentOptions(filteredData, content);
             let embedDataContent: StromData | EncryptedData = filteredData;
             if (password) {
                 embedDataContent = await encrypt(JSON.stringify(filteredData), password);

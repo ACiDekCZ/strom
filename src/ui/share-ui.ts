@@ -33,6 +33,10 @@ export const shareUiMethods = uiModule({
     shareReplyToExportId: null as string | null,
     /** Reply envelope captured from an in-app HTML import (web-app sender path). */
     pendingReplyEnvelope: null as EmbeddedDataEnvelope | null,
+    /** Change packet awaiting Accept / Review in the preview dialog. */
+    pendingChangePacket: null as import('../share-diff.js').ChangePacket | null,
+    /** The baseline the pending packet was built against (for the merge path). */
+    pendingChangePacketBase: null as StromData | null,
 
     // ==================== SHARE DIALOG ====================
 
@@ -79,6 +83,9 @@ export const shareUiMethods = uiModule({
         const pwd = (document.getElementById('share-password') as HTMLElement | null)?.closest('.form-group') as HTMLElement | null;
         if (priv) priv.style.display = isChanges ? 'none' : '';
         if (pwd) pwd.style.display = isChanges ? 'none' : '';
+        // One narration line explaining where the change file should go.
+        const hint = document.getElementById('share-changes-hint') as HTMLElement | null;
+        if (hint) hint.style.display = isChanges ? '' : 'none';
     },
 
     closeShareDialog(): void {
@@ -245,8 +252,10 @@ export const shareUiMethods = uiModule({
     },
 
     /**
-     * Import a change packet: find the tree it was based on, reconstruct the full
-     * incoming tree (baseline + packet) and hand it to the normal merge preview.
+     * Open a change packet: find the tree it was based on, switch to it, and show
+     * a dedicated preview of what it changes. From there the user can Accept (a
+     * direct, undoable apply) or Review in detail (the full merge engine). The
+     * heavy merge wizard is no longer the only door.
      */
     async importChangePacket(packet: import('../share-diff.js').ChangePacket): Promise<void> {
         const { loadBaseline, getBaselineTreeId } = await import('../share-baselines.js');
@@ -263,10 +272,117 @@ export const shareUiMethods = uiModule({
 
         if (TreeManager.getActiveTreeId() !== tree.id) {
             await DataManager.switchTree(tree.id);
+            this.updateTreeSwitcher();
+            await TreeRenderer.renderAsync();
         }
+
+        // Summarise against the CURRENT tree — that is what the recipient gains.
+        const { summarizeChangePacket } = await import('../share-diff.js');
+        const summary = summarizeChangePacket(DataManager.getData(), packet);
+        if (!summary.hasEffect) {
+            // Idempotent: a packet re-opened after it was already applied.
+            await this.showAlert(strings.shareDiff.alreadyApplied, 'info');
+            return;
+        }
+
+        this.pendingChangePacket = packet;
+        this.pendingChangePacketBase = base;
+        this.showChangePacketPreview(packet, summary, tree.name);
+    },
+
+    /** Populate and show the change-packet preview dialog. */
+    showChangePacketPreview(
+        packet: import('../share-diff.js').ChangePacket,
+        summary: import('../share-diff.js').PacketSummary,
+        treeName?: string
+    ): void {
+        const modal = document.getElementById('share-packet-modal');
+        if (!modal) return;
+        const sender = packet.senderName || strings.share.unknownSender;
+
+        const title = document.getElementById('share-packet-title');
+        if (title) title.textContent = strings.shareDiff.previewTitle(sender);
+        const intro = document.getElementById('share-packet-intro');
+        if (intro) intro.textContent = strings.shareDiff.previewIntro(treeName || packet.treeName || '');
+        const msg = document.getElementById('share-packet-message');
+        if (msg) {
+            msg.style.display = packet.senderMessage ? '' : 'none';
+            // textContent (not innerHTML) — the message comes from the file.
+            msg.textContent = packet.senderMessage ?? '';
+        }
+        const body = document.getElementById('share-packet-body');
+        if (body) body.innerHTML = this.renderPacketSummary(summary);
+
+        modal.classList.add('active');
+    },
+
+    /** Build the escaped HTML body of the preview (stats chips + named lists). */
+    renderPacketSummary(summary: import('../share-diff.js').PacketSummary): string {
+        const CAP = 25;
+        const chips: string[] = [];
+        if (summary.newPersons.length) chips.push(strings.shareDiff.newPeople(summary.newPersons.length));
+        if (summary.modifiedPersons.length) chips.push(strings.shareDiff.updatedPeople(summary.modifiedPersons.length));
+        if (summary.mediaCount) chips.push(strings.shareDiff.media(summary.mediaCount));
+        if (summary.placeCount) chips.push(strings.shareDiff.placesChip(summary.placeCount));
+        if (summary.surnameGroupCount) chips.push(strings.shareDiff.surnameGroups(summary.surnameGroupCount));
+        if (summary.removedPersonCount) chips.push(strings.shareDiff.removed(summary.removedPersonCount));
+
+        let html = `<div class="share-packet-stats">${chips.map(c => `<span class="share-packet-chip">${esc(c)}</span>`).join('')}</div>`;
+
+        if (summary.newPersons.length) {
+            const shown = summary.newPersons.slice(0, CAP).map(p => esc(p.name));
+            if (summary.newPersons.length > CAP) shown.push(esc(strings.shareDiff.andMore(summary.newPersons.length - CAP)));
+            html += `<div class="share-packet-section"><h3>${esc(strings.shareDiff.sectionNew)}</h3><p>${shown.join(', ')}</p></div>`;
+        }
+
+        if (summary.modifiedPersons.length) {
+            const labels = strings.labels as unknown as Record<string, string>;
+            const rows = summary.modifiedPersons.slice(0, CAP).map(m => {
+                const fields = m.changedFieldKeys
+                    .map(k => k === 'fieldOther' ? strings.shareDiff.fieldOther : (labels[k] ?? k))
+                    .join(', ');
+                const tail = fields ? ` — <span class="share-packet-fields">${esc(strings.shareDiff.changedFields(fields))}</span>` : '';
+                return `<li>${esc(m.name)}${tail}</li>`;
+            });
+            if (summary.modifiedPersons.length > CAP) {
+                rows.push(`<li>${esc(strings.shareDiff.andMore(summary.modifiedPersons.length - CAP))}</li>`);
+            }
+            html += `<div class="share-packet-section"><h3>${esc(strings.shareDiff.sectionUpdated)}</h3><ul>${rows.join('')}</ul></div>`;
+        }
+
+        return html;
+    },
+
+    /** Accept: apply the packet directly onto the current tree, one undo step. */
+    async acceptChangePacket(): Promise<void> {
+        const packet = this.pendingChangePacket;
+        if (!packet) return;
+        // Compute the applied counts BEFORE the tree changes (for the toast).
+        const { summarizeChangePacket } = await import('../share-diff.js');
+        const summary = summarizeChangePacket(DataManager.getData(), packet);
+        this.closeChangePacketPreview();
+
+        DataManager.applyChangePacketDirect(packet);
+        await TreeRenderer.renderAsync();
+        this.showToast(strings.shareDiff.applied(summary.newPersons.length, summary.modifiedPersons.length));
+    },
+
+    /** Review in detail: hand the reconstructed incoming tree to the merge engine. */
+    async reviewChangePacketInMerge(): Promise<void> {
+        const packet = this.pendingChangePacket;
+        const base = this.pendingChangePacketBase;
+        if (!packet || !base) return;
+        this.closeChangePacketPreview();
+
         const { applyChangePacket } = await import('../share-diff.js');
         const incoming = applyChangePacket(base, packet);
         MergerUI.startMerge(incoming, packet.senderName || strings.share.unknownSender);
+    },
+
+    closeChangePacketPreview(): void {
+        document.getElementById('share-packet-modal')?.classList.remove('active');
+        this.pendingChangePacket = null;
+        this.pendingChangePacketBase = null;
     },
 
     /** Collaboration bar → reply export with the remembered lineage. */

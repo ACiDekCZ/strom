@@ -8,6 +8,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import {
     buildChangePacket, applyChangePacket, isChangePacket, isEmptyPacket,
+    summarizeChangePacket, applyPacketOntoData,
 } from '../share-diff.js';
 import { StromData, PersonId, PartnershipId } from '../types.js';
 
@@ -143,5 +144,76 @@ describe('tree-level registries travel in the packet (Fix 3)', () => {
         const packet = buildChangePacket(base, current, META);
         expect(packet.formatVersion).toBe(1);
         expect(packet.places).toBeUndefined();
+    });
+});
+
+describe('packet carries the sender name (R6 preview)', () => {
+    it('senderName from meta rides in the packet', () => {
+        const base = clone(comprehensive);
+        const current = clone(comprehensive);
+        (Object.values(current.persons)[0] as { firstName: string }).firstName = 'CHANGED';
+        const packet = buildChangePacket(base, current, { baseExportId: 'X', senderName: 'Aunt Mary' });
+        expect(packet.senderName).toBe('Aunt Mary');
+    });
+});
+
+describe('summarizeChangePacket (recipient preview + idempotence)', () => {
+    it('classifies new / modified / removed against the CURRENT tree', () => {
+        const base = clone(comprehensive);
+        const current = clone(comprehensive);
+        const ids = Object.keys(current.persons) as PersonId[];
+        current.persons[ids[0]].birthPlace = 'Praha';          // modified
+        const removedId = ids[1];
+        delete current.persons[removedId];                     // removed
+        const nid = 'p_sum' as PersonId;
+        current.persons[nid] = { id: nid, firstName: 'Sum', lastName: 'Mary', gender: 'female', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] };
+
+        const packet = buildChangePacket(base, current, META);
+        // The recipient still has the baseline as their current tree.
+        const summary = summarizeChangePacket(base, packet);
+        expect(summary.hasEffect).toBe(true);
+        expect(summary.newPersons.map(p => p.id)).toContain(nid);
+        expect(summary.modifiedPersons.map(m => m.id)).toContain(ids[0]);
+        expect(summary.modifiedPersons.find(m => m.id === ids[0])?.changedFieldKeys).toContain('birthPlace');
+        expect(summary.removedPersonCount).toBe(1);
+    });
+
+    it('is empty (idempotent) when the packet is already applied to current', () => {
+        const base = clone(comprehensive);
+        const current = clone(comprehensive);
+        (Object.values(current.persons)[0] as { firstName: string }).firstName = 'CHANGED';
+        const packet = buildChangePacket(base, current, META);
+        // Recipient's tree already equals the target: nothing left to do.
+        const summary = summarizeChangePacket(current, packet);
+        expect(summary.hasEffect).toBe(false);
+        expect(summary.newPersons).toHaveLength(0);
+        expect(summary.modifiedPersons).toHaveLength(0);
+    });
+
+    it('flags gained photos/attachments in mediaCount', () => {
+        const base = clone(comprehensive);
+        const current = clone(comprehensive);
+        const id = (Object.keys(current.persons) as PersonId[])[0];
+        current.persons[id].photo = 'data:image/jpeg;base64,AAAA';
+        const packet = buildChangePacket(base, current, META);
+        const summary = summarizeChangePacket(base, packet);
+        expect(summary.mediaCount).toBe(1);
+    });
+});
+
+describe('applyPacketOntoData (Accept path)', () => {
+    it('applies onto the current tree while preserving untouched fields', () => {
+        const base = clone(comprehensive);
+        const current = clone(comprehensive);
+        const nid = 'p_direct' as PersonId;
+        current.persons[nid] = { id: nid, firstName: 'Direct', lastName: 'Add', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] };
+        const packet = buildChangePacket(base, current, META);
+
+        // Recipient tree carries an unrelated default person that must survive.
+        const recipient = clone(base);
+        recipient.defaultPersonId = (Object.keys(recipient.persons) as PersonId[])[0];
+        const out = applyPacketOntoData(recipient, packet);
+        expect(out.persons[nid]).toBeDefined();
+        expect(out.defaultPersonId).toBe(recipient.defaultPersonId);
     });
 });

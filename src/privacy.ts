@@ -11,8 +11,120 @@
 import { StromData, Person } from './types.js';
 import { strings } from './strings.js';
 import { yearOf } from './dates.js';
+import { stripPhotos } from './photo.js';
+import { stripAttachments } from './attachments.js';
 
 export type PrivacyMode = 'full' | 'initials' | 'anonymous' | 'minimal';
+
+// ==================== GRANULAR EXPORT CONTENT ====================
+
+/**
+ * Which content categories an export carries. Independent of the living-privacy
+ * filter above: privacy obscures WHO, content options decide WHAT extras (heavy
+ * media, free-text notes, the source apparatus) travel with the file. All true
+ * is the full archive.
+ */
+export interface ContentOptions {
+    photos: boolean;
+    attachments: boolean;
+    notes: boolean;
+    sources: boolean;
+}
+
+/** Everything included — the default (Complete archive) and the "all on" preset. */
+export const ALL_CONTENT: ContentOptions = { photos: true, attachments: true, notes: true, sources: true };
+
+/** Named export-content presets offered in the dialog. */
+export type ContentPreset = 'complete' | 'small' | 'skeleton';
+
+/**
+ * Checkbox patterns behind the three presets:
+ * - complete: the full archive (everything),
+ * - small: no heavy media (photos + attachments), text kept — a file to email,
+ * - skeleton: structure and names only (all four off).
+ */
+export const CONTENT_PRESETS: Record<ContentPreset, ContentOptions> = {
+    complete: { photos: true, attachments: true, notes: true, sources: true },
+    small: { photos: false, attachments: false, notes: true, sources: true },
+    skeleton: { photos: false, attachments: false, notes: false, sources: false },
+};
+
+/** The preset whose pattern equals `opts`, or null when the state is custom. */
+export function matchContentPreset(opts: ContentOptions): ContentPreset | null {
+    for (const name of Object.keys(CONTENT_PRESETS) as ContentPreset[]) {
+        const p = CONTENT_PRESETS[name];
+        if (p.photos === opts.photos && p.attachments === opts.attachments
+            && p.notes === opts.notes && p.sources === opts.sources) return name;
+    }
+    return null;
+}
+
+/**
+ * Deep copy with every free-text note removed: person notes, partnership notes,
+ * life-event notes and event-participant notes. Identity, structure and all
+ * other fields are preserved. Does not mutate the input.
+ */
+export function stripNotes(data: StromData): StromData {
+    const copy = structuredClone(data);
+    for (const person of Object.values(copy.persons)) {
+        delete person.notes;
+        for (const ev of person.events ?? []) {
+            delete ev.note;
+            for (const part of ev.participants ?? []) delete part.note;
+        }
+    }
+    for (const partnership of Object.values(copy.partnerships)) {
+        delete partnership.note;
+    }
+    return copy;
+}
+
+/**
+ * Deep copy with the whole source/citation apparatus removed: the sources
+ * catalog and every reference into it — person/event/partnership sourceIds and
+ * attachment.sourceId links — so nothing is left pointing at a source that is no
+ * longer present. Does not mutate the input.
+ */
+export function stripSources(data: StromData): StromData {
+    const copy = structuredClone(data);
+    delete copy.sources;
+    for (const person of Object.values(copy.persons)) {
+        delete person.sourceIds;
+        for (const ev of person.events ?? []) delete ev.sourceIds;
+        for (const att of person.attachments ?? []) delete att.sourceId;
+    }
+    for (const partnership of Object.values(copy.partnerships)) {
+        delete partnership.sourceIds;
+    }
+    return copy;
+}
+
+/**
+ * Normalise the legacy boolean "drop media" flag into full ContentOptions:
+ * `false` keeps everything, `true` drops photos + attachments (the old
+ * stripMedia behaviour) while keeping notes and sources.
+ */
+export function resolveContentOptions(content: boolean | ContentOptions): ContentOptions {
+    if (typeof content === 'boolean') {
+        return content ? { photos: false, attachments: false, notes: true, sources: true } : ALL_CONTENT;
+    }
+    return content;
+}
+
+/**
+ * Deep copy of `data` keeping only the selected content categories. A thin
+ * composition of the pure strip functions; the leading clone guarantees a fresh
+ * object even when nothing is stripped. Does not mutate the input.
+ */
+export function applyContentOptions(data: StromData, content: boolean | ContentOptions): StromData {
+    const opts = resolveContentOptions(content);
+    let out = structuredClone(data);
+    if (!opts.photos) out = stripPhotos(out);
+    if (!opts.attachments) out = stripAttachments(out);
+    if (!opts.notes) out = stripNotes(out);
+    if (!opts.sources) out = stripSources(out);
+    return out;
+}
 
 /** Ages beyond this (with no death date) are assumed deceased. */
 const ASSUMED_MAX_AGE = 110;
