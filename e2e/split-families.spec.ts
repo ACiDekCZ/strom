@@ -2,11 +2,15 @@ import { test, expect } from '@playwright/test';
 import { openApp, card } from './helpers.js';
 
 /**
- * "Split into families" (N4): break one tree into the branch-level families it
- * contains — the core family, then the in-law / ancestral branches that hang off
- * it. The partition is FOCUS-INVARIANT (carved from a reference lineage chosen
+ * "Split into families" (N4): break one tree into the families it contains,
+ * cut either as surname lines ("rody", the default) or as branches (the core
+ * family plus each in-law branch) — a dialog toggle switches the cut. Either
+ * way the partition is FOCUS-INVARIANT (carved from a reference lineage chosen
  * from the data; the same tree always splits the same way — the focus only
  * orders the list, pre-highlights, and picks the created tree's default person).
+ * On this fixture the two cuts agree (Eva is written under her married name),
+ * so the shared tests below hold in the default mode; the toggle test uses a
+ * maiden-name variant where the cuts differ.
  * Each row's head-count is real people + unknowns, and its preview draws the
  * whole family. The original is never touched — the split copies.
  */
@@ -222,6 +226,38 @@ test('the connector person appears in both created trees and links them', async 
 
     await page.evaluate(async () => { await window.Strom.TreeRenderer.renderAsync?.(); });
     await expect(page.locator('.cross-tree-badge').first()).toBeVisible({ timeout: 10000 });
+});
+
+test('the what-counts-as-one-family toggle recuts the same tree two ways', async ({ page }) => {
+    // Eva under her MAIDEN name: as a surname line she belongs to the Svobodas
+    // (with her parents); as a branch she stays in the core with her husband.
+    const MAIDEN = structuredClone(TREE);
+    MAIDEN.persons.wife = mk('wife', 'Eva', 'Svobodová', 'female', '1962', ['u_m'], ['wdad', 'wmom'], ['kid']);
+    await openApp(page);
+    await page.evaluate(async (data) => {
+        await window.Strom.DataManager.importAsNewTree(data, 'Rodina za svobodna');
+        window.Strom.TreeRenderer.restoreFromSession();
+        window.Strom.TreeRenderer.setFocus('me', false);
+    }, MAIDEN);
+    await expect(card(page, 'Petr')).toHaveClass(/focused/);
+
+    await page.evaluate(() => window.Strom.UI.showSplitFamiliesDialog());
+    const modal = page.locator('#split-families-modal');
+    await expect(modal).toBeVisible();
+
+    // Surname lines are the default cut: Eva sits in the Svoboda line (3
+    // members + the shared connector card the created tree carries = 4 shown).
+    await expect(modal.locator('.splitfam-mode-btn[data-mode="surname"]')).toHaveClass(/active/);
+    const svoboda = modal.locator('.splitfam-row', { has: page.locator('.splitfam-name[value="Karel Svoboda (*1935) family"]') });
+    await expect(svoboda).toContainText('4 people');
+
+    // One click recuts the SAME tree as branches: Eva stays with her husband
+    // (Svoboda parents + Eva as the glued connector = 3 shown, core all 8).
+    await modal.locator('.splitfam-mode-btn[data-mode="lineage"]').click();
+    await expect(modal.locator('.splitfam-mode-btn[data-mode="lineage"]')).toHaveClass(/active/);
+    await expect(modal.locator('.splitfam-row', { has: page.locator('.splitfam-name[value="Karel Svoboda (*1935) family"]') }))
+        .toContainText('3 people');
+    await expect(modal.locator('.splitfam-row').first()).toContainText('8 people');
 });
 
 test('tree manager row: split opens the proposals directly, even for a non-active tree', async ({ page }) => {

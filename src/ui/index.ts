@@ -223,6 +223,12 @@ export class UIClass {
     // path, any tree for the tree-manager path — hence a stored source, not
     // always DataManager.getData()).
     splitFamiliesComponents: import('../split-families.js').FamilyComponent[] = [];
+    /** What counts as one family — the dialog's toggle; kept for the session. */
+    splitFamiliesMode: import('../split-families.js').SplitMode = 'surname';
+    /** The open dialog's inputs, so the mode toggle can recompute in place. */
+    splitFamiliesRun: {
+        treeId: TreeId; data: StromData; focusPersonId: PersonId; parentDialogId?: string;
+    } | null = null;
     splitFamiliesData: StromData | null = null;
     splitFamiliesTreeId: TreeId | null = null;
     splitFamiliesParentDialog: string | null = null;

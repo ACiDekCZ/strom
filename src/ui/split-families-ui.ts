@@ -16,7 +16,7 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import { PersonId, StromData, TreeId, LAST_FOCUSED } from '../types.js';
-import { decomposeIntoFamilies, seedIdsFor, bestRenderFocus, FamilyComponent } from '../split-families.js';
+import { decomposeIntoFamilies, seedIdsFor, bestRenderFocus, FamilyComponent, SplitMode } from '../split-families.js';
 import { extractSubtree } from '../subtree.js';
 import { TreePreview, renderTreeThumbnail } from '../tree-preview.js';
 import { AuditLogManager } from '../audit-log.js';
@@ -106,14 +106,26 @@ export const splitFamiliesMethods = uiModule({
         // The partition is focus-invariant: the same tree always yields the same
         // families, whoever the focus is. The focus only decides which family is
         // listed first (its own) and which person a new tree opens on.
-        const components = decomposeIntoFamilies(run.data, run.focusPersonId);
-        // A single family means there is nothing to split — say so plainly.
+        let components = decomposeIntoFamilies(run.data, run.focusPersonId, this.splitFamiliesMode);
+        // One family in the preferred mode: the OTHER cut may still split (a
+        // one-surname tree can hold several in-law branches, and vice versa) —
+        // fall over to it rather than telling the user there is nothing here.
+        if (components.length < 2) {
+            const other: SplitMode = this.splitFamiliesMode === 'surname' ? 'lineage' : 'surname';
+            const retry = decomposeIntoFamilies(run.data, run.focusPersonId, other);
+            if (retry.length >= 2) {
+                this.splitFamiliesMode = other;
+                components = retry;
+            }
+        }
+        // A single family either way means there is nothing to split — say so.
         if (components.length < 2) {
             this.showToast(strings.splitFamilies.tooSmall);
             // Nothing opened; hand control back to the parent dialog if any.
             if (run.parentDialogId) document.getElementById(run.parentDialogId)?.classList.add('active');
             return;
         }
+        this.splitFamiliesRun = run;
         this.splitFamiliesComponents = components;
         this.splitFamiliesData = run.data;
         this.splitFamiliesTreeId = run.treeId;
@@ -141,6 +153,13 @@ export const splitFamiliesMethods = uiModule({
                     <button class="close-btn" id="splitfam-close-x">&times;</button>
                 </div>
                 <p class="splitfam-intro">${s.intro}</p>
+                <div class="splitfam-mode" role="radiogroup" aria-label="${s.modeLabel}">
+                    <button type="button" class="splitfam-mode-btn${this.splitFamiliesMode === 'surname' ? ' active' : ''}"
+                        data-mode="surname" aria-pressed="${this.splitFamiliesMode === 'surname'}">${s.modeSurname}</button>
+                    <button type="button" class="splitfam-mode-btn${this.splitFamiliesMode === 'lineage' ? ' active' : ''}"
+                        data-mode="lineage" aria-pressed="${this.splitFamiliesMode === 'lineage'}">${s.modeLineage}</button>
+                </div>
+                <p class="splitfam-mode-hint">${this.splitFamiliesMode === 'surname' ? s.modeSurnameHint : s.modeLineageHint}</p>
                 <div class="splitfam-list">
                     ${components.map((c, i) => this.splitFamiliesRowHtml(c, i)).join('')}
                 </div>
@@ -160,6 +179,20 @@ export const splitFamiliesMethods = uiModule({
         (overlay.querySelector('#splitfam-cancel') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#splitfam-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#splitfam-go') as HTMLButtonElement).onclick = () => void this.performSplitFamilies();
+        // Switching what counts as one family recomputes and redraws the whole
+        // dialog in place (same run) — unless the other cut cannot split at all.
+        overlay.querySelectorAll('.splitfam-mode-btn').forEach(btn => {
+            (btn as HTMLButtonElement).onclick = () => {
+                const m = btn.getAttribute('data-mode') as SplitMode;
+                if (m === this.splitFamiliesMode) return;
+                if (decomposeIntoFamilies(run.data, run.focusPersonId, m).length < 2) {
+                    this.showToast(strings.splitFamilies.oneFamilyInMode);
+                    return;
+                }
+                this.splitFamiliesMode = m;
+                this.openSplitFamiliesDialog(run);
+            };
+        });
         overlay.querySelectorAll('.splitfam-check').forEach(box => {
             (box as HTMLInputElement).onchange = () => this.updateSplitFamiliesFooter();
         });
@@ -351,6 +384,9 @@ export const splitFamiliesMethods = uiModule({
         // scratch and never shows a previous split's state (whatever close path
         // — X, Cancel, overlay, Escape or after-split — got us here).
         this.splitFamiliesParentDialog = null;
+        // The chosen mode deliberately survives the close — it is a preference,
+        // not run state; everything else resets.
+        this.splitFamiliesRun = null;
         this.splitFamiliesData = null;
         this.splitFamiliesTreeId = null;
         this.splitFamiliesComponents = [];

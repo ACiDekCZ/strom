@@ -2,13 +2,16 @@
  * Splitting one tree into the families it contains (N4).
  *
  * INVARIANT #0 — the partition is a property of the DATA, not the vantage point.
- * The families are carved by walking the tree the way a reader does — the core
- * family, then the in-law and ancestral BRANCHES that hang off its edges — but
- * the walk starts from a REFERENCE person chosen deterministically from the data
- * itself, never from the volatile UI focus. So the same tree always yields the
- * same families. The focus person only changes PRESENTATION: which family is
- * listed first (the one it belongs to), which row is pre-highlighted, and which
- * person the created tree opens on.
+ * The families are carved by walking the tree from a REFERENCE person chosen
+ * deterministically from the data itself, never from the volatile UI focus. So
+ * the same tree always yields the same families. The focus person only changes
+ * PRESENTATION: which family is listed first (the one it belongs to), which row
+ * is pre-highlighted, and which person the created tree opens on.
+ *
+ * WHAT counts as one family is the user's choice (SplitMode): surname LINES
+ * ("rody" — one name up and down), or BRANCHES the way the tree grew (the
+ * reference line plus each in-law branch). Both modes share the same carve
+ * skeleton, folding rules and presentation.
  *
  * Reference person: the senior member (birthdate → id) of the tree's LARGEST
  * blood lineage — the biggest set of people joined by parent–child links,
@@ -25,6 +28,21 @@
 
 import { PersonId, StromData } from './types.js';
 import { selectSubgraph } from './layout/pipeline/1-select-subgraph.js';
+import { sameSurname, surnameKey } from './surnames.js';
+
+/**
+ * How the tree is cut into families — both are focus-invariant (invariant #0):
+ *
+ * - 'surname': classic family LINES ("rody"). A child belongs to the line of
+ *   the parent whose surname they carry (via sameSurname, so Víšková ↔ Víšek
+ *   and grouped spellings count); the line follows that name up and down. A
+ *   spouse who has no parents here and no children after their own name stays
+ *   with their partner — anyone with a line of their own founds it.
+ * - 'lineage': branches the way the tree grew — the reference line plus every
+ *   in-law/ancestral branch hanging off it (children + spouses closure;
+ *   parents root new branches).
+ */
+export type SplitMode = 'surname' | 'lineage';
 
 /** One proposed family: a disjoint slice of the tree with an entry person. */
 export interface FamilyComponent {
@@ -177,7 +195,8 @@ function walkIsland(data: StromData, start: PersonId, pool: Set<PersonId>): Pers
  */
 export function decomposeIntoFamilies(
     data: StromData,
-    focusId: PersonId
+    focusId: PersonId,
+    mode: SplitMode = 'surname'
 ): FamilyComponent[] {
     const rootSeed = referenceLineageAnchor(data);
 
@@ -192,14 +211,6 @@ export function decomposeIntoFamilies(
         const { root, connector } = queue.shift()!;
         const isRoot = components.length === 0;
 
-        // The family: the root, every blood DESCENDANT, the spouses who
-        // married in, and those spouses' children from any union — closed
-        // under "descendants + direct spouse", never depth-limited. (A
-        // depth-limited "view" here was the bug that spilled great-
-        // grandchildren into the next family and drew previews full of
-        // parentless islands.) A member's PARENTS are deliberately not
-        // claimed: each parent couple roots its own family — that is what
-        // keeps the Výsek and Voigt sides of one person's ancestry apart.
         const claimedSet = new Set<PersonId>();
         const work: PersonId[] = [];
         const push = (id: PersonId): void => {
@@ -210,17 +221,88 @@ export function decomposeIntoFamilies(
             }
         };
         push(root);
-        while (work.length > 0) {
-            const id = work.shift()!;
-            const p = data.persons[id];
-            for (const ch of sortIds(data, p.childIds.filter(x => !!data.persons[x]))) push(ch);
-            for (const sp of sortIds(data, partnersOf(data, id))) push(sp);
+
+        if (mode === 'surname') {
+            // A family LINE ("rod"): everyone joined to the root by parent–child
+            // links along ONE surname (sameSurname — feminine forms and grouped
+            // spellings count), up to the founder and down to the last bearer.
+            // A person with no surname stays with whichever line reaches them
+            // first — an unnamed slot must not break a line in two. A spouse is
+            // absorbed only when they have no line of their own here: no parents
+            // in the data and no child after their own name. Antonín Krepčík
+            // (no parents recorded, children named after him) FOUNDS the
+            // Krepčík line; Zdena the childless in-law stays with her husband.
+            const rodSurname = data.persons[root]?.lastName ?? '';
+            const rodKey = surnameKey(rodSurname);
+            // Placeholders count as unnamed even when a surname was guessed for
+            // them (GEDCOM slots often inherit one) — an unknown person must
+            // never break a line in two, nor found one.
+            const isUnnamed = (id: PersonId): boolean => {
+                const p = data.persons[id];
+                return !!p && (!!p.isPlaceholder || !surnameKey(p.lastName ?? ''));
+            };
+            const inLine = (id: PersonId): boolean => {
+                if (isUnnamed(id)) return true;
+                return !!rodKey && sameSurname(data.persons[id]!.lastName!, rodSurname, data);
+            };
+            const foundsOwnLine = (sp: PersonId): boolean => {
+                const p = data.persons[sp]!;
+                if (isUnnamed(sp)) return false;
+                if (p.parentIds.some(x => !!data.persons[x])) return true;
+                const n = p.lastName ?? '';
+                if (!surnameKey(n)) return false;
+                return p.childIds.some(ch =>
+                    data.persons[ch] && sameSurname(data.persons[ch]!.lastName ?? '', n, data));
+            };
+            while (work.length > 0) {
+                const id = work.shift()!;
+                const p = data.persons[id];
+                for (const ch of sortIds(data, p.childIds.filter(x => !!data.persons[x]))) {
+                    if (inLine(ch)) push(ch);
+                }
+                for (const par of sortIds(data, p.parentIds.filter(x => !!data.persons[x]))) {
+                    if (inLine(par)) push(par);
+                }
+                // Same-name SIBLINGS belong to the line even when the shared
+                // parent is written differently (Víšek brothers under a father
+                // registered as Výsek) — the parent stays free to found the
+                // differently-written line; grouping the spellings in the
+                // surname register merges the two lines into one.
+                for (const sib of sortIds(data, siblingsOf(data, id).filter(x => !!data.persons[x]))) {
+                    if (inLine(sib)) push(sib);
+                }
+                for (const sp of sortIds(data, partnersOf(data, id))) {
+                    if (!foundsOwnLine(sp)) push(sp);
+                }
+            }
+        } else {
+            // 'lineage' branches: the root, every blood DESCENDANT, the spouses
+            // who married in, and those spouses' children from any union —
+            // closed under "descendants + direct spouse", never depth-limited.
+            // (A depth-limited "view" here was the bug that spilled great-
+            // grandchildren into the next family and drew previews full of
+            // parentless islands.) A member's PARENTS are deliberately not
+            // claimed: each parent couple roots its own family — that is what
+            // keeps the Výsek and Voigt sides of one person's ancestry apart.
+            while (work.length > 0) {
+                const id = work.shift()!;
+                const p = data.persons[id];
+                for (const ch of sortIds(data, p.childIds.filter(x => !!data.persons[x]))) push(ch);
+                for (const sp of sortIds(data, partnersOf(data, id))) push(sp);
+            }
         }
 
+        // Boundary neighbours seed the next families. In 'lineage' mode only
+        // PARENTS can be uncovered (children and spouses are always claimed);
+        // in 'surname' mode a different-surname parent, child or spouse each
+        // starts (or joins) its own line, so every uncovered neighbour seeds.
         const newParents: { parent: PersonId; child: PersonId }[] = [];
         for (const id of sortIds(data, [...claimedSet])) {
             const p = data.persons[id];
-            for (const par of sortIds(data, p.parentIds.filter(x => data.persons[x] && !covered.has(x)))) {
+            const neighbours = mode === 'surname'
+                ? [...p.parentIds, ...p.childIds, ...partnersOf(data, id)]
+                : p.parentIds;
+            for (const par of sortIds(data, neighbours.filter(x => data.persons[x] && !covered.has(x)))) {
                 newParents.push({ parent: par, child: id });
             }
         }
@@ -267,7 +349,7 @@ export function decomposeIntoFamilies(
         });
     }
 
-    return presentForFocus(data, finaliseComponents(data, components), focusId);
+    return presentForFocus(data, finaliseComponents(data, components, mode), focusId);
 }
 
 /** The family's own senior real member (birthdate→id), or null if it has none. */
@@ -276,28 +358,28 @@ function firstRealOwned(data: StromData, c: FamilyComponent): PersonId | null {
     return reals.length ? sortIds(data, reals)[0] : null;
 }
 
-/** Case/diacritic-insensitive surname key (local copy of the search rule). */
-function surnameKeyOf(name: string | undefined): string {
-    return (name ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-}
-
 /**
  * The senior, or the senior's spouse when the spouse carries the family's most
  * common surname and the senior does not — the lineage name should name the
- * family. Tie (or no co-member spouse) → the senior.
+ * family. Names are compared with sameSurname, so Svoboda and Svobodová count
+ * as ONE name and the founder is never outvoted by his own daughters' feminine
+ * forms. Tie (or no co-member spouse) → the senior.
  */
 function pickBetterNamed(data: StromData, personIds: PersonId[], senior: PersonId): PersonId {
     const members = new Set(personIds);
-    const counts = new Map<string, number>();
-    for (const id of personIds) {
-        if (!isReal(data, id)) continue;
-        const k = surnameKeyOf(data.persons[id]?.lastName);
-        if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
-    }
-    const score = (id: PersonId): number => counts.get(surnameKeyOf(data.persons[id]?.lastName)) ?? 0;
+    const reals = personIds.filter(id => isReal(data, id));
+    const nameOf = (id: PersonId): string => data.persons[id]?.lastName ?? '';
+    const score = (id: PersonId): number => {
+        const n = nameOf(id);
+        if (!surnameKey(n)) return 0;
+        return reals.filter(o => sameSurname(nameOf(o), n, data)).length;
+    };
     let best = senior;
+    let bestScore = score(senior);
     for (const sp of sortIds(data, partnersOf(data, senior))) {
-        if (members.has(sp) && isReal(data, sp) && score(sp) > score(best)) best = sp;
+        if (!members.has(sp) || !isReal(data, sp)) continue;
+        const s = score(sp);
+        if (s > bestScore) { best = sp; bestScore = s; }
     }
     return best;
 }
@@ -311,9 +393,19 @@ function pickBetterNamed(data: StromData, personIds: PersonId[], senior: PersonI
  * children) that hangs off one real person. Instead its persons fold into the
  * real family that reached them (the one owning its connector), so the split
  * still covers everyone exactly once but never offers an empty family.
+ *
+ * In 'surname' mode a family with a SINGLE real member folds the same way: one
+ * person is not a line, they are somebody's relative — a lone daughter-in-law's
+ * child, a twice-married widow's other husband — and belongs with the family
+ * that reached them. ('lineage' branches keep even one-person families: there
+ * the person IS the whole in-law branch.)
  */
-function finaliseComponents(data: StromData, components: FamilyComponent[]): FamilyComponent[] {
-    const hasReal = (c: FamilyComponent): boolean => c.personIds.some(id => isReal(data, id));
+function finaliseComponents(data: StromData, components: FamilyComponent[], mode: SplitMode): FamilyComponent[] {
+    const realCount = (c: FamilyComponent): number =>
+        c.personIds.filter(id => isReal(data, id)).length;
+    const foldsAway = (c: FamilyComponent): boolean =>
+        realCount(c) === 0 || (mode === 'surname' && realCount(c) === 1 && c.connectorId != null);
+    const survives = (c: FamilyComponent): boolean => !foldsAway(c);
 
     const ownerOf = new Map<PersonId, number>();
     components.forEach((c, i) => c.personIds.forEach(id => ownerOf.set(id, i)));
@@ -330,7 +422,7 @@ function finaliseComponents(data: StromData, components: FamilyComponent[]): Fam
         let t = 0;
         if (c.connectorId != null) {
             const owner = ownerOf.get(c.connectorId);
-            if (owner != null && owner !== i) t = hasReal(components[owner]) ? owner : targetFor(owner);
+            if (owner != null && owner !== i) t = survives(components[owner]) ? owner : targetFor(owner);
         }
         target.set(i, t);
         return t;
@@ -338,14 +430,14 @@ function finaliseComponents(data: StromData, components: FamilyComponent[]): Fam
 
     const foldedInto = new Map<number, PersonId[]>();
     components.forEach((c, i) => {
-        if (hasReal(c)) return;
+        if (survives(c)) return;
         const t = targetFor(i);
         foldedInto.set(t, [...(foldedInto.get(t) ?? []), ...c.personIds]);
     });
 
     const result: FamilyComponent[] = [];
     components.forEach((c, i) => {
-        if (!hasReal(c)) return; // folded away above
+        if (!survives(c)) return; // folded away above
         const extra = foldedInto.get(i);
         const personIds = extra ? sortIds(data, [...c.personIds, ...extra]) : c.personIds;
 
