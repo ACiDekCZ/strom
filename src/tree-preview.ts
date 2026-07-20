@@ -5,6 +5,8 @@
 
 import { PersonId, StromData, LayoutConfig, DEFAULT_LAYOUT_CONFIG } from './types.js';
 import { computeLayout, runLayoutPipeline, LayoutResult, StromLayoutEngine, SelectionPolicy, Connection, SpouseLine } from './layout/index.js';
+import { extractSubtree } from './subtree.js';
+import { bestRenderFocus } from './split-families.js';
 import { strings } from './strings.js';
 
 // ==================== TYPES ====================
@@ -44,19 +46,92 @@ function layoutFor(
     data: StromData, focusPersonId: PersonId, config: LayoutConfig,
     depthUp: number, depthDown: number, wholeTree: boolean
 ): LayoutResult {
-    if (wholeTree) {
-        return runLayoutPipeline({
-            data, focusPersonId, config,
-            ancestorDepth: 40, descendantDepth: 40,
-            includeSpouseAncestors: true, includeParentSiblings: true,
-            includeParentSiblingDescendants: true,
-        });
-    }
+    if (wholeTree) return computeWholeFamilyLayout(data, config);
     const policy: SelectionPolicy = {
         ancestorDepth: depthUp, descendantDepth: depthDown,
         includeAuntsUncles: false, includeCousins: false,
     };
     return computeLayout(new StromLayoutEngine(), { data, focusPersonId, policy, config });
+}
+
+/** One person's first-degree relatives that exist in `data`. */
+function relativesIn(data: StromData, id: PersonId): PersonId[] {
+    const p = data.persons[id];
+    if (!p) return [];
+    const out = [...p.parentIds, ...p.childIds];
+    for (const uid of p.partnerships) {
+        const u = data.partnerships[uid];
+        if (u) out.push(u.person1Id === id ? u.person2Id : u.person1Id);
+    }
+    return out.filter(r => data.persons[r]);
+}
+
+/** The connected components of a family (parent/child/partner links). */
+function connectedComponents(data: StromData): PersonId[][] {
+    const ids = Object.keys(data.persons) as PersonId[];
+    const seen = new Set<PersonId>();
+    const out: PersonId[][] = [];
+    for (const start of ids) {
+        if (seen.has(start)) continue;
+        const comp: PersonId[] = [];
+        const stack = [start];
+        seen.add(start);
+        while (stack.length) {
+            const id = stack.pop()!;
+            comp.push(id);
+            for (const r of relativesIn(data, id)) if (!seen.has(r)) { seen.add(r); stack.push(r); }
+        }
+        out.push(comp);
+    }
+    return out;
+}
+
+/**
+ * Lay out an entire proposed family so that EVERY person is drawn — the split
+ * preview's "what you see is what you get". A carved family can be a FOREST
+ * (in-law branches connect only through a person another family already owns, so
+ * once extracted they stand apart); a single focus would clip the other trees.
+ * We lay out each connected piece from its best vantage and stack the pieces.
+ * Never touches `src/layout/**` beyond its public entry point.
+ */
+function computeWholeFamilyLayout(data: StromData, config: LayoutConfig): LayoutResult {
+    const wide = {
+        ancestorDepth: 40, descendantDepth: 40,
+        includeSpouseAncestors: true, includeParentSiblings: true,
+        includeParentSiblingDescendants: true,
+    };
+    const comps = connectedComponents(data);
+    if (comps.length <= 1) {
+        return runLayoutPipeline({ data, focusPersonId: bestRenderFocus(data), config, ...wide });
+    }
+    // Biggest pieces first, then stacked top to bottom with a small gap.
+    comps.sort((a, b) => b.length - a.length);
+    const positions = new Map<PersonId, { x: number; y: number }>();
+    const spouseLines: SpouseLine[] = [];
+    const connections: Connection[] = [];
+    let base: LayoutResult | null = null;
+    let cursorY = 0;
+    const gap = config.cardHeight * 1.4;
+    for (const comp of comps) {
+        const cd = extractSubtree(data, new Set(comp));
+        const lr = runLayoutPipeline({ data: cd, focusPersonId: bestRenderFocus(cd), config, ...wide });
+        base = base ?? lr;
+        if (lr.positions.size === 0) continue;
+        let minY = Infinity, maxY = -Infinity;
+        for (const pos of lr.positions.values()) { minY = Math.min(minY, pos.y); maxY = Math.max(maxY, pos.y + config.cardHeight); }
+        const dy = cursorY - minY;
+        for (const [id, pos] of lr.positions) positions.set(id, { x: pos.x, y: pos.y + dy });
+        for (const s of lr.spouseLines) spouseLines.push({ ...s, y: s.y + dy });
+        for (const c of lr.connections) connections.push({
+            ...c,
+            stemTopY: c.stemTopY + dy, stemBottomY: c.stemBottomY + dy,
+            branchY: c.branchY + dy, connectorY: c.connectorY + dy,
+            drops: c.drops.map(d => ({ ...d, topY: d.topY + dy, bottomY: d.bottomY + dy })),
+        });
+        cursorY += (maxY - minY) + gap;
+    }
+    if (!base) return runLayoutPipeline({ data, focusPersonId: bestRenderFocus(data), config, ...wide });
+    return { positions, spouseLines, connections, diagnostics: base.diagnostics };
 }
 
 /** Options for comparison view (two trees side by side) */

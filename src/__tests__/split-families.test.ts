@@ -1,14 +1,17 @@
 /**
- * Splitting one tree into the families it contains (N4). The decomposition is a
- * pure, FOCUS-INVARIANT partition: the same data always yields the same families
- * (invariant #0), every real person lands in exactly one, no family is
- * placeholder-only, and it is deterministic. The focus only affects order.
+ * Splitting one tree into the families it contains (N4). Branch-level granularity
+ * (the core family, then the in-law/ancestral BRANCHES that hang off it), but the
+ * partition is FOCUS-INVARIANT: it is carved from a reference lineage chosen
+ * deterministically from the data (invariant #0), so the same tree always yields
+ * the same families. The focus only orders the list (its family first), pre-
+ * highlights, and picks the created tree's default person. Every real person is
+ * in exactly one family; no family is placeholder-only; it is deterministic.
  */
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { decomposeIntoFamilies, seedIdsFor, bestRenderFocus } from '../split-families.js';
+import { decomposeIntoFamilies, seedIdsFor, bestRenderFocus, referenceLineageAnchor } from '../split-families.js';
 import { StromData, PersonId, Person, Partnership, PartnershipId } from '../types.js';
 
 // ---- Tiny synthetic-tree builder (no real family data) ----
@@ -56,124 +59,122 @@ function expectCleanPartition(data: StromData, focus: PersonId): void {
     const comps = decomposeIntoFamilies(data, focus);
     const seen = new Set<PersonId>();
     for (const c of comps) {
-        // No family is placeholder-only.
-        expect(c.personIds.some(id => !data.persons[id].isPlaceholder)).toBe(true);
-        // The name anchor and default person are real, existing persons.
-        expect(data.persons[c.nameAnchorId]).toBeDefined();
+        expect(c.personIds.some(id => !data.persons[id].isPlaceholder)).toBe(true); // no placeholder-only
+        expect(data.persons[c.nameAnchorId]?.isPlaceholder).toBe(false);            // real name anchor
         expect(data.persons[c.defaultPersonId]).toBeDefined();
-        expect(data.persons[c.nameAnchorId].isPlaceholder).toBe(false);
         for (const id of c.personIds) {
             expect(seen.has(id)).toBe(false);   // disjoint
             seen.add(id);
         }
     }
-    // 100% coverage.
-    expect(seen.size).toBe(Object.keys(data.persons).length);
-    // The focus's own family is listed first.
-    expect(comps[0].isFirst).toBe(true);
-    expect(comps[0].personIds.includes(focus)).toBe(true);
+    expect(seen.size).toBe(Object.keys(data.persons).length);   // 100% coverage
+    if (comps.some(c => c.personIds.includes(focus))) {
+        expect(comps[0].isFirst).toBe(true);
+        expect(comps[0].personIds).toContain(focus);            // focus family first
+    }
 }
 
-describe('decomposeIntoFamilies — focus-invariant nuclear partition', () => {
-    // A three-generation family with in-laws on both sides.
-    const family = tree([
-        person('gpa', 'Old', 'male', { partnerships: [U('u_g')], childIds: [P('dad')] }),
-        person('gma', 'Stará', 'female', { partnerships: [U('u_g')], childIds: [P('dad')] }),
-        person('dad', 'Jan', 'male', { parentIds: [P('gpa'), P('gma')], partnerships: [U('u_p')], childIds: [P('me'), P('bro')] }),
-        person('mom', 'Marie', 'female', { partnerships: [U('u_p')], childIds: [P('me'), P('bro')] }),
-        person('me', 'Petr', 'male', { parentIds: [P('dad'), P('mom')], partnerships: [U('u_m')], childIds: [P('kid')] }),
-        person('bro', 'Josef', 'male', { parentIds: [P('dad'), P('mom')] }),
-        person('wife', 'Eva', 'female', { partnerships: [U('u_m')], childIds: [P('kid')] }),
-        person('kid', 'Adam', 'male', { parentIds: [P('me'), P('wife')] }),
-    ], [
-        union('u_g', 'gpa', 'gma', ['dad']),
-        union('u_p', 'dad', 'mom', ['me', 'bro']),
-        union('u_m', 'me', 'wife', ['kid']),
-    ]);
+// A core family (grandparents → parents → child) with in-laws whose own lines
+// hang off the edges. Wgpa is the oldest, so he anchors the largest lineage.
+const branchy = tree([
+    person('wgpa', 'Wgpa', 'male', { birthDate: '1880', partnerships: [U('uwg')], childIds: [P('wdad')] }),
+    person('wgma', 'Wgma', 'female', { birthDate: '1882', partnerships: [U('uwg')], childIds: [P('wdad')] }),
+    person('wdad', 'Wdad', 'male', { birthDate: '1910', parentIds: [P('wgpa'), P('wgma')], partnerships: [U('uw')], childIds: [P('wife')] }),
+    person('wmom', 'Wmom', 'female', { birthDate: '1912', partnerships: [U('uw')], childIds: [P('wife')] }),
+    person('dad', 'Dad', 'male', { birthDate: '1915', partnerships: [U('up')], childIds: [P('me')] }),
+    person('mom', 'Mom', 'female', { birthDate: '1917', partnerships: [U('up')], childIds: [P('me')] }),
+    person('me', 'Me', 'male', { birthDate: '1940', parentIds: [P('dad'), P('mom')], partnerships: [U('um')], childIds: [P('kid')] }),
+    person('wife', 'Wife', 'female', { birthDate: '1942', parentIds: [P('wdad'), P('wmom')], partnerships: [U('um')], childIds: [P('kid')] }),
+    person('kid', 'Kid', 'male', { birthDate: '1970', parentIds: [P('me'), P('wife')] }),
+], [
+    union('uwg', 'wgpa', 'wgma', ['wdad']),
+    union('uw', 'wdad', 'wmom', ['wife']),
+    union('up', 'dad', 'mom', ['me']),
+    union('um', 'me', 'wife', ['kid']),
+]);
 
-    it('gives the SAME families whoever the focus is (invariant #0)', () => {
-        expectFocusInvariant(family);
+describe('decomposeIntoFamilies — focus-invariant branch partition', () => {
+    it('carves from the senior of the largest blood lineage, ignoring the focus', () => {
+        expect(referenceLineageAnchor(branchy)).toBe(P('wgpa'));      // oldest of the one lineage
+        // Same partition whoever the focus is.
+        expectFocusInvariant(branchy);
+        expect(signature(branchy, P('kid'))).toBe(signature(branchy, P('dad')));
     });
 
-    it('is a clean, deterministic, fully-covering partition', () => {
-        expectCleanPartition(family, P('me'));
-        expect(signature(family, P('me'))).toBe(signature(family, P('me')));
+    it('keeps branch granularity: a whole three-generation family is ONE family', () => {
+        const comps = decomposeIntoFamilies(branchy, P('me'));
+        const core = comps.find(c => c.personIds.includes(P('me')))!;
+        // Grandparents-in-law through the grandchild all sit in the core family —
+        // it is a branch, not a nuclear couple-and-kids sliver.
+        for (const id of ['wgpa', 'wgma', 'wdad', 'wmom', 'me', 'wife', 'kid']) {
+            expect(core.personIds).toContain(P(id));
+        }
+        // Me's own parents are the in-law ancestral branch, named after the
+        // connector (Me) whose blood line they are.
+        const parentsBranch = comps.find(c => c.personIds.includes(P('dad')))!;
+        expect(parentsBranch).not.toBe(core);
+        expect(parentsBranch.connectorId).toBe(P('me'));
+        expect(parentsBranch.nameAnchorId).toBe(P('me'));
     });
 
-    it('groups each couple with its unmarried children; married children start their own', () => {
-        const comps = decomposeIntoFamilies(family, P('me'));
-        const familyOf = (id: string): number => comps.findIndex(c => c.personIds.includes(P(id)));
-        expect(familyOf('gpa')).toBe(familyOf('gma'));       // grandparents together
-        expect(familyOf('dad')).toBe(familyOf('mom'));       // parents together
-        expect(familyOf('bro')).toBe(familyOf('dad'));       // unmarried son stays home
-        expect(familyOf('me')).not.toBe(familyOf('dad'));    // married son moved out
-        expect(familyOf('me')).toBe(familyOf('wife'));       // Petr + Eva + Adam
-        expect(familyOf('kid')).toBe(familyOf('me'));
-        // Three nuclear families: grandparents; parents + unmarried Josef; Petr's.
-        expect(comps.length).toBe(3);
-    });
-
-    it('lists the focus person\'s own family first, whoever it is', () => {
-        expect(decomposeIntoFamilies(family, P('bro'))[0].personIds).toContain(P('bro'));
-        expect(decomposeIntoFamilies(family, P('gpa'))[0].personIds).toContain(P('gpa'));
-        // ...but the set of families is identical either way.
-        expect(signature(family, P('bro'))).toBe(signature(family, P('gpa')));
+    it('is clean, deterministic and lists the focus family first with its default person', () => {
+        expectCleanPartition(branchy, P('dad'));
+        const comps = decomposeIntoFamilies(branchy, P('dad'));
+        expect(comps[0].personIds).toContain(P('dad'));
+        expect(comps[0].defaultPersonId).toBe(P('dad'));   // opens on the focus
+        expect(signature(branchy, P('dad'))).toBe(signature(branchy, P('dad')));
     });
 });
 
-describe('decomposeIntoFamilies — second marriage', () => {
-    // Anna married Johann first (a child), then Fritz. Anna is owned by her
-    // primary (Johann) union; Fritz becomes his own one-person family.
+describe('decomposeIntoFamilies — second marriage names its own spouse', () => {
+    // The main line Johann→Karl→Anselm; Anna (Johann's wife) also married Fritz.
     const remarriage = tree([
-        person('johann', 'Johann', 'male', { partnerships: [U('u1')], childIds: [P('child')] }),
-        person('anna', 'Anna', 'female', { partnerships: [U('u1'), U('u2')], childIds: [P('child')] }),
-        person('child', 'Kind', 'male', { parentIds: [P('johann'), P('anna')] }),
-        person('fritz', 'Fritz', 'male', { partnerships: [U('u2')] }),
+        person('johann', 'Johann', 'male', { birthDate: '1840', partnerships: [U('u1')], childIds: [P('karl')] }),
+        person('anna', 'Anna', 'female', { birthDate: '1845', partnerships: [U('u1'), U('u2')], childIds: [P('karl')] }),
+        person('karl', 'Karl', 'male', { birthDate: '1870', parentIds: [P('johann'), P('anna')], partnerships: [U('u3')], childIds: [P('anselm')] }),
+        person('kw', 'Klára', 'female', { birthDate: '1872', partnerships: [U('u3')], childIds: [P('anselm')] }),
+        person('anselm', 'Anselm', 'male', { birthDate: '1900', parentIds: [P('karl'), P('kw')] }),
+        person('fritz', 'Fritz', 'male', { birthDate: '1843', partnerships: [U('u2')] }),
     ], [
-        union('u1', 'johann', 'anna', ['child']),
+        union('u1', 'johann', 'anna', ['karl']),
+        union('u3', 'karl', 'kw', ['anselm']),
         { ...union('u2', 'fritz', 'anna', []), isPrimary: false },
     ]);
 
-    it('keeps the first couple whole and makes the second spouse his own family', () => {
+    it('gives Fritz his own family, named after himself, linked back to Anna', () => {
         expectFocusInvariant(remarriage);
-        const comps = decomposeIntoFamilies(remarriage, P('johann'));
-        const familyOf = (id: string): number => comps.findIndex(c => c.personIds.includes(P(id)));
-        expect(familyOf('johann')).toBe(familyOf('anna'));    // couple atomic
-        expect(familyOf('child')).toBe(familyOf('johann'));   // child with parents
-        expect(familyOf('fritz')).not.toBe(familyOf('anna')); // Fritz his own family
+        expectCleanPartition(remarriage, P('karl'));
+        const comps = decomposeIntoFamilies(remarriage, P('karl'));
         const fritz = comps.find(c => c.personIds.includes(P('fritz')))!;
-        expect(fritz.nameAnchorId).toBe(P('fritz'));          // named after himself
-        expect(fritz.connectorId).toBe(P('anna'));            // linked back to Anna
+        expect(fritz.nameAnchorId).toBe(P('fritz'));       // his own name, not Anna's
+        expect(fritz.connectorId).toBe(P('anna'));         // links back to Anna
+        expect(comps.find(c => c.personIds.includes(P('anna')))).not.toBe(fritz);
     });
 });
 
-describe('decomposeIntoFamilies — placeholders', () => {
-    // A real couple whose son married an UNKNOWN woman and had unknown children:
-    // that whole placeholder brood must fold into a real family, never stand alone.
+describe('decomposeIntoFamilies — placeholders never stand alone', () => {
     const withPlaceholders = tree([
-        person('a', 'Real', 'male', { partnerships: [U('ua')], childIds: [P('son')] }),
-        person('b', 'Realka', 'female', { partnerships: [U('ua')], childIds: [P('son')] }),
-        person('son', 'Syn', 'male', { parentIds: [P('a'), P('b')], partnerships: [U('us')], childIds: [P('gk')] }),
+        person('gpa', 'Gpa', 'male', { birthDate: '1900', partnerships: [U('ug')], childIds: [P('a')] }),
+        person('gma', 'Gma', 'female', { birthDate: '1902', partnerships: [U('ug')], childIds: [P('a')] }),
+        person('a', 'A', 'male', { birthDate: '1930', parentIds: [P('gpa'), P('gma')], partnerships: [U('ua')], childIds: [P('son')] }),
+        person('b', 'B', 'female', { birthDate: '1932', partnerships: [U('ua')], childIds: [P('son')] }),
+        person('son', 'Son', 'male', { birthDate: '1960', parentIds: [P('a'), P('b')], partnerships: [U('us')], childIds: [P('gk')] }),
         placeholder('phw', 'female', { partnerships: [U('us')], childIds: [P('gk')] }),
         placeholder('gk', 'male', { parentIds: [P('son'), P('phw')] }),
     ], [
+        union('ug', 'gpa', 'gma', ['a']),
         union('ua', 'a', 'b', ['son']),
         union('us', 'son', 'phw', ['gk']),
     ]);
 
-    it('never proposes a placeholder-only family and still covers everyone', () => {
+    it('folds the unknown wife + grandchild into a real family; covers everyone', () => {
         expectFocusInvariant(withPlaceholders);
         expectCleanPartition(withPlaceholders, P('a'));
-        const comps = decomposeIntoFamilies(withPlaceholders, P('a'));
-        // The unknown wife + grandchild travel with the son (their nearest real).
-        const sonFam = comps.find(c => c.personIds.includes(P('son')))!;
-        expect(sonFam.personIds).toContain(P('phw'));
-        expect(sonFam.personIds).toContain(P('gk'));
     });
 });
 
 describe('decomposeIntoFamilies — duplicate names', () => {
-    it('anchors each same-named family on its own person (year disambiguates in UI)', () => {
+    it('anchors each same-named family on its own real person', () => {
         const dup = tree([
             person('a', 'Emil', 'male', { birthDate: '1942', partnerships: [U('ua')], childIds: [P('ac')] }),
             person('wa', 'Alena', 'female', { partnerships: [U('ua')], childIds: [P('ac')] }),
@@ -183,22 +184,15 @@ describe('decomposeIntoFamilies — duplicate names', () => {
             person('bc', 'Jana', 'female', { parentIds: [P('b'), P('wb')] }),
         ], [union('ua', 'a', 'wa', ['ac']), union('ub', 'b', 'wb', ['bc'])]);
         expectFocusInvariant(dup);
-        const comps = decomposeIntoFamilies(dup, P('a'));
-        for (const c of comps) expect(dup.persons[c.nameAnchorId].isPlaceholder).toBe(false);
-        const years = comps.map(c => dup.persons[c.nameAnchorId].birthDate).filter(Boolean);
-        expect(years).toContain('1942');
-        expect(years).toContain('1905');
+        for (const c of decomposeIntoFamilies(dup, P('a'))) {
+            expect(dup.persons[c.nameAnchorId].isPlaceholder).toBe(false);
+        }
     });
 });
 
 describe('bestRenderFocus', () => {
     it('picks a member from which the whole family lays out', () => {
-        const fam = tree([
-            person('h', 'H', 'male', { partnerships: [U('u')], childIds: [P('c')] }),
-            person('w', 'W', 'female', { partnerships: [U('u')], childIds: [P('c')] }),
-            person('c', 'C', 'male', { parentIds: [P('h'), P('w')] }),
-        ], [union('u', 'h', 'w', ['c'])]);
-        expect(fam.persons[bestRenderFocus(fam)]).toBeDefined();
+        expect(branchy.persons[bestRenderFocus(branchy)]).toBeDefined();
     });
 });
 
@@ -218,7 +212,6 @@ for (const fixture of ['devel-demo.json', 'comprehensive.json']) {
     describe(`decomposeIntoFamilies — ${fixture}`, () => {
         const data = loadFixture(fixture);
         const maybe = data ? it : it.skip;
-
         maybe('is focus-invariant', () => expectFocusInvariant(data!));
         maybe('covers 100% with no placeholder-only family, deterministically', () => {
             expectCleanPartition(data!, firstFocus(data!));

@@ -2,63 +2,58 @@
  * Splitting one tree into the families it contains (N4).
  *
  * INVARIANT #0 — the partition is a property of the DATA, not the vantage point.
- * The same tree always breaks into the same families, whoever you happen to be
- * looking at. The focus person never changes WHO ends up with WHOM; it only
- * changes PRESENTATION — which family is listed first and which person a new
- * tree opens on. (An earlier version grew families outward from the focus along
- * connector chains, so the cut depended on where you started and even two
- * siblings produced different splits. That is fixed here.)
+ * The families are carved by walking the tree the way a reader does — the core
+ * family, then the in-law and ancestral BRANCHES that hang off its edges — but
+ * the walk starts from a REFERENCE person chosen deterministically from the data
+ * itself, never from the volatile UI focus. So the same tree always yields the
+ * same families. The focus person only changes PRESENTATION: which family is
+ * listed first (the one it belongs to), which row is pre-highlighted, and which
+ * person the created tree opens on.
  *
- * The unit rule (objective, orientation-free): every person belongs to exactly
- * one NUCLEAR family, identified deterministically from the graph:
- *   1. If the person has a marriage/partnership, their home is their PRIMARY
- *      union (the `isPrimary` one, else the earliest by start date then id).
- *      Both spouses of a union whose primary it is land together — couples are
- *      atomic — as do that union's unmarried children.
- *   2. Otherwise, if they have parents, their home is the union that produced
- *      them (they stay with their parents and siblings).
- *   3. Otherwise they are their own single-person family.
- * A person married more than once is owned by ONE union (their primary); their
- * other spouses are owned by their own primary union, so a second marriage
- * becomes its own small family (the in-law is added back only as a link anchor).
+ * Reference person: the senior member (birthdate → id) of the tree's LARGEST
+ * blood lineage — the biggest set of people joined by parent–child links,
+ * counting real (non-placeholder) people. That is the tree's backbone; carving
+ * the branches relative to it is stable and orientation-free.
  *
- * Kept invariants: every real person appears in exactly one family; no family is
- * placeholder-only (unknown GEDCOM slots fold into the real family that owns a
- * relative); the split is deterministic; the preview shows exactly the family.
- *
- * Cross-tree link: each family (except the focus one) records a `connectorId` —
- * a real person in a NEIGHBOURING family (a parent, spouse or child on its
- * edge). The tree-creation step adds that one shared card so the existing
- * cross-tree badge can tie the new trees back together. It is never counted in
- * `personIds`.
+ * Each person lands in exactly one family — the first that reaches them (first
+ * claim), so a cousin marriage does not duplicate anybody. A boundary person
+ * (connector) stays a member of its own family but is ALSO added as a single
+ * anchor card when the neighbouring family's tree is created — that shared card
+ * lets the cross-tree badge link the two families. Placeholder-only groups fold
+ * into the real family that owns them; no family is ever a run of unknown slots.
  */
 
-import { PersonId, PartnershipId, StromData } from './types.js';
+import { PersonId, StromData } from './types.js';
 import { selectSubgraph } from './layout/pipeline/1-select-subgraph.js';
 
-/** One proposed family: a disjoint nuclear unit of the tree. */
+/** One proposed family: a disjoint slice of the tree with an entry person. */
 export interface FamilyComponent {
-    /** The family's senior real person (same as `nameAnchorId`; kept for compat). */
+    /** The person this family was grown from (its carve seed). */
     focusId: PersonId;
     /**
-     * A real person in a NEIGHBOURING family used as the shared link card, or
-     * null. Added as an anchor at tree-creation time so the cross-tree badge can
-     * form. Never counted in `personIds`.
+     * The boundary person that seeded this family, or null for the root one. It
+     * belongs to the PARENT family; the tree-creation step adds it back as an
+     * anchor so the cross-tree link can form. Never counted in `personIds`.
      */
     connectorId: PersonId | null;
     /** Persons this family owns — disjoint from every other family, sorted. */
     personIds: PersonId[];
-    /** Person the new tree opens on (the focus if it lives here, else the anchor). */
+    /** Person the new tree opens on (a member of personIds, or the connector). */
     defaultPersonId: PersonId;
-    /** The real person the family is named after — never a placeholder. */
+    /**
+     * The real person the family is named after — never a placeholder. For an
+     * ancestral/descendant branch this is the connector (the person you reached
+     * the family through); for a spouse/sibling branch it is the family's own
+     * senior member, so a second marriage does not borrow its in-law's name.
+     */
     nameAnchorId: PersonId;
-    /** True for the family that contains the focus person (presentation only). */
+    /** True for the family that contains the UI focus (presentation only). */
     isFirst: boolean;
 }
 
 /**
- * Options are presentation-only now (the partition ignores them); kept so
- * existing callers compile. Depths/view no longer influence WHO is in a family.
+ * Presentation-only knobs (depths for the carve view). The partition never
+ * depends on the focus or on a live view; these just tune branch reach.
  */
 export interface DecomposeOptions {
     ancestorDepth?: number;
@@ -68,7 +63,7 @@ export interface DecomposeOptions {
     firstViewIds?: Set<PersonId>;
 }
 
-/** Partners of a person across all their unions (existing persons only). */
+/** Partners of a person across all their unions. */
 function partnersOf(data: StromData, id: PersonId): PersonId[] {
     const p = data.persons[id];
     if (!p) return [];
@@ -76,17 +71,40 @@ function partnersOf(data: StromData, id: PersonId): PersonId[] {
     for (const uid of p.partnerships) {
         const u = data.partnerships[uid];
         if (!u) continue;
-        const other = u.person1Id === id ? u.person2Id : u.person1Id;
-        if (data.persons[other]) out.push(other);
+        out.push(u.person1Id === id ? u.person2Id : u.person1Id);
     }
     return out;
+}
+
+/** Siblings of a person (sharing at least one parent). */
+function siblingsOf(data: StromData, id: PersonId): PersonId[] {
+    const p = data.persons[id];
+    if (!p) return [];
+    const out = new Set<PersonId>();
+    for (const parentId of p.parentIds) {
+        const parent = data.persons[parentId];
+        if (!parent) continue;
+        for (const childId of parent.childIds) {
+            if (childId !== id) out.add(childId);
+        }
+    }
+    return [...out];
 }
 
 /** Every first-degree relative of a person that exists in the data. */
 function relativesOf(data: StromData, id: PersonId): PersonId[] {
     const p = data.persons[id];
     if (!p) return [];
-    return [...p.parentIds, ...p.childIds, ...partnersOf(data, id)].filter(r => data.persons[r]);
+    return [...p.parentIds, ...p.childIds, ...siblingsOf(data, id), ...partnersOf(data, id)]
+        .filter(r => data.persons[r]);
+}
+
+/**
+ * A person is on the family's boundary when a relative of theirs is not in the
+ * shown set — the exact condition behind the "◂ parents / family ▸" pills.
+ */
+function isBoundary(data: StromData, id: PersonId, view: Set<PersonId>): boolean {
+    return relativesOf(data, id).some(r => !view.has(r));
 }
 
 /** Deterministic order: birthdate, then id, so the split never wobbles. */
@@ -104,174 +122,277 @@ function isReal(data: StromData, id: PersonId): boolean {
     return !!p && !p.isPlaceholder;
 }
 
-/** The person's primary union: the flagged one, else the earliest (start,id). */
-function primaryUnionOf(data: StromData, id: PersonId): PartnershipId | null {
-    const unions = (data.persons[id]?.partnerships ?? []).filter(u => data.partnerships[u]);
-    if (unions.length === 0) return null;
-    const flagged = unions.find(u => data.partnerships[u].isPrimary);
-    if (flagged) return flagged;
-    return unions.slice().sort((a, b) => {
-        const sa = data.partnerships[a].startDate ?? '';
-        const sb = data.partnerships[b].startDate ?? '';
-        if (sa !== sb) return sa < sb ? -1 : 1;
-        return a < b ? -1 : 1;
-    })[0];
-}
-
-/** The union that produced this person (its childIds include them), if any. */
-function parentsUnionOf(data: StromData, id: PersonId): PartnershipId | null {
-    const parents = (data.persons[id]?.parentIds ?? []).filter(p => data.persons[p]);
-    if (parents.length < 2) return null;
-    for (const [uid, u] of Object.entries(data.partnerships) as [PartnershipId, StromData['partnerships'][PartnershipId]][]) {
-        if (u.childIds.includes(id) && parents.includes(u.person1Id) && parents.includes(u.person2Id)) return uid;
-    }
-    return null;
-}
-
 /**
- * The objective home key for a person (see invariant #0). Two persons share a
- * family exactly when their home keys are equal — no reference to any focus.
+ * The reference person the partition is carved from (invariant #0): the senior
+ * member of the LARGEST blood lineage. Blood lineages are the connected groups
+ * under parent–child links; the largest by real-person count is the tree's
+ * backbone, and its oldest member (birthdate → id) is a stable, data-only seed.
  */
-function homeKeyOf(data: StromData, id: PersonId): string {
-    const own = primaryUnionOf(data, id);
-    if (own) return `U:${own}`;
-    const parents = parentsUnionOf(data, id);
-    if (parents) return `U:${parents}`;
-    const parentIds = (data.persons[id]?.parentIds ?? []).filter(p => data.persons[p]).slice().sort();
-    if (parentIds.length) return `P:${parentIds.join(',')}`;
-    return `S:${id}`;
+export function referenceLineageAnchor(data: StromData): PersonId {
+    const all = Object.keys(data.persons) as PersonId[];
+    // Blood-connected components under parent<->child edges.
+    const seen = new Set<PersonId>();
+    const componentOf = new Map<PersonId, PersonId[]>();
+    for (const start of all) {
+        if (seen.has(start)) continue;
+        const comp: PersonId[] = [];
+        const stack = [start];
+        seen.add(start);
+        while (stack.length) {
+            const id = stack.pop()!;
+            comp.push(id);
+            const p = data.persons[id];
+            for (const r of [...p.parentIds, ...p.childIds]) {
+                if (data.persons[r] && !seen.has(r)) { seen.add(r); stack.push(r); }
+            }
+        }
+        for (const m of comp) componentOf.set(m, comp);
+    }
+    // Pick the largest lineage by real-person count; tie → the one whose senior
+    // person is older. Return that lineage's senior real person.
+    let best: PersonId | null = null;
+    let bestScore = -1;
+    for (const start of sortIds(data, all)) {          // senior-first iteration
+        if (!isReal(data, start)) continue;
+        const comp = componentOf.get(start)!;
+        const senior = sortIds(data, comp.filter(id => isReal(data, id)))[0];
+        if (senior !== start) continue;                // count each lineage once, at its senior
+        const score = comp.filter(id => isReal(data, id)).length;
+        if (score > bestScore) { bestScore = score; best = start; }
+    }
+    return best ?? sortIds(data, all)[0];
 }
 
 /**
- * Break the whole tree into disjoint nuclear families. Focus-invariant: the set
- * of families and their membership does not depend on `focusId`; only the order
- * (focus family first) and each family's default person do.
+ * The persons the family view selects around a carve seed — the same step-1
+ * pipeline selection the renderer uses. Depths are clamped to at least one in
+ * each direction so the walk can always climb and descend.
+ */
+function viewOf(data: StromData, seed: PersonId, opts: Required<Pick<DecomposeOptions,
+    'ancestorDepth' | 'descendantDepth' | 'includeAuntsUncles' | 'includeCousins'>>): Set<PersonId> {
+    return selectSubgraph({
+        data,
+        focusPersonId: seed,
+        ancestorDepth: Math.max(1, opts.ancestorDepth),
+        descendantDepth: Math.max(1, opts.descendantDepth),
+        includeSpouseAncestors: false,
+        includeParentSiblings: opts.includeAuntsUncles,
+        includeParentSiblingDescendants: opts.includeCousins,
+    }).persons;
+}
+
+/** Walk everyone connected to `start` among a set of still-uncovered persons. */
+function walkIsland(data: StromData, start: PersonId, pool: Set<PersonId>): PersonId[] {
+    const group: PersonId[] = [];
+    const queue: PersonId[] = [start];
+    const seen = new Set<PersonId>([start]);
+    while (queue.length) {
+        const id = queue.pop()!;
+        group.push(id);
+        for (const r of relativesOf(data, id)) {
+            if (pool.has(r) && !seen.has(r)) {
+                seen.add(r);
+                queue.push(r);
+            }
+        }
+    }
+    return group;
+}
+
+/**
+ * Break the whole tree into disjoint families.
+ *
+ * The partition is carved from the deterministic reference lineage (invariant
+ * #0) and is identical whatever `focusId` is. `focusId` only decides which
+ * family is listed first and which person its new tree opens on.
  */
 export function decomposeIntoFamilies(
     data: StromData,
     focusId: PersonId,
-    _opts: DecomposeOptions = {}
+    opts: DecomposeOptions = {}
 ): FamilyComponent[] {
-    // 1. Objective partition by home key.
-    const members = new Map<string, PersonId[]>();
-    const keyOf = new Map<PersonId, string>();
-    for (const id of Object.keys(data.persons) as PersonId[]) {
-        const key = homeKeyOf(data, id);
-        keyOf.set(id, key);
-        (members.get(key) ?? members.set(key, []).get(key)!).push(id);
-    }
+    const view = {
+        ancestorDepth: opts.ancestorDepth ?? 3,
+        descendantDepth: opts.descendantDepth ?? 3,
+        includeAuntsUncles: opts.includeAuntsUncles ?? true,
+        includeCousins: opts.includeCousins ?? true,
+    };
+    const rootSeed = referenceLineageAnchor(data);
 
-    // 2. Fold placeholder-only families into the real family that owns their
-    //    nearest real person, so no family is a run of unknown slots. This is
-    //    focus-free (it walks the relative graph, not the vantage point): a chain
-    //    of unknown ancestors folds into whichever real descendant it hangs off.
-    const hasReal = (list: PersonId[]): boolean => list.some(id => isReal(data, id));
-    // A stable global fallback for a placeholder island with no real relative at
-    // all: the tree's senior real person's family (never the focus).
-    const allReal = sortIds(data, (Object.keys(data.persons) as PersonId[]).filter(id => isReal(data, id)));
-    const fallbackKey = allReal.length ? keyOf.get(allReal[0])! : keyOf.get(focusId)!;
-    for (const key of [...members.keys()].sort()) {
-        const list = members.get(key)!;
-        if (hasReal(list)) continue;
-        const targetKey = nearestRealFamilyKey(data, list, keyOf) ?? fallbackKey;
-        const target = members.get(targetKey);
-        if (!target || targetKey === key) continue;
-        target.push(...list);
-        for (const m of list) keyOf.set(m, targetKey);
-        members.delete(key);
-    }
+    const covered = new Set<PersonId>();
+    const components: FamilyComponent[] = [];
+    const enqueued = new Set<PersonId>([rootSeed]);
+    const queue: { seed: PersonId; connector: PersonId | null }[] = [
+        { seed: rootSeed, connector: null },
+    ];
 
-    // 3. Build one family per surviving unit.
-    const focusKey = keyOf.get(focusId);
-    const units = [...members.entries()].map(([key, list]) => {
-        const personIds = sortIds(data, list);
-        const owned = new Set(personIds);
-        // Named after the senior real member; the focus, if it lives here, opens the tree.
-        const reals = personIds.filter(id => isReal(data, id));
-        const nameAnchorId = (reals.length ? sortIds(data, reals)[0] : personIds[0]);
-        const isFirst = key === focusKey;
-        const defaultPersonId = isFirst ? focusId : nameAnchorId;
-        // Cross-tree link: a real person just outside this family (a parent,
-        // spouse or child on its edge), senior first, upward links preferred.
-        const connectorId = connectorFor(data, personIds, owned);
-        return { key, focusId: nameAnchorId, connectorId, personIds, defaultPersonId, nameAnchorId, isFirst };
-    });
+    while (queue.length > 0) {
+        const { seed, connector } = queue.shift()!;
+        const isRoot = components.length === 0;
+        const shown = viewOf(data, seed, view);
 
-    // 4. Presentation order: the focus family first, then by senior member.
-    units.sort((a, b) => {
-        if (a.isFirst !== b.isFirst) return a.isFirst ? -1 : 1;
-        const ba = data.persons[a.nameAnchorId]?.birthDate ?? '9999';
-        const bb = data.persons[b.nameAnchorId]?.birthDate ?? '9999';
-        if (ba !== bb) return ba < bb ? -1 : 1;
-        return a.nameAnchorId < b.nameAnchorId ? -1 : a.nameAnchorId > b.nameAnchorId ? 1 : 0;
-    });
+        const claimed = sortIds(
+            data,
+            [...shown].filter(id => data.persons[id] && !covered.has(id))
+        );
+        // A boundary can lead only into persons an earlier family already took.
+        if (!isRoot && claimed.length === 0) continue;
 
-    return units.map(({ key: _key, ...c }) => c);
-}
+        for (const id of claimed) covered.add(id);
 
-/**
- * Family key of the nearest real person reachable from a placeholder-only unit,
- * walking the relative graph breadth-first (through other placeholders if need
- * be). Focus-free and deterministic: nearest wins, senior (birthdate→id) breaks
- * ties. Null only if no real person is reachable at all.
- */
-function nearestRealFamilyKey(
-    data: StromData,
-    seed: PersonId[],
-    keyOf: Map<PersonId, string>
-): string | null {
-    const seen = new Set<PersonId>(seed);
-    let frontier = sortIds(data, seed);
-    while (frontier.length) {
-        const next: PersonId[] = [];
-        for (const id of frontier) {
-            for (const r of relativesOf(data, id)) {
-                if (seen.has(r)) continue;
-                seen.add(r);
-                next.push(r);
+        components.push({
+            focusId: seed,
+            connectorId: connector,
+            personIds: claimed,
+            // The connector is not in `claimed` (an earlier family owns it); it is
+            // added as an anchor at tree-creation time, so it is a valid default.
+            defaultPersonId: isRoot ? rootSeed : (connector as PersonId),
+            nameAnchorId: isRoot ? rootSeed : (connector as PersonId), // finalised below
+            isFirst: isRoot,   // carve-root; re-pointed to the focus's family below
+        });
+
+        for (const b of sortIds(data, claimed.filter(id => isBoundary(data, id, shown)))) {
+            if (!enqueued.has(b)) {
+                enqueued.add(b);
+                queue.push({ seed: b, connector: b });
             }
         }
-        const reals = sortIds(data, next.filter(r => isReal(data, r)));
-        if (reals.length) return keyOf.get(reals[0]) ?? null;
-        frontier = sortIds(data, next);
     }
-    return null;
+
+    // Safety net: anything the walk could not reach (separate families sharing
+    // the file) becomes its own island, so the split always covers 100%.
+    const pool = new Set<PersonId>(
+        (Object.keys(data.persons) as PersonId[]).filter(id => !covered.has(id))
+    );
+    for (const start of sortIds(data, [...pool])) {
+        if (covered.has(start)) continue;
+        const island = sortIds(data, walkIsland(data, start, pool));
+        for (const id of island) covered.add(id);
+        components.push({
+            focusId: island[0],
+            connectorId: null,
+            personIds: island,
+            defaultPersonId: island[0],
+            nameAnchorId: island[0], // finalised below
+            isFirst: false,
+        });
+    }
+
+    return presentForFocus(data, finaliseComponents(data, components), focusId);
+}
+
+/** The family's own senior real member (birthdate→id), or null if it has none. */
+function firstRealOwned(data: StromData, c: FamilyComponent): PersonId | null {
+    const reals = c.personIds.filter(id => isReal(data, id));
+    return reals.length ? sortIds(data, reals)[0] : null;
 }
 
 /**
- * A real person just outside the family, used as the shared cross-tree card.
- * Preference keeps links stable and mostly upward: a member's parents, then
- * spouses, then children; senior (birthdate→id) wins ties. Null if the family
- * touches no other real person (a truly isolated unit).
+ * Fold placeholder-only families away and give every surviving family a real
+ * name anchor and a sensible default person.
+ *
+ * A family with no real member of its own is not a family a reader would
+ * recognise — it is a run of GEDCOM placeholder slots (unknown spouses, unnamed
+ * children) that hangs off one real person. Instead its persons fold into the
+ * real family that reached them (the one owning its connector), so the split
+ * still covers everyone exactly once but never offers an empty family.
  */
-function connectorFor(data: StromData, personIds: PersonId[], owned: Set<PersonId>): PersonId | null {
-    const outsideReal = (list: PersonId[]): PersonId[] =>
-        list.filter(r => isReal(data, r) && !owned.has(r));
-    const tiers: PersonId[][] = [[], [], []];
-    for (const m of sortIds(data, personIds)) {
-        const p = data.persons[m];
-        if (!p) continue;
-        tiers[0].push(...outsideReal(p.parentIds));
-        tiers[1].push(...outsideReal(partnersOf(data, m)));
-        tiers[2].push(...outsideReal(p.childIds));
-    }
-    for (const tier of tiers) {
-        const uniq = [...new Set(tier)];
-        if (uniq.length) return sortIds(data, uniq)[0];
-    }
-    return null;
+function finaliseComponents(data: StromData, components: FamilyComponent[]): FamilyComponent[] {
+    const hasReal = (c: FamilyComponent): boolean => c.personIds.some(id => isReal(data, id));
+
+    const ownerOf = new Map<PersonId, number>();
+    components.forEach((c, i) => c.personIds.forEach(id => ownerOf.set(id, i)));
+
+    // The surviving real family a placeholder-only component folds into: follow
+    // its connector to the owning family, and on up until a real family. The
+    // connector always lives in an EARLIER family, so this terminates; the root
+    // family is the guaranteed real fallback.
+    const target = new Map<number, number>();
+    const targetFor = (i: number): number => {
+        if (target.has(i)) return target.get(i)!;
+        target.set(i, 0); // guard against a pathological cycle
+        const c = components[i];
+        let t = 0;
+        if (c.connectorId != null) {
+            const owner = ownerOf.get(c.connectorId);
+            if (owner != null && owner !== i) t = hasReal(components[owner]) ? owner : targetFor(owner);
+        }
+        target.set(i, t);
+        return t;
+    };
+
+    const foldedInto = new Map<number, PersonId[]>();
+    components.forEach((c, i) => {
+        if (hasReal(c)) return;
+        const t = targetFor(i);
+        foldedInto.set(t, [...(foldedInto.get(t) ?? []), ...c.personIds]);
+    });
+
+    const result: FamilyComponent[] = [];
+    components.forEach((c, i) => {
+        if (!hasReal(c)) return; // folded away above
+        const extra = foldedInto.get(i);
+        const personIds = extra ? sortIds(data, [...c.personIds, ...extra]) : c.personIds;
+        const owned = new Set(personIds);
+
+        // Name anchor: the connector when the family is that connector's own
+        // blood line (its parents or children are here); otherwise the family's
+        // senior member, so a second-marriage branch keeps its own name. The
+        // carve-root family is named after the reference person itself.
+        let nameAnchorId: PersonId;
+        if (c.isFirst) {
+            nameAnchorId = c.focusId;
+        } else {
+            const connector = c.connectorId != null ? data.persons[c.connectorId] : undefined;
+            const bloodLine = !!connector && !connector.isPlaceholder
+                && [...connector.parentIds, ...connector.childIds].some(id => owned.has(id));
+            nameAnchorId = bloodLine
+                ? (c.connectorId as PersonId)
+                : (firstRealOwned(data, { ...c, personIds }) ?? c.focusId);
+        }
+
+        // Open on the shared connector card (the visible cross-tree link) when it
+        // is a real person; otherwise open on the family's own name anchor.
+        const defaultPersonId = (!c.isFirst && c.connectorId != null && isReal(data, c.connectorId))
+            ? c.connectorId
+            : nameAnchorId;
+
+        result.push({ ...c, personIds, nameAnchorId, defaultPersonId });
+    });
+
+    return result;
 }
 
 /**
- * The persons whose data travels into a family's new tree: exactly the family it
- * owns. `extractSubtree` still pulls the missing partner of a kept couple whose
- * child is kept, so children never end up half-orphaned — but no extra anchor is
- * forced in, so the created tree, the preview and the head-count are one and the
- * same set. The `connectorId` names the neighbouring family this one marries
- * into (shown as a "connects to …" note), it is not a card in this tree.
+ * Re-order for the UI focus (presentation only — the partition is untouched):
+ * the family that CONTAINS the focus is listed first and pre-highlighted, and
+ * its new tree opens on the focus person. Everything else keeps its carve order.
+ * If the focus is a placeholder that folded into a family, that family leads.
+ */
+function presentForFocus(data: StromData, families: FamilyComponent[], focusId: PersonId): FamilyComponent[] {
+    const reordered = families.map(c => ({ ...c, isFirst: false }));
+    const idx = reordered.findIndex(c => c.personIds.includes(focusId));
+    if (idx < 0) {
+        if (reordered[0]) reordered[0].isFirst = true;
+        return reordered;
+    }
+    const [focusFamily] = reordered.splice(idx, 1);
+    focusFamily.isFirst = true;
+    // Open the focus's own tree on the focus person (if it is a real member).
+    if (isReal(data, focusId)) focusFamily.defaultPersonId = focusId;
+    reordered.unshift(focusFamily);
+    return reordered;
+}
+
+/**
+ * The persons whose data travels into a family's new tree: the family itself
+ * plus its connector anchor (if any). The connector is the single shared card
+ * that lets the cross-tree badge link the family back to its neighbour.
  */
 export function seedIdsFor(component: FamilyComponent): Set<PersonId> {
-    return new Set<PersonId>(component.personIds);
+    const ids = new Set<PersonId>(component.personIds);
+    if (component.connectorId) ids.add(component.connectorId);
+    return ids;
 }
 
 /**

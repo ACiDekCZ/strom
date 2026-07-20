@@ -274,9 +274,12 @@ export const splitFamiliesMethods = uiModule({
         // presentation cue only (the partition itself never depends on it).
         const badge = component.isFirst
             ? `<span class="splitfam-badge">${s.focusHere}</span>` : '';
-        // The shared card that links this family up to a neighbouring one.
+        // The shared card that links this family up to a neighbouring one —
+        // shown only when it adds information (not when the family is already
+        // named after that very person, i.e. its own ancestral branch).
         const c = component.connectorId;
-        const crossRef = (c != null && this.splitFamiliesData?.persons[c] && !this.splitFamiliesData.persons[c].isPlaceholder)
+        const crossRef = (c != null && c !== component.nameAnchorId
+            && this.splitFamiliesData?.persons[c] && !this.splitFamiliesData.persons[c].isPlaceholder)
             ? `<span class="splitfam-crossref">${this.escapeHtml(s.connectsTo(this.splitFamilyPersonLabel(c)))}</span>`
             : '';
         return `
