@@ -1138,14 +1138,42 @@
             overflow-y: auto;
             box-shadow: var(--shadow-lg);
         }
-        /* On phones: near full-width dialogs with a sticky action bar so Save is
-           always reachable in long forms (person modal, export dialogs). */
+        /* Unified dialog skeleton (round 13): once a modal's body has been wrapped
+           in .modal-content (see src/ui/modal-skeleton.ts), the modal becomes a
+           flex column — header and action row stay pinned, only the body scrolls.
+           Scoped via :has() so any legacy dialog without a wrapper is untouched. */
+        .modal:has(> .modal-content) {
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            overflow: hidden;
+        }
+        .modal-content {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 16px 24px;
+        }
+        /* Bottom fade hint, shown only while more content lies below the fold. A
+           sticky pseudo-element pinned to the scroll viewport's lower edge; the
+           negative margin keeps it from adding scroll height. */
+        .modal-content.is-scrollable::after {
+            content: '';
+            position: sticky;
+            bottom: 0;
+            left: 0;
+            display: block;
+            height: 18px;
+            margin-top: -18px;
+            background: linear-gradient(transparent, var(--surface-modal));
+            pointer-events: none;
+        }
+        /* On phones: near full-width dialogs; the flex skeleton keeps Save
+           reachable, so no sticky action-bar hack is needed. */
         @media (max-width: 500px) {
             .modal { min-width: 0; width: 100%; max-width: 100vw; max-height: 94vh; padding: 16px; }
-            .modal .buttons, .modal .export-buttons {
-                position: sticky; bottom: -16px; z-index: 3;
-                background: var(--card-bg); padding: 10px 0; margin-bottom: -16px;
-            }
+            .modal:has(> .modal-content) { padding: 0; }
+            .modal-content { padding: 14px 16px; }
         }
         .modal h2 {
             font-size: 17px;
@@ -1155,13 +1183,10 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            position: sticky;
-            top: -24px;
+            flex-shrink: 0;
             background: var(--card-bg);
-            margin: -24px -24px 18px -24px;
-            padding: 24px 24px 12px 24px;
-            z-index: 10;
-            border-bottom: 1px solid transparent;
+            padding: 20px 24px 12px 24px;
+            border-bottom: 1px solid var(--divider);
         }
         .modal-header h2 {
             margin-bottom: 0;
@@ -1415,8 +1440,6 @@
         .audit-log-subtitle { font-size: 12px; color: var(--text-faint); }
         /* A plain divided list — no boxed frame. */
         .audit-log-list {
-            max-height: 60vh;
-            overflow-y: auto;
             margin: 4px 0 0;
         }
         /* Day group header: copper small-caps (like the person modal sections). */
@@ -1547,25 +1570,8 @@
             background: var(--card-bg);
         }
         /* Tree-manager items are fully tokenized — no dark override needed. */
-        /* Dark mode: secondary buttons in modal */
-        [data-theme="dark"] .modal button.secondary {
-            background: #444;
-            color: var(--text);
-            border-color: #555;
-        }
-        [data-theme="dark"] .modal button.secondary:hover {
-            background: #555;
-        }
-        /* Dark mode: modal footer buttons */
-        [data-theme="dark"] .modal-footer button.secondary,
-        [data-theme="dark"] .modal-actions button.secondary {
-            background: #444;
-            color: var(--text);
-        }
-        [data-theme="dark"] .modal-footer button.secondary:hover,
-        [data-theme="dark"] .modal-actions button.secondary:hover {
-            background: #555;
-        }
+        /* Secondary buttons use the tokenized ghost style in both themes
+           (transparent + var(--border)); no dark-specific override needed. */
         /* Dark mode: Manage Relationships button */
         [data-theme="dark"] .link-relationships-btn {
             background: #3a3a3a;
@@ -1579,15 +1585,7 @@
         [data-theme="dark"] .close-btn {
             color: var(--text-light);
         }
-        /* Dark mode: empty footer buttons (tree manager) */
-        [data-theme="dark"] .tree-manager-footer button:not(.primary) {
-            background: #444;
-            color: var(--text);
-            border-color: #555;
-        }
-        [data-theme="dark"] .tree-manager-footer button:not(.primary):hover {
-            background: #555;
-        }
+        /* Tree-manager footer secondary buttons use the tokenized ghost style. */
         /* Dark mode: focus controls exit button */
         [data-theme="dark"] .focus-controls .btn-exit-focus {
             background: #444;
@@ -1863,7 +1861,7 @@
         .rel-section {
             margin-bottom: 16px;
             padding-bottom: 16px;
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 1px solid var(--divider);
         }
         .rel-section:last-child {
             border-bottom: none;
@@ -1903,7 +1901,7 @@
             border: none;
             border-radius: 6px;
             background: #ffebee;
-            color: #e53935;
+            color: var(--danger);
             font-size: 12px;
             cursor: pointer;
             transition: background 0.2s;
@@ -2329,7 +2327,7 @@
             outline: none;
         }
         .cross-tree-chooser-item:active {
-            background: #e0e0e0;
+            background: var(--hover-bg);
         }
         .cross-tree-chooser-tree {
             font-size: 14px;
@@ -2490,7 +2488,7 @@
         .surname-group-names { font-size: 13px; font-weight: 600; min-width: 0; }
         .surname-group button { padding: 4px 9px; font-size: 12px; white-space: nowrap; }
         .surnames-none { font-size: 13px; color: var(--text-light); font-style: italic; margin: 0 0 12px; }
-        .surnames-add { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-color, #eee); }
+        .surnames-add { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
         .surnames-hint { margin: 0 0 8px; font-size: 12px; color: var(--text-light); }
         .surnames-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
         /* `.modal button` (0,1,1) sets border:none and its own padding, so a
@@ -2521,7 +2519,7 @@
         /* ---- Split a tree into the families it holds (N3) ---- */
         .split-modal { max-width: 560px; }
         .split-intro { margin: 4px 0 14px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
-        .split-list { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
+        .split-list { display: flex; flex-direction: column; gap: 8px; }
         /* Each row is a <label> so the whole box is clickable — which means
            beating `.modal label { display: block }`, hence the longer selector. */
         .split-modal .split-row {
@@ -2554,7 +2552,7 @@
         .splitfam-modal { max-width: 640px; }
         .splitfam-intro { margin: 4px 0 14px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
         .splitfam-note { margin: 12px 0 0; font-size: 12px; color: var(--text-light); line-height: 1.5; }
-        .splitfam-list { display: flex; flex-direction: column; gap: 10px; max-height: 52vh; overflow-y: auto; padding: 2px; }
+        .splitfam-list { display: flex; flex-direction: column; gap: 10px; padding: 2px; }
         .splitfam-row {
             display: grid;
             grid-template-columns: auto 132px 1fr;
@@ -2593,10 +2591,10 @@
         .splitfam-preview-btn {
             margin-left: auto; padding: 2px 10px; font-size: 12px;
             border: 1px solid var(--border-color, #ddd); border-radius: 999px;
-            background: transparent; color: var(--text-color, #333); cursor: pointer;
+            background: transparent; color: var(--text); cursor: pointer;
         }
         .splitfam-preview-btn:hover { border-color: var(--primary); color: var(--primary); }
-        .splitfam-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .modal .splitfam-footer { justify-content: space-between; gap: 12px; flex-wrap: wrap; }
         .splitfam-summary { font-size: 12px; color: var(--text-light); }
         .splitfam-footer-buttons { display: flex; gap: 8px; }
 
@@ -2629,9 +2627,9 @@
         /* ---- Places manager: names + where they sit on the map (K5/A6) ---- */
         .places-modal { max-width: 580px; }
         .places-intro { margin: 4px 0 14px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
-        .places-list { display: flex; flex-direction: column; gap: 10px; max-height: 52vh; overflow-y: auto; }
+        .places-list { display: flex; flex-direction: column; gap: 10px; }
         /* Footer: housekeeping (clean orphans) on the left, Close on the right. */
-        .places-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .modal .places-footer { justify-content: space-between; flex-wrap: wrap; }
         .places-clean-orphans:disabled { opacity: 0.45; cursor: not-allowed; }
         .place-row {
             padding: 10px 12px;
@@ -2704,7 +2702,6 @@
             .place-name { flex-basis: 100%; }
             .place-search { flex-direction: column; }
             .place-search-go { width: 100%; }
-            .places-list { max-height: 60vh; }
         }
 
         /* ---- Godparents & witnesses on an event (K2) ---- */
@@ -2798,11 +2795,19 @@
             margin: 0;
         }
 
-        .modal .buttons {
+        /* Unified action row: pinned to the modal bottom by the flex skeleton,
+           with a top divider and a subtly recessed surface. Covers every footer
+           class the dialogs use. */
+        .modal .buttons,
+        .modal .modal-buttons {
             display: flex;
             gap: 10px;
             justify-content: flex-end;
-            margin-top: 20px;
+            align-items: center;
+            flex-shrink: 0;
+            padding: 14px 24px;
+            border-top: 1px solid var(--divider);
+            background: var(--surface-2);
         }
         .modal .buttons.export-buttons {
             justify-content: space-between;
@@ -2823,17 +2828,19 @@
             color: var(--on-primary);
         }
         .modal button.primary:hover { background: var(--primary-dark); }
+        /* Ghost secondary: transparent with a hairline border (round 13 tokens). */
         .modal button.secondary {
-            background: #e0e0e0;
+            background: transparent;
             color: var(--text);
+            border: 1px solid var(--border);
         }
-        .modal button.secondary:hover { background: #d0d0d0; }
+        .modal button.secondary:hover { background: var(--hover-bg); }
         .modal button.danger {
-            background: #e53935;
+            background: var(--danger);
             color: white;
             margin-right: auto;
         }
-        .modal button.danger:hover { background: #c62828; }
+        .modal button.danger:hover { filter: brightness(0.92); }
 
         /* ==================== PERSON MODAL — Letopis ==================== */
         .pm-modal {
@@ -2847,11 +2854,9 @@
             display: flex;
             align-items: center;
             gap: 14px;
+            flex-shrink: 0;
             padding: 20px 24px 16px;
             border-bottom: 1px solid var(--divider);
-            position: sticky;
-            top: 0;
-            z-index: 10;
             background: var(--surface-modal);
             border-radius: 14px 14px 0 0;
         }
@@ -2895,14 +2900,17 @@
         }
         .pm-header .close-btn { flex: none; align-self: flex-start; }
 
-        .pm-modal > .pm-section,
-        .pm-modal > .expand-btn,
-        .pm-modal > #extended-fields { margin-left: 24px; margin-right: 24px; }
-        .pm-modal > .pm-section:first-of-type { margin-top: 20px; }
+        /* The person modal keeps its own 24px section margins, so its scroll
+           wrapper carries no padding — layout stays pixel-identical to before. */
+        .pm-modal > .modal-content { padding: 0; }
+        .pm-modal > .modal-content > .pm-section,
+        .pm-modal > .modal-content > .expand-btn,
+        .pm-modal > .modal-content > #extended-fields { margin-left: 24px; margin-right: 24px; }
+        .pm-modal > .modal-content > .pm-section:first-of-type { margin-top: 20px; }
         /* The expander is width:100% for the relation modal; inside the person
            modal it sits between 24px side margins, so let those margins size it
            (block + auto) instead of adding 100% on top of them → no h-overflow. */
-        .pm-modal > .expand-btn { display: block; width: auto; box-sizing: border-box; }
+        .pm-modal > .modal-content > .expand-btn { display: block; width: auto; box-sizing: border-box; }
 
         .pm-section { margin-bottom: 22px; }
         .pm-section-head {
@@ -3027,13 +3035,11 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            margin: 8px 0 0;
+            flex-shrink: 0;
             padding: 16px 24px;
             background: var(--surface-2);
             border-top: 1px solid var(--divider);
             border-radius: 0 0 14px 14px;
-            position: sticky;
-            bottom: 0;
         }
         .modal button.pm-delete-link {
             margin-right: auto;
@@ -3044,37 +3050,30 @@
         }
         .modal button.pm-delete-link:hover { text-decoration: underline; background: transparent; }
 
-        /* Shell pattern shared by the other form modals (event, source, relation). */
+        /* Shell pattern shared by the other form modals (event, source, relation).
+           The bare <h2> acts as the pinned header; its horizontal padding stands
+           in for the (now zero) modal padding. */
         .form-modal { background: var(--surface-modal); }
         .form-modal > h2 {
+            flex-shrink: 0;
             font-size: 20px;
             border-bottom: 1px solid var(--divider);
-            padding-bottom: 12px;
-            margin: 0 0 18px;
+            padding: 20px 24px 12px;
+            margin: 0;
         }
         .form-modal .buttons {
-            border-top: 1px solid var(--divider);
-            margin: 20px -24px -24px;
-            padding: 16px 24px;
-            background: var(--surface-2);
             border-radius: 0 0 14px 14px;
         }
 
         @media (max-width: 500px) {
             .pm-modal { min-width: 0; width: 100%; max-width: 100vw; padding: 0; }
             .form-grid { grid-template-columns: 1fr; }
-            .modal .pm-footer {
-                position: sticky;
-                bottom: 0;
-                background: var(--surface-2);
-                padding: 14px 16px;
-                margin: 8px 0 0;
-            }
-            .pm-modal > .pm-section,
-            .pm-modal > .expand-btn,
-            .pm-modal > #extended-fields { margin-left: 16px; margin-right: 16px; }
+            .modal .pm-footer { padding: 14px 16px; }
+            .pm-modal > .modal-content > .pm-section,
+            .pm-modal > .modal-content > .expand-btn,
+            .pm-modal > .modal-content > #extended-fields { margin-left: 16px; margin-right: 16px; }
             .pm-header { padding: 16px; }
-            .form-modal .buttons { margin: 20px -16px -16px; padding: 14px 16px; }
+            .form-modal .buttons { padding: 14px 16px; }
         }
 
         /* ==================== EMPTY STATE ==================== */
@@ -3205,7 +3204,7 @@
         }
         .buttons .danger {
             background: #ffebee;
-            color: #c62828;
+            color: var(--danger);
         }
         .buttons .danger:hover {
             background: #ffcdd2;
@@ -3879,7 +3878,7 @@
             border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; margin-top: 2px;
         }
         .wiz-add:hover { border-color: var(--primary); color: var(--primary); }
-        .wiz-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; position: sticky; bottom: 0; }
+        .wiz-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-shrink: 0; padding: 14px 24px; border-top: 1px solid var(--divider); background: var(--surface-2); }
         /* On a phone the role column ate 60px of ~370 and squeezed the name
            fields to 133px. The role is a heading for the row, not a column —
            put it above and give the fields the whole width. */
@@ -4566,7 +4565,7 @@
             margin: -6px 0 14px;
             padding: 8px 12px;
             font-size: 13px;
-            color: var(--text, #333);
+            color: var(--text);
             background: var(--hover-bg, #f1f1ee);
             border-radius: 8px;
             border-left: 3px solid var(--primary, #5a9a5a);
@@ -4731,7 +4730,7 @@
             align-items: center;
             gap: 10px;
             padding: 12px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid var(--border);
             border-radius: 8px;
             cursor: pointer;
             transition: border-color 0.2s, background 0.2s;
@@ -4857,7 +4856,7 @@
         /* Sender hint under the "only changes" scope option. */
         .share-changes-hint { margin: 8px 0 0; font-size: 12.5px; color: var(--text-secondary, #777); line-height: 1.45; }
         /* Recipient change-packet preview: stats chips + named person lists. */
-        .share-packet-body { text-align: left; max-height: 46vh; overflow-y: auto; margin: 8px 0 2px; }
+        .share-packet-body { text-align: left; margin: 8px 0 2px; }
         .share-packet-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
         .share-packet-chip {
             background: var(--hover-bg, #f4f1ea); color: var(--text);
@@ -4874,10 +4873,6 @@
         .share-packet-fields { color: var(--text-secondary, #777); }
         @media (max-width: 500px) {
             .collab-bar { flex-wrap: wrap; justify-content: center; top: auto; bottom: calc(var(--bottom-bar-h) + 12px); }
-            .share-packet-body { max-height: 40vh; }
-        }
-        @media (min-width: 500px) and (max-width: 900px) {
-            .share-packet-body { max-height: 50vh; }
         }
 
         /* Descendants context chip — same paper pill as the focus chip
@@ -5206,7 +5201,7 @@
             align-items: center;
             gap: 12px;
             padding: 14px 16px;
-            border: 1px solid #e0e0e0;
+            border: 1px solid var(--border);
             border-radius: 10px;
             background: #fafafa;
             cursor: pointer;
@@ -5268,7 +5263,7 @@
             cursor: not-allowed;
         }
         .menu-option.disabled:hover {
-            border-color: #e0e0e0;
+            border-color: var(--border);
             background: #fafafa;
         }
 
@@ -5366,17 +5361,26 @@
         .merge-tab.active .tab-count {
             background: rgba(255,255,255,0.3);
         }
+        /* Justified inner-scroll exception: the merge match list scrolls on its
+           own so the filter tabs and stats above it stay visible. The modal body
+           itself does not scroll (see .merge-modal .modal-content below), so
+           there is still only one scrollbar per dialog. */
         .merge-match-list {
-            flex: 1;
+            flex: 1 1 auto;
+            min-height: 140px;
             overflow-y: auto;
             margin-bottom: 16px;
-            max-height: 400px;
-            border: 1px solid #e0e0e0;
+            border: 1px solid var(--border);
             border-radius: 8px;
+        }
+        .merge-modal .modal-content {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
         .merge-item {
             padding: 12px 14px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--divider);
             cursor: pointer;
             transition: background 0.15s;
         }
@@ -5411,7 +5415,7 @@
             align-items: center;
             justify-content: center;
             font-size: 12px;
-            background: #e0e0e0;
+            background: var(--surface-2);
             flex-shrink: 0;
         }
         .merge-item-status.confirmed {
@@ -5419,7 +5423,7 @@
             color: white;
         }
         .merge-item-status.rejected {
-            background: #e53935;
+            background: var(--danger);
             color: white;
         }
         .merge-item-status.new {
@@ -5440,7 +5444,7 @@
             font-weight: 600;
             padding: 2px 9px;
             border-radius: 10px;
-            background: #e0e0e0;
+            background: var(--surface-2);
             white-space: nowrap;
         }
         .merge-item-score.confidence-high {
@@ -5453,7 +5457,7 @@
         }
         .merge-item-score.confidence-low {
             background: #ffebee;
-            color: #c62828;
+            color: var(--danger);
         }
         .merge-item-reasons {
             font-size: 11px;
@@ -5513,8 +5517,8 @@
             color: white;
         }
         .merge-btn-reject.active {
-            background: #e53935;
-            border-color: #e53935;
+            background: var(--danger);
+            border-color: var(--danger);
             color: white;
         }
         .merge-btn-skip.active {
@@ -5534,7 +5538,7 @@
             color: white;
         }
         .merge-item-badge.skipped {
-            background: #e0e0e0;
+            background: var(--surface-2);
             color: #616161;
         }
         [data-theme="dark"] .merge-item-badge.skipped {
@@ -5692,12 +5696,11 @@
         }
         /* person-merge conflict UI is tokenized — no dark overrides needed. */
         .merge-conflict-content {
-            max-height: 400px;
-            overflow-y: auto;
+            /* Scrolls with the modal body (unified skeleton). */
         }
         .conflict-row {
             padding: 12px 0;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--divider);
         }
         .conflict-row:last-child {
             border-bottom: none;
@@ -5717,7 +5720,7 @@
             flex-wrap: wrap;
             gap: 10px;
             padding: 8px 12px;
-            border: 1px solid #e0e0e0;
+            border: 1px solid var(--border);
             border-radius: 8px;
             cursor: pointer;
             transition: all 0.15s;
@@ -5760,7 +5763,7 @@
         .conflict-badge {
             font-size: 10px;
             padding: 2px 6px;
-            background: #e0e0e0;
+            background: var(--surface-2);
             border-radius: 6px;
         }
         .validation-content {
@@ -5778,7 +5781,7 @@
             gap: 8px;
         }
         .validation-section-title.errors {
-            color: #e53935;
+            color: var(--danger);
         }
         .validation-section-title.warnings {
             color: var(--warning);
@@ -5832,7 +5835,7 @@
         .merge-step {
             padding: 6px 12px;
             font-size: 12px;
-            background: #e0e0e0;
+            background: var(--surface-2);
             border-radius: 14px;
             color: var(--text-light);
             transition: all 0.2s;
@@ -5882,6 +5885,10 @@
             gap: 8px;
             justify-content: flex-start;
             align-items: center;
+            flex-shrink: 0;
+            padding: 14px 24px;
+            border-top: 1px solid var(--divider);
+            background: var(--surface-2);
         }
         .tree-manager-footer button {
             padding: 8px 12px;
@@ -6187,7 +6194,7 @@
             display: flex; justify-content: space-between;
             font-size: 12px; color: var(--text-secondary, #666); margin-bottom: 4px;
         }
-        .stats-split-labels b { color: var(--text, #333); }
+        .stats-split-labels b { color: var(--text); }
         .stats-split-bar {
             display: flex; height: 14px; border-radius: 999px; overflow: hidden;
             background: rgba(128,128,128,0.18);
@@ -6258,7 +6265,7 @@
             user-select: none;
         }
         .tree-stats-family[open] .tree-stats-family-summary {
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 1px solid var(--divider);
             margin-bottom: 8px;
         }
         [data-theme="dark"] .tree-stats-family[open] .tree-stats-family-summary {
@@ -6321,13 +6328,10 @@
             gap: 8px;
             padding: 6px 0;
             font-size: 13px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--divider);
         }
         .tree-stats-anniversary:last-child {
             border-bottom: none;
-        }
-        [data-theme="dark"] .tree-stats-anniversary {
-            border-bottom-color: #333;
         }
         .tree-stats-anniversary-icon {
             font-size: 16px;
@@ -6429,8 +6433,6 @@
             display: flex;
             flex-direction: column;
             gap: 18px;
-            max-height: 64vh;
-            overflow-y: auto;
         }
         .health-empty { padding: 28px; text-align: center; color: var(--text-light); }
         .health-block {
@@ -7175,8 +7177,7 @@
             margin-bottom: 16px;
         }
         .pending-merge-list {
-            max-height: 300px;
-            overflow-y: auto;
+            /* Scrolls with the modal body (unified skeleton). */
         }
         .pending-merge-item {
             display: flex;
@@ -7221,7 +7222,7 @@
         }
         .btn-discard {
             background: #ffebee;
-            color: #e53935;
+            color: var(--danger);
         }
         .btn-discard:hover {
             background: #ffcdd2;
@@ -7285,7 +7286,7 @@
         .person-picker-item {
             padding: 10px 12px;
             cursor: pointer;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--divider);
             font-size: 14px;
             transition: background 0.15s;
             /* One name per row; ellipsis only when the viewport cap truly bites. */
@@ -7437,30 +7438,12 @@
                 padding: 6px 8px;
                 min-width: auto;
             }
-            /* Better scroll for tree manager on mobile */
+            /* The unified skeleton already scrolls the body; only tweak sizing. */
             .tree-manager-modal {
                 max-height: 90vh;
-                display: flex;
-                flex-direction: column;
-                padding: 12px;
-                overflow: hidden;
-            }
-            .tree-manager-modal .modal-header {
-                margin: -12px -12px 8px -12px;
-                padding: 12px 12px 8px 12px;
-                flex-shrink: 0;
             }
             .tree-manager-modal .modal-header h2 {
                 font-size: 16px;
-            }
-            .tree-manager-list {
-                flex: 1 1 auto;
-                max-height: none;
-                overflow-y: auto;
-                min-height: 100px;
-            }
-            .tree-manager-footer {
-                flex-shrink: 0;
             }
             .tree-manager-item {
                 padding: 10px;
@@ -7574,17 +7557,15 @@
                 font-size: 12px;
             }
 
-            /* Mobile modal: sticky footer buttons */
+            /* Mobile modal: the flex skeleton pins header/footer; only widths and
+               padding change here. */
             .modal {
                 min-width: 95vw;
                 max-width: 95vw;
                 max-height: 90vh;
-                padding: 16px;
             }
             .modal-header {
-                margin: -16px -16px 16px -16px;
                 padding: 16px 16px 12px 16px;
-                top: -16px;
             }
             .modal .form-row {
                 flex-direction: column;
@@ -7593,40 +7574,17 @@
             .modal .form-group.half {
                 margin-bottom: 16px;
             }
-            .modal .buttons {
-                position: sticky;
-                bottom: -16px;
-                margin: 20px -16px -16px -16px;
-                padding: 16px;
-                background: var(--card-bg);
-                border-top: 1px solid #eee;
-            }
-            [data-theme="dark"] .modal .buttons {
-                border-top-color: #333;
+            .modal .buttons,
+            .modal .modal-buttons {
+                padding: 14px 16px;
             }
 
             /* Tree manager modal specific */
-            .tree-manager-modal {
-                padding: 0;
-            }
             .tree-manager-modal .modal-header {
-                margin: 0 0 12px 0;
                 padding: 16px 16px 12px 16px;
             }
-            .tree-manager-modal .tree-manager-list {
-                max-height: 50vh;
-                overflow-y: auto;
-                padding: 0 16px;
-            }
             .tree-manager-modal .tree-manager-footer {
-                position: sticky;
-                bottom: 0;
                 padding: 12px 16px;
-                background: var(--card-bg);
-                border-top: 1px solid #eee;
-            }
-            [data-theme="dark"] .tree-manager-modal .tree-manager-footer {
-                border-top-color: #333;
             }
 
             /* Tree stats on mobile */
@@ -7674,10 +7632,8 @@
             /* Merge modal on mobile */
             .merge-modal {
                 max-width: 95vw;
-                padding: 10px;
             }
             .merge-modal .modal-header {
-                margin: -10px -10px 4px -10px;
                 padding: 8px 10px;
             }
             .merge-modal .modal-header h2 {
@@ -7726,15 +7682,10 @@
                 margin-left: 1px;
             }
             .merge-match-list {
-                max-height: 50vh;
                 margin-bottom: 0;
             }
             .merge-modal .buttons.merge-actions {
-                margin-top: 8px;
                 padding: 10px;
-                margin-bottom: -10px;
-                margin-left: -10px;
-                margin-right: -10px;
             }
             .merge-item {
                 padding: 8px 10px;
@@ -7795,21 +7746,15 @@
             }
             .merge-modal {
                 max-height: 95vh;
-                padding: 8px;
             }
             .merge-modal .modal-header {
-                margin: -8px -8px 4px -8px;
                 padding: 6px 8px;
             }
             .merge-modal .modal-header h2 {
                 font-size: 13px;
             }
-            .merge-match-list {
-                max-height: 30vh;
-            }
             .merge-modal .buttons.merge-actions {
                 padding: 6px 8px;
-                margin: 4px -8px -8px -8px;
                 gap: 4px;
             }
             .merge-actions button {
@@ -8024,7 +7969,7 @@
         [data-theme="dark"] .event-row { border-color: #444; background: #2a2a2a; }
 
         /* Sources / citations */
-        .sources-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; max-height: 50vh; overflow-y: auto; }
+        .sources-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
         .source-row {
             display: flex; align-items: center; gap: 8px;
             padding: 6px 10px; border: 1px solid var(--border-color, #ddd);
@@ -8066,7 +8011,7 @@
         #source-picker-modal, #source-editor-modal { z-index: 250; }
         /* Source picker */
         .source-picker-search { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
-        .source-picker-list { display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow-y: auto; margin-bottom: 12px; }
+        .source-picker-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
         .source-picker-item {
             text-align: left; border: 1px solid var(--border-color, #ddd); border-radius: 6px;
             background: var(--card-bg, #fafafa); padding: 8px 10px; cursor: pointer; font-size: 14px;
@@ -8077,7 +8022,7 @@
 
         /* Backups / snapshots */
         .snapshots-total { color: var(--text-secondary, #777); font-size: 12px; margin-bottom: 8px; }
-        .snapshots-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; max-height: 55vh; overflow-y: auto; }
+        .snapshots-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
         .snapshot-row {
             display: flex; align-items: center; gap: 10px;
             padding: 8px 10px; border: 1px solid var(--border-color, #ddd);

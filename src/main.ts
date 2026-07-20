@@ -13,6 +13,7 @@ import { MergerUI } from './merge/index.js';
 import { SettingsManager } from './settings.js';
 import { AuditLogManager } from './audit-log.js';
 import { TreePreview, TreeCompare } from './tree-preview.js';
+import { initModalSkeleton } from './ui/modal-skeleton.js';
 import { DebugOptions, DebugStep, DebugPhase } from './layout/pipeline/debug-types.js';
 import { decrypt, CryptoSession } from './crypto.js';
 import { StromData, AppMode, PWA_HOSTNAME, APP_VERSION } from './types.js';
@@ -152,6 +153,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize UI strings from strings.ts
     UI.initializeStrings();
+
+    // Unify all dialogs onto the flex skeleton (fixed header + scrolling body +
+    // fixed actions) and watch for dynamically inserted modals.
+    initModalSkeleton();
 
     // Expose modules globally early (needed for password prompt buttons)
     window.Strom = {
