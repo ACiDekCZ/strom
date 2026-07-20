@@ -684,6 +684,18 @@
         .gen-label.covered { opacity: 0; }
         .gen-label-arrow { margin-right: 4px; font-weight: 700; }
 
+        /* Line mode: the band name is written INTO the top boundary rule as a
+           fieldset legend (— PARENTS ———). A var(--bg) background with a little
+           padding masks the guide rule under the text, so the line appears to
+           break around the name. --text-ghost keeps it quiet; it sits in the
+           empty world-space gutter between rows, so it never covers a card. */
+        .gen-labels--line .gen-label {
+            color: var(--text-ghost);
+            background: var(--bg);
+            padding: 4px 8px;
+            border-radius: 3px;
+        }
+
         /* ==================== PERSON CARD ==================== */
         .person-card {
             position: absolute;
@@ -1488,11 +1500,7 @@
             background: #1a3a5c;
             border-color: var(--primary);
         }
-        [data-theme="dark"] .stat-item,
-        [data-theme="dark"] .import-tree-stats .stat-item,
-        [data-theme="dark"] .gedcom-stats .stat-item {
-            background: #3a3a3a;
-        }
+        /* Stat chips are tokenized (var(--surface-2)) — no dark override needed. */
         [data-theme="dark"] input,
         [data-theme="dark"] select,
         [data-theme="dark"] textarea {
@@ -1785,20 +1793,7 @@
         [data-theme="dark"] .merge-step {
             background: #444;
         }
-        [data-theme="dark"] .merge-trees-option {
-            border-color: #444;
-            background: #2a2a2a;
-        }
-        [data-theme="dark"] .merge-trees-option:hover {
-            background: #3a3a3a;
-        }
-        [data-theme="dark"] .merge-trees-option.selected {
-            background: rgba(90, 154, 90, 0.2);
-        }
-        [data-theme="dark"] .merge-trees-warning {
-            background: #3a3020;
-            color: #ffb74d;
-        }
+        /* .merge-trees-option / .merge-trees-warning are tokenized — no dark override needed. */
         [data-theme="dark"] .pending-merge-item {
             background: #3a3a3a;
         }
@@ -1811,7 +1806,7 @@
         .stat-item {
             text-align: center;
             padding: 8px 4px;
-            background: #f8f9fa;
+            background: var(--surface-2);
             border-radius: 8px;
         }
         .stat-value {
@@ -3812,7 +3807,7 @@
             border: none; background: none; cursor: pointer; font-size: 18px;
             color: var(--text-light); line-height: 1;
         }
-        .wiz-remove:hover { color: #d33; }
+        .wiz-remove:hover { color: var(--danger); }
         .wiz-spacer { display: inline-block; }
         .wiz-hint { grid-column: 1 / -1; font-size: 12px; display: flex; align-items: center; gap: 8px; min-height: 0; }
         .wiz-hint:empty { display: none; }
@@ -5001,7 +4996,7 @@
             text-align: center;
         }
         .gedcom-stats .stat-item {
-            background: #f8f9fa;
+            background: var(--surface-2);
             padding: 10px 6px;
             border-radius: 8px;
             min-width: 0;
@@ -5052,27 +5047,31 @@
             gap: 8px;
             margin-bottom: 16px;
         }
+        /* Paper chips: a soft --surface pill with a hairline border. Meaning is
+           carried by the coloured SVG glyph in the label, not the box fill. */
         .merge-stat {
             flex: 1;
-            background: #f8f9fa;
-            border: 1px solid rgba(128,128,128,0.15);
-            border-radius: 8px;
-            padding: 8px 6px;
-        }
-        [data-theme="dark"] .merge-stat { background: #2a2a2a; }
-        .merge-stat.highlight .merge-stat-label { color: #2e7d32; }
-        .merge-stat.warning .merge-stat-label { color: #ef6c00; }
-        .merge-stat.new .merge-stat-label { color: #1565c0; }
-        .merge-stat {
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 4px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 8px 6px;
         }
         .merge-stat-label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
             font-size: 11px;
             color: var(--text-light);
         }
+        .merge-stat-glyph { display: inline-flex; align-items: center; }
+        .merge-stat.highlight .merge-stat-glyph { color: var(--primary); }
+        .merge-stat.warning .merge-stat-glyph { color: var(--warning); }
+        .merge-stat.new .merge-stat-glyph { color: var(--primary); }
+        .merge-stat.skipped .merge-stat-glyph { color: var(--text-faint); }
         .merge-stat-value {
             font-size: 20px;
             font-weight: 600;
@@ -5295,8 +5294,8 @@
             background: #3a3a3a;
             color: #bbb;
         }
-        .merge-stat.skipped .merge-stat-label { color: #616161; }
-        .merge-stat.skipped .merge-stat-value { color: #616161; }
+        .merge-stat.skipped .merge-stat-label { color: var(--text-faint); }
+        .merge-stat.skipped .merge-stat-value { color: var(--text-faint); }
         /* "Update existing only" toggle */
         .merge-update-only {
             display: flex;
@@ -5304,13 +5303,10 @@
             gap: 8px;
             padding: 8px 12px;
             margin: 0 0 10px;
-            background: #f5f5f5;
+            background: var(--surface-2);
             border-radius: 6px;
             cursor: pointer;
             font-size: 13px;
-        }
-        [data-theme="dark"] .merge-update-only {
-            background: #2a2a2a;
         }
         .merge-update-only input {
             margin-top: 2px;
@@ -5338,7 +5334,7 @@
         }
         .merge-manual-person {
             padding: 10px 12px;
-            background: #f5f5f5;
+            background: var(--surface-2);
             border-radius: 6px;
             font-weight: 500;
             flex: 1;
@@ -5350,50 +5346,37 @@
         /* Person merge dialog */
         .person-merge-person {
             padding: 10px 12px;
-            background: #f5f5f5;
+            background: var(--surface-2);
             border-radius: 6px;
             font-weight: 500;
         }
         .person-merge-person.other {
-            background: #fff3cd;
-        }
-        [data-theme="dark"] .person-merge-person {
-            background: #3a3a3a;
-            color: var(--text);
-        }
-        [data-theme="dark"] .person-merge-person.other {
-            background: #4a4020;
+            background: var(--surface-2);
+            border-left: 3px solid var(--warning);
         }
         .person-merge-preview {
             margin-top: 16px;
             padding-top: 16px;
-            border-top: 1px solid #eee;
-        }
-        [data-theme="dark"] .person-merge-preview {
-            border-top-color: #444;
+            border-top: 1px solid var(--divider);
         }
         .person-merge-warning {
             margin-top: 12px;
             padding: 10px 12px;
-            background: #fff3cd;
+            background: var(--surface-2);
+            border-left: 3px solid var(--warning);
             border-radius: 6px;
             font-size: 13px;
+            color: var(--text-light);
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        [data-theme="dark"] .person-merge-warning {
-            background: #4a4020;
-            color: #ffb74d;
-        }
         .person-merge-conflicts {
             margin-top: 16px;
             padding-top: 16px;
-            border-top: 1px solid #eee;
+            border-top: 1px solid var(--divider);
         }
-        [data-theme="dark"] .person-merge-conflicts {
-            border-top-color: #444;
-        }
+        /* person-merge blocks are tokenized — no dark overrides needed. */
         .person-merge-conflicts h3 {
             font-size: 14px;
             font-weight: 600;
@@ -5416,12 +5399,9 @@
         }
         .person-merge-conflict-row {
             padding: 12px;
-            background: #f8f9fa;
+            background: var(--surface-2);
             border-radius: 6px;
             margin-bottom: 8px;
-        }
-        [data-theme="dark"] .person-merge-conflict-row {
-            background: #2a2a2a;
         }
         .person-merge-conflict-label {
             font-size: 12px;
@@ -5438,30 +5418,20 @@
             align-items: center;
             gap: 8px;
             padding: 8px 10px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border);
             border-radius: 6px;
             cursor: pointer;
             transition: all 0.15s;
         }
         .person-merge-conflict-option:hover {
-            background: #f0f0f0;
+            background: var(--surface-2);
         }
         .person-merge-conflict-option input[type="radio"] {
             margin: 0;
         }
         .person-merge-conflict-option.selected {
             border-color: var(--primary);
-            background: rgba(90, 154, 90, 0.1);
-        }
-        [data-theme="dark"] .person-merge-conflict-option {
-            border-color: #444;
-            background: #2a2a2a;
-        }
-        [data-theme="dark"] .person-merge-conflict-option:hover {
-            background: #3a3a3a;
-        }
-        [data-theme="dark"] .person-merge-conflict-option.selected {
-            background: rgba(90, 154, 90, 0.2);
+            background: var(--primary-soft);
         }
         .person-merge-conflict-value {
             flex: 1;
@@ -5469,13 +5439,11 @@
         .person-merge-conflict-badge {
             font-size: 11px;
             padding: 2px 6px;
-            background: #e0e0e0;
+            background: var(--surface-2);
             border-radius: 6px;
             color: var(--text-light);
         }
-        [data-theme="dark"] .person-merge-conflict-badge {
-            background: #444;
-        }
+        /* person-merge conflict UI is tokenized — no dark overrides needed. */
         .merge-conflict-content {
             max-height: 400px;
             overflow-y: auto;
@@ -6170,7 +6138,14 @@
             padding: 32px;
         }
         .validation-passed-icon {
-            font-size: 48px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: var(--on-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .validation-passed-text {
             font-size: 16px;
@@ -6184,24 +6159,21 @@
             gap: 12px 16px;
             justify-content: center;
             padding: 12px;
-            background: #f8f8f8;
+            background: var(--surface-2);
             border-radius: 8px;
-        }
-        [data-theme="dark"] .validation-summary {
-            background: #2a2a2a;
         }
         .validation-count {
             font-size: 14px;
             font-weight: 500;
         }
         .validation-count.error {
-            color: #d9534f;
+            color: var(--danger);
         }
         .validation-count.warning {
-            color: #f0ad4e;
+            color: var(--warning);
         }
         .validation-count.info {
-            color: #5bc0de;
+            color: var(--text-light);
         }
         .validation-issues {
             display: flex;
@@ -6321,7 +6293,7 @@
             align-items: center;
             gap: 10px;
             padding: 12px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid var(--border);
             border-radius: 8px;
             cursor: pointer;
             margin-bottom: 8px;
@@ -6332,7 +6304,7 @@
         }
         .merge-trees-option.selected {
             border-color: var(--primary);
-            background: rgba(90, 154, 90, 0.1);
+            background: var(--primary-soft);
         }
         .merge-trees-option input[type="radio"] {
             width: auto;
@@ -6353,10 +6325,11 @@
             align-items: center;
             gap: 8px;
             padding: 10px 12px;
-            background: #fff3e0;
+            background: var(--surface-2);
+            border-left: 3px solid var(--warning);
             border-radius: 6px;
             font-size: 13px;
-            color: #ef6c00;
+            color: var(--text-light);
             margin-bottom: 16px;
         }
 
@@ -6423,14 +6396,15 @@
             text-align: center;
         }
         .import-tree-stats .stat-item {
-            background: #f8f9fa;
+            background: var(--surface-2);
             padding: 12px;
             border-radius: 8px;
         }
         .import-tree-stats .number {
+            font-family: var(--font-serif);
             font-size: 24px;
             font-weight: 600;
-            color: var(--primary);
+            color: var(--text);
         }
         .import-tree-stats .label {
             font-size: 12px;
@@ -9410,19 +9384,19 @@
                     <span class="merge-stat-value" id="merge-stat-existing">0</span>
                 </div>
                 <div class="merge-stat highlight">
-                    <span class="merge-stat-label">✓ <span data-i18n="merge.statsMatches">Matches</span></span>
+                    <span class="merge-stat-label"><span class="merge-stat-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span><span data-i18n="merge.statsMatches">Matches</span></span>
                     <span class="merge-stat-value" id="merge-stat-matches">0</span>
                 </div>
                 <div class="merge-stat warning">
-                    <span class="merge-stat-label">⚠ <span data-i18n="merge.statsConflicts">Conflicts</span></span>
+                    <span class="merge-stat-label"><span class="merge-stat-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v9"/><path d="M12 18h.01"/></svg></span><span data-i18n="merge.statsConflicts">Conflicts</span></span>
                     <span class="merge-stat-value" id="merge-stat-conflicts">0</span>
                 </div>
                 <div class="merge-stat new">
-                    <span class="merge-stat-label">+ <span data-i18n="merge.statsNew">New</span></span>
+                    <span class="merge-stat-label"><span class="merge-stat-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span><span data-i18n="merge.statsNew">New</span></span>
                     <span class="merge-stat-value" id="merge-stat-new">0</span>
                 </div>
                 <div class="merge-stat skipped" id="merge-stat-skipped-card" style="display:none;">
-                    <span class="merge-stat-label">⊘ <span data-i18n="merge.statsSkipped">Skipped</span></span>
+                    <span class="merge-stat-label"><span class="merge-stat-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M6.5 6.5l11 11"/></svg></span><span data-i18n="merge.statsSkipped">Skipped</span></span>
                     <span class="merge-stat-value" id="merge-stat-skipped">0</span>
                 </div>
             </div>

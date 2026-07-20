@@ -20,22 +20,23 @@ test('generation labels survive zooming out a step or two', async ({ page }) => 
     await expect(page.locator('#gen-labels')).toBeHidden();
 });
 
-test('a card panned over a generation label fades it — cards take precedence', async ({ page }) => {
+test('line mode: band names sit on the boundary rules and never collide with cards', async ({ page }) => {
     // Mobile viewport: this is where a card scrolling into the left-edge label
-    // zone actually overlapped the band name (the reported bug).
+    // zone historically overlapped the band name (the reported bug). In line
+    // mode the label is written INTO the top-boundary rule, in the empty gutter
+    // between two generation rows, so it can never land on a card.
     await page.setViewportSize({ width: 390, height: 844 });
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(page.locator('.person-card').first()).toBeVisible();
 
-    // Baseline: with nothing panned over them, labels are shown and not faded.
+    // The overlay runs in line mode (the shipped default) and shows labels.
+    await expect(page.locator('#gen-labels.gen-labels--line')).toBeAttached();
     const firstLabel = page.locator('#gen-labels .gen-label').first();
     await expect(firstLabel).toBeVisible();
-    await expect(firstLabel).not.toHaveClass(/covered/);
 
-    // Drive a card's centre to screen (40, viewport centre) via
-    // centerOnWorldPoint — that forces the card over its own band's label,
-    // which lives at the left edge.
+    // Drive a card's centre to the left edge (40, viewport centre) — the very
+    // motion that used to slide a card under a band name.
     await page.evaluate(() => {
         const zp = window.Strom.ZoomPan;
         const rend = window.Strom.TreeRenderer;
@@ -47,24 +48,38 @@ test('a card panned over a generation label fades it — cards take precedence',
         zp.centerOnWorldPoint(cx - (Sx - width / 2) / scale, cy - (Sy - height / 2) / scale);
     });
 
-    // Every label a card now overlaps must be faded (covered) — never printed
-    // on top of the person.
-    const res = await page.evaluate(() => {
+    // No visible label overlaps any card rect — boundaries live in the gutters.
+    const overlaps = await page.evaluate(() => {
         const labels = Array.from(document.querySelectorAll('#gen-labels .gen-label'))
             .filter(el => (el as HTMLElement).style.display !== 'none') as HTMLElement[];
         const cardRects = Array.from(document.querySelectorAll('.person-card'))
             .map(c => c.getBoundingClientRect());
-        let overlaps = 0, coveredWrong = 0;
+        let n = 0;
         for (const el of labels) {
             const r = el.getBoundingClientRect();
-            const hit = cardRects.some(cr =>
-                cr.left < r.right && cr.right > r.left && cr.top < r.bottom && cr.bottom > r.top);
-            if (hit) { overlaps++; if (!el.classList.contains('covered')) coveredWrong++; }
+            if (cardRects.some(cr =>
+                cr.left < r.right && cr.right > r.left && cr.top < r.bottom && cr.bottom > r.top)) n++;
         }
-        return { overlaps, coveredWrong };
+        return n;
     });
-    expect(res.overlaps).toBeGreaterThan(0);
-    expect(res.coveredWrong).toBe(0);
+    expect(overlaps).toBe(0);
+
+    // And the contract the designer named: over EVERY on-screen card, the point
+    // that would sit nearest a band boundary (a hair below the card's top edge)
+    // resolves to the card or a real tree element — never to a label overlay.
+    // The overlay is pointer-events:none, so a line-mode label can never
+    // intercept a card, no matter how the tree is panned.
+    const interceptedByLabel = await page.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll('.person-card')) as HTMLElement[];
+        for (const cardEl of cards) {
+            const r = cardEl.getBoundingClientRect();
+            if (r.width === 0 || r.top < 0 || r.bottom > window.innerHeight) continue;
+            const el = document.elementFromPoint(r.left + r.width / 2, r.top + 3);
+            if (el && el.closest('#gen-labels')) return true;
+        }
+        return false;
+    });
+    expect(interceptedByLabel).toBe(false);
 });
 
 test('no left-fade veil: the focus card at the left edge keeps full opacity', async ({ page }) => {

@@ -86,6 +86,16 @@ test('tree merge wizard matches a shared person and merges without duplicates', 
     await expect(wizard.locator('#merge-match-list .merge-item').first()).toBeVisible();
     await expect(wizard.locator('#merge-match-list')).toContainText('Jan');
 
+    // Round 11: stat boxes are paper chips whose meaning rides on an inline SVG
+    // glyph, not an emoji. The meaning classes survive (the flow above targets
+    // them), the highlight/warning/new chips each carry an <svg> glyph, and no
+    // stat label leaks a ✓/⚠/⊘/＋ glyph character.
+    await expect(wizard.locator('.merge-stat.highlight .merge-stat-glyph svg')).toBeVisible();
+    await expect(wizard.locator('.merge-stat.warning .merge-stat-glyph svg')).toBeVisible();
+    await expect(wizard.locator('.merge-stat.new .merge-stat-glyph svg')).toBeVisible();
+    const statLabels = (await wizard.locator('.merge-stat-label').allInnerTexts()).join('');
+    expect(statLabels).not.toMatch(/[\u2713\u26A0\u2298\uFF0B\uFE0E\uFE0F]/);
+
     // Exactly ONE wizard step reads as current.
     await expect(wizard.locator('.merge-step.active')).toHaveCount(1);
     await expect(wizard.locator('.merge-step.active')).toHaveText(/Review matches/);

@@ -17,6 +17,22 @@ import { ZoomPan } from '../zoom.js';
 import { SettingsManager } from '../settings.js';
 import { uiModule } from './module.js';
 
+/**
+ * Two placements for the generation names. Flip this constant to switch.
+ *
+ *  'line' (default) — the name is written INTO the band's top boundary line,
+ *      a fieldset-legend look (— PARENTS ———) with a var(--bg) mask under the
+ *      text that hides the guide rule beneath it. The boundary lives in the
+ *      empty world-space gutter between two generation rows, so the label can
+ *      NEVER collide with a card — the `.covered` fade is unused in this mode.
+ *
+ *  'row' — the previous behaviour: the name floats at the row centre and fades
+ *      out (`.covered`) under any card that pans over it.
+ *
+ * Both modes keep the small-zoom pitch hiding and the ↑ pin at the top edge.
+ */
+const GEN_LABEL_MODE: 'line' | 'row' = 'line';
+
 // Below this zoom the labels are noise on a distant tree — hide them.
 /**
  * Hide the labels only when generation bands get too CRAMPED on screen to
@@ -58,6 +74,8 @@ export const genLabelsMethods = uiModule({
     updateGenLabels(): void {
         const overlay = document.getElementById('gen-labels');
         if (!overlay) return;
+
+        overlay.classList.toggle('gen-labels--line', GEN_LABEL_MODE === 'line');
 
         const bands = SettingsManager.isGenLabelsEnabled() ? TreeRenderer.getGenerationBands() : [];
         overlay.innerHTML = '';
@@ -110,12 +128,15 @@ export const genLabelsMethods = uiModule({
         }
         overlay.style.display = 'block';
 
-        // Cards take precedence over labels: project every card rect to screen
-        // space (same coordinate system the labels use — container-relative),
-        // so a label a card has panned over can fade out instead of printing on
-        // top of the person. A handful of labels × a few hundred cards of plain
-        // arithmetic per transform change — cheap enough to run inline.
-        const cardRects = TreeRenderer.getCardWorldRects().map(r => ({
+        const lineMode = GEN_LABEL_MODE === 'line';
+
+        // Cards take precedence over labels (row mode only): project every card
+        // rect to screen space (same coordinate system the labels use —
+        // container-relative), so a label a card has panned over can fade out
+        // instead of printing on top of the person. In line mode the labels sit
+        // on the boundary rules in the empty band gutters and never collide, so
+        // this projection is skipped entirely.
+        const cardRects = lineMode ? [] : TreeRenderer.getCardWorldRects().map(r => ({
             left: r.x * scale + tx,
             top: r.y * scale + ty,
             right: (r.x + r.w) * scale + tx,
@@ -133,23 +154,34 @@ export const genLabelsMethods = uiModule({
                 continue;
             }
 
+            // The label anchors to the band's top boundary line in line mode,
+            // to the row centre in row mode.
+            const anchorY = lineMode ? bandTop : rowY;
+
             let centerY: number;
             let pinned = false;
-            if (rowY < EDGE_PAD) {
-                // The row scrolled above the top, but the band still reaches in:
-                // pin the label to the top edge with an up-arrow.
+            if (anchorY < EDGE_PAD) {
+                // The anchor scrolled above the top, but the band still reaches
+                // in: pin the label to the top edge with an up-arrow.
                 centerY = EDGE_PAD + PIN_HALF;
                 pinned = true;
-            } else if (rowY > height - 4) {
+            } else if (anchorY > height - 4) {
                 row.style.display = 'none';
                 continue;
             } else {
-                centerY = rowY;
+                centerY = anchorY;
             }
 
             row.style.display = '';
             row.style.top = `${centerY}px`;
             arrow.style.display = pinned ? '' : 'none';
+
+            if (lineMode) {
+                // Line mode never collides with a card — the boundary lives in
+                // an empty gutter — so `.covered` stays off.
+                row.classList.remove('covered');
+                continue;
+            }
 
             // Fade the label out if any card covers it. The row keeps its
             // 'display' so opacity can transition (see .gen-label.covered CSS);

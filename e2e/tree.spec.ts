@@ -165,6 +165,25 @@ test('tree validation flags date inconsistencies with details', async ({ page })
     await expect(modal.locator('.validation-issue', { hasText: 'missing source' })).toBeVisible();
 });
 
+test('a clean tree shows the passed badge as an SVG check, never an emoji', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    // A lone, dateless, source-free person raises no issues.
+    const treeId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
+    await page.evaluate((id) => window.Strom.UI.showTreeValidationDialog(id), treeId);
+
+    const modal = page.locator('#tree-validation-modal');
+    await expect(modal).toBeVisible();
+
+    // Passed state: the badge is a green circle with an inline SVG check —
+    // monochrome, obeys the theme, and carries NO emoji/glyph text.
+    const icon = modal.locator('.validation-passed-icon');
+    await expect(icon).toBeVisible();
+    await expect(icon.locator('svg')).toBeVisible();
+    expect((await icon.innerText()).trim()).toBe('');
+});
+
 test('hiding the active tree switches to a visible one; the last visible cannot be hidden', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
