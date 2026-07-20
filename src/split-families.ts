@@ -34,6 +34,13 @@ export interface FamilyComponent {
     personIds: PersonId[];
     /** Person the new tree opens on (a member of personIds, or the connector). */
     defaultPersonId: PersonId;
+    /**
+     * The real person the family is named after — never a placeholder. For an
+     * ancestral/descendant branch this is the connector (the person you reached
+     * the family through); for a spouse/sibling branch it is the family's own
+     * senior member, so a second marriage does not borrow its in-law's name.
+     */
+    nameAnchorId: PersonId;
     /** The very first family (the focused person's current view). */
     isFirst: boolean;
 }
@@ -182,6 +189,7 @@ export function decomposeIntoFamilies(
             // The connector is not in `claimed` (an earlier family owns it); it is
             // added as an anchor at tree-creation time, so it is a valid default.
             defaultPersonId: isFirst ? rootFocusId : (connector as PersonId),
+            nameAnchorId: isFirst ? rootFocusId : (connector as PersonId), // finalised below
             isFirst,
         });
 
@@ -207,11 +215,100 @@ export function decomposeIntoFamilies(
             connectorId: null,
             personIds: island,
             defaultPersonId: island[0],
+            nameAnchorId: island[0], // finalised below
             isFirst: false,
         });
     }
 
-    return components;
+    return finaliseComponents(data, components);
+}
+
+/** A person that carries a real identity (not a GEDCOM placeholder slot). */
+function isReal(data: StromData, id: PersonId): boolean {
+    const p = data.persons[id];
+    return !!p && !p.isPlaceholder;
+}
+
+/** The family's own senior real member (birthdate→id), or null if it has none. */
+function firstRealOwned(data: StromData, c: FamilyComponent): PersonId | null {
+    const reals = c.personIds.filter(id => isReal(data, id));
+    return reals.length ? sortIds(data, reals)[0] : null;
+}
+
+/**
+ * Fold placeholder-only families away and give every surviving family a real
+ * name anchor and a sensible default person.
+ *
+ * A family with no real member of its own is not a family a reader would
+ * recognise — it is a run of GEDCOM placeholder slots (unknown spouses,
+ * unnamed children) that hangs off one real person. Proposing it as a separate
+ * tree shows an empty box. Instead its persons are folded into the real family
+ * that reached them (the one owning its connector), so the split still covers
+ * everyone exactly once but never offers an empty family.
+ */
+function finaliseComponents(data: StromData, components: FamilyComponent[]): FamilyComponent[] {
+    const hasReal = (c: FamilyComponent): boolean => c.personIds.some(id => isReal(data, id));
+
+    const ownerOf = new Map<PersonId, number>();
+    components.forEach((c, i) => c.personIds.forEach(id => ownerOf.set(id, i)));
+
+    // The surviving real family a placeholder-only component folds into: follow
+    // its connector to the owning family, and on up until a real family. The
+    // connector always lives in an EARLIER family, so this terminates; the first
+    // family (the focus view) is the guaranteed real fallback.
+    const target = new Map<number, number>();
+    const targetFor = (i: number): number => {
+        if (target.has(i)) return target.get(i)!;
+        target.set(i, 0); // guard against a pathological cycle
+        const c = components[i];
+        let t = 0;
+        if (c.connectorId != null) {
+            const owner = ownerOf.get(c.connectorId);
+            if (owner != null && owner !== i) t = hasReal(components[owner]) ? owner : targetFor(owner);
+        }
+        target.set(i, t);
+        return t;
+    };
+
+    const foldedInto = new Map<number, PersonId[]>();
+    components.forEach((c, i) => {
+        if (hasReal(c)) return;
+        const t = targetFor(i);
+        foldedInto.set(t, [...(foldedInto.get(t) ?? []), ...c.personIds]);
+    });
+
+    const result: FamilyComponent[] = [];
+    components.forEach((c, i) => {
+        if (!hasReal(c)) return; // folded away above
+        const extra = foldedInto.get(i);
+        const personIds = extra ? sortIds(data, [...c.personIds, ...extra]) : c.personIds;
+        const owned = new Set(personIds);
+
+        // Name anchor: the connector when the family is that connector's own
+        // blood line (its parents or children are here); otherwise the family's
+        // senior member, so a second-marriage branch keeps its own name.
+        let nameAnchorId: PersonId;
+        if (c.isFirst) {
+            nameAnchorId = c.focusId;
+        } else {
+            const connector = c.connectorId != null ? data.persons[c.connectorId] : undefined;
+            const bloodLine = !!connector && !connector.isPlaceholder
+                && [...connector.parentIds, ...connector.childIds].some(id => owned.has(id));
+            nameAnchorId = bloodLine
+                ? (c.connectorId as PersonId)
+                : (firstRealOwned(data, { ...c, personIds }) ?? c.focusId);
+        }
+
+        // Open on the shared connector card (the visible cross-tree link) when it
+        // is a real person; otherwise open on the family's own name anchor.
+        const defaultPersonId = (!c.isFirst && c.connectorId != null && isReal(data, c.connectorId))
+            ? c.connectorId
+            : nameAnchorId;
+
+        result.push({ ...c, personIds, nameAnchorId, defaultPersonId });
+    });
+
+    return result;
 }
 
 /**

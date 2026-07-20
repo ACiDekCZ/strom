@@ -65,7 +65,9 @@ test('the dialog lists the focus family first, then the families that branch off
     await expect(rows).toHaveCount(3);
     // The first is the current view, badged and named after the focus.
     await expect(rows.first()).toContainText('Your current view');
-    await expect(rows.first().locator('.splitfam-name')).toHaveValue('Petr Novák family');
+    // The suggested name carries the birth year, so two same-named people stay
+    // apart ("Emil Víšek (*1942)" vs "Emil Víšek (*1905)").
+    await expect(rows.first().locator('.splitfam-name')).toHaveValue('Petr Novák (*1960) family');
 });
 
 test('every family row shows a non-empty tree thumbnail, and Preview opens a framed overlay Esc closes first', async ({ page }) => {
@@ -110,6 +112,28 @@ test('every family row shows a non-empty tree thumbnail, and Preview opens a fra
     await expect(modal).toBeHidden();
 });
 
+test('closing with Escape resets fully — reopening starts from scratch, not a stale run', async ({ page }) => {
+    await loadShallowView(page);
+    await page.evaluate(() => window.Strom.UI.showSplitFamiliesDialog());
+    await expect(page.locator('#split-families-modal')).toBeVisible();
+
+    // Escape must tear the dialog down completely, not just hide it: the element
+    // is removed from the DOM and every field of the run is cleared.
+    await page.keyboard.press('Escape');
+    const afterEscape = await page.evaluate(() => ({
+        domExists: !!document.getElementById('split-families-modal'),
+        dataSet: !!window.Strom.UI.splitFamiliesData,
+        comps: window.Strom.UI.splitFamiliesComponents.length,
+        wysiwyg: window.Strom.UI.splitFamiliesWysiwyg,
+    }));
+    expect(afterEscape).toEqual({ domExists: false, dataSet: false, comps: 0, wysiwyg: false });
+
+    // Reopening builds one fresh dialog (no leftover ghost element, no doubled rows).
+    await page.evaluate(() => window.Strom.UI.showSplitFamiliesDialog());
+    await expect(page.locator('#split-families-modal')).toHaveCount(1);
+    await expect(page.locator('#split-families-modal .splitfam-row')).toHaveCount(3);
+});
+
 test('creating the checked families leaves the original alone and links them', async ({ page }) => {
     await loadShallowView(page);
     const before = await page.evaluate(() => window.Strom.DataManager.getAllPersons().length);
@@ -131,15 +155,15 @@ test('creating the checked families leaves the original alone and links them', a
         .map((t: { name: string; personCount: number }) => [t.name, t.personCount] as [string, number]));
     const names = trees.map(t => t[0]);
     expect(names).toContain('Rodina Novákových');
-    expect(names).toContain('Petr Novák family');
-    expect(names).toContain('Jan Novák family');
-    expect(names).not.toContain('Eva Nováková family'); // unchecked → not created
+    expect(names).toContain('Petr Novák (*1960) family');
+    expect(names).toContain('Jan Novák (*1930) family');
+    expect(names).not.toContain('Eva Nováková (*1962) family'); // unchecked → not created
     // The original is untouched: everyone still in it.
     expect(trees.find(t => t[0] === 'Rodina Novákových')?.[1]).toBe(before);
 
     // Jan's-parents tree opens on the connector (Jan) and holds him as the anchor.
     const janDefault = await page.evaluate(async () => {
-        const meta = window.Strom.TreeManager.getTrees().find((t: { name: string }) => t.name === 'Jan Novák family');
+        const meta = window.Strom.TreeManager.getTrees().find((t: { name: string }) => t.name === 'Jan Novák (*1930) family');
         const data = await window.Strom.TreeManager.getTreeData(meta!.id);
         return { def: data!.defaultPersonId, hasJan: !!data!.persons['dad'] };
     });
@@ -181,8 +205,8 @@ test('tree manager row: split picks a starting person (prefilled) and splits a n
 
     const names = await page.evaluate(() => window.Strom.TreeManager.getTrees()
         .map((t: { name: string }) => t.name));
-    expect(names).toContain('Petr Novák family');
-    expect(names).toContain('Eva Nováková family');
+    expect(names).toContain('Petr Novák (*1960) family');
+    expect(names).toContain('Eva Nováková (*1962) family');
     expect(names).toContain('Rodina Novákových');   // original untouched
 
     // The user stays on the tree they had active — the split did not switch it.
@@ -194,4 +218,80 @@ test('tree manager row: split picks a starting person (prefilled) and splits a n
         ];
     });
     expect(active).toBe(other);
+});
+
+// A tree with the two shapes the real data exposed: a second marriage (a
+// spouse-branch) and a subtree made only of GEDCOM placeholder slots.
+const TREE2 = {
+    version: 5,
+    defaultPersonId: 'me',
+    persons: {
+        gma: mk('gma', 'Stará', 'Nováková', 'female', '1932', ['u_g', 'u_g2'], [], ['mom']),
+        gpa: mk('gpa', 'Old', 'Novák', 'male', '1930', ['u_g'], [], ['mom']),
+        step: mk('step', 'Josef', 'Dvořák', 'male', '1928', ['u_g2'], [], []),
+        mom: mk('mom', 'Marie', 'Nováková', 'female', '1955', ['u_p'], ['gpa', 'gma'], ['me']),
+        dad: mk('dad', 'Jan', 'Novák', 'male', '1953', ['u_p'], [], ['me']),
+        me: mk('me', 'Petr', 'Novák', 'male', '1980', ['u_m'], ['dad', 'mom'], ['kid']),
+        wife: mk('wife', 'Eva', 'Nováková', 'female', '1982', ['u_m'], [], ['kid']),
+        kid: mk('kid', 'Adam', 'Novák', 'male', '2005', ['u_k'], ['me', 'wife'], ['phk1', 'phk2']),
+        phw: ph('phw', 'female', ['u_k'], [], ['phk1', 'phk2']),
+        phk1: ph('phk1', 'male', [], ['kid', 'phw'], []),
+        phk2: ph('phk2', 'female', [], ['kid', 'phw'], []),
+    },
+    partnerships: {
+        u_g: { id: 'u_g', person1Id: 'gpa', person2Id: 'gma', childIds: ['mom'], status: 'married' },
+        u_g2: { id: 'u_g2', person1Id: 'step', person2Id: 'gma', childIds: [], status: 'married' },
+        u_p: { id: 'u_p', person1Id: 'dad', person2Id: 'mom', childIds: ['me'], status: 'married' },
+        u_m: { id: 'u_m', person1Id: 'me', person2Id: 'wife', childIds: ['kid'], status: 'married' },
+        u_k: { id: 'u_k', person1Id: 'kid', person2Id: 'phw', childIds: ['phk1', 'phk2'], status: 'married' },
+    },
+};
+function ph(id: string, gender: string, partnerships: string[], parentIds: string[], childIds: string[]) {
+    return { id, firstName: '', lastName: '', gender, isPlaceholder: true, partnerships, parentIds, childIds };
+}
+
+test('a placeholder-only subtree is folded away, and a second marriage names its own spouse and cross-references', async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(async (data) => {
+        await window.Strom.DataManager.importAsNewTree(data, 'Rodina 2');
+        window.Strom.TreeRenderer.restoreFromSession();
+        window.Strom.TreeRenderer.setFocus('me', false);
+        window.Strom.TreeRenderer.setFocusDepth(1, 1);
+    }, TREE2);
+    await expect(card(page, 'Petr')).toHaveClass(/focused/);
+
+    await page.evaluate(() => window.Strom.UI.showSplitFamiliesDialog());
+    const modal = page.locator('#split-families-modal');
+    await expect(modal).toBeVisible();
+
+    // Three real families — the focus view, Marie's parents (gpa+gma), and
+    // Stará's second husband. The three placeholder cards (Adam's unknown wife +
+    // two children) never form a fourth, empty box; they are folded into the
+    // family that owns Adam.
+    const rows = modal.locator('.splitfam-row');
+    await expect(rows).toHaveCount(3);
+
+    // The second-marriage branch is named after its own real member (Josef),
+    // not after the in-law it hangs off (Stará) — with the birth year.
+    const names = await modal.locator('.splitfam-name').evaluateAll(
+        els => (els as HTMLInputElement[]).map(e => e.value));
+    expect(names).toContain('Josef Dvořák (*1928) family');
+
+    // ...and it says where it connects, so it never looks unrelated.
+    await expect(modal.locator('.splitfam-crossref')).toContainText('connects to Stará Nováková (*1932)');
+
+    // Coverage still totals every person: the placeholders travel with Adam.
+    const accounting = await page.evaluate(() => {
+        const comps = window.Strom.UI.splitFamiliesComponents as { personIds: string[] }[];
+        const all = comps.flatMap(c => c.personIds);
+        const kidComp = comps.find(c => c.personIds.includes('kid'))!;
+        return {
+            total: all.length,
+            distinct: new Set(all).size,
+            placeholdersWithKid: ['phw', 'phk1', 'phk2'].every(p => kidComp.personIds.includes(p)),
+        };
+    });
+    expect(accounting.total).toBe(11);
+    expect(accounting.distinct).toBe(11);
+    expect(accounting.placeholdersWithKid).toBe(true);
 });

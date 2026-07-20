@@ -41,16 +41,23 @@ interface SplitFamiliesRun {
 }
 
 export const splitFamiliesMethods = uiModule({
-    /** The person a family should be named after (connector, or the focus itself). */
+    /** The real person a family is named after (never a placeholder). */
     splitFamilyNameAnchor(component: FamilyComponent): PersonId {
-        return component.connectorId ?? component.focusId;
+        return component.nameAnchorId;
     },
 
-    /** "Rodina {full name}" suggested tree name for a family. */
+    /** "First Last (*1942)" — the birth year disambiguates two same-named people. */
+    splitFamilyPersonLabel(id: PersonId): string {
+        const person = this.splitFamiliesData?.persons[id];
+        if (!person) return '?';
+        const name = `${person.firstName ?? ''} ${person.lastName ?? ''}`.trim() || '?';
+        const year = person.birthDate?.split('-')[0];
+        return year ? `${name} (*${year})` : name;
+    },
+
+    /** "Rodina {full name (*year)}" suggested tree name for a family. */
     splitFamilyDefaultName(component: FamilyComponent): string {
-        const person = this.splitFamiliesData?.persons[this.splitFamilyNameAnchor(component)];
-        const name = person ? `${person.firstName ?? ''} ${person.lastName ?? ''}`.trim() : '';
-        return strings.splitFamilies.familyName(name || '?');
+        return strings.splitFamilies.familyName(this.splitFamilyPersonLabel(this.splitFamilyNameAnchor(component)));
     },
 
     /**
@@ -256,6 +263,16 @@ export const splitFamiliesMethods = uiModule({
         // "Your current view" only makes sense for the live-view (WYSIWYG) path.
         const badge = (component.isFirst && this.splitFamiliesWysiwyg)
             ? `<span class="splitfam-badge">${s.yourView}</span>` : '';
+        // Cross-reference: when the family branches off a real person whose own
+        // family is elsewhere (a second marriage, an in-law), say so — otherwise
+        // a family named after its own member looks unconnected. Skipped when the
+        // family is named after the connector itself (an ancestral/descendant
+        // branch), where the link is already obvious from the name.
+        const c = component.connectorId;
+        const crossRef = (c != null && c !== component.nameAnchorId
+            && this.splitFamiliesData?.persons[c] && !this.splitFamiliesData.persons[c].isPlaceholder)
+            ? `<span class="splitfam-crossref">${this.escapeHtml(s.connectsTo(this.splitFamilyPersonLabel(c)))}</span>`
+            : '';
         return `
             <div class="splitfam-row">
                 <label class="splitfam-check-wrap">
@@ -267,7 +284,7 @@ export const splitFamiliesMethods = uiModule({
                         value="${this.escapeHtml(this.splitFamilyDefaultName(component))}"
                         placeholder="${s.namePlaceholder}" aria-label="${s.namePlaceholder}">
                     <div class="splitfam-row-meta">
-                        <span>${s.persons(count)}</span>${badge}
+                        <span>${s.persons(count)}</span>${badge}${crossRef}
                         <button type="button" class="splitfam-preview-btn" data-index="${index}">${s.preview}</button>
                     </div>
                 </div>
@@ -382,9 +399,14 @@ export const splitFamiliesMethods = uiModule({
         this.dialogStack = this.dialogStack.filter(d => d !== 'split-families-modal');
         // Reopen the tree manager when the split was launched from it.
         const parent = this.splitFamiliesParentDialog;
+        // Reset EVERYTHING the run held, so the next open always recomputes from
+        // scratch and never shows a previous split's state (whatever close path
+        // — X, Cancel, overlay, Escape or after-split — got us here).
         this.splitFamiliesParentDialog = null;
         this.splitFamiliesData = null;
         this.splitFamiliesTreeId = null;
+        this.splitFamiliesComponents = [];
+        this.splitFamiliesWysiwyg = false;
         if (parent) document.getElementById(parent)?.classList.add('active');
     },
 });

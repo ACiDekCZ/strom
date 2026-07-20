@@ -607,6 +607,17 @@ export const miscMethods = uiModule({
                         this.closeSplitDialog();
                         return;
                     }
+                    // Split-into-families dialogs are built per-open: Escape must
+                    // fully tear them down (remove element + reset run state), not
+                    // just drop the 'active' class, or a stale run leaks.
+                    if (currentDialog === 'split-families-modal') {
+                        this.closeSplitFamiliesDialog();
+                        return;
+                    }
+                    if (currentDialog === 'split-fam-picker-modal') {
+                        this.closeSplitFamiliesPickerDialog(true);
+                        return;
+                    }
                     if (currentDialog === 'surnames-modal') {
                         this.closeSurnamesDialog();
                         return;
