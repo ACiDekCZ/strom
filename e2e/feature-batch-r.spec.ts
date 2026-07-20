@@ -49,6 +49,39 @@ test('R1: the descendants view exports a non-empty poster SVG with a card per vi
     // Connections are drawn (parent→child stems) — the poster is not just cards.
     expect(svg).toContain('<g class="connections">');
     expect((svg.match(/<line /g) || []).length).toBeGreaterThan(0);
+
+    // Draw parity for the de-emphasis (R1 F5): the poster dims exactly the same
+    // context-only people the view dims on screen (opacity 0.5). Henry VIII's
+    // descendants have no context-only relatives, so both counts are 0 here —
+    // the parity is exercised for real in the family-view test below.
+    const onScreenIndirect = await page.locator('.person-card.indirect').count();
+    const dimmedGroups = (svg.match(/<g opacity="0.5">/g) || []).length;
+    expect(dimmedGroups).toBe(onScreenIndirect);
+});
+
+test('R1: the family-view poster dims context-only in-laws, matching the screen', async ({ page }) => {
+    await loadSample(page);
+
+    // Anne Boleyn's FAMILY view pulls in her co-wives' branches for context —
+    // those in-laws render de-emphasized (opacity 0.5) on screen.
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const anne = dm.getAllPersons().find((x: { id: string }) => x.id === 'td_anne_b');
+        if (anne) window.Strom.TreeRenderer.setFocus(anne.id);
+        window.Strom.UI.setDisplayViewMode('family');
+    });
+    await expect.poll(() => page.locator('.person-card.indirect').count()).toBeGreaterThan(0);
+    const onScreenIndirect = await page.locator('.person-card.indirect').count();
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.evaluate(() => window.Strom.UI.exportPosterSvg());
+    const download = await downloadPromise;
+    const svg = readFileSync(await download.path(), 'utf-8');
+
+    // The poster carries the same de-emphasis: one opacity-0.5 group per
+    // context-only person, exactly matching the on-screen dimmed cards.
+    const dimmedGroups = (svg.match(/<g opacity="0.5">/g) || []).length;
+    expect(dimmedGroups).toBe(onScreenIndirect);
 });
 
 // ==================== R2: person life timeline ====================

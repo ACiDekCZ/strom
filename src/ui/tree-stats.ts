@@ -264,7 +264,7 @@ export const treeStatsMethods = uiModule({
                     const treeIdAttr = target.getAttribute('data-tree-id');
                     const personIdAttr = target.getAttribute('data-person-id');
                     if (treeIdAttr && personIdAttr) {
-                        this.focusPersonFromValidation(treeIdAttr, personIdAttr);
+                        void this.focusPersonFromValidation(treeIdAttr, personIdAttr);
                     }
                 } else if (target.classList.contains('validation-fix-btn')) {
                     e.preventDefault();
@@ -441,15 +441,18 @@ export const treeStatsMethods = uiModule({
      * Focus on a person from validation dialog
      * Switches to the tree if needed and focuses on the person
      */
-    focusPersonFromValidation(treeId: string, personId: string): void {
+    async focusPersonFromValidation(treeId: string, personId: string): Promise<void> {
         // Close all dialogs
         this.closeTreeValidationDialog();
         this.closeTreeManagerDialog();
 
-        // Switch to tree if needed
+        // Switch to tree if needed — AWAIT it: switchToTree finishes by
+        // restoring the new tree's own focus (restoreFromSession), so calling
+        // setFocus before the switch resolves would set the target on the OLD
+        // tree and then get overwritten by the restore. Await, then focus.
         const activeTreeId = TreeManager.getActiveTreeId();
         if (activeTreeId !== treeId) {
-            this.switchToTree(treeId as TreeId);
+            await this.switchToTree(treeId as TreeId);
         }
 
         // Focus on the person
@@ -469,6 +472,10 @@ export const treeStatsMethods = uiModule({
         const treeData = await TreeManager.getTreeData(treeId as TreeId);
         if (!tree || !treeData) return;
 
+        // Remember the parent dialog so an in-place reopen (after a quick action
+        // like place cleanup) keeps the Escape-back target (F3).
+        this.treeHealthParentDialogId = parentDialogId ?? null;
+
         const modal = document.getElementById('tree-health-modal');
         const title = document.getElementById('tree-health-title');
         const content = document.getElementById('tree-health-content');
@@ -482,7 +489,7 @@ export const treeStatsMethods = uiModule({
                     e.preventDefault();
                     const t = link.getAttribute('data-tree-id');
                     const p = link.getAttribute('data-person-id');
-                    if (t && p) this.focusPersonFromHealth(t, p);
+                    if (t && p) void this.focusPersonFromHealth(t, p);
                     return;
                 }
                 const btn = target.closest('.health-action') as HTMLElement | null;
@@ -508,25 +515,38 @@ export const treeStatsMethods = uiModule({
     },
 
     /** Focus a person from a health-dialog link (closes the dashboard first). */
-    focusPersonFromHealth(treeId: string, personId: string): void {
+    async focusPersonFromHealth(treeId: string, personId: string): Promise<void> {
         this.closeTreeHealthDialog();
+        // Await the switch before focusing — see focusPersonFromValidation:
+        // restoreFromSession runs at the end of the switch and would otherwise
+        // clobber a focus set too early on the still-loaded old tree.
         const activeTreeId = TreeManager.getActiveTreeId();
-        if (activeTreeId !== treeId) this.switchToTree(treeId as TreeId);
+        if (activeTreeId !== treeId) await this.switchToTree(treeId as TreeId);
         TreeRenderer.setFocus(personId as PersonId);
     },
 
     /** Run a health-dashboard quick action, hopping to the relevant dialog. */
     runHealthAction(action: string, treeId: string): void {
+        // `split` and `cleanPlaces` mutate the ACTIVE tree (split reads the
+        // current view; cleanOrphanPlaces reads DataManager.getData()), so they
+        // are only allowed for the active tree — the dashboard is a read-only
+        // checkup and must never silently act on a different tree (F1). The
+        // buttons are already rendered disabled for a non-active tree; this is
+        // the belt-and-braces guard for the action itself.
+        const isActive = TreeManager.getActiveTreeId() === (treeId as TreeId);
         if (action === 'validate') {
             this.closeTreeHealthDialog();
             this.showTreeValidationDialog(treeId);
         } else if (action === 'split') {
+            if (!isActive) { this.showToast(strings.treeHealth.switchFirst); return; }
             this.closeTreeHealthDialog();
             this.showSplitFamiliesDialog();
         } else if (action === 'cleanPlaces') {
-            // Operates on the active tree, then refreshes the dashboard in place.
+            if (!isActive) { this.showToast(strings.treeHealth.switchFirst); return; }
+            // Operates on the active tree, then refreshes the dashboard in place
+            // (keeping the remembered parent dialog for Escape-back, F3).
             void Promise.resolve(this.cleanOrphanPlaces()).then(() => {
-                void this.showTreeHealthDialog(treeId);
+                void this.showTreeHealthDialog(treeId, this.treeHealthParentDialogId ?? undefined);
             });
         }
     },
@@ -625,15 +645,22 @@ export const treeStatsMethods = uiModule({
                 ${islandsHtml}
             </div>`;
 
-        // (d) Quick actions.
+        // (d) Quick actions. `cleanPlaces` and `split` change the ACTIVE tree,
+        // so they are disabled (with a hint) when viewing a non-active tree's
+        // health — mirroring how the tree-manager row only offers Places and
+        // Surnames on the active tree (F1). `validate` is read-only and always
+        // targets the parameter tree.
+        const isActive = TreeManager.getActiveTreeId() === (treeId as TreeId);
+        const inactiveHint = isActive ? '' : ` title="${this.escapeHtml(s.switchFirst)}"`;
         const actionsBlock = `
             <div class="health-block">
                 <div class="health-block-title">${this.escapeHtml(s.sectionActions)}</div>
                 <div class="health-actions">
                     <button type="button" class="secondary health-action" data-action="validate">${this.escapeHtml(s.actionValidate)}</button>
-                    <button type="button" class="secondary health-action" data-action="cleanPlaces"${orphanCount === 0 ? ' disabled' : ''}>${this.escapeHtml(s.actionCleanPlaces(orphanCount))}</button>
-                    <button type="button" class="secondary health-action" data-action="split">${this.escapeHtml(s.actionSplit)}</button>
+                    <button type="button" class="secondary health-action" data-action="cleanPlaces"${(orphanCount === 0 || !isActive) ? ' disabled' : ''}${inactiveHint}>${this.escapeHtml(s.actionCleanPlaces(orphanCount))}</button>
+                    <button type="button" class="secondary health-action" data-action="split"${isActive ? '' : ' disabled'}${inactiveHint}>${this.escapeHtml(s.actionSplit)}</button>
                 </div>
+                ${isActive ? '' : `<div class="health-block-hint">${this.escapeHtml(s.switchFirst)}</div>`}
             </div>`;
 
         return validationBlock + completenessBlock + structureBlock + actionsBlock;

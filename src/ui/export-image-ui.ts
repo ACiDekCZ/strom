@@ -18,6 +18,7 @@ import { uiModule } from './module.js';
 import { DEFAULT_LAYOUT_CONFIG, StromData, ViewMode } from '../types.js';
 import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy.js';
 import { classifyBranches } from '../branch-colors.js';
+import { computeIndirectIds } from '../indirect.js';
 import { SettingsManager } from '../settings.js';
 
 /** Browsers cap canvas dimensions; keep well under the common ~16k limit. */
@@ -165,10 +166,17 @@ function buildCurrentPoster(): PosterBuild | null {
     const branchMap = (SettingsManager.isBranchColorsEnabled() && focusId)
         ? classifyBranches(data, focusId) as unknown as Map<string, string>
         : null;
+    // Draw parity: the descendants / family views dim context-only people on
+    // screen (opacity 0.5). Reuse the SAME membership rule so the poster dims
+    // exactly that set instead of printing everyone at full strength.
+    const dimmedIds = (focusId && (mode === 'descendants' || mode === 'family'))
+        ? computeIndirectIds(data, focusId, mode, [...layout.positions.keys()] as unknown as string[]) as unknown as Set<string>
+        : undefined;
     const options: PosterOptions = {
         ...meta,
         branchMap,
         deceasedSet: presumedDeceasedSet(data),
+        ...(dimmedIds ? { dimmedIds } : {}),
     };
     const svg = buildTreeSvg(data, layout, options);
 

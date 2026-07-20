@@ -161,6 +161,31 @@ describe('computePersonLifeline', () => {
         expect(pts.find(x => x.kind === 'child')!.relatedName).toBe('Josef Novák');
     });
 
+    it('prefers the LIVE linked participant name over the stored snapshot', () => {
+        // Godparent is linked (personId 'g') AND renamed in the tree; the event
+        // still carries an out-of-date snapshot name. The lifeline must show the
+        // live person's current name, not the stale snapshot.
+        const godmother = lp('g', 'Eva', 'female');
+        const p = lp('p', 'Anna', 'female', {
+            birthDate: '1870', deathDate: '1930',
+            events: [{ id: 'e1', type: 'baptism', date: '1870',
+                participants: [{ id: 'x', role: 'godparent', personId: 'g' as PersonId, name: 'Old Snapshot' }] } as LifeEvent],
+        });
+        const pts = computePersonLifeline(data([p, godmother]), 'p');
+        expect(pts.find(x => x.kind === 'event')!.participants).toEqual(['Eva Novák']);
+    });
+
+    it('falls back to the snapshot name when the linked participant is gone', () => {
+        // personId points at a person no longer in the tree → use the snapshot.
+        const p = lp('p', 'Anna', 'female', {
+            birthDate: '1870', deathDate: '1930',
+            events: [{ id: 'e1', type: 'baptism', date: '1870',
+                participants: [{ id: 'x', role: 'godparent', personId: 'gone' as PersonId, name: 'Eva Kmotra' }] } as LifeEvent],
+        });
+        const pts = computePersonLifeline(data([p]), 'p');
+        expect(pts.find(x => x.kind === 'event')!.participants).toEqual(['Eva Kmotra']);
+    });
+
     it('carries event participants and places', () => {
         const p = lp('p', 'Anna', 'female', {
             birthDate: '1870', deathDate: '1930',

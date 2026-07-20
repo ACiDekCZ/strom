@@ -182,8 +182,11 @@ export function computePersonLifeline(data: StromData, personId: string): Lifeli
     for (const ev of person.events ?? []) {
         const y = yearOf(ev.date);
         if (y === null) continue;
+        // Prefer the LIVE person's current name (the link is the source of
+        // truth); fall back to the stored snapshot only when the link is gone
+        // — same contract as the participant display elsewhere.
         const participants = (ev.participants ?? [])
-            .map(part => part.name?.trim() || personName(data, part.personId))
+            .map(part => personName(data, part.personId) ?? part.name?.trim())
             .filter((n): n is string => !!n);
         points.push({
             year: y,

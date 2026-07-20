@@ -28,7 +28,6 @@ import {
     DisplayPolicy,
     runLayoutPipelineWithDebug,
     collectBloodDescendants,
-    collectBloodRelatives,
     DebugOptions,
     DebugSnapshot,
     LayoutDebugContext
@@ -46,6 +45,7 @@ import { SettingsManager } from './settings.js';
 import { personInitials } from './initials.js';
 import { extractSubtree } from './subtree.js';
 import { buildFanModel, buildFanSvg } from './fan-chart.js';
+import { computeIndirectIds } from './indirect.js';
 
 /**
  * One generation band's world-space geometry, consumed by the sticky HTML
@@ -852,67 +852,19 @@ class TreeRendererClass {
                 ? classifyBranches(DataManager.getData(), this.focusPersonId)
                 : null;
 
-        // Descendants view: mark step-relatives (neither blood descendants
-        // nor partners of one) so they render de-emphasized, and remember the
-        // blood set for the badge count.
+        // Descendants / family views de-emphasize context-only people (step-
+        // relatives, or in-laws shown only for context). The membership rule is
+        // shared verbatim with the poster export via computeIndirectIds — the
+        // single source of truth for the `indirect` set. Descendants view also
+        // keeps the blood set for the badge count.
         this.bloodDescendantIds = null;
         let indirectIds: Set<PersonId> | null = null;
-        if (this.viewMode === 'descendants' && this.focusPersonId) {
+        if (this.focusPersonId && (this.viewMode === 'descendants' || this.viewMode === 'family')) {
             const data = DataManager.getData();
-            const blood = collectBloodDescendants(data, this.focusPersonId);
-            this.bloodDescendantIds = blood;
-            indirectIds = new Set();
-            for (const id of this.positions.keys()) {
-                if (blood.has(id)) continue;
-                const p = DataManager.getPerson(id);
-                if (!p || p.isPlaceholder) continue;
-                const partnerOfBlood = p.partnerships.some(pid => {
-                    const u = data.partnerships[pid];
-                    if (!u) return false;
-                    const other = u.person1Id === id ? u.person2Id : u.person1Id;
-                    return blood.has(other);
-                });
-                if (!partnerOfBlood) indirectIds.add(id);
+            if (this.viewMode === 'descendants') {
+                this.bloodDescendantIds = collectBloodDescendants(data, this.focusPersonId);
             }
-        }
-
-        // Family view: de-emphasize people shown only for context — those who
-        // belong to another union with no blood tie to the focus line (e.g. the
-        // second husband of a great-grandmother). Fully visible =
-        //   BLOOD(focus)
-        //   ∪ {partners of anyone in BLOOD(focus)}
-        //   ∪ BLOOD(each partner of focus)   (keeps the partner's V-fan ancestry)
-        // where BLOOD is the up-then-down closure (see collectBloodRelatives).
-        if (this.viewMode === 'family' && this.focusPersonId) {
-            const data = DataManager.getData();
-            const keep = collectBloodRelatives(data, this.focusPersonId);
-            // Partners of anyone in the focus blood set.
-            for (const bid of [...keep]) {
-                const bp = data.persons[bid];
-                if (!bp) continue;
-                for (const pid of bp.partnerships) {
-                    const u = data.partnerships[pid];
-                    if (!u) continue;
-                    keep.add(u.person1Id === bid ? u.person2Id : u.person1Id);
-                }
-            }
-            // Blood of each partner of the focus (their whole ancestry stays lit).
-            const focus = data.persons[this.focusPersonId];
-            if (focus) {
-                for (const pid of focus.partnerships) {
-                    const u = data.partnerships[pid];
-                    if (!u) continue;
-                    const partnerId = u.person1Id === this.focusPersonId ? u.person2Id : u.person1Id;
-                    for (const b of collectBloodRelatives(data, partnerId)) keep.add(b);
-                }
-            }
-            indirectIds = new Set();
-            for (const id of this.positions.keys()) {
-                if (keep.has(id)) continue;
-                const p = DataManager.getPerson(id);
-                if (!p || p.isPlaceholder) continue;
-                indirectIds.add(id);
-            }
+            indirectIds = computeIndirectIds(data, this.focusPersonId, this.viewMode, this.positions.keys());
         }
 
         for (const [id, pos] of this.positions) {

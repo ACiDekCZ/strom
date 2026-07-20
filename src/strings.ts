@@ -683,6 +683,8 @@ const stringsEN = {
         actionValidate: 'Validation details',
         actionCleanPlaces: (n: number) => n > 0 ? `Clean orphan places (${n})` : 'Clean orphan places',
         actionSplit: 'Split into families',
+        // Actions that change data act on the active tree; disabled otherwise.
+        switchFirst: 'Switch to this tree first',
     },
 
     // Person modal
@@ -2408,6 +2410,8 @@ const stringsCZ: StringsType = {
         actionValidate: 'Detaily validace',
         actionCleanPlaces: (n: number) => n > 0 ? `Vyčistit osiřelá místa (${n})` : 'Vyčistit osiřelá místa',
         actionSplit: 'Rozdělit na rodiny',
+        // Akce měnící data pracují s aktivním stromem; jinak jsou zakázané.
+        switchFirst: 'Nejprve na tento strom přepněte',
     },
 
     // Person modal

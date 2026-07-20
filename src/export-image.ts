@@ -116,6 +116,11 @@ export interface PosterOptions {
     branchMap?: Map<string, string> | null;
     /** Persons drawn with the † marker. */
     deceasedSet?: Set<string>;
+    /**
+     * Context-only persons drawn de-emphasized (opacity 0.5), matching the
+     * on-screen `indirect` class in the descendants / family views.
+     */
+    dimmedIds?: Set<string>;
 }
 
 /** Fields the shared poster footer needs (a subset of PosterOptions). */
@@ -270,6 +275,11 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
         const ring = isPlaceholder ? COLORS.placeholderRing
             : (person?.gender === 'male' ? COLORS.male : COLORS.female);
 
+        // Context-only person (step-relative / in-law): dim the whole card group
+        // to 50%, matching the on-screen `indirect` de-emphasis (draw parity).
+        const dimmed = !!options.dimmedIds?.has(personId);
+        if (dimmed) out.push('<g opacity="0.5">');
+
         // "Letopis" card: neutral surface, hairline border (dashed for placeholders).
         const borderDash = isPlaceholder ? ' stroke-dasharray="4,3"' : '';
         out.push(`<rect x="${pos.x.toFixed(1)}" y="${pos.y.toFixed(1)}" width="${cw}" height="${ch}" rx="8" fill="${COLORS.cardBg}" stroke="${COLORS.cardBorder}" stroke-width="1"${borderDash}/>`);
@@ -320,6 +330,8 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
                 out.push(fittedText(meta, cx, pos.y + 45, contentW, [11, 10, 9], false, COLORS.textLight));
             }
         }
+
+        if (dimmed) out.push('</g>');
     }
     out.push('</g>');
 

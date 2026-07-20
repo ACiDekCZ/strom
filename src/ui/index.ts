@@ -123,6 +123,10 @@ export class UIClass {
     // Dialog stack for ESC navigation (child -> parent)
     dialogStack: string[] = [];
 
+    // Parent dialog the tree-health dashboard was opened from, remembered so an
+    // in-place reopen (after "clean orphan places") keeps the Escape-back target.
+    treeHealthParentDialogId: string | null = null;
+
     // Undo toast (raised after each single user mutation).
     undoToastEl: HTMLElement | null = null;
     undoToastTimer: ReturnType<typeof setTimeout> | null = null;

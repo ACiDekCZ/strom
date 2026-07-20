@@ -121,6 +121,18 @@ describe('buildTreeSvg', () => {
         expect(svg).toContain('#d08a5a');                         // paternal stripe
     });
 
+    it('draws dimmed (context-only) persons at half opacity, others at full', () => {
+        const data = makeData(person('a'), person('b', { gender: 'female' }));
+        const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 }, b: { x: 200, y: 300 } }), {
+            dimmedIds: new Set(['b']),
+        });
+        // Exactly one card group is wrapped in an opacity-0.5 group (person b).
+        expect((svg.match(/<g opacity="0.5">/g) || []).length).toBe(1);
+        // Without dimmedIds, nothing is dimmed.
+        const plain = buildTreeSvg(data, layout({ a: { x: 0, y: 0 }, b: { x: 200, y: 300 } }));
+        expect(plain).not.toContain('<g opacity="0.5">');
+    });
+
     it('long names shrink and clamp instead of overflowing the card', () => {
         const data = makeData(person('a', { firstName: 'Maximilian Alexander Wolfgang Amadeus' } as never));
         const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 } }));
