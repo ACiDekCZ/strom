@@ -468,6 +468,10 @@ export const miscMethods = uiModule({
             this.showUndoToast(description);
             this.refreshUndoRedoToolbar();  // R3: keep the visible toolbar pair in sync
         };
+        // R3: fires for EVERY commit, silent bulk flows included — a silent
+        // import/merge/batch/restore clears the redo stack, so the toolbar must
+        // refresh even when no toast is shown and render() early-returns.
+        DataManager.onUndoRedoChanged = () => this.refreshUndoRedoToolbar();
 
         document.addEventListener('keydown', (e) => {
             // The slideshow owns the keyboard while it runs (TV remote style).

@@ -157,6 +157,38 @@ test('R3: the desktop toolbar Undo/Redo buttons follow the can-undo/redo flow', 
     await expect(undoBtn).toBeEnabled();
 });
 
+test('R3: a silent bulk flow clears the redo stack AND greys the Redo button', async ({ page }) => {
+    // Regression: after Undo leaves a redo pending, a SILENT mutation (import /
+    // merge / batch / restore) clears the redo stack. The button must follow —
+    // even when the flow's render early-returns (empty tree), the redo state is
+    // "top" so the button must be disabled, never left stale-enabled.
+    await openApp(page);
+    const redoBtn = page.locator('#toolbar-redo-btn');
+
+    await createFirstPerson(page, 'Jan', 'Novak');
+    // Add a second (disconnected) person, then undo it → redo is pending.
+    await page.getByRole('button', { name: 'Add Person' }).first().click();
+    await page.locator('#input-firstname').fill('Petr');
+    await page.locator('#input-lastname').fill('Svoboda');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await page.locator('#toolbar-undo-btn').click();
+    await expect(redoBtn).toBeEnabled();
+
+    // Silent import into the current tree (mirrors processJsonImport's body:
+    // loadStromData clears the redo stack, then a render follows).
+    const canRedoBefore = await page.evaluate(() => window.Strom.DataManager.canRedo());
+    expect(canRedoBefore).toBe(true);
+    await page.evaluate(() => {
+        window.Strom.DataManager.loadStromData(
+            { version: 5, persons: {}, partnerships: {}, relationships: [], sources: {}, places: {} });
+        window.Strom.TreeRenderer.render();
+    });
+
+    // Stack truth: redo is now empty. UI must agree — button disabled.
+    await expect.poll(() => page.evaluate(() => window.Strom.DataManager.canRedo())).toBe(false);
+    await expect(redoBtn).toBeDisabled();
+});
+
 // ==================== R4: tree-health dashboard ====================
 
 test('R4: the tree-health dashboard opens with all four blocks', async ({ page }) => {

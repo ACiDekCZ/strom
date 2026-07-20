@@ -173,6 +173,17 @@ class DataManagerClass {
      */
     onMutationCommitted: ((description: string) => void) | null = null;
 
+    /**
+     * Notified after EVERY commit (single or silent bulk flow) and every
+     * undo/redo — anything that changes canUndo()/canRedo(). The UI uses it to
+     * keep the desktop Undo/Redo toolbar honest. Unlike onMutationCommitted this
+     * fires for silent flows too: a silent import/merge/batch/restore still
+     * clears the redo stack, so the toolbar must refresh even though no toast is
+     * shown. Decoupled from render() because render() can early-return (empty
+     * tree, no focus person) before its updateViewModeUI beat runs.
+     */
+    onUndoRedoChanged: (() => void) | null = null;
+
     // Pending encrypted embedded data (requires password to unlock)
     private pendingEncryptedEmbedded: EncryptedData | null = null;
 
@@ -800,6 +811,11 @@ class DataManagerClass {
             this.pendingBefore = null;
         }
         this.save();
+        // The Undo/Redo availability just changed (a push clears the redo stack)
+        // — refresh the toolbar for EVERY commit, silent flows included. Doing it
+        // here rather than piggy-backing on the next render keeps the toolbar
+        // honest even when render() early-returns (empty tree / no focus).
+        this.onUndoRedoChanged?.();
         // Single user actions raise the Undo toast; bulk flows (import / merge /
         // batch) pass silent — they surface their own result UI instead.
         if (!silent && !this.viewMode) this.onMutationCommitted?.(description);
