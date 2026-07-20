@@ -4757,9 +4757,12 @@
            crowd the toolbar in the 1024–1280px band (actions label is hidden there
            too). Disabled state reads as clearly inert. */
         .toolbar-undo-group { display: flex; gap: 2px; align-items: center; }
-        .toolbar .toolbar-undo-btn { padding: 6px; }
-        .toolbar .toolbar-undo-btn svg { display: block; }
-        .toolbar .toolbar-undo-btn:disabled {
+        .toolbar .toolbar-undo-btn,
+        .toolbar .toolbar-redo-btn { padding: 6px; }
+        .toolbar .toolbar-undo-btn svg,
+        .toolbar .toolbar-redo-btn svg { display: block; }
+        .toolbar .toolbar-undo-btn:disabled,
+        .toolbar .toolbar-redo-btn:disabled {
             opacity: 0.32;
             cursor: default;
             background: transparent;

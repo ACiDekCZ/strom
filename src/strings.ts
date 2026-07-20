@@ -463,7 +463,7 @@ const stringsEN = {
     // Labels
     labels: {
         nameVariants: 'Other spellings of the name',
-        nameVariantsHint: 'How the registers actually write it (Wischek, Vissek), an alias, or the farm the family was known by. Separate with commas. Search and merge find the person under any of them.',
+        nameVariantsHint: 'How the registers actually write it (Wischek, Vissek), an alias, or the farm the family was known by. Separate with commas. Search and merge find the person under any of them. Applies to this person only — surname spellings shared by the whole family belong in Manage trees → Surname spellings.',
         firstName: 'First Name',
         lastName: 'Last Name',
         gender: 'Gender',
@@ -2225,7 +2225,7 @@ const stringsCZ: StringsType = {
     // Labels
     labels: {
         nameVariants: 'Další tvary jména',
-        nameVariantsHint: 'Jak to píší matriky (Wischek, Vissek), alias, nebo jméno po chalupě. Oddělte čárkami. Hledání i slučování pak osobu najdou pod kterýmkoli z nich.',
+        nameVariantsHint: 'Jak to píší matriky (Wischek, Vissek), alias, nebo jméno po chalupě. Oddělte čárkami. Hledání i slučování pak osobu najdou pod kterýmkoli z nich. Platí jen pro tuto osobu — tvary příjmení společné celé rodině patří do Správa stromů → Tvary příjmení.',
         firstName: 'Jméno',
         lastName: 'Příjmení',
         gender: 'Pohlaví',
