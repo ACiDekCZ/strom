@@ -1538,6 +1538,8 @@ const stringsEN = {
 
     // Tree Preview
     treePreview: {
+        linkCardTitle: 'Shared link card — this person belongs to a neighbouring family; their own spouse and children live there.',
+        bigFamilyHint: 'A large family — the preview starts at its head; click people to move around.',
         title: 'Tree Preview',
         close: 'Close',
         focusedOn: 'Focused on',
@@ -3313,6 +3315,8 @@ const stringsCZ: StringsType = {
 
     // Tree Preview
     treePreview: {
+        linkCardTitle: 'Sdílená spojovací karta — tato osoba patří do sousední rodiny; její partner a děti jsou tam.',
+        bigFamilyHint: 'Velká rodina — náhled začíná u její hlavy; klikáním na osoby se posouváte.',
         title: 'Náhled stromu',
         close: 'Zavřít',
         focusedOn: 'Fokus na',

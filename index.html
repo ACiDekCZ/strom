@@ -6921,6 +6921,21 @@
             border-style: dashed;
             box-shadow: none;
         }
+        /* Placeholders recede in previews — the real family carries the story. */
+        .tree-preview-card.placeholder, .tree-thumb-card.placeholder { opacity: 0.45; }
+        /* Shared link card: belongs to a neighbouring family, stands here as
+           the connection only (split preview connector). */
+        .tree-preview-card.link-card {
+            border-style: dashed;
+            border-color: var(--primary);
+        }
+        .tree-preview-card.link-card::after {
+            content: '⧉';
+            position: absolute;
+            top: 2px; right: 5px;
+            font-size: 11px;
+            color: var(--primary);
+        }
         .tree-preview-card.focused {
             border-color: var(--primary);
             box-shadow: inset 0 0 0 2px var(--primary), var(--shadow-sm);

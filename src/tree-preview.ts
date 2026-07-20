@@ -29,6 +29,12 @@ export interface TreePreviewOptions {
      * ("Fokus na: Tomáš Pižl" for the Krepčík family). Once the user refocuses
      * by hand, the footer follows their choice. */
     focusDisplayId?: PersonId;
+    /**
+     * Cards to mark as SHARED LINK cards — people who belong to a neighbouring
+     * family and stand here only as the connection (split preview: the
+     * connector). Rendered with a link style + explanatory title, so "why has
+     * he no spouse here?" answers itself. */
+    linkPersonIds?: PersonId[];
     /** Subtitle/source info (optional) */
     subtitle?: string;
     /** Callback when preview is closed */
@@ -422,6 +428,10 @@ class TreePreviewClass {
             }
             if (personId === this.currentFocusId) {
                 classes += ' focused';
+            }
+            if (this.options?.linkPersonIds?.includes(personId)) {
+                classes += ' link-card';
+                card.title = strings.treePreview?.linkCardTitle ?? '';
             }
 
             card.className = classes;

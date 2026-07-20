@@ -229,10 +229,16 @@ export const splitFamiliesMethods = uiModule({
      *  matches the count exactly. */
     renderSplitFamilyThumb(box: HTMLElement, index: number, component: FamilyComponent): void {
         try {
+            const subtree = this.splitFamilySubtree(index, component);
+            const big = Object.keys(subtree.persons).length > 40;
             renderTreeThumbnail(box, {
-                data: this.splitFamilySubtree(index, component),
-                focusPersonId: this.splitFamiliesShown[index]?.renderFocus ?? component.defaultPersonId,
-                wholeTree: true,
+                data: subtree,
+                // Big families: a recognizable vignette around the family head
+                // beats an unreadable smear of the whole forest.
+                focusPersonId: big
+                    ? component.nameAnchorId
+                    : (this.splitFamiliesShown[index]?.renderFocus ?? component.defaultPersonId),
+                wholeTree: !big,
             });
         } catch {
             // A thumbnail is a nicety; never let it block the split.
@@ -243,12 +249,18 @@ export const splitFamiliesMethods = uiModule({
     previewSplitFamily(index: number): void {
         const component = this.splitFamiliesComponents[index];
         if (!component) return;
+        const subtree = this.splitFamilySubtree(index, component);
+        const big = Object.keys(subtree.persons).length > 40;
         TreePreview.show({
-            data: this.splitFamilySubtree(index, component),
-            focusPersonId: this.splitFamiliesShown[index]?.renderFocus ?? component.defaultPersonId,
-            wholeTree: true,
+            data: subtree,
+            focusPersonId: big
+                ? component.nameAnchorId
+                : (this.splitFamiliesShown[index]?.renderFocus ?? component.defaultPersonId),
+            wholeTree: !big,
+            ...(big ? { depthUp: 3, depthDown: 3, subtitle: strings.treePreview.bigFamilyHint } : {}),
             title: this.readSplitFamilyName(index),
             focusDisplayId: component.nameAnchorId,
+            linkPersonIds: component.connectorId ? [component.connectorId] : [],
         });
     },
 
