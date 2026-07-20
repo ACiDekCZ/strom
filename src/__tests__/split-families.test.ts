@@ -11,7 +11,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { decomposeIntoFamilies, seedIdsFor, bestRenderFocus, referenceLineageAnchor, SplitMode } from '../split-families.js';
+import {
+    decomposeIntoFamilies, seedIdsFor, bestRenderFocus, referenceLineageAnchor,
+    perspectiveCutCandidates, SplitMode,
+} from '../split-families.js';
 import { StromData, PersonId, Person, Partnership, PartnershipId } from '../types.js';
 
 // ---- Tiny synthetic-tree builder (no real family data) ----
@@ -254,6 +257,102 @@ describe('decomposeIntoFamilies — surname lines ("rody")', () => {
         const comps = decomposeIntoFamilies(gap, P('a'), 'surname');
         expect(comps).toHaveLength(1);
         expect(comps[0].personIds).toHaveLength(3);
+    });
+});
+
+describe("decomposeIntoFamilies — one person's view ('perspective')", () => {
+    // Me, up three generations, with a sibling at every level: brother (with
+    // family), dad's brother (uncle + cousin), grandpa's brother (granduncle +
+    // his wife and child).
+    const persp = tree([
+        person('gg', 'Gg', 'male', { birthDate: '1880', partnerships: [U('ugg')], childIds: [P('gpa'), P('gruncle')] }),
+        person('ggw', 'Ggw', 'female', { birthDate: '1882', partnerships: [U('ugg')], childIds: [P('gpa'), P('gruncle')] }),
+        person('gpa', 'Gpa', 'male', { birthDate: '1905', parentIds: [P('gg'), P('ggw')], partnerships: [U('ug')], childIds: [P('dad'), P('uncle')] }),
+        person('gruncle', 'Gruncle', 'male', { birthDate: '1907', parentIds: [P('gg'), P('ggw')], partnerships: [U('ugr')], childIds: [P('gcous')] }),
+        person('gw', 'Gw', 'female', { birthDate: '1910', partnerships: [U('ugr')], childIds: [P('gcous')] }),
+        person('gcous', 'Gcous', 'male', { birthDate: '1935', parentIds: [P('gruncle'), P('gw')] }),
+        person('gma', 'Gma', 'female', { birthDate: '1908', partnerships: [U('ug')], childIds: [P('dad'), P('uncle')] }),
+        person('dad', 'Dad', 'male', { birthDate: '1930', parentIds: [P('gpa'), P('gma')], partnerships: [U('ud')], childIds: [P('me'), P('bro')] }),
+        person('uncle', 'Uncle', 'male', { birthDate: '1933', parentIds: [P('gpa'), P('gma')], partnerships: [U('uu')], childIds: [P('cous')] }),
+        person('uw', 'Uw', 'female', { birthDate: '1935', partnerships: [U('uu')], childIds: [P('cous')] }),
+        person('cous', 'Cous', 'male', { birthDate: '1960', parentIds: [P('uncle'), P('uw')] }),
+        person('mom', 'Mom', 'female', { birthDate: '1932', partnerships: [U('ud')], childIds: [P('me'), P('bro')] }),
+        person('me', 'Me', 'male', { birthDate: '1958', parentIds: [P('dad'), P('mom')], partnerships: [U('um')], childIds: [P('kid')] }),
+        person('wife', 'Wife', 'female', { birthDate: '1960', partnerships: [U('um')], childIds: [P('kid')] }),
+        person('kid', 'Kid', 'male', { birthDate: '1985', parentIds: [P('me'), P('wife')] }),
+        person('bro', 'Bro', 'male', { birthDate: '1961', parentIds: [P('dad'), P('mom')], partnerships: [U('ub')], childIds: [P('bk')] }),
+        person('bw', 'Bw', 'female', { birthDate: '1963', partnerships: [U('ub')], childIds: [P('bk')] }),
+        person('bk', 'Bk', 'male', { birthDate: '1988', parentIds: [P('bro'), P('bw')] }),
+    ], [
+        union('ugg', 'gg', 'ggw', ['gpa', 'gruncle']),
+        union('ugr', 'gruncle', 'gw', ['gcous']),
+        union('ug', 'gpa', 'gma', ['dad', 'uncle']),
+        union('uu', 'uncle', 'uw', ['cous']),
+        union('ud', 'dad', 'mom', ['me', 'bro']),
+        union('um', 'me', 'wife', ['kid']),
+        union('ub', 'bro', 'bw', ['bk']),
+    ]);
+
+    const decompose = (opts?: Parameters<typeof decomposeIntoFamilies>[3]) =>
+        decomposeIntoFamilies(persp, P('me'), 'perspective', opts);
+
+    it('default depth keeps first cousins; a granduncle stays alone and his family splits', () => {
+        const comps = decompose();
+        const base = comps[0];
+        expect(base.personal).toBe(true);
+        expect(base.personIds).toContain(P('me'));
+        // First cousins kept (uncle's whole family), granduncle bare.
+        for (const id of ['uncle', 'uw', 'cous', 'bro', 'bw', 'bk', 'gruncle', 'gg', 'ggw']) {
+            expect(base.personIds).toContain(P(id));
+        }
+        expect(base.personIds).not.toContain(P('gw'));
+        const gwFam = comps.find(c => c.personIds.includes(P('gw')))!;
+        expect(gwFam.personIds).toEqual([P('gw'), P('gcous')]);   // birthdate order
+        expect(gwFam.connectorId).toBe(P('gruncle'));
+        // A personal tree keeps its person's name and opens on them.
+        expect(base.nameAnchorId).toBe(P('me'));
+        expect(base.defaultPersonId).toBe(P('me'));
+        // Everyone exactly once.
+        const seen = comps.flatMap(c => c.personIds);
+        expect(new Set(seen).size).toBe(seen.length);
+        expect(seen.length).toBe(Object.keys(persp.persons).length);
+    });
+
+    it('depth 0 cuts at the uncle too, but own siblings always keep their families', () => {
+        const comps = decompose({ baseIds: [P('me')], cousinDepth: 0 });
+        const base = comps[0];
+        expect(base.personIds).toContain(P('uncle'));         // the sibling himself stays
+        expect(base.personIds).not.toContain(P('uw'));        // his family splits
+        expect(base.personIds).toContain(P('bw'));            // brother's family stays (gen 0)
+        const uwFam = comps.find(c => c.personIds.includes(P('uw')))!;
+        expect(uwFam.personIds).toEqual([P('uw'), P('cous')]);   // birthdate order
+        expect(uwFam.connectorId).toBe(P('uncle'));
+    });
+
+    it('per-sibling overrides beat the depth in both directions', () => {
+        const comps = decompose({
+            baseIds: [P('me')], cousinDepth: 1,
+            cutOverrides: new Map([[P('uncle'), true], [P('gruncle'), false]]),
+        });
+        const base = comps[0];
+        expect(base.personIds).not.toContain(P('uw'));        // cut despite depth 1
+        expect(base.personIds).toContain(P('gw'));            // kept despite depth 1
+        expect(base.personIds).toContain(P('gcous'));
+    });
+
+    it('lists the tunable boundary siblings with generation, family size and kept flag', () => {
+        const cuts = perspectiveCutCandidates(persp, P('me'));
+        const by = Object.fromEntries(cuts.map(c => [c.id, c]));
+        expect(by['bro']).toMatchObject({ generation: 0, familySize: 2, kept: true });
+        expect(by['uncle']).toMatchObject({ generation: 1, familySize: 2, kept: true });
+        expect(by['gruncle']).toMatchObject({ generation: 2, familySize: 2, kept: false });
+    });
+
+    it('a second base person carves their own personal tree from what is left', () => {
+        const comps = decompose({ baseIds: [P('me'), P('gw')], cousinDepth: 1 });
+        const second = comps.find(c => c.personal && c.personIds.includes(P('gw')))!;
+        expect(second.nameAnchorId).toBe(P('gw'));
+        expect(second.personIds).toContain(P('gcous'));
     });
 });
 

@@ -16,7 +16,10 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import { PersonId, StromData, TreeId, LAST_FOCUSED } from '../types.js';
-import { decomposeIntoFamilies, seedIdsFor, bestRenderFocus, FamilyComponent, SplitMode } from '../split-families.js';
+import {
+    decomposeIntoFamilies, seedIdsFor, bestRenderFocus, perspectiveCutCandidates,
+    FamilyComponent, SplitMode,
+} from '../split-families.js';
 import { extractSubtree } from '../subtree.js';
 import { TreePreview, renderTreeThumbnail } from '../tree-preview.js';
 import { AuditLogManager } from '../audit-log.js';
@@ -102,20 +105,39 @@ export const splitFamiliesMethods = uiModule({
         this.openSplitFamiliesDialog({ treeId: id, data, focusPersonId: focus, parentDialogId });
     },
 
+    /** The 'perspective' cut config for this run, created on first use. */
+    splitFamiliesPerspectiveOpts(run: SplitFamiliesRun): {
+        baseIds: PersonId[]; cousinDepth: number; cutOverrides: Map<PersonId, boolean>;
+    } {
+        if (!this.splitFamiliesPerspective) {
+            this.splitFamiliesPerspective = {
+                baseIds: [run.focusPersonId],
+                cousinDepth: 1,
+                cutOverrides: new Map(),
+            };
+        }
+        return this.splitFamiliesPerspective;
+    },
+
     openSplitFamiliesDialog(run: SplitFamiliesRun): void {
-        // The partition is focus-invariant: the same tree always yields the same
-        // families, whoever the focus is. The focus only decides which family is
-        // listed first (its own) and which person a new tree opens on.
-        let components = decomposeIntoFamilies(run.data, run.focusPersonId, this.splitFamiliesMode);
-        // One family in the preferred mode: the OTHER cut may still split (a
+        // 'surname' and 'lineage' are focus-invariant: the same tree always
+        // yields the same families, whoever the focus is (it only orders the
+        // list). 'perspective' is the deliberate exception — it is built from
+        // the chosen people (this run's config).
+        const persp = this.splitFamiliesPerspectiveOpts(run);
+        let components = decomposeIntoFamilies(run.data, run.focusPersonId, this.splitFamiliesMode, persp);
+        // One family in the preferred cut: another cut may still split (a
         // one-surname tree can hold several in-law branches, and vice versa) —
         // fall over to it rather than telling the user there is nothing here.
         if (components.length < 2) {
-            const other: SplitMode = this.splitFamiliesMode === 'surname' ? 'lineage' : 'surname';
-            const retry = decomposeIntoFamilies(run.data, run.focusPersonId, other);
-            if (retry.length >= 2) {
-                this.splitFamiliesMode = other;
-                components = retry;
+            for (const other of (['surname', 'lineage', 'perspective'] as SplitMode[])) {
+                if (other === this.splitFamiliesMode) continue;
+                const retry = decomposeIntoFamilies(run.data, run.focusPersonId, other, persp);
+                if (retry.length >= 2) {
+                    this.splitFamiliesMode = other;
+                    components = retry;
+                    break;
+                }
             }
         }
         // A single family either way means there is nothing to split — say so.
@@ -154,12 +176,14 @@ export const splitFamiliesMethods = uiModule({
                 </div>
                 <p class="splitfam-intro">${s.intro}</p>
                 <div class="splitfam-mode" role="radiogroup" aria-label="${s.modeLabel}">
-                    <button type="button" class="splitfam-mode-btn${this.splitFamiliesMode === 'surname' ? ' active' : ''}"
-                        data-mode="surname" aria-pressed="${this.splitFamiliesMode === 'surname'}">${s.modeSurname}</button>
-                    <button type="button" class="splitfam-mode-btn${this.splitFamiliesMode === 'lineage' ? ' active' : ''}"
-                        data-mode="lineage" aria-pressed="${this.splitFamiliesMode === 'lineage'}">${s.modeLineage}</button>
+                    ${([['surname', s.modeSurname], ['lineage', s.modeLineage], ['perspective', s.modePerspective]] as [SplitMode, string][])
+                        .map(([m, label]) => `<button type="button" class="splitfam-mode-btn${this.splitFamiliesMode === m ? ' active' : ''}"
+                            data-mode="${m}" aria-pressed="${this.splitFamiliesMode === m}">${label}</button>`).join('')}
                 </div>
-                <p class="splitfam-mode-hint">${this.splitFamiliesMode === 'surname' ? s.modeSurnameHint : s.modeLineageHint}</p>
+                <p class="splitfam-mode-hint">${{
+                    surname: s.modeSurnameHint, lineage: s.modeLineageHint, perspective: s.modePerspectiveHint,
+                }[this.splitFamiliesMode]}</p>
+                ${this.splitFamiliesMode === 'perspective' ? this.splitFamiliesPerspectiveHtml(run) : ''}
                 <div class="splitfam-list">
                     ${components.map((c, i) => this.splitFamiliesRowHtml(c, i)).join('')}
                 </div>
@@ -185,7 +209,7 @@ export const splitFamiliesMethods = uiModule({
             (btn as HTMLButtonElement).onclick = () => {
                 const m = btn.getAttribute('data-mode') as SplitMode;
                 if (m === this.splitFamiliesMode) return;
-                if (decomposeIntoFamilies(run.data, run.focusPersonId, m).length < 2) {
+                if (decomposeIntoFamilies(run.data, run.focusPersonId, m, persp).length < 2) {
                     this.showToast(strings.splitFamilies.oneFamilyInMode);
                     return;
                 }
@@ -193,6 +217,7 @@ export const splitFamiliesMethods = uiModule({
                 this.openSplitFamiliesDialog(run);
             };
         });
+        if (this.splitFamiliesMode === 'perspective') this.bindSplitFamiliesPerspective(overlay, run);
         overlay.querySelectorAll('.splitfam-check').forEach(box => {
             (box as HTMLInputElement).onchange = () => this.updateSplitFamiliesFooter();
         });
@@ -214,6 +239,89 @@ export const splitFamiliesMethods = uiModule({
         }
         this.pushDialog('split-families-modal');
         this.updateSplitFamiliesFooter();
+    },
+
+    /** The 'perspective' cut's config block: depth, base people, cut list. */
+    splitFamiliesPerspectiveHtml(run: SplitFamiliesRun): string {
+        const s = strings.splitFamilies;
+        const persp = this.splitFamiliesPerspectiveOpts(run);
+        const cuts = perspectiveCutCandidates(run.data, run.focusPersonId, persp);
+        const chip = (id: PersonId): string => `
+            <span class="splitfam-persp-chip" data-id="${id}">${this.escapeHtml(this.splitFamilyPersonLabel(id))}${
+                persp.baseIds.length > 1 ? `<button type="button" class="splitfam-persp-chip-x" data-id="${id}" aria-label="${s.cancel}">&times;</button>` : ''
+            }</span>`;
+        return `
+            <div class="splitfam-persp">
+                <label class="splitfam-persp-depth">
+                    <span>${s.perspDepthLabel}</span>
+                    <select id="splitfam-persp-depth">
+                        <option value="1"${persp.cousinDepth === 1 ? ' selected' : ''}>${s.perspDepthCousins}</option>
+                        <option value="2"${persp.cousinDepth === 2 ? ' selected' : ''}>${s.perspDepthSecond}</option>
+                        <option value="0"${persp.cousinDepth === 0 ? ' selected' : ''}>${s.perspDepthNone}</option>
+                    </select>
+                </label>
+                <div class="splitfam-persp-bases">
+                    <span class="splitfam-persp-label">${s.perspBasesLabel}:</span>
+                    ${persp.baseIds.map(chip).join('')}
+                    <button type="button" class="splitfam-preview-btn" id="splitfam-persp-add">${s.perspAddPerson}</button>
+                </div>
+                <div id="splitfam-persp-picker" class="splitfam-persp-picker" style="display:none"></div>
+                ${cuts.length > 0 ? `
+                <details class="splitfam-persp-cuts">
+                    <summary>${s.perspCutsLabel(cuts.length)}</summary>
+                    <p class="splitfam-mode-hint">${s.perspCutHint}</p>
+                    <div class="splitfam-persp-cut-list">
+                        ${cuts.map(c => `
+                        <label class="splitfam-persp-cut">
+                            <input type="checkbox" class="splitfam-persp-cut-box" data-id="${c.id}"${c.kept ? '' : ' checked'}>
+                            <span>${this.escapeHtml(this.splitFamilyPersonLabel(c.id))} — ${s.persons(c.familySize)}</span>
+                        </label>`).join('')}
+                    </div>
+                </details>` : ''}
+            </div>`;
+    },
+
+    /** Wire the 'perspective' config block (rebuilds the dialog on change). */
+    bindSplitFamiliesPerspective(overlay: HTMLElement, run: SplitFamiliesRun): void {
+        const persp = this.splitFamiliesPerspectiveOpts(run);
+        const reopen = (): void => this.openSplitFamiliesDialog(run);
+        overlay.querySelector('#splitfam-persp-depth')?.addEventListener('change', (e) => {
+            persp.cousinDepth = Number((e.target as HTMLSelectElement).value);
+            persp.cutOverrides.clear();   // a new depth means a fresh default cut
+            reopen();
+        });
+        overlay.querySelectorAll('.splitfam-persp-cut-box').forEach(box => {
+            (box as HTMLInputElement).onchange = () => {
+                const id = box.getAttribute('data-id') as PersonId;
+                persp.cutOverrides.set(id, (box as HTMLInputElement).checked);
+                reopen();
+            };
+        });
+        overlay.querySelectorAll('.splitfam-persp-chip-x').forEach(btn => {
+            (btn as HTMLButtonElement).onclick = () => {
+                const id = btn.getAttribute('data-id') as PersonId;
+                persp.baseIds = persp.baseIds.filter(b => b !== id);
+                reopen();
+            };
+        });
+        const addBtn = overlay.querySelector('#splitfam-persp-add') as HTMLButtonElement | null;
+        addBtn?.addEventListener('click', () => {
+            const box = overlay.querySelector('#splitfam-persp-picker') as HTMLElement | null;
+            if (!box) return;
+            const open = box.style.display !== 'none';
+            box.style.display = open ? 'none' : '';
+            if (!open && !box.hasChildNodes()) {
+                new PersonPicker({
+                    containerId: 'splitfam-persp-picker',
+                    persons: Object.values(run.data.persons)
+                        .filter(p => !p.isPlaceholder && !persp.baseIds.includes(p.id as PersonId)),
+                    onSelect: (id) => {
+                        if (!persp.baseIds.includes(id)) persp.baseIds.push(id);
+                        reopen();
+                    },
+                });
+            }
+        });
     },
 
     /** One proposed family, with its name field, count, thumbnail and checkbox. */
@@ -385,8 +493,9 @@ export const splitFamiliesMethods = uiModule({
         // — X, Cancel, overlay, Escape or after-split — got us here).
         this.splitFamiliesParentDialog = null;
         // The chosen mode deliberately survives the close — it is a preference,
-        // not run state; everything else resets.
+        // not run state; everything else (incl. the perspective config) resets.
         this.splitFamiliesRun = null;
+        this.splitFamiliesPerspective = null;
         this.splitFamiliesData = null;
         this.splitFamiliesTreeId = null;
         this.splitFamiliesComponents = [];

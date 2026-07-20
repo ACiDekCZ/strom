@@ -260,6 +260,48 @@ test('the what-counts-as-one-family toggle recuts the same tree two ways', async
     await expect(modal.locator('.splitfam-row').first()).toContainText('8 people');
 });
 
+test("the third cut — one person's view: the depth decides where sibling families split", async ({ page }) => {
+    // The core tree plus dad's brother with his own family (wife + cousin).
+    const PERSP = structuredClone(TREE);
+    PERSP.persons.gpa.childIds = ['dad', 'uncle'];
+    PERSP.persons.gma.childIds = ['dad', 'uncle'];
+    (PERSP.persons as Record<string, unknown>).uncle = mk('uncle', 'Strejda', 'Novák', 'male', '1933', ['u_u'], ['gpa', 'gma'], ['cous']);
+    (PERSP.persons as Record<string, unknown>).uw = mk('uw', 'Teta', 'Malá', 'female', '1935', ['u_u'], [], ['cous']);
+    (PERSP.persons as Record<string, unknown>).cous = mk('cous', 'Bratranec', 'Novák', 'male', '1965', [], ['uncle', 'uw'], []);
+    (PERSP.partnerships as Record<string, unknown>).u_u = { id: 'u_u', person1Id: 'uncle', person2Id: 'uw', childIds: ['cous'], status: 'married' };
+    await openApp(page);
+    await page.evaluate(async (data) => {
+        await window.Strom.DataManager.importAsNewTree(data, 'Rodina se strejdou');
+        window.Strom.TreeRenderer.restoreFromSession();
+        window.Strom.TreeRenderer.setFocus('me', false);
+    }, PERSP);
+    await expect(card(page, 'Petr')).toHaveClass(/focused/);
+
+    await page.evaluate(() => window.Strom.UI.showSplitFamiliesDialog());
+    const modal = page.locator('#split-families-modal');
+    await expect(modal).toBeVisible();
+
+    // Switch to the personal cut: the base tree is named after and opened on
+    // Petr, and with the default depth (first cousins) it holds everyone but
+    // the wife's parents — the uncle's family stays in.
+    await modal.locator('.splitfam-mode-btn[data-mode="perspective"]').click();
+    await expect(modal.locator('.splitfam-mode-btn[data-mode="perspective"]')).toHaveClass(/active/);
+    await expect(modal.locator('.splitfam-row').first().locator('.splitfam-name'))
+        .toHaveValue('Petr Novák (*1960) family');
+    await expect(modal.locator('.splitfam-row')).toHaveCount(2);
+    await expect(modal.locator('.splitfam-row').first()).toContainText('11 people');
+
+    // Direct line only: the uncle stays alone, his wife and the cousin become
+    // their own neighbouring tree — three families now.
+    await modal.locator('#splitfam-persp-depth').selectOption('0');
+    await expect(modal.locator('.splitfam-row')).toHaveCount(3);
+    await expect(modal.locator('.splitfam-row').first()).toContainText('9 people');
+
+    // The cut list names the uncle as the boundary to tune.
+    await expect(modal.locator('.splitfam-persp-cuts summary')).toContainText('Cuts at siblings (1)');
+    await expect(modal.locator('.splitfam-persp-cut')).toContainText('Strejda Novák (*1933)');
+});
+
 test('tree manager row: split opens the proposals directly, even for a non-active tree', async ({ page }) => {
     await loadTree(page);
     await page.evaluate(() => window.Strom.DataManager.createNewTree('Jiný strom'));

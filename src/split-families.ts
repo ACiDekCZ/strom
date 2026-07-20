@@ -41,8 +41,40 @@ import { sameSurname, surnameKey } from './surnames.js';
  * - 'lineage': branches the way the tree grew — the reference line plus every
  *   in-law/ancestral branch hanging off it (children + spouses closure;
  *   parents root new branches).
+ * - 'perspective': ONE PERSON'S view — deliberately the only cut that DEPENDS
+ *   on chosen people (invariant #0 does not apply; that is its purpose). The
+ *   base tree is the person's own line: direct ancestors, their blood siblings,
+ *   own siblings and all descendants with spouses. Sibling FAMILIES stay in
+ *   the base up to a configurable ancestor generation (first cousins by
+ *   default) with per-sibling overrides; everything else falls into automatic
+ *   neighbouring families connected through the boundary people.
  */
-export type SplitMode = 'surname' | 'lineage';
+export type SplitMode = 'surname' | 'lineage' | 'perspective';
+
+/** Configuration of the 'perspective' cut. */
+export interface PerspectiveOptions {
+    /** People whose view forms a base tree each, in claim order (first wins). */
+    baseIds: PersonId[];
+    /**
+     * Sibling families stay in the base tree up to this ancestor generation:
+     * 0 = own siblings only, 1 = parents' siblings too (first cousins visible),
+     * 2 = grandparents' siblings too (second cousins).
+     */
+    cousinDepth: number;
+    /** Per-sibling overrides: true = cut their family off, false = keep it. */
+    cutOverrides?: ReadonlyMap<PersonId, boolean>;
+}
+
+/** One boundary sibling the 'perspective' cut can be tuned at. */
+export interface PerspectiveCutCandidate {
+    id: PersonId;
+    /** 0 = own sibling, 1 = parent's sibling, 2 = grandparent's sibling… */
+    generation: number;
+    /** How many people their family (spouses + descendants) would take along. */
+    familySize: number;
+    /** Whether the current options keep that family in the base tree. */
+    kept: boolean;
+}
 
 /** One proposed family: a disjoint slice of the tree with an entry person. */
 export interface FamilyComponent {
@@ -74,6 +106,12 @@ export interface FamilyComponent {
      * family). Undefined for the focus's own family.
      */
     viaFromFocusId?: PersonId;
+    /**
+     * 'perspective' base tree: named after and opened on its chosen person
+     * (never renamed to the senior — "Rodina Milana" is Milan's view, not his
+     * great-grandfather's).
+     */
+    personal?: boolean;
 }
 
 /** Partners of a person across all their unions. */
@@ -196,8 +234,10 @@ function walkIsland(data: StromData, start: PersonId, pool: Set<PersonId>): Pers
 export function decomposeIntoFamilies(
     data: StromData,
     focusId: PersonId,
-    mode: SplitMode = 'surname'
+    mode: SplitMode = 'surname',
+    perspective?: PerspectiveOptions
 ): FamilyComponent[] {
+    if (mode === 'perspective') return decomposePerspective(data, focusId, perspective);
     const rootSeed = referenceLineageAnchor(data);
 
     const covered = new Set<PersonId>();
@@ -352,6 +392,184 @@ export function decomposeIntoFamilies(
     return presentForFocus(data, finaliseComponents(data, components, mode), focusId);
 }
 
+/** Filled-in perspective options: base defaults to the dialog's focus person. */
+function resolvePerspective(focusId: PersonId, opts?: PerspectiveOptions): Required<PerspectiveOptions> {
+    return {
+        baseIds: opts?.baseIds?.length ? opts.baseIds : [focusId],
+        cousinDepth: opts?.cousinDepth ?? 1,
+        cutOverrides: opts?.cutOverrides ?? new Map<PersonId, boolean>(),
+    };
+}
+
+/**
+ * The 'perspective' cut (see SplitMode): each chosen person gets a base tree —
+ * their own line, cut at the siblings whose families are not kept — and
+ * whatever remains falls into automatic neighbouring families, each connected
+ * through the boundary person it hangs off. Deterministic given the options,
+ * but by design NOT focus-invariant: the chosen people are the point.
+ */
+function decomposePerspective(
+    data: StromData,
+    focusId: PersonId,
+    optsIn?: PerspectiveOptions
+): FamilyComponent[] {
+    const opts = resolvePerspective(focusId, optsIn);
+    const covered = new Set<PersonId>();
+    const components: FamilyComponent[] = [];
+
+    for (const base of opts.baseIds) {
+        if (!data.persons[base] || covered.has(base)) continue;
+        const claimedSet = new Set<PersonId>();
+        const claim = (id: PersonId): boolean => {
+            if (data.persons[id] && !covered.has(id)) {
+                covered.add(id);
+                claimedSet.add(id);
+                return true;
+            }
+            return false;
+        };
+        // A whole family hanging down from `seed`: descendants and the spouses
+        // who married in (children + direct spouse closure, same as 'lineage').
+        const growDown = (seed: PersonId): void => {
+            const work: PersonId[] = [seed];
+            while (work.length > 0) {
+                const id = work.shift()!;
+                const p = data.persons[id]!;
+                for (const ch of sortIds(data, p.childIds.filter(x => !!data.persons[x]))) {
+                    if (claim(ch)) work.push(ch);
+                }
+                for (const sp of sortIds(data, partnersOf(data, id))) {
+                    if (claim(sp)) work.push(sp);
+                }
+            }
+        };
+
+        // The person, their spouses and all descendants with spouses…
+        claim(base);
+        growDown(base);
+        // …then straight up the ancestor line, taking each level's blood
+        // siblings along: with their whole family when kept, alone when cut
+        // (the family then falls to a neighbouring tree through them).
+        let frontier: PersonId[] = [base];
+        let gen = 0;
+        const sibsSeen = new Set<PersonId>();
+        while (frontier.length > 0) {
+            const next: PersonId[] = [];
+            for (const person of frontier) {
+                for (const sib of sortIds(data, siblingsOf(data, person).filter(x => !!data.persons[x]))) {
+                    if (sibsSeen.has(sib)) continue;
+                    sibsSeen.add(sib);
+                    const kept = keepFamily(sib, gen, opts);
+                    if (claim(sib) && kept) growDown(sib);
+                }
+                const p = data.persons[person];
+                for (const par of sortIds(data, (p?.parentIds ?? []).filter(x => !!data.persons[x]))) {
+                    if (claim(par)) next.push(par);
+                }
+            }
+            frontier = next;
+            gen += 1;
+        }
+
+        if (claimedSet.size === 0) continue;
+        components.push({
+            focusId: base,
+            connectorId: null,
+            personIds: sortIds(data, [...claimedSet]),
+            defaultPersonId: base,
+            nameAnchorId: base,
+            isFirst: components.length === 0,
+            personal: true,
+        });
+    }
+
+    // Everything the base trees did not keep: connected groups, each linked
+    // back through the boundary person it touches (an uncle's wife and
+    // children connect through the uncle).
+    const pool = new Set<PersonId>(
+        (Object.keys(data.persons) as PersonId[]).filter(id => !covered.has(id))
+    );
+    for (const start of sortIds(data, [...pool])) {
+        if (covered.has(start)) continue;
+        const island = sortIds(data, walkIsland(data, start, pool));
+        for (const id of island) covered.add(id);
+        let connector: PersonId | null = null;
+        outer: for (const id of island) {
+            for (const r of sortIds(data, relativesOf(data, id))) {
+                if (!pool.has(r)) { connector = r; break outer; }
+            }
+        }
+        components.push({
+            focusId: island[0],
+            connectorId: connector,
+            personIds: island,
+            defaultPersonId: island[0],
+            nameAnchorId: island[0], // finalised below
+            isFirst: false,
+        });
+    }
+
+    return presentForFocus(data, finaliseComponents(data, components, 'perspective'), focusId);
+}
+
+/**
+ * The boundary siblings the 'perspective' cut can be tuned at: every real
+ * sibling along the base people's ancestor lines who has a family of their own
+ * (a spouse or children). `familySize` is what that family would take along.
+ */
+export function perspectiveCutCandidates(
+    data: StromData,
+    focusId: PersonId,
+    optsIn?: PerspectiveOptions
+): PerspectiveCutCandidate[] {
+    const opts = resolvePerspective(focusId, optsIn);
+    const out: PerspectiveCutCandidate[] = [];
+    const seen = new Set<PersonId>();
+
+    const familySize = (sib: PersonId): number => {
+        // The sibling's own family hanging down from them, sibling excluded.
+        const group = new Set<PersonId>([sib]);
+        const work: PersonId[] = [sib];
+        while (work.length > 0) {
+            const id = work.shift()!;
+            const p = data.persons[id]!;
+            for (const r of [...p.childIds, ...partnersOf(data, id)]) {
+                if (data.persons[r] && !group.has(r)) { group.add(r); work.push(r); }
+            }
+        }
+        return group.size - 1;
+    };
+
+    for (const base of opts.baseIds) {
+        if (!data.persons[base]) continue;
+        let frontier: PersonId[] = [base];
+        let gen = 0;
+        const ancestorsSeen = new Set<PersonId>([base]);
+        while (frontier.length > 0) {
+            const next: PersonId[] = [];
+            for (const person of frontier) {
+                for (const sib of sortIds(data, siblingsOf(data, person).filter(x => !!data.persons[x]))) {
+                    if (seen.has(sib) || !isReal(data, sib)) continue;
+                    seen.add(sib);
+                    const size = familySize(sib);
+                    if (size === 0) continue;   // nothing to cut, nothing to keep
+                    out.push({ id: sib, generation: gen, familySize: size, kept: keepFamily(sib, gen, opts) });
+                }
+                for (const par of sortIds(data, (data.persons[person]?.parentIds ?? []).filter(x => !!data.persons[x]))) {
+                    if (!ancestorsSeen.has(par)) { ancestorsSeen.add(par); next.push(par); }
+                }
+            }
+            frontier = next;
+            gen += 1;
+        }
+    }
+    return out;
+}
+
+function keepFamily(sib: PersonId, gen: number, opts: Required<PerspectiveOptions>): boolean {
+    return opts.cutOverrides.has(sib) ? !opts.cutOverrides.get(sib)! : gen <= opts.cousinDepth;
+}
+
 /** The family's own senior real member (birthdate→id), or null if it has none. */
 function firstRealOwned(data: StromData, c: FamilyComponent): PersonId | null {
     const reals = c.personIds.filter(id => isReal(data, id));
@@ -394,17 +612,20 @@ function pickBetterNamed(data: StromData, personIds: PersonId[], senior: PersonI
  * real family that reached them (the one owning its connector), so the split
  * still covers everyone exactly once but never offers an empty family.
  *
- * In 'surname' mode a family with a SINGLE real member folds the same way: one
- * person is not a line, they are somebody's relative — a lone daughter-in-law's
- * child, a twice-married widow's other husband — and belongs with the family
- * that reached them. ('lineage' branches keep even one-person families: there
- * the person IS the whole in-law branch.)
+ * In the 'surname' and 'perspective' cuts a family with a SINGLE real member
+ * folds the same way: one person is not a family, they are somebody's relative
+ * — a lone daughter-in-law's child, a twice-married widow's other husband —
+ * and belong with the family that reached them. ('lineage' branches keep even
+ * one-person families: there the person IS the whole in-law branch.)
  */
 function finaliseComponents(data: StromData, components: FamilyComponent[], mode: SplitMode): FamilyComponent[] {
     const realCount = (c: FamilyComponent): number =>
         c.personIds.filter(id => isReal(data, id)).length;
+    // 'lineage' keeps one-person families (the person IS the whole in-law
+    // branch there); the other cuts fold them into the family they hang off.
     const foldsAway = (c: FamilyComponent): boolean =>
-        realCount(c) === 0 || (mode === 'surname' && realCount(c) === 1 && c.connectorId != null);
+        realCount(c) === 0
+        || (mode !== 'lineage' && !c.personal && realCount(c) === 1 && c.connectorId != null);
     const survives = (c: FamilyComponent): boolean => !foldsAway(c);
 
     const ownerOf = new Map<PersonId, number>();
@@ -440,6 +661,13 @@ function finaliseComponents(data: StromData, components: FamilyComponent[], mode
         if (!survives(c)) return; // folded away above
         const extra = foldedInto.get(i);
         const personIds = extra ? sortIds(data, [...c.personIds, ...extra]) : c.personIds;
+
+        // A 'perspective' base tree is one person's view: it keeps that
+        // person's name and opens on them, whoever its senior is.
+        if (c.personal) {
+            result.push({ ...c, personIds });
+            return;
+        }
 
         // Name anchor: the family's own SENIOR real member (birthdate → id).
         // "Rodina X" reads as "the family founded by X", so the oldest member

@@ -225,6 +225,10 @@ export class UIClass {
     splitFamiliesComponents: import('../split-families.js').FamilyComponent[] = [];
     /** What counts as one family — the dialog's toggle; kept for the session. */
     splitFamiliesMode: import('../split-families.js').SplitMode = 'surname';
+    /** 'perspective' cut config for the OPEN dialog only (reset on close). */
+    splitFamiliesPerspective: {
+        baseIds: PersonId[]; cousinDepth: number; cutOverrides: Map<PersonId, boolean>;
+    } | null = null;
     /** The open dialog's inputs, so the mode toggle can recompute in place. */
     splitFamiliesRun: {
         treeId: TreeId; data: StromData; focusPersonId: PersonId; parentDialogId?: string;
