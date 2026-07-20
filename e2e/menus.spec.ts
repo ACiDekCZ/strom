@@ -78,14 +78,17 @@ test.describe('actions menu "Tree:" submenu', () => {
         await row.hover();
         await expect(submenu).toBeVisible();
 
-        // The whole-tree actions moved in: validation, book and split are here…
-        await expect(submenu.locator('.tree-switcher-action', { hasText: 'Validate' })).toBeVisible();
+        // The whole-tree actions moved in: tree health, book and split are here…
+        await expect(submenu.locator('.tree-switcher-action', { hasText: 'Tree health' })).toBeVisible();
         await expect(submenu.locator('.tree-switcher-action', { hasText: 'Family book' })).toBeVisible();
         await expect(submenu.locator('.tree-switcher-action', { hasText: 'Split into families' })).toBeVisible();
         // …Hide is now offered here too…
         await expect(submenu.locator('.tree-switcher-action', { hasText: 'Hide' })).toBeVisible();
         // …but Delete stays in the tree manager only.
         await expect(submenu).not.toContainText('Delete');
+        // The standalone "Validate" row is gone — validation now lives behind
+        // Tree health → Validation details (single entry point).
+        await expect(submenu).not.toContainText('Validate');
     });
 
     test('keyboard: → opens the submenu, ← closes it', async ({ page }) => {

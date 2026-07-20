@@ -199,9 +199,12 @@ test('tapping the Tree row opens the second-level tree sheet with the full deskt
     // Every whole-tree action from the desktop submenu is present (all except
     // Delete, which stays in the tree manager).
     for (const label of ['Rename', 'Duplicate', 'Merge into', 'Split into families',
-        'Statistics', 'Validate', 'Family book', 'Export', 'Anniversaries', 'Hide', 'Manage Trees']) {
+        'Statistics', 'Family book', 'Export', 'Anniversaries', 'Hide', 'Manage Trees']) {
         await expect(tree.locator('.bottom-sheet-item', { hasText: label }).first()).toBeVisible();
     }
+    // The standalone "Validate" row is gone — validation now lives behind the
+    // Tree health dashboard (single entry point).
+    await expect(tree).not.toContainText('Validate');
 
     // Manage Trees opens the tree manager (proves the second-level rows dispatch).
     await tree.locator('.bottom-sheet-item', { hasText: 'Manage Trees' }).click();

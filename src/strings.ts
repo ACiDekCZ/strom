@@ -1317,7 +1317,6 @@ const stringsEN = {
         statsMemorial: 'memorial',
         statsYears: 'years',
         // Validation
-        validate: 'Validate',
         validateDesc: 'Check tree for errors',
         validationTitle: 'Tree Validation',
         postImportCheckTitle: 'Data check',
@@ -3044,7 +3043,6 @@ const stringsCZ: StringsType = {
         statsMemorial: 'výročí úmrtí',
         statsYears: 'let',
         // Validation
-        validate: 'Validovat',
         validateDesc: 'Zkontrolovat strom na chyby',
         validationTitle: 'Validace stromu',
         postImportCheckTitle: 'Kontrola dat',

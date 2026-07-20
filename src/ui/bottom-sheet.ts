@@ -209,7 +209,6 @@ export const bottomSheetMethods = uiModule({
             // WYSIWYG: the active tree IS the live view, so no person picker.
             { label: s.menu.splitFamilies, run: () => this.showSplitFamiliesDialog() },
             { label: s.treeManager.stats, run: () => this.showActiveTreeStats() },
-            { label: s.treeManager.validate, run: () => void this.showTreeValidationDialog(id) },
             { label: s.book.menu, run: () => this.showBookDialog() },
             { label: s.menu.export, run: () => this.showExportDialog() },
         ];

@@ -155,8 +155,13 @@ test('tree validation flags date inconsistencies with details', async ({ page })
         dm.updatePerson(p.id, { birthDate: '1950', deathDate: '1940' });
     });
 
+    // Validation now lives behind the Tree health dashboard's "Validation
+    // details" quick action — the single entry point after the menu cleanup.
     const treeId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
-    await page.evaluate((id) => window.Strom.UI.showTreeValidationDialog(id), treeId);
+    await page.evaluate((id) => window.Strom.UI.showTreeHealthDialog(id), treeId);
+    const health = page.locator('#tree-health-modal');
+    await expect(health).toHaveClass(/active/);
+    await health.locator('.health-action[data-action="validate"]').click();
 
     const modal = page.locator('#tree-validation-modal');
     await expect(modal).toBeVisible();

@@ -341,11 +341,6 @@ export const treeManagementMethods = uiModule({
         this.closeActionsMenu();
         this.showActiveTreeStats();
     },
-    treeActionValidate(): void {
-        const id = TreeManager.getActiveTreeId();
-        this.closeActionsMenu();
-        if (id) this.showTreeValidationDialog(id);
-    },
     treeActionHealth(): void {
         const id = TreeManager.getActiveTreeId();
         this.closeActionsMenu();
@@ -581,7 +576,6 @@ export const treeManagementMethods = uiModule({
                             <button class="tree-row-menu-btn" data-tip="${s.moreActions}">⋯</button>
                             <div class="tree-row-menu">
                                 ${menuItem(`window.Strom.UI.showTreeStatsDialog('${tree.id}', 'tree-manager-modal')`, s.stats)}
-                                ${menuItem(`window.Strom.UI.showTreeValidationDialog('${tree.id}', 'tree-manager-modal')`, s.validate)}
                                 ${menuItem(`window.Strom.UI.showTreeHealthDialog('${tree.id}', 'tree-manager-modal')`, strings.treeHealth.menu)}
                                 ${menuItem(`window.Strom.UI.showExportDialogFromManager('${tree.id}')`, s.export)}
                                 ${menuItem(`window.Strom.UI.showRenameTreeDialog('${tree.id}', 'tree-manager-modal')`, s.rename, 'edit-only tree-row-menu-divider')}
