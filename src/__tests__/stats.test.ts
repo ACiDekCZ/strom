@@ -143,3 +143,40 @@ describe('computeFamilyStats — longest marriage and empty states', () => {
         expect(stats.longestMarriage).toBeNull();
     });
 });
+
+// ==================== computeCompleteness (R4) ====================
+
+import { computeCompleteness } from '../stats.js';
+
+describe('computeCompleteness', () => {
+    it('counts real persons carrying each fact and ignores placeholders', () => {
+        const full: Person = {
+            id: 'a' as PersonId, firstName: 'Jan', lastName: 'N', gender: 'male', isPlaceholder: false,
+            parentIds: [], childIds: [], partnerships: [],
+            birthDate: '1880', birthPlace: 'Děčín', deathDate: '1950', photo: 'data:image/png;base64,xx',
+        };
+        const partial: Person = {
+            id: 'b' as PersonId, firstName: 'Eva', lastName: 'N', gender: 'female', isPlaceholder: false,
+            parentIds: [], childIds: [], partnerships: [], birthDate: '1884',
+        };
+        const ghost: Person = {
+            id: 'c' as PersonId, firstName: '', lastName: '', gender: 'male', isPlaceholder: true,
+            parentIds: [], childIds: [], partnerships: [], birthDate: '1800', birthPlace: 'X', photo: 'data:x',
+        };
+        const d: StromData = {
+            persons: { a: full, b: partial, c: ghost } as StromData['persons'],
+            partnerships: {} as StromData['partnerships'],
+        };
+        const r = computeCompleteness(d);
+        expect(r.total).toBe(2);            // placeholder excluded
+        expect(r.withBirthDate).toBe(2);
+        expect(r.withBirthPlace).toBe(1);
+        expect(r.withDeathDate).toBe(1);
+        expect(r.withPhoto).toBe(1);
+    });
+
+    it('is all zero for an empty tree', () => {
+        const d: StromData = { persons: {} as StromData['persons'], partnerships: {} as StromData['partnerships'] };
+        expect(computeCompleteness(d)).toEqual({ total: 0, withBirthDate: 0, withBirthPlace: 0, withDeathDate: 0, withPhoto: 0 });
+    });
+});

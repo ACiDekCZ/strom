@@ -647,6 +647,44 @@ const stringsEN = {
         omitted: (n: number) => `${n} ${n === 1 ? 'person' : 'people'} without a birth year not shown`,
     },
 
+    // Tree health dashboard (R4)
+    treeHealth: {
+        menu: 'Tree health',
+        title: (name: string) => `Tree health: ${name}`,
+        empty: 'This tree has no people yet.',
+        // Validation summary block
+        sectionValidation: 'Consistency',
+        allGood: 'No inconsistencies found',
+        countErrors: (n: number) => `${n} ${n === 1 ? 'error' : 'errors'}`,
+        countWarnings: (n: number) => `${n} ${n === 1 ? 'warning' : 'warnings'}`,
+        countInfos: (n: number) => `${n} ${n === 1 ? 'note' : 'notes'}`,
+        topIssues: 'Top issues',
+        moreIssues: (n: number) => `and ${n} more…`,
+        // Completeness block
+        sectionCompleteness: 'Data completeness',
+        completenessHint: 'Share of people with each fact recorded.',
+        fieldBirthDate: 'Birth date',
+        fieldBirthPlace: 'Birth place',
+        fieldDeathDate: 'Death date',
+        fieldPhoto: 'Photo',
+        // Structure block
+        sectionStructure: 'Structure',
+        statPeople: 'People',
+        statUnions: 'Unions',
+        statGenerations: 'Generations',
+        statIslands: 'Separate families',
+        islandsOne: 'All people are connected into one family.',
+        islandsMany: (n: number) => `This tree holds ${n} separate families with no link between them.`,
+        islandItem: (surname: string, count: number) => `${surname} — ${count} ${count === 1 ? 'person' : 'people'}`,
+        islandUnnamed: 'Unnamed family',
+        islandsSplitHint: 'Use “Split into families” below to give each its own tree.',
+        // Quick actions
+        sectionActions: 'Quick actions',
+        actionValidate: 'Validation details',
+        actionCleanPlaces: (n: number) => n > 0 ? `Clean orphan places (${n})` : 'Clean orphan places',
+        actionSplit: 'Split into families',
+    },
+
     // Person modal
     personModal: {
         birthEstimate: (year: number) => `Born no later than ~${year} (from other dates)`,
@@ -666,6 +704,15 @@ const stringsEN = {
         sectionDeathEvents: 'Death and other events',
         sectionSources: 'Sources and attachments',
         sectionPhotoNotes: 'Photo and notes',
+        // Life timeline (R2) — read-only mini-timeline of the person's life
+        sectionLifeline: 'Life timeline',
+        lifelineBorn: 'Born',
+        lifelineDied: 'Died',
+        lifelineMarried: (name: string) => `Married ${name}`,
+        lifelineMarriedUnknown: 'Married',
+        lifelineChild: (name: string) => `Child born: ${name}`,
+        lifelineChildUnknown: 'Child born',
+        lifelineWith: (names: string) => `with ${names}`,
         dateHint: '5/15/1880 · 5/1880 · 1880 · about 1880',
         deletePerson: 'Delete person…',
         // Live summaries shown next to each section header
@@ -2325,6 +2372,44 @@ const stringsCZ: StringsType = {
         omitted: (n: number) => `${n} ${n === 1 ? 'osoba' : (n < 5 ? 'osoby' : 'osob')} bez roku narození není zobrazena`,
     },
 
+    // Přehled zdraví stromu (R4)
+    treeHealth: {
+        menu: 'Zdraví stromu',
+        title: (name: string) => `Zdraví stromu: ${name}`,
+        empty: 'Tento strom zatím nemá žádné osoby.',
+        // Blok validace
+        sectionValidation: 'Konzistence',
+        allGood: 'Nenalezeny žádné nesrovnalosti',
+        countErrors: (n: number) => `${n} ${n === 1 ? 'chyba' : (n < 5 ? 'chyby' : 'chyb')}`,
+        countWarnings: (n: number) => `${n} ${n === 1 ? 'varování' : 'varování'}`,
+        countInfos: (n: number) => `${n} ${n === 1 ? 'poznámka' : (n < 5 ? 'poznámky' : 'poznámek')}`,
+        topIssues: 'Nejdůležitější nálezy',
+        moreIssues: (n: number) => `a další ${n}…`,
+        // Blok úplnosti
+        sectionCompleteness: 'Úplnost dat',
+        completenessHint: 'Podíl osob, které mají daný údaj vyplněný.',
+        fieldBirthDate: 'Datum narození',
+        fieldBirthPlace: 'Místo narození',
+        fieldDeathDate: 'Datum úmrtí',
+        fieldPhoto: 'Fotografie',
+        // Blok struktury
+        sectionStructure: 'Struktura',
+        statPeople: 'Osoby',
+        statUnions: 'Svazky',
+        statGenerations: 'Generace',
+        statIslands: 'Nesouvislé rodiny',
+        islandsOne: 'Všechny osoby jsou propojeny do jedné rodiny.',
+        islandsMany: (n: number) => `Tento strom obsahuje ${n} nesouvislých rodin bez vzájemné vazby.`,
+        islandItem: (surname: string, count: number) => `${surname} — ${count} ${count === 1 ? 'osoba' : (count < 5 ? 'osoby' : 'osob')}`,
+        islandUnnamed: 'Bezejmenná rodina',
+        islandsSplitHint: 'Tlačítkem „Rozdělit na rodiny“ níže dáte každé vlastní strom.',
+        // Rychlé akce
+        sectionActions: 'Rychlé akce',
+        actionValidate: 'Detaily validace',
+        actionCleanPlaces: (n: number) => n > 0 ? `Vyčistit osiřelá místa (${n})` : 'Vyčistit osiřelá místa',
+        actionSplit: 'Rozdělit na rodiny',
+    },
+
     // Person modal
     personModal: {
         birthEstimate: (year: number) => `Narozen(a) nejpozději ~${year} (odvozeno z ostatních dat)`,
@@ -2344,6 +2429,15 @@ const stringsCZ: StringsType = {
         sectionDeathEvents: 'Úmrtí a další události',
         sectionSources: 'Prameny a přílohy',
         sectionPhotoNotes: 'Fotografie a poznámky',
+        // Časová osa života (R2) — jen pro čtení, mini-osa života osoby
+        sectionLifeline: 'Časová osa života',
+        lifelineBorn: 'Narození',
+        lifelineDied: 'Úmrtí',
+        lifelineMarried: (name: string) => `Sňatek — ${name}`,
+        lifelineMarriedUnknown: 'Sňatek',
+        lifelineChild: (name: string) => `Narození dítěte: ${name}`,
+        lifelineChildUnknown: 'Narození dítěte',
+        lifelineWith: (names: string) => `s ${names}`,
         dateHint: '15.5.1880 · 5/1880 · 1880 · kolem 1880',
         deletePerson: 'Smazat osobu…',
         // Live summaries shown next to each section header

@@ -42,6 +42,33 @@ function fullName(p: Person): string {
     return `${p.firstName} ${p.lastName}`.trim();
 }
 
+/** Share of real persons carrying each key fact (R4 tree-health completeness). */
+export interface Completeness {
+    /** Real persons (placeholders excluded) — the denominator for every share. */
+    total: number;
+    withBirthDate: number;
+    withBirthPlace: number;
+    withDeathDate: number;
+    withPhoto: number;
+}
+
+/**
+ * Count how many real persons carry each key fact. Pure; the UI turns the
+ * counts into progress bars. Placeholders never count (they are stand-ins, not
+ * documented people).
+ */
+export function computeCompleteness(data: StromData): Completeness {
+    const persons = Object.values(data.persons).filter(p => !p.isPlaceholder);
+    let withBirthDate = 0, withBirthPlace = 0, withDeathDate = 0, withPhoto = 0;
+    for (const p of persons) {
+        if (p.birthDate) withBirthDate++;
+        if (p.birthPlace?.trim()) withBirthPlace++;
+        if (p.deathDate) withDeathDate++;
+        if (p.photo) withPhoto++;
+    }
+    return { total: persons.length, withBirthDate, withBirthPlace, withDeathDate, withPhoto };
+}
+
 /** Top-N first names for a gender, ties broken alphabetically for determinism. */
 function topNames(persons: Person[], gender: 'male' | 'female', limit: number): NameCount[] {
     const counts = new Map<string, number>();

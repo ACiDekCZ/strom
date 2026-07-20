@@ -2917,6 +2917,53 @@
         .pm-section .form-group { margin-bottom: 12px; }
         .pm-section .form-group:last-child { margin-bottom: 0; }
 
+        /* Life timeline (R2): read-only vertical mini-timeline. */
+        .pm-lifeline-head { cursor: pointer; user-select: none; }
+        .pm-lifeline-chevron {
+            font-size: 11px;
+            color: var(--text-light);
+            transition: transform 0.15s ease;
+        }
+        .pm-lifeline-section.collapsed .pm-lifeline-chevron { transform: rotate(-90deg); }
+        .pm-lifeline-section.collapsed .pm-lifeline-body { display: none; }
+        .pm-lifeline-body {
+            border-left: 2px solid var(--line-color, #ddd4c2);
+            margin-left: 6px;
+            padding-left: 0;
+        }
+        .pm-lifeline-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 5px 0 5px 14px;
+            position: relative;
+        }
+        .pm-lifeline-year {
+            flex: 0 0 auto;
+            min-width: 42px;
+            font-variant-numeric: tabular-nums;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text, #2b2822);
+        }
+        .pm-lifeline-glyph {
+            flex: 0 0 auto;
+            margin-top: 1px;
+            color: var(--text-light, #5c5546);
+        }
+        .pm-lifeline-glyph svg { display: block; }
+        .pm-lifeline-desc {
+            flex: 1 1 auto;
+            font-size: 13px;
+            color: var(--text, #2b2822);
+            line-height: 1.4;
+        }
+        .pm-lifeline-place { color: var(--text-light, #5c5546); }
+        .pm-lifeline-glyph.k-birth { color: var(--male, #5b7f9e); }
+        .pm-lifeline-glyph.k-death { color: var(--text-light, #5c5546); }
+        .pm-lifeline-glyph.k-marriage { color: #d4a017; }
+        .pm-lifeline-glyph.k-child { color: var(--female, #a1706e); }
+
         .form-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -4561,6 +4608,26 @@
         .desktop-only { display: flex; }
         .mobile-only { display: none !important; }
 
+        /* Undo / Redo toolbar pair (R3). Compact ghost icon buttons so they never
+           crowd the toolbar in the 1024–1280px band (actions label is hidden there
+           too). Disabled state reads as clearly inert. */
+        .toolbar-undo-group { display: flex; gap: 2px; align-items: center; }
+        .toolbar .toolbar-undo-btn { padding: 6px; }
+        .toolbar .toolbar-undo-btn svg { display: block; }
+        .toolbar .toolbar-undo-btn:disabled {
+            opacity: 0.32;
+            cursor: default;
+            background: transparent;
+            color: var(--text-light);
+        }
+        @media (max-width: 1120px) {
+            /* Tightest desktop band (1025–1120px): the toolbar is already full
+               with a long tree name + add-person, so fold the visible Undo/Redo
+               pair away here (the ⋯ menu still carries the Undo/Redo rows). This
+               keeps the toolbar clip-free — see toolbar-responsive.spec. */
+            .toolbar-undo-group { display: none !important; }
+        }
+
         /* Family / Descendants view tabs — full-height, copper underline on the
            active tab. margin-left:auto pushes the tabs (+ ⋯/settings/add) right. */
         .view-mode-segment {
@@ -6175,6 +6242,72 @@
         .validation-count.info {
             color: var(--text-light);
         }
+
+        /* ===== Tree health dashboard (R4) ===== */
+        .tree-health-modal { min-width: 520px; max-width: 640px; }
+        .tree-health-content {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            max-height: 64vh;
+            overflow-y: auto;
+        }
+        .health-empty { padding: 28px; text-align: center; color: var(--text-light); }
+        .health-block {
+            background: var(--surface-2);
+            border: 1px solid var(--line-color);
+            border-radius: 10px;
+            padding: 14px 16px;
+        }
+        .health-block-title {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 10px;
+        }
+        .health-block-hint { font-size: 12px; color: var(--text-light); margin: 6px 0; }
+        .health-summary { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+        .health-ok { font-size: 14px; font-weight: 500; color: var(--primary); }
+        .health-issues { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+        .health-issue { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
+        .health-issue .validation-issue-dot {
+            flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; margin-top: 5px;
+        }
+        .health-issue.error .validation-issue-dot { background: var(--danger); }
+        .health-issue.warning .validation-issue-dot { background: var(--warning); }
+        .health-issue.info .validation-issue-dot { background: var(--text-light); }
+        .health-issue-msg { color: var(--text); }
+        .health-issue-persons { font-size: 12px; margin-top: 2px; }
+        .health-more { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+        /* Completeness bars */
+        .health-bar-row { display: flex; align-items: center; gap: 10px; margin: 7px 0; }
+        .health-bar-label { flex: 0 0 120px; font-size: 13px; color: var(--text); }
+        .health-bar-track {
+            flex: 1 1 auto; height: 8px; border-radius: 5px;
+            background: var(--line-color); overflow: hidden;
+        }
+        .health-bar-fill { display: block; height: 100%; background: var(--primary); border-radius: 5px; }
+        .health-bar-val {
+            flex: 0 0 40px; text-align: right; font-size: 12px;
+            font-variant-numeric: tabular-nums; color: var(--text-light);
+        }
+        /* Structure tiles */
+        .health-tiles { display: flex; flex-wrap: wrap; gap: 10px; }
+        .health-tile {
+            flex: 1 1 90px; min-width: 84px;
+            display: flex; flex-direction: column; align-items: center; gap: 2px;
+            padding: 10px 6px; border-radius: 8px; background: var(--surface);
+            border: 1px solid var(--line-color);
+        }
+        .health-tile-num { font-size: 22px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+        .health-tile-lbl { font-size: 11px; color: var(--text-light); text-align: center; }
+        .health-islands { margin-top: 10px; }
+        .health-island-list { margin: 6px 0; padding-left: 18px; font-size: 13px; color: var(--text); }
+        .health-island-list li { margin: 2px 0; }
+        .health-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
         .validation-issues {
             display: flex;
             flex-direction: column;
@@ -7166,6 +7299,11 @@
                 min-width: 450px;
                 max-width: 550px;
             }
+            /* Tree health on tablet (R4) */
+            .tree-health-modal {
+                min-width: 450px;
+                max-width: 560px;
+            }
         }
 
         /* Mobile: show floating focus controls */
@@ -7313,6 +7451,14 @@
                 border-radius: 0;
                 margin: 0;
             }
+            /* Tree health on mobile (R4) */
+            .tree-health-modal {
+                min-width: 100vw;
+                max-width: 100vw;
+                border-radius: 0;
+                margin: 0;
+            }
+            .tree-health-modal .health-bar-label { flex-basis: 96px; }
             .validation-content {
                 max-height: 50vh;
             }
@@ -8070,6 +8216,18 @@
             <button id="view-mode-map" onclick="window.Strom.UI.setDisplayViewMode('map')" data-i18n="viewModeSwitch.map"></button>
         </div>
 
+        <!-- Undo / Redo (R3) — desktop-only ghost icon buttons; the mobile "More"
+             sheet carries the same pair below 1024px. State (disabled + tooltip)
+             is refreshed on every mutation / undo / redo. -->
+        <div class="toolbar-undo-group desktop-only edit-only" id="toolbar-undo-group">
+            <button type="button" class="secondary toolbar-undo-btn" id="toolbar-undo-btn" disabled onclick="window.Strom.UI.performUndo()" aria-label="Undo">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            </button>
+            <button type="button" class="secondary toolbar-redo-btn" id="toolbar-redo-btn" disabled onclick="window.Strom.UI.performRedo()" aria-label="Redo">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+        </div>
+
         <!-- Actions menu (⋯) — desktop only; the mobile ⋯ + "More" sheet cover smaller screens -->
         <div class="actions-menu desktop-only">
             <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><svg class="actions-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span></button>
@@ -8129,6 +8287,9 @@
                         </div>
                         <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionValidate()">
                             <span data-i18n="treeManager.validate"></span>
+                        </div>
+                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionHealth()">
+                            <span data-i18n="treeHealth.menu"></span>
                         </div>
                         <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionBook()">
                             <span data-i18n="book.menu"></span>
@@ -8413,6 +8574,16 @@
                     <button type="button" class="link-relationships-btn" id="link-relationships" style="display:none;">
                         <span data-i18n="buttons.manageRelationships">Manage Relationships</span>
                     </button>
+                </div>
+
+                <!-- Life timeline (R2) — read-only, collapsible; hidden when the
+                     person has fewer than two dated points. -->
+                <div class="pm-section pm-lifeline-section" id="pm-lifeline-section" style="display:none;">
+                    <div class="pm-section-head pm-lifeline-head" id="pm-lifeline-head" role="button" tabindex="0" aria-expanded="true" aria-controls="pm-lifeline-body" onclick="window.Strom.UI.toggleLifelineSection()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.Strom.UI.toggleLifelineSection();}">
+                        <span class="pm-section-title" data-i18n="personModal.sectionLifeline"></span>
+                        <span class="pm-lifeline-chevron" aria-hidden="true">▾</span>
+                    </div>
+                    <div class="pm-lifeline-body" id="pm-lifeline-body"></div>
                 </div>
 
                 <div class="pm-section">
@@ -9683,6 +9854,22 @@
             </div>
             <div class="buttons">
                 <button class="secondary" onclick="window.Strom.UI.closeTreeValidationDialog()" data-i18n="buttons.close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tree Health Dashboard (R4) -->
+    <div class="modal-overlay" id="tree-health-modal">
+        <div class="modal tree-health-modal">
+            <div class="modal-header">
+                <h2 id="tree-health-title" data-i18n="treeHealth.menu">Tree health</h2>
+                <button class="close-btn" onclick="window.Strom.UI.closeTreeHealthDialog()">&times;</button>
+            </div>
+            <div id="tree-health-content" class="tree-health-content">
+                <!-- Health dashboard rendered dynamically -->
+            </div>
+            <div class="buttons">
+                <button class="secondary" onclick="window.Strom.UI.closeTreeHealthDialog()" data-i18n="buttons.close">Close</button>
             </div>
         </div>
     </div>

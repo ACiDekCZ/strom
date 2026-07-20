@@ -46,8 +46,61 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { yearOf, parseFlexDate } from '../dates.js';
-import { computeFamilyStats } from '../stats.js';
+import { computeFamilyStats, computeCompleteness } from '../stats.js';
 import { findComponents, componentName } from '../components.js';
+import { orphanedPlaceKeys } from '../places.js';
+
+/** Maps a validation issue `type` to its localized treeManager string key. */
+const VALIDATION_TYPE_KEYS: Record<string, string> = {
+    'cycle': 'valCycle',
+    'selfPartnership': 'valSelfPartnership',
+    'duplicatePartnership': 'valDuplicatePartnership',
+    'missingChildRef': 'valMissingChildRef',
+    'missingParentRef': 'valMissingParentRef',
+    'missingPartnershipRef': 'valMissingPartnershipRef',
+    'partnershipChildMismatch': 'valPartnershipChildMismatch',
+    'orphanedParentRef': 'valOrphanedRef',
+    'orphanedChildRef': 'valOrphanedRef',
+    'orphanedPartnershipRef': 'valOrphanedRef',
+    'orphanedPartnerRef': 'valOrphanedRef',
+    'orphanedPartnershipChildRef': 'valOrphanedRef',
+    'orphanedParticipantRef': 'valOrphanedParticipantRef',
+    'tooManyParents': 'valTooManyParents',
+    'parentYoungerThanChild': 'valParentYoungerThanChild',
+    'parentTooYoung': 'valParentTooYoung',
+    'parentTooOld': 'valParentTooOld',
+    'generationConflict': 'valGenerationConflict',
+    'partnerIsParent': 'valPartnerIsParent',
+    'partnerIsChild': 'valPartnerIsChild',
+    'siblingIsParent': 'valSiblingIsParent',
+    'siblingIsChild': 'valSiblingIsChild',
+    'event-birth-death': 'valEventBirthDeath',
+    'event-no-label': 'valEventNoLabel',
+    'event-bad-date': 'valEventBadDate',
+    'deathBeforeBirth': 'valDeathBeforeBirth',
+    'implausibleLifespan': 'valImplausibleLifespan',
+    'eventBeforeBirth': 'valEventBeforeBirth',
+    'eventAfterDeath': 'valEventAfterDeath',
+    'weddingBeforeBirth': 'valWeddingBeforeBirth',
+    'weddingAfterDeath': 'valWeddingAfterDeath',
+    'childMarriage': 'valChildMarriage',
+    'childAfterMotherDeath': 'valChildAfterMotherDeath',
+    'childAfterFatherDeath': 'valChildAfterFatherDeath',
+    'citationMissingSource': 'valCitationMissingSource',
+    'attachmentNoData': 'valAttachmentNoData',
+    'partnerAgeGap': 'valPartnerAgeGap',
+    'possibleDuplicate': 'valPossibleDuplicate',
+    'placeSpelling': 'valPlaceSpelling',
+    'recurringGodparent': 'valRecurringGodparent',
+};
+
+/** Localized message for a validation issue type (falls back to the raw type). */
+function translateValidationType(type: string): string {
+    const s = strings.treeManager as Record<string, unknown>;
+    const key = VALIDATION_TYPE_KEYS[type];
+    const val = key ? s[key] : undefined;
+    return typeof val === 'string' ? val : type;
+}
 
 /** Escape text for safe inclusion in SVG/HTML (names come from user data). */
 function escXml(s: string): string {
@@ -333,53 +386,8 @@ export const treeStatsMethods = uiModule({
             <div class="validation-issues">
         `;
 
-        // Translate validation issue type to localized message
-        const translateIssueType = (type: string): string => {
-            const typeToKey: Record<string, keyof typeof s> = {
-                'cycle': 'valCycle',
-                'selfPartnership': 'valSelfPartnership',
-                'duplicatePartnership': 'valDuplicatePartnership',
-                'missingChildRef': 'valMissingChildRef',
-                'missingParentRef': 'valMissingParentRef',
-                'missingPartnershipRef': 'valMissingPartnershipRef',
-                'partnershipChildMismatch': 'valPartnershipChildMismatch',
-                'orphanedParentRef': 'valOrphanedRef',
-                'orphanedChildRef': 'valOrphanedRef',
-                'orphanedPartnershipRef': 'valOrphanedRef',
-                'orphanedPartnerRef': 'valOrphanedRef',
-                'orphanedPartnershipChildRef': 'valOrphanedRef',
-                'orphanedParticipantRef': 'valOrphanedParticipantRef',
-                'tooManyParents': 'valTooManyParents',
-                'parentYoungerThanChild': 'valParentYoungerThanChild',
-                'parentTooYoung': 'valParentTooYoung',
-                'parentTooOld': 'valParentTooOld',
-                'generationConflict': 'valGenerationConflict',
-                'partnerIsParent': 'valPartnerIsParent',
-                'partnerIsChild': 'valPartnerIsChild',
-                'siblingIsParent': 'valSiblingIsParent',
-                'siblingIsChild': 'valSiblingIsChild',
-                'event-birth-death': 'valEventBirthDeath',
-                'event-no-label': 'valEventNoLabel',
-                'event-bad-date': 'valEventBadDate',
-                'deathBeforeBirth': 'valDeathBeforeBirth',
-                'implausibleLifespan': 'valImplausibleLifespan',
-                'eventBeforeBirth': 'valEventBeforeBirth',
-                'eventAfterDeath': 'valEventAfterDeath',
-                'weddingBeforeBirth': 'valWeddingBeforeBirth',
-                'weddingAfterDeath': 'valWeddingAfterDeath',
-                'childMarriage': 'valChildMarriage',
-                'childAfterMotherDeath': 'valChildAfterMotherDeath',
-                'childAfterFatherDeath': 'valChildAfterFatherDeath',
-                'citationMissingSource': 'valCitationMissingSource',
-                'attachmentNoData': 'valAttachmentNoData',
-                'partnerAgeGap': 'valPartnerAgeGap',
-                'possibleDuplicate': 'valPossibleDuplicate',
-                'placeSpelling': 'valPlaceSpelling',
-                'recurringGodparent': 'valRecurringGodparent',
-            };
-            const key = typeToKey[type];
-            return key ? (s[key] as string) : type;
-        };
+        // Translate validation issue type to localized message (shared with R4).
+        const translateIssueType = translateValidationType;
 
         const renderIssue = (issue: ValidationIssue, issueIdx: number) => {
             // Severity now reads from the colored dot + the row's severity class.
@@ -446,6 +454,189 @@ export const treeStatsMethods = uiModule({
 
         // Focus on the person
         TreeRenderer.setFocus(personId as PersonId);
+    },
+
+    // ==================== TREE HEALTH DASHBOARD (R4) ====================
+
+    /**
+     * R4: open the tree-health dashboard for a tree — a single panel composing
+     * the validation summary, data completeness, structure (counts, generation
+     * span, disconnected islands) and a quick-actions row. Read-only; the quick
+     * actions hop to the existing dialogs (validation, split, place cleanup).
+     */
+    async showTreeHealthDialog(treeId: string, parentDialogId?: string): Promise<void> {
+        const tree = TreeManager.getTreeMetadata(treeId as TreeId);
+        const treeData = await TreeManager.getTreeData(treeId as TreeId);
+        if (!tree || !treeData) return;
+
+        const modal = document.getElementById('tree-health-modal');
+        const title = document.getElementById('tree-health-title');
+        const content = document.getElementById('tree-health-content');
+        if (title) title.textContent = strings.treeHealth.title(tree.name);
+        if (content) {
+            content.innerHTML = this.generateTreeHealthHtml(treeData, treeId);
+            content.onclick = (e) => {
+                const target = e.target as HTMLElement;
+                const link = target.closest('.validation-person-link') as HTMLElement | null;
+                if (link) {
+                    e.preventDefault();
+                    const t = link.getAttribute('data-tree-id');
+                    const p = link.getAttribute('data-person-id');
+                    if (t && p) this.focusPersonFromHealth(t, p);
+                    return;
+                }
+                const btn = target.closest('.health-action') as HTMLElement | null;
+                if (btn) {
+                    e.preventDefault();
+                    this.runHealthAction(btn.getAttribute('data-action') || '', treeId);
+                }
+            };
+        }
+
+        this.clearDialogStack();
+        if (parentDialogId) {
+            this.pushDialog(parentDialogId);
+            this.closeDialogById(parentDialogId);
+        }
+        this.pushDialog('tree-health-modal');
+        modal?.classList.add('active');
+    },
+
+    closeTreeHealthDialog(): void {
+        document.getElementById('tree-health-modal')?.classList.remove('active');
+        this.returnToParentDialog();
+    },
+
+    /** Focus a person from a health-dialog link (closes the dashboard first). */
+    focusPersonFromHealth(treeId: string, personId: string): void {
+        this.closeTreeHealthDialog();
+        const activeTreeId = TreeManager.getActiveTreeId();
+        if (activeTreeId !== treeId) this.switchToTree(treeId as TreeId);
+        TreeRenderer.setFocus(personId as PersonId);
+    },
+
+    /** Run a health-dashboard quick action, hopping to the relevant dialog. */
+    runHealthAction(action: string, treeId: string): void {
+        if (action === 'validate') {
+            this.closeTreeHealthDialog();
+            this.showTreeValidationDialog(treeId);
+        } else if (action === 'split') {
+            this.closeTreeHealthDialog();
+            this.showSplitFamiliesDialog();
+        } else if (action === 'cleanPlaces') {
+            // Operates on the active tree, then refreshes the dashboard in place.
+            void Promise.resolve(this.cleanOrphanPlaces()).then(() => {
+                void this.showTreeHealthDialog(treeId);
+            });
+        }
+    },
+
+    /** Build the tree-health dashboard HTML for a tree. */
+    generateTreeHealthHtml(data: StromData, treeId: string): string {
+        const s = strings.treeHealth;
+        const validation = validateTreeData(data);
+        const completeness = computeCompleteness(data);
+        const familyStats = computeFamilyStats(data);
+        const components = findComponents(data);
+        const unionCount = Object.keys(data.partnerships).length;
+        const orphanCount = orphanedPlaceKeys(data).length;
+
+        if (completeness.total === 0) {
+            return `<div class="health-empty">${this.escapeHtml(s.empty)}</div>`;
+        }
+
+        // (a) Validation summary + top issues.
+        const vStats = validation.stats;
+        const summaryChips = validation.issues.length === 0
+            ? `<span class="health-ok">${this.escapeHtml(s.allGood)}</span>`
+            : [
+                vStats.errors > 0 ? `<span class="validation-count error">${this.escapeHtml(s.countErrors(vStats.errors))}</span>` : '',
+                vStats.warnings > 0 ? `<span class="validation-count warning">${this.escapeHtml(s.countWarnings(vStats.warnings))}</span>` : '',
+                vStats.infos > 0 ? `<span class="validation-count info">${this.escapeHtml(s.countInfos(vStats.infos))}</span>` : '',
+            ].filter(Boolean).join('');
+
+        const order = { error: 0, warning: 1, info: 2 } as const;
+        const sortedIssues = [...validation.issues].sort((a, b) => order[a.severity] - order[b.severity]);
+        const TOP = 5;
+        const topIssuesHtml = sortedIssues.slice(0, TOP).map(issue => {
+            const links = (issue.personIds ?? []).map(id => {
+                const person = data.persons[id];
+                const name = person ? `${person.firstName} ${person.lastName}`.trim() : id;
+                return `<a href="#" class="validation-person-link" data-tree-id="${this.escapeHtml(treeId)}" data-person-id="${this.escapeHtml(id)}">${this.escapeHtml(name)}</a>`;
+            }).join(', ');
+            return `<div class="health-issue ${issue.severity}">`
+                + `<span class="validation-issue-dot" aria-hidden="true"></span>`
+                + `<div class="health-issue-body"><div class="health-issue-msg">${this.escapeHtml(translateValidationType(issue.type))}</div>`
+                + (links ? `<div class="health-issue-persons">${links}</div>` : '')
+                + `</div></div>`;
+        }).join('');
+        const moreCount = sortedIssues.length - TOP;
+        const moreHtml = moreCount > 0 ? `<div class="health-more">${this.escapeHtml(s.moreIssues(moreCount))}</div>` : '';
+
+        const validationBlock = `
+            <div class="health-block">
+                <div class="health-block-title">${this.escapeHtml(s.sectionValidation)}</div>
+                <div class="health-summary">${summaryChips}</div>
+                ${validation.issues.length > 0 ? `<div class="health-issues">${topIssuesHtml}${moreHtml}</div>` : ''}
+            </div>`;
+
+        // (b) Completeness bars.
+        const bar = (label: string, count: number): string => {
+            const pct = completeness.total > 0 ? Math.round((count / completeness.total) * 100) : 0;
+            return `<div class="health-bar-row">`
+                + `<span class="health-bar-label">${this.escapeHtml(label)}</span>`
+                + `<span class="health-bar-track"><span class="health-bar-fill" style="width:${pct}%"></span></span>`
+                + `<span class="health-bar-val">${pct}%</span></div>`;
+        };
+        const completenessBlock = `
+            <div class="health-block">
+                <div class="health-block-title">${this.escapeHtml(s.sectionCompleteness)}</div>
+                <div class="health-block-hint">${this.escapeHtml(s.completenessHint)}</div>
+                ${bar(s.fieldBirthDate, completeness.withBirthDate)}
+                ${bar(s.fieldBirthPlace, completeness.withBirthPlace)}
+                ${bar(s.fieldDeathDate, completeness.withDeathDate)}
+                ${bar(s.fieldPhoto, completeness.withPhoto)}
+            </div>`;
+
+        // (c) Structure: counts, generation span, islands.
+        const tile = (value: number, label: string): string =>
+            `<div class="health-tile"><span class="health-tile-num">${value}</span><span class="health-tile-lbl">${this.escapeHtml(label)}</span></div>`;
+        let islandsHtml = '';
+        if (components.length > 1) {
+            const items = components.map(c => {
+                const name = componentName(c, sn => sn, s.islandUnnamed);
+                return `<li>${this.escapeHtml(s.islandItem(name, c.count))}</li>`;
+            }).join('');
+            islandsHtml = `<div class="health-islands"><div class="health-block-hint">${this.escapeHtml(s.islandsMany(components.length))}</div>`
+                + `<ul class="health-island-list">${items}</ul>`
+                + `<div class="health-block-hint">${this.escapeHtml(s.islandsSplitHint)}</div></div>`;
+        } else {
+            islandsHtml = `<div class="health-block-hint">${this.escapeHtml(s.islandsOne)}</div>`;
+        }
+        const structureBlock = `
+            <div class="health-block">
+                <div class="health-block-title">${this.escapeHtml(s.sectionStructure)}</div>
+                <div class="health-tiles">
+                    ${tile(completeness.total, s.statPeople)}
+                    ${tile(unionCount, s.statUnions)}
+                    ${tile(familyStats.generations, s.statGenerations)}
+                    ${tile(components.length, s.statIslands)}
+                </div>
+                ${islandsHtml}
+            </div>`;
+
+        // (d) Quick actions.
+        const actionsBlock = `
+            <div class="health-block">
+                <div class="health-block-title">${this.escapeHtml(s.sectionActions)}</div>
+                <div class="health-actions">
+                    <button type="button" class="secondary health-action" data-action="validate">${this.escapeHtml(s.actionValidate)}</button>
+                    <button type="button" class="secondary health-action" data-action="cleanPlaces"${orphanCount === 0 ? ' disabled' : ''}>${this.escapeHtml(s.actionCleanPlaces(orphanCount))}</button>
+                    <button type="button" class="secondary health-action" data-action="split">${this.escapeHtml(s.actionSplit)}</button>
+                </div>
+            </div>`;
+
+        return validationBlock + completenessBlock + structureBlock + actionsBlock;
     },
 
     /**

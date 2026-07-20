@@ -309,6 +309,9 @@ export const miscMethods = uiModule({
 
     /** Sync the toolbar segment + descendants badge with the renderer's view mode. */
     updateViewModeUI(): void {
+        // R3: runs on every render (tree switch, import, undo/redo, boot) — a
+        // reliable beat to keep the toolbar Undo/Redo state honest.
+        this.refreshUndoRedoToolbar();
         const mode = TreeRenderer.getViewMode();
         // Mobile CSS hides the focus bar under the descendants badge.
         document.body.classList.toggle('descendants-view', mode === 'descendants');
@@ -461,7 +464,10 @@ export const miscMethods = uiModule({
     initKeyboard(): void {
         // Every single user mutation raises the Undo toast (bulk import/merge
         // pass silent — they have their own UI). Registered once, at startup.
-        DataManager.onMutationCommitted = (description: string) => this.showUndoToast(description);
+        DataManager.onMutationCommitted = (description: string) => {
+            this.showUndoToast(description);
+            this.refreshUndoRedoToolbar();  // R3: keep the visible toolbar pair in sync
+        };
 
         document.addEventListener('keydown', (e) => {
             // The slideshow owns the keyboard while it runs (TV remote style).
@@ -1088,6 +1094,7 @@ export const miscMethods = uiModule({
         void TreeRenderer.renderAsync();
         // Undo can add/remove/rename people — the picker's cached list too.
         this.refreshSearch();
+        this.refreshUndoRedoToolbar();  // R3
         this.showToast(strings.undo.undone(result.description));
     },
 
@@ -1098,6 +1105,7 @@ export const miscMethods = uiModule({
         if (!result) return;
         void TreeRenderer.renderAsync();
         this.refreshSearch();
+        this.refreshUndoRedoToolbar();  // R3
         this.showToast(strings.undo.redone(result.description));
     },
 
