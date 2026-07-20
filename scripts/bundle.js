@@ -23,7 +23,11 @@ const escapedJs = js.replace(/\$/g, '$$$$');
 const output = html.replace(
     '<script src="dist/bundle.js"></script>',
     `<script>${escapedJs}</script>`
-);
+)
+    // Stamp the About dialog's version into the static HTML too. The runtime
+    // overwrites it anyway (ui/misc.ts), but the release process polls the
+    // deployed page for '>X.Y.Z<' — that marker must exist in the raw HTML.
+    .replace(/(<span id="about-version">)[^<]*(<\/span>)/, `$1${pkgVersion}$2`);
 
 // Write the single-file output
 writeFileSync('strom.html', output);
