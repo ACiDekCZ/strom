@@ -226,8 +226,15 @@ export class UIClass {
     splitFamiliesData: StromData | null = null;
     splitFamiliesTreeId: TreeId | null = null;
     splitFamiliesParentDialog: string | null = null;
-    /** True only for the live-view path, where the first family badge ("your
-     *  current view") is meaningful. */
+    /**
+     * Per-family precompute: the exact self-contained tree the proposal creates
+     * and previews, its best render focus, and its real/unknown head-count — so
+     * the count line, the thumbnail and the full preview all describe ONE set.
+     */
+    splitFamiliesShown: {
+        data: StromData; renderFocus: PersonId; ids: Set<PersonId>; real: number; unknown: number;
+    }[] = [];
+    /** Kept for state-reset symmetry (the old "your current view" badge). */
     splitFamiliesWysiwyg = false;
     /** Person picker for the tree-manager "starting person" step. */
     splitFamiliesPicker: import('../person-picker.js').PersonPicker | null = null;

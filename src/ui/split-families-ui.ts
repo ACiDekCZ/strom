@@ -16,7 +16,7 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import { PersonId, StromData, TreeId, LAST_FOCUSED } from '../types.js';
-import { decomposeIntoFamilies, seedIdsFor, FamilyComponent } from '../split-families.js';
+import { decomposeIntoFamilies, seedIdsFor, bestRenderFocus, FamilyComponent } from '../split-families.js';
 import { extractSubtree } from '../subtree.js';
 import { TreePreview, renderTreeThumbnail } from '../tree-preview.js';
 import { AuditLogManager } from '../audit-log.js';
@@ -61,25 +61,27 @@ export const splitFamiliesMethods = uiModule({
     },
 
     /**
-     * WYSIWYG entry (actions menu / mobile sheet): split the ACTIVE tree, with
-     * the first family exactly the persons on screen now, at the current depths.
+     * Live entry (actions menu / mobile sheet): split the ACTIVE tree. The focus
+     * is the person on screen — it only decides which family is listed first; the
+     * partition is the same whatever it is.
      */
     showSplitFamiliesDialog(): void {
         if (DataManager.isViewMode()) return;
         const treeId = DataManager.getCurrentTreeId();
+        const data = DataManager.getData();
         const focus = TreeRenderer.getFocusPersonId();
-        const firstViewIds = TreeRenderer.getVisiblePersonIds();
-        if (!treeId || !focus || firstViewIds.size < 2) {
+        const realCount = Object.values(data.persons).filter(p => !p.isPlaceholder).length;
+        if (!treeId || !focus || realCount < 2) {
             this.showToast(strings.splitFamilies.tooSmall);
             return;
         }
         this.openSplitFamiliesDialog({
             treeId,
-            data: DataManager.getData(),
+            data,
             focusPersonId: focus,
             ancestorDepth: TreeRenderer.getFocusDepthUp(),
             descendantDepth: TreeRenderer.getFocusDepthDown(),
-            firstViewIds,
+            firstViewIds: TreeRenderer.getVisiblePersonIds(),
         });
     },
 
@@ -182,13 +184,10 @@ export const splitFamiliesMethods = uiModule({
      * the same components dialog for every entry point.
      */
     openSplitFamiliesDialog(run: SplitFamiliesRun): void {
-        const components = decomposeIntoFamilies(run.data, run.focusPersonId, {
-            ancestorDepth: run.ancestorDepth,
-            descendantDepth: run.descendantDepth,
-            includeAuntsUncles: true,
-            includeCousins: true,
-            firstViewIds: run.firstViewIds,
-        });
+        // The partition is focus-invariant: the same tree always yields the same
+        // families, whoever the focus is. The focus only decides which family is
+        // listed first (its own) and which person a new tree opens on.
+        const components = decomposeIntoFamilies(run.data, run.focusPersonId);
         // A single family means there is nothing to split — say so plainly.
         if (components.length < 2) {
             this.showToast(strings.splitFamilies.tooSmall);
@@ -201,6 +200,16 @@ export const splitFamiliesMethods = uiModule({
         this.splitFamiliesTreeId = run.treeId;
         this.splitFamiliesWysiwyg = !!run.firstViewIds;
         this.splitFamiliesParentDialog = run.parentDialogId ?? null;
+        // Precompute each family's exact self-contained tree once: the count
+        // line, the thumbnail and the full preview all read from this, so what
+        // you are told matches what you see and what gets created (WYSIWYG).
+        this.splitFamiliesShown = components.map(c => {
+            const data = extractSubtree(run.data, seedIdsFor(c));
+            const ids = new Set(Object.keys(data.persons) as PersonId[]);
+            let real = 0, unknown = 0;
+            for (const id of ids) (data.persons[id].isPlaceholder ? unknown++ : real++);
+            return { data, renderFocus: bestRenderFocus(data), ids, real, unknown };
+        });
 
         const s = strings.splitFamilies;
         document.getElementById('split-families-modal')?.remove();
@@ -243,7 +252,7 @@ export const splitFamiliesMethods = uiModule({
         // Thumbnails render after the boxes are in the DOM (they size to the box).
         components.forEach((c, i) => {
             const box = overlay.querySelector(`.splitfam-thumb[data-index="${i}"]`) as HTMLElement | null;
-            if (box) this.renderSplitFamilyThumb(box, c);
+            if (box) this.renderSplitFamilyThumb(box, i, c);
         });
 
         this.clearDialogStack();
@@ -259,18 +268,15 @@ export const splitFamiliesMethods = uiModule({
     /** One proposed family, with its name field, count, thumbnail and checkbox. */
     splitFamiliesRowHtml(component: FamilyComponent, index: number): string {
         const s = strings.splitFamilies;
-        const count = component.personIds.length;
-        // "Your current view" only makes sense for the live-view (WYSIWYG) path.
-        const badge = (component.isFirst && this.splitFamiliesWysiwyg)
-            ? `<span class="splitfam-badge">${s.yourView}</span>` : '';
-        // Cross-reference: when the family branches off a real person whose own
-        // family is elsewhere (a second marriage, an in-law), say so — otherwise
-        // a family named after its own member looks unconnected. Skipped when the
-        // family is named after the connector itself (an ancestral/descendant
-        // branch), where the link is already obvious from the name.
+        const shown = this.splitFamiliesShown[index];
+        const countLine = s.personsWithUnknown(shown?.real ?? component.personIds.length, shown?.unknown ?? 0);
+        // Mark the family that holds the person the dialog was opened on — a
+        // presentation cue only (the partition itself never depends on it).
+        const badge = component.isFirst
+            ? `<span class="splitfam-badge">${s.focusHere}</span>` : '';
+        // The shared card that links this family up to a neighbouring one.
         const c = component.connectorId;
-        const crossRef = (c != null && c !== component.nameAnchorId
-            && this.splitFamiliesData?.persons[c] && !this.splitFamiliesData.persons[c].isPlaceholder)
+        const crossRef = (c != null && this.splitFamiliesData?.persons[c] && !this.splitFamiliesData.persons[c].isPlaceholder)
             ? `<span class="splitfam-crossref">${this.escapeHtml(s.connectsTo(this.splitFamilyPersonLabel(c)))}</span>`
             : '';
         return `
@@ -284,43 +290,41 @@ export const splitFamiliesMethods = uiModule({
                         value="${this.escapeHtml(this.splitFamilyDefaultName(component))}"
                         placeholder="${s.namePlaceholder}" aria-label="${s.namePlaceholder}">
                     <div class="splitfam-row-meta">
-                        <span>${s.persons(count)}</span>${badge}${crossRef}
+                        <span>${countLine}</span>${badge}${crossRef}
                         <button type="button" class="splitfam-preview-btn" data-index="${index}">${s.preview}</button>
                     </div>
                 </div>
             </div>`;
     },
 
-    /** The self-contained data behind a family's proposed tree (with its anchor).
-     *  Built from the tree being split, which is not always the active one. */
-    splitFamilySubtree(component: FamilyComponent): StromData {
-        return extractSubtree(this.splitFamiliesData ?? DataManager.getData(), seedIdsFor(component));
+    /** The self-contained data behind a family's proposed tree (precomputed). */
+    splitFamilySubtree(index: number, component: FamilyComponent): StromData {
+        return this.splitFamiliesShown[index]?.data
+            ?? extractSubtree(this.splitFamiliesData ?? DataManager.getData(), seedIdsFor(component));
     },
 
-    /** Draw the small tree preview for a row. */
-    renderSplitFamilyThumb(box: HTMLElement, component: FamilyComponent): void {
+    /** Draw the small tree preview for a row — the WHOLE family, so the drawing
+     *  matches the count exactly. */
+    renderSplitFamilyThumb(box: HTMLElement, index: number, component: FamilyComponent): void {
         try {
             renderTreeThumbnail(box, {
-                data: this.splitFamilySubtree(component),
-                focusPersonId: component.defaultPersonId,
-                depthUp: 2,
-                depthDown: 2,
+                data: this.splitFamilySubtree(index, component),
+                focusPersonId: this.splitFamiliesShown[index]?.renderFocus ?? component.defaultPersonId,
+                wholeTree: true,
             });
         } catch {
             // A thumbnail is a nicety; never let it block the split.
         }
     },
 
-    /** Open the full, pannable preview for one proposed family. */
+    /** Open the full, pannable preview for one proposed family (whole family). */
     previewSplitFamily(index: number): void {
         const component = this.splitFamiliesComponents[index];
         if (!component) return;
-        const data = this.splitFamilySubtree(component);
         TreePreview.show({
-            data,
-            focusPersonId: component.defaultPersonId,
-            depthUp: 3,
-            depthDown: 3,
+            data: this.splitFamilySubtree(index, component),
+            focusPersonId: this.splitFamiliesShown[index]?.renderFocus ?? component.defaultPersonId,
+            wholeTree: true,
             title: this.readSplitFamilyName(index),
         });
     },
@@ -340,9 +344,15 @@ export const splitFamiliesMethods = uiModule({
 
     updateSplitFamiliesFooter(): void {
         const chosen = this.selectedSplitFamiliesIndexes();
-        const persons = chosen.reduce((sum, i) => sum + this.splitFamiliesComponents[i].personIds.length, 0);
+        // Distinct people across the ticked families: a person shared as a link
+        // anchor between two families is counted once, so the total stays honest.
+        const seen = new Set<PersonId>();
+        for (const i of chosen) for (const id of this.splitFamiliesShown[i]?.ids ?? []) seen.add(id);
+        let real = 0, unknown = 0;
+        const data = this.splitFamiliesData;
+        for (const id of seen) (data?.persons[id]?.isPlaceholder ? unknown++ : real++);
         const summary = document.getElementById('splitfam-summary');
-        if (summary) summary.textContent = strings.splitFamilies.summary(chosen.length, persons);
+        if (summary) summary.textContent = strings.splitFamilies.summary(chosen.length, real, unknown);
         const btn = document.getElementById('splitfam-go') as HTMLButtonElement | null;
         if (btn) {
             btn.textContent = strings.splitFamilies.create(chosen.length);
@@ -372,7 +382,10 @@ export const splitFamiliesMethods = uiModule({
 
         for (const index of chosen) {
             const component = this.splitFamiliesComponents[index];
-            const subtree = extractSubtree(data, seedIdsFor(component));
+            // The exact tree previewed (structuredClone so tree creation cannot
+            // mutate the cache), opened on the family's default person.
+            const src = this.splitFamiliesShown[index]?.data ?? extractSubtree(data, seedIdsFor(component));
+            const subtree = structuredClone(src);
             subtree.defaultPersonId = component.defaultPersonId;
             createdPersons += Object.keys(subtree.persons).length;
             TreeManager.createTreeFromImport(subtree, this.readSplitFamilyName(index));
@@ -406,6 +419,7 @@ export const splitFamiliesMethods = uiModule({
         this.splitFamiliesData = null;
         this.splitFamiliesTreeId = null;
         this.splitFamiliesComponents = [];
+        this.splitFamiliesShown = [];
         this.splitFamiliesWysiwyg = false;
         if (parent) document.getElementById(parent)?.classList.add('active');
     },

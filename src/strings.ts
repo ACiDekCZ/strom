@@ -164,23 +164,32 @@ const stringsEN = {
     },
     splitFamilies: {
         title: 'Split into families',
-        intro: 'Every family this tree holds, seen from the person you are looking at. The first is your current view; the rest were found by following the relatives that lead out of it. Each person ends up in exactly one tree.',
+        intro: 'The families this tree contains — one per couple and their children. The same tree always splits the same way; the person you were looking at just decides which family is listed first. Every person ends up in exactly one tree.',
         familyName: (name: string) => `${name} family`,
-        yourView: 'Your current view',
+        focusHere: 'Selected person',
         connectsTo: (name: string) => `connects to ${name}`,
         persons: (count: number) => count === 1 ? '1 person' : `${count} people`,
+        // "3 people", "1 person + 8 unknown" — real people counted plainly, the
+        // unknown (placeholder) relatives stated separately so a family that is
+        // mostly unknowns never reads as a big family.
+        unknown: (count: number) => `${count} unknown`,
+        personsWithUnknown: (real: number, unknown: number) => {
+            const r = real === 1 ? '1 person' : `${real} people`;
+            return unknown > 0 ? `${r} + ${unknown} unknown` : r;
+        },
         namePlaceholder: 'Tree name',
         preview: 'Preview',
-        summary: (trees: number, persons: number) => `${trees} trees · ${persons} people · 100% covered`,
+        summary: (trees: number, real: number, unknown: number) =>
+            `${trees} trees · ${real} people${unknown > 0 ? ` + ${unknown} unknown` : ''} · 100% covered`,
         create: (count: number) => count === 1 ? 'Create 1 tree' : `Create ${count} trees`,
         cancel: 'Cancel',
         keepsOriginal: 'The original tree is left exactly as it is. The new trees stay linked across their shared people — delete any you do not want in Manage trees.',
         done: (count: number) => count === 1 ? '1 tree created' : `${count} trees created`,
-        tooSmall: 'Show a family or descendants view first, then split it into families.',
-        // Person-picker step (splitting a tree that is not the one on screen —
-        // no live view to seed the first family, so the user names the person).
+        tooSmall: 'This tree holds only one family — there is nothing to split.',
+        // Person-picker step (splitting a tree that is not the one on screen — no
+        // live focus, so the user names the person whose family to list first).
         pickerTitle: 'Split into families — starting person',
-        pickerIntro: 'Pick the person this split starts from. The first family grows around them; the rest are found by following the relatives that lead out of it.',
+        pickerIntro: 'Pick a person to start from. It does not change how the tree is split — only which family is listed first.',
         pickerConfirm: 'Continue',
     },
 
@@ -1926,23 +1935,34 @@ const stringsCZ: StringsType = {
     },
     splitFamilies: {
         title: 'Rozdělit na rodiny',
-        intro: 'Všechny rodiny v tomto stromu z pohledu osoby, kterou máte zobrazenou. První je váš aktuální pohled, další se našly sledováním příbuzných, kteří z něj vedou ven. Každá osoba skončí právě v jednom stromu.',
+        intro: 'Rodiny, které tento strom obsahuje — jedna na každý pár a jeho děti. Stejný strom se vždy rozdělí stejně; osoba, kterou máte zobrazenou, jen určí, která rodina je první. Každá osoba skončí právě v jednom stromu.',
         familyName: (name: string) => `Rodina ${name}`,
-        yourView: 'Váš aktuální pohled',
+        focusHere: 'Zvolená osoba',
         connectsTo: (name: string) => `napojeno na ${name}`,
         persons: (count: number) => count === 1 ? '1 osoba' : (count < 5 ? `${count} osoby` : `${count} osob`),
+        // „3 osoby", „1 osoba + 8 neznámých" — skutečné osoby zvlášť, neznámí
+        // (placeholder) příbuzní zvlášť, ať rodina plná neznámých nevypadá velká.
+        unknown: (count: number) => count === 1 ? '1 neznámá' : (count < 5 ? `${count} neznámé` : `${count} neznámých`),
+        personsWithUnknown: (real: number, unknown: number) => {
+            const r = real === 1 ? '1 osoba' : (real < 5 ? `${real} osoby` : `${real} osob`);
+            const u = unknown === 1 ? '1 neznámá' : (unknown < 5 ? `${unknown} neznámé` : `${unknown} neznámých`);
+            return unknown > 0 ? `${r} + ${u}` : r;
+        },
         namePlaceholder: 'Název stromu',
         preview: 'Náhled',
-        summary: (trees: number, persons: number) => `${trees} ${trees < 5 ? 'stromy' : 'stromů'} · ${persons} osob · pokrytí 100 %`,
+        summary: (trees: number, real: number, unknown: number) => {
+            const u = unknown === 1 ? '1 neznámá' : (unknown < 5 ? `${unknown} neznámé` : `${unknown} neznámých`);
+            return `${trees} ${trees < 5 ? 'stromy' : 'stromů'} · ${real} osob${unknown > 0 ? ` + ${u}` : ''} · pokrytí 100 %`;
+        },
         create: (count: number) => count === 1 ? 'Vytvořit 1 strom' : `Vytvořit ${count} ${count < 5 ? 'stromy' : 'stromů'}`,
         cancel: 'Zrušit',
         keepsOriginal: 'Původní strom zůstává přesně tak, jak je. Nové stromy zůstávají propojené přes společné osoby — nechtěné smažte ve Správě stromů.',
         done: (count: number) => count === 1 ? 'Vytvořen 1 strom' : `Vytvořeno ${count} ${count < 5 ? 'stromy' : 'stromů'}`,
-        tooSmall: 'Nejdřív zobrazte pohled Rodina nebo Potomci, pak jej rozdělte na rodiny.',
-        // Výběr osoby (dělíme strom, který není zobrazený — není živý pohled,
-        // který by první rodinu určil, tak osobu zadá uživatel).
+        tooSmall: 'Tento strom obsahuje jen jednu rodinu — není co rozdělovat.',
+        // Výběr osoby (dělíme strom, který není zobrazený — bez živého pohledu
+        // uživatel zvolí osobu, jejíž rodina se vypíše první).
         pickerTitle: 'Rozdělit na rodiny — výchozí osoba',
-        pickerIntro: 'Vyberte osobu, od které se dělení začne. Kolem ní vyroste první rodina; ostatní se najdou sledováním příbuzných, kteří z ní vedou ven.',
+        pickerIntro: 'Vyberte osobu, od které se má začít. Nemění to, jak se strom rozdělí — jen která rodina bude první.',
         pickerConfirm: 'Pokračovat',
     },
 

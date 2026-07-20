@@ -4,7 +4,7 @@
  */
 
 import { PersonId, StromData, LayoutConfig, DEFAULT_LAYOUT_CONFIG } from './types.js';
-import { computeLayout, LayoutResult, StromLayoutEngine, SelectionPolicy, Connection, SpouseLine } from './layout/index.js';
+import { computeLayout, runLayoutPipeline, LayoutResult, StromLayoutEngine, SelectionPolicy, Connection, SpouseLine } from './layout/index.js';
 import { strings } from './strings.js';
 
 // ==================== TYPES ====================
@@ -26,6 +26,37 @@ export interface TreePreviewOptions {
     onClose?: () => void;
     /** Callback when a person is clicked (for external handling) */
     onPersonClick?: (personId: PersonId) => void;
+    /**
+     * Draw EVERY person in `data` (in-laws, half-siblings and all), not just
+     * those within a depth around the focus. Used by the split-families preview
+     * so the drawing matches the proposed family exactly.
+     */
+    wholeTree?: boolean;
+}
+
+/**
+ * Lay out either a depth-limited view (default) or the WHOLE passed tree. The
+ * whole-tree path reaches sideways (spouse ancestors, aunts/uncles, cousins) so
+ * a self-contained family is drawn in full — never using anything from
+ * `src/layout/**` beyond its public entry point.
+ */
+function layoutFor(
+    data: StromData, focusPersonId: PersonId, config: LayoutConfig,
+    depthUp: number, depthDown: number, wholeTree: boolean
+): LayoutResult {
+    if (wholeTree) {
+        return runLayoutPipeline({
+            data, focusPersonId, config,
+            ancestorDepth: 40, descendantDepth: 40,
+            includeSpouseAncestors: true, includeParentSiblings: true,
+            includeParentSiblingDescendants: true,
+        });
+    }
+    const policy: SelectionPolicy = {
+        ancestorDepth: depthUp, descendantDepth: depthDown,
+        includeAuntsUncles: false, includeCousins: false,
+    };
+    return computeLayout(new StromLayoutEngine(), { data, focusPersonId, policy, config });
 }
 
 /** Options for comparison view (two trees side by side) */
@@ -215,22 +246,10 @@ class TreePreviewClass {
             verticalGap: 80
         };
 
-        // Selection policy
-        const policy: SelectionPolicy = {
-            ancestorDepth: depthUp,
-            descendantDepth: depthDown,
-            includeAuntsUncles: false,
-            includeCousins: false
-        };
-
-        // Compute layout
-        const engine = new StromLayoutEngine();
-        const layout = computeLayout(engine, {
-            data,
-            focusPersonId: this.currentFocusId,
-            policy,
-            config
-        });
+        // Compute layout (whole family, or a depth-limited view)
+        const layout = layoutFor(
+            data, this.currentFocusId, config, depthUp, depthDown, !!this.options.wholeTree
+        );
 
         this.positions = layout.positions;
 
@@ -1134,7 +1153,7 @@ export const TreeCompare = new TreeCompareClass();
  */
 export function renderTreeThumbnail(
     container: HTMLElement,
-    options: { data: StromData; focusPersonId: PersonId; depthUp?: number; depthDown?: number }
+    options: { data: StromData; focusPersonId: PersonId; depthUp?: number; depthDown?: number; wholeTree?: boolean }
 ): void {
     const depthUp = options.depthUp ?? 2;
     const depthDown = options.depthDown ?? 2;
@@ -1142,13 +1161,9 @@ export function renderTreeThumbnail(
         ...DEFAULT_LAYOUT_CONFIG,
         cardWidth: 110, cardHeight: 54, horizontalGap: 16, verticalGap: 66,
     };
-    const policy: SelectionPolicy = {
-        ancestorDepth: depthUp, descendantDepth: depthDown,
-        includeAuntsUncles: false, includeCousins: false,
-    };
-    const layout: LayoutResult = computeLayout(new StromLayoutEngine(), {
-        data: options.data, focusPersonId: options.focusPersonId, policy, config,
-    });
+    const layout: LayoutResult = layoutFor(
+        options.data, options.focusPersonId, config, depthUp, depthDown, !!options.wholeTree
+    );
 
     container.innerHTML = '';
     container.classList.add('tree-thumb');
