@@ -71,6 +71,12 @@ jobs:
           # the in-app update banner never fires for anyone.
           HASH=$(sha256sum run/index.html | cut -c1-12)
           sed -i "s/const CACHE_NAME = 'strom-[^']*'/const CACHE_NAME = 'strom-${HASH}'/" run/sw.js
+          # Stamp the app version too: the worker adds it to its background
+          # shell revalidation (?v=...), which is how the server-side stats
+          # learn the version mix of installed PWAs. The build writes the
+          # version into the About span, so the artifact itself is the source.
+          VERSION=$(grep -o 'id="about-version">[^<]*' run/index.html | cut -d'>' -f2)
+          sed -i "s/const APP_VERSION = '[^']*'/const APP_VERSION = '${VERSION}'/" run/sw.js
           git add run/index.html run/sw.js
           git diff --staged --quiet || git commit -m "Update PWA from GitHub build"
           git push origin main
