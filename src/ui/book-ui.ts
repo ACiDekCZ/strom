@@ -51,7 +51,8 @@ export const bookUiMethods = uiModule({
         const dropMedia = (document.getElementById('book-drop-media') as HTMLInputElement | null)?.checked || false;
         const maxGenRaw = (document.getElementById('book-max-gen') as HTMLInputElement | null)?.value.trim() || '';
         const maxGenerations = maxGenRaw ? Math.max(1, parseInt(maxGenRaw, 10)) : undefined;
-        const lang = getCurrentLanguage() === 'cs' ? 'cs' : 'en';
+        const cur = getCurrentLanguage();
+        const lang = cur === 'cs' ? 'cs' : cur === 'de' ? 'de' : 'en';
 
         // The tree overview SVG (drop media strips photos there too, if requested).
         let treeSvg: string | undefined;

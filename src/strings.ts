@@ -2,11 +2,12 @@
  * UI Strings - Multi-language support
  */
 
-export type Language = 'en' | 'cs';
+export type Language = 'en' | 'cs' | 'de';
 
 export const SUPPORTED_LANGUAGES: { code: Language; name: string }[] = [
     { code: 'en', name: 'English' },
-    { code: 'cs', name: 'Čeština' }
+    { code: 'cs', name: 'Čeština' },
+    { code: 'de', name: 'Deutsch' }
 ];
 
 // Type definition for strings structure
@@ -3592,14 +3593,1739 @@ const stringsCZ: StringsType = {
     }
 };
 
+const stringsDE: StringsType = {
+    // Toolbar
+    toolbar: {
+        title: 'Strom',
+        addPerson: 'Person hinzufügen',
+        export: 'Export ▾',
+        import: 'Import ▾',
+        newTree: 'Neuer Stammbaum'
+    },
+
+    // Menu dialogs
+    menu: {
+        export: 'Export',
+        import: 'Import',
+        exportJson: 'JSON exportieren',
+        exportJsonDesc: 'Daten als JSON-Datei herunterladen',
+        exportFocus: 'Diese Ansicht exportieren',
+        exportSelection: 'Export',
+        poster: 'Poster…',
+        makeTree: 'Stammbaum erstellen',
+        makeTreeFromView: 'Stammbaum aus dieser Ansicht erstellen',
+        makeTreeFromViewDesc: 'Aus den angezeigten Personen einen neuen Stammbaum in der App erstellen',
+        splitFamilies: 'In Familien aufteilen…',
+        splitFamiliesHint: 'Teilt einen zusammenhängenden Stammbaum in einen Stammbaum je Familie — nach Namenslinien oder nach Zweigen.',
+        mergeViewInto: 'Zusammenführen mit…',
+        actions: 'Aktionen',
+        treeActions: 'Stammbaum:',
+        sectionCurrentView: 'Aktuelle Ansicht',
+        sectionTree: 'Stammbaum',
+        sectionEdits: 'Änderungen',
+        sectionView: 'Ansicht',
+        sectionApp: 'App',
+        exportFocusDesc: 'Die angezeigten Personen als JSON-Datei herunterladen',
+        exportApp: 'App exportieren',
+        exportAppDesc: 'Eigenständige HTML-Datei herunterladen',
+        importJson: 'JSON importieren',
+        importJsonDesc: 'Daten aus JSON-Datei laden',
+        importGedcom: 'GEDCOM importieren',
+        importGedcomDesc: 'Stammbaum aus GEDCOM-Datei laden',
+        exportGedcom: 'GEDCOM exportieren',
+        exportGedcomDesc: 'Als GEDCOM-Datei herunterladen',
+        newTree: 'Neuer Stammbaum',
+        newTreeDesc: 'Einen neuen, leeren Stammbaum beginnen'
+    },
+
+    // Mobile menu
+    mobileMenu: {
+        addPerson: 'Person hinzufügen',
+        export: 'Export',
+        import: 'Import',
+        newTree: 'Neuer Stammbaum',
+        more: 'Mehr'
+    },
+
+    // Empty state
+    emptyState: {
+        title: 'Willkommen bei Strom',
+        subtitle: 'Beginnen Sie mit Ihrem Stammbaum',
+        addFirst: 'Erste Person hinzufügen',
+        importFromFile: 'Ich habe Daten woanders (GEDCOM von MyHeritage, Ancestry…)',
+        youCard: 'Sie?'
+    },
+
+    demo: {
+        tryDemo: 'Beispiel-Stammbaum ausprobieren',
+        tryDemoDesc: 'Erkunden Sie einen fertigen historischen Stammbaum',
+        treeName: 'Beispiel: Haus Tudor',
+        hint: 'Klicken Sie auf eine Karte, um Aktionen zu sehen. Es ist ein ganz normaler Stammbaum — Sie können ihn in der Stammbaum-Verwaltung löschen.'
+    },
+
+    // Family book
+    book: {
+        menu: 'Familienbuch',
+        menuDesc: 'Druckbares Buch: Kapitel nach Familien, Fotos, Quellen und ein Personenregister',
+        toolbarPrint: 'Drucken',
+        toolbarClose: 'Schließen',
+        title: 'Familienbuch',
+        dialogTitle: 'Familienbuch',
+        subtitle: 'Das Buch der Familie',
+        families: 'Familien',
+        children: 'Kinder',
+        index: 'Personenregister',
+        tree: 'Stammbaum',
+        treeHint: 'Ein vollständiger, gut lesbarer Stammbaum liegt als eigenes Poster bei (Export → Poster).',
+        sources: 'Quellen',
+        chapterShort: 'Kap.',
+        born: '*',
+        died: '†',
+        persons: 'Personen',
+        generations: 'Generationen',
+        generate: 'Buch öffnen',
+        optName: 'Titel',
+        optMaxGen: 'Max. Generationen (optional)',
+        compiled: (date: string) => `erstellt ${date}`,
+        empty: 'Der Stammbaum ist leer.',
+    },
+
+    // Versioned backups
+    snapshots: {
+        delete: 'Löschen',
+        deleteConfirm: (what: string) => `Diese Sicherung löschen? Der Stammbaum selbst bleibt unberührt.${what ? `\n\n${what}` : ''}`,
+        deleted: 'Sicherung gelöscht',
+        inBrowser: 'Sicherungen leben in diesem Browser, nicht in Ihrer Stammbaum-Datei — sie vergrößern sie nie und sind weg, wenn Sie die Browserdaten löschen oder an einen anderen Computer wechseln. Exportieren Sie den Stammbaum für eine Sicherung, die Sie behalten können.',
+        menu: 'Sicherungen',
+        title: 'Sicherungsverlauf',
+        empty: 'Noch keine Sicherungen',
+        createNow: 'Jetzt Sicherung erstellen',
+        restore: 'Wiederherstellen',
+        download: 'Herunterladen',
+        restored: 'Sicherung wiederhergestellt',
+        created: 'Sicherung erstellt',
+        restoreConfirm: (what: string) => `Diese Sicherung wiederherstellen? Sie überschreibt den aktuellen Stammbaum — der aktuelle Stand wird zuvor als Sicherung gespeichert.${what ? `\n\n${what}` : ''}`,
+        total: (count: number, size: string) => `${count} Sicherungen · ${size}`,
+        colDate: 'Datum',
+        colReason: 'Grund',
+        colPersons: 'Personen',
+        persons: (count: number) => count === 1 ? '1 Person' : `${count} Personen`,
+        colSize: 'Größe',
+        reasons: {
+            auto: 'Automatisch',
+            manual: 'Manuell',
+            'pre-import': 'Vor dem Import',
+            'pre-merge': 'Vor dem Zusammenführen',
+        },
+    },
+
+    split: {
+        postImportTitle: 'Mehrere Familien in einer Datei',
+        postImport: (count: number) =>
+            `Die importierte Datei enthält ${count} Familien, die nichts verbindet — kein Elternteil, kein Kind und keine Ehe führt von einer zur anderen. Aus jeder könnte ein eigener Stammbaum werden.`,
+        unrelated: (count: number) => `Enthält ${count} Familien, die nichts verbindet`,
+        unrelatedHint: 'Teilen Sie sie unter Stammbäume verwalten → ⋯ → Nicht verbundene Teile trennen.',
+        menu: 'Nicht verbundene Teile trennen…',
+        menuHint: 'Stammbäume für Inseln, die nichts verbindet — kein Elternteil, kein Kind und keine Ehe zwischen ihnen.',
+        title: 'Nicht verbundene Teile dieses Stammbaums',
+        intro: 'Dieser Stammbaum enthält Familien, die nichts verbindet — kein Elternteil, kein Kind und keine Ehe führt von einer zur anderen. Aus jeder kann ein eigener Stammbaum werden.',
+        single: 'Alle in diesem Stammbaum sind verbunden — es gibt hier nur eine Familie, also gibt es nichts zu teilen.',
+        familyName: (surname: string) => `Familie ${surname}`,
+        persons: (count: number) => count === 1 ? '1 Person' : `${count} Personen`,
+        oldest: (name: string, year: number) => `älteste(r) ${name} (${year})`,
+        noSurname: 'ohne Nachname',
+        alone: 'Mit niemandem verbunden',
+        selected: (count: number) => `${count} abtrennen`,
+        keepsOriginal: 'Der ursprüngliche Stammbaum bleibt, wie er ist — löschen Sie ihn selbst, sobald Sie mit der Aufteilung zufrieden sind.',
+        done: (count: number) => `${count} Stammbäume erstellt. Der ursprüngliche bleibt unberührt.`,
+    },
+    splitFamilies: {
+        title: 'In Familien aufteilen',
+        intro: 'Die Familien, die dieser Stammbaum enthält. Wählen Sie unten, was als eine Familie zählt; derselbe Stammbaum wird dann immer gleich aufgeteilt — die Person, die Sie gerade betrachtet haben, bestimmt nur, welche Familie zuerst aufgeführt wird und wie sich die Verbindungen lesen. Jede Person landet in genau einem Stammbaum.',
+        modeLabel: 'Was als eine Familie zählt',
+        modeSurname: 'Namenslinien',
+        modeLineage: 'Zweige',
+        modeSurnameHint: 'Eine Familie = eine Namenslinie: Kinder gehören zu dem Elternteil, dessen Nachnamen sie tragen, vom Stammvater bis zum letzten Träger. Ein/e angeheiratete Ehepartner/in ohne eigene Familie in diesem Stammbaum bleibt bei seinem/ihrem Partner.',
+        modeLineageHint: 'Eine Familie = ein Zweig, so wie der Stammbaum gewachsen ist: die Hauptlinie mit allen Eingeheirateten und jeder abzweigende angeheiratete Zweig.',
+        modePerspective: 'Sicht einer Person',
+        modePerspectiveHint: 'Der Basis-Stammbaum ist die eigene Linie der gewählten Person: direkte Vorfahren, deren leibliche Geschwister, eigene Geschwister und alle Nachkommen. Geschwisterfamilien, die Sie behalten, bleiben darin; der Rest teilt sich in benachbarte Stammbäume auf. Anders als die beiden anderen Schnitte hängt dieser von den gewählten Personen ab.',
+        perspDepthLabel: 'Geschwisterfamilien behalten bis zu',
+        perspDepthCousins: 'Cousins ersten Grades (Geschwister der Eltern)',
+        perspDepthSecond: 'Cousins zweiten Grades (Geschwister der Großeltern)',
+        perspDepthNone: 'niemandem (nur direkte Linie)',
+        perspBasesLabel: 'Basis-Stammbäume aus Sicht von',
+        perspAddPerson: 'Person hinzufügen…',
+        perspCutsLabel: (n: number) => `Schnitte bei Geschwistern (${n})`,
+        perspCutHint: 'Angehakt = dieses Geschwister bleibt allein im Basis-Stammbaum und seine Familie wird ein benachbarter Stammbaum. Haken entfernen, um die Familie im Basis-Stammbaum zu behalten.',
+        oneFamilyInMode: 'So gesehen ist der ganze Stammbaum eine Familie — nichts zu teilen.',
+        familyName: (name: string) => `Familie ${name}`,
+        focusHere: 'Gewählte Person',
+        connectsTo: (name: string) => `verbunden über ${name}`,
+        persons: (count: number) => count === 1 ? '1 Person' : `${count} Personen`,
+        unknown: (count: number) => `${count} unbekannt`,
+        personsWithUnknown: (real: number, unknown: number) => {
+            const r = real === 1 ? '1 Person' : `${real} Personen`;
+            return unknown > 0 ? `${r} + ${unknown} unbekannt` : r;
+        },
+        namePlaceholder: 'Stammbaum-Name',
+        preview: 'Vorschau',
+        summary: (trees: number, real: number, unknown: number) =>
+            `${trees} Stammbäume · ${real} Personen${unknown > 0 ? ` + ${unknown} unbekannt` : ''} · 100 % abgedeckt`,
+        create: (count: number) => count === 1 ? '1 Stammbaum erstellen' : `${count} Stammbäume erstellen`,
+        cancel: 'Abbrechen',
+        keepsOriginal: 'Der ursprüngliche Stammbaum bleibt genau so, wie er ist. Die neuen Stammbäume bleiben über ihre gemeinsamen Personen verbunden — löschen Sie unerwünschte unter Stammbäume verwalten.',
+        done: (count: number) => count === 1 ? '1 Stammbaum erstellt' : `${count} Stammbäume erstellt`,
+        tooSmall: 'Dieser Stammbaum enthält nur eine Familie — es gibt nichts zu teilen.',
+    },
+
+    advanced: {
+        settingLabel: 'Erweiterte Felder',
+        settingHint: 'Zeigt Quellen, Anhänge, Referenznummern, Namensschreibweisen und offene Fragen zu einer Person. Standardmäßig aus — eine Person, für die Sie bereits etwas ausgefüllt haben, zeigt es immer.',
+    },
+
+    surnames: {
+        menu: 'Namensschreibweisen',
+        title: 'Namensschreibweisen',
+        intro: 'Vor etwa 1900 schreiben die Kirchenbücher eine Familie von Eintrag zu Eintrag unterschiedlich. Sagen Sie einmal, dass Schreibweisen dieselbe Familie meinen, und Suche und Zusammenführen finden sie alle — egal wie eine Person geschrieben ist, auch Personen, die Sie später hinzufügen.',
+        groupsTitle: 'Verknüpfte Schreibweisen',
+        none: 'Noch keine Schreibweisen verknüpft.',
+        addTitle: 'Schreibweisen verknüpfen',
+        addHint: 'Wählen Sie die Schreibweisen, die eine Familie meinen.',
+        inTree: (count: number) => count === 1 ? '1 Person' : `${count} Personen`,
+        notInTree: 'nicht im Stammbaum',
+        addOther: 'Andere Schreibweise…',
+        link: 'Verknüpfen',
+        unlink: 'Verknüpfung lösen',
+        linked: 'Schreibweisen verknüpft.',
+    },
+
+    events: {
+        occupationLabel: 'Beruf / Gewerbe',
+        occupationHint: 'Nur das Gewerbe selbst — „Schmied", nicht „arbeitete in Kladno als Schmied". Es wird als Beruf in GEDCOM ausgegeben.',
+        participants: 'Paten & Zeugen',
+        participantsHint: 'Wen der Eintrag sonst noch nennt. Ein Pate, der immer wieder auftaucht, ist meist ein Verwandter.',
+        addParticipant: '+ Hinzufügen',
+        participantName: 'Name wie geschrieben',
+        participantNote: 'Detail (Gewerbe, „Nachbar"…)',
+        participantLink: 'Mit jemandem im Stammbaum verknüpfen',
+        participantUnlink: 'Nicht diese Person',
+        participantInTree: 'im Stammbaum',
+        participantNameRequired: 'Geben Sie einen Namen an oder verknüpfen Sie jemanden aus dem Stammbaum.',
+        roles: {
+            godparent: 'Pate/Patin',
+            witness: 'Zeuge',
+            officiant: 'Amtsperson',
+            other: 'Anwesend',
+        },
+        title: 'Ereignisse',
+        add: 'Ereignis hinzufügen',
+        addTitle: 'Ereignis hinzufügen',
+        editTitle: 'Ereignis bearbeiten',
+        empty: 'Noch keine Ereignisse',
+        edit: 'Bearbeiten',
+        delete: 'Löschen',
+        type: 'Typ',
+        date: 'Datum',
+        place: 'Ort',
+        note: 'Notiz',
+        customLabel: 'Bezeichnung',
+        customLabelRequired: 'Geben Sie eine Bezeichnung für das eigene Ereignis ein',
+        deleteConfirm: (what: string) => `Dieses Ereignis löschen?\n\n${what}`,
+        types: {
+            birth: 'Geburt',
+            death: 'Tod',
+            baptism: 'Taufe',
+            burial: 'Beerdigung',
+            occupation: 'Beruf',
+            residence: 'Wohnort',
+            military: 'Militärdienst',
+            emigration: 'Auswanderung',
+            immigration: 'Einwanderung',
+            education: 'Ausbildung',
+            custom: 'Eigenes'
+        }
+    },
+
+    // Sources / citations
+    sources: {
+        menu: 'Quellen',
+        title: 'Quellen',
+        add: 'Quelle hinzufügen',
+        addTitle: 'Quelle hinzufügen',
+        editTitle: 'Quelle bearbeiten',
+        empty: 'Noch keine Quellen',
+        sectionTitle: 'Quellen',
+        cite: 'Quelle zitieren',
+        citePartnership: 'Quelle zitieren (Trauungseintrag…)',
+        pickTitle: 'Quelle zitieren',
+        searchPlaceholder: 'Quellen durchsuchen…',
+        createNew: 'Neue Quelle…',
+        emptyPicker: 'Keine Quellen — legen Sie eine an',
+        edit: 'Bearbeiten',
+        delete: 'Löschen',
+        remove: 'Zitat entfernen',
+        fieldTitle: 'Titel',
+        fieldRepository: 'Archiv / Einrichtung',
+        fieldReference: 'Signatur / Fundstelle',
+        fieldUrl: 'URL',
+        fieldNote: 'Notiz',
+        titleRequired: 'Geben Sie einen Quellentitel ein',
+        citations: (n: number) => `${n}×`,
+        deleteConfirm: (title: string, n: number) =>
+            n > 0
+                ? `Diese Quelle löschen? Sie ist an ${n} Stelle(n) zitiert; diese Zitate werden entfernt.\n\n${title}`
+                : `Diese Quelle löschen?\n\n${title}`,
+    },
+
+    // Attachments
+    attachments: {
+        title: 'Anhänge',
+        add: 'Anhang hinzufügen',
+        empty: 'Noch keine Anhänge',
+        delete: 'Löschen',
+        deleteConfirm: (what: string) => `Diesen Anhang löschen?\n\n${what}`,
+        notePlaceholder: 'Notiz (optional)',
+        total: (count: number, size: string) => `${count} ${count === 1 ? 'Anhang' : 'Anhänge'}, insgesamt ${size}`,
+        pdfTooLarge: 'PDF ist zu groß (max. 2 MB).',
+        unsupportedType: 'Nicht unterstützter Dateityp. Verwenden Sie JPG, PNG oder PDF.',
+        readError: 'Die Datei konnte nicht gelesen werden.',
+    },
+
+    // Duplicate suggestions
+    duplicates: {
+        title: 'Ähnliche Personen existieren bereits:',
+        goToPerson: 'Zur Person',
+        useExisting: 'Vorhandene verwenden',
+        parentsLabel: (names: string) => `Eltern: ${names}`,
+        settingLabel: 'Duplikat-Vorschläge',
+        settingHint: 'Beim Anlegen einer neuen Person ähnliche vorhandene vorschlagen',
+    },
+
+    // Overview minimap
+    minimap: {
+        title: 'Übersichts-Minikarte',
+        settingLabel: 'Minikarte',
+        settingHint: 'Eine Übersichts-Minikarte für große Stammbäume anzeigen',
+    },
+
+    // Sticky generation labels
+    genLabels: {
+        settingLabel: 'Generationsbeschriftungen',
+        settingHint: 'Generationsnamen am linken Rand der Arbeitsfläche anheften',
+    },
+
+    // Branch colour coding
+    branchColors: {
+        settingLabel: 'Zweigfarben',
+        legendLabel: 'Stammbaum-Legende',
+        legendHint: 'Die Legende über dem Stammbaum anzeigen (Geschlechtsringe, Zweigfarben)',
+        settingHint: 'Karten nach Zweig relativ zur Fokusperson einfärben',
+        legendPaternal: 'Väterlich',
+        legendMaternal: 'Mütterlich',
+        legendDescendant: 'Nachkommen',
+    },
+
+    // Interactive tour
+    tour: {
+        menu: 'Rundgang starten',
+        offer: 'Neu hier? Machen Sie einen kurzen Rundgang.',
+        offerYes: 'Rundgang starten',
+        next: 'Weiter',
+        skip: 'Überspringen',
+        done: 'Fertig',
+        step1: 'Das ist eine Personenkarte. Klicken Sie darauf, um Aktionen zu öffnen — bearbeiten, Verwandte hinzufügen, fokussieren oder löschen.',
+        step2: 'Wenn Sie mit der Maus über eine Karte fahren, erscheinen Schnell-Hinzufügen-Schaltflächen: oben ein Elternteil, rechts ein Partner, unten ein Kind. Der Kettenglied-Reiter an der oberen Kante verwaltet Partnerschaften und Eltern; das Hinzufügen eines Geschwisters finden Sie im Kartenmenü.',
+        step3: 'Personen fügen Sie auch hier hinzu: eine einzelne Person oder eine ganze Familie auf einmal mit dem Familien-Assistenten.',
+        step4: 'Das Fokus-Panel zeigt, auf wen der Stammbaum zentriert ist. Mit den Pfeilen ändern Sie, wie viele Generationen an Vorfahren und Nachkommen sichtbar sind.',
+        step5: 'Ansichten wechseln: Familie, Nachkommen, Zeitleiste oder der Ahnen-Fächer.',
+        step6: 'Zoom- und Verschiebe-Steuerung — Sie können die Arbeitsfläche auch mit der Maus ziehen und mit dem Mausrad zoomen; 0 setzt die Ansicht zurück.',
+        step7: 'Suchen Sie jemanden nach Namen und filtern Sie mit dem Trichter nach Nachname, Ort, Geburtsjahren, Geschlecht oder Lebendstatus.',
+        step8: 'Stammbäume, Export und Teilen finden Sie hier. Strom exportiert sich als eine einzige, in sich geschlossene Datei, die Sie einem Verwandten per E-Mail schicken können.',
+    },
+
+    // Visual family statistics (tree-stats dialog)
+    stats: {
+        section: 'Familienstatistik',
+        topMaleNames: 'Häufigste männliche Namen',
+        topFemaleNames: 'Häufigste weibliche Namen',
+        lifespanByGen: 'Durchschnittliche Lebensdauer nach Generation',
+        childrenByGen: 'Kinder pro Paar nach Generation',
+        birthsByMonth: 'Geburten nach Monat',
+        oldest: 'Person mit dem längsten Leben',
+        longestMarriage: 'Längste Ehe',
+        years: 'J.',
+        generation: (n: number) => `Gen. ${n}`,
+        sampleN: (n: number) => `n = ${n}`,
+        notEnough: 'Noch nicht genug Daten',
+        largestFamily: 'Größte Familie',
+        childrenCount: (n: number) => n === 1 ? '1 Kind' : `${n} Kinder`,
+        months: ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'],
+    },
+
+    // Anniversaries + "on this day"
+    anniversaries: {
+        deathHint: 'Auch jährliche Todestage anzeigen',
+        menu: 'Jahrestage',
+        title: 'Bevorstehende Jahrestage',
+        empty: 'Keine Jahrestage in den nächsten 30 Tagen',
+        today: 'heute',
+        tomorrow: 'morgen',
+        inDays: (n: number) => `in ${n} Tagen`,
+        yearsAgo: (n: number) => `vor ${n} ${n === 1 ? 'Jahr' : 'Jahren'}`,
+        birthday: (name: string, years: number) => `${name} wird ${years}`,
+        wedding: (a: string, b: string, years: number) => `${a} & ${b} — ${years} Jahre verheiratet`,
+        birthMilestone: (name: string, years: number) => `${name} — ${years} Jahre seit der Geburt`,
+        deathMilestone: (name: string, years: number) => `${name} — ${years} Jahre seit dem Tod`,
+        deathAnniversary: (name: string, years: number) => `${name} — ${years} Jahre seit dem Tod`,
+        otdTitle: 'An diesem Tag',
+        otdBirth: (name: string, ago: string, _female: boolean) => `${ago} wurde ${name} geboren`,
+        otdDeath: (name: string, ago: string, _female: boolean) => `${ago} starb ${name}`,
+        otdWedding: (a: string, b: string, ago: string) => `${ago} heirateten ${a} & ${b}`,
+        settingLabel: 'An diesem Tag',
+        settingHint: 'Beim Öffnen eines Stammbaums eine tägliche „An diesem Tag"-Erinnerung anzeigen',
+    },
+
+    // Family wizard (add a whole family at once)
+    familyWizard: {
+        menu: 'Familie hinzufügen…',
+        title: 'Familie hinzufügen',
+        settingLabel: 'Schaltfläche „Familie hinzufügen"',
+        settingHint: 'Eine Schaltfläche „Familie hinzufügen" in der Symbolleiste anzeigen',
+        aroundName: (name: string) => `Rund um ${name}`,
+        roles: { father: 'Vater', mother: 'Mutter', partner: 'Partner', sibling: 'Geschwister', child: 'Kind' },
+        firstName: 'Vorname',
+        lastName: 'Nachname',
+        year: 'Geburtsjahr',
+        weddingYear: 'Hochzeitsjahr',
+        addSibling: '+ Geschwister',
+        addChild: '+ Kind',
+        remove: 'Entfernen',
+        save: 'Familie hinzufügen',
+        maybe: (name: string) => `Ähnlich: ${name}`,
+        useExisting: 'Vorhandene verwenden',
+        linked: 'Mit vorhandener verknüpft',
+        added: (n: number) => n === 1 ? '1 Person hinzugefügt' : `${n} Personen hinzugefügt`,
+        continuePrompt: 'Mit dem Rest der Familie fortfahren?',
+        continueYes: 'Familie hinzufügen',
+    },
+
+    // Progressive web app (offline + updates)
+    pwa: {
+        offline: 'Offline',
+        updateReady: 'Eine neue Version ist verfügbar.',
+        refresh: 'Aktualisieren',
+    },
+
+    // File System Access (work over a file on disk)
+    fileAccess: {
+        saveToFile: 'In Datei speichern…',
+        saveToFileDesc: 'Diesen Stammbaum mit einer Datei auf der Festplatte verknüpfen — dann genügt Strg+S zum Speichern',
+        openFromFile: 'Aus Datei öffnen…',
+        openFromFileDesc: 'Eine JSON-Datei öffnen und verknüpft halten, damit Änderungen zurück in sie gespeichert werden',
+        save: 'Speichern',
+        unlink: 'Datei trennen',
+        indicator: 'Mit einer Datei verknüpft',
+        linkedTo: (name: string) => `Verknüpft mit ${name}`,
+        saved: (name: string) => `In ${name} gespeichert`,
+        linked: (name: string) => `Verknüpft mit ${name}`,
+        unlinked: 'Datei getrennt',
+        saveFailed: 'Speichern in die Datei nicht möglich',
+        permissionDenied: 'Der Dateizugriff wurde verweigert — die Verknüpfung wurde entfernt',
+        lockedRefuse: 'Entsperren Sie die Verschlüsselung, bevor Sie in eine Datei speichern',
+    },
+
+    // CSV export (spreadsheet person table)
+    csv: {
+        menuTitle: 'CSV exportieren',
+        menuDesc: 'Personentabelle für Excel / Google Sheets',
+        firstName: 'Vorname', lastName: 'Nachname', gender: 'Geschlecht',
+        birthDate: 'Geboren', birthPlace: 'Geburtsort',
+        deathDate: 'Gestorben', deathPlace: 'Sterbeort',
+        father: 'Vater', mother: 'Mutter', partners: 'Partner', notes: 'Notizen',
+    },
+
+    // Zoom controls
+    zoomControls: {
+        zoomIn: 'Vergrößern',
+        zoomOut: 'Verkleinern',
+        reset: 'Ansicht zurücksetzen',
+        fitToScreen: 'An Bildschirm anpassen',
+        settingLabel: 'Schwebende Schaltflächen',
+        settingHint: 'Die schwebenden Zoom-Schaltflächen über dem Stammbaum anzeigen',
+    },
+
+    // Labels
+    labels: {
+        nameVariants: 'Andere Schreibweisen des Namens',
+        nameVariantsHint: 'Wie die Kirchenbücher ihn tatsächlich schreiben (Wischek, Vissek), ein Beiname oder der Hof, unter dem die Familie bekannt war. Mit Kommas trennen. Suche und Zusammenführen finden die Person unter jedem davon. Gilt nur für diese Person — Namensschreibweisen, die die ganze Familie teilt, gehören unter Stammbäume verwalten → Namensschreibweisen.',
+        firstName: 'Vorname',
+        lastName: 'Nachname',
+        gender: 'Geschlecht',
+        selectPerson: 'Person auswählen',
+        birthDate: 'Geburtsdatum',
+        birthPlace: 'Geburtsort',
+        deathDate: 'Sterbedatum',
+        deathPlace: 'Sterbeort',
+        deceased: 'Verstorben',
+        photo: 'Foto',
+        photoChoose: 'Foto auswählen',
+        photoRemove: 'Entfernen',
+        photoRotateLeft: 'Nach links drehen',
+        photoRotateRight: 'Nach rechts drehen',
+        maidenName: 'Geburtsname',
+        refn: 'Referenznummer',
+        question: 'Offene Frage',
+        startDateMarried: 'Hochzeitsdatum',
+        startDatePartners: 'Beginn der Beziehung',
+        startPlace: 'Ort',
+        endDateMarried: 'Scheidungsdatum',
+        endDatePartners: 'Ende der Beziehung',
+        note: 'Notiz',
+        notes: 'Notizen',
+        moreInfo: 'Weitere Infos',
+        partner: 'Partner',
+        isPrimary: 'Hauptbeziehung'
+    },
+
+    // Tooltip
+    tooltip: {
+        alsoWritten: 'auch geschrieben',
+        age: 'Alter',
+        born: 'Geboren',
+        died: 'Gestorben',
+        notes: 'Notizen',
+        yearsOld: (age: number) => `(${age} ${age === 1 ? 'Jahr' : 'Jahre'})`,
+        childrenCount: (n: number) => `${n} ${n === 1 ? 'Kind' : 'Kinder'}`,
+        gestureHint: 'Klicken, um das Menü zu öffnen',
+    },
+
+    // Placeholders
+    placeholders: {
+        nameVariants: 'Wischek, Vissek, beim Schmied',
+        firstName: 'Vorname',
+        lastName: 'Nachname',
+        maidenName: 'Geburtsname',
+        refn: 'z. B. Archivkasten 12 oder eine ID aus einem anderen Programm',
+        question: 'z. B. Kennt jemand ihr Geburtsdatum?',
+        flexDate: '15.5.1880 · 5.1880 · 1880 · um 1880'
+    },
+
+    // Archive search
+    archives: {
+        title: 'In Archiven suchen',
+        internationalSection: 'International',
+        czechSection: 'Tschechische Kirchenbücher (matriky)',
+        familySearchHint: 'Vorausgefüllte Datensatzsuche (Name, Jahre, Ort)',
+        suggestedFor: 'Vorgeschlagen für',
+        allPortals: 'Alle tschechischen Regionalarchive',
+        disclaimer: 'Externe Seiten öffnen sich in einem neuen Tab. Vorschläge beruhen auf Ortsnamen und können ungenau sein.',
+    },
+
+    // Relationship calculator
+    kinship: {
+        title: 'Verwandtschaft',
+        fromLabel: 'Ausgangsperson',
+        pickLabel: 'Wählen Sie die zweite Person:',
+        isOf: 'ist, bezogen auf',
+        noRelation: 'Keine Verwandtschaft gefunden (innerhalb des erfassten Stammbaums).',
+        highlight: 'Im Stammbaum hervorheben',
+        close: 'Schließen',
+    },
+
+    // Context menu
+    contextMenu: {
+        edit: 'Bearbeiten',
+        focus: 'Fokussieren',
+        showDescendants: 'Nachkommen anzeigen',
+        relationship: 'Verwandtschaft finden…',
+        archives: 'In Archiven suchen…',
+        addParent: 'Elternteil hinzufügen',
+        addPartner: 'Partner hinzufügen',
+        addChild: 'Kind hinzufügen',
+        addSibling: 'Geschwister hinzufügen',
+        delete: 'Löschen'
+    },
+
+    // Family / descendants view switch
+    viewModeSwitch: {
+        family: 'Familie',
+        descendants: 'Nachkommen',
+        timeline: 'Zeitleiste',
+        fan: 'Fächer',
+        map: 'Karte',
+        toggle: 'Familien-/Nachkommenansicht',
+        back: 'Zurück zur Familienansicht',
+        badgeLabel: 'Nachkommen:',
+        badgeCount: (count: number) => count === 1 ? '1 Person' : `${count} Personen`,
+        bloodOnly: {
+            label: 'Nur Blutsverwandte',
+            short: 'Blut',
+            hint: 'Auch Partner und Stieffamilien anzeigen',
+        },
+        fullFamilies: {
+            label: 'Ganze Familien',
+            short: 'Familien',
+            hint: 'Nur leibliche Nachkommen anzeigen',
+        },
+        settingLabel: 'Nachkommenansicht',
+        settingHint: 'Standardmäßig die ganzen Familien der Partner anzeigen (ihre anderen Verbindungen und Stiefkinder, abgeschwächt)',
+    },
+
+    // Fan chart (ancestor semicircle)
+    map: {
+        fit: 'Alle Orte einpassen',
+        zoomIn: 'Vergrößern',
+        zoomOut: 'Verkleinern',
+        scopeView: 'Diese Ansicht',
+        scopeTree: 'Ganzer Stammbaum',
+        noPlaces: 'Für keine der angezeigten Personen ist bisher ein Ort eingetragen.',
+        noPlacesAtAll: 'Für diesen Stammbaum sind bisher keine Orte eingetragen.',
+        offline: 'Kein Internet, daher kann das Kartenbild nicht geladen werden. Die bereits vorhandenen Koordinaten bleiben in Ihrem Stammbaum.',
+        missing: (shown: number, missing: number) =>
+            shown > 0
+                ? `${strings.map.placeCount(shown)} auf der Karte, ${missing} ohne Koordinaten.`
+                : `${strings.map.placeCount(missing)} noch ohne Koordinaten.`,
+        lookUp: (count: number) => `${strings.map.placeCount(count)} nachschlagen`,
+        placeCount: (count: number) => `${count} ${count === 1 ? 'Ort' : 'Orte'}`,
+        managePlaces: 'Orte',
+        allPlaced: (count: number) => `${strings.map.placeCount(count)} auf der Karte.`,
+        placesTitle: 'Orte',
+        placesIntro: 'Benennen Sie einen Ort um, um ihn im ganzen Stammbaum auf einmal zu korrigieren. Um einen auf die Karte zu bringen, suchen Sie unter einem Namen, den die Karte kennt — die nächstgelegene Stadt funktioniert meist. Nur die Koordinaten werden angehängt; der Ort behält den Namen, den Ihre Familie geschrieben hat.',
+        nameLabel: 'Ortsname, wie im Stammbaum verwendet',
+        rename: 'Umbenennen',
+        renamed: (count: number) => `An ${count} ${count === 1 ? 'Stelle' : 'Stellen'} umbenannt.`,
+        notOnMap: 'Noch nicht auf der Karte',
+        findOnMap: 'Auf der Karte finden',
+        changePin: 'Ändern',
+        removePin: 'Entfernen',
+        cleanOrphans: (count: number) => `Verwaiste Orte bereinigen (${count})`,
+        cleanOrphansConfirm: (count: number) =>
+            `Gespeicherte Koordinaten für ${count} ${count === 1 ? 'Ort' : 'Orte'} entfernen, die niemand in diesem Stammbaum mehr verwendet? Nichts, was Ihre Familie geschrieben hat, wird angetastet — nur die übrig gebliebenen Kartenmarkierungen verschwinden. Das lässt sich rückgängig machen.`,
+        cleanOrphansDone: (count: number) => `${count} verwaiste ${count === 1 ? 'Ort' : 'Orte'} entfernt.`,
+        wrongSpot: 'Falsche Stelle? Diesen Ort korrigieren',
+        usedBy: (count: number) => count === 1 ? '1 Person' : `${count} Personen`,
+        search: 'Suchen',
+        searchLabel: 'Diesen Ort unter einem anderen Namen suchen',
+        searching: 'Suche läuft…',
+        noCandidates: 'Nichts gefunden. Versuchen Sie die nächstgelegene Stadt oder fügen Sie das Land hinzu.',
+        matched: (label: string) => label ? `Zugeordnet zu ${label}` : 'Zugeordnet',
+        geocodingProgress: (done: number, total: number, place: string) =>
+            `Orte werden nachgeschlagen… ${done}/${total} (${place})`,
+        done: (found: number) => `${strings.map.placeCount(found)} auf der Karte platziert.`,
+        doneWithMisses: (found: number, missed: number) =>
+            `${strings.map.placeCount(found)} platziert. ${missed} konnten nicht gefunden werden — prüfen Sie die Schreibweise oder fügen Sie das Land hinzu.`,
+        consentTitle: 'Koordinaten online nachschlagen?',
+        consentBody: (count: number, service: string) =>
+            `Um die Karte zu zeichnen, ${count === 1 ? 'wird 1 Ortsname' : `werden ${count} Ortsnamen`} (zum Beispiel „Prag") an ${service} gesendet. `
+            + 'Sonst verlässt nichts die App — keine Namen, Daten oder Verwandtschaften Ihrer Familie. '
+            + 'Die Koordinaten werden in Ihren Stammbaum gespeichert, sodass jeder Ort nur einmal nachgeschlagen wird und die Karte danach offline funktioniert.',
+        consentConfirm: 'Nachschlagen',
+        settingLabel: 'Orte online nachschlagen',
+        settingHint: 'Erlaubt der Karte, Ortsnamen an einen Geocoding-Dienst zu senden. Bereits gefundene Koordinaten bleiben in Ihrem Stammbaum.',
+        tilesNotice: 'Der Kartenhintergrund stammt von openstreetmap.org — beim Laden erfährt dieser Server, welchen Bereich Sie betrachten, mehr nicht. Ihre Familiendaten bleiben in der App.',
+        tilesNoticeOk: 'Karte anzeigen',
+        timeMode: 'Wanderung über die Zeit',
+        timeModeEmpty: 'Fügen Sie Daten (Geburt, Tod, Ereignisse) hinzu, um die Wanderung der Familie über die Zeit zu verfolgen.',
+        timePlay: 'Abspielen',
+        timePause: 'Pause',
+        timeYear: 'Jahr',
+        timeUndated: (n: number) =>
+            `${n} ${n === 1 ? 'Ort' : 'Orte'} ohne Datum ${n === 1 ? 'wird' : 'werden'} auf der Zeitleiste nicht angezeigt.`,
+    },
+
+    fan: {
+        generations: 'Generationen',
+    },
+
+    // Timeline view
+    timeline: {
+        segment: 'Zeitleiste',
+        wedding: 'Heirat',
+        empty: 'Keine Personen mit bekanntem Geburtsjahr',
+        omitted: (n: number) => `${n} ${n === 1 ? 'Person' : 'Personen'} ohne Geburtsjahr nicht angezeigt`,
+    },
+
+    // Tree health dashboard (R4)
+    treeHealth: {
+        menu: 'Stammbaum-Gesundheit',
+        title: (name: string) => `Stammbaum-Gesundheit: ${name}`,
+        empty: 'Dieser Stammbaum hat noch keine Personen.',
+        sectionValidation: 'Konsistenz',
+        allGood: 'Keine Ungereimtheiten gefunden',
+        countErrors: (n: number) => `${n} Fehler`,
+        countWarnings: (n: number) => `${n} ${n === 1 ? 'Warnung' : 'Warnungen'}`,
+        countInfos: (n: number) => `${n} ${n === 1 ? 'Hinweis' : 'Hinweise'}`,
+        topIssues: 'Wichtigste Probleme',
+        moreIssues: (n: number) => `und ${n} weitere…`,
+        sectionCompleteness: 'Datenvollständigkeit',
+        completenessHint: 'Anteil der Personen mit dem jeweils erfassten Fakt.',
+        fieldBirthDate: 'Geburtsdatum',
+        fieldBirthPlace: 'Geburtsort',
+        fieldDeathDate: 'Sterbedatum',
+        fieldPhoto: 'Foto',
+        sectionStructure: 'Struktur',
+        statPeople: 'Personen',
+        statUnions: 'Verbindungen',
+        statGenerations: 'Generationen',
+        statIslands: 'Getrennte Familien',
+        islandsOne: 'Alle Personen sind zu einer Familie verbunden.',
+        islandsMany: (n: number) => `Dieser Stammbaum enthält ${n} getrennte Familien ohne Verbindung zueinander.`,
+        islandItem: (surname: string, count: number) => `${surname} — ${count} ${count === 1 ? 'Person' : 'Personen'}`,
+        islandUnnamed: 'Unbenannte Familie',
+        islandsSplitHint: 'Verwenden Sie unten „In Familien aufteilen", um jeder einen eigenen Stammbaum zu geben.',
+        sectionActions: 'Schnellaktionen',
+        actionValidate: 'Prüfungsdetails',
+        actionCleanPlaces: (n: number) => n > 0 ? `Verwaiste Orte bereinigen (${n})` : 'Verwaiste Orte bereinigen',
+        actionSplit: 'In Familien aufteilen',
+        switchFirst: 'Wechseln Sie zuerst zu diesem Stammbaum',
+    },
+
+    // Person modal
+    personModal: {
+        birthEstimate: (year: number) => `Geboren spätestens ~${year} (aus anderen Daten)`,
+        birthEstimateApply: 'übernehmen',
+        addTitle: 'Person hinzufügen',
+        editTitle: 'Person bearbeiten',
+        completeTitle: 'Person vervollständigen',
+        enterName: 'Bitte geben Sie einen Vor- oder Nachnamen ein',
+        unsavedMessage: 'Sie haben ungespeicherte Änderungen in den Personendetails.',
+        invalidDate: 'Ungültiges Datum. Verwenden Sie z. B. 15.5.1880, 5.1880, 1880 oder „um 1880".',
+        photoError: 'Das Bild konnte nicht verarbeitet werden.',
+        newPersonName: 'Neue Person',
+        sectionBasic: 'Grunddaten',
+        sectionBirth: 'Geburt',
+        sectionRelations: 'Beziehungen',
+        sectionDeathEvents: 'Tod und weitere Ereignisse',
+        sectionSources: 'Quellen und Anhänge',
+        sectionPhotoNotes: 'Foto und Notizen',
+        sectionLifeline: 'Lebenslauf',
+        lifelineBorn: 'Geboren',
+        lifelineDied: 'Gestorben',
+        lifelineMarried: (name: string) => `Heirat mit ${name}`,
+        lifelineMarriedUnknown: 'Verheiratet',
+        lifelineChild: (name: string) => `Kind geboren: ${name}`,
+        lifelineChildUnknown: 'Kind geboren',
+        lifelineWith: (names: string) => `mit ${names}`,
+        dateHint: '15.5.1880 · 5.1880 · 1880 · um 1880',
+        deletePerson: 'Person löschen…',
+        sumParents: 'Eltern',
+        sumPartners: (n: number) => n === 1 ? '1 Partner' : `${n} Partner`,
+        sumChildren: (n: number) => n === 1 ? '1 Kind' : `${n} Kinder`,
+        sumEvents: (n: number) => n === 1 ? '1 Ereignis' : `${n} Ereignisse`,
+        sumDeceased: 'verstorben',
+        sumCitations: (n: number) => n === 1 ? '1 Zitat' : `${n} Zitate`,
+        sumScans: (n: number) => n === 1 ? '1 Scan' : `${n} Scans`,
+        sumPhoto: 'Foto',
+        sumNote: 'Notiz',
+        sumNone: 'leer',
+    },
+
+    // Relation modal
+    relationModal: {
+        addParent: 'Elternteil hinzufügen',
+        addPartner: 'Partner hinzufügen',
+        addChild: 'Kind hinzufügen',
+        addSibling: 'Geschwister hinzufügen',
+        linkExisting: 'Vorhandene Person verknüpfen',
+        linkExistingTitle: 'Vorhandene Person verknüpfen',
+        linkAsParent: 'Als Elternteil verknüpfen',
+        linkAsPartner: 'Als Partner verknüpfen',
+        linkAsChild: 'Als Kind verknüpfen',
+        linkAsSibling: 'Als Geschwister verknüpfen',
+        createNewTitle: 'Neue Person anlegen',
+        selectPerson: '-- Auswählen --',
+        enterName: 'Bitte geben Sie einen Vor- oder Nachnamen ein',
+        selectPersonError: 'Bitte wählen Sie eine Person',
+        linkButton: 'Verknüpfen'
+    },
+
+    // Child confirmation
+    childConfirm: {
+        title: 'Kind hinzufügen',
+        message: (name: string, partnerName: string) =>
+            `<strong>${name}</strong> hat einen Partner (<strong>${partnerName}</strong>).`,
+        addToBoth: 'Kind zu beiden Eltern hinzufügen',
+        addToOne: (name: string) => `Kind nur zu ${name} hinzufügen`
+    },
+
+    // Delete confirmation
+    deleteConfirm: {
+        message: (name: string, birthYear?: string) =>
+            birthYear ? `„${name}" (*${birthYear}) löschen?` : `„${name}" löschen?`
+    },
+
+    // Confirmation modal
+    confirmation: {
+        title: 'Bestätigen'
+    },
+
+    // Relationships panel
+    relationships: {
+        title: (name: string) => `Beziehungen: ${name}`,
+        parents: 'Eltern',
+        partners: 'Partner',
+        children: 'Kinder',
+        siblings: 'Geschwister',
+        addParent: '+ Elternteil hinzufügen',
+        addPartner: '+ Partner hinzufügen',
+        addChild: '+ Kind hinzufügen',
+        addSibling: '+ Geschwister hinzufügen',
+        remove: 'Entfernen',
+        noRelationships: 'Noch keine Beziehungen',
+        unsavedTitle: 'Ungespeicherte Änderungen',
+        unsavedMessage: 'Sie haben ungespeicherte Änderungen in den Beziehungseinstellungen.',
+        unsavedSave: 'Speichern & schließen',
+        unsavedDiscard: 'Änderungen verwerfen',
+        unsavedStay: 'Bleiben',
+        orphanConfirm: (name: string) => `„${name}" hat keine verbleibenden Beziehungen. Diese Person löschen?`,
+        orphanDelete: 'Löschen',
+        orphanKeep: 'Behalten'
+    },
+
+    // Buttons
+    card: {
+        addTabParent: 'Elternteil',
+        addTabPartner: 'Partner',
+        addTabChild: 'Kind',
+        relTab: 'Beziehungen',
+        ageWord: 'Alter',
+    },
+    buttons: {
+        save: 'Speichern',
+        cancel: 'Abbrechen',
+        close: 'Schließen',
+        add: 'Hinzufügen',
+        continue: 'Weiter',
+        delete: 'Löschen',
+        manageRelationships: 'Beziehungen verwalten',
+        ok: 'OK',
+        yes: 'Ja',
+        no: 'Nein',
+        importComplete: 'Import abgeschlossen',
+        exportComplete: 'Export abgeschlossen'
+    },
+
+    // Custom dialogs
+    dialog: {
+        info: 'Information',
+        warning: 'Warnung',
+        error: 'Fehler',
+        confirm: 'Bestätigen'
+    },
+
+    // Gender
+    gender: {
+        male: 'Männlich',
+        female: 'Weiblich'
+    },
+
+    // Partnership status
+    partnershipStatus: {
+        married: 'Verheiratet',
+        partners: 'Partner',
+        divorced: 'Geschieden',
+        separated: 'Getrennt'
+    },
+
+    // Parent→child relationship type
+    parentRelType: {
+        biological: 'Leiblich',
+        adoptive: 'Adoptiv',
+        step: 'Stief',
+        foster: 'Pflege',
+    },
+
+    // Export
+    export: {
+        failed: 'Export fehlgeschlagen. Bitte versuchen Sie es erneut.',
+        devModeNotSupported: 'App exportieren ist nur aus der gebauten Version (strom.html) verfügbar. Führen Sie zuerst „npm run build" aus.'
+    },
+
+    // Focus mode
+    focus: {
+        focusedOn: 'Fokussiert auf',
+        back: 'Zurück zur vorherigen Person (Alt+←)',
+        forward: 'Vorwärts (Alt+→)',
+        showAll: 'Alle anzeigen',
+        generationsUp: 'Generationen nach oben',
+        generationsDown: 'Generationen nach unten',
+        exportFocus: 'Fokus exportieren',
+        hiddenPartners: (count: number) => `+${count} Partner (zum Fokussieren klicken)`,
+        hiddenFamilies: (count: number) => `${count} weitere ${count > 1 ? 'Familien' : 'Familie'} mit Kindern (zum Fokussieren klicken)`,
+        hiddenPartnersTooltip: 'Andere Partner',
+        hiddenFamiliesTooltip: 'Andere Familien',
+        collapsePartners: 'Erweiterte Partner einklappen',
+        collapsePartnersLabel: '−',
+        hiddenSiblingsTooltip: 'Geschwister',
+        hiddenParentsTooltip: 'Eltern',
+        hiddenChildrenTooltip: 'Kinder',
+        branchTabParents: 'Eltern',
+        branchTabSiblings: 'Geschwister',
+        branchTabChildren: 'Familie',
+        personCount: (visible: number, total: number) => `${visible} von ${total} Personen`
+    },
+
+    // Generation guide labels (small-caps rules on the canvas, relative to focus)
+    generationLabels: {
+        grandparents: 'GROSSELTERN',
+        parents: 'ELTERN',
+        focus: 'FOKUSGENERATION',
+        children: 'KINDER',
+        grandchildren: 'ENKELKINDER',
+        generationN: (offset: number) => `GENERATION ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`,
+    },
+
+    // Branch tabs (family context navigation)
+    branchTabs: {
+        viewParents: 'Als Kind ansehen (Eltern zeigen)',
+        viewSiblings: 'Geschwister anzeigen',
+        viewFamily: 'Als Elternteil ansehen (eigene Familie zeigen)'
+    },
+
+    // Search
+    search: {
+        placeholder: 'Person suchen...',
+        noResults: 'Keine Ergebnisse',
+        multipleResults: 'Mehrere Ergebnisse gefunden',
+        selectPerson: 'Person auswählen',
+        shortcutHint: '/',
+        shortcutAria: 'Drücken Sie /, um zu suchen',
+    },
+
+    // Search filters
+    searchFilters: {
+        toggle: 'Filter',
+        lastName: 'Nachname',
+        place: 'Ort',
+        yearFrom: 'Jahr von',
+        yearTo: 'Jahr bis',
+        anyGender: 'Beliebiges Geschlecht',
+        anyStatus: 'Lebend oder verstorben',
+        living: 'Nur Lebende',
+        deceased: 'Nur Verstorbene',
+        clear: 'Zurücksetzen',
+        resultCount: (n: number) => `${n} ${n === 1 ? 'Ergebnis' : 'Ergebnisse'}`,
+    },
+
+    // Person picker
+    personPicker: {
+        placeholder: 'Person suchen...',
+        noResults: 'Keine passenden Personen'
+    },
+
+    // Errors
+    errors: {
+        saveFailed: 'Speichern fehlgeschlagen — Ihre letzten Änderungen wurden möglicherweise nicht gespeichert! Schaffen Sie Speicherplatz oder entsperren Sie die Verschlüsselung und bearbeiten Sie es erneut.',
+        parseStoredData: 'Gespeicherte Daten konnten nicht gelesen werden',
+        invalidJson: 'Ungültige JSON-Datei'
+    },
+
+    // Partner selection dialog
+    partnerSelection: {
+        title: 'Partner auswählen',
+        description: (name: string) => `Beziehungszweig für ${name} anzeigen:`
+    },
+
+    // Add child - parent selection
+    addChild: {
+        selectParent: 'Anderen Elternteil auswählen',
+        selectParentDesc: (name: string) => `${name} hat mehrere Partner. Wählen Sie den anderen Elternteil:`,
+        newPlaceholder: 'Neue Person (unbekannt)',
+        unknownPerson: 'Unbekannte Person'
+    },
+
+    // About dialog
+    // Small UI tooltips wired via data-i18n-title
+    uiTips: {
+        centerOnFocus: 'Auf die fokussierte Person zentrieren',
+        showStats: 'Stammbaum-Statistik anzeigen',
+        embeddedInfo: 'Info',
+    },
+
+    about: {
+        title: 'Über Strom',
+        version: 'Version',
+        description: 'Stammbaum im Browser oder als einzelne HTML-Datei. Die Daten bleiben bei Ihnen.',
+        createdBy: 'Erstellt von',
+        license: 'Lizenz',
+        licenseType: 'MPL-2.0 / Kommerziell',
+        author: 'Autor',
+        authorName: 'Milan Víšek',
+        website: 'Website',
+        websiteUrl: 'https://stromapp.info',
+        close: 'Schließen',
+        currentData: 'Aktuelle Daten',
+        stats: {
+            treeName: 'Stammbaum',
+            trees: 'Stammbäume',
+            persons: 'Personen',
+            families: 'Familien',
+            men: 'Männer',
+            women: 'Frauen',
+            generations: 'Generationen',
+            oldest: 'Älteste'
+        }
+    },
+
+    // GEDCOM import
+    gedcom: {
+        resultTitle: 'GEDCOM-Umwandlung',
+        persons: 'Personen',
+        partnerships: 'Partnerschaften',
+        placeholders: 'Platzhalter',
+        unsupported: 'Nicht unterstützt',
+        saveAsJson: 'Als JSON speichern',
+        saveAsJsonDesc: 'Umgewandelte Daten als JSON-Datei herunterladen',
+        importAsNew: 'Als neuen Stammbaum importieren',
+        importAsNewDesc: 'Als eigenen Stammbaum hinzufügen (Ihr aktueller Stammbaum bleibt)',
+        mergeExisting: 'Mit Vorhandenem zusammenführen',
+        mergeExistingDesc: 'Intelligentes Zusammenführen in den aktuellen Stammbaum',
+        insertToTree: 'In Stammbaum einfügen',
+        insertToTreeDesc: 'Umgewandelte Daten in den aktuellen Stammbaum laden',
+        parseError: 'GEDCOM-Datei konnte nicht gelesen werden',
+        skippedTags: 'Übersprungene Einträge',
+        unknownSex: (n: number) => `${n} ${n === 1 ? 'Person' : 'Personen'} mit unbekanntem Geschlecht (Geschlecht aus der Familienrolle abgeleitet)`,
+        otherFamilyLinks: (n: number) =>
+            `${n} ${n === 1 ? 'Kind wurde' : 'Kinder wurden'} in mehr als einer Familie erfasst `
+            + `(z. B. adoptiert); mit der Geburtsfamilie angezeigt, der Rest bei der Person vermerkt`,
+        photos: 'Fotos',
+        documents: 'Dokumente',
+        sources: 'Quellen',
+        events: 'Ereignisse',
+        notes: 'Notizen',
+        allImported: 'Alles in der Datei wurde importiert.',
+        viewCutTooSmall: 'Zeigen Sie mehr Personen an (Familien- oder Nachkommenansicht), bevor Sie aus der Ansicht einen Stammbaum erstellen.',
+        viewCutName: (name: string) => `${name} — Auswahl`,
+        externalMedia: (n: number) => `Die Datei verweist auf ${n} ${n === 1 ? 'externe Mediendatei' : 'externe Mediendateien'} (Plattformen exportieren Fotos als eigenen Ordner/ZIP — entpacken Sie ihn zuerst).`,
+        attachMedia: 'Mediendateien anhängen…',
+        downloadMedia: 'Fotos aus dem Internet herunterladen',
+        downloading: (done: number, total: number) => `Fotos werden heruntergeladen… ${done}/${total}`,
+        mediaAttached: (matched: number, total: number) => `${matched} von ${total} referenzierten Dateien angehängt.`,
+        mediaNoMatch: 'Keine der ausgewählten Dateien passt zu den referenzierten Namen.',
+    },
+
+    // Notes the GEDCOM importer writes into the data itself (persisted).
+    gedcomNotes: {
+        altBirth: 'Geburt (alternativer Eintrag)',
+        altDeath: 'Tod (alternativer Eintrag)',
+        remarriage: (divorced: string, married: string) => `Geschieden ${divorced}, erneut geheiratet ${married}`,
+        remarriageNoDate: (married: string) => `Geschieden, erneut geheiratet ${married}`,
+        engagement: (date: string) => `Verlobung: ${date}`,
+        association: (name: string, label: string) => `Verknüpfung: ${name} (${label})`,
+        email: (value: string) => `E-Mail: ${value}`,
+        adoptedChild: 'adoptiertes Kind',
+        fosterChild: 'Pflegekind',
+        child: 'Kind',
+        parentAnd: ' und ',
+        alsoRecorded: (kind: string, parents: string) => `Auch erfasst als ${kind} von ${parents}.`,
+        alsoRecordedNoParents: (kind: string) => `Auch als ${kind} in einer anderen Familie erfasst.`,
+    },
+
+    // Save current data dialog
+    saveCurrent: {
+        title: 'Aktuelle Daten speichern?',
+        message: 'Sie haben vorhandene Daten. Möchten Sie sie speichern, bevor Sie fortfahren?',
+        exportJson: 'JSON exportieren',
+        exportApp: 'App exportieren',
+        continueWithout: 'Ohne Speichern fortfahren'
+    },
+
+    // Validation messages
+    validation: {
+        parseError: 'Fehler beim Lesen der Datei',
+        invalidStructure: 'Ungültige Dateistruktur',
+        missingPersons: 'Personendaten fehlen',
+        missingPartnerships: 'Partnerschaftsdaten fehlen',
+        missingField: 'Pflichtfeld fehlt',
+        invalidReference: 'Ungültiger Verweis in den Daten',
+        missingGedcomHeader: 'GEDCOM-Kopf fehlt',
+        noIndividuals: 'Keine Personen in der Datei gefunden',
+        fileTooShort: 'Datei ist zu kurz oder leer',
+        invalidLine: 'Ungültiges Zeilenformat',
+        unknownError: 'Unbekannter Fehler',
+        continueWithWarnings: 'Mit Warnungen fortfahren',
+        validationFailed: 'Prüfung fehlgeschlagen',
+        warnings: 'Warnungen',
+        errors: 'Fehler',
+        noVersion: 'Datei ohne Versionsangabe (älteres Format)',
+        olderVersion: 'Datei stammt aus einer älteren Version',
+        newerVersion: 'Datei stammt aus einer neueren Version (mögliche Kompatibilitätsprobleme)',
+        newerDataTitle: 'Neuere Datenversion erkannt',
+        newerDataInStorage: 'Ihre gespeicherten Daten wurden mit einer neueren Version der Anwendung erstellt.',
+        newerDataInImport: 'Diese Datei wurde mit einer neueren Version der Anwendung erstellt.',
+        newerDataWarning: 'Das Öffnen mit dieser älteren Version kann zu Datenverlust oder Fehlern führen.',
+        newerDataSolution: 'Empfohlen: Exportieren Sie Ihre Daten als JSON und importieren Sie sie in der neueren Version.',
+        exportAndExit: 'JSON exportieren & schließen',
+        getNewerVersion: 'Bitte verwenden Sie eine neuere Version der Anwendung, um diese Datei zu öffnen.',
+        yourVersion: 'Ihre App-Version',
+        dataVersion: 'Datenversion',
+        viewOnlyAllowed: 'Sie können diese Daten ansehen, aber der Import ist deaktiviert, um Datenverlust zu verhindern.',
+        viewOnly: 'Nur ansehen (schreibgeschützt)',
+        importBlocked: 'Import blockiert',
+        importBlockedNewer: 'Import nicht möglich: Diese Datei benötigt eine neuere Version der Anwendung.',
+        jsonNewerVersion: 'Diese JSON-Datei wurde mit einer neueren Version (v%d) erstellt. Ihre App unterstützt Version %d.'
+    },
+
+    // Merge import
+    merge: {
+        title: 'Daten zusammenführen',
+        analyzing: 'Personen werden analysiert...',
+        matches: 'Übereinstimmungen',
+        conflicts: 'Konflikte',
+        newPersons: 'Neue Personen',
+        tabAll: 'Alle',
+        highConfidence: 'Hoch',
+        mediumConfidence: 'Mittel',
+        lowConfidence: 'Niedrig',
+        unmatched: 'Ohne Übereinstimmung',
+        confirm: 'Bestätigen',
+        reject: 'Ablehnen',
+        skip: 'Überspringen',
+        unskip: 'Nicht überspringen',
+        skipped: 'Übersprungen',
+        skipTooltip: 'Diese Person gar nicht übernehmen — weder zusammenführen noch hinzufügen (anders als Ablehnen, das sie als neue Person importiert).',
+        statsSkipped: 'Übersprungen',
+        skippedCount: (n: number) => `${n} übersprungen`,
+        changeMatch: 'Ändern',
+        manualMatch: 'Mit Vorhandener abgleichen',
+        reanalyze: 'Neu analysieren',
+        execute: 'Zusammenführen ausführen',
+        updateOnlyLabel: 'Nur vorhandene Personen aktualisieren (keine neuen hinzufügen)',
+        updateOnlyHint: 'Abgeglichene Personen aus dem Import anreichern, aber keine neuen Personen hinzufügen.',
+        mergeViewInto: 'Diese Ansicht zusammenführen mit…',
+        mergeViewDescription: 'Die aktuell angezeigten Personen zusammenführen mit:',
+        mergeViewSourceLabel: 'Aktuelle Ansicht',
+        mergeViewEmpty: 'Nichts zusammenzuführen — die aktuelle Ansicht ist leer.',
+        mergeViewNoTarget: 'Kein anderer Stammbaum zum Zusammenführen.',
+        keepExisting: 'Vorhandenes behalten',
+        useImport: 'Aus dem Import übernehmen',
+        complete: 'Zusammenführen abgeschlossen',
+        failed: 'Zusammenführen fehlgeschlagen',
+        switchToNewTree: 'Zum neuen Stammbaum wechseln?',
+        stats: (merged: number, added: number) =>
+            `${merged} Personen zusammengeführt, ${added} neue Personen hinzugefügt`,
+        noItems: 'Keine Einträge zum Anzeigen',
+        newPerson: 'Neu',
+        selectExisting: '-- Vorhandene Person auswählen --',
+        selectExistingError: 'Bitte wählen Sie eine Person',
+        importCount: 'Import',
+        existingCount: 'Vorhanden',
+        statsMatches: 'Übereinstimmungen',
+        statsConflicts: 'Konflikte',
+        statsNew: 'Neu',
+        mergeInto: 'In vorhandenen Stammbaum zusammenführen',
+
+        wizardTitle: 'Daten zusammenführen',
+        wizardExplanation: 'Prüfen Sie, wie importierte Personen mit vorhandenen Daten übereinstimmen. Grün = bestätigte Übereinstimmung, Gelb = zu prüfen, Blau = neue Person.',
+        stepReview: 'Übereinstimmungen prüfen',
+        stepResolve: 'Konflikte lösen',
+        stepExecute: 'Zusammenführen ausführen',
+
+        closeConfirmTitle: 'Zusammenführen schließen?',
+        closeConfirmMessage: 'Sie haben ungespeicherten Fortschritt beim Zusammenführen.',
+        closeDiscard: 'Änderungen verwerfen',
+        closeSave: 'Für später speichern',
+        closeCancel: 'Weiter zusammenführen',
+
+        pendingMerges: 'Ausstehende Zusammenführungen',
+        pendingMergeFound: 'Sie haben eine ausstehende Zusammenführungssitzung',
+        resume: 'Fortsetzen',
+        discard: 'Verwerfen',
+        savedAt: 'Gespeichert',
+        progress: 'Fortschritt',
+        reviewedCount: (reviewed: number, total: number) =>
+            `${reviewed}/${total} geprüft`,
+
+        highConfidenceTooltip: 'Starke Übereinstimmung: Namen, Daten und Beziehungen passen zusammen',
+        mediumConfidenceTooltip: 'Wahrscheinliche Übereinstimmung: teilweise Datenübereinstimmung oder Familienverbindung — bitte prüfen',
+        lowConfidenceTooltip: 'Mögliche Übereinstimmung: geringe Datenübereinstimmung — sorgfältige Prüfung nötig',
+        newPersonTooltip: 'Wird als neue Person hinzugefügt',
+
+        matchReasons: {
+            exact_name_gender_birthdate: 'Exakter Name und Geburtsdatum',
+            name_gender_birthyear: 'Name und Geburtsjahr',
+            name_gender_parents: 'Name und übereinstimmende Eltern',
+            name_similarity_relationships: 'Ähnlicher Name mit Familienkontext',
+            first_name_match: 'Vorname stimmt überein (anderer Nachname)',
+            first_name_birthyear: 'Vorname und Geburtsjahr',
+            lastname_birthyear: 'Nachname und Geburtsjahr',
+            partner_of_matched: 'Partner einer abgeglichenen Person',
+            child_of_matched: 'Kind einer abgeglichenen Person',
+            parent_of_matched: 'Elternteil einer abgeglichenen Person',
+            partner_similarity: 'Ähnliche Partnernamen',
+            manual: 'Manueller Abgleich'
+        },
+
+        resolveConflicts: 'Lösen',
+
+        newTreeNamePrompt: 'Geben Sie einen Namen für den zusammengeführten Stammbaum ein:',
+        pendingGate: (n: number) => `${n} unsichere ${n === 1 ? 'Übereinstimmung' : 'Übereinstimmungen'} noch offen — diese Personen werden als GETRENNTE Personen importiert (Sie können sie später zusammenführen). Fortfahren?`,
+        suggestedPrecise: 'vorgeschlagen — genaueres Datum',
+        suggestedComplete: 'vorgeschlagen — vollständigerer Wert',
+
+        photoConflict: 'zwei verschiedene Fotos',
+
+        preValidationWarning: (existing: number, incoming: number) =>
+            `Der vorhandene Stammbaum hat ${existing} ${existing === 1 ? 'Problem' : 'Probleme'}, der neue ${incoming} — beim Zusammenführen werden sie übernommen.`,
+        preValidationHint: 'Sie können sie zuerst über die Prüfung beheben.',
+        newIssuesTitle: 'Zusammenführen hat neue Probleme verursacht',
+        newIssues: (n: number) =>
+            `Zusammenführen hat ${n} ${n === 1 ? 'neues Problem' : 'neue Probleme'} verursacht — Prüfung öffnen?`,
+
+        incomingPerson: 'Neue Person:',
+
+        existingTree: 'Vorhandener Stammbaum',
+        incomingTree: 'Neue Daten',
+
+        pendingMergeLabel: 'Ausstehende Zusammenführung',
+        pendingMergeInto: (source: string, target: string) => `${source} → ${target}`,
+        pendingMergeFrom: (source: string) => `aus ${source}`,
+        pendingMergeConflicts: (count: number) => `${count} Konflikte`
+    },
+
+    // Person merge (duplicate resolution)
+    personMerge: {
+        title: 'Personen zusammenführen',
+        keepPerson: 'Behalten',
+        mergeWith: 'Zusammenführen mit',
+        selectPerson: 'Person zum Zusammenführen auswählen...',
+        fieldConflicts: 'Feldkonflikte',
+        partnershipConflicts: 'Partnerschaftskonflikte',
+        keepValue: 'Behalten',
+        useOther: 'Vom anderen übernehmen',
+        mergePartnership: 'Partnerschaften zusammenführen',
+        keepBoth: 'Beide Partnerschaften behalten',
+        noConflicts: 'Keine Konflikte — die Daten werden kombiniert',
+        confirmMerge: 'Personen zusammenführen',
+        mergeComplete: 'Personen erfolgreich zusammengeführt',
+        samePersonError: 'Eine Person kann nicht mit sich selbst zusammengeführt werden',
+        willBeDeleted: 'wird gelöscht',
+        relationshipsTransferred: 'Beziehungen werden übertragen'
+    },
+
+    // Settings
+    settings: {
+        title: 'Einstellungen',
+        theme: 'Erscheinungsbild',
+        themeSystem: 'System (folgt dem Betriebssystem)',
+        themeLight: 'Hell',
+        themeDark: 'Dunkel',
+        language: 'Sprache',
+        languageSystem: 'System (Browsersprache)',
+        close: 'Schließen'
+    },
+
+    // Tree Manager
+    treeManager: {
+        defaultTreeName: 'Mein Stammbaum',
+        newTree: 'Neuer Stammbaum',
+        manageTreesTitle: 'Stammbäume verwalten',
+        treeSwitcher: 'Stammbaum',
+        open: 'Öffnen',
+        moreActions: 'Weitere Aktionen',
+        searchTrees: 'Stammbäume durchsuchen…',
+        pendingSection: 'Unfertige Zusammenführungen',
+        cannotHideLastVisible: 'Der letzte sichtbare Stammbaum kann nicht ausgeblendet werden — blenden Sie zuerst einen anderen ein.',
+        activeBadge: 'Aktiv',
+        lockedBadge: 'Gesperrt',
+        hiddenBadge: 'Ausgeblendet',
+        rename: 'Umbenennen',
+        duplicate: 'Duplizieren',
+        duplicateTitle: 'Stammbaum duplizieren',
+        newTreeNameLabel: 'Neuer Stammbaum-Name',
+        mergeInto: 'Zusammenführen mit...',
+        delete: 'Löschen',
+        export: 'Export',
+        newTreePlaceholder: 'Stammbaum-Name',
+        confirmDelete: (name: string) => `Stammbaum „${name}" löschen? Das kann nicht rückgängig gemacht werden.`,
+        duplicateSuffix: '(Kopie)',
+        selectTargetTree: 'Zielstammbaum auswählen',
+        mergeSourceTree: 'Stammbaum zusammenführen',
+        mergeIntoTree: 'in',
+        startMerge: 'Zusammenführen starten',
+        importTreeName: 'Importierter Stammbaum',
+        importAsNewTree: 'Als neuen Stammbaum importieren',
+        treeNameLabel: 'Stammbaum-Name',
+        persons: 'Personen',
+        families: 'Familien',
+        stats: 'Statistik',
+        statsTitle: 'Stammbaum-Statistik',
+        statsPeople: 'Personen',
+        statsTotal: 'Gesamt',
+        statsMales: 'Männer',
+        statsFemales: 'Frauen',
+        statsLiving: 'Lebend',
+        statsDeceased: 'Verstorben',
+        statsFamilies: 'Familien',
+        statsPartnerships: 'Partnerschaften',
+        statsAvgChildren: 'Durchschn. Kinder',
+        statsDateRange: 'Zeitraum',
+        statsGenerations: 'Generationen',
+        statsYearSpan: 'Abgedeckte Jahre',
+        statsData: 'Datenvollständigkeit',
+        statsWithBirthDate: 'Mit Geburtsdatum',
+        statsWithDeathDate: 'Mit Sterbedatum',
+        statsWithBirthPlace: 'Mit Geburtsort',
+        statsPhotos: 'Fotos',
+        statsEvents: 'Ereignisse',
+        statsSources: 'Quellen',
+        statsSourceCoverage: 'Quellenabdeckung',
+        statsAttachments: 'Anhänge',
+        statsMediaWarning: 'Über 10 MB an Medien — die Datei könnte für den E-Mail-Versand zu groß sein',
+        statsSize: 'Speicher',
+        statsTreeSize: 'Stammbaumgröße',
+        statsAnniversaries: 'Bevorstehende Jahrestage',
+        statsAnniversariesNone: 'Keine Jahrestage in den nächsten 30 Tagen',
+        statsToday: 'Heute',
+        statsThisWeek: 'Diese Woche',
+        statsThisMonth: 'Diesen Monat',
+        statsBirthday: 'Geburtstag',
+        statsBirthAnniversary: 'wäre',
+        statsWeddingAnniversary: 'Hochzeitstag',
+        statsMemorial: 'Gedenktag',
+        statsYears: 'Jahre',
+        validateDesc: 'Stammbaum auf Fehler prüfen',
+        validationTitle: 'Stammbaum-Prüfung',
+        postImportCheckTitle: 'Datenprüfung',
+        postImportCheck: (n: number) => `Wir haben die importierten Daten geprüft und ${n} ${n === 1 ? 'Sache' : 'Sachen'} gefunden, die einen Blick wert ${n === 1 ? 'ist' : 'sind'}. Ansehen?`,
+        postImportReview: 'Ansehen',
+        validationPassed: 'Keine Probleme gefunden',
+        validationErrors: 'Fehler',
+        validationWarnings: 'Warnungen',
+        validationInfos: 'Infos',
+        validationIssuesFound: 'Probleme gefunden',
+        valCycle: 'Vorfahrenzyklus erkannt',
+        valSelfPartnership: 'Partnerschaft mit sich selbst',
+        valDuplicatePartnership: 'Doppelte Partnerschaft',
+        valMissingChildRef: 'Elternteil fehlt Kindverweis',
+        valMissingParentRef: 'Kind fehlt Elternverweis',
+        valMissingPartnershipRef: 'Person fehlt Partnerschaftsverweis',
+        valPartnershipChildMismatch: 'Partnerschaft-Kind-Abweichung',
+        valOrphanedRef: 'Verweis auf nicht vorhandenen Datensatz',
+        valTooManyParents: 'Mehr als 2 Eltern',
+        valParentYoungerThanChild: 'Elternteil jünger als Kind',
+        valParentTooYoung: 'Elternteil bei Geburt sehr jung',
+        valParentTooOld: 'Elternteil bei Geburt sehr alt',
+        valGenerationConflict: 'Person in mehreren Generationen',
+        valPartnerIsParent: 'Partner ist auch Elternteil',
+        valPartnerIsChild: 'Partner ist auch Kind',
+        valSiblingIsParent: 'Geschwister ist auch Elternteil',
+        valSiblingIsChild: 'Geschwister ist auch Kind',
+        valEventBirthDeath: 'Geburt/Tod als Lebensereignis erfasst (gehört in die Datumsfelder)',
+        valEventNoLabel: 'Eigenes Ereignis hat keine Bezeichnung',
+        valEventBadDate: 'Ereignis hat ein ungültiges Datum',
+        valDeathBeforeBirth: 'Sterbedatum liegt vor dem Geburtsdatum',
+        valImplausibleLifespan: 'Unplausibel lange Lebensdauer',
+        valEventBeforeBirth: 'Ereignis vor der Geburt datiert',
+        valEventAfterDeath: 'Ereignis nach dem Tod datiert',
+        valWeddingBeforeBirth: 'Hochzeit vor der Geburt eines Partners datiert',
+        valWeddingAfterDeath: 'Hochzeit nach dem Tod eines Partners datiert',
+        valChildMarriage: 'Als Kind verheiratet',
+        valChildAfterMotherDeath: 'Kind nach dem Tod der Mutter geboren',
+        valChildAfterFatherDeath: 'Kind lange nach dem Tod des Vaters geboren',
+        valCitationMissingSource: 'Zitat verweist auf eine fehlende Quelle',
+        valAttachmentNoData: 'Anhang hat keine verwendbaren Daten',
+        valPartnerAgeGap: 'Extremer Altersunterschied zwischen Partnern',
+        valPossibleDuplicate: 'Mögliche doppelte Person (gleicher Name und Geburtsjahr)',
+        valPlaceSpelling: 'Ein Ort auf mehrere Arten geschrieben',
+        valRecurringGodparent: 'Ein Pate, der immer wieder auftaucht — oft ein Verwandter',
+        valRecurringGodparentDetail: (name: string, events: number, people: number, whose: string) =>
+            `${name} — bei ${events} Ereignissen von ${people} Personen · ${whose}`,
+        valRecurringGodparentByName: 'nach Namen abgeglichen',
+        valOrphanedParticipantRef: 'Ereignisbeteiligter verweist auf eine nicht mehr vorhandene Person',
+        valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
+            `${person} · ${event}: ${who}`,
+        valFix: 'Beheben',
+        valFixAll: 'Alle beheben',
+        valFixed: (count: number) => `${count} ${count === 1 ? 'Problem' : 'Probleme'} behoben`,
+        defaultPerson: 'Standardperson',
+        defaultPersonDesc: 'Beim Öffnen dieses Stammbaums fokussieren auf:',
+        defaultPersonFirstPerson: 'Erste Person',
+        defaultPersonLastFocused: 'Zuletzt fokussiert',
+        defaultPersonSpecific: 'Bestimmte Person:',
+        defaultTree: 'Standard-Stammbaum',
+        defaultTreeDesc: 'Beim Öffnen der App laden:',
+        defaultTreeFirstTree: 'Erster Stammbaum',
+        defaultTreeLastFocused: 'Zuletzt fokussiert',
+        defaultTreeSpecific: 'Bestimmter Stammbaum:',
+        newTreeMenu: 'Neuer Stammbaum',
+        emptyTree: 'Leerer Stammbaum',
+        emptyTreeDesc: 'Mit einem leeren Stammbaum beginnen',
+        fromJson: 'Aus JSON',
+        fromJsonDesc: 'Aus JSON-Datei importieren',
+        fromGedcom: 'Aus GEDCOM',
+        fromGedcomDesc: 'Aus GEDCOM-Datei importieren',
+        fromHtml: 'Aus HTML-Datei',
+        fromHtmlDesc: 'Aus exportierter Strom-HTML-Datei importieren',
+        htmlNoData: 'Keine eingebetteten Daten in der HTML-Datei gefunden',
+        fromFocus: 'Aus aktueller Ansicht',
+        fromFocusDesc: 'Sichtbare Personen in einen neuen, eigenen Stammbaum kopieren',
+        noFocusedData: 'Keine fokussierten Daten, um einen Stammbaum zu erstellen',
+        exportAll: 'Alle Stammbäume exportieren',
+        exportAllJson: 'Als JSON exportieren',
+        exportAllJsonDesc: 'Alle Stammbäume in einer JSON-Datei',
+        exportAllApp: 'Als App exportieren',
+        exportAllAppDesc: 'Eigenständige HTML-Datei mit allen Stammbäumen',
+        showTree: 'Stammbaum einblenden',
+        hideTree: 'Stammbaum ausblenden',
+        hide: 'Ausblenden',
+        showTreeHint: 'Stammbaum einblenden',
+        hideTreeHint: 'Stammbaum ausblenden',
+        hiddenLabel: '(ausgeblendet)'
+    },
+
+    // Collaboration: send to a relative
+    share: {
+        menuItem: '📩 An einen Verwandten senden',
+        menuDesc: 'Eine Datei per E-Mail — er öffnet sie, ergänzt, was er weiß, und schickt sie zurück',
+        passwordLabel: 'Passwort (optional)',
+        dialogTitle: 'An einen Verwandten senden',
+        dialogIntro: 'Erstellt eine einzelne Datei, die Sie per E-Mail versenden können. Der Empfänger öffnet sie einfach — keine Installation, kein Konto.',
+        scopeLabel: 'Was gesendet wird',
+        scopeWhole: 'Der ganze Stammbaum',
+        scopeBranch: 'Die aktuelle Ansicht (sichtbarer Zweig)',
+        senderNameLabel: 'Ihr Name (dem Empfänger angezeigt)',
+        messageLabel: 'Nachricht für den Empfänger',
+        messagePlaceholder: 'Hallo! Könntest du ergänzen, was du über deinen Zweig weißt?',
+        createFile: 'Datei zum Senden erstellen',
+        welcomeTitle: (sender: string) => `${sender} hat Ihnen einen Stammbaum geschickt`,
+        welcomeCounts: (tree: string, persons: number) => `„${tree}" · ${persons} Personen`,
+        welcomeView: 'Nur umsehen',
+        welcomeEdit: 'Ergänzen, was ich weiß',
+        collabBar: (sender: string) => `Sie ergänzen einen Stammbaum für ${sender}.`,
+        collabSend: 'Die Datei zurücksenden',
+        collabHide: 'Ausblenden',
+        collabBadgeTitle: 'Zusammenarbeit läuft',
+        replyTitle: (sender: string) => `${sender} hat Ihren Stammbaum zurückgeschickt`,
+        replyIntro: (tree: string) => `Diese Datei antwortet auf Ihren geteilten Stammbaum „${tree}". Ihre Ergänzungen einfügen?`,
+        replyMerge: 'Prüfen und zusammenführen',
+        replyView: 'Erst nur ansehen',
+        replyImport: 'Als neuen Stammbaum importieren',
+        unknownSender: 'Ein Verwandter'
+    },
+
+    // Change packets (send only changes)
+    shareDiff: {
+        scopeChanges: 'Nur die Änderungen seit dem letzten Teilen',
+        changesHint: 'Dies sendet nur Ihre Ergänzungen. Schicken Sie die Datei an denjenigen zurück, der den Stammbaum mit Ihnen geteilt hat.',
+        packetSaved: 'Änderungsdatei gespeichert',
+        noChanges: 'Seit dem letzten Teilen hat sich nichts geändert',
+        baselineMissing: 'Die Ausgangsbasis für diese Änderungen fehlt — bitten Sie stattdessen um die ganze Datei',
+        treeNotFound: 'Kein passender Stammbaum für diese Änderungen — bitten Sie den Absender stattdessen um die ganze Datei',
+        previewTitle: (sender: string) => `${sender} hat Ihnen Änderungen geschickt`,
+        previewIntro: (tree: string) => tree ? `Diese Ergänzungen aktualisieren Ihren Stammbaum „${tree}".` : 'Diese Ergänzungen aktualisieren Ihren Stammbaum.',
+        accept: 'Änderungen übernehmen',
+        reviewDetail: 'Im Detail prüfen',
+        newPeople: (n: number) => `${n} neue ${n === 1 ? 'Person' : 'Personen'}`,
+        updatedPeople: (n: number) => `${n} aktualisiert`,
+        media: (n: number) => `${n} ${n === 1 ? 'Foto oder Datei' : 'Fotos oder Dateien'}`,
+        placesChip: (n: number) => `${n} ${n === 1 ? 'Ort' : 'Orte'}`,
+        surnameGroups: (n: number) => `${n} ${n === 1 ? 'Namensverknüpfung' : 'Namensverknüpfungen'}`,
+        removed: (n: number) => `${n} entfernt`,
+        sectionNew: 'Neue Personen',
+        sectionUpdated: 'Aktualisierte Personen',
+        fieldOther: 'weitere Details',
+        changedFields: (fields: string) => `geändert: ${fields}`,
+        andMore: (n: number) => `+${n} weitere`,
+        applied: (added: number, updated: number) => `Übernommen — ${added} hinzugefügt, ${updated} aktualisiert`,
+        alreadyApplied: 'Diese Änderungen sind bereits in Ihrem Stammbaum — nichts zu übernehmen.',
+    },
+
+    // View Mode (embedded data)
+    viewMode: {
+        banner: 'Ansichtsmodus (schreibgeschützt)',
+        bannerDetail: 'Wählen Sie, wie es weitergeht:',
+        goOnline: 'Zu stromapp.info gehen',
+        goOnlineHint: 'Empfohlen',
+        stayOffline: 'Bei dieser Datei bleiben',
+        importButton: 'In den Speicher importieren',
+        existingTitle: 'Stammbaum existiert bereits',
+        existingMessage: 'Ein Stammbaum aus diesem Export ist bereits in Ihrem Speicher.',
+        viewStored: 'Gespeicherte Version ansehen',
+        viewEmbedded: 'Eingebettete Version ansehen',
+        updateStored: 'Speicher aktualisieren',
+        importTitle: 'Stammbaum importieren',
+        importMessage: 'Diesen Stammbaum in Ihren lokalen Speicher importieren, um die Bearbeitung zu ermöglichen?',
+        createNew: 'In den Speicher importieren',
+        createCopy: 'Kopie erstellen',
+        importSuccess: 'Stammbaum erfolgreich importiert',
+        importAllSuccess: (count: number) => `${count} ${count === 1 ? 'Stammbaum' : 'Stammbäume'} erfolgreich importiert`,
+        updateSuccess: 'Speicher erfolgreich aktualisiert'
+    },
+
+    // Encryption
+    encryption: {
+        enable: 'Daten verschlüsseln',
+        warning: 'Wenn Sie das Passwort vergessen, können Ihre Daten nicht wiederhergestellt werden.',
+        setPassword: 'Passwort festlegen',
+        confirmPassword: 'Passwort bestätigen',
+        enterPassword: 'Passwort eingeben',
+        wrongPassword: 'Falsches Passwort',
+        exportPassword: 'Export-Verschlüsselung',
+        exportPasswordHint: 'Legen Sie ein Passwort fest, um die Datei zu verschlüsseln, oder exportieren Sie ohne Verschlüsselung.',
+        exportWithPassword: 'Verschlüsselt exportieren',
+        exportWithoutPassword: 'Ohne Verschlüsselung exportieren',
+        passwordMismatch: 'Passwörter stimmen nicht überein',
+        minLength: 'Das Passwort muss mindestens 6 Zeichen lang sein',
+        encryptionEnabled: 'Verschlüsselung aktiviert',
+        encryptionDisabled: 'Verschlüsselung deaktiviert',
+        unlockData: 'Daten entsperren',
+        decryptionFailed: 'Daten konnten nicht entschlüsselt werden',
+        changePassword: 'Passwort ändern',
+        currentPassword: 'Aktuelles Passwort',
+        newPassword: 'Neues Passwort',
+        passwordChanged: 'Passwort erfolgreich geändert',
+        optional: '(optional)',
+        dataEncrypted: 'Daten sind verschlüsselt',
+        enterPasswordToView: 'Passwort eingeben, um anzusehen'
+    },
+
+    // Tree Preview
+    treePreview: {
+        linkCardTitle: 'Verknüpfungskarte — diese Person gehört zu einer benachbarten Familie; ihr eigener Ehepartner und ihre Kinder leben dort.',
+        bigFamilyHint: 'Eine große Familie — die Vorschau beginnt beim Oberhaupt; klicken Sie auf Personen, um sich zu bewegen.',
+        title: 'Stammbaum-Vorschau',
+        close: 'Schließen',
+        focusedOn: 'Fokussiert auf',
+        clickToFocus: 'Klicken Sie auf eine Person, um sie zu fokussieren',
+        compare: 'Stammbäume vergleichen',
+        preview: 'Vorschau',
+        comparePersons: 'Vergleichen'
+    },
+
+    // Cross-tree links
+    slideshow: {
+        menu: 'Diashow (TV-Modus)',
+        menuDesc: 'Ein automatischer Flug durch den Stammbaum — für den Familienbildschirm',
+        needMore: 'Zeigen Sie mehr Personen an, bevor Sie die Diashow starten.',
+        runsInFamily: 'Die Diashow läuft in der Familienansicht',
+        hint: 'Leertaste = Pause · ← → = bewegen · Esc = beenden',
+        paused: 'Pausiert',
+    },
+
+    cardDensity: {
+        settingLabel: 'Kartendetail',
+        compact: 'Kompakt — nur Namen',
+        normal: 'Normal — Namen und Jahre',
+        detailed: 'Detailliert — + Ort und Alter',
+    },
+
+    fanChart: {
+        settingLabel: 'Fächerdiagramm',
+        kekuleHint: 'Kekulé-(Ahnen-)Nummern anzeigen',
+    },
+
+    crossTree: {
+        badgeTitle: (count: number) => `In ${count} ${count === 1 ? 'weiterem Stammbaum' : 'weiteren Stammbäumen'} gefunden`,
+        settingLabel: 'Stammbaum-übergreifende Verbindungen',
+        settingHint: 'Ein Abzeichen anzeigen, wenn eine Person auch in einem anderen Stammbaum vorkommt',
+        tooltipHeader: 'Auch in:',
+        clickToSwitch: 'Zum Wechseln klicken',
+        chooserHeader: 'In Stammbaum öffnen…'
+    },
+
+    // Embedded Mode (local HTML file)
+    embeddedMode: {
+        banner: 'Eigenständige Datei',
+        bannerDetail: 'Diese Datei hat ihren eigenen, getrennten Datenspeicher.',
+        goOnline: 'stromapp.info',
+        exportJson: 'JSON exportieren',
+        exportJsonDesc: 'Für den Import in die Online-Version',
+        saveFile: 'Datei speichern',
+        saveFileTitle: 'Datei mit aktuellen Daten herunterladen',
+        unsavedWarning: 'Sie haben ungespeicherte Änderungen. Verwenden Sie „Datei speichern", um sie zu behalten.',
+        infoTitle: 'Über diese Datei',
+        infoText1: 'Dies ist eine eigenständige HTML-Datei. Ihre Daten werden im Speicher dieses Browsers gespeichert.',
+        infoText2: 'Die Web-App auf stromapp.info hat ihren eigenen, getrennten Speicher. Die Daten werden NICHT zwischen ihnen synchronisiert.',
+        infoHow: 'Ihre Möglichkeiten:',
+        infoStayOffline: 'Diese Datei weiter verwenden',
+        infoStayOfflineDesc: 'Ihre Daten bleiben in diesem Browser. Verwenden Sie „Datei speichern", um eine Kopie mit Ihren Änderungen herunterzuladen.',
+        infoGoOnline: 'Zu stromapp.info wechseln',
+        infoGoOnlineDesc: 'Verwenden Sie stattdessen die Web-App. Sie müssen diese Datei dort importieren, um Ihre Daten zu übertragen.'
+    },
+
+    // Import from offline version (intro text in new tree menu)
+    importFromOffline: {
+        description: 'Willkommen bei stromapp.info! Um mit Ihren Daten fortzufahren, importieren Sie die Datei, die Sie verwendet haben.'
+    },
+
+    // Lock
+    lock: {
+        lockPerson: 'Sperren',
+        unlockPerson: 'Entsperren',
+        lockTree: 'Stammbaum sperren',
+        unlockTree: 'Stammbaum entsperren',
+        lockedTooltip: 'Gesperrt'
+    },
+
+    // Audit Log
+    auditLog: {
+        title: 'Änderungsverlauf',
+        empty: 'Noch keine Einträge erfasst.',
+        clear: 'Verlauf löschen',
+        clearConfirm: 'Den gesamten Änderungsverlauf löschen? Das kann nicht rückgängig gemacht werden.',
+        entries: (count: number) => `${count} ${count === 1 ? 'Eintrag' : 'Einträge'}`,
+        today: 'Heute',
+        yesterday: 'Gestern',
+        enableSetting: 'Änderungsverlauf',
+        enabled: 'Änderungsverlauf aktiviert',
+        disabled: 'Änderungsverlauf deaktiviert',
+        viewLog: 'Änderungsverlauf',
+        exportInclude: 'Änderungsverlauf einschließen',
+        exportTxt: 'TXT exportieren',
+        createdPerson: (name: string) => `Person angelegt: ${name}`,
+        createdPlaceholder: (gender: string) => `Platzhalter angelegt (${gender})`,
+        updatedPerson: (name: string, fields: string) => `${name} aktualisiert: ${fields}`,
+        deletedPerson: (name: string) => `Person gelöscht: ${name}`,
+        createdPartnership: (p1: string, p2: string, status: string) => `Partnerschaft angelegt: ${p1} & ${p2} (${status})`,
+        updatedPartnership: (p1: string, p2: string) => `Partnerschaft aktualisiert: ${p1} & ${p2}`,
+        removedPartnership: (p1: string, p2: string) => `Partnerschaft entfernt: ${p1} & ${p2}`,
+        addedParentChild: (parent: string, child: string) => `Eltern-Kind hinzugefügt: ${parent} → ${child}`,
+        addedFamily: (name: string, count: number) => `Familie rund um ${name} hinzugefügt (${count} neu)`,
+        removedParentChild: (parent: string, child: string) => `Eltern-Kind entfernt: ${parent} → ${child}`,
+        mergedPersons: (removed: string, kept: string, details: string) => `Personen zusammengeführt: ${removed} → ${kept}${details ? ' (' + details + ')' : ''}`,
+        clearedData: (persons: number, partnerships: number) => `Daten gelöscht: ${persons} Personen, ${partnerships} Partnerschaften`,
+        loadedData: (persons: number, partnerships: number) => `Daten geladen: ${persons} Personen, ${partnerships} Partnerschaften`,
+        addedChild: (parent: string, child: string) => `Kind hinzugefügt: ${parent} → ${child}`,
+        addedParent: (parent: string, child: string) => `Elternteil hinzugefügt: ${parent} → ${child}`,
+        addedSibling: (person: string, sibling: string) => `Geschwister hinzugefügt: ${person} + ${sibling}`,
+        addedPartner: (person: string, partner: string) => `Partner hinzugefügt: ${person} & ${partner}`,
+        treeMerge: (merged: number, added: number, source: string) => `Stammbaum-Zusammenführung aus „${source}": ${merged} zusammengeführt, ${added} hinzugefügt`,
+        appliedChanges: (sender: string) => `Änderungen von ${sender} übernommen`,
+        splitFamilies: (trees: number, persons: number) => `In ${trees} Familienstammbäume aufgeteilt (${persons} Personen)`,
+        repairedIssue: (desc: string) => `Automatische Reparatur: ${desc}`,
+        restoredBackup: 'Eine Sicherung wiederhergestellt',
+        addedEvent: (name: string) => `Ereignis zu ${name} hinzugefügt`,
+        updatedEvent: (name: string) => `Ereignis von ${name} aktualisiert`,
+        removedEvent: (name: string) => `Ereignis von ${name} entfernt`,
+        cleanedOrphanPlaces: (count: number) => `${count} verwaiste ${count === 1 ? 'Ort' : 'Orte'} bereinigt`,
+        addedSource: (title: string) => `Quelle „${title}" hinzugefügt`,
+        updatedSource: (title: string) => `Quelle „${title}" aktualisiert`,
+        removedSource: (title: string) => `Quelle „${title}" entfernt`,
+        citedSource: (name: string) => `Quelle bei ${name} zitiert`,
+        uncitedSource: (name: string) => `Zitat von ${name} entfernt`,
+        addedAttachment: (name: string) => `Anhang zu ${name} hinzugefügt`,
+        removedAttachment: (name: string) => `Anhang von ${name} entfernt`,
+        updatedAttachment: (name: string) => `Anhang von ${name} aktualisiert`,
+        setParentRelType: (parent: string, child: string) => `Beziehungstyp ${parent} → ${child} festgelegt`,
+        undoAction: (desc: string) => `Rückgängig: ${desc}`,
+        redoAction: (desc: string) => `Wiederholen: ${desc}`
+    },
+
+    // Undo / redo
+    undo: {
+        undo: 'Rückgängig',
+        redo: 'Wiederholen',
+        addPerson: (name: string) => `${name} hinzufügen`,
+        editPerson: (name: string) => `${name} bearbeiten`,
+        clearedData: 'alle Daten löschen',
+        geocodePlaces: (count: number) => `${count} Orte nachschlagen`,
+        clearPlaceGeo: 'einen Ort von der Karte entfernen',
+        cleanOrphanPlaces: (count: number) => `${count} verwaiste ${count === 1 ? 'Ort' : 'Orte'} bereinigen`,
+        renamePlace: (name: string) => `einen Ort in ${name} umbenennen`,
+        addSurnameGroup: (names: string) => `die Schreibweisen ${names} verknüpfen`,
+        removeSurnameGroup: (name: string) => `die Verknüpfung der Schreibweisen von ${name} lösen`,
+        loadedData: 'Daten importieren',
+        repairedIssue: 'eine Prüfungsreparatur',
+        deletePerson: (name: string) => `${name} löschen`,
+        addPartnership: (a: string, b: string) => `Partnerschaft ${a} & ${b}`,
+        editPartnership: (a: string, b: string) => `Partnerschaft ${a} & ${b} bearbeiten`,
+        removePartnership: (a: string, b: string) => `Partnerschaft ${a} & ${b} entfernen`,
+        addRelation: (parent: string, child: string) => `Verknüpfung ${parent} → ${child}`,
+        removeRelation: (parent: string, child: string) => `Verknüpfung ${parent} → ${child} lösen`,
+        addFamily: (name: string) => `Familie rund um ${name} hinzufügen`,
+        mergePersons: (name: string) => `Zusammenführen zu ${name}`,
+        addEvent: (name: string) => `Ereignis von ${name}`,
+        editEvent: (name: string) => `Ereignis von ${name} bearbeiten`,
+        removeEvent: (name: string) => `Ereignis von ${name} entfernen`,
+        restoreBackup: 'Sicherung wiederherstellen',
+        addSource: (title: string) => `Quelle „${title}"`,
+        editSource: (title: string) => `Quelle „${title}" bearbeiten`,
+        removeSource: (title: string) => `Quelle „${title}" entfernen`,
+        cite: (name: string) => `Zitat bei ${name}`,
+        uncite: (name: string) => `Zitat von ${name} entfernen`,
+        addAttachment: (name: string) => `Anhang von ${name}`,
+        removeAttachment: (name: string) => `Anhang von ${name} entfernen`,
+        editAttachment: (name: string) => `Anhang von ${name} bearbeiten`,
+        setParentRelType: (child: string) => `Beziehungstyp von ${child}`,
+        applyChanges: (sender: string) => `Änderungen von ${sender} übernehmen`,
+        undone: (desc: string) => `Rückgängig gemacht: ${desc}`,
+        redone: (desc: string) => `Wiederholt: ${desc}`,
+        nothingToUndo: 'Nichts rückgängig zu machen',
+        nothingToRedo: 'Nichts zu wiederholen'
+    },
+
+    // Undo / redo entries in the ⋯ actions menu (labels carry the last change).
+    actions: {
+        undoLabel: (desc: string) => `Rückgängig: ${desc}`,
+        undoDisabled: 'Rückgängig',
+        redo: 'Wiederholen',
+    },
+
+    // Living-person privacy filter for exports
+    privacy: {
+        livingPerson: 'Lebende Person',
+        label: 'Privatsphäre lebender Personen',
+        tooltip: 'Details von Personen verbergen, die wahrscheinlich noch leben, wenn der Stammbaum Ihre Familie verlässt. Die Struktur bleibt erhalten.',
+        modeFull: 'Vollständige Daten',
+        modeInitials: 'Initialen + Geburtsjahr',
+        modeAnonymous: 'Namen verbergen',
+        modeMinimal: 'Nur Nachname behalten',
+        stripPhotos: 'Ohne Fotos & Anhänge exportieren',
+        contentLabel: 'Inhalt',
+        contentTooltip: 'Wählen Sie, was mit der Datei mitgeht. Struktur und Namen des Stammbaums bleiben immer erhalten.',
+        contentEstimate: (size: string) => `Geschätzte Größe: ${size}`,
+        presetComplete: 'Vollständiges Archiv',
+        presetSmall: 'Kleine Datei zum Senden',
+        presetSkeleton: 'Nacktes Gerüst',
+        contentPhotos: 'Fotos',
+        contentAttachments: 'Anhänge & Dokumente',
+        contentNotes: 'Notizen',
+        contentSources: 'Quellen & Zitate'
+    },
+
+    // Poster export (SVG / PNG / tiled PDF)
+    poster: {
+        menu: 'Poster exportieren',
+        title: 'Als Poster exportieren',
+        description: 'Exportieren Sie die aktuelle Ansicht als Vektor, Bild oder druckbares mehrseitiges Poster.',
+        printsView: 'Druckt die aktuelle Ansicht:',
+        viewFamily: (name: string, up: number, down: number) => `Familie — ab ${name} (Tiefe ${up}/${down})`,
+        viewDescendants: (name: string) => `Nachkommen von ${name}`,
+        viewFan: (name: string, gens: number) => `Fächer — Vorfahren von ${name}, ${gens} Generationen`,
+        viewTimeline: (name: string) => `Zeitleiste — Ansicht von ${name}`,
+        viewMapBlocked: 'Die Karte lässt sich nicht als Poster drucken — wechseln Sie für den Druck in eine Stammbaumansicht.',
+        svg: 'SVG (Vektor)',
+        svgDesc: 'Skalierbarer Vektor, öffnet sich im Browser oder in Inkscape',
+        png: 'PNG (Bild)',
+        pngDesc: 'Rasterbild in hoher Auflösung',
+        pdf: 'Druck / PDF (gekachelt)',
+        pdfDesc: 'Über mehrere Seiten drucken mit Klebemarken',
+        format: 'Papierformat',
+        orientation: 'Ausrichtung',
+        portrait: 'Hochformat',
+        landscape: 'Querformat',
+        empty: 'Nichts zu exportieren — öffnen Sie zuerst einen Stammbaum.',
+        pngScaledDown: 'Das Bild wurde verkleinert, um in die Größenbeschränkung zu passen.',
+        pngError: 'Das Bild konnte nicht erstellt werden.',
+        pageLabel: (row: number, col: number) => `Zeile ${row} · Spalte ${col}`,
+        guideOption: 'Eine erste Seite mit Zusammenbau-Anleitung hinzufügen',
+        guideTitle: 'Zusammenbau-Anleitung',
+        guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
+            `${pages} Blätter (${rows} × ${cols}), ${overlap} mm Überlappung — nach dem Raster unten zusammenkleben.`,
+        emptySheet: 'leer — nicht gedruckt'
+    }
+};
+
 // Language dictionary
 const languagePacks: Record<Language, StringsType> = {
     en: stringsEN,
-    cs: stringsCZ
+    cs: stringsCZ,
+    de: stringsDE
 };
 
 /** Get the full string pack for a specific language (used by the family book). */
-export function getStringsForLang(lang: 'cs' | 'en'): StringsType {
+export function getStringsForLang(lang: Language): StringsType {
     return languagePacks[lang];
 }
 
@@ -3633,6 +5359,9 @@ export function detectBrowserLanguage(): Language {
     const browserLang = navigator.language.split('-')[0].toLowerCase();
     if (browserLang === 'cs' || browserLang === 'sk') {
         return 'cs';
+    }
+    if (browserLang === 'de') {
+        return 'de';
     }
     return 'en';
 }

@@ -839,7 +839,8 @@ export const appModeMethods = uiModule({
         const yesterday = new Date(now);
         yesterday.setDate(now.getDate() - 1);
         if (key === this.auditLogDayKey(yesterday)) return strings.auditLog.yesterday;
-        const locale = getCurrentLanguage() === 'cs' ? 'cs-CZ' : 'en-US';
+        const curLang = getCurrentLanguage();
+        const locale = curLang === 'cs' ? 'cs-CZ' : curLang === 'de' ? 'de-DE' : 'en-US';
         const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' };
         if (date.getFullYear() !== now.getFullYear()) opts.year = 'numeric';
         return date.toLocaleDateString(locale, opts);

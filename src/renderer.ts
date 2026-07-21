@@ -1772,8 +1772,12 @@ class TreeRendererClass {
         const day = parseInt(parts[2], 10);
         const month = parseInt(parts[1], 10);
         const year = parts[0];
-        if (getCurrentLanguage() === 'cs') {
+        const lang = getCurrentLanguage();
+        if (lang === 'cs') {
             return `${day}. ${month}. ${year}`;
+        }
+        if (lang === 'de') {
+            return `${day}.${month}.${year}`;
         }
         return `${month}/${day}/${year}`;
     }

@@ -543,7 +543,7 @@ export function isEmbeddedEnvelope(obj: unknown): obj is EmbeddedDataEnvelope {
 export const SETTINGS_KEY = 'strom-settings';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
-export type LanguageSetting = 'en' | 'cs' | 'system';
+export type LanguageSetting = 'en' | 'cs' | 'de' | 'system';
 
 export interface AppSettings {
     theme: ThemeMode;  // default: 'system'

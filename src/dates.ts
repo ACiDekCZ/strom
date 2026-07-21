@@ -186,26 +186,31 @@ export function dateSortKey(value?: string): string {
     return /^[~<>]/.test(value) ? value.slice(1) : value;
 }
 
-const QUALIFIER_TEXT: Record<'cs' | 'en', Record<Exclude<DateQualifier, ''>, string>> = {
+const QUALIFIER_TEXT: Record<'cs' | 'en' | 'de', Record<Exclude<DateQualifier, ''>, string>> = {
     cs: { '~': 'kolem', '<': 'před', '>': 'po' },
     en: { '~': 'about', '<': 'before', '>': 'after' },
+    de: { '~': 'um', '<': 'vor', '>': 'nach' },
 };
 
 /**
  * Human-readable form for tooltips/details:
  *   cs: '15. 5. 1880', '5/1880', 'kolem 1880'
  *   en: '5/15/1880', '5/1880', 'about 1880'
+ *   de: '15.5.1880', '5/1880', 'um 1880'
  */
-export function formatFlexDate(value?: string, lang?: 'cs' | 'en'): string {
+export function formatFlexDate(value?: string, lang?: 'cs' | 'en' | 'de'): string {
     const d = parseFlexDate(value);
     if (!d) return value ?? '';
-    const locale = lang ?? (getCurrentLanguage() === 'cs' ? 'cs' : 'en');
+    const cur = getCurrentLanguage();
+    const locale = lang ?? (cur === 'cs' ? 'cs' : cur === 'de' ? 'de' : 'en');
 
     let core: string;
     if (d.day !== undefined && d.month !== undefined) {
         core = locale === 'cs'
             ? `${d.day}. ${d.month}. ${d.year}`
-            : `${d.month}/${d.day}/${d.year}`;
+            : locale === 'de'
+                ? `${d.day}.${d.month}.${d.year}`
+                : `${d.month}/${d.day}/${d.year}`;
     } else if (d.month !== undefined) {
         core = `${d.month}/${d.year}`;
     } else {
@@ -214,7 +219,11 @@ export function formatFlexDate(value?: string, lang?: 'cs' | 'en'): string {
 
     if (d.end) {
         const endCore = formatFlexDate(toCanonical({ qualifier: '', ...d.end }), locale);
-        return locale === 'cs' ? `mezi ${core} a ${endCore}` : `between ${core} and ${endCore}`;
+        return locale === 'cs'
+            ? `mezi ${core} a ${endCore}`
+            : locale === 'de'
+                ? `zwischen ${core} und ${endCore}`
+                : `between ${core} and ${endCore}`;
     }
 
     return d.qualifier ? `${QUALIFIER_TEXT[locale][d.qualifier]} ${core}` : core;
@@ -231,7 +240,11 @@ export function formatDateForInput(value?: string): string {
     const d = parseFlexDate(value);
     if (!d) return value;
     if (d.end) return value;  // ranges stay canonical ('1880..1885')
-    if (getCurrentLanguage() !== 'cs') return value;
+    // Czech and German both write dates day-first with dots ('15.5.1880'), and
+    // every emitted form parses back through normalizeDateInput. English keeps
+    // the canonical ISO form: 'M/D/YYYY' would clash with day-first parsing.
+    const inputLang = getCurrentLanguage();
+    if (inputLang !== 'cs' && inputLang !== 'de') return value;
     const q = d.qualifier;
     if (d.day !== undefined && d.month !== undefined) return `${q}${d.day}.${d.month}.${d.year}`;
     if (d.month !== undefined) return `${q}${d.month}.${d.year}`;

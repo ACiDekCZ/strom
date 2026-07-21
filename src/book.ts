@@ -20,7 +20,7 @@ import { personInitials } from './initials.js';
 
 export interface BookOptions {
     title?: string;
-    lang: 'cs' | 'en';
+    lang: 'cs' | 'en' | 'de';
     privacyMode: PrivacyMode;
     dropMedia?: boolean;
     maxGenerations?: number;
