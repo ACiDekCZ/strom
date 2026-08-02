@@ -59,8 +59,13 @@ export const searchMethods = uiModule({
                 TreeRenderer.setFocus(personId);
                 ZoomPan.centerOnPerson(personId);
                 ZoomPan.highlightPerson(personId);
-                // Clear picker after selection
+                // Clear picker after selection. clear() empties the input
+                // programmatically — no 'input' event fires — so the live
+                // match-dimming must be dropped here, or it sticks around
+                // with a visibly empty search box.
                 this.toolbarSearchPicker?.clear();
+                if (this.searchFilterTimer) clearTimeout(this.searchFilterTimer);
+                this.applySearchFilter();
             },
             placeholder: strings.search.placeholder,
             filter: (p) => !p.isPlaceholder

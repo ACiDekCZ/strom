@@ -152,6 +152,9 @@ export class UIClass {
         nameVariants: string;
         refn: string;
         question: string;
+        /** Quick-entry event fields (occupation note / residence place). */
+        occupation: string;
+        residence: string;
     } | null = null;
 
     // Debounce timer for the live search filter/highlight.

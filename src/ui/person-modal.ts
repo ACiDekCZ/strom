@@ -14,6 +14,7 @@ import {
     PartnershipId,
     PartnershipStatus,
     Gender,
+    LifeEvent,
     RelationType,
     RelationContext,
     StromData,
@@ -21,6 +22,7 @@ import {
     LAST_FOCUSED,
     LastFocusedMarker
 } from '../types.js';
+import { sortLifeEvents } from '../events.js';
 import { strings } from '../strings.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import { compressPhoto, dataUrlByteSize, rotatePhotoDataUrl } from '../photo.js';
@@ -81,7 +83,6 @@ export const personModalMethods = uiModule({
         if (notesInput) notesInput.readOnly = false;
         if (saveBtn) saveBtn.style.display = '';
 
-        this.updatePersonModalHeader(null, strings.personModal.addTitle);
         deleteBtn.style.display = 'none';
         if (mergeBtn) mergeBtn.style.display = 'none';
         // Relationships need a saved person; hide the whole section while adding.
@@ -106,7 +107,15 @@ export const personModalMethods = uiModule({
         if (questionClear) questionClear.value = '';
         const addDeceased = document.getElementById('input-is-deceased') as HTMLInputElement;
         if (addDeceased) addDeceased.checked = false;
+        const occupationClear = document.getElementById('input-occupation') as HTMLInputElement | null;
+        if (occupationClear) { occupationClear.value = ''; occupationClear.readOnly = false; }
+        const residenceClear = document.getElementById('input-residence') as HTMLInputElement | null;
+        if (residenceClear) { residenceClear.value = ''; residenceClear.readOnly = false; }
         this.setPhotoPreview(undefined);
+
+        // Header LAST — it reads the name inputs and the photo preview, so it
+        // must run after they are reset, or it shows the previous person.
+        this.updatePersonModalHeader(null, strings.personModal.addTitle);
 
         this.applyAdvancedFieldVisibility(null);
 
@@ -115,6 +124,7 @@ export const personModalMethods = uiModule({
             firstName: '', lastName: '', gender: 'male',
             birthDate: '', birthPlace: '', deathDate: '', deathPlace: '', notes: '',
             nameVariants: '', refn: '', question: '',
+            occupation: '', residence: '',
         };
 
         // Setup gender change listener for dynamic labels
@@ -406,9 +416,6 @@ export const personModalMethods = uiModule({
 
         if (!modal || !title || !deleteBtn || !firstNameInput || !lastNameInput || !genderSelect) return;
 
-        this.updatePersonModalHeader(
-            person,
-            person.isPlaceholder ? strings.personModal.completeTitle : strings.personModal.editTitle);
         deleteBtn.style.display = 'block';
         if (mergeBtn) mergeBtn.style.display = 'block';
         firstNameInput.value = person.isPlaceholder ? '' : person.firstName;
@@ -429,6 +436,19 @@ export const personModalMethods = uiModule({
         const questionInput = document.getElementById('input-question') as HTMLInputElement | null;
         if (questionInput) questionInput.value = person.question || '';
 
+        // Quick-entry event fields: the newest occupation/residence event —
+        // the same one the detailed card density displays.
+        const occupationInput = document.getElementById('input-occupation') as HTMLInputElement | null;
+        if (occupationInput) {
+            occupationInput.value = this.latestQuickEvent(person, 'occupation', 'note')?.note?.trim() || '';
+            occupationInput.readOnly = false;
+        }
+        const residenceInput = document.getElementById('input-residence') as HTMLInputElement | null;
+        if (residenceInput) {
+            residenceInput.value = this.latestQuickEvent(person, 'residence', 'place')?.place?.trim() || '';
+            residenceInput.readOnly = false;
+        }
+
         // "Deceased" checkbox reflects the current (heuristic or explicit) status.
         const deceasedInput = document.getElementById('input-is-deceased') as HTMLInputElement;
         if (deceasedInput) {
@@ -438,6 +458,12 @@ export const personModalMethods = uiModule({
 
         // Photo preview
         this.setPhotoPreview(person.photo);
+
+        // Header LAST — it reads the name inputs and the photo preview, so it
+        // must run after they are filled, or it shows the PREVIOUS person.
+        this.updatePersonModalHeader(
+            person,
+            person.isPlaceholder ? strings.personModal.completeTitle : strings.personModal.editTitle);
 
         // Snapshot original values for unsaved changes detection
         this.personModalSnapshot = {
@@ -452,6 +478,8 @@ export const personModalMethods = uiModule({
             nameVariants: (document.getElementById('input-name-variants') as HTMLInputElement | null)?.value || '',
             refn: (document.getElementById('input-refn') as HTMLInputElement | null)?.value || '',
             question: (document.getElementById('input-question') as HTMLInputElement | null)?.value || '',
+            occupation: occupationInput?.value || '',
+            residence: residenceInput?.value || '',
         };
 
         // Setup gender change listener for dynamic labels
@@ -489,6 +517,8 @@ export const personModalMethods = uiModule({
             if (deathDateInput) deathDateInput.readOnly = true;
             if (deathPlaceInput) deathPlaceInput.readOnly = true;
             if (notesInput) notesInput.readOnly = true;
+            if (occupationInput) occupationInput.readOnly = true;
+            if (residenceInput) residenceInput.readOnly = true;
             if (saveBtn) saveBtn.style.display = 'none';
             deleteBtn.style.display = 'none';
             if (mergeBtn) mergeBtn.style.display = 'none';
@@ -715,6 +745,36 @@ export const personModalMethods = uiModule({
         this.setPhotoPreview(undefined);
     },
 
+    /**
+     * The newest event of the type whose given field is filled — the same one
+     * the detailed card density shows, so the form edits what the user sees.
+     */
+    latestQuickEvent(person: Person, type: 'occupation' | 'residence', field: 'note' | 'place'): LifeEvent | null {
+        const hits = (person.events ?? []).filter(e => e.type === type && e[field]?.trim());
+        if (hits.length === 0) return null;
+        return sortLifeEvents(hits)[hits.length - 1];
+    },
+
+    /**
+     * Keep the quick-entry event in sync with its form field: create it,
+     * update the newest one, or remove it when the field was emptied. Other
+     * events of the type (an occupation history) are left alone.
+     */
+    syncQuickEvent(personId: PersonId, type: 'occupation' | 'residence', field: 'note' | 'place', value: string): void {
+        const person = DataManager.getPerson(personId);
+        if (!person) return;
+        const latest = this.latestQuickEvent(person, type, field);
+        if (!value) {
+            if (latest) DataManager.removeLifeEvent(personId, latest.id);
+            return;
+        }
+        if (!latest) {
+            DataManager.addLifeEvent(personId, { type, [field]: value });
+        } else if ((latest[field] ?? '').trim() !== value) {
+            DataManager.updateLifeEvent(personId, latest.id, { [field]: value });
+        }
+    },
+
     savePerson(): void {
         const firstNameInput = document.getElementById('input-firstname') as HTMLInputElement;
         const lastNameInput = document.getElementById('input-lastname') as HTMLInputElement;
@@ -738,6 +798,8 @@ export const personModalMethods = uiModule({
             .split(',').map(v => v.trim()).filter(Boolean);
         const refn = (document.getElementById('input-refn') as HTMLInputElement | null)?.value.trim() || '';
         const question = (document.getElementById('input-question') as HTMLInputElement | null)?.value.trim() || '';
+        const occupation = (document.getElementById('input-occupation') as HTMLInputElement | null)?.value.trim() || '';
+        const residence = (document.getElementById('input-residence') as HTMLInputElement | null)?.value.trim() || '';
         // Explicit alive/deceased override; a death date already implies deceased.
         const deceasedChecked = (document.getElementById('input-is-deceased') as HTMLInputElement)?.checked || false;
         const isDeceased = deathDate ? undefined : deceasedChecked;
@@ -778,6 +840,8 @@ export const personModalMethods = uiModule({
                 isDeceased,
                 photo
             });
+            this.syncQuickEvent(this.currentId, 'occupation', 'note', occupation);
+            this.syncQuickEvent(this.currentId, 'residence', 'place', residence);
         } else {
             // Create new
             const newPerson = DataManager.createPerson({ firstName, lastName, gender });
@@ -796,6 +860,9 @@ export const personModalMethods = uiModule({
                     photo
                 });
             }
+            // Register-style quick entry: "Jan Novák, blacksmith of Lipany".
+            if (occupation) DataManager.addLifeEvent(newPerson.id, { type: 'occupation', note: occupation });
+            if (residence) DataManager.addLifeEvent(newPerson.id, { type: 'residence', place: residence });
             // A person added from the toolbar has no relatives yet — the form
             // cannot offer relationships, because there was nobody to relate
             // until Save. Rather than leaving them floating (the tree's own
@@ -893,11 +960,14 @@ export const personModalMethods = uiModule({
         const notes = (document.getElementById('input-notes') as HTMLTextAreaElement)?.value || '';
         const refn = (document.getElementById('input-refn') as HTMLInputElement)?.value || '';
         const question = (document.getElementById('input-question') as HTMLInputElement)?.value || '';
+        const occupation = (document.getElementById('input-occupation') as HTMLInputElement | null)?.value || '';
+        const residence = (document.getElementById('input-residence') as HTMLInputElement | null)?.value || '';
 
         return firstName !== s.firstName || lastName !== s.lastName || gender !== s.gender
             || birthDate !== s.birthDate || birthPlace !== s.birthPlace
             || deathDate !== s.deathDate || deathPlace !== s.deathPlace
-            || notes !== s.notes || refn !== s.refn || question !== s.question;
+            || notes !== s.notes || refn !== s.refn || question !== s.question
+            || occupation !== s.occupation || residence !== s.residence;
     },
 
     /**

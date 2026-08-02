@@ -8800,6 +8800,23 @@
                 <span class="expand-icon">▶</span> <span data-i18n="labels.moreInfo">More Info</span>
             </button>
             <div id="extended-fields" class="extended-fields">
+                <!-- Register-style quick entry: "Jan Novák, kovář z Lipan" —
+                     occupation and residence in one place, stored as events. -->
+                <div class="pm-section">
+                    <div class="pm-section-head"><span class="pm-section-title" data-i18n="personModal.sectionOrigin"></span></div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label data-i18n="personModal.occupationField"></label>
+                            <input type="text" id="input-occupation" autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="personModal.residenceField"></label>
+                            <input type="text" id="input-residence" autocomplete="off" list="places-datalist">
+                        </div>
+                    </div>
+                    <div class="pm-date-hint" data-i18n="personModal.originHint"></div>
+                </div>
+
                 <div class="pm-section" id="pm-relations-section" style="display:none;">
                     <div class="pm-section-head">
                         <span class="pm-section-title" data-i18n="personModal.sectionRelations"></span>
