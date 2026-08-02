@@ -1836,6 +1836,59 @@ class DataManagerClass {
         return true;
     }
 
+    /** True when `candidateId` is `rootId` itself or one of its descendants. */
+    private isSelfOrDescendantOf(candidateId: PersonId, rootId: PersonId): boolean {
+        const seen = new Set<PersonId>([rootId]);
+        const stack: PersonId[] = [rootId];
+        while (stack.length > 0) {
+            const id = stack.pop()!;
+            if (id === candidateId) return true;
+            for (const ch of this.data.persons[id]?.childIds ?? []) {
+                if (!seen.has(ch)) { seen.add(ch); stack.push(ch); }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Move a parent→child link to a different parent in one step ("I linked
+     * the person to the wrong one"). Keeps the relationship type (step,
+     * adoptive…), hangs the child under the new parent's partnership with the
+     * child's remaining parent when there is one, refuses cycles, and rolls
+     * back to the original state when the new link cannot be made.
+     */
+    reassignParentChild(childId: PersonId, oldParentId: PersonId, newParentId: PersonId): boolean {
+        const child = this.data.persons[childId];
+        if (!child || !this.data.persons[oldParentId] || !this.data.persons[newParentId]) return false;
+        if (oldParentId === newParentId || child.parentIds.includes(newParentId)) return false;
+        if (!child.parentIds.includes(oldParentId)) return false;
+        // A parent from the child's own descendants would be a cycle.
+        if (this.isSelfOrDescendantOf(newParentId, childId)) return false;
+
+        const keptType = child.parentRelTypes?.[oldParentId];
+        const oldUnion = Object.values(this.data.partnerships).find(u =>
+            (u.person1Id === oldParentId || u.person2Id === oldParentId) && u.childIds.includes(childId));
+
+        if (!this.removeParentChild(oldParentId, childId)) return false;
+
+        // The child follows the new parent into their union with the child's
+        // remaining parent — otherwise it would hang beside the couple, not
+        // under it.
+        const otherParentId = child.parentIds[0];
+        const newUnion = otherParentId ? Object.values(this.data.partnerships).find(u =>
+            (u.person1Id === newParentId && u.person2Id === otherParentId) ||
+            (u.person2Id === newParentId && u.person1Id === otherParentId)) : undefined;
+
+        if (!this.addParentChild(newParentId, childId, newUnion?.id)) {
+            // Restore what removeParentChild took apart, union attachment included.
+            this.addParentChild(oldParentId, childId, oldUnion?.id);
+            if (keptType && keptType !== 'biological') this.setParentRelType(childId, oldParentId, keptType);
+            return false;
+        }
+        if (keptType && keptType !== 'biological') this.setParentRelType(childId, newParentId, keptType);
+        return true;
+    }
+
     removeParentChild(parentId: PersonId, childId: PersonId): boolean {
         const parent = this.data.persons[parentId];
         const child = this.data.persons[childId];

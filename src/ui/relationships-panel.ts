@@ -104,6 +104,16 @@ export const relationshipsPanelMethods = uiModule({
             });
         });
 
+        // "Reassign" moves the parent link to a different person in one step.
+        content.querySelectorAll('.rel-reassign-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const target = e.currentTarget as HTMLElement;
+                this.openReassignPicker(personId,
+                    target.dataset.relId as PersonId,
+                    target.dataset.relType as 'parent' | 'child');
+            });
+        });
+
         // Attach event listeners for add buttons
         content.querySelectorAll('.rel-add-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -362,6 +372,9 @@ export const relationshipsPanelMethods = uiModule({
                     </span>
                     ${statusHtml}
                     ${relTypeHtml}
+                    ${!isLocked && (type === 'parents' || type === 'children')
+                        ? `<button class="rel-reassign-btn" data-rel-type="${relType[type]}" data-rel-id="${p.id}" title="${strings.relationships.reassignHeading}">⇄ ${strings.relationships.reassign}</button>`
+                        : ''}
                     ${!isLocked ? `<button class="rel-remove-btn" data-rel-type="${relType[type]}" data-rel-id="${p.id}">
                         ${strings.relationships.remove}
                     </button>` : ''}
@@ -377,6 +390,66 @@ export const relationshipsPanelMethods = uiModule({
                 ${canAdd && !isLocked ? `<button class="rel-add-btn" data-rel-type="${relType[type]}">${addBtnText[type]}</button>` : ''}
             </div>
         `;
+    },
+
+    /**
+     * "I linked them to the wrong person": pick a different parent for the
+     * link, nothing retyped. A 'parent' row moves THIS person's parent link;
+     * a 'child' row moves that child away from this person.
+     */
+    openReassignPicker(personId: PersonId, relatedId: PersonId, relType: 'parent' | 'child'): void {
+        const childId = relType === 'parent' ? personId : relatedId;
+        const oldParentId = relType === 'parent' ? relatedId : personId;
+        const child = DataManager.getPerson(childId);
+        const oldParent = DataManager.getPerson(oldParentId);
+        if (!child || !oldParent) return;
+        const name = (p: Person) => `${p.firstName} ${p.lastName}`.trim() || '?';
+
+        document.getElementById('reassign-modal')?.remove();
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay active';
+        overlay.id = 'reassign-modal';
+        overlay.innerHTML = `
+            <div class="modal reassign-modal">
+                <div class="modal-header">
+                    <h2>${strings.relationships.reassignHeading}</h2>
+                    <button class="close-btn" id="reassign-close">&times;</button>
+                </div>
+                <p class="reassign-hint">${this.escapeHtml(strings.relationships.reassignHint(name(child), name(oldParent)))}</p>
+                <div id="reassign-picker"></div>
+            </div>`;
+        document.body.appendChild(overlay);
+        const close = (): void => overlay.remove();
+        overlay.onclick = (e) => { if (e.target === overlay) close(); };
+        (overlay.querySelector('#reassign-close') as HTMLButtonElement).onclick = close;
+
+        // Only valid new parents are offered: not the child, not its current
+        // parents, and nobody from the child's own descendants (a cycle).
+        const excluded = new Set<PersonId>([childId, ...child.parentIds]);
+        const stack: PersonId[] = [childId];
+        while (stack.length > 0) {
+            const cur = DataManager.getPerson(stack.pop()!);
+            for (const ch of cur?.childIds ?? []) {
+                if (!excluded.has(ch)) { excluded.add(ch); stack.push(ch); }
+            }
+        }
+        new PersonPicker({
+            containerId: 'reassign-picker',
+            persons: DataManager.getAllPersons().filter(p => !excluded.has(p.id as PersonId)),
+            onSelect: (newParentId) => {
+                close();
+                const newParent = DataManager.getPerson(newParentId);
+                if (DataManager.reassignParentChild(childId, oldParentId, newParentId)) {
+                    this.showToast(strings.relationships.reassignDone(
+                        name(child), newParent ? name(newParent) : '?'));
+                } else {
+                    this.showToast(strings.relationships.reassignFailed);
+                }
+                TreeRenderer.render();
+                this.refreshSearch();
+                if (this.relationshipsPanelPersonId) this.refreshRelationshipsPanel();
+            },
+        });
     },
 
     async removeRelationship(personId: PersonId, relatedId: PersonId, type: 'parent' | 'partner' | 'child' | 'sibling'): Promise<void> {

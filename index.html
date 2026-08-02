@@ -1909,6 +1909,29 @@
         .rel-remove-btn:hover {
             background: #ffcdd2;
         }
+        /* "Reassign" moves the link instead of deleting it — neutral, not red. */
+        .rel-reassign-btn {
+            padding: 4px 10px;
+            border: none;
+            border-radius: 6px;
+            background: var(--surface-2, #f0ede6);
+            color: var(--primary);
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .rel-reassign-btn:hover {
+            background: var(--hover-bg, #e5e1d8);
+        }
+        [data-theme="dark"] .rel-reassign-btn {
+            background: #2a3a34;
+        }
+        .reassign-modal { max-width: 460px; }
+        .reassign-hint { margin: 4px 0 12px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
+        @media (max-width: 500px) {
+            .reassign-modal { max-width: 94vw; }
+        }
         .rel-status-select,
         .modal select.parent-rel-type-select {
             width: auto;

@@ -90,3 +90,52 @@ test('add-relation birth date rejects an unparseable value', async ({ page }) =>
     await expect(modal).toBeVisible();
     await expect(card(page, 'Petr')).toHaveCount(0);
 });
+
+test('reassign moves a wrongly-linked child to the right parent without retyping', async ({ page }) => {
+    await openApp(page);
+    // Two men + a child linked to the WRONG one (with a 'step' type to keep).
+    await page.evaluate(async () => {
+        const DM = window.Strom.DataManager;
+        const right = DM.createPerson({ firstName: 'Spravny', lastName: 'Otec', gender: 'male' });
+        const wrong = DM.createPerson({ firstName: 'Spatny', lastName: 'Otec', gender: 'male' });
+        const kid = DM.createPerson({ firstName: 'Dite', lastName: 'Otec', gender: 'male' });
+        DM.addParentChild(wrong.id, kid.id);
+        DM.setParentRelType(kid.id, wrong.id, 'step');
+        window.Strom.TreeRenderer.restoreFromSession();
+        window.Strom.TreeRenderer.setFocus(kid.id, false);
+    });
+    await expect(card(page, 'Dite')).toBeVisible();
+
+    // Open the child's relationships panel and reassign the wrong parent.
+    await page.evaluate(() => {
+        const kid = window.Strom.DataManager.getAllPersons().find((p) => p.firstName === 'Dite');
+        window.Strom.UI.showRelationshipsPanel(kid.id, false);
+    });
+    const panel = page.locator('#relationships-modal');
+    await expect(panel).toBeVisible();
+    await panel.locator('.rel-reassign-btn').first().click();
+
+    const reassign = page.locator('#reassign-modal');
+    await expect(reassign).toBeVisible();
+    await expect(reassign).toContainText('Dite');
+    await reassign.locator('.person-picker-input').fill('Spravny');
+    await reassign.locator('.person-picker-item').first().click();
+    await expect(reassign).toBeHidden();
+
+    // The link moved, nothing was retyped, and the 'step' type survived.
+    const state = await page.evaluate(() => {
+        const DM = window.Strom.DataManager;
+        const kid = DM.getAllPersons().find((p) => p.firstName === 'Dite');
+        const right = DM.getAllPersons().find((p) => p.firstName === 'Spravny');
+        const wrong = DM.getAllPersons().find((p) => p.firstName === 'Spatny');
+        return {
+            parents: kid.parentIds,
+            rightId: right.id,
+            wrongChildren: wrong.childIds.length,
+            relType: kid.parentRelTypes?.[right.id],
+        };
+    });
+    expect(state.parents).toEqual([state.rightId]);
+    expect(state.wrongChildren).toBe(0);
+    expect(state.relType).toBe('step');
+});
