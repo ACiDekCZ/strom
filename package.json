@@ -1,6 +1,6 @@
 {
   "name": "strom",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "description": "Family tree application",
   "main": "dist/bundle.js",
   "scripts": {
