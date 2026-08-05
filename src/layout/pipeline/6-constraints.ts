@@ -110,13 +110,29 @@ interface AncestorNode {
  * Get the visual card extent (left, right) of a block.
  * Handles chain blocks (wider coupleWidth) correctly.
  */
-function getBlockCardExtent(
+export function getBlockCardExtent(
     block: FamilyBlock,
     model: LayoutModel,
     config: LayoutConfig
 ): { left: number; right: number } {
     if (block.chainInfo) {
-        // Chain block: use actual coupleWidth
+        // A chain knows where each of its cards sits, and that is the only
+        // honest answer here. Deriving the extent from coupleWidth got it wrong
+        // twice over: the row is not centred on xCenter (xCenter stays on the
+        // primary couple while appendage spouses hang off one side), and
+        // coupleWidth also reserves room for an extra partner's CHILDREN, who
+        // stand a generation BELOW and take no width in this row. The reserved
+        // slot then read as a card sticking out sideways, so a caller resolving
+        // overlaps saw a collision that was not there and shoved the whole
+        // chain out of its place — a deep ancestor's second wife ended up a
+        // full card across her great-granddaughter's side of the couple.
+        const centres = [...block.chainInfo.personPositions.values()];
+        if (centres.length > 0) {
+            return {
+                left: Math.min(...centres) - config.cardWidth / 2,
+                right: Math.max(...centres) + config.cardWidth / 2
+            };
+        }
         return {
             left: block.xCenter - block.coupleWidth / 2,
             right: block.xCenter + block.coupleWidth / 2
@@ -469,33 +485,75 @@ function placeAncestorTree(
     const husbandRightEdge = husbandCenterX + config.cardWidth / 2;
     const wifeLeftEdge = wifeCenterX - config.cardWidth / 2;
 
-    // Place H-subtree: ENTIRE tree must stay LEFT of husband's RIGHT EDGE
+    // Place H-subtree: it must stay LEFT of husband's RIGHT EDGE — but only
+    // while there is a W-subtree on the other side to keep clear of
     if (node.hSubtree && hWidth > 0) {
-        // Initial placement: tree right edge at husband's right edge
-        const hTreeCenterX = husbandRightEdge - hWidth / 2;
-        placeAncestorTree(node.hSubtree, hTreeCenterX, config);
-
-        // Verify: check if any node in the subtree exceeds the boundary
-        const hMaxX = findTreeMaxX(node.hSubtree, config);
-        if (hMaxX > husbandRightEdge) {
-            // Shift entire subtree left to respect boundary
-            const overshoot = hMaxX - husbandRightEdge;
-            shiftAncestorTree(node.hSubtree, -overshoot);
-        }
+        placeSubtreeAgainstBoundary(
+            node.hSubtree, husbandCenterX,
+            wWidth > 0 ? husbandRightEdge : null, 'LEFT', config);
     }
 
-    // Place W-subtree: ENTIRE tree must stay RIGHT of wife's LEFT EDGE
+    // Place W-subtree: mirror of the above
     if (node.wSubtree && wWidth > 0) {
-        // Initial placement: tree left edge at wife's left edge
-        const wTreeCenterX = wifeLeftEdge + wWidth / 2;
-        placeAncestorTree(node.wSubtree, wTreeCenterX, config);
+        placeSubtreeAgainstBoundary(
+            node.wSubtree, wifeCenterX,
+            hWidth > 0 ? wifeLeftEdge : null, 'RIGHT', config);
+    }
 
-        // Verify: check if any node in the subtree exceeds the boundary
-        const wMinX = findTreeMinX(node.wSubtree, config);
-        if (wMinX < wifeLeftEdge) {
-            // Shift entire subtree right to respect boundary
-            const undershoot = wifeLeftEdge - wMinX;
-            shiftAncestorTree(node.wSubtree, undershoot);
+    // The two boundaries above leave the branches exactly partnerGap apart —
+    // the width of the couple's own card gap. Every later pass that keeps
+    // blocks in a row apart asks for horizontalGap instead, finds the pair
+    // short by the difference, and pays it by shoving one branch sideways out
+    // of the place this function just chose for it. Settle it here, splitting
+    // the shortfall so the pair stays centred on the couple.
+    if (node.hSubtree && node.wSubtree && hWidth > 0 && wWidth > 0) {
+        resolveAncestorTreeOverlap(node.hSubtree, node.wSubtree, config);
+    }
+}
+
+/**
+ * Place one ancestor subtree above the person it belongs to, then pull it back
+ * to its side of the couple — but only as far as the boundary actually demands.
+ *
+ * The subtree used to be placed by its own bounding box: right edge flush with
+ * the husband's card edge (mirrored for the wife). That satisfies the side
+ * boundary, but it moves the subtree ROOT — the person's own parents — by half
+ * the width of everything above them. Every generation repeats the shift and it
+ * accumulates downward, so on a deep tree the parent couple ended up thousands
+ * of pixels away from the child it belongs to, with an empty band in between
+ * (measured on a 10-generation line: 2537px between a father and his son).
+ *
+ * Starting from the child's own X keeps the couple where invariant 6 wants it —
+ * above its child — and the corrective shift still guarantees the side
+ * boundary, so nothing crosses the couple midline. Wide branches still slide
+ * outward, just by the overshoot instead of by their full half-width.
+ *
+ * boundaryX of null means there is nothing on the other side to keep clear of:
+ * the couple's other partner has no ancestors in view, so the lone branch is
+ * free to stand above the partner it belongs to. Clamping it there anyway used
+ * to cost another 1030px of empty band on the line measured above, buying
+ * nothing — the side rule exists to separate two branches, and there is only
+ * one. Neighbouring anchors are kept apart by separateTreeClusters.
+ */
+function placeSubtreeAgainstBoundary(
+    subtree: AncestorNode,
+    anchorCenterX: number,
+    boundaryX: number | null,
+    side: 'LEFT' | 'RIGHT',
+    config: LayoutConfig
+): void {
+    placeAncestorTree(subtree, anchorCenterX, config);
+    if (boundaryX === null) return;
+
+    if (side === 'LEFT') {
+        const maxX = findTreeMaxX(subtree, config);
+        if (isFinite(maxX) && maxX > boundaryX) {
+            shiftAncestorTree(subtree, boundaryX - maxX);
+        }
+    } else {
+        const minX = findTreeMinX(subtree, config);
+        if (isFinite(minX) && minX < boundaryX) {
+            shiftAncestorTree(subtree, boundaryX - minX);
         }
     }
 }
@@ -600,8 +658,14 @@ function enforceAllCoupleBoundaries(
     const husbandRightEdge = husbandCenterX + config.cardWidth / 2;
     const wifeLeftEdge = wifeCenterX - config.cardWidth / 2;
 
+    // The side rule separates the two branches from each other. With only one
+    // branch present there is nothing to separate, and clamping it to the card
+    // edge just pushes it away from the person it belongs to — see
+    // placeSubtreeAgainstBoundary.
+    const bothSides = !!node.hSubtree && !!node.wSubtree;
+
     // Check H-subtree: entire tree must stay LEFT of husband's RIGHT EDGE
-    if (node.hSubtree) {
+    if (node.hSubtree && bothSides) {
         const hMaxX = findTreeMaxX(node.hSubtree, config);
         if (hMaxX > husbandRightEdge + 0.5) { // tolerance
             const overshoot = hMaxX - husbandRightEdge;
@@ -611,7 +675,7 @@ function enforceAllCoupleBoundaries(
     }
 
     // Check W-subtree: entire tree must stay RIGHT of wife's LEFT EDGE
-    if (node.wSubtree) {
+    if (node.wSubtree && bothSides) {
         const wMinX = findTreeMinX(node.wSubtree, config);
         if (wMinX < wifeLeftEdge - 0.5) { // tolerance
             const undershoot = wifeLeftEdge - wMinX;
@@ -974,14 +1038,13 @@ function runPhaseBIndependentTrees(
         } else if (wTree && !hTree) {
             placeAncestorTree(wTree, wifeCenterX, config);
         } else {
-            // Both trees exist: place them so they don't cross the midpoint
+            // Both trees exist: place them above their own partner and pull
+            // each back only as far as the couple midline demands
             if (hTree) {
-                const hTreeCenterX = husbandRightEdge - hWidth / 2;
-                placeAncestorTree(hTree, hTreeCenterX, config);
+                placeSubtreeAgainstBoundary(hTree, husbandCenterX, husbandRightEdge, 'LEFT', config);
             }
             if (wTree) {
-                const wTreeCenterX = wifeLeftEdge + wWidth / 2;
-                placeAncestorTree(wTree, wTreeCenterX, config);
+                placeSubtreeAgainstBoundary(wTree, wifeCenterX, wifeLeftEdge, 'RIGHT', config);
             }
         }
 

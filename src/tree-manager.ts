@@ -22,6 +22,7 @@ import { isEncrypted, EncryptedData, CryptoSession } from './crypto.js';
 import { SettingsManager } from './settings.js';
 import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
+import { asciiSlug } from './filenames.js';
 
 /** Current tree index version */
 const TREE_INDEX_VERSION = 1;
@@ -34,13 +35,7 @@ const INDEX_KEY = '_index';
  * "Rodina Novák" → "rodina-novak"
  */
 function slugify(text: string): string {
-    return text
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')  // Remove diacritics
-        .replace(/[^a-z0-9]+/g, '-')       // Replace non-alphanumeric with hyphens
-        .replace(/^-+|-+$/g, '')           // Trim leading/trailing hyphens
-        .replace(/-+/g, '-');              // Collapse multiple hyphens
+    return asciiSlug(text);
 }
 
 class TreeManagerClass {

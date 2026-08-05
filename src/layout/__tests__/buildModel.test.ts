@@ -381,3 +381,144 @@ describe('buildLayoutModel', () => {
         });
     });
 });
+
+describe('an ancestor who remarried keeps the line through the fertile marriage', () => {
+    /**
+     * The bug this locks down: a great-grandfather married twice — first the
+     * woman the line runs through, then, widowed, a childless second wife. The
+     * later wedding won the partnership order, so his CHILDLESS union became
+     * the couple the layout hangs off. The block, its children and the walk up
+     * to his own parents all follow that union, so his parents were never laid
+     * out at all: their grandson's card showed a "hidden parents" badge and the
+     * branch simply stopped, with nothing on screen to explain why.
+     */
+    const tree = (): StromData => ({
+        persons: {
+            child: person('child', ['gp_h'], []),
+            gp_h: person('gp_h', ['ggp_h', 'ggp_w'], ['child']),
+            ggp_h: person('ggp_h', ['gggp_h', 'gggp_w'], ['gp_h']),
+            ggp_w: person('ggp_w', [], ['gp_h']),
+            second_wife: person('second_wife', [], []),
+            gggp_h: person('gggp_h', [], ['ggp_h']),
+            gggp_w: person('gggp_w', [], ['ggp_h']),
+        } as unknown as StromData['persons'],
+        partnerships: {
+            // The line: married first, has the son.
+            u_first: union('u_first', 'ggp_h', 'ggp_w', ['gp_h'], '1870'),
+            // Married later, no children — this one used to win.
+            u_second: union('u_second', 'ggp_h', 'second_wife', [], '1905'),
+            u_parents: union('u_parents', 'gggp_h', 'gggp_w', ['ggp_h'], '1845'),
+            u_gp: union('u_gp', 'gp_h', 'gp_w' as PersonId, ['child'], '1900'),
+        } as unknown as StromData['partnerships'],
+    });
+
+    function person(id: string, parentIds: string[], childIds: string[]) {
+        return {
+            id, firstName: id, lastName: 'X', gender: id.endsWith('_w') || id === 'second_wife' ? 'female' : 'male',
+            isPlaceholder: false, parentIds, childIds,
+            partnerships: [] as string[],
+        };
+    }
+    function union(id: string, p1: string, p2: string, childIds: string[], startDate: string) {
+        return { id, person1Id: p1, person2Id: p2, childIds, status: 'married', startDate };
+    }
+
+    it('makes the union with children the one everything hangs off', () => {
+        const data = tree();
+        // Wire partnerships onto the persons, as the app's data always is.
+        for (const u of Object.values(data.partnerships)) {
+            for (const pid of [u.person1Id, u.person2Id]) {
+                const p = data.persons[pid];
+                if (p) p.partnerships.push(u.id);
+            }
+        }
+        const selection: GraphSelection = {
+            persons: new Set(Object.keys(data.persons) as PersonId[]),
+            partnerships: new Set(['u_first', 'u_second', 'u_parents'] as PartnershipId[]),
+            focusPersonId: 'child' as PersonId,
+            maxAncestorGen: 3,
+            maxDescendantGen: 0,
+        };
+        const model = buildLayoutModel({ data, selection, focusPersonId: 'child' as PersonId });
+
+        // The great-grandfather's primary union is the one with the son in it.
+        const primary = model.personToUnion.get('ggp_h' as PersonId);
+        const primaryUnion = primary ? model.unions.get(primary) : undefined;
+        expect(primaryUnion?.childIds).toContain('gp_h');
+
+        // …and the grandfather's parent union is that same one, so the walk up
+        // to the great-great-grandparents starts from the right couple.
+        const parentUnionId = model.childToParentUnion.get('gp_h' as PersonId);
+        expect(parentUnionId).toBe(primary);
+    });
+});
+
+describe('two fertile marriages: the line beats the documented wedding date', () => {
+    /**
+     * The harder half of the same bug. Both of the ancestor's marriages
+     * produced children, so childlessness cannot decide between them — and the
+     * marriage the line does NOT run through is the one with a wedding record.
+     * Wedding date (newest first) then handed the primary role to the wrong
+     * couple, with two visible symptoms: the ancestral wife's own parents were
+     * never built (her card kept a "hidden parents" badge), and the line down
+     * to her son was drawn from her card centre instead of from the middle of
+     * the couple, because her union counted as a secondary chain union.
+     */
+    function person(id: string, gender: 'male' | 'female', parentIds: string[], childIds: string[]) {
+        return {
+            id, firstName: id, lastName: 'X', gender,
+            isPlaceholder: false, parentIds, childIds, partnerships: [] as string[],
+        };
+    }
+    function union(id: string, p1: string, p2: string, childIds: string[], startDate?: string) {
+        return { id, person1Id: p1, person2Id: p2, childIds, status: 'married', startDate };
+    }
+
+    it('makes the ancestral marriage the primary union of the twice-married ancestor', () => {
+        const data = {
+            persons: {
+                child: person('child', 'male', ['father'], []),
+                father: person('father', 'male', ['ggp_h', 'line_wife'], ['child']),
+                ggp_h: person('ggp_h', 'male', [], ['father', 'half_sibling']),
+                // The line runs through her — her marriage has no record.
+                line_wife: person('line_wife', 'female', ['her_father'], ['father']),
+                // The documented second marriage, children of its own.
+                dated_wife: person('dated_wife', 'female', [], ['half_sibling']),
+                half_sibling: person('half_sibling', 'female', ['ggp_h', 'dated_wife'], []),
+                her_father: person('her_father', 'male', [], ['line_wife']),
+            } as unknown as StromData['persons'],
+            partnerships: {
+                u_line: union('u_line', 'ggp_h', 'line_wife', ['father']),
+                u_dated: union('u_dated', 'ggp_h', 'dated_wife', ['half_sibling'], '1781-02-04'),
+                u_father: union('u_father', 'father', 'mother' as PersonId, ['child'], '1820'),
+            } as unknown as StromData['partnerships'],
+        } as StromData;
+
+        for (const u of Object.values(data.partnerships)) {
+            for (const pid of [u.person1Id, u.person2Id]) {
+                const p = data.persons[pid];
+                if (p) p.partnerships.push(u.id);
+            }
+        }
+
+        // The half-sibling's branch is outside this view, exactly as in the
+        // real tree — only the two wives' cards stand next to the ancestor.
+        const selection: GraphSelection = {
+            persons: new Set(['child', 'father', 'ggp_h', 'line_wife', 'dated_wife', 'her_father'] as PersonId[]),
+            partnerships: new Set(['u_line', 'u_dated'] as PartnershipId[]),
+            focusPersonId: 'child' as PersonId,
+            maxAncestorGen: 3,
+            maxDescendantGen: 0,
+        };
+        const model = buildLayoutModel({ data, selection, focusPersonId: 'child' as PersonId });
+
+        const primary = model.personToUnion.get('ggp_h' as PersonId);
+        const primaryUnion = primary ? model.unions.get(primary) : undefined;
+        expect([primaryUnion?.partnerA, primaryUnion?.partnerB]).toContain('line_wife');
+        expect(model.childToParentUnion.get('father' as PersonId)).toBe(primary);
+
+        // The ancestral wife is a partner of the primary couple, so the walk up
+        // to her own father starts from a union that actually gets laid out.
+        expect(model.personToUnion.get('line_wife' as PersonId)).toBe(primary);
+    });
+});

@@ -101,3 +101,37 @@ test('sources: cite a source on a partnership (marriage record)', async ({ page 
     await panel.locator('.partnership-uncite').click();
     await expect(panel.locator('.partnership-citations .source-chip')).toHaveCount(0);
 });
+
+test('wedding witnesses: imported ones show, and one can be added and removed', async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const jan = dm.getAllPersons()[0];
+        const marie = dm.createPerson({ firstName: 'Marie', lastName: 'Novakova', gender: 'female' });
+        const union = dm.createPartnership(jan.id, marie.id);
+        // As a register import leaves them: a name, no record of their own.
+        dm.addPartnershipParticipant(union.id, { name: 'Vaclav Sedlak' });
+        window.Strom.UI.showRelationshipsPanel(jan.id);
+    });
+    const panel = page.locator('#relationships-modal');
+    await expect(panel.locator('.partnership-witnesses .source-chip')).toContainText('Vaclav Sedlak');
+
+    // Add a second one through the prompt.
+    await panel.locator('.partnership-witness-btn').click();
+    const prompt = page.locator('#confirmation-modal');
+    await expect(prompt).toBeVisible();
+    await prompt.locator('#prompt-input').fill('Anna Kmotrova');
+    await prompt.locator('#confirm-ok-btn').click();
+    await expect(panel.locator('.partnership-witnesses .source-chip')).toHaveCount(2);
+
+    // …and it is really on the partnership, not just on screen.
+    const names = await page.evaluate(() =>
+        (Object.values(window.Strom.DataManager.getData().partnerships)[0].participants ?? [])
+            .map((p: { name?: string }) => p.name));
+    expect(names).toEqual(['Vaclav Sedlak', 'Anna Kmotrova']);
+
+    await panel.locator('.partnership-witness-remove').first().click();
+    await expect(panel.locator('.partnership-witnesses .source-chip')).toHaveCount(1);
+});

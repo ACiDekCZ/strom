@@ -155,6 +155,9 @@ export class UIClass {
         /** Quick-entry event fields (occupation note / residence place). */
         occupation: string;
         residence: string;
+        /** The narrative fields, as typed. */
+        storyTitle: string;
+        storyText: string;
     } | null = null;
 
     // Debounce timer for the live search filter/highlight.
@@ -164,6 +167,13 @@ export class UIClass {
     editingEventId: string | null = null;
     /** Participants being edited; held here until the event is saved. */
     eventParticipants: EventParticipant[] = [];
+    /**
+     * Keeps the godparents/witnesses field on screen for the rest of an editing
+     * session once an event has shown it. Without this, deleting the last row
+     * from an event whose type does not normally carry witnesses would make the
+     * whole field vanish under the user's hands.
+     */
+    eventParticipantsPinned = false;
     /** Set while the person picker is open, so Cancel/Escape can settle it. */
     participantPickerResolve: (() => void) | null = null;
 

@@ -74,6 +74,13 @@ function normalize(data: StromData): StromData {
             person1Id: p.get(part.person1Id)!,
             person2Id: p.get(part.person2Id)!,
             childIds: part.childIds.map(x => p.get(x)!),
+            ...(part.sourceIds ? { sourceIds: mapSrc(part.sourceIds) } : {}),
+            // Witness ids are generated fresh on every import, like event ones.
+            ...(part.participants ? { participants: part.participants.map((pt, j) => ({
+                ...pt,
+                id: `WT${j}`,
+                ...(pt.personId ? { personId: p.get(pt.personId)! } : {}),
+            })) } : {}),
         };
     }
     const result: StromData = { persons, partnerships };
@@ -690,5 +697,286 @@ describe('name variants survive the round-trip (K3)', () => {
     it('survives import → export → import unchanged', () => {
         const once = importGed(GED);
         expect(normalize(importGed(exportGed(once)))).toEqual(normalize(once));
+    });
+});
+
+describe('register-harvest tags: CHR, EVEN+TYPE, CENS', () => {
+    const GED = `0 HEAD
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Jan /Novák/
+1 SEX M
+1 CHR
+2 DATE 12 MAY 1850
+2 PLAC Lipany
+1 EVEN
+2 TYPE Rychtář
+2 DATE 1888
+2 PLAC Lipany
+1 CENS
+2 DATE 1869
+2 PLAC Lipany 12
+0 TRLR
+`;
+
+    it('imports CHR as baptism, EVEN+TYPE and CENS as labelled custom events', () => {
+        const data = importGed(GED);
+        const person = Object.values(data.persons)[0];
+        const byType = (t: string) => (person.events ?? []).filter(e => e.type === t);
+        expect(byType('baptism')).toHaveLength(1);
+        expect(byType('baptism')[0].place).toBe('Lipany');
+        const custom = byType('custom');
+        expect(custom.map(e => e.customLabel).sort()).toEqual(['Census', 'Rychtář']);
+        const rychtar = custom.find(e => e.customLabel === 'Rychtář')!;
+        expect(rychtar.date).toBe('1888');
+        expect(rychtar.place).toBe('Lipany');
+    });
+
+    it('custom events survive the full import → export → import round-trip', () => {
+        const once = importGed(GED);
+        const twice = importGed(exportGed(once));
+        expect(normalize(twice)).toEqual(normalize(once));
+        // …and the exported GEDCOM carries the generic tag with its label.
+        const ged = exportGed(once);
+        expect(ged).toContain('1 EVEN');
+        expect(ged).toContain('2 TYPE Rychtář');
+    });
+});
+
+describe('register entries: what hangs under BIRT, DEAT and MARR', () => {
+    // The shape an AI-transcribed parish register produces: the citation, the
+    // note and the godparents sit INSIDE the birth/death/marriage block, not
+    // on the person. Reading only DATE and PLAC lost all of it silently — in
+    // one real 121-person file: 117 citations, 75 witnesses and 29 notes.
+    const GED = `0 HEAD
+1 CHAR UTF-8
+0 @S1@ SOUR
+1 TITL Matrika narozených Lipany 1840-1870
+1 REPO SOA Praha
+0 @S2@ SOUR
+1 TITL Matrika oddaných Lipany
+0 @I1@ INDI
+1 NAME Jan /Novák/
+1 SEX M
+1 BIRT
+2 DATE 12 MAY 1850
+2 PLAC Lipany
+2 SOUR @S1@
+3 PAGE sign. LIP-N5, fol. 123
+2 NOTE Zapsán jako Johann.
+2 _WITN Josef Dvořák, sedlák z Lipan
+3 RELA godparent
+1 CHR
+2 DATE 14 MAY 1850
+2 PLAC Lipany
+1 DEAT
+2 DATE 3 FEB 1910
+2 SOUR @S1@
+2 NOTE Příčina: zápal plic.
+1 NOTE První poznámka.
+1 NOTE Druhá poznámka.
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Marie /Nováková/
+1 SEX F
+1 BIRT
+2 DATE 1 JAN 1855
+2 _WITN Anna Kmotrová
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 5 SEP 1875
+2 PLAC Lipany
+2 SOUR @S2@
+3 PAGE sign. LIP-O2, fol. 12
+2 NOTE Ohlášky třikrát.
+0 TRLR
+`;
+
+    it('keeps the citation of the birth and death entry on the person', () => {
+        const data = importGed(GED);
+        const jan = Object.values(data.persons).find(p => p.firstName === 'Jan')!;
+        expect(jan.sourceIds).toHaveLength(2);
+        const titles = jan.sourceIds!.map(id => data.sources![id].title);
+        expect(titles).toEqual(['Matrika narozených Lipany 1840-1870', 'Matrika narozených Lipany 1840-1870']);
+        // The PAGE under the citation becomes the source reference.
+        expect(data.sources![jan.sourceIds![0]].reference).toBe('sign. LIP-N5, fol. 123');
+    });
+
+    it('keeps the witnesses named at the wedding', () => {
+        const ged = GED.replace('2 NOTE Ohlášky třikrát.',
+            '2 NOTE Ohlášky třikrát.\n2 _WITN Václav Sedlák, soused\n2 _WITN Anna Kmotrová');
+        const data = importGed(ged);
+        const union = Object.values(data.partnerships)[0];
+        expect(union.participants!.map(p => p.name))
+            .toEqual(['Václav Sedlák, soused', 'Anna Kmotrová']);
+        // _WITN says what they were, so that is the role they get.
+        expect(union.participants!.every(p => p.role === 'witness')).toBe(true);
+        // …and they are written back under MARR, not lost on export.
+        const out = exportGed(data);
+        expect(out).toMatch(/2 _WITN Václav Sedlák, soused\n3 RELA Witness/);
+        expect(normalize(importGed(out))).toEqual(normalize(data));
+    });
+
+    it('keeps the marriage record citation and note on the partnership', () => {
+        const data = importGed(GED);
+        const union = Object.values(data.partnerships)[0];
+        expect(union.sourceIds).toHaveLength(1);
+        expect(data.sources![union.sourceIds![0]].title).toBe('Matrika oddaných Lipany');
+        expect(union.note).toContain('Ohlášky třikrát.');
+    });
+
+    it('keeps notes written under BIRT/DEAT, labelled by the fact', () => {
+        const data = importGed(GED);
+        const jan = Object.values(data.persons).find(p => p.firstName === 'Jan')!;
+        expect(jan.notes).toContain('Birth: Zapsán jako Johann.');
+        expect(jan.notes).toContain('Death: Příčina: zápal plic.');
+    });
+
+    it('keeps every 1 NOTE, not just the last one', () => {
+        const data = importGed(GED);
+        const jan = Object.values(data.persons).find(p => p.firstName === 'Jan')!;
+        expect(jan.notes).toContain('První poznámka.');
+        expect(jan.notes).toContain('Druhá poznámka.');
+    });
+
+    it('moves a godparent named under BIRT onto the baptism', () => {
+        const data = importGed(GED);
+        const jan = Object.values(data.persons).find(p => p.firstName === 'Jan')!;
+        const baptism = jan.events!.find(e => e.type === 'baptism')!;
+        expect(baptism.participants).toHaveLength(1);
+        expect(baptism.participants![0].name).toBe('Josef Dvořák, sedlák z Lipan');
+        expect(baptism.participants![0].role).toBe('godparent');
+        // No entry event was invented: the file already had the baptism.
+        expect(jan.events!.filter(e => e.type === 'custom')).toHaveLength(0);
+    });
+
+    it('gives a witness an entry event when the file records no baptism', () => {
+        const data = importGed(GED);
+        const marie = Object.values(data.persons).find(p => p.firstName === 'Marie')!;
+        const entry = marie.events!.find(e => e.customLabel === 'Birth record')!;
+        expect(entry.date).toBe('1855-01-01');
+        expect(entry.participants!.map(p => p.name)).toEqual(['Anna Kmotrová']);
+    });
+
+    it('survives the full import → export → import round-trip', () => {
+        const once = importGed(GED);
+        const twice = importGed(exportGed(once));
+        expect(normalize(twice)).toEqual(normalize(once));
+    });
+});
+
+describe('_STORY: the narrative written about a person or a couple', () => {
+    /**
+     * The contract the register-research tooling writes (see the _STORY block
+     * it emits): TYPE/TITL/STAT/TEXT/DATA/NOTE, with the text glued back by
+     * pure concatenation — CONC continues the same line, CONT is a real break.
+     * Confusing the two would reflow the prose a little on every pass.
+     */
+    const GED = `0 HEAD
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME František /Krepčík/
+1 SEX M
+1 _STORY
+2 TYPE vypraveni
+2 TITL Nemanželský syn z čp. 22
+2 STAT navrh
+2 TEXT Když se 5. května 1863 narodil v lučickém stavení čp. 22 chlapec, nechal farář rubriku pro ot
+3 CONC ce prázdnou.
+3 CONT
+3 CONT V matrikách je nejdřív **nádeník**, později **domkář**.
+2 DATA BIRT 5 MAY 1863 [K-04]
+2 DATA CHR 7 MAY 1863 [K-04]
+2 NOTE Sestaveno z doložených faktů. Není pramen.
+0 @I2@ INDI
+1 NAME Anna /Kadeřábková/
+1 SEX F
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 2 AUG 1886
+1 _STORY
+2 TYPE vypraveni
+2 STAT hotovo
+2 TEXT Vzali se v srpnu 1886.
+0 TRLR
+`;
+
+    it('reads the block: title, state, facts, caveat', () => {
+        const data = importGed(GED);
+        const frantisek = Object.values(data.persons).find(p => p.firstName === 'František')!;
+        const story = frantisek.story!;
+        expect(story.kind).toBe('vypraveni');
+        expect(story.title).toBe('Nemanželský syn z čp. 22');
+        expect(story.status).toBe('draft');
+        expect(story.facts).toEqual(['BIRT 5 MAY 1863 [K-04]', 'CHR 7 MAY 1863 [K-04]']);
+        expect(story.note).toContain('Není pramen');
+    });
+
+    it('glues the text the way the contract says: CONC joins, CONT breaks', () => {
+        const story = Object.values(importGed(GED).persons)
+            .find(p => p.firstName === 'František')!.story!;
+        expect(story.text).toBe(
+            'Když se 5. května 1863 narodil v lučickém stavení čp. 22 chlapec, nechal farář rubriku pro otce prázdnou.'
+            + '\n\nV matrikách je nejdřív **nádeník**, později **domkář**.');
+        // Two paragraphs, and the markdown emphasis is left for the book.
+        expect(story.text.split('\n\n')).toHaveLength(2);
+    });
+
+    it('reads a story on a family too', () => {
+        const union = Object.values(importGed(GED).partnerships)[0];
+        expect(union.story?.text).toBe('Vzali se v srpnu 1886.');
+        expect(union.story?.status).toBe('final');
+    });
+
+    it('writes it back and survives import → export → import unchanged', () => {
+        const once = importGed(GED);
+        const ged = exportGed(once);
+        expect(ged).toContain('1 _STORY');
+        expect(ged).toContain('2 TYPE vypraveni');
+        expect(ged).toContain('2 STAT navrh');
+        expect(ged).toContain('2 DATA BIRT 5 MAY 1863 [K-04]');
+        expect(normalize(importGed(ged))).toEqual(normalize(once));
+    });
+
+    it('keeps every physical line inside the 255-BYTE limit, diacritics and all', () => {
+        // 1200 Czech characters in one paragraph — roughly 2000 bytes in UTF-8.
+        const long = 'Příliš žluťoučký kůň úpěl ďábelské ódy. '.repeat(30).trim();
+        const data = importGed(GED);
+        const person = Object.values(data.persons).find(p => p.firstName === 'František')!;
+        person.story = { text: long, facts: ['x'.repeat(400)] };
+
+        const ged = exportGed(data);
+        const enc = new TextEncoder();
+        for (const line of ged.split('\n')) {
+            expect(enc.encode(line).length).toBeLessThanOrEqual(255);
+        }
+        // Split mid-word, never next to a space: no value is padded, so a
+        // trimming reader cannot swallow one and run two words together.
+        for (const line of ged.split('\n')) {
+            const m = /^\d+ (?:@[^@]+@ )?(_?[A-Za-z0-9]+)(?: (.*))?$/.exec(line);
+            if (m?.[2]) expect(m[2]).toBe(m[2].trim());
+        }
+        // And it comes back character for character.
+        const back = Object.values(importGed(ged).persons).find(p => p.firstName === 'František')!;
+        expect(back.story!.text).toBe(long);
+        expect(back.story!.facts).toEqual(['x'.repeat(400)]);
+    });
+
+    it('is idempotent: exporting what was imported changes nothing', () => {
+        const ged1 = exportGed(importGed(GED));
+        const ged2 = exportGed(importGed(ged1));
+        expect(stripVolatile(ged2)).toBe(stripVolatile(ged1));
+    });
+
+    it('a story without text is no story at all', () => {
+        const empty = GED.replace(/2 TEXT [^\n]*\n(3 CON[TC][^\n]*\n)*/, '');
+        const frantisek = Object.values(importGed(empty).persons).find(p => p.firstName === 'František')!;
+        expect(frantisek.story).toBeUndefined();
     });
 });

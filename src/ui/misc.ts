@@ -633,6 +633,13 @@ export const miscMethods = uiModule({
                         return;
                     }
 
+                    // Event editor: close only itself and pop its own entry,
+                    // leaving the person modal it was opened from on screen.
+                    if (currentDialog === 'event-editor-modal') {
+                        this.closeEventEditor();
+                        return;
+                    }
+
                     this.dialogStack.pop();
 
                     this.closeDialogById(currentDialog);
@@ -969,6 +976,59 @@ export const miscMethods = uiModule({
             if (key && el instanceof HTMLElement) {
                 el.setAttribute('aria-label', getString(key));
             }
+        });
+
+        this.installFieldHints();
+    },
+
+    /**
+     * Move long field explanations off the form and behind a "?" on the label.
+     *
+     * These paragraphs run to three or four lines and sat open permanently, so
+     * on a phone a single explained field pushed the rest of the form off the
+     * screen — and the text is read once, when someone first meets the field.
+     * Pressing the "?" opens it as a popup the reader dismisses, rather than
+     * unfolding it in place: an explanation that grows the form as you read it
+     * moves the field you were about to fill in.
+     *
+     * Folded only when all three hold, so nothing useful is hidden:
+     * - the text is static (carries data-i18n) — a hint written by code, like
+     *   the birth-date estimate, is a live result and keeps showing itself;
+     * - it is long enough to be in the way (a line of date formats is quicker
+     *   to read than to open);
+     * - it has a label to hang the "?" on. A note explaining a whole section
+     *   has nowhere to attach and stays where it is.
+     */
+    installFieldHints(): void {
+        /** Below this a hint costs less to read than to open. */
+        const LONG_HINT = 80;
+
+        document.querySelectorAll('.field-hint[data-i18n]').forEach(hint => {
+            if (!(hint instanceof HTMLElement)) return;
+            const text = hint.textContent?.trim() ?? '';
+            if (text.length < LONG_HINT) return;
+
+            const group = hint.closest('.form-group');
+            const label = group?.querySelector('label');
+            if (!label || label.querySelector('.hint-toggle')) return;
+
+            hint.classList.add('is-folded');
+
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'hint-toggle';
+            toggle.textContent = '?';
+            toggle.setAttribute('aria-label', strings.labels.showHint);
+            toggle.title = strings.labels.showHint;
+            toggle.onclick = () => {
+                // Read at click time: the language can change under us, and the
+                // hint element keeps being refreshed by initializeStrings.
+                const title = (label.cloneNode(true) as HTMLElement);
+                title.querySelector('.hint-toggle')?.remove();
+                void this.showAlert(hint.textContent?.trim() ?? '', 'info',
+                    title.textContent?.trim() || undefined);
+            };
+            label.appendChild(toggle);
         });
     },
 

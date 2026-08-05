@@ -9,7 +9,7 @@
  * localization, privacy, media dropping and a max-generations limit.
  */
 
-import { StromData, Person, PersonId, Partnership, Source, LifeEvent } from './types.js';
+import { StromData, Person, PersonId, Partnership, Source, LifeEvent, Story } from './types.js';
 import { applyLivingPrivacy, PrivacyMode } from './privacy.js';
 import { stripMedia } from './attachments.js';
 import { formatFlexDate, yearOf } from './dates.js';
@@ -151,6 +151,53 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     const formatSource = (src: Source): string =>
         [src.title, src.repository, src.reference].filter(Boolean).map(x => esc(x!)).join(', ');
 
+    /**
+     * A narrative, set as the prose it is: paragraphs, and the markdown
+     * **bold** the writer used (registers-turned-prose lean on it for the
+     * words that carry the point — "nádeník", "domkář"). Everything is escaped
+     * first, so the only markup that survives is the emphasis we render.
+     *
+     * It is deliberately NOT rendered inside the person's medallion: two
+     * medallions stand side by side, so a story there came out as a column of
+     * three-word lines. Stories run the full width of the page BELOW the
+     * couple, one after the other, each headed by whose it is.
+     */
+    /**
+     * A note longer than this is prose, not a caption. A medallion column is
+     * about 35 characters wide, so anything past ~4 lines reads as a ribbon of
+     * three-word lines; those join the narratives below the couple, where they
+     * have the width they need. Shorter ones stay with the person, where a
+     * caption belongs.
+     */
+    const LONG_NOTE = 140;
+    const isLongNote = (person?: Person): boolean => (person?.notes?.length ?? 0) > LONG_NOTE;
+
+    /** Paragraphs, escaped, with the writer's **bold** rendered. */
+    const proseHtml = (text: string): string =>
+        text.split(/\n{2,}/).map(par => par.trim()).filter(Boolean)
+            .map(par => `<p>${esc(par).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n/g, '<br>')}</p>`).join('');
+
+    /** A person's long note, set below the couple like a narrative. */
+    const longNoteHtml = (person: Person): string => {
+        const body = proseHtml(person.notes ?? '');
+        return body
+            ? `<div class="book-story book-story-note"><h4 class="book-story-head">${name(person)}</h4>${body}</div>`
+            : '';
+    };
+
+    const storyHtml = (story: Story, kind: 'person' | 'couple', who: string): string => {
+        const paragraphs = proseHtml(story.text);
+        if (!paragraphs) return '';
+        // The draft/approved state is the author's workshop note: it travels in
+        // the data and back out to GEDCOM, but a printed book says nothing
+        // about it — a page of prose is either worth printing or it is not.
+        const title = story.title
+            ? ` <span class="book-story-title">${esc(story.title)}</span>` : '';
+        const head = `<h4 class="book-story-head">${who}${title}</h4>`;
+        return `<div class="book-story book-story-${kind}">${head}${paragraphs}</div>`;
+    };
+
     // Photo (circular) or initials.
     const photoImg = (p: Person) => p.photo
         ? `<img class="book-portrait" src="${esc(p.photo)}" alt="">`
@@ -177,7 +224,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
                 <div class="book-person-dates">${esc(dates(p))}</div>
                 ${placeLine(p) ? `<div class="book-person-places">${esc(placeLine(p))}</div>` : ''}
                 ${eventHtml}
-                ${p.notes ? `<div class="book-person-notes">${esc(p.notes)}</div>` : ''}
+                ${p.notes && !isLongNote(p) ? `<div class="book-person-notes">${esc(p.notes)}</div>` : ''}
             </div>
         </div>`;
     };
@@ -207,6 +254,17 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
             return `<li>${name(c)}${dates(c) ? ` <span class="book-muted">(${esc(dates(c))})</span>` : ''}${ref ? ` <span class="book-chapter-ref">→ ${B.chapterShort} ${ref}</span>` : ''}</li>`;
         }).join('');
 
+        // Prose runs below the couple, in reading order: his, hers, theirs —
+        // a long note first, then the narrative written about that person.
+        const stories = [
+            ...(isLongNote(p1) ? [longNoteHtml(p1!)] : []),
+            ...(p1?.story ? [storyHtml(p1.story, 'person', name(p1))] : []),
+            ...(isLongNote(p2) ? [longNoteHtml(p2!)] : []),
+            ...(p2?.story ? [storyHtml(p2.story, 'person', name(p2))] : []),
+            ...(u.story ? [storyHtml(u.story, 'couple',
+                `${name(p1)}${p2 ? ` <span class="book-amp">&amp;</span> ${name(p2)}` : ''}`)] : []),
+        ].join('');
+
         // Footnotes are collected during coupleHtml rendering above.
         const footnotes = [...footnoteNo.entries()]
             .map(([sid, no]) => `<div class="book-footnote">[${no}] ${formatSource(sources[sid])}</div>`)
@@ -218,6 +276,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
             ${married ? `<div class="book-marriage-line">${married}</div>` : ''}
             ${u.note ? `<div class="book-marriage-note">${esc(u.note)}</div>` : ''}
             <div class="book-couple">${coupleHtml}</div>
+            ${stories}
             ${children ? `<div class="book-children"><h3>${esc(B.children)}</h3><ul>${children}</ul></div>` : ''}
             ${footnotes ? `<div class="book-footnotes"><h3>${esc(B.sources)}</h3>${footnotes}</div>` : ''}
         </section>`;
@@ -257,6 +316,21 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
 <style>
     :root { --book-ink: #2b2620; --book-accent: #8b6f47; --book-rule: #c9b99a; }
     .book-page * { margin: 0; padding: 0; box-sizing: border-box; }
+    /* The narrative: prose after the facts, running the full width of the page
+       (inside a medallion it came out as a column of three-word lines). */
+    .book-story { margin: 16px 0 0 30px; font-size: 13.5px; line-height: 1.7; text-align: justify;
+        hyphens: auto; }
+    .book-story p { margin-bottom: 7px; text-indent: 1.2em; }
+    .book-story p:first-of-type { text-indent: 0; }
+    .book-story-head { font-size: 13px; font-weight: bold; text-align: left; margin-bottom: 5px;
+        padding-bottom: 3px; border-bottom: 1px solid var(--book-rule); }
+    .book-story-title { font-weight: normal; font-style: italic; color: var(--book-accent); }
+    .book-story-title::before { content: '— '; }
+    /* Their shared chapter reads as one voice: a wider, quieter opening. */
+    .book-story-couple .book-story-head { color: var(--book-accent); }
+    /* A long note is research, not narrative — same width, quieter voice. */
+    .book-story-note { font-style: italic; color: #5d5346; }
+    .book-story-note .book-story-head { font-style: normal; }
     body { font-family: Georgia, 'Times New Roman', serif; color: var(--book-ink); background: #f4efe6; }
     .book-page { max-width: 700px; margin: 0 auto; padding: 48px 56px; background: #fffdf8; }
     @media screen { .book-page { box-shadow: 0 2px 14px rgba(0,0,0,.12); margin: 24px auto; } }
@@ -324,6 +398,11 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         .book-page-break { break-before: page; }
         .book-title-page { min-height: 90vh; }
         .book-chapter { break-inside: avoid; }
+        /* A chapter with a narrative is a page or more of prose: let it break,
+           but never leave its heading, or a single line, stranded. */
+        .book-chapter:has(.book-story) { break-inside: auto; }
+        .book-story-head { break-after: avoid; }
+        .book-story p { orphans: 2; widows: 2; }
     }
 </style></head><body>
 

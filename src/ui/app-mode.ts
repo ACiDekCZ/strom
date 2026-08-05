@@ -41,6 +41,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
+import { safeFileName } from '../filenames.js';
 
 export const appModeMethods = uiModule({
     // ---- EMBEDDED MODE INFO ----
@@ -903,7 +904,7 @@ export const appModeMethods = uiModule({
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `audit-log-${treeName.replace(/[^a-zA-Z0-9_-]/g, '_')}.txt`;
+        a.download = `audit-log-${safeFileName(treeName, 'tree')}.txt`;
         a.click();
         URL.revokeObjectURL(url);
     },

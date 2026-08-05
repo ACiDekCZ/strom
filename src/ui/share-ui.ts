@@ -19,6 +19,8 @@ import { strings } from '../strings.js';
 import { PrivacyMode } from '../privacy.js';
 import { EmbeddedDataEnvelope, StromData, TreeId } from '../types.js';
 import { uiModule } from './module.js';
+import { autoGrowAll } from './autogrow.js';
+import { safeFileName } from '../filenames.js';
 
 function esc(text: string): string {
     return text
@@ -60,6 +62,7 @@ export const shareUiMethods = uiModule({
         this.onShareScopeChange();
 
         modal.classList.add('active');
+        autoGrowAll(modal, '#share-message');
     },
 
     /** Show the "only changes" scope option when a usable baseline exists. */
@@ -241,7 +244,7 @@ export const shareUiMethods = uiModule({
         const packet = buildChangePacket(base, DataManager.getData(), { baseExportId: baseId, senderName, ...(senderMessage ? { senderMessage } : {}), ...(treeName ? { treeName } : {}) });
         if (isEmptyPacket(packet)) { this.showToast(strings.shareDiff.noChanges); return; }
 
-        const safe = (treeName || 'strom').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const safe = safeFileName(treeName, 'strom');
         const blob = new Blob([JSON.stringify(packet, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);

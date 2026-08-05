@@ -205,6 +205,8 @@ export interface Person {
     photoOriginalName?: string;
     /** Life events other than birth/death (see LifeEvent). */
     events?: LifeEvent[];
+    /** This person's chapter in the family book (GEDCOM _STORY on INDI). */
+    story?: Story;
     /** Ids of Source entries (StromData.sources) citing this person. */
     sourceIds?: string[];
     /** Attached documents (scans, certificates, letters…). */
@@ -239,6 +241,33 @@ export interface FamilyWizardSpec {
     children: FamilyWizardMember[];
 }
 
+/**
+ * A narrative about a person or a couple: the family-book text that comes
+ * after the facts. It is prose built ON TOP of evidence, never evidence
+ * itself — which is why it has its own home instead of being mixed into
+ * notes, and why it carries the facts it leans on and the author's caveat.
+ *
+ * GEDCOM tools exchange it as the _STORY structure (see src/ged-parser.ts).
+ */
+export interface Story {
+    /** _STORY TYPE — kind of text ('vypraveni'); reserved for future kinds. */
+    kind?: string;
+    /** Optional subheading of the chapter. */
+    title?: string;
+    /** Draft (STAT navrh) or approved (STAT hotovo). */
+    status?: 'draft' | 'final';
+    /**
+     * The text. '\n' is a real line break and '\n\n' a paragraph — exactly
+     * what CONT lines carry, so the text survives a round-trip unreformatted.
+     * May contain markdown **bold**, which the book renders.
+     */
+    text: string;
+    /** The facts the text leans on (DATA lines) — a checklist, not citations. */
+    facts?: string[];
+    /** The author's caveat, kept verbatim ("not a source, proves nothing"). */
+    note?: string;
+}
+
 export interface Partnership {
     id: PartnershipId;
     person1Id: PersonId;
@@ -254,6 +283,14 @@ export interface Partnership {
     note?: string;
     /** Ids of Source entries citing this partnership (marriage record etc.). */
     sourceIds?: string[];
+    /**
+     * Witnesses at the wedding (see EventParticipant). A marriage entry names
+     * them the way a baptism names godparents, and they are the same kind of
+     * lead — the model has no union event to hang them on, so they live here.
+     */
+    participants?: EventParticipant[];
+    /** The couple's chapter in the family book (GEDCOM _STORY on FAM). */
+    story?: Story;
     // Primary partnership flag - when person has multiple partnerships,
     // this one is shown by default (unless viewing from child's perspective)
     isPrimary?: boolean;
@@ -272,10 +309,12 @@ export type LastFocusedMarker = typeof LAST_FOCUSED;
  * citation ids (Person.sourceIds, LifeEvent.sourceIds).
  * v4 (2026-07): added Person.attachments (inline documents).
  * v5 (2026-07): added Person.parentRelTypes (adoptive/step/foster links).
+ * v6 (2026-08): added Partnership.participants (wedding witnesses) and
+ *   Person.story / Partnership.story (narratives, GEDCOM _STORY).
  * All additive/backward-compatible for reading; the bump makes an older app
  * warn ("newer version") before it silently drops the new fields on re-save.
  */
-export const STROM_DATA_VERSION = 5;
+export const STROM_DATA_VERSION = 6;
 
 /**
  * Coordinates of one place, kept in the tree's own file so a place is looked up

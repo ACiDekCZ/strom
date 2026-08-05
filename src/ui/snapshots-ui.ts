@@ -12,6 +12,7 @@ import { strings } from '../strings.js';
 import { TreeId } from '../types.js';
 import { listSnapshots, totalSnapshotBytes, getSnapshotJson, SnapshotMeta } from '../snapshots.js';
 import { uiModule } from './module.js';
+import { safeFileName } from '../filenames.js';
 
 function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -139,7 +140,7 @@ export const snapshotsUiMethods = uiModule({
     async downloadSnapshot(snapshotId: string): Promise<void> {
         const json = await getSnapshotJson(snapshotId);
         if (!json) return;
-        const treeName = TreeManager.getActiveTreeMetadata()?.name || 'strom';
+        const treeName = safeFileName(TreeManager.getActiveTreeMetadata()?.name, 'strom');
         const stamp = new Date().toISOString().slice(0, 10);
         const blob = new Blob([json], { type: 'application/json' });
         const url = URL.createObjectURL(blob);

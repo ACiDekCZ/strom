@@ -13,7 +13,7 @@
  * of a linked godparent still count as one person.
  */
 
-import { StromData, Person, PersonId } from './types.js';
+import { StromData, Person, PersonId, EventParticipant } from './types.js';
 
 /** Someone who appears as a participant more than once. */
 export interface RecurringParticipant {
@@ -83,30 +83,40 @@ function relativesOf(id: PersonId, data: StromData): Set<PersonId> {
 export function recurringParticipants(data: StromData): RecurringParticipant[] {
     const seen = new Map<string, RecurringParticipant>();
 
+    const note = (part: EventParticipant, subject: Person): void => {
+        const linked = part.personId ? data.persons[part.personId] : undefined;
+        const name = linked ? fullName(linked) : (part.name ?? '').trim();
+        if (!name) return;
+        // Linked people count under their id, so two spellings of the
+        // same linked godparent are still one person.
+        const key = part.personId ?? `name:${fold(name)}`;
+
+        const entry = seen.get(key) ?? {
+            name,
+            ...(part.personId ? { personId: part.personId } : {}),
+            count: 0,
+            subjects: [],
+            alreadyRelated: false,
+        };
+        entry.count++;
+        if (!entry.subjects.some(s => s.id === subject.id)) {
+            entry.subjects.push({ id: subject.id, name: fullName(subject) });
+        }
+        seen.set(key, entry);
+    };
+
     for (const subject of Object.values(data.persons)) {
         for (const event of subject.events ?? []) {
-            for (const part of event.participants ?? []) {
-                const linked = part.personId ? data.persons[part.personId] : undefined;
-                const name = linked ? fullName(linked) : (part.name ?? '').trim();
-                if (!name) continue;
-                // Linked people count under their id, so two spellings of the
-                // same linked godparent are still one person.
-                const key = part.personId ?? `name:${fold(name)}`;
-
-                const entry = seen.get(key) ?? {
-                    name,
-                    ...(part.personId ? { personId: part.personId } : {}),
-                    count: 0,
-                    subjects: [],
-                    alreadyRelated: false,
-                };
-                entry.count++;
-                if (!entry.subjects.some(s => s.id === subject.id)) {
-                    entry.subjects.push({ id: subject.id, name: fullName(subject) });
-                }
-                seen.set(key, entry);
-            }
+            for (const part of event.participants ?? []) note(part, subject);
         }
+    }
+    // Wedding witnesses. A marriage counts ONCE, under the first spouse:
+    // counting it for both would make a single wedding look like two separate
+    // appearances and manufacture a lead out of nothing.
+    for (const union of Object.values(data.partnerships)) {
+        const subject = data.persons[union.person1Id] ?? data.persons[union.person2Id];
+        if (!subject) continue;
+        for (const part of union.participants ?? []) note(part, subject);
     }
 
     const out: RecurringParticipant[] = [];

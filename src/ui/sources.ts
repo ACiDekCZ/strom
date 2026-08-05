@@ -11,6 +11,7 @@ import { DataManager } from '../data.js';
 import { PersonId, PartnershipId, Source } from '../types.js';
 import { strings } from '../strings.js';
 import { uiModule } from './module.js';
+import { autoGrowAll } from './autogrow.js';
 
 /** HTML-escape a user string for safe innerHTML insertion. */
 function esc(text: string): string {
@@ -107,7 +108,11 @@ export const sourcesMethods = uiModule({
     openSourceEditor(title: string): void {
         const titleEl = document.getElementById('source-editor-title');
         if (titleEl) titleEl.textContent = title;
-        document.getElementById('source-editor-modal')?.classList.add('active');
+        const modal = document.getElementById('source-editor-modal');
+        if (!modal) return;
+        modal.classList.add('active');
+        // What a citation says about a record is prose too.
+        autoGrowAll(modal, '#input-source-note');
     },
 
     closeSourceEditor(): void {

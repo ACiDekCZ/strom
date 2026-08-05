@@ -24,6 +24,8 @@ import {
     Partnership,
     StromData,
     LifeEvent,
+    EventParticipant,
+    Story,
     LifeEventType,
     ParentChildRelType,
     ParticipantRole,
@@ -56,10 +58,39 @@ function relaToRole(rela: string | undefined): ParticipantRole {
     return 'other';
 }
 
+/**
+ * What a _WITN with no RELA of its own means. The tag says witness, so that is
+ * what they are recorded as; an explicit 3 RELA read later overwrites it.
+ */
+const WITNESS_RELA = 'witness';
+
+/**
+ * A raw _STORY block becomes a Story. STAT is the author's workflow state in
+ * the file's own words ('navrh'/'hotovo'); 'draft'/'final' are accepted too,
+ * since another tool may well write the English ones.
+ */
+function toStory(raw: RawStory | undefined): Story | undefined {
+    if (!raw || !raw.text.trim()) return undefined;
+    const stat = raw.stat.trim().toLowerCase();
+    const status = (stat === 'navrh' || stat === 'draft') ? 'draft'
+        : (stat === 'hotovo' || stat === 'final') ? 'final' : undefined;
+    return {
+        ...(raw.kind ? { kind: raw.kind } : {}),
+        ...(raw.title ? { title: raw.title } : {}),
+        ...(status ? { status } : {}),
+        text: raw.text,
+        ...(raw.facts.length > 0 ? { facts: raw.facts } : {}),
+        ...(raw.note ? { note: raw.note } : {}),
+    };
+}
+
 /** GEDCOM event tag <-> LifeEvent type. */
 const EVENT_TAG_TO_TYPE: Record<string, LifeEventType> = {
     BAPM: 'baptism', BURI: 'burial', OCCU: 'occupation', RESI: 'residence',
     EMIG: 'emigration', IMMI: 'immigration', EDUC: 'education',
+    // Import alias: CHR (christening) is what many tools — and AI-written
+    // register transcriptions — use for BAPM. Export always writes BAPM.
+    CHR: 'baptism',
 };
 
 /** Raw OBJE media object under an individual. */
@@ -85,6 +116,26 @@ interface RawEvent {
     /** Godparents / witnesses: ASSO (a person ref) or _WITN (a bare name). */
     participants?: RawParticipant[];
 }
+
+/**
+ * A _STORY block as it comes out of the file. TITL, TEXT, DATA and NOTE are
+ * glued from their continuation lines by pure concatenation: CONC appends
+ * directly (a long line that did not fit), CONT appends a newline first (a
+ * break that is really in the text). Telling the two apart is the whole point —
+ * if everything came back as CONT, every pass through the app would reflow the
+ * prose a little more.
+ */
+interface RawStory {
+    kind: string;
+    title: string;
+    stat: string;
+    text: string;
+    facts: string[];
+    note: string;
+}
+
+const newStory = (): RawStory =>
+    ({ kind: '', title: '', stat: '', text: '', facts: [], note: '' });
 
 /** A participant as it comes out of the file, before ids are resolved. */
 interface RawParticipant {
@@ -140,6 +191,16 @@ interface GedcomIndividual {
     fams: string[];  // Families as spouse
     /** Level-1 ASSO on the person: associations outside any event. */
     assos: RawParticipant[];
+    /** The person's narrative (1 _STORY), when the file carries one. */
+    story?: RawStory;
+    /**
+     * Godparents / informants named under 1 BIRT and 1 DEAT. Birth and death
+     * are fields, not events, so these are re-homed on conversion: onto the
+     * baptism / burial event when the file gives one, otherwise onto a
+     * "birth record" / "death record" event created for them.
+     */
+    birthParticipants: RawParticipant[];
+    deathParticipants: RawParticipant[];
     /**
      * Every FAMC with its own PEDI. A person may be a child of more than one
      * family — born to one and adopted into another — and the PEDI belongs to
@@ -173,6 +234,10 @@ interface GedcomFamily {
     note: string;
     /** 1 SOUR citations on the family (marriage record etc.). */
     sourceRefs: string[];
+    /** Witnesses named under 1 MARR (2 ASSO / 2 _WITN). */
+    marriageParticipants: RawParticipant[];
+    /** The couple's narrative (1 _STORY). */
+    story?: RawStory;
 }
 
 /** Parsed GEDCOM data */
@@ -220,7 +285,7 @@ export interface GedcomConversionResult {
         placeholderPersons: number;
         /** Count of encountered tags our data model cannot represent (see header). */
         unsupportedTags: number;
-        /** Human-readable breakdown, e.g. "TITL ×3, CHR ×2". Empty when none. */
+        /** Human-readable breakdown, e.g. "TITL ×3, SSN ×2". Empty when none. */
         droppedTagSummary: string;
         /** Individuals with SEX other than M/F (gender inferred from family role). */
         unknownSexPersons: number;
@@ -469,10 +534,10 @@ export function decodeGedcomFile(buffer: ArrayBuffer): string {
  * Parse GEDCOM file content into structured data
  */
 /** Level-1 INDI tags the parser understands (everything else is counted as dropped). */
-const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT', 'OBJE', 'REFN', 'ASSO',
+const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT', 'OBJE', 'REFN', 'ASSO', '_STORY',
     ...Object.keys(EVENT_TAG_TO_TYPE)]);
 /** Level-1 FAM tags the parser understands. */
-const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', 'SOUR']);
+const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', 'SOUR', '_STORY']);
 /** Level-0 record types (handled or structural). */
 /**
  * Labels for ALTERNATIVE birth/death facts. Platforms (MyHeritage) allow several
@@ -615,6 +680,15 @@ export function parseGedcom(content: string): ParsedGedcom {
     let currentEvent: RawEvent | null = null;
     /** Level-2 tag inside the current event (for level-3 NOTE continuations). */
     let currentEventSubTag: string | null = null;
+    /** The 1 _STORY block currently open, and the level-2 tag inside it. */
+    let currentStory: RawStory | null = null;
+    let currentStorySubTag: string | null = null;
+    /**
+     * Level-2 tag inside a BIRT/DEAT (INDI) or MARR (FAM) block — the facts the
+     * model stores as fields rather than events, so they have no RawEvent to
+     * hang level-3 lines (PAGE, RELA, CONT) on.
+     */
+    let currentFactSubTag: string | null = null;
     let currentSource: RawSource | null = null;
     let currentMedia: RawMedia | null = null;
     /** Level-2 tag inside the current OBJE (for level-3 FILE continuations). */
@@ -695,6 +769,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     deathSeen: false,
                     fams: [],
                     assos: [],
+                    birthParticipants: [],
+                    deathParticipants: [],
                     famcLinks: []
                 };
                 currentType = 'INDI';
@@ -726,7 +802,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     unionEvents: [],
                     note: '',
                     engagementDate: '',
-                    sourceRefs: []
+                    sourceRefs: [],
+                    marriageParticipants: []
                 };
                 currentType = 'FAM';
                 currentSource = null;
@@ -740,6 +817,9 @@ export function parseGedcom(content: string): ParsedGedcom {
             currentSubTag = null;
             currentEvent = null;
             currentEventSubTag = null;
+            currentFactSubTag = null;
+            currentStory = null;
+            currentStorySubTag = null;
             currentMedia = null;
             currentMediaSubTag = null;
             currentCitationId = null;
@@ -789,6 +869,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentSubTag = tag;
                 currentEvent = null;
                 currentEventSubTag = null;
+                currentFactSubTag = null;
+                currentStory = null;
+                currentStorySubTag = null;
                 if (tag !== 'OBJE') currentMedia = null;
                 currentMediaSubTag = null;
                 if (tag !== 'SOUR') currentCitationId = null;
@@ -826,10 +909,18 @@ export function parseGedcom(content: string): ParsedGedcom {
                             if (value) indi.assos.push({ ref: value });
                             break;
                         case 'NOTE':
-                            indi.notes = value;
+                            // A person may carry several 1 NOTE lines; assigning kept
+                            // only the last one (44 records in one register file).
+                            indi.notes = indi.notes ? `${indi.notes}\n${value}` : value;
                             break;
                         case 'REFN':
                             indi.refn = value;
+                            break;
+                        case '_STORY':
+                            // The narrative written about this person. Not a
+                            // source and not a note — its own structure.
+                            indi.story = newStory();
+                            currentStory = indi.story;
                             break;
                         case 'SOUR':
                             // Level-1 SOUR on INDI is a citation reference (@Sx@).
@@ -875,6 +966,18 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 if (tag === 'OCCU' && value) ev.note = value;
                                 indi.events.push(ev);
                                 currentEvent = ev;
+                            } else if (tag === 'EVEN' || tag === 'CENS') {
+                                // Generic events (1 EVEN + 2 TYPE label) and
+                                // censuses become CUSTOM events — a register-
+                                // harvested GEDCOM loses nothing here.
+                                const ev: RawEvent = {
+                                    type: 'custom',
+                                    customLabel: tag === 'CENS'
+                                        ? strings.gedcomNotes.census
+                                        : (value || strings.gedcomNotes.genericEvent),
+                                };
+                                indi.events.push(ev);
+                                currentEvent = ev;
                             } else if (!KNOWN_INDI_TAGS.has(tag) && tag !== 'BIRT' && tag !== 'DEAT'
                                 && !IGNORED_BOOKKEEPING_TAGS.has(tag)) {
                                 drop(tag);
@@ -895,7 +998,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             fam.children.push(value);
                             break;
                         case 'NOTE':
-                            fam.note = value;
+                            fam.note = fam.note ? `${fam.note}\n${value}` : value;
                             break;
                         case 'DIV':
                             // A bare DIV (no date sub-record) still means divorced.
@@ -909,6 +1012,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case 'MARR':
                             fam.unionEvents.push({ type: 'marriage', date: '' });
                             break;
+                        case '_STORY':
+                            fam.story = newStory();
+                            currentStory = fam.story;
+                            break;
                         case 'ENGA':
                             fam.engagementDate = value === 'Y' ? '?' : '';
                             break;
@@ -917,15 +1024,64 @@ export function parseGedcom(content: string): ParsedGedcom {
                             break;
                     }
                 }
+            } else if (currentStory && level >= 2) {
+                // 2 TYPE / TITL / STAT / TEXT / DATA / NOTE, each continued by
+                // 3 CONC (same line) or 3 CONT (a real line break).
+                if (level === 2) {
+                    currentStorySubTag = tag;
+                    switch (tag) {
+                        case 'TYPE': currentStory.kind = value; break;
+                        case 'TITL': currentStory.title = value; break;
+                        case 'STAT': currentStory.stat = value; break;
+                        case 'TEXT': currentStory.text = value; break;
+                        case 'DATA': currentStory.facts.push(value); break;
+                        case 'NOTE': currentStory.note = value; break;
+                    }
+                } else if (level === 3 && (tag === 'CONC' || tag === 'CONT')) {
+                    const glue = tag === 'CONT' ? '\n' + value : value;
+                    switch (currentStorySubTag) {
+                        case 'TITL': currentStory.title += glue; break;
+                        case 'TEXT': currentStory.text += glue; break;
+                        case 'NOTE': currentStory.note += glue; break;
+                        case 'DATA':
+                            if (currentStory.facts.length > 0) {
+                                currentStory.facts[currentStory.facts.length - 1] += glue;
+                            }
+                            break;
+                    }
+                }
             } else if (level === 2) {
                 if (currentType === 'INDI') {
                     const indi = currentRecord as GedcomIndividual;
-                    if (currentSubTag === 'BIRT') {
-                        if (tag === 'DATE') indi.birthDate = parseGedcomDate(value);
-                        if (tag === 'PLAC') indi.birthPlace = value;
-                    } else if (currentSubTag === 'DEAT') {
-                        if (tag === 'DATE') indi.deathDate = parseGedcomDate(value);
-                        if (tag === 'PLAC') indi.deathPlace = value;
+                    if (currentSubTag === 'BIRT' || currentSubTag === 'DEAT') {
+                        // Birth and death live in fields, but their block in the
+                        // register carries the same detail as any event: the
+                        // citation of the entry, a note, and who stood there.
+                        // Reading only DATE/PLAC threw all of that away without
+                        // a word — 117 citations and 52 godparents in one
+                        // register-harvested file.
+                        const isBirth = currentSubTag === 'BIRT';
+                        currentFactSubTag = tag;
+                        if (tag === 'DATE') {
+                            if (isBirth) indi.birthDate = parseGedcomDate(value);
+                            else indi.deathDate = parseGedcomDate(value);
+                        } else if (tag === 'PLAC') {
+                            if (isBirth) indi.birthPlace = value; else indi.deathPlace = value;
+                        } else if (tag === 'SOUR' && value) {
+                            // The birth/death entry itself: cited on the person.
+                            indi.sourceRefs.push(value);
+                            currentCitationId = value;
+                        } else if (tag === 'NOTE' && value) {
+                            const line = isBirth
+                                ? strings.gedcomNotes.birthNote(value)
+                                : strings.gedcomNotes.deathNote(value);
+                            indi.notes = indi.notes ? `${indi.notes}\n${line}` : line;
+                        } else if (tag === 'ASSO' && value) {
+                            (isBirth ? indi.birthParticipants : indi.deathParticipants).push({ ref: value });
+                        } else if ((tag === '_WITN' || tag === 'WITN') && value) {
+                            (isBirth ? indi.birthParticipants : indi.deathParticipants)
+                                .push({ name: value, rela: WITNESS_RELA });
+                        }
                     } else if (currentSubTag === 'FAMC') {
                         // Pedigree type of the child→family link (adopted/foster).
                         // It belongs to the FAMC it sits under — the last one seen.
@@ -959,6 +1115,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                         currentEventSubTag = tag;
                         if (tag === 'DATE') currentEvent.date = parseGedcomDate(value);
                         else if (tag === 'PLAC') currentEvent.place = value;
+                        else if (tag === 'TYPE' && currentEvent.type === 'custom' && value) {
+                            // 1 EVEN / 2 TYPE Rychtář — the TYPE is the label.
+                            currentEvent.customLabel = value;
+                        }
                         else if (tag === 'SOUR' && value) {
                             (currentEvent.sourceRefs ??= []).push(value);
                             currentCitationId = value;
@@ -975,7 +1135,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             (currentEvent.participants ??= []).push({ ref: value });
                         } else if ((tag === '_WITN' || tag === 'WITN') && value) {
                             // …and one who does not: just a name in the register.
-                            (currentEvent.participants ??= []).push({ name: value });
+                            (currentEvent.participants ??= []).push({ name: value, rela: WITNESS_RELA });
                         }
                     }
                 } else if (currentType === 'FAM') {
@@ -985,6 +1145,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     } else if (currentSubTag === 'SOUR' && tag === 'QUAY' && currentCitationId) {
                         noteQuay(currentCitationId, value);
                     } else if (currentSubTag === 'MARR') {
+                        currentFactSubTag = tag;
                         if (tag === 'DATE') {
                             fam.marriageDate = parseGedcomDate(value);
                             lastUnionEvent(fam, 'marriage', fam.marriageDate);
@@ -992,6 +1153,19 @@ export function parseGedcom(content: string): ParsedGedcom {
                         // First wins: the union's startDate comes from the FIRST
                         // marriage, so its place must not drift to a later one.
                         if (tag === 'PLAC' && !fam.marriagePlace) fam.marriagePlace = value;
+                        // The marriage record's own citation, note and witnesses
+                        // sit here, not on the FAM — reading only DATE/PLAC lost
+                        // every one of them.
+                        if (tag === 'SOUR' && value) {
+                            fam.sourceRefs.push(value);
+                            currentCitationId = value;
+                        } else if (tag === 'NOTE' && value) {
+                            fam.note = fam.note ? `${fam.note}\n${value}` : value;
+                        } else if (tag === 'ASSO' && value) {
+                            fam.marriageParticipants.push({ ref: value });
+                        } else if ((tag === '_WITN' || tag === 'WITN') && value) {
+                            fam.marriageParticipants.push({ name: value, rela: WITNESS_RELA });
+                        }
                     } else if (currentSubTag === 'DIV') {
                         if (tag === 'DATE') {
                             fam.divorceDate = parseGedcomDate(value);
@@ -1003,6 +1177,33 @@ export function parseGedcom(content: string): ParsedGedcom {
                         if (tag === 'CONT') fam.note += '\n' + value;
                         else if (tag === 'CONC') fam.note += value;
                     }
+                }
+            } else if (level === 3 && currentFactSubTag
+                && (currentSubTag === 'BIRT' || currentSubTag === 'DEAT' || currentSubTag === 'MARR')) {
+                // Level-3 lines under the field-backed facts: the citation's
+                // PAGE/QUAY, a witness's RELA/NOTE, a note's continuation.
+                const indi = currentType === 'INDI' ? currentRecord as GedcomIndividual : null;
+                const fam = currentType === 'FAM' ? currentRecord as GedcomFamily : null;
+                const parts = indi
+                    ? (currentSubTag === 'BIRT' ? indi.birthParticipants : indi.deathParticipants)
+                    : fam?.marriageParticipants;
+                if (currentFactSubTag === 'SOUR' && currentCitationId) {
+                    if (tag === 'PAGE') {
+                        if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
+                    } else if (tag === 'QUAY') {
+                        noteQuay(currentCitationId, value);
+                    }
+                } else if (currentFactSubTag === 'ASSO' || currentFactSubTag === '_WITN'
+                    || currentFactSubTag === 'WITN') {
+                    const last = parts?.[parts.length - 1];
+                    if (last) {
+                        if (tag === 'RELA') last.rela = value;
+                        else if (tag === 'NOTE') last.note = value;
+                    }
+                } else if (currentFactSubTag === 'NOTE' && (tag === 'CONT' || tag === 'CONC')) {
+                    const sep = tag === 'CONT' ? '\n' : '';
+                    if (indi) indi.notes += sep + value;
+                    else if (fam) fam.note += sep + value;
                 }
             } else if (level === 3 && currentType === 'INDI' && currentEvent
                 && currentEventSubTag === 'NOTE') {
@@ -1148,6 +1349,23 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         // Other spellings from the file, kept as written.
         const variants = indi.nameVariants.map(v => v.replace(/\//g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
         if (variants.length > 0) person.nameVariants = variants;
+        /**
+         * A godparent / witness as the file wrote them. An ASSO pointing at
+         * someone the file never defines (@VOID@ or a missing record) yields
+         * null: with no link and no name, a bare role says nothing worth keeping.
+         */
+        const toParticipant = (raw: RawParticipant): EventParticipant | null => {
+            const linked = raw.ref ? personIdMap.get(raw.ref) : undefined;
+            if (!linked && !raw.name) return null;
+            return {
+                id: generateParticipantId(),
+                role: relaToRole(raw.rela),
+                ...(linked ? { personId: linked } : {}),
+                ...(raw.name ? { name: raw.name } : {}),
+                ...(raw.note ? { note: raw.note } : {}),
+            };
+        };
+
         if (indi.events.length > 0) {
             person.events = indi.events.map((ev): LifeEvent => {
                 const out: LifeEvent = { id: generateLifeEventId(), type: ev.type };
@@ -1158,19 +1376,8 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 const evRefs = mapRefs(ev.sourceRefs);
                 if (evRefs.length > 0) out.sourceIds = evRefs;
 
-                // Godparents / witnesses. An ASSO pointing at someone the file
-                // never defines (@VOID@ or a missing record) is dropped: with
-                // no link and no name, a bare role says nothing worth keeping.
-                const parts = (ev.participants ?? []).map(raw => {
-                    const linked = raw.ref ? personIdMap.get(raw.ref) : undefined;
-                    return {
-                        id: generateParticipantId(),
-                        role: relaToRole(raw.rela),
-                        ...(linked ? { personId: linked } : {}),
-                        ...(raw.name ? { name: raw.name } : {}),
-                        ...(raw.note ? { note: raw.note } : {}),
-                    };
-                }).filter(p => p.personId || p.name);
+                const parts = (ev.participants ?? [])
+                    .map(toParticipant).filter((p): p is EventParticipant => !!p);
                 if (parts.length > 0) out.participants = parts;
                 return out;
             });
@@ -1202,6 +1409,46 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 person.notes = person.notes ? `${person.notes}\n${line}` : line;
             }
         }
+
+        /**
+         * Godparents at the birth entry, informants at the death entry. The
+         * model hangs people on events, and birth/death are fields — so they
+         * join the event the register itself implies: the baptism (burial) when
+         * the file records one, otherwise an entry event carrying the same date
+         * and place. Keeping them beats the alternative of dropping the only
+         * names in the record that lead anywhere.
+         */
+        const rehomeParticipants = (raws: RawParticipant[], kind: 'birth' | 'death'): void => {
+            const parts = raws.map(toParticipant).filter((p): p is EventParticipant => !!p);
+            if (parts.length === 0) return;
+            const hostType: LifeEventType = kind === 'birth' ? 'baptism' : 'burial';
+            let host = person.events?.find(e => e.type === hostType);
+            if (!host) {
+                const date = kind === 'birth' ? indi.birthDate : indi.deathDate;
+                const place = kind === 'birth' ? indi.birthPlace : indi.deathPlace;
+                host = {
+                    id: generateLifeEventId(),
+                    type: 'custom',
+                    customLabel: kind === 'birth'
+                        ? strings.gedcomNotes.birthRecord : strings.gedcomNotes.deathRecord,
+                    ...(date ? { date } : {}),
+                    ...(place ? { place } : {}),
+                };
+                (person.events ??= []).push(host);
+            }
+            const seen = new Set((host.participants ?? []).map(p => p.personId ?? p.name));
+            for (const part of parts) {
+                const key = part.personId ?? part.name;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                (host.participants ??= []).push(part);
+            }
+        };
+        rehomeParticipants(indi.birthParticipants, 'birth');
+        rehomeParticipants(indi.deathParticipants, 'death');
+
+        const story = toStory(indi.story);
+        if (story) person.story = story;
 
         const personRefs = mapRefs(indi.sourceRefs);
         if (personRefs.length > 0) person.sourceIds = personRefs;
@@ -1326,6 +1573,23 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
 
         const famRefs = mapRefs(fam.sourceRefs);
         if (famRefs.length > 0) partnership.sourceIds = famRefs;
+
+        // Witnesses at the wedding, named under 1 MARR.
+        const witnesses = fam.marriageParticipants.map(raw => {
+            const linked = raw.ref ? personIdMap.get(raw.ref) : undefined;
+            if (!linked && !raw.name) return null;
+            return {
+                id: generateParticipantId(),
+                role: relaToRole(raw.rela),
+                ...(linked ? { personId: linked } : {}),
+                ...(raw.name ? { name: raw.name } : {}),
+                ...(raw.note ? { note: raw.note } : {}),
+            };
+        }).filter((p): p is EventParticipant => !!p);
+        if (witnesses.length > 0) partnership.participants = witnesses;
+
+        const famStory = toStory(fam.story);
+        if (famStory) partnership.story = famStory;
 
         partnerships[partnershipId] = partnership;
 

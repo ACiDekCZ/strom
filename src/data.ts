@@ -16,6 +16,8 @@ import {
     generateLifeEventId,
     LifeEvent,
     generateSourceId,
+    generateParticipantId,
+    ParticipantRole,
     Source,
     generateAttachmentId,
     Attachment,
@@ -44,6 +46,7 @@ import { createSnapshot, getSnapshotJson, SnapshotReason } from './snapshots.js'
 import { ValidationIssue } from './validation.js';
 import { UndoManager } from './undo.js';
 import { applyLivingPrivacy, applyContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
+import { safeFileName } from './filenames.js';
 
 /** Extended updates for Partnership */
 type PartnershipUpdates = Partial<Pick<Partnership, 'status' | 'startDate' | 'startPlace' | 'endDate' | 'note' | 'isPrimary'>>;
@@ -1277,6 +1280,10 @@ class DataManagerClass {
             const kept = updates.nameVariants.map(v => v.trim()).filter(Boolean);
             person.nameVariants = kept.length > 0 ? kept : undefined;
         }
+        // The narrative: an empty text means there is none.
+        if ('story' in updates) {
+            person.story = updates.story?.text.trim() ? updates.story : undefined;
+        }
         // isDeceased is tri-state (true / false / undefined); apply verbatim when provided.
         if ('isDeceased' in updates) person.isDeceased = updates.isDeceased;
         if ('photo' in updates) person.photo = updates.photo || undefined;
@@ -1485,6 +1492,51 @@ class DataManagerClass {
         const names = this.partnershipNames(partnership);
         this.commitMutation(strings.undo.uncite(names));
         AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(names));
+        return true;
+    }
+
+    /**
+     * Add a witness to a wedding. Registers name two of them at every marriage
+     * and they are the same kind of lead as a godparent — usually neighbours or
+     * relatives who are not (yet) in the tree, hence the free-text name.
+     */
+    addPartnershipParticipant(partnershipId: PartnershipId, participant: {
+        name?: string; personId?: PersonId; role?: ParticipantRole; note?: string;
+    }): boolean {
+        const partnership = this.data.partnerships[partnershipId];
+        if (!partnership) return false;
+        if (this.isTreeLocked()) return false;
+        const name = participant.name?.trim();
+        if (!name && !participant.personId) return false;
+
+        this.beginMutation();
+        (partnership.participants ??= []).push({
+            id: generateParticipantId(),
+            role: participant.role ?? 'witness',
+            ...(participant.personId ? { personId: participant.personId } : {}),
+            ...(name ? { name } : {}),
+            ...(participant.note ? { note: participant.note } : {}),
+        });
+        const p1 = auditPersonName(this.data.persons[partnership.person1Id]);
+        const p2 = auditPersonName(this.data.persons[partnership.person2Id]);
+        this.commitMutation(strings.undo.editPartnership(p1, p2));
+        AuditLogManager.log(this.currentTreeId, 'partnership.update',
+            strings.auditLog.updatedPartnership(p1, p2));
+        return true;
+    }
+
+    /** Remove a wedding witness. */
+    removePartnershipParticipant(partnershipId: PartnershipId, participantId: string): boolean {
+        const partnership = this.data.partnerships[partnershipId];
+        if (!partnership?.participants?.some(p => p.id === participantId)) return false;
+        if (this.isTreeLocked()) return false;
+
+        this.beginMutation();
+        partnership.participants = partnership.participants.filter(p => p.id !== participantId);
+        if (partnership.participants.length === 0) delete partnership.participants;
+        this.commitMutation(strings.undo.editPartnership(
+            auditPersonName(this.data.persons[partnership.person1Id]),
+            auditPersonName(this.data.persons[partnership.person2Id])));
         return true;
     }
 
@@ -2453,7 +2505,7 @@ class DataManagerClass {
 
         const treeMeta = TreeManager.getTreeMetadata(treeId);
         const treeName = treeMeta?.name || 'family-tree';
-        const safeName = treeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const safeName = safeFileName(treeName, 'family-tree');
 
         let dataStr: string;
         if (password) {

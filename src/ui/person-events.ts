@@ -15,10 +15,11 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { strings } from '../strings.js';
 import { SettingsManager } from '../settings.js';
-import { SELECTABLE_EVENT_TYPES, sortLifeEvents } from '../events.js';
+import { SELECTABLE_EVENT_TYPES, sortLifeEvents, eventTakesParticipants } from '../events.js';
 import { formatFlexDate, normalizeDateInput, formatDateForInput } from '../dates.js';
 import { chainLinkSvg } from '../icons.js';
 import { uiModule } from './module.js';
+import { autoGrowAll } from './autogrow.js';
 
 /** HTML-escape a user string for safe innerHTML insertion. */
 function esc(text: string): string {
@@ -33,9 +34,21 @@ function eventTypeLabel(event: LifeEvent): string {
     return strings.events.types[event.type];
 }
 
-/** Secondary line: date (year, flex-aware) and place, joined with a middot. */
-function eventMeta(date: string | undefined, place: string | undefined): string {
+/**
+ * Secondary line: date (year, flex-aware) and place, joined with a middot.
+ *
+ * `lead` comes first, for an event whose note IS its subject. An occupation
+ * keeps the trade in its note — that is what goes out as the GEDCOM OCCU value
+ * — so the row read "Povolání" and nothing else whenever the trade carried no
+ * date or place. Which trade it was is the one thing worth seeing there.
+ */
+function eventMeta(
+    date: string | undefined,
+    place: string | undefined,
+    lead?: string | undefined
+): string {
     const parts: string[] = [];
+    if (lead?.trim()) parts.push(lead.trim());
     const d = formatFlexDate(date);
     if (d) parts.push(d);
     if (place) parts.push(place);
@@ -69,7 +82,9 @@ export const personEventsMethods = uiModule({
         const events = sortLifeEvents(person.events ?? []);
         for (const event of events) {
             rows.push(this.eventRowHtml(eventTypeLabel(event),
-                eventMeta(event.date, event.place), locked ? null : event.id,
+                eventMeta(event.date, event.place,
+                    event.type === 'occupation' ? event.note : undefined),
+                locked ? null : event.id,
                 this.participantsSummary(event)));
         }
 
@@ -227,6 +242,11 @@ export const personEventsMethods = uiModule({
                 this.renderEventParticipants();
             };
         });
+
+        // An event that names someone shows the field whatever its type is —
+        // re-check here, because the rows are what decides it.
+        const typeSelect = document.getElementById('input-event-type') as HTMLSelectElement | null;
+        this.updateEventParticipantsVisibility((typeSelect?.value || 'custom') as LifeEventType);
     },
 
     addEventParticipantRow(): void {
@@ -280,9 +300,10 @@ export const personEventsMethods = uiModule({
         if (!this.currentId) return;
         if (DataManager.isPersonLocked(this.currentId)) return;
         this.editingEventId = null;
+        this.eventParticipants = [];
+        this.eventParticipantsPinned = false;
         this.populateEventTypeSelect();
         this.setEventEditorFields('baptism', '', '', '', '');
-        this.eventParticipants = [];
         this.renderEventParticipants();
         // Citations need a saved event id — hide the section while adding.
         const src = document.getElementById('event-sources-section');
@@ -297,11 +318,12 @@ export const personEventsMethods = uiModule({
         const event = person?.events?.find(e => e.id === eventId);
         if (!event) return;
         this.editingEventId = eventId;
+        // A copy: editing the rows must not touch the stored event until Save.
+        this.eventParticipants = (event.participants ?? []).map(p => ({ ...p }));
+        this.eventParticipantsPinned = this.eventParticipants.length > 0;
         this.populateEventTypeSelect();
         this.setEventEditorFields(event.type, event.customLabel ?? '',
             formatDateForInput(event.date), event.place ?? '', event.note ?? '');
-        // A copy: editing the rows must not touch the stored event until Save.
-        this.eventParticipants = (event.participants ?? []).map(p => ({ ...p }));
         this.renderEventParticipants();
         // Citations available for an existing event — but they are a research
         // field, so the same rule as everywhere: only when asked for, unless this
@@ -332,6 +354,16 @@ export const personEventsMethods = uiModule({
         if (!select || !group) return;
         group.style.display = select.value === 'custom' ? '' : 'none';
         this.updateEventNoteLabel(select.value as LifeEventType);
+        this.updateEventParticipantsVisibility(select.value as LifeEventType);
+    },
+
+    /** Offer godparents/witnesses only where a register would name them. */
+    updateEventParticipantsVisibility(type: LifeEventType): void {
+        const section = document.getElementById('event-participants-section');
+        if (!section) return;
+        if (this.eventParticipants.length > 0) this.eventParticipantsPinned = true;
+        const show = eventTakesParticipants(type, this.eventParticipantsPinned);
+        section.style.display = show ? '' : 'none';
     },
 
     /**
@@ -368,12 +400,21 @@ export const personEventsMethods = uiModule({
         const titleEl = document.getElementById('event-editor-title');
         if (titleEl) titleEl.textContent = title;
         const modal = document.getElementById('event-editor-modal');
-        if (modal) modal.classList.add('active');
+        if (!modal) return;
+        // On the dialog stack, like every other dialog opened on top of
+        // another: without an entry Escape fell through to the "close
+        // everything" fallback and took the person modal underneath with it.
+        this.pushDialog('event-editor-modal');
+        modal.classList.add('active');
+        autoGrowAll(modal, '#input-event-note');
     },
 
     closeEventEditor(): void {
         const modal = document.getElementById('event-editor-modal');
         if (modal) modal.classList.remove('active');
+        if (this.dialogStack[this.dialogStack.length - 1] === 'event-editor-modal') {
+            this.dialogStack.pop();
+        }
         this.editingEventId = null;
     },
 

@@ -215,3 +215,39 @@ describe('inferBirthUpperBounds — indirect liveness evidence', () => {
         expect(() => inferBirthUpperBounds(d)).not.toThrow();
     });
 });
+
+describe('narratives are the most personal text in the file', () => {
+    const story = { text: 'Vyprávění o živém člověku.' };
+
+    it('a living person keeps no story under any privacy mode', () => {
+        for (const mode of ['initials', 'anonymous', 'minimal'] as const) {
+            const out = applyLivingPrivacy(
+                tree(person('living', { birthDate: '1990', story: structuredClone(story) })), mode, NOW);
+            expect(P(out)['living'].story).toBeUndefined();
+        }
+    });
+
+    it('a deceased person keeps theirs', () => {
+        const out = applyLivingPrivacy(
+            tree(person('dead', { birthDate: '1900', deathDate: '1970', story: structuredClone(story) })),
+            'anonymous', NOW);
+        expect(P(out)['dead'].story?.text).toBe(story.text);
+    });
+
+    it('a couple’s story goes as soon as either of them is living', () => {
+        const data: StromData = {
+            persons: {
+                a: person('a', { birthDate: '1900', deathDate: '1970' }),
+                b: person('b', { birthDate: '1990' }),
+            } as StromData['persons'],
+            partnerships: {
+                u1: {
+                    id: 'u1' as PartnershipId, person1Id: 'a' as PersonId, person2Id: 'b' as PersonId,
+                    childIds: [], status: 'married', story: { text: 'Jejich příběh.' },
+                },
+            } as StromData['partnerships'],
+        };
+        const out = applyLivingPrivacy(data, 'anonymous', NOW);
+        expect(Object.values(out.partnerships)[0].story).toBeUndefined();
+    });
+});

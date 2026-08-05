@@ -957,6 +957,28 @@
             background: none; border: none; padding: 0 0 0 4px; cursor: pointer;
             color: var(--primary, #4a7c59); font: inherit; text-decoration: underline;
         }
+        /* Long explanations move off the form and into a popup opened from the
+           "?" on their label. Deliberately quiet: a soft disc that reads as
+           punctuation next to the label, not as a second control competing
+           with the field itself. */
+        .field-hint.is-folded { display: none; }
+        .hint-toggle {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 15px; height: 15px; margin-left: 5px; padding: 0;
+            border: none; border-radius: 50%;
+            background: var(--divider, rgba(0, 0, 0, 0.07));
+            color: var(--text-light, #888);
+            font-size: 10px; font-weight: 600; line-height: 1; cursor: pointer;
+            vertical-align: middle; opacity: 0.6;
+            transition: opacity 0.12s ease, color 0.12s ease;
+        }
+        .hint-toggle:hover, .hint-toggle:focus-visible {
+            opacity: 1; color: var(--primary, #4a7c59);
+        }
+        /* Touch targets: a 15px disc is fine to read but not to hit. */
+        @media (max-width: 900px) {
+            .hint-toggle { width: 20px; height: 20px; font-size: 12px; margin-left: 7px; }
+        }
 
         /* Row 1: full name, Source Serif 15px/600. Staged fitting (JS measures
            once per render, see fitCardNames): step 0 = 15px; step 1 shrinks to
@@ -1154,6 +1176,16 @@
             overflow-y: auto;
             padding: 16px 24px;
         }
+        /* A dialog whose header is a bare <h2> (form-modal, menu-modal, the
+           confirm box) keeps that heading as a direct child of .modal, and the
+           skeleton above drops the modal's own padding — so the title alone
+           ended up flush against the panel's edge, sitting in the rounded
+           corner while the text under it was properly inset. Give it the same
+           inset .modal-header carries. */
+        .modal:has(> .modal-content) > h2 {
+            padding: 20px 24px 0;
+            margin-bottom: 12px;
+        }
         /* Bottom fade hint, shown only while more content lies below the fold. A
            sticky pseudo-element pinned to the scroll viewport's lower edge; the
            negative margin keeps it from adding scroll height. */
@@ -1174,6 +1206,7 @@
             .modal { min-width: 0; width: 100%; max-width: 100vw; max-height: 94vh; padding: 16px; }
             .modal:has(> .modal-content) { padding: 0; }
             .modal-content { padding: 14px 16px; }
+            .modal:has(> .modal-content) > h2 { padding: 16px 16px 0; margin-bottom: 10px; }
         }
         .modal h2 {
             font-size: 17px;
@@ -8028,8 +8061,19 @@
             font-weight: 500;
         }
 
-        /* Notes textarea */
-        #input-notes { width: 100%; resize: vertical; max-height: 120px; box-sizing: border-box; }
+        /* Notes textarea. No max-height: the box follows its content (see
+           src/ui/autogrow.ts), which caps it at a share of the window. A fixed
+           120px ceiling silently won over that — the field was told to be as
+           tall as its text and rendered three lines regardless. */
+        #input-notes { width: 100%; resize: vertical; box-sizing: border-box; }
+        /* The narrative is prose, not a field — it gets room to be read. */
+        #input-story { width: 100%; resize: vertical; min-height: 160px; box-sizing: border-box;
+            line-height: 1.55; font-family: Georgia, 'Times New Roman', serif; }
+        #input-story-title { width: 100%; box-sizing: border-box; }
+        .story-facts { font-size: 12px; color: var(--text-secondary, #777); line-height: 1.6; }
+        .story-facts div { padding: 1px 0; }
+        @media (max-width: 500px) { #input-story { min-height: 200px; } }
+        @media (min-width: 901px) { #input-story { min-height: 240px; } }
 
         /* Life events list */
         .events-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
@@ -8105,6 +8149,14 @@
             color: var(--text-secondary, #777);
         }
         .partnership-cite-btn:hover { border-color: var(--primary, #4a7c59); color: var(--primary, #4a7c59); }
+        /* Wedding witnesses read like the citations above them. */
+        .partnership-witnesses { margin-top: 6px; }
+        .partnership-witness-btn {
+            border: 1px dashed var(--border-color, #ccc); background: none; cursor: pointer;
+            border-radius: 999px; padding: 3px 10px; font-size: 12px;
+            color: var(--text-secondary, #777);
+        }
+        .partnership-witness-btn:hover { border-color: var(--primary, #4a7c59); color: var(--primary, #4a7c59); }
         /* Source picker + editor open ABOVE whatever dialog cited them
            (person modal, relationships panel) — DOM order is not enough. */
         #source-picker-modal, #source-editor-modal { z-index: 250; }
@@ -8917,6 +8969,26 @@
                         <div id="attachments-total" class="attachments-total"></div>
                         <input type="file" id="input-attachment" accept="image/jpeg,image/png,application/pdf" style="display:none" onchange="window.Strom.UI.handleAttachmentInput(event)">
                         <button type="button" class="secondary" id="btn-add-attachment" onclick="document.getElementById('input-attachment').click()" data-i18n="attachments.add"></button>
+                    </div>
+                </div>
+
+                <div class="pm-section" id="pm-story-section">
+                    <div class="pm-section-head">
+                        <span class="pm-section-title" data-i18n="story.section"></span>
+                        <span class="pm-section-summary" id="pm-sum-story"></span>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="story.titleField"></label>
+                        <input type="text" id="input-story-title" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="story.text"></label>
+                        <textarea id="input-story" rows="10" autocomplete="off"></textarea>
+                        <div class="field-hint" data-i18n="story.hint"></div>
+                    </div>
+                    <div class="form-group" id="story-facts-group" style="display:none">
+                        <label data-i18n="story.facts"></label>
+                        <div id="story-facts" class="story-facts"></div>
                     </div>
                 </div>
 

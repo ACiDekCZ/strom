@@ -11,7 +11,8 @@
  * foster→foster); 'step' has no GEDCOM equivalent and exports without PEDI.
  */
 
-import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo } from './types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story } from './types.js';
+import { strings } from './strings.js';
 import { placeKey } from './places.js';
 
 /**
@@ -28,7 +29,7 @@ export const SURNAME_GROUP_SEP = ' | ';
 
 /**
  * LifeEvent type -> GEDCOM tag. Types with no GEDCOM equivalent ('military',
- * 'custom') are absent and their events are dropped on export (known-unsupported).
+ * 'custom') ride on the generic EVEN tag with a TYPE label.
  */
 const EVENT_TYPE_TO_TAG: Partial<Record<LifeEventType, string>> = {
     baptism: 'BAPM', burial: 'BURI', occupation: 'OCCU', residence: 'RESI',
@@ -156,20 +157,42 @@ function escapeGedcomText(text: string): string {
 }
 
 /**
- * GEDCOM 5.5.1 caps physical lines at 255 chars — long values must continue
- * on CONC lines. Chunks are split MID-WORD on purpose: leading/trailing
- * spaces on a continuation line are ambiguous (many parsers, including ours,
- * trim them), and the spec itself recommends breaking within a word.
+ * GEDCOM 5.5.1 caps a physical line at 255 BYTES — not characters. Czech,
+ * German and Polish text is two bytes per accented letter in UTF-8, so a
+ * 200-CHARACTER limit let a Czech note out at up to 400 bytes and quietly
+ * broke the spec. Long values continue on CONC lines; the margin below 255
+ * leaves room for the level, the tag and the space.
  */
-const MAX_VALUE_LEN = 200;
+const MAX_VALUE_BYTES = 200;
 
+function byteLen(text: string): number {
+    let n = 0;
+    for (const ch of text) {
+        const cp = ch.codePointAt(0)!;
+        n += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+    }
+    return n;
+}
+
+/**
+ * Split a value into byte-bounded chunks. A cut NEVER sits next to a space:
+ * a chunk that ended (or started) with one would lose it in any parser that
+ * trims line values — ours included — and two words would run together.
+ */
 function chunkValue(text: string): string[] {
-    if (text.length <= MAX_VALUE_LEN) return [text];
+    if (byteLen(text) <= MAX_VALUE_BYTES) return [text];
     const chunks: string[] = [];
     let rest = text;
-    while (rest.length > MAX_VALUE_LEN) {
-        let cut = MAX_VALUE_LEN;
-        // Never split AT a space (either side of the cut) — shift left into a word.
+    while (byteLen(rest) > MAX_VALUE_BYTES) {
+        // The longest prefix that fits, counted in bytes and whole code points.
+        let cut = 0;
+        let used = 0;
+        for (const ch of rest) {
+            const b = byteLen(ch);
+            if (used + b > MAX_VALUE_BYTES) break;
+            used += b;
+            cut += ch.length;
+        }
         while (cut > 1 && (rest[cut] === ' ' || rest[cut - 1] === ' ')) cut--;
         chunks.push(rest.slice(0, cut));
         rest = rest.slice(cut);
@@ -188,19 +211,43 @@ function pushWrapped(lines: string[], level: number, tag: string, text: string):
 }
 
 /**
- * Emit a NOTE structure: embedded newlines become CONT lines, over-long lines
- * continue on CONC lines, so multi-line and long notes survive the round-trip.
+ * Emit `level TAG value` for text of any length: a real line break in the text
+ * becomes a CONT line, an over-long line continues on CONC lines. Reading them
+ * back is pure concatenation (CONC appends, CONT appends a newline first), so
+ * the text comes out of a round-trip exactly as it went in — never reflowed.
  */
-function pushNote(lines: string[], level: number, text: string): void {
+function pushLongValue(lines: string[], level: number, tag: string, text: string): void {
     const parts = text.split('\n');
-    pushWrapped(lines, level, 'NOTE', parts[0]);
-    for (let i = 1; i < parts.length; i++) {
-        const chunks = chunkValue(escapeGedcomText(parts[i]));
-        lines.push(`${level + 1} CONT ${chunks[0]}`);
-        for (let j = 1; j < chunks.length; j++) {
-            lines.push(`${level + 1} CONC ${chunks[j]}`);
-        }
-    }
+    const emit = (lvl: number, t: string, value: string): void => {
+        lines.push(value ? `${lvl} ${t} ${value}` : `${lvl} ${t}`);
+    };
+    parts.forEach((part, i) => {
+        const chunks = chunkValue(escapeGedcomText(part));
+        emit(i === 0 ? level : level + 1, i === 0 ? tag : 'CONT', chunks[0]);
+        for (let j = 1; j < chunks.length; j++) emit(level + 1, 'CONC', chunks[j]);
+    });
+}
+
+/** Emit a NOTE structure (see pushLongValue). */
+function pushNote(lines: string[], level: number, text: string): void {
+    pushLongValue(lines, level, 'NOTE', text);
+}
+
+/**
+ * Emit a _STORY structure — the narrative written about a person or a couple.
+ *
+ * A non-standard tag, deliberately: a story is prose built on top of the
+ * evidence and must not be mistaken for a NOTE on the record. Programs that do
+ * not know the tag skip the whole block, which is exactly the right outcome.
+ */
+function pushStory(lines: string[], level: number, story: Story): void {
+    lines.push(`${level} _STORY`);
+    lines.push(`${level + 1} TYPE ${escapeGedcomText(story.kind || 'vypraveni')}`);
+    if (story.title) pushLongValue(lines, level + 1, 'TITL', story.title);
+    if (story.status) lines.push(`${level + 1} STAT ${story.status === 'final' ? 'hotovo' : 'navrh'}`);
+    pushLongValue(lines, level + 1, 'TEXT', story.text);
+    for (const fact of story.facts ?? []) pushLongValue(lines, level + 1, 'DATA', fact);
+    if (story.note) pushLongValue(lines, level + 1, 'NOTE', story.note);
 }
 
 /**
@@ -341,19 +388,30 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
         }
 
         // Note
+        if (person.story) {
+            pushStory(lines, 1, person.story);
+        }
+
         if (person.notes) {
             pushNote(lines, 1, person.notes);
         }
 
         // Life events. OCCU carries its detail as the tag value; the rest use
-        // level-2 DATE/PLAC/NOTE. 'military'/'custom' have no tag and are dropped.
+        // level-2 DATE/PLAC/NOTE. 'custom'/'military' have no dedicated tag and
+        // ride on the generic EVEN with a TYPE label, so nothing is dropped.
         for (const event of person.events ?? []) {
             const tag = EVENT_TYPE_TO_TAG[event.type];
-            if (!tag) continue;
+            let typeLabel: string | null = null;
+            if (!tag) {
+                typeLabel = event.type === 'custom'
+                    ? (event.customLabel || strings.gedcomNotes.genericEvent)
+                    : strings.events.types[event.type];
+            }
             if (event.type === 'occupation' && event.note) {
                 lines.push(`1 OCCU ${escapeGedcomText(event.note)}`);
             } else {
-                lines.push(`1 ${tag}`);
+                lines.push(`1 ${tag ?? 'EVEN'}`);
+                if (typeLabel) lines.push(`2 TYPE ${escapeGedcomText(typeLabel)}`);
             }
             if (event.date) {
                 const date = formatGedcomDate(event.date);
@@ -490,6 +548,20 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
             if (partnership.startPlace) {
                 pushPlace(lines, 2, partnership.startPlace, data.places);
             }
+            // Witnesses at the wedding, written like the ones on an event: in
+            // the tree → ASSO at their record, otherwise _WITN with the name.
+            for (const part of partnership.participants ?? []) {
+                const xref = part.personId ? personIdMap.get(part.personId) : undefined;
+                if (xref) {
+                    lines.push(`2 ASSO ${xref}`);
+                } else if (part.name) {
+                    lines.push(`2 _WITN ${escapeGedcomText(part.name)}`);
+                } else {
+                    continue;
+                }
+                lines.push(`3 RELA ${GEDCOM_RELA[part.role]}`);
+                if (part.note) pushNote(lines, 3, part.note);
+            }
         }
 
         // Divorce event
@@ -499,6 +571,10 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
                 const date = formatGedcomDate(partnership.endDate);
                 if (date) lines.push(`2 DATE ${date}`);
             }
+        }
+
+        if (partnership.story) {
+            pushStory(lines, 1, partnership.story);
         }
 
         // Note

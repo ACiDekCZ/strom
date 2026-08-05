@@ -47,6 +47,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
+import { safeFileName } from '../filenames.js';
 
 export const importExportMethods = uiModule({
     // ---- EXPORT/IMPORT DIALOGS ----
@@ -170,7 +171,7 @@ export const importExportMethods = uiModule({
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${metadata?.name || 'family-tree'}.ged`;
+            a.download = `${safeFileName(metadata?.name, 'family-tree')}.ged`;
             a.click();
             URL.revokeObjectURL(url);
         }, false, { defaultPrivacy: 'initials', passwordless: true });
@@ -201,7 +202,7 @@ export const importExportMethods = uiModule({
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${metadata?.name || 'family-tree'}.csv`;
+            a.download = `${safeFileName(metadata?.name, 'family-tree')}.csv`;
             a.click();
             URL.revokeObjectURL(url);
         }, false, { defaultPrivacy: 'full', passwordless: true });

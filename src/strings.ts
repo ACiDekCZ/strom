@@ -487,6 +487,7 @@ const stringsEN = {
     // Labels
     labels: {
         nameVariants: 'Other spellings of the name',
+        showHint: 'Show help for this field',
         nameVariantsHint: 'How the registers actually write it (Wischek, Vissek), an alias, or the farm the family was known by. Separate with commas. Search and merge find the person under any of them. Applies to this person only — surname spellings shared by the whole family belong in Manage trees → Surname spellings.',
         firstName: 'First Name',
         lastName: 'Last Name',
@@ -535,7 +536,7 @@ const stringsEN = {
 
     // Placeholders
     placeholders: {
-        nameVariants: 'Wischek, Vissek, u Kováře',
+        nameVariants: 'Wischek, Vissek, Kovářovic',
         firstName: 'First name',
         lastName: 'Last name',
         maidenName: 'Maiden name',
@@ -817,6 +818,9 @@ const stringsEN = {
         addChild: '+ Add Child',
         addSibling: '+ Add Sibling',
         remove: 'Remove',
+        witnesses: 'Wedding witnesses',
+        addWitness: '👥 Add witness',
+        witnessPrompt: 'Name of the witness as the register writes it:',
         reassign: 'Reassign…',
         reassignHeading: 'Reassign to a different parent',
         reassignHint: (child: string, oldParent: string) => `${child} will be unlinked from ${oldParent} and linked to the person you pick below. Nothing is retyped.`,
@@ -1062,8 +1066,14 @@ const stringsEN = {
     // Notes the GEDCOM importer writes into the data itself (persisted). Built
     // in the app's CURRENT language at import time — English source above.
     gedcomNotes: {
+        census: 'Census',
+        genericEvent: 'Event',
         altBirth: 'Birth (alternative record)',
         altDeath: 'Death (alternative record)',
+        birthRecord: 'Birth record',
+        deathRecord: 'Death record',
+        birthNote: (text: string) => `Birth: ${text}`,
+        deathNote: (text: string) => `Death: ${text}`,
         remarriage: (divorced: string, married: string) => `Divorced ${divorced}, married again ${married}`,
         remarriageNoDate: (married: string) => `Divorced, married again ${married}`,
         engagement: (date: string) => `Engagement: ${date}`,
@@ -1777,6 +1787,23 @@ const stringsEN = {
     },
 
     // Poster export (SVG / PNG / tiled PDF)
+    /**
+     * Narratives (GEDCOM _STORY): the family-book text written on top of the
+     * facts. Not evidence — the wording says so.
+     */
+    story: {
+        section: 'Story',
+        titleField: 'Chapter subheading',
+        text: 'The story',
+        hint: 'Prose written on top of the facts — it goes into the family book after them. Not a source. Text wrapped in double asterisks is set in bold in the book.',
+        status: 'State',
+        statusNone: '—',
+        statusDraft: 'Draft',
+        statusFinal: 'Approved',
+        facts: 'Built on',
+        sumWords: (n: number) => `${n} words`,
+    },
+
     poster: {
         menu: 'Export poster',
         title: 'Export as poster',
@@ -2285,6 +2312,7 @@ const stringsCZ: StringsType = {
     // Labels
     labels: {
         nameVariants: 'Další tvary jména',
+        showHint: 'Zobrazit nápovědu k poli',
         nameVariantsHint: 'Jak to píší matriky (Wischek, Vissek), alias, nebo jméno po chalupě. Oddělte čárkami. Hledání i slučování pak osobu najdou pod kterýmkoli z nich. Platí jen pro tuto osobu — tvary příjmení společné celé rodině patří do Správa stromů → Tvary příjmení.',
         firstName: 'Jméno',
         lastName: 'Příjmení',
@@ -2333,7 +2361,7 @@ const stringsCZ: StringsType = {
 
     // Placeholders
     placeholders: {
-        nameVariants: 'Wischek, Vissek, u Kováře',
+        nameVariants: 'Wischek, Vissek, Kovářovic',
         firstName: 'Jméno',
         lastName: 'Příjmení',
         maidenName: 'Rodné příjmení',
@@ -2620,6 +2648,9 @@ const stringsCZ: StringsType = {
         addChild: '+ Přidat dítě',
         addSibling: '+ Přidat sourozence',
         remove: 'Odebrat',
+        witnesses: 'Svědci sňatku',
+        addWitness: '👥 Přidat svědka',
+        witnessPrompt: 'Jméno svědka tak, jak ho píše matrika:',
         reassign: 'Přepojit…',
         reassignHeading: 'Přepojit k jinému rodiči',
         reassignHint: (child: string, oldParent: string) => `${child} se odpojí od: ${oldParent} a připojí ke zvolené osobě. Nic se nevyplňuje znovu.`,
@@ -2865,8 +2896,14 @@ const stringsCZ: StringsType = {
     // Poznámky, které importér GEDCOM zapisuje přímo do dat (uloží se). Sestaveny
     // v AKTUÁLNÍM jazyce aplikace v okamžiku importu.
     gedcomNotes: {
+        census: 'Sčítání lidu',
+        genericEvent: 'Událost',
         altBirth: 'Narození (alternativní záznam)',
         altDeath: 'Úmrtí (alternativní záznam)',
+        birthRecord: 'Zápis o narození',
+        deathRecord: 'Zápis o úmrtí',
+        birthNote: (text: string) => `Narození: ${text}`,
+        deathNote: (text: string) => `Úmrtí: ${text}`,
         remarriage: (divorced: string, married: string) => `Rozvod ${divorced}, nový sňatek ${married}`,
         remarriageNoDate: (married: string) => `Rozvod, nový sňatek ${married}`,
         engagement: (date: string) => `Zásnuby: ${date}`,
@@ -3579,6 +3616,19 @@ const stringsCZ: StringsType = {
     },
 
     // Poster export (SVG / PNG / tiled PDF)
+    story: {
+        section: 'Vyprávění',
+        titleField: 'Podnadpis kapitoly',
+        text: 'Text vyprávění',
+        hint: 'Souvislý text sestavený nad fakty — v knize rodu stojí až za nimi. Není to pramen. Text mezi dvojicemi hvězdiček se v knize vysází tučně.',
+        status: 'Stav',
+        statusNone: '—',
+        statusDraft: 'Návrh',
+        statusFinal: 'Hotovo',
+        facts: 'Opírá se o',
+        sumWords: (n: number) => `${n} slov`,
+    },
+
     poster: {
         menu: 'Export plakátu',
         title: 'Export jako plakát',
@@ -4075,6 +4125,7 @@ const stringsDE: StringsType = {
     // Labels
     labels: {
         nameVariants: 'Andere Schreibweisen des Namens',
+        showHint: 'Hilfe zu diesem Feld anzeigen',
         nameVariantsHint: 'Wie die Kirchenbücher ihn tatsächlich schreiben (Wischek, Vissek), ein Beiname oder der Hof, unter dem die Familie bekannt war. Mit Kommas trennen. Suche und Zusammenführen finden die Person unter jedem davon. Gilt nur für diese Person — Namensschreibweisen, die die ganze Familie teilt, gehören unter Stammbäume verwalten → Namensschreibweisen.',
         firstName: 'Vorname',
         lastName: 'Nachname',
@@ -4119,7 +4170,7 @@ const stringsDE: StringsType = {
 
     // Placeholders
     placeholders: {
-        nameVariants: 'Wischek, Vissek, beim Schmied',
+        nameVariants: 'Wischek, Vissek, Schmieds',
         firstName: 'Vorname',
         lastName: 'Nachname',
         maidenName: 'Geburtsname',
@@ -4393,6 +4444,9 @@ const stringsDE: StringsType = {
         addChild: '+ Kind hinzufügen',
         addSibling: '+ Geschwister hinzufügen',
         remove: 'Entfernen',
+        witnesses: 'Trauzeugen',
+        addWitness: '👥 Trauzeuge hinzufügen',
+        witnessPrompt: 'Name des Trauzeugen, wie ihn das Kirchenbuch schreibt:',
         reassign: 'Umhängen…',
         reassignHeading: 'An einen anderen Elternteil umhängen',
         reassignHint: (child: string, oldParent: string) => `${child} wird von ${oldParent} gelöst und mit der unten gewählten Person verknüpft. Nichts wird neu eingegeben.`,
@@ -4633,8 +4687,14 @@ const stringsDE: StringsType = {
 
     // Notes the GEDCOM importer writes into the data itself (persisted).
     gedcomNotes: {
+        census: 'Volkszählung',
+        genericEvent: 'Ereignis',
         altBirth: 'Geburt (alternativer Eintrag)',
         altDeath: 'Tod (alternativer Eintrag)',
+        birthRecord: 'Geburtseintrag',
+        deathRecord: 'Sterbeeintrag',
+        birthNote: (text: string) => `Geburt: ${text}`,
+        deathNote: (text: string) => `Tod: ${text}`,
         remarriage: (divorced: string, married: string) => `Geschieden ${divorced}, erneut geheiratet ${married}`,
         remarriageNoDate: (married: string) => `Geschieden, erneut geheiratet ${married}`,
         engagement: (date: string) => `Verlobung: ${date}`,
@@ -5312,6 +5372,19 @@ const stringsDE: StringsType = {
     },
 
     // Poster export (SVG / PNG / tiled PDF)
+    story: {
+        section: 'Erzählung',
+        titleField: 'Untertitel des Kapitels',
+        text: 'Der Text',
+        hint: 'Zusammenhängender Text über den Fakten — im Familienbuch steht er hinter ihnen. Keine Quelle. Text zwischen doppelten Sternchen wird im Buch fett gesetzt.',
+        status: 'Stand',
+        statusNone: '—',
+        statusDraft: 'Entwurf',
+        statusFinal: 'Fertig',
+        facts: 'Stützt sich auf',
+        sumWords: (n: number) => `${n} Wörter`,
+    },
+
     poster: {
         menu: 'Poster exportieren',
         title: 'Als Poster exportieren',

@@ -20,6 +20,7 @@ import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy
 import { classifyBranches } from '../branch-colors.js';
 import { computeIndirectIds } from '../indirect.js';
 import { SettingsManager } from '../settings.js';
+import { safeFileName } from '../filenames.js';
 
 /** Browsers cap canvas dimensions; keep well under the common ~16k limit. */
 const MAX_CANVAS_PX = 15000;
@@ -34,9 +35,7 @@ const PAGE_OVERLAP_MM = 10;
 const MM_PER_PX = 0.26;
 
 function posterFilename(ext: string): string {
-    const name = TreeManager.getActiveTreeMetadata()?.name || 'family-tree';
-    const safe = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    return `${safe || 'family-tree'}.${ext}`;
+    return `${safeFileName(TreeManager.getActiveTreeMetadata()?.name, 'family-tree')}.${ext}`;
 }
 
 function posterPrivacyMode(): PrivacyMode {

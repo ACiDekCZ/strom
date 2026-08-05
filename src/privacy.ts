@@ -61,13 +61,15 @@ export function matchContentPreset(opts: ContentOptions): ContentPreset | null {
 
 /**
  * Deep copy with every free-text note removed: person notes, partnership notes,
- * life-event notes and event-participant notes. Identity, structure and all
- * other fields are preserved. Does not mutate the input.
+ * life-event notes, event-participant notes and the narratives (which are the
+ * longest free text in the tree). Identity, structure and all other fields are
+ * preserved. Does not mutate the input.
  */
 export function stripNotes(data: StromData): StromData {
     const copy = structuredClone(data);
     for (const person of Object.values(copy.persons)) {
         delete person.notes;
+        delete person.story;
         for (const ev of person.events ?? []) {
             delete ev.note;
             for (const part of ev.participants ?? []) delete part.note;
@@ -75,6 +77,7 @@ export function stripNotes(data: StromData): StromData {
     }
     for (const partnership of Object.values(copy.partnerships)) {
         delete partnership.note;
+        delete partnership.story;
     }
     return copy;
 }
@@ -214,6 +217,9 @@ function stripDetails(person: Person): void {
     delete person.deathDate;
     delete person.deathPlace;
     delete person.notes;
+    // A narrative is the most personal text in the file — never about a living
+    // person under a privacy mode.
+    delete person.story;
     delete person.photo;
     delete person.photoOriginalName;
     // Life events carry places and dates — drop them for living people.
@@ -259,6 +265,14 @@ export function applyLivingPrivacy(
             .filter(p => !p.isPlaceholder && isLivingPerson(p, currentYear, bounds))
             .map(p => p.id)
     );
+
+    // A couple's narrative tells the story of both of them, so it goes as soon
+    // as either one is living — there is no half of it to keep.
+    for (const partnership of Object.values(copy.partnerships)) {
+        if (living.has(partnership.person1Id) || living.has(partnership.person2Id)) {
+            delete partnership.story;
+        }
+    }
 
     for (const person of Object.values(copy.persons)) {
         if (!living.has(person.id)) continue;

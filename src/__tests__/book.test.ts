@@ -169,3 +169,104 @@ describe('book toolbar', () => {
         expect(cs).toContain('Zavřít');
     });
 });
+
+describe('narratives in the book', () => {
+    /** Husband with a story, wife without; the couple has one of its own. */
+    const tree = {
+        persons: mkPersons(
+            { ...p('h', 'Jan', 'Novák', 'male', { birthDate: '1863', notes: 'Zápis v matrice.' }),
+                story: {
+                    title: 'Nemanželský syn z čp. 22',
+                    status: 'draft' as const,
+                    text: 'První odstavec o **nádeníkovi**.\n\nDruhý odstavec.',
+                    facts: ['BIRT 5 MAY 1863 [K-04]'],
+                    note: 'Není pramen.',
+                } },
+            p('w', 'Anna', 'Nováková', 'female', { birthDate: '1865' }),
+            p('c', 'Josef', 'Novák', 'male', { birthDate: '1890' }),
+        ),
+        partnerships: {
+            u1: {
+                id: 'u1', person1Id: 'h', person2Id: 'w', childIds: ['c'],
+                status: 'married' as const, startDate: '1886',
+                story: { text: 'Vzali se v srpnu 1886.' },
+            },
+        },
+    } as unknown as StromData;
+
+    const html = buildFamilyBook(tree, { lang: 'cs', privacyMode: 'full' });
+
+    it('prints the story after the facts, one <p> per paragraph', () => {
+        expect(html).toContain('<div class="book-story book-story-person">');
+        expect(html).toContain('<p>První odstavec o <strong>nádeníkovi</strong>.</p>');
+        expect(html).toContain('<p>Druhý odstavec.</p>');
+        // After the person's own notes, which are the facts' last word.
+        expect(html.indexOf('Zápis v matrice.')).toBeLessThan(html.indexOf('První odstavec'));
+    });
+
+    it('shows the subheading, and says nothing about the draft state', () => {
+        expect(html).toContain('Nemanželský syn z čp. 22');
+        // Draft/approved is a workshop note: it stays in the data and in the
+        // GEDCOM, but a printed page does not comment on itself.
+        expect(html).not.toContain('book-story-draft');
+        expect(html).not.toContain('návrh');
+    });
+
+    it('prints the couple’s story in their chapter', () => {
+        expect(html).toContain('book-story-couple');
+        expect(html).toContain('Vzali se v srpnu 1886.');
+    });
+
+    it('keeps the checklist of facts out of the book — it is workshop, not text', () => {
+        expect(html).not.toContain('BIRT 5 MAY 1863');
+        expect(html).not.toContain('Není pramen.');
+    });
+
+    it('escapes before it renders emphasis: no markup rides in from the text', () => {
+        const nasty = structuredClone(tree);
+        (nasty.persons as Record<string, Person>)['h'].story!.text = '<script>alert(1)</script> a **tučně**';
+        const out = buildFamilyBook(nasty, { lang: 'cs', privacyMode: 'full' });
+        expect(out).not.toContain('<script>alert(1)</script>');
+        expect(out).toContain('&lt;script&gt;');
+        expect(out).toContain('<strong>tučně</strong>');
+    });
+});
+
+describe('a narrative is not squeezed into the medallion', () => {
+    /**
+     * Two medallions stand side by side, so a story rendered inside one came
+     * out as a column of three-word lines. Stories belong below the couple,
+     * full width, each headed by whose it is.
+     */
+    const tree = {
+        persons: mkPersons(
+            { ...p('h', 'Jan', 'Novák', 'male', { birthDate: '1863' }),
+                story: { text: 'Jeho příběh.' } },
+            { ...p('w', 'Anna', 'Nováková', 'female', { birthDate: '1865' }),
+                story: { text: 'Její příběh.' } },
+            p('c', 'Josef', 'Novák', 'male', { birthDate: '1890' }),
+        ),
+        partnerships: {
+            u1: {
+                id: 'u1', person1Id: 'h', person2Id: 'w', childIds: ['c'],
+                status: 'married' as const, story: { text: 'Jejich příběh.' },
+            },
+        },
+    } as unknown as StromData;
+
+    const html = buildFamilyBook(tree, { lang: 'cs', privacyMode: 'full' });
+
+    it('renders stories outside the side-by-side couple block', () => {
+        const couple = /<div class="book-couple">([\s\S]*?)<\/div>\s*<div class="book-story/.exec(html);
+        expect(couple, 'stories follow the couple block').not.toBeNull();
+        expect(couple![1]).not.toContain('book-story');
+    });
+
+    it('names whose story it is, his then hers then theirs', () => {
+        const heads = [...html.matchAll(/<h4 class="book-story-head">([\s\S]*?)<\/h4>/g)]
+            .map(m => m[1].replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').trim());
+        expect(heads).toEqual(['Jan Novák', 'Anna Nováková', 'Jan Novák & Anna Nováková']);
+        expect(html.indexOf('Jeho příběh.')).toBeLessThan(html.indexOf('Její příběh.'));
+        expect(html.indexOf('Její příběh.')).toBeLessThan(html.indexOf('Jejich příběh.'));
+    });
+});

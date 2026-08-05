@@ -272,7 +272,7 @@ describe('validateJsonImport on the real devel-demo fixture', () => {
 type EditedByUpdatePerson =
     | 'firstName' | 'lastName' | 'gender' | 'nameVariants'
     | 'birthDate' | 'birthPlace' | 'deathDate' | 'deathPlace'
-    | 'notes' | 'refn' | 'question' | 'isDeceased' | 'isLocked' | 'photo';
+    | 'notes' | 'refn' | 'question' | 'isDeceased' | 'isLocked' | 'photo' | 'story';
 
 /**
  * Fields updatePerson deliberately does NOT touch, and who owns them instead.
@@ -343,6 +343,14 @@ describe('updatePerson applies every field it owns', () => {
         isDeceased: true,
         isLocked: true,
         photo: 'data:image/png;base64,iVBORw0KGgo=',
+        story: {
+            kind: 'vypraveni',
+            title: 'Včelařka z Kolína',
+            status: 'draft',
+            text: 'První odstavec.\n\nDruhý odstavec.',
+            facts: ['BIRT 3 FEB 1901 [M-04]'],
+            note: 'Není pramen.',
+        },
     };
 
     const { isLocked: _lock, ...editable } = edits;

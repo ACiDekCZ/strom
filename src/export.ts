@@ -9,6 +9,7 @@ import { TreeId, StromData, EmbeddedDataEnvelope, APP_VERSION, generateExportId 
 import { encrypt, EncryptedData } from './crypto.js';
 import { AuditLogManager } from './audit-log.js';
 import { applyLivingPrivacy, applyContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
+import { safeFileName } from './filenames.js';
 
 /**
  * Clean dynamic UI state from HTML before export: drop 'active' from specific
@@ -157,8 +158,7 @@ class AppExporterClass {
             let exportedHtml = html.replace('</head>', `${dataScript}\n</head>`);
 
             // Get tree name for filename
-            const safeName = treeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-            const filename = `strom-${safeName || 'family-tree'}.html`;
+            const filename = `strom-${safeFileName(treeName, 'family-tree')}.html`;
 
             // Download
             this.downloadHtml(exportedHtml, filename);

@@ -24,7 +24,7 @@ export { buildLayoutModel, getChildUnions } from './2-build-model.js';
 export { assignGenerations, validateGenerations } from './3-assign-generations.js';
 export { measureSubtrees, getTotalWidth } from './4-measure.js';
 export { placeX } from './5-place-x.js';
-export { applyConstraints } from './6-constraints.js';
+export { applyConstraints, getBlockCardExtent } from './6-constraints.js';
 export { routeEdges, detectStaircaseEdges, validateNoStaircaseEdges, type StaircaseViolation } from './7-route-edges.js';
 export { emitLayoutResult } from './8-emit-result.js';
 export { validateLayout } from './validation.js';

@@ -43,6 +43,7 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { normalizeDateInput, formatDateForInput } from '../dates.js';
+import { autoGrowAll } from './autogrow.js';
 
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
@@ -165,6 +166,26 @@ export const relationshipsPanelMethods = uiModule({
             });
         });
 
+        // Wedding witnesses: the register names them, so they are typed in as
+        // written; ✕ removes one.
+        content.querySelectorAll('.partnership-witness-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const partnershipId = (e.currentTarget as HTMLElement).dataset.partnershipId as PartnershipId;
+                const name = await this.showPrompt(strings.relationships.witnessPrompt);
+                if (!name?.trim()) return;
+                DataManager.addPartnershipParticipant(partnershipId, { name: name.trim() });
+                this.refreshRelationshipsPanel();
+            });
+        });
+        content.querySelectorAll('.partnership-witness-remove').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const el = e.currentTarget as HTMLElement;
+                DataManager.removePartnershipParticipant(
+                    el.dataset.partnershipId as PartnershipId, el.dataset.participantId!);
+                this.refreshRelationshipsPanel();
+            });
+        });
+
         // Attach event listeners for partnership notes (pending change)
         content.querySelectorAll('.partnership-note').forEach(textarea => {
             textarea.addEventListener('input', (e) => {
@@ -173,6 +194,8 @@ export const relationshipsPanelMethods = uiModule({
                 this.setPendingPartnershipChange(partnershipId, { note: target.value });
             });
         });
+        // A register note runs to paragraphs; let the box show them.
+        autoGrowAll(content, '.partnership-note');
 
         // Attach event listeners for start date (pending change)
         content.querySelectorAll('.partnership-start-date').forEach(input => {
@@ -360,6 +383,20 @@ export const relationshipsPanelMethods = uiModule({
                                 return src ? `<span class="source-chip"><span class="source-chip-label" title="${this.escapeHtml(src.title)}">${this.escapeHtml(src.title)}</span><button type="button" class="source-chip-remove partnership-uncite" data-partnership-id="${partnership.id}" data-source-id="${sid}">&times;</button></span>` : '';
                             }).join('')}
                             <button type="button" class="partnership-cite-btn" data-partnership-id="${partnership.id}">📚 ${strings.sources.citePartnership}</button>
+                        </div>
+                        <div class="partnership-witnesses sources-chips"${
+                            // Wedding witnesses: research, like the citation
+                            // above — shown on request, never hidden once the
+                            // marriage entry actually named someone.
+                            SettingsManager.isAdvancedFields() || partnership.participants?.length
+                                ? '' : ' style="display:none"'}>
+                            ${(partnership.participants ?? []).map(part => {
+                                const linked = part.personId ? DataManager.getPerson(part.personId) : null;
+                                const name = linked ? `${linked.firstName} ${linked.lastName}`.trim() : (part.name ?? '');
+                                const title = [name, part.note].filter(Boolean).join(' — ');
+                                return `<span class="source-chip"><span class="source-chip-label" title="${this.escapeHtml(title)}">${this.escapeHtml(name)}</span><button type="button" class="source-chip-remove partnership-witness-remove" data-partnership-id="${partnership.id}" data-participant-id="${part.id}">&times;</button></span>`;
+                            }).join('')}
+                            <button type="button" class="partnership-witness-btn" data-partnership-id="${partnership.id}">${strings.relationships.addWitness}</button>
                         </div>
                     `;
                 }

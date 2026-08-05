@@ -44,6 +44,9 @@ export function buildLayoutModel(input: BuildModelInput): LayoutModel {
     const focusPerson = data.persons[focusPersonId];
     const focusParentIds = new Set(focusPerson?.parentIds ?? []);
 
+    // Partnerships the focus person descends from (see Priority 3)
+    const lineagePartnershipIds = collectLineagePartnerships(data, focusPersonId);
+
     // Step 1: Create PersonNodes for all selected persons
     for (const personId of selection.persons) {
         const person = data.persons[personId];
@@ -62,9 +65,11 @@ export function buildLayoutModel(input: BuildModelInput): LayoutModel {
     // Sort partnerships by priority:
     // 1. Biological parent partnership (both partners are focus person's parents)
     // 2. isPrimary flag set
-    // 3. Active status (married/partners/undefined) before terminated (divorced/separated)
-    // 4. By wedding date (newest first)
-    // 5. By ID for determinism
+    // 3. A partnership the focus person descends from
+    // 4. A union with children before a childless one (the line runs through it)
+    // 5. Active status (married/partners/undefined) before terminated (divorced/separated)
+    // 6. By wedding date (newest first)
+    // 7. By ID for determinism
     const sortedPartnershipIds = [...selection.partnerships].sort((aId, bId) => {
         const a = data.partnerships[aId];
         const b = data.partnerships[bId];
@@ -80,19 +85,57 @@ export function buildLayoutModel(input: BuildModelInput): LayoutModel {
         if (a.isPrimary && !b.isPrimary) return -1;
         if (!a.isPrimary && b.isPrimary) return 1;
 
-        // Priority 3: Active status beats terminated
+        // Priority 3: the marriage the focus person actually descends from.
+        //
+        // An ancestor who married twice keeps only one union as the primary
+        // one — the couple that gets the block, the children hanging off it
+        // and the walk further up to their own parents. Ordering by wedding
+        // date handed that role to whichever marriage happened to carry a
+        // date, so a documented second marriage outranked the undocumented
+        // first one the line really runs through: the ancestral wife's own
+        // parents were never built (her card kept a "hidden parents" badge)
+        // and the line down to her child was drawn from her card centre
+        // instead of from the middle of the couple.
+        //
+        // The lineage is read from the DATA, so it does not depend on how
+        // wide the current view happens to be.
+        const aLineage = lineagePartnershipIds.has(aId);
+        const bLineage = lineagePartnershipIds.has(bId);
+        if (aLineage && !bLineage) return -1;
+        if (!aLineage && bLineage) return 1;
+
+        // Priority 4: a marriage that produced children outranks a childless one.
+        //
+        // Whichever union wins here becomes the couple everything hangs off:
+        // the block, its children, and — for an ancestor — the walk further up
+        // to their own parents. Ordering by wedding date handed that role to
+        // the LATER marriage, so an ancestor who remarried late in life had his
+        // childless second union chosen, and the parents of the wife the line
+        // actually runs through were never built at all: their grandson's card
+        // showed a "hidden parents" badge and the branch stopped there.
+        //
+        // Childlessness is read from the DATA, so the choice does not depend on
+        // how wide the current view happens to be, and two child-bearing unions
+        // still fall through to the existing date/id order — the arrangement
+        // every layout in the etalon was tuned against.
+        const aChildless = a.childIds.length === 0;
+        const bChildless = b.childIds.length === 0;
+        if (!aChildless && bChildless) return -1;
+        if (aChildless && !bChildless) return 1;
+
+        // Priority 5: Active status beats terminated
         const isTerminated = (s?: string) => s === 'divorced' || s === 'separated';
         const aTerminated = isTerminated(a.status);
         const bTerminated = isTerminated(b.status);
         if (!aTerminated && bTerminated) return -1;
         if (aTerminated && !bTerminated) return 1;
 
-        // Priority 4: Start date (newest first)
+        // Priority 6: Start date (newest first)
         const aDate = a.startDate ?? '';
         const bDate = b.startDate ?? '';
         if (aDate !== bDate) return bDate.localeCompare(aDate);
 
-        // Priority 5: ID for determinism
+        // Priority 7: ID for determinism
         return aId.localeCompare(bId);
     });
 
@@ -247,6 +290,46 @@ export function buildLayoutModel(input: BuildModelInput): LayoutModel {
         childToParentUnion,
         partnerChains
     };
+}
+
+/**
+ * Collect every partnership the focus person descends from.
+ *
+ * Walks up the parent chain and records, for each generation, the partnership
+ * that produced the person below. Pedigree collapse is handled by the visited
+ * set, so a shared ancestor is walked once.
+ */
+function collectLineagePartnerships(
+    data: StromData,
+    focusPersonId: PersonId
+): Set<PartnershipId> {
+    const result = new Set<PartnershipId>();
+    const visited = new Set<PersonId>();
+    const queue: PersonId[] = [focusPersonId];
+
+    while (queue.length > 0) {
+        const childId = queue.shift()!;
+        if (visited.has(childId)) continue;
+        visited.add(childId);
+
+        const child = data.persons[childId];
+        if (!child || child.parentIds.length === 0) continue;
+
+        for (const partnershipId in data.partnerships) {
+            const partnership = data.partnerships[partnershipId as PartnershipId];
+            if (!partnership.childIds.includes(childId)) continue;
+            // Only a partnership of the recorded parents counts as the line
+            if (!child.parentIds.includes(partnership.person1Id) &&
+                !child.parentIds.includes(partnership.person2Id)) {
+                continue;
+            }
+            result.add(partnership.id);
+        }
+
+        for (const parentId of child.parentIds) queue.push(parentId);
+    }
+
+    return result;
 }
 
 /**

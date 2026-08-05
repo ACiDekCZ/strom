@@ -15,6 +15,7 @@ import {
     PartnershipStatus,
     Gender,
     LifeEvent,
+    Story,
     RelationType,
     RelationContext,
     StromData,
@@ -47,6 +48,7 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { isValidDateInput, normalizeDateInput, formatDateForInput } from '../dates.js';
+import { autoGrowAll } from './autogrow.js';
 import { computePersonLifeline, LifelinePoint } from '../timeline.js';
 
 export const personModalMethods = uiModule({
@@ -111,6 +113,7 @@ export const personModalMethods = uiModule({
         if (occupationClear) { occupationClear.value = ''; occupationClear.readOnly = false; }
         const residenceClear = document.getElementById('input-residence') as HTMLInputElement | null;
         if (residenceClear) { residenceClear.value = ''; residenceClear.readOnly = false; }
+        this.fillStoryFields(null);
         this.setPhotoPreview(undefined);
 
         // Header LAST — it reads the name inputs and the photo preview, so it
@@ -125,6 +128,7 @@ export const personModalMethods = uiModule({
             birthDate: '', birthPlace: '', deathDate: '', deathPlace: '', notes: '',
             nameVariants: '', refn: '', question: '',
             occupation: '', residence: '',
+            storyTitle: '', storyText: '',
         };
 
         // Setup gender change listener for dynamic labels
@@ -312,6 +316,75 @@ export const personModalMethods = uiModule({
         if (person.photo) photoNoteParts.push(S.sumPhoto);
         if (person.notes?.trim()) photoNoteParts.push(S.sumNote);
         set('pm-sum-photonotes', photoNoteParts);
+
+        const storyParts: string[] = [];
+        if (person.story?.text?.trim()) {
+            storyParts.push(strings.story.sumWords(person.story.text.trim().split(/\s+/).length));
+            if (person.story.status === 'draft') storyParts.push(strings.story.statusDraft);
+        }
+        set('pm-sum-story', storyParts);
+    },
+
+    /**
+     * The narrative fields. The text is the person's chapter in the family
+     * book; `kind`, the facts it leans on and the author's caveat come from the
+     * file that brought it in and are shown read-only — they belong to whoever
+     * wrote the story, and dropping them on the first edit would quietly break
+     * the round-trip back to GEDCOM.
+     */
+    fillStoryFields(person: Person | null): void {
+        const story = person?.story;
+        const title = document.getElementById('input-story-title') as HTMLInputElement | null;
+        const text = document.getElementById('input-story') as HTMLTextAreaElement | null;
+        if (title) { title.value = story?.title || ''; title.readOnly = false; }
+        if (text) { text.value = story?.text || ''; text.readOnly = false; }
+
+        const factsGroup = document.getElementById('story-facts-group');
+        const facts = document.getElementById('story-facts');
+        if (factsGroup && facts) {
+            const lines = [...(story?.facts ?? []), ...(story?.note ? [story.note] : [])];
+            facts.innerHTML = lines.map(f => `<div>${this.escapeHtml(f)}</div>`).join('');
+            factsGroup.style.display = lines.length > 0 ? '' : 'none';
+        }
+
+        // Same rule as the research fields: out of the way until asked for, but
+        // never hidden once there is something written.
+        const section = document.getElementById('pm-story-section');
+        if (section) {
+            section.style.display = (SettingsManager.isAdvancedFields() || story?.text?.trim())
+                ? '' : 'none';
+        }
+    },
+
+    /** The narrative fields as the unsaved-changes check compares them. */
+    storySnapshot(): { storyTitle: string; storyText: string } {
+        return {
+            storyTitle: (document.getElementById('input-story-title') as HTMLInputElement | null)?.value || '',
+            storyText: (document.getElementById('input-story') as HTMLTextAreaElement | null)?.value || '',
+        };
+    },
+
+    /**
+     * Read the narrative back off the form, keeping what only the file knows.
+     *
+     * `status` (the GEDCOM contract's draft/final) is among those: the app does
+     * not act on it anywhere — the family book stopped printing a draft badge —
+     * so an editable control for it was a knob wired to nothing. The value
+     * still travels through untouched, so a file that arrives marked as a draft
+     * leaves marked as a draft.
+     */
+    collectStory(existing: Story | undefined): Story | undefined {
+        const text = (document.getElementById('input-story') as HTMLTextAreaElement | null)?.value ?? '';
+        if (!text.trim()) return undefined;
+        const title = (document.getElementById('input-story-title') as HTMLInputElement | null)?.value.trim() ?? '';
+        return {
+            ...(existing?.kind ? { kind: existing.kind } : {}),
+            ...(title ? { title } : {}),
+            ...(existing?.status ? { status: existing.status } : {}),
+            text,
+            ...(existing?.facts?.length ? { facts: existing.facts } : {}),
+            ...(existing?.note ? { note: existing.note } : {}),
+        };
     },
 
     setupDateInputs(): void {
@@ -456,6 +529,8 @@ export const personModalMethods = uiModule({
                 person, new Date().getFullYear(), inferBirthUpperBounds(DataManager.getData()));
         }
 
+        this.fillStoryFields(person);
+
         // Photo preview
         this.setPhotoPreview(person.photo);
 
@@ -480,6 +555,7 @@ export const personModalMethods = uiModule({
             question: (document.getElementById('input-question') as HTMLInputElement | null)?.value || '',
             occupation: occupationInput?.value || '',
             residence: residenceInput?.value || '',
+            ...this.storySnapshot(),
         };
 
         // Setup gender change listener for dynamic labels
@@ -519,6 +595,10 @@ export const personModalMethods = uiModule({
             if (notesInput) notesInput.readOnly = true;
             if (occupationInput) occupationInput.readOnly = true;
             if (residenceInput) residenceInput.readOnly = true;
+            const storyTitleInput = document.getElementById('input-story-title') as HTMLInputElement | null;
+            const storyTextInput = document.getElementById('input-story') as HTMLTextAreaElement | null;
+            if (storyTitleInput) storyTitleInput.readOnly = true;
+            if (storyTextInput) storyTextInput.readOnly = true;
             if (saveBtn) saveBtn.style.display = 'none';
             deleteBtn.style.display = 'none';
             if (mergeBtn) mergeBtn.style.display = 'none';
@@ -559,6 +639,9 @@ export const personModalMethods = uiModule({
         this.disableDuplicateSuggest('person');
 
         modal.classList.add('active');
+        // Now that the dialog has a layout, let the long text fields take the
+        // height their content needs.
+        autoGrowAll(modal, '#input-notes, #input-story');
         if (!DataManager.isPersonLocked(id)) firstNameInput.focus();
 
         // Setup Enter as Tab for form fields
@@ -838,16 +921,18 @@ export const personModalMethods = uiModule({
                 refn,
                 question,
                 isDeceased,
-                photo
+                photo,
+                story: this.collectStory(DataManager.getPerson(this.currentId)?.story)
             });
             this.syncQuickEvent(this.currentId, 'occupation', 'note', occupation);
             this.syncQuickEvent(this.currentId, 'residence', 'place', residence);
         } else {
             // Create new
             const newPerson = DataManager.createPerson({ firstName, lastName, gender });
+            const story = this.collectStory(undefined);
             // Update with extended info if provided
             if (birthDate || birthPlace || deathDate || deathPlace || notes || refn || question
-                || photo || nameVariants.length > 0) {
+                || photo || story || nameVariants.length > 0) {
                 DataManager.updatePerson(newPerson.id, {
                     birthDate,
                     birthPlace,
@@ -857,7 +942,8 @@ export const personModalMethods = uiModule({
                     nameVariants,
                     refn,
                     question,
-                    photo
+                    photo,
+                    story
                 });
             }
             // Register-style quick entry: "Jan Novák, blacksmith of Lipany".
@@ -963,11 +1049,14 @@ export const personModalMethods = uiModule({
         const occupation = (document.getElementById('input-occupation') as HTMLInputElement | null)?.value || '';
         const residence = (document.getElementById('input-residence') as HTMLInputElement | null)?.value || '';
 
+        const story = this.storySnapshot();
+
         return firstName !== s.firstName || lastName !== s.lastName || gender !== s.gender
             || birthDate !== s.birthDate || birthPlace !== s.birthPlace
             || deathDate !== s.deathDate || deathPlace !== s.deathPlace
             || notes !== s.notes || refn !== s.refn || question !== s.question
-            || occupation !== s.occupation || residence !== s.residence;
+            || occupation !== s.occupation || residence !== s.residence
+            || story.storyTitle !== s.storyTitle || story.storyText !== s.storyText;
     },
 
     /**

@@ -176,3 +176,50 @@ describe('godparentLeads', () => {
         expect(godparentLeads({ persons: {}, partnerships: {} })).toEqual([]);
     });
 });
+
+describe('wedding witnesses count too', () => {
+    /** A tree where the same name witnesses a wedding and stands at a baptism. */
+    function withWedding(witnesses: Partial<EventParticipant>[], ...people: Person[]): StromData {
+        const data = tree(...people);
+        const uid = toPartnershipId('u1');
+        data.partnerships = {
+            [uid]: {
+                id: uid,
+                person1Id: people[0].id,
+                person2Id: people[1].id,
+                childIds: [],
+                status: 'married',
+                participants: witnesses.map((x, i) => ({
+                    id: `wt_${i}`, role: 'witness' as const, ...x,
+                })),
+            },
+        } as StromData['partnerships'];
+        return data;
+    }
+
+    it('a witness at a wedding and a godparent at a baptism is one recurring name', () => {
+        const data = withWedding(
+            [{ name: 'Josef Dvořák' }],
+            person('a', 'Jan', 'Novak'),
+            person('b', 'Marie', 'Novakova'),
+            baptised(person('c', 'Petr', 'Novak'), [{ name: 'Josef Dvořák' }]),
+        );
+        const [lead] = recurringParticipants(data);
+        expect(lead.name).toBe('Josef Dvořák');
+        expect(lead.count).toBe(2);
+        expect(lead.subjects.map(s => s.name).sort()).toEqual(['Jan Novak', 'Petr Novak']);
+        // Two different people's records → worth mentioning.
+        expect(godparentLeads(data).map(l => l.name)).toEqual(['Josef Dvořák']);
+    });
+
+    it('one wedding is one appearance, not one per spouse', () => {
+        const data = withWedding(
+            [{ name: 'Josef Dvořák' }],
+            person('a', 'Jan', 'Novak'),
+            person('b', 'Marie', 'Novakova'),
+        );
+        // Counting the union under both spouses would make a lone wedding look
+        // like a pattern across two people.
+        expect(recurringParticipants(data)).toEqual([]);
+    });
+});

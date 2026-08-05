@@ -14,6 +14,33 @@ export const SELECTABLE_EVENT_TYPES: LifeEventType[] = [
 ];
 
 /**
+ * Event types where a register names people besides the subject.
+ *
+ * Parish books record witnesses for the sacramental and legal acts —
+ * godparents at a baptism, witnesses at a wedding, the people who attended a
+ * burial or reported a death. Nobody ever witnessed a change of address or a
+ * change of trade, so offering the field on residence, occupation, schooling
+ * or emigration only adds a control that is never filled in.
+ *
+ * 'custom' stays in: it carries whatever the user (or the GEDCOM importer,
+ * which files stray godparents under a "Birth record" event) puts there.
+ */
+const PARTICIPANT_EVENT_TYPES = new Set<LifeEventType>([
+    'birth', 'death', 'baptism', 'burial', 'custom',
+]);
+
+/**
+ * Whether to offer the godparents/witnesses field for an event.
+ *
+ * An event that already names someone always shows them — hiding recorded
+ * data because the type does not usually carry it would lose it silently on
+ * the next save.
+ */
+export function eventTakesParticipants(type: LifeEventType, hasParticipants = false): boolean {
+    return hasParticipants || PARTICIPANT_EVENT_TYPES.has(type);
+}
+
+/**
  * Chronological order by year (flex-date aware). Undated events sort last;
  * ties break by id for a stable order.
  */
