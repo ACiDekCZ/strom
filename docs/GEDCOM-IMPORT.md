@@ -122,6 +122,13 @@ Write the fact alone — "blacksmith", not "worked in Kladno as a blacksmith".
 Strom shows this value wherever the event appears, and exports it back on the
 tag line. A subordinate `NOTE` instead would import as an event with no subject.
 
+A `2 NOTE` written *underneath* one of these is read, but the model has a single
+field here, so the value and the remark are joined. Strom splits them apart
+again on export — the fact on the tag line, the remark back under `2 NOTE` —
+which means the file survives a round-trip unchanged. A remark that belongs to
+the person rather than to the fact still reads better as a `1 NOTE` on the
+person.
+
 ### Anything else
 
 `1 EVEN` with a `2 TYPE` label becomes a custom event keeping that label:
@@ -180,19 +187,21 @@ sets it in the family book after the facts.
 2 TYPE vypraveni
 2 TITL Nemanželský syn z čp. 22
 2 STAT hotovo
-2 TEXT František se narodil 5. května 1863 v Lučici jako
-3 CONC nemanželský syn Anny Krepčíkové.
+2 TEXT František se narodil 5. května 1863 v Lučici jako nemanžel
+3 CONC ský syn Anny Krepčíkové.
 3 CONT
 3 CONT Otec není v matrice uveden.
-2 DATA
-3 TEXT BIRT 5 MAY 1863 [M-04]
+2 DATA BIRT 5 MAY 1863 [M-04]
 2 NOTE Odvozeno z matriky, není to pramen.
 ```
 
 - `TEXT` is the prose. `CONC` joins, `CONT` breaks a line — a blank line
   between paragraphs is an empty `CONT`.
-- `DATA` > `TEXT` lists the facts it leans on; `NOTE` is the author's caveat.
-  Both are kept and shown read-only, and neither is printed in the book.
+- `DATA` carries one fact the text leans on, **on the tag's own line**, as many
+  times as needed; `NOTE` is the author's caveat. Both are kept and shown
+  read-only, and neither is printed in the book. `2 DATA` with a `3 TEXT`
+  beneath it is read too, for files written the other way round, but Strom's
+  own export uses the shape above.
 - `STAT` is `navrh` or `hotovo`. Strom carries it through untouched but does
   not act on it — the book prints no draft badge.
 - Text wrapped in double asterisks is set in bold in the book.
@@ -212,14 +221,26 @@ only by case, accents or punctuation, and it can carry coordinates:
 ## What Strom does with the rest
 
 Facts with no field of their own are **not dropped**. They join the person's or
-the couple's note as a labelled line — "Banns: 18. 4. 1886 · Lučice":
+the couple's note as a labelled line — "Banns: 18. 4. 1886 · Lučice".
 
-`BLES` `RETI` `CAST` `DSCR` `IDNO` `NCHI` `NMR` `PROP` `SSN` `FACT` `ALIA`
-`MARB` `MARC` `MARL` `MARS` `ANUL` `DIVF`
+**Which record a tag hangs on decides whether it is read at all.** Each of
+these is understood in one place only:
 
-Only the bookkeeping of the program that wrote the file is discarded, and even
-that is reported in the import summary rather than passed over in silence:
-`ANCI` `DESI` `RFN` `AFN` `RESN`, plus platform sync ids.
+| Under | Tags |
+|---|---|
+| `INDI` | `BLES` `RETI` `CAST` `DSCR` `IDNO` `NCHI` `NMR` `PROP` `SSN` `FACT` `ALIA` |
+| `FAM` | `MARB` `MARC` `MARL` `MARS` `ANUL` `DIVF` `CENS` `NCHI` |
+
+So write the banns as `MARB` **inside the family**: on a person the tag is not
+recognised and the fact is lost. The same holds for the events above — `MARR`
+and `DIV` are read on a `FAM`, `OCCU`, `RESI` and `RELI` on an `INDI`. If you
+are marrying someone whose spouse is not in the data, do not give them a
+`MARR`; write an `EVEN` with a `TYPE` instead.
+
+Discarded outright is the bookkeeping of the program that wrote the file:
+`ANCI` `DESI` `RFN` `AFN` `RESN` are reported in the import summary, while the
+platform sync ids (`RIN`, `_UID`, `CHAN`, `_UPD` and their kind) are skipped
+without a word — they say nothing about a person and would only be noise.
 
 **Anything else is reported as an unsupported tag.** If your file lists tags
 there, they reached Strom and were not understood — the summary is the place to

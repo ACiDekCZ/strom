@@ -38,9 +38,20 @@ const GED = `0 HEAD
 2 _WITN Marie Dvořáková
 2 RELI Římskokatolické
 1 OCCU mistr obuvnický
+2 NOTE Tovaryšem od roku 1880.
 1 EVEN
 2 TYPE Požár stavení
 2 DATE NOV 1905
+1 _STORY
+2 TYPE vypraveni
+2 TITL Nemanželský syn z čp. 22
+2 STAT hotovo
+2 TEXT František se narodil 5. května 1863 v Lučici jako nemanžel
+3 CONC ský syn Anny Krepčíkové.
+3 CONT
+3 CONT Otec není v matrice uveden.
+2 DATA BIRT 5 MAY 1863 [M-04]
+2 NOTE Odvozeno z matriky, není to pramen.
 0 @I2@ INDI
 1 NAME Anna /Kadeřábková/
 1 SEX U
@@ -89,7 +100,24 @@ describe('the published GEDCOM import contract', () => {
 
     it('takes a value that rides on the tag line as the fact itself', () => {
         const trade = (groom(imported()).events ?? []).find(e => e.type === 'occupation');
-        expect(trade?.note).toBe('mistr obuvnický');
+        // The fact first, then the remark written under it — one field here.
+        expect(trade?.note).toBe('mistr obuvnický\nTovaryšem od roku 1880.');
+    });
+
+    it('reads a narrative whole: prose, the facts it leans on, the caveat', () => {
+        const story = groom(imported()).story!;
+        expect(story.title).toBe('Nemanželský syn z čp. 22');
+        expect(story.status).toBe('final');
+        // CONC joins with nothing between, CONT breaks a line, an empty CONT is
+        // the blank line between paragraphs.
+        // Note where the CONC falls: mid-word, because it joins with NOTHING.
+        // Splitting at a space would have produced "jakonemanželský" — which is
+        // exactly the mistake the document warns about, and the example in it
+        // used to make.
+        expect(story.text).toBe('František se narodil 5. května 1863 v Lučici'
+            + ' jako nemanželský syn Anny Krepčíkové.\n\nOtec není v matrice uveden.');
+        expect(story.facts).toEqual(['BIRT 5 MAY 1863 [M-04]']);
+        expect(story.note).toBe('Odvozeno z matriky, není to pramen.');
     });
 
     it('keeps a generic EVEN under the label its TYPE gives it', () => {
@@ -116,15 +144,54 @@ describe('the published GEDCOM import contract', () => {
     it('survives the round-trip the document tells exporters to check', () => {
         const once = imported();
         const twice = convertToStrom(parseGedcom(exportToGedcom(once).content)).data;
+
+        // Counts alone let a lost note through once. Compare the content.
         expect(Object.keys(twice.persons)).toHaveLength(Object.keys(once.persons).length);
         expect(groom(twice).birthDate).toBe(groom(once).birthDate);
-        expect((groom(twice).events ?? []).find(e => e.type === 'occupation')?.note)
-            .toBe('mistr obuvnický');
+        expect(groom(twice).notes).toBe(groom(once).notes);
+        expect(union(twice).note).toBe(union(once).note);
+        expect(groom(twice).story).toEqual(groom(once).story);
+
+        const trade = (e: Person) => (e.events ?? []).find(x => x.type === 'occupation')?.note;
+        expect(trade(groom(twice))).toBe(trade(groom(once)));
     });
 
-    it('writes no physical line longer than 255 bytes', () => {
+    it('stays GEDCOM even when every free-text field carries a line break', () => {
+        // The structure of the file IS its line structure. A newline written
+        // into a value emits a physical line with nothing in front of it, and
+        // every reader loses the rest of that record. Fields a person types
+        // into are where those newlines come from.
+        const data = imported();
+        const person = groom(data);
+        person.notes = 'první řádek\ndruhý řádek';
+        person.refn = 'K-04\nnavíc';
+        person.birthPlace = 'Lučice\nu Chrudimi';
+        person.events = [
+            { id: 'x1', type: 'occupation', note: 'kovář\nod roku 1880' },
+            { id: 'x2', type: 'custom', customLabel: 'Požár\nstavení', place: 'Lučice\n46' },
+        ];
+        union(data).note = 'poznámka\nna dvou řádcích';
+
+        const ged = exportToGedcom(data).content;
+        for (const line of ged.split('\n')) {
+            if (line.length === 0) continue;
+            expect(line, 'line without a level').toMatch(/^\d+ /);
+        }
+        // …and the text is still there, not swallowed by the repair.
+        const back = convertToStrom(parseGedcom(ged)).data;
+        expect(groom(back).notes).toContain('druhý řádek');
+        expect((groom(back).events ?? []).find(e => e.type === 'occupation')?.note)
+            .toContain('od roku 1880');
+    });
+
+    it('writes GEDCOM: every line carries a level, and none exceeds 255 bytes', () => {
+        // A newline written straight onto a tag line produced a physical line
+        // with no level in front of it. The file stopped being GEDCOM, and the
+        // text after the break was gone on the next import.
         const ged = exportToGedcom(imported()).content;
         for (const line of ged.split('\n')) {
+            if (line.length === 0) continue;
+            expect(line, 'line without a level').toMatch(/^\d+ /);
             expect(Buffer.byteLength(line, 'utf8'), line).toBeLessThanOrEqual(255);
         }
     });

@@ -157,8 +157,16 @@ function formatGedcomName(firstName: string, lastName: string): string {
  * Escape special characters in GEDCOM text
  */
 function escapeGedcomText(text: string): string {
-    // GEDCOM doesn't have many escape sequences, but we should handle @ signs
-    return text.replace(/@/g, '@@');
+    // GEDCOM doesn't have many escape sequences, but we should handle @ signs.
+    //
+    // A line break is the dangerous one. The structure of the file IS the line
+    // structure: every physical line must start with a level. A newline written
+    // into a value emits a line with nothing in front of it, so the file stops
+    // being GEDCOM and every reader loses the rest of that record. Callers that
+    // may legitimately span lines go through pushLongValue, which turns each
+    // break into a CONT; for everything else a break is an accident of typing
+    // and becomes a space.
+    return text.replace(/[\r\n]+/g, ' ').replace(/@/g, '@@');
 }
 
 /**
@@ -302,7 +310,7 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
         if (!ref) return;
         lines.push(`${level} SOUR ${ref}`);
         const src = data.sources?.[srcId];
-        if (src?.reference) lines.push(`${level + 1} PAGE ${escapeGedcomText(src.reference)}`);
+        if (src?.reference) pushLongValue(lines, level + 1, 'PAGE', src.reference);
         if (src?.quality !== undefined) lines.push(`${level + 1} QUAY ${src.quality}`);
     };
 
@@ -415,10 +423,22 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
             if (tag && eventValueIsOnTag(event.type) && event.note) {
                 // The note IS the fact for these — GEDCOM puts it on the tag
                 // line, not in a subordinate NOTE.
-                lines.push(`1 ${tag} ${escapeGedcomText(event.note)}`);
+                //
+                // Import glues the tag's value and any subordinate NOTE into
+                // this one field, so split it back the way it came: the first
+                // line is the fact, the rest is the remark about it. Writing
+                // the whole field on the tag line emitted the newline verbatim,
+                // which is a physical line with no level in front of it — the
+                // file stopped being GEDCOM and the remark was gone after one
+                // more pass. pushLongValue also chunks a long value into CONC
+                // instead of blowing the 255-byte limit.
+                const [fact, ...rest] = event.note.split('\n');
+                pushLongValue(lines, 1, tag, fact);
+                const remark = rest.join('\n').trim();
+                if (remark) pushNote(lines, 2, remark);
             } else {
                 lines.push(`1 ${tag ?? 'EVEN'}`);
-                if (typeLabel) lines.push(`2 TYPE ${escapeGedcomText(typeLabel)}`);
+                if (typeLabel) pushLongValue(lines, 2, 'TYPE', typeLabel);
             }
             if (event.date) {
                 const date = formatGedcomDate(event.date);

@@ -1115,6 +1115,17 @@ export function parseGedcom(content: string): ParsedGedcom {
                         case 'DATA': currentStory.facts.push(value); break;
                         case 'NOTE': currentStory.note = value; break;
                     }
+                } else if (level === 3 && tag === 'TEXT' && currentStorySubTag === 'DATA') {
+                    // `2 DATA` / `3 TEXT <fact>` — the shape GEDCOM uses for a
+                    // source's DATA, and the one a writer naturally reaches for.
+                    // Strom's own export puts the fact on the DATA line, so the
+                    // empty DATA pushed above is filled rather than doubled.
+                    const facts = currentStory.facts;
+                    if (facts.length > 0 && facts[facts.length - 1] === '') {
+                        facts[facts.length - 1] = value;
+                    } else {
+                        facts.push(value);
+                    }
                 } else if (level === 3 && (tag === 'CONC' || tag === 'CONT')) {
                     const glue = tag === 'CONT' ? '\n' + value : value;
                     switch (currentStorySubTag) {
@@ -1214,6 +1225,14 @@ export function parseGedcom(content: string): ParsedGedcom {
                         } else if (tag === 'NOTE') {
                             currentEvent.note = currentEvent.note
                                 ? `${currentEvent.note}\n${value}` : value;
+                        } else if (tag === 'CONC' || tag === 'CONT') {
+                            // The value of a fact that rides on its own tag line
+                            // (`1 OCCU …`) continues here when it is long or has
+                            // more than one line. Without this the tail of a
+                            // chunked value was read as nothing and vanished on
+                            // the next import.
+                            currentEvent.note = (currentEvent.note ?? '')
+                                + (tag === 'CONT' ? '\n' : '') + value;
                         } else if (tag === 'EMAIL' && value) {
                             // MyHeritage keeps contact e-mail under RESI.
                             const line = strings.gedcomNotes.email(value);
