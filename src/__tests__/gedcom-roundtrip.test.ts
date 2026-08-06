@@ -299,17 +299,18 @@ describe('GEDCOM fidelity fixes (audit 2026-07)', () => {
     });
 
     it('counts and summarizes dropped tags (dead counter fixed)', () => {
-        // TITL used to stand in here as the unsupported tag; it is a title now,
-        // so the counter is exercised with tags we genuinely do not model.
+        // TITL stood in here once and DSCR after it; both are carried now, so
+        // the counter is exercised with tags we genuinely keep out — a nickname
+        // the model has no place for, and one of the file's own record numbers.
         const ged = GED([
             '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M',
-            '1 DSCR tall', '1 NICK Honza', '1 DSCR bearded',
+            '1 NICK Honza', '1 RFN 12345', '1 NICK Jenda',
             '0 @N1@ NOTE some floating note',
         ].join('\n'));
         const r = conv(ged);
         expect(r.stats.unsupportedTags).toBe(4);
-        expect(r.stats.droppedTagSummary).toContain('DSCR ×2');
-        expect(r.stats.droppedTagSummary).toContain('NICK ×1');
+        expect(r.stats.droppedTagSummary).toContain('NICK ×2');
+        expect(r.stats.droppedTagSummary).toContain('RFN ×1');
     });
 
     it('infers gender from the family role for SEX U, and counts it', () => {
@@ -885,6 +886,83 @@ describe('the standard events a register actually keeps', () => {
         expect(result.stats.droppedTagSummary).toBeFalsy();
         const types = (Object.values(result.data.persons)[0].events ?? []).map(e => e.type);
         expect(types.sort()).toEqual(['baptism', 'education']);
+    });
+});
+
+describe('standard facts with no field of their own are kept as notes', () => {
+    /**
+     * Giving each of these a field or an event would mean carrying a subsystem
+     * for facts that turn up once in a hundred files; dropping them means a
+     * GEDCOM from another program arrives quietly poorer than it left. A
+     * labelled line in the note keeps everything and costs nothing.
+     */
+    const GED = `0 HEAD
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Jan /Novák/
+1 SEX M
+1 FAMS @F1@
+1 PROP Grunt čp. 22 v Lučici
+1 CAST sedlák
+1 RETI
+2 DATE 1925
+2 PLAC Lučice
+1 FACT
+2 TYPE Vojenská hodnost
+2 NOTE desátník
+1 NOTE Volná poznámka ze souboru.
+0 @I2@ INDI
+1 NAME Marie /Nová/
+1 SEX F
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 3 MAY 1886
+1 MARB
+2 DATE 18 APR 1886
+2 PLAC Lučice
+1 ANUL
+0 TRLR
+`;
+
+    it('reports none of them as unsupported', () => {
+        expect(convertToStrom(parseGedcom(GED)).stats.droppedTagSummary).toBeFalsy();
+    });
+
+    it('labels each fact and keeps its value, date and place', () => {
+        const data = importGed(GED);
+        const jan = Object.values(data.persons).find(p => p.firstName === 'Jan')!;
+        expect(jan.notes).toContain('Grunt čp. 22 v Lučici');
+        expect(jan.notes).toContain('sedlák');
+        // A dated fact keeps both halves.
+        expect(jan.notes).toMatch(/1925.*Lučice/);
+        // TYPE names what a generic FACT is about; a NOTE under it joins in.
+        expect(jan.notes).toContain('Vojenská hodnost');
+        expect(jan.notes).toContain('desátník');
+        // The file's own free-text note is not displaced by any of it.
+        expect(jan.notes).toContain('Volná poznámka ze souboru.');
+    });
+
+    it('puts what was recorded about the couple on the couple', () => {
+        const union = Object.values(importGed(GED).partnerships)[0];
+        expect(union.note).toMatch(/18|4/);          // the banns date, formatted
+        expect(union.note).toContain('Lučice');
+        // A fact with nothing but its own tag still earns its line: the
+        // register said it happened, and that is the fact.
+        expect(union.note!.split('\n').some(l => l.trim().length > 0
+            && !l.includes('Lučice'))).toBe(true);
+    });
+
+    it('leaves the platform bookkeeping alone', () => {
+        // ANCI/DESI/RFN/AFN/RESN belong to the program that wrote the file, not
+        // to anything a register said — they stay reported, not folded in.
+        const ged = `0 HEAD\n1 CHAR UTF-8\n0 @I1@ INDI\n1 NAME A /B/\n`
+            + `1 RFN 12345\n1 RESN confidential\n0 TRLR\n`;
+        const result = convertToStrom(parseGedcom(ged));
+        expect(result.stats.droppedTagSummary).toContain('RFN');
+        expect(Object.values(result.data.persons)[0].notes ?? '').not.toContain('12345');
     });
 });
 

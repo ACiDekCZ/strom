@@ -1081,6 +1081,32 @@ const stringsEN = {
     // Notes the GEDCOM importer writes into the data itself (persisted). Built
     // in the app's CURRENT language at import time — English source above.
     gedcomNotes: {
+        /**
+         * Labels for standard GEDCOM facts the model has no field for. They are
+         * folded into the person's or the couple's note rather than dropped —
+         * see foldFactIntoNote in the parser.
+         */
+        factLabels: {
+            BLES: 'Blessing',
+            RETI: 'Retirement',
+            CAST: 'Social standing',
+            DSCR: 'Description',
+            IDNO: 'Identification number',
+            NCHI: 'Number of children',
+            NMR: 'Number of marriages',
+            PROP: 'Property',
+            SSN: 'Social security number',
+            FACT: 'Fact',
+            ALIA: 'Also known as',
+            MARB: 'Banns',
+            MARC: 'Marriage contract',
+            MARL: 'Marriage licence',
+            MARS: 'Marriage settlement',
+            ANUL: 'Annulment',
+            DIVF: 'Divorce filed',
+            CENS: 'Census',
+            EVEN: 'Event',
+        } as Record<string, string>,
         census: 'Census',
         genericEvent: 'Event',
         altBirth: 'Birth (alternative record)',
@@ -2926,6 +2952,32 @@ const stringsCZ: StringsType = {
     // Poznámky, které importér GEDCOM zapisuje přímo do dat (uloží se). Sestaveny
     // v AKTUÁLNÍM jazyce aplikace v okamžiku importu.
     gedcomNotes: {
+        /**
+         * Labels for standard GEDCOM facts the model has no field for. They are
+         * folded into the person's or the couple's note rather than dropped —
+         * see foldFactIntoNote in the parser.
+         */
+        factLabels: {
+            BLES: 'Požehnání',
+            RETI: 'Odchod na odpočinek',
+            CAST: 'Společenské postavení',
+            DSCR: 'Popis',
+            IDNO: 'Identifikační číslo',
+            NCHI: 'Počet dětí',
+            NMR: 'Počet sňatků',
+            PROP: 'Majetek',
+            SSN: 'Číslo pojištěnce',
+            FACT: 'Údaj',
+            ALIA: 'Také uváděn jako',
+            MARB: 'Ohlášky',
+            MARC: 'Svatební smlouva',
+            MARL: 'Povolení k sňatku',
+            MARS: 'Svatební smlouva o majetku',
+            ANUL: 'Prohlášení manželství za neplatné',
+            DIVF: 'Podán návrh na rozvod',
+            CENS: 'Sčítání lidu',
+            EVEN: 'Událost',
+        } as Record<string, string>,
         census: 'Sčítání lidu',
         genericEvent: 'Událost',
         altBirth: 'Narození (alternativní záznam)',
@@ -4732,6 +4784,32 @@ const stringsDE: StringsType = {
 
     // Notes the GEDCOM importer writes into the data itself (persisted).
     gedcomNotes: {
+        /**
+         * Labels for standard GEDCOM facts the model has no field for. They are
+         * folded into the person's or the couple's note rather than dropped —
+         * see foldFactIntoNote in the parser.
+         */
+        factLabels: {
+            BLES: 'Segnung',
+            RETI: 'Ruhestand',
+            CAST: 'Stand',
+            DSCR: 'Beschreibung',
+            IDNO: 'Ausweisnummer',
+            NCHI: 'Kinderzahl',
+            NMR: 'Anzahl der Ehen',
+            PROP: 'Besitz',
+            SSN: 'Sozialversicherungsnummer',
+            FACT: 'Angabe',
+            ALIA: 'Auch bekannt als',
+            MARB: 'Aufgebot',
+            MARC: 'Ehevertrag',
+            MARL: 'Heiratserlaubnis',
+            MARS: 'Ehevertrag (Vermögen)',
+            ANUL: 'Annullierung',
+            DIVF: 'Scheidung eingereicht',
+            CENS: 'Volkszählung',
+            EVEN: 'Ereignis',
+        } as Record<string, string>,
         census: 'Volkszählung',
         genericEvent: 'Ereignis',
         altBirth: 'Geburt (alternativer Eintrag)',

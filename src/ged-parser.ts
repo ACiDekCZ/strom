@@ -38,7 +38,7 @@ import {
     generateSourceId,
     PlaceGeo
 } from './types';
-import { dateSortKey } from './dates';
+import { dateSortKey, formatFlexDate } from './dates';
 import { placeKey } from './places';
 import { eventValueIsOnTag } from './events';
 import { strings } from './strings';
@@ -101,6 +101,58 @@ const EVENT_TAG_TO_TYPE: Record<string, LifeEventType> = {
     CHRA: 'baptism',
     GRAD: 'education',
 };
+
+/**
+ * Standard GEDCOM facts the model has no field for.
+ *
+ * They are folded into the person's or the couple's note, labelled, instead of
+ * being dropped. Giving each its own field or event would mean carrying a
+ * subsystem for facts that appear once in a hundred files; losing them means a
+ * GEDCOM from another program arrives quietly poorer than it left. A labelled
+ * line in the note is the honest middle: nothing disappears, and it is written
+ * where a reader looks for context.
+ *
+ * Deliberately absent: ANCI, DESI, RFN, AFN, RESN and the platform sync ids.
+ * Those are bookkeeping of the program that wrote the file, not something a
+ * register ever said about a person.
+ */
+const NOTED_INDI_TAGS = new Set(['BLES', 'RETI', 'CAST', 'DSCR', 'IDNO', 'NCHI',
+    'NMR', 'PROP', 'SSN', 'FACT', 'ALIA']);
+const NOTED_FAM_TAGS = new Set(['MARB', 'MARC', 'MARL', 'MARS', 'ANUL', 'DIVF',
+    'CENS', 'EVEN', 'NCHI']);
+
+/** A fact being read: its value on the tag line, its date and place below it. */
+interface RawNoteFact {
+    tag: string;
+    value: string;
+    date: string;
+    place: string;
+}
+
+/**
+ * "Banns: 3. 5. 1886 · Lučice" — the label in the app's language, then whatever
+ * the file gave. A fact with nothing at all still earns its line: the register
+ * said it happened, and that is the fact.
+ */
+function factToNoteLine(fact: RawNoteFact): string {
+    const label = strings.gedcomNotes.factLabels[fact.tag] ?? fact.tag;
+    const parts = [fact.value, formatFlexDate(fact.date), fact.place]
+        .map(x => x?.trim()).filter((x): x is string => !!x);
+    return parts.length > 0 ? `${label}: ${parts.join(' · ')}` : label;
+}
+
+/**
+ * A level-2 line under such a fact. TYPE names what a generic FACT/EVEN is
+ * about, so it reads better as the value than the bare word "Fact"; a NOTE
+ * written under it joins the same line rather than starting a stray one.
+ */
+function attachToFact(fact: RawNoteFact, tag: string, value: string): void {
+    if (tag === 'DATE') fact.date = parseGedcomDate(value);
+    else if (tag === 'PLAC') fact.place = value;
+    else if ((tag === 'TYPE' || tag === 'NOTE') && value) {
+        fact.value = fact.value ? `${fact.value} · ${value}` : value;
+    }
+}
 
 /** Raw OBJE media object under an individual. */
 interface RawMedia {
@@ -200,6 +252,8 @@ interface GedcomIndividual {
     fams: string[];  // Families as spouse
     /** Level-1 ASSO on the person: associations outside any event. */
     assos: RawParticipant[];
+    /** Standard facts with no field of their own — folded into the note. */
+    noteFacts: RawNoteFact[];
     /** The person's narrative (1 _STORY), when the file carries one. */
     story?: RawStory;
     /**
@@ -241,6 +295,8 @@ interface GedcomFamily {
      */
     unionEvents: { type: 'marriage' | 'divorce'; date: string }[];
     note: string;
+    /** Standard facts with no field of their own — folded into the note. */
+    noteFacts: RawNoteFact[];
     /** 1 SOUR citations on the family (marriage record etc.). */
     sourceRefs: string[];
     /** Witnesses named under 1 MARR (2 ASSO / 2 _WITN). */
@@ -778,6 +834,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     deathSeen: false,
                     fams: [],
                     assos: [],
+                    noteFacts: [],
                     birthParticipants: [],
                     deathParticipants: [],
                     famcLinks: []
@@ -812,7 +869,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     note: '',
                     engagementDate: '',
                     sourceRefs: [],
-                    marriageParticipants: []
+                    marriageParticipants: [],
+                    noteFacts: []
                 };
                 currentType = 'FAM';
                 currentSource = null;
@@ -990,6 +1048,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 };
                                 indi.events.push(ev);
                                 currentEvent = ev;
+                            } else if (NOTED_INDI_TAGS.has(tag)) {
+                                // No field of its own, but the register said it:
+                                // keep it as a labelled line in the note.
+                                indi.noteFacts.push({ tag, value, date: '', place: '' });
                             } else if (!KNOWN_INDI_TAGS.has(tag) && tag !== 'BIRT' && tag !== 'DEAT'
                                 && !IGNORED_BOOKKEEPING_TAGS.has(tag)) {
                                 drop(tag);
@@ -1032,7 +1094,11 @@ export function parseGedcom(content: string): ParsedGedcom {
                             fam.engagementDate = value === 'Y' ? '?' : '';
                             break;
                         default:
-                            if (!KNOWN_FAM_TAGS.has(tag) && !IGNORED_BOOKKEEPING_TAGS.has(tag)) drop(tag);
+                            if (NOTED_FAM_TAGS.has(tag)) {
+                                fam.noteFacts.push({ tag, value, date: '', place: '' });
+                            } else if (!KNOWN_FAM_TAGS.has(tag) && !IGNORED_BOOKKEEPING_TAGS.has(tag)) {
+                                drop(tag);
+                            }
                             break;
                     }
                 }
@@ -1127,6 +1193,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                         else if (tag === 'FILE') currentMedia.file = value;
                         else if (tag === '_STROM_KIND') currentMedia.stromKind = value;
                         else if ((tag === '_PRIM' || tag === '_PERSONALPHOTO') && value === 'Y') currentMedia.primary = true;
+                    } else if (NOTED_INDI_TAGS.has(currentSubTag ?? '') && indi.noteFacts.length > 0) {
+                        attachToFact(indi.noteFacts[indi.noteFacts.length - 1], tag, value);
                     } else if (currentSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
                         // Citation page: standard place for a source reference.
                         if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
@@ -1197,6 +1265,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     } else if (currentSubTag === 'NOTE') {
                         if (tag === 'CONT') fam.note += '\n' + value;
                         else if (tag === 'CONC') fam.note += value;
+                    } else if (NOTED_FAM_TAGS.has(currentSubTag ?? '') && fam.noteFacts.length > 0) {
+                        attachToFact(fam.noteFacts[fam.noteFacts.length - 1], tag, value);
                     }
                 }
             } else if (level === 3 && currentFactSubTag
@@ -1365,7 +1435,11 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         // liveness heuristic would treat the person as possibly living.
         if (indi.deceased && !indi.deathDate) person.isDeceased = true;
         if (indi.deathPlace) person.deathPlace = indi.deathPlace;
-        if (indi.notes) person.notes = indi.notes;
+        // Facts with no field of their own join the note, labelled, ahead of
+        // whatever free text the file wrote (see NOTED_INDI_TAGS).
+        const factLines = indi.noteFacts.map(factToNoteLine);
+        const allNotes = [...factLines, ...(indi.notes ? [indi.notes] : [])];
+        if (allNotes.length > 0) person.notes = allNotes.join('\n');
         if (indi.refn) person.refn = indi.refn;
         // Other spellings from the file, kept as written.
         const variants = indi.nameVariants.map(v => v.replace(/\//g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
@@ -1592,6 +1666,13 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
         }
 
+        // Banns, a marriage contract, an annulment: recorded about the couple,
+        // with no field of their own (see NOTED_FAM_TAGS).
+        for (const fact of fam.noteFacts) {
+            const line = factToNoteLine(fact);
+            partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
+        }
+
         const famRefs = mapRefs(fam.sourceRefs);
         if (famRefs.length > 0) partnership.sourceIds = famRefs;
 
@@ -1723,6 +1804,13 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
 
         if (fam.engagementDate && fam.engagementDate !== '?') {
             const line = strings.gedcomNotes.engagement(fam.engagementDate);
+            partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
+        }
+
+        // Banns, a marriage contract, an annulment: recorded about the couple,
+        // with no field of their own (see NOTED_FAM_TAGS).
+        for (const fact of fam.noteFacts) {
+            const line = factToNoteLine(fact);
             partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
         }
 
