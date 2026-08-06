@@ -10,7 +10,7 @@ import { yearOf } from './dates.js';
 /** Event types a user can add (birth/death excluded — they are first-class). */
 export const SELECTABLE_EVENT_TYPES: LifeEventType[] = [
     'baptism', 'occupation', 'residence', 'military',
-    'emigration', 'immigration', 'education', 'burial', 'custom',
+    'emigration', 'immigration', 'education', 'religion', 'burial', 'custom',
 ];
 
 /**

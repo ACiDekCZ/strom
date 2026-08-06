@@ -232,6 +232,8 @@ const stringsEN = {
     events: {
         occupationLabel: 'Occupation / trade',
         occupationHint: 'The trade itself — "blacksmith", not "worked in Kladno as a blacksmith". It goes out as the occupation in GEDCOM.',
+        religionLabel: 'Denomination',
+        religionHint: 'The denomination itself — "Roman Catholic", "Lutheran". A conversion is an event of its own, so record each one where it happened.',
         participants: 'Godparents & witnesses',
         participantsHint: 'Who else the record names. A godparent who keeps turning up is usually a relative.',
         addParticipant: '+ Add',
@@ -272,6 +274,7 @@ const stringsEN = {
             emigration: 'Emigration',
             immigration: 'Immigration',
             education: 'Education',
+            religion: 'Religion',
             custom: 'Custom'
         }
     },
@@ -2057,6 +2060,8 @@ const stringsCZ: StringsType = {
     events: {
         occupationLabel: 'Povolání / řemeslo',
         occupationHint: 'Jen to řemeslo — „kovář“, ne „pracoval v Kladně jako kovář“. Odchází to jako povolání v GEDCOMu.',
+        religionLabel: 'Vyznání',
+        religionHint: 'Jen samo vyznání — „římskokatolické“, „evangelické augsburského vyznání“. Přestup je samostatná událost, zapisujte ho tam, kde k němu došlo.',
         participants: 'Kmotři a svědci',
         participantsHint: 'Koho ještě zápis jmenuje. Kmotr, který se opakuje, bývá příbuzný.',
         addParticipant: '+ Přidat',
@@ -2097,6 +2102,7 @@ const stringsCZ: StringsType = {
             emigration: 'Emigrace',
             immigration: 'Imigrace',
             education: 'Vzdělání',
+            religion: 'Vyznání',
             custom: 'Vlastní'
         }
     },
@@ -3870,6 +3876,8 @@ const stringsDE: StringsType = {
     events: {
         occupationLabel: 'Beruf / Gewerbe',
         occupationHint: 'Nur das Gewerbe selbst — „Schmied", nicht „arbeitete in Kladno als Schmied". Es wird als Beruf in GEDCOM ausgegeben.',
+        religionLabel: 'Konfession',
+        religionHint: 'Nur die Konfession selbst — „römisch-katholisch", „evangelisch A.B.". Ein Übertritt ist ein eigenes Ereignis; tragen Sie ihn dort ein, wo er stattfand.',
         participants: 'Paten & Zeugen',
         participantsHint: 'Wen der Eintrag sonst noch nennt. Ein Pate, der immer wieder auftaucht, ist meist ein Verwandter.',
         addParticipant: '+ Hinzufügen',
@@ -3910,6 +3918,7 @@ const stringsDE: StringsType = {
             emigration: 'Auswanderung',
             immigration: 'Einwanderung',
             education: 'Ausbildung',
+            religion: 'Konfession',
             custom: 'Eigenes'
         }
     },

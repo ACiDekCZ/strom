@@ -28,6 +28,17 @@ function esc(text: string): string {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/**
+ * The note of an event whose note IS its subject, not a remark about it: the
+ * trade of an occupation, the denomination of a religion. Both go out as the
+ * value of their own GEDCOM tag, and both leave the row saying only
+ * "Occupation" / "Religion" if they are not shown.
+ */
+function eventOwnSubject(event: LifeEvent): string | undefined {
+    return event.type === 'occupation' || event.type === 'religion'
+        ? event.note : undefined;
+}
+
 /** Display label for an event (custom label when present, else the type name). */
 function eventTypeLabel(event: LifeEvent): string {
     if (event.type === 'custom' && event.customLabel) return event.customLabel;
@@ -82,8 +93,7 @@ export const personEventsMethods = uiModule({
         const events = sortLifeEvents(person.events ?? []);
         for (const event of events) {
             rows.push(this.eventRowHtml(eventTypeLabel(event),
-                eventMeta(event.date, event.place,
-                    event.type === 'occupation' ? event.note : undefined),
+                eventMeta(event.date, event.place, eventOwnSubject(event)),
                 locked ? null : event.id,
                 this.participantsSummary(event)));
         }
@@ -374,11 +384,19 @@ export const personEventsMethods = uiModule({
     updateEventNoteLabel(type: LifeEventType): void {
         const label = document.getElementById('event-note-label');
         const input = document.getElementById('input-event-note') as HTMLTextAreaElement | null;
-        const isOccupation = type === 'occupation';
-        if (label) label.textContent = isOccupation ? strings.events.occupationLabel : strings.events.note;
+        // For these two the field is not a remark about the event, it IS the
+        // event — the trade, the denomination — and goes out as the GEDCOM
+        // tag's own value. Labelling it "Note" invited prose that then became
+        // the man's trade in every other program.
+        const own = type === 'occupation'
+            ? { label: strings.events.occupationLabel, hint: strings.events.occupationHint }
+            : type === 'religion'
+                ? { label: strings.events.religionLabel, hint: strings.events.religionHint }
+                : null;
+        if (label) label.textContent = own ? own.label : strings.events.note;
         if (input) {
-            input.placeholder = isOccupation ? strings.events.occupationHint : '';
-            input.rows = isOccupation ? 1 : 2;
+            input.placeholder = own ? own.hint : '';
+            input.rows = own ? 1 : 2;
         }
     },
 

@@ -33,7 +33,7 @@ export const SURNAME_GROUP_SEP = ' | ';
  */
 const EVENT_TYPE_TO_TAG: Partial<Record<LifeEventType, string>> = {
     baptism: 'BAPM', burial: 'BURI', occupation: 'OCCU', residence: 'RESI',
-    emigration: 'EMIG', immigration: 'IMMI', education: 'EDUC',
+    emigration: 'EMIG', immigration: 'IMMI', education: 'EDUC', religion: 'RELI',
 };
 
 /** RELA values for participant roles. Godparent/Witness are the conventional ones. */
@@ -407,8 +407,10 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
                     ? (event.customLabel || strings.gedcomNotes.genericEvent)
                     : strings.events.types[event.type];
             }
-            if (event.type === 'occupation' && event.note) {
-                lines.push(`1 OCCU ${escapeGedcomText(event.note)}`);
+            if ((event.type === 'occupation' || event.type === 'religion') && event.note) {
+                // The note IS the fact for these two — GEDCOM puts it on the
+                // tag line, not in a subordinate NOTE.
+                lines.push(`1 ${tag} ${escapeGedcomText(event.note)}`);
             } else {
                 lines.push(`1 ${tag ?? 'EVEN'}`);
                 if (typeLabel) lines.push(`2 TYPE ${escapeGedcomText(typeLabel)}`);
@@ -420,7 +422,7 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
             if (event.place) {
                 pushPlace(lines, 2, event.place, data.places);
             }
-            if (event.note && event.type !== 'occupation') {
+            if (event.note && event.type !== 'occupation' && event.type !== 'religion') {
                 pushNote(lines, 2, event.note);
             }
             // Godparents / witnesses. Someone in the tree goes out as ASSO

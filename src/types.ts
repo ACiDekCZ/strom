@@ -64,7 +64,7 @@ export type ParentChildRelType = 'biological' | 'adoptive' | 'step' | 'foster';
 export type LifeEventType =
     | 'birth' | 'death' | 'baptism' | 'burial' | 'occupation'
     | 'residence' | 'military' | 'emigration' | 'immigration'
-    | 'education' | 'custom';
+    | 'education' | 'religion' | 'custom';
 
 /**
  * A single life event. birth/death are represented by the first-class

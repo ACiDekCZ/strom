@@ -87,7 +87,7 @@ function toStory(raw: RawStory | undefined): Story | undefined {
 /** GEDCOM event tag <-> LifeEvent type. */
 const EVENT_TAG_TO_TYPE: Record<string, LifeEventType> = {
     BAPM: 'baptism', BURI: 'burial', OCCU: 'occupation', RESI: 'residence',
-    EMIG: 'emigration', IMMI: 'immigration', EDUC: 'education',
+    EMIG: 'emigration', IMMI: 'immigration', EDUC: 'education', RELI: 'religion',
     // Import alias: CHR (christening) is what many tools — and AI-written
     // register transcriptions — use for BAPM. Export always writes BAPM.
     CHR: 'baptism',
@@ -963,7 +963,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 // OCCU carries the occupation as its value; other
                                 // events carry date/place on level-2 sub-lines.
                                 const ev: RawEvent = { type: evType };
-                                if (tag === 'OCCU' && value) ev.note = value;
+                                // OCCU and RELI carry their subject as the tag's
+                                // own value; everything else hangs on level-2
+                                // sub-lines.
+                                if ((tag === 'OCCU' || tag === 'RELI') && value) ev.note = value;
                                 indi.events.push(ev);
                                 currentEvent = ev;
                             } else if (tag === 'EVEN' || tag === 'CENS') {
@@ -1072,6 +1075,15 @@ export function parseGedcom(content: string): ParsedGedcom {
                             indi.sourceRefs.push(value);
                             currentCitationId = value;
                         } else if (tag === 'NOTE' && value) {
+                            const line = isBirth
+                                ? strings.gedcomNotes.birthNote(value)
+                                : strings.gedcomNotes.deathNote(value);
+                            indi.notes = indi.notes ? `${indi.notes}\n${line}` : line;
+                        } else if (tag === 'RELI' && value) {
+                            // The denomination the register wrote at this act.
+                            // It is not the person's own RELI attribute, so it
+                            // is kept as a note labelled by the fact rather
+                            // than silently promoted to a religion event.
                             const line = isBirth
                                 ? strings.gedcomNotes.birthNote(value)
                                 : strings.gedcomNotes.deathNote(value);

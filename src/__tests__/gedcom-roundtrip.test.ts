@@ -743,6 +743,57 @@ describe('register-harvest tags: CHR, EVEN+TYPE, CENS', () => {
     });
 });
 
+describe('RELI: denomination as an event of its own', () => {
+    /**
+     * A denomination is not a fixed property of a person: a conversion is a
+     * dated act with a place and a record behind it, which is why it is an
+     * event rather than a field. GEDCOM puts the denomination on the tag's own
+     * line, the way it does for OCCU.
+     */
+    const GED = `0 HEAD
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Jan /Novák/
+1 SEX M
+1 RELI Evangelík augsburského vyznání
+2 DATE 12 MAY 1889
+2 PLAC Lučice
+1 BIRT
+2 DATE 5 MAY 1863
+2 PLAC Lučice
+2 RELI Římskokatolické
+0 TRLR
+`;
+
+    it('reads RELI as a religion event carrying the denomination', () => {
+        const data = importGed(GED);
+        const person = Object.values(data.persons)[0];
+        const rel = (person.events ?? []).find(e => e.type === 'religion')!;
+        expect(rel.note).toBe('Evangelík augsburského vyznání');
+        expect(rel.date).toBe('1889-05-12');
+        expect(rel.place).toBe('Lučice');
+    });
+
+    it('keeps a denomination written INSIDE a birth block as a labelled note', () => {
+        // That one is what the register wrote at the baptism, not the person's
+        // own RELI attribute — promoting it to an event would invent a
+        // conversion that never happened. Before this it vanished without even
+        // being counted as an unsupported tag.
+        const person = Object.values(importGed(GED).persons)[0];
+        expect(person.notes).toContain('Římskokatolické');
+    });
+
+    it('nothing is reported as unsupported, and it survives the round-trip', () => {
+        const result = convertToStrom(parseGedcom(GED));
+        expect(result.stats.droppedTagSummary).toBeFalsy();
+
+        const once = importGed(GED);
+        const ged = exportGed(once);
+        expect(ged).toContain('1 RELI Evangelík augsburského vyznání');
+        expect(normalize(importGed(ged))).toEqual(normalize(once));
+    });
+});
+
 describe('register entries: what hangs under BIRT, DEAT and MARR', () => {
     // The shape an AI-transcribed parish register produces: the citation, the
     // note and the godparents sit INSIDE the birth/death/marriage block, not
