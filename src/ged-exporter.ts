@@ -13,6 +13,7 @@
 
 import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story } from './types.js';
 import { strings } from './strings.js';
+import { eventValueIsOnTag } from './events.js';
 import { placeKey } from './places.js';
 
 /**
@@ -34,6 +35,10 @@ export const SURNAME_GROUP_SEP = ' | ';
 const EVENT_TYPE_TO_TAG: Partial<Record<LifeEventType, string>> = {
     baptism: 'BAPM', burial: 'BURI', occupation: 'OCCU', residence: 'RESI',
     emigration: 'EMIG', immigration: 'IMMI', education: 'EDUC', religion: 'RELI',
+    confirmation: 'CONF', firstCommunion: 'FCOM', barMitzvah: 'BARM',
+    batMitzvah: 'BASM', ordination: 'ORDN', adoption: 'ADOP',
+    naturalization: 'NATU', will: 'WILL', probate: 'PROB', cremation: 'CREM',
+    title: 'TITL', nationality: 'NATI',
 };
 
 /** RELA values for participant roles. Godparent/Witness are the conventional ones. */
@@ -407,9 +412,9 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
                     ? (event.customLabel || strings.gedcomNotes.genericEvent)
                     : strings.events.types[event.type];
             }
-            if ((event.type === 'occupation' || event.type === 'religion') && event.note) {
-                // The note IS the fact for these two — GEDCOM puts it on the
-                // tag line, not in a subordinate NOTE.
+            if (tag && eventValueIsOnTag(event.type) && event.note) {
+                // The note IS the fact for these — GEDCOM puts it on the tag
+                // line, not in a subordinate NOTE.
                 lines.push(`1 ${tag} ${escapeGedcomText(event.note)}`);
             } else {
                 lines.push(`1 ${tag ?? 'EVEN'}`);
@@ -422,7 +427,7 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
             if (event.place) {
                 pushPlace(lines, 2, event.place, data.places);
             }
-            if (event.note && event.type !== 'occupation' && event.type !== 'religion') {
+            if (event.note && !eventValueIsOnTag(event.type)) {
                 pushNote(lines, 2, event.note);
             }
             // Godparents / witnesses. Someone in the tree goes out as ASSO

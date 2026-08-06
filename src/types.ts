@@ -64,7 +64,14 @@ export type ParentChildRelType = 'biological' | 'adoptive' | 'step' | 'foster';
 export type LifeEventType =
     | 'birth' | 'death' | 'baptism' | 'burial' | 'occupation'
     | 'residence' | 'military' | 'emigration' | 'immigration'
-    | 'education' | 'religion' | 'custom';
+    | 'education' | 'religion' | 'custom'
+    // Sacraments and rites of passage a register keeps its own book for.
+    | 'confirmation' | 'firstCommunion' | 'barMitzvah' | 'batMitzvah' | 'ordination'
+    // Legal acts.
+    | 'adoption' | 'naturalization' | 'will' | 'probate'
+    // What was written about the person rather than done by them.
+    | 'title' | 'nationality'
+    | 'cremation';
 
 /**
  * A single life event. birth/death are represented by the first-class

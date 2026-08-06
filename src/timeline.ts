@@ -9,6 +9,7 @@
 
 import { StromData, Gender, LifeEventType } from './types.js';
 import { yearOf, parseFlexDate } from './dates.js';
+import { eventValueIsOnTag } from './events.js';
 import { isLivingPerson } from './privacy.js';
 
 export interface TimelineEvent {
@@ -140,9 +141,9 @@ export interface LifelinePoint {
     customLabel?: string;
     /**
      * The event's own subject, when its note carries it rather than describing
-     * it: the trade of an occupation, the denomination of a religion. Both go
-     * out as the value of their own GEDCOM tag, and without them the row reads
-     * "Occupation" and leaves out the only thing it was recorded for.
+     * it: the trade, the denomination, the title. Each goes out as the value of
+     * its own GEDCOM tag, and without it the row reads "Occupation" and leaves
+     * out the only thing it was recorded for.
      */
     detail?: string;
     /** Related person's name — the partner (marriage) or the child (child). */
@@ -201,7 +202,7 @@ export function computePersonLifeline(data: StromData, personId: string): Lifeli
             kind: 'event',
             eventType: ev.type,
             ...(ev.customLabel ? { customLabel: ev.customLabel } : {}),
-            ...((ev.type === 'occupation' || ev.type === 'religion') && ev.note?.trim()
+            ...(eventValueIsOnTag(ev.type) && ev.note?.trim()
                 ? { detail: ev.note.trim() } : {}),
             ...(participants.length ? { participants } : {}),
             ...(ev.place ? { place: ev.place } : {}),

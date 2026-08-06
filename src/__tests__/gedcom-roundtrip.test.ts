@@ -299,14 +299,16 @@ describe('GEDCOM fidelity fixes (audit 2026-07)', () => {
     });
 
     it('counts and summarizes dropped tags (dead counter fixed)', () => {
+        // TITL used to stand in here as the unsupported tag; it is a title now,
+        // so the counter is exercised with tags we genuinely do not model.
         const ged = GED([
             '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M',
-            '1 TITL Count of Nowhere', '1 NICK Honza', '1 TITL Duke',
+            '1 DSCR tall', '1 NICK Honza', '1 DSCR bearded',
             '0 @N1@ NOTE some floating note',
         ].join('\n'));
         const r = conv(ged);
         expect(r.stats.unsupportedTags).toBe(4);
-        expect(r.stats.droppedTagSummary).toContain('TITL ×2');
+        expect(r.stats.droppedTagSummary).toContain('DSCR ×2');
         expect(r.stats.droppedTagSummary).toContain('NICK ×1');
     });
 
@@ -791,6 +793,98 @@ describe('RELI: denomination as an event of its own', () => {
         const ged = exportGed(once);
         expect(ged).toContain('1 RELI Evangelík augsburského vyznání');
         expect(normalize(importGed(ged))).toEqual(normalize(once));
+    });
+});
+
+describe('the standard events a register actually keeps', () => {
+    /**
+     * An audit of GEDCOM 5.5.1 against the parser found thirty INDI tags going
+     * straight to the floor. These are the ones a parish book (or the office
+     * that followed it) really writes: the rest of the sacraments, the legal
+     * acts, and the two attributes that describe the person rather than
+     * something they did.
+     */
+    const GED = `0 HEAD
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Jan /Novák/
+1 SEX M
+1 CONF
+2 DATE 3 JUN 1875
+2 PLAC Litomyšl
+1 FCOM
+2 DATE 1873
+1 BARM
+2 DATE 1876
+1 BASM
+2 DATE 1877
+1 ORDN
+2 DATE 1888
+1 ADOP
+2 DATE 1866
+1 NATU
+2 DATE 1910
+1 WILL
+2 DATE 1930
+1 PROB
+2 DATE 1932
+1 CREM
+2 DATE 1932
+1 TITL MUDr.
+1 NATI Rakousko-Uhersko
+0 TRLR
+`;
+
+    it('reads every one of them, and reports nothing as unsupported', () => {
+        const result = convertToStrom(parseGedcom(GED));
+        expect(result.stats.droppedTagSummary).toBeFalsy();
+
+        const person = Object.values(result.data.persons)[0];
+        const byType = new Map((person.events ?? []).map(e => [e.type, e]));
+        expect([...byType.keys()].sort()).toEqual([
+            'adoption', 'barMitzvah', 'batMitzvah', 'confirmation', 'cremation',
+            'firstCommunion', 'naturalization', 'nationality', 'ordination',
+            'probate', 'title', 'will',
+        ].sort());
+        expect(byType.get('confirmation')!.date).toBe('1875-06-03');
+        expect(byType.get('confirmation')!.place).toBe('Litomyšl');
+    });
+
+    it('keeps an attribute\'s value, which rides on the tag line', () => {
+        // `1 TITL MUDr.` — the value is the fact, the way `1 OCCU` works. Read
+        // as a subordinate structure it would import as an empty event.
+        const person = Object.values(importGed(GED).persons)[0];
+        const byType = new Map((person.events ?? []).map(e => [e.type, e]));
+        expect(byType.get('title')!.note).toBe('MUDr.');
+        expect(byType.get('nationality')!.note).toBe('Rakousko-Uhersko');
+    });
+
+    it('writes them back under their own tags, not as generic events', () => {
+        const ged = exportGed(importGed(GED));
+        for (const tag of ['CONF', 'FCOM', 'BARM', 'BASM', 'ORDN', 'ADOP',
+            'NATU', 'WILL', 'PROB', 'CREM']) {
+            expect(ged, tag).toContain(`1 ${tag}`);
+        }
+        expect(ged).toContain('1 TITL MUDr.');
+        expect(ged).toContain('1 NATI Rakousko-Uhersko');
+        expect(ged).not.toContain('1 EVEN');
+    });
+
+    it('survives the round-trip', () => {
+        const once = importGed(GED);
+        expect(normalize(importGed(exportGed(once)))).toEqual(normalize(once));
+    });
+
+    it('folds the alias tags into the sacrament they are', () => {
+        // CHRA is the adult form of a christening and GRAD is schooling
+        // reaching its end; neither needs a type of its own, and dropping them
+        // would lose a dated fact.
+        const aliased = `0 HEAD\n1 CHAR UTF-8\n0 @I1@ INDI\n1 NAME A /B/\n`
+            + `1 CHRA\n2 DATE 1900\n1 GRAD\n2 DATE 1885\n0 TRLR\n`;
+        const result = convertToStrom(parseGedcom(aliased));
+        expect(result.stats.droppedTagSummary).toBeFalsy();
+        const types = (Object.values(result.data.persons)[0].events ?? []).map(e => e.type);
+        expect(types.sort()).toEqual(['baptism', 'education']);
     });
 });
 

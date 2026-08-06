@@ -7,11 +7,33 @@
 import { LifeEvent, LifeEventType } from './types.js';
 import { yearOf } from './dates.js';
 
-/** Event types a user can add (birth/death excluded — they are first-class). */
+/**
+ * Event types a user can add (birth/death excluded — they are first-class),
+ * in the order a life runs rather than alphabetically.
+ */
 export const SELECTABLE_EVENT_TYPES: LifeEventType[] = [
-    'baptism', 'occupation', 'residence', 'military',
-    'emigration', 'immigration', 'education', 'religion', 'burial', 'custom',
+    'baptism', 'confirmation', 'firstCommunion', 'barMitzvah', 'batMitzvah',
+    'education', 'occupation', 'ordination', 'residence', 'military',
+    'emigration', 'immigration', 'naturalization',
+    'religion', 'nationality', 'title', 'adoption',
+    'will', 'probate', 'burial', 'cremation', 'custom',
 ];
+
+/**
+ * Event types whose VALUE rides on the GEDCOM tag's own line rather than in a
+ * subordinate structure: `1 OCCU blacksmith`, `1 RELI Lutheran`. For these the
+ * event's note is not a remark about the fact — it IS the fact, which is why
+ * the form labels the field with the fact's own name and why the event row and
+ * the life timeline show it instead of leaving the line saying only "Occupation".
+ */
+const VALUE_ON_TAG_EVENT_TYPES = new Set<LifeEventType>([
+    'occupation', 'religion', 'title', 'nationality',
+]);
+
+/** Whether this event's note carries the fact itself (see the set above). */
+export function eventValueIsOnTag(type: LifeEventType): boolean {
+    return VALUE_ON_TAG_EVENT_TYPES.has(type);
+}
 
 /**
  * Event types where a register names people besides the subject.
@@ -27,6 +49,11 @@ export const SELECTABLE_EVENT_TYPES: LifeEventType[] = [
  */
 const PARTICIPANT_EVENT_TYPES = new Set<LifeEventType>([
     'birth', 'death', 'baptism', 'burial', 'custom',
+    // The rest of the sacraments and rites name a sponsor the same way a
+    // baptism names godparents…
+    'confirmation', 'firstCommunion', 'barMitzvah', 'batMitzvah', 'ordination',
+    // …and a legal act names the people who witnessed it.
+    'adoption', 'naturalization', 'will', 'probate', 'cremation',
 ]);
 
 /**

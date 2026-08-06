@@ -40,6 +40,7 @@ import {
 } from './types';
 import { dateSortKey } from './dates';
 import { placeKey } from './places';
+import { eventValueIsOnTag } from './events';
 import { strings } from './strings';
 import { SURNAME_GROUPS_MARKER, SURNAME_GROUP_SEP } from './ged-exporter';
 
@@ -88,9 +89,17 @@ function toStory(raw: RawStory | undefined): Story | undefined {
 const EVENT_TAG_TO_TYPE: Record<string, LifeEventType> = {
     BAPM: 'baptism', BURI: 'burial', OCCU: 'occupation', RESI: 'residence',
     EMIG: 'emigration', IMMI: 'immigration', EDUC: 'education', RELI: 'religion',
-    // Import alias: CHR (christening) is what many tools — and AI-written
-    // register transcriptions — use for BAPM. Export always writes BAPM.
+    CONF: 'confirmation', FCOM: 'firstCommunion', BARM: 'barMitzvah',
+    BASM: 'batMitzvah', ORDN: 'ordination', ADOP: 'adoption', NATU: 'naturalization',
+    WILL: 'will', PROB: 'probate', CREM: 'cremation',
+    TITL: 'title', NATI: 'nationality',
+    // Import aliases. CHR (christening) is what many tools — and AI-written
+    // register transcriptions — use for BAPM; CHRA is the adult form of the
+    // same sacrament; GRAD is schooling reaching its end. Export always writes
+    // the canonical tag, so these fold in without a type of their own.
     CHR: 'baptism',
+    CHRA: 'baptism',
+    GRAD: 'education',
 };
 
 /** Raw OBJE media object under an individual. */
@@ -963,10 +972,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 // OCCU carries the occupation as its value; other
                                 // events carry date/place on level-2 sub-lines.
                                 const ev: RawEvent = { type: evType };
-                                // OCCU and RELI carry their subject as the tag's
-                                // own value; everything else hangs on level-2
-                                // sub-lines.
-                                if ((tag === 'OCCU' || tag === 'RELI') && value) ev.note = value;
+                                // Some facts ride on the tag's own line
+                                // (`1 OCCU blacksmith`); the rest hang their
+                                // detail on level-2 sub-lines.
+                                if (value && eventValueIsOnTag(evType)) ev.note = value;
                                 indi.events.push(ev);
                                 currentEvent = ev;
                             } else if (tag === 'EVEN' || tag === 'CENS') {

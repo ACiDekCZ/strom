@@ -15,7 +15,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { strings } from '../strings.js';
 import { SettingsManager } from '../settings.js';
-import { SELECTABLE_EVENT_TYPES, sortLifeEvents, eventTakesParticipants } from '../events.js';
+import { SELECTABLE_EVENT_TYPES, sortLifeEvents, eventTakesParticipants, eventValueIsOnTag } from '../events.js';
 import { formatFlexDate, normalizeDateInput, formatDateForInput } from '../dates.js';
 import { chainLinkSvg } from '../icons.js';
 import { uiModule } from './module.js';
@@ -29,14 +29,13 @@ function esc(text: string): string {
 }
 
 /**
- * The note of an event whose note IS its subject, not a remark about it: the
- * trade of an occupation, the denomination of a religion. Both go out as the
- * value of their own GEDCOM tag, and both leave the row saying only
- * "Occupation" / "Religion" if they are not shown.
+ * The note of an event whose note IS its subject rather than a remark about it
+ * — the trade, the denomination, the title. Each goes out as the value of its
+ * own GEDCOM tag, and each leaves the row saying only "Occupation" or "Title"
+ * if it is not shown.
  */
 function eventOwnSubject(event: LifeEvent): string | undefined {
-    return event.type === 'occupation' || event.type === 'religion'
-        ? event.note : undefined;
+    return eventValueIsOnTag(event.type) ? event.note : undefined;
 }
 
 /** Display label for an event (custom label when present, else the type name). */
@@ -388,11 +387,15 @@ export const personEventsMethods = uiModule({
         // event — the trade, the denomination — and goes out as the GEDCOM
         // tag's own value. Labelling it "Note" invited prose that then became
         // the man's trade in every other program.
-        const own = type === 'occupation'
-            ? { label: strings.events.occupationLabel, hint: strings.events.occupationHint }
-            : type === 'religion'
-                ? { label: strings.events.religionLabel, hint: strings.events.religionHint }
-                : null;
+        // A few carry a hint of their own; the rest are named well enough by
+        // their type ("Title", "Nationality").
+        const hints: Partial<Record<LifeEventType, { label: string; hint: string }>> = {
+            occupation: { label: strings.events.occupationLabel, hint: strings.events.occupationHint },
+            religion: { label: strings.events.religionLabel, hint: strings.events.religionHint },
+        };
+        const own = eventValueIsOnTag(type)
+            ? (hints[type] ?? { label: strings.events.types[type], hint: '' })
+            : null;
         if (label) label.textContent = own ? own.label : strings.events.note;
         if (input) {
             input.placeholder = own ? own.hint : '';
