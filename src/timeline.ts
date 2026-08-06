@@ -138,6 +138,13 @@ export interface LifelinePoint {
     eventType?: LifeEventType;
     /** Custom event label (eventType === 'custom'). */
     customLabel?: string;
+    /**
+     * The event's own subject, when its note carries it rather than describing
+     * it. An occupation keeps the trade there — that is what goes out as the
+     * GEDCOM OCCU value — so without it the row reads "Occupation" and leaves
+     * out the only thing it was recorded for.
+     */
+    detail?: string;
     /** Related person's name — the partner (marriage) or the child (child). */
     relatedName?: string;
     /** Participant names for an event (godparents, witnesses, the officiant…). */
@@ -194,6 +201,7 @@ export function computePersonLifeline(data: StromData, personId: string): Lifeli
             kind: 'event',
             eventType: ev.type,
             ...(ev.customLabel ? { customLabel: ev.customLabel } : {}),
+            ...(ev.type === 'occupation' && ev.note?.trim() ? { detail: ev.note.trim() } : {}),
             ...(participants.length ? { participants } : {}),
             ...(ev.place ? { place: ev.place } : {}),
         });

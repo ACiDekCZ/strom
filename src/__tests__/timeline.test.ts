@@ -161,6 +161,26 @@ describe('computePersonLifeline', () => {
         expect(pts.find(x => x.kind === 'child')!.relatedName).toBe('Josef Novák');
     });
 
+    it('carries the trade of an occupation, which lives in its note', () => {
+        // The note IS the occupation — it goes out as the GEDCOM OCCU value —
+        // so a row without it says "Occupation" and omits the one thing the
+        // entry was recorded for.
+        const p = lp('p', 'Frantisek', 'male', {
+            birthDate: '1863', deathDate: '1932',
+            events: [
+                { id: 'e1', type: 'occupation', date: '1890', note: 'mistr obuvnický', place: 'Lučice' } as LifeEvent,
+                { id: 'e2', type: 'residence', date: '1895', note: 'a plain note' } as LifeEvent,
+            ],
+        });
+        const pts = computePersonLifeline(data([p]), 'p');
+        const trade = pts.find(x => x.eventType === 'occupation')!;
+        expect(trade.detail).toBe('mistr obuvnický');
+        expect(trade.place).toBe('Lučice');
+        // Other events keep their note as a note — it describes them, it is not
+        // what they are.
+        expect(pts.find(x => x.eventType === 'residence')!.detail).toBeUndefined();
+    });
+
     it('prefers the LIVE linked participant name over the stored snapshot', () => {
         // Godparent is linked (personId 'g') AND renamed in the tree; the event
         // still carries an out-of-date snapshot name. The lifeline must show the

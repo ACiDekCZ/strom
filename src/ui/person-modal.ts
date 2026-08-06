@@ -709,7 +709,11 @@ export const personModalMethods = uiModule({
                 const withPeople = pt.participants && pt.participants.length
                     ? ` <span class="pm-lifeline-place">· ${this.escapeHtml(pm.lifelineWith(pt.participants.join(', ')))}</span>`
                     : '';
-                return `${this.escapeHtml(label)}${withPeople}${place}`;
+                // The trade itself, ahead of who and where — it is what the row
+                // is about (see LifelinePoint.detail).
+                const detail = pt.detail
+                    ? ` <span class="pm-lifeline-place">· ${this.escapeHtml(pt.detail)}</span>` : '';
+                return `${this.escapeHtml(label)}${detail}${withPeople}${place}`;
             }
         }
     },
