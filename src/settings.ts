@@ -310,6 +310,16 @@ class SettingsManagerClass {
         this.saveQuietly();
     }
 
+    /** The one-time "the browser may clear this data" notice (see src/persistence.ts). */
+    isPersistenceWarningShown(): boolean {
+        return this.settings.persistenceWarningShown === true;
+    }
+
+    setPersistenceWarningShown(): void {
+        this.settings.persistenceWarningShown = true;
+        this.saveQuietly();
+    }
+
     private saveQuietly(): void {
         try {
             this.save();

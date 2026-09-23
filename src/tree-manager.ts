@@ -23,6 +23,7 @@ import { isEncrypted, EncryptedData, CryptoSession, decrypt } from './crypto.js'
 import { SettingsManager } from './settings.js';
 import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
+import { requestPersistentStorage } from './persistence.js';
 import { asciiSlug } from './filenames.js';
 import { announceTreeSaved } from './tab-sync.js';
 
@@ -509,6 +510,8 @@ class TreeManagerClass {
         }
         // Ensure version is set
         data.version = STROM_DATA_VERSION;
+        // A tree with people is worth protecting from browser eviction.
+        if (Object.keys(data.persons ?? {}).length > 0) void requestPersistentStorage();
         // Snapshot NOW: the caller keeps mutating the live object.
         const plainText = JSON.stringify(data);
 

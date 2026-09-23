@@ -20,6 +20,7 @@ import { AppMode, PWA_HOSTNAME, APP_VERSION, TreeId } from './types.js';
 import { strings } from './strings.js';
 import { onTreeSavedElsewhere } from './tab-sync.js';
 import { StorageManager } from './storage.js';
+import { PERSISTENCE_EVENT, PersistenceState, getRequestedPersistenceState } from './persistence.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild } from './pwa.js';
 
 // Make modules available globally for HTML event handlers
@@ -367,6 +368,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Strom Research in the app: welcome-screen offer + menu item gating.
     UI.initResearchPromo();
 
+
     // ---- Data: runs once the data is readable ----
 
     /** URL parameters and idle extras after the first real render. */
@@ -387,6 +389,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Strom Research: light the "New" marker, maybe the one-time 3.0 card.
         UI.researchPromoAfterFirstRender();
+
+        // Persistent storage: a one-time notice when the browser may clear a
+        // big tree — for a request settled during startup, and for later ones.
+        const settled = getRequestedPersistenceState();
+        if (settled) UI.maybeWarnNotPersistent(settled);
+        window.addEventListener(PERSISTENCE_EVENT, (e) => {
+            UI.maybeWarnNotPersistent((e as CustomEvent<PersistenceState>).detail);
+        });
 
         // "On this day" reminder — after the first render, off the critical path.
         const showOtd = () => UI.maybeShowOnThisDay();

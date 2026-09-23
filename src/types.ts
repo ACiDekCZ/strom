@@ -543,7 +543,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.0.0';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.0.1';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -623,6 +623,7 @@ export interface AppSettings {
     researchNewFirstSeen?: string;   // ISO date the "New" marker was first shown
     researchNewDismissed?: boolean;  // the "New" marker went out for good
     whatsNew30Shown?: boolean;       // the one-time "What's new in 3.0" card was shown
+    persistenceWarningShown?: boolean; // the one-time "browser may clear this data" notice was shown
 }
 
 // ==================== MULTI-TREE STORAGE ====================

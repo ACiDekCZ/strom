@@ -17,6 +17,8 @@ import { formatRelativeDateTime, formatFileSize } from '../format.js';
 import { emptyStateHtml } from './empty-state.js';
 
 import { iconSvg } from '../icons.js';
+import { SettingsManager } from '../settings.js';
+import { getPersistenceState, shouldWarnNotPersistent, PersistenceState } from '../persistence.js';
 /** Locked encryption vs anything else (quota, corrupt record). */
 function snapshotErrorMessage(err: unknown): string {
     const msg = err instanceof Error ? err.message : String(err);
@@ -48,7 +50,41 @@ export const snapshotsUiMethods = uiModule({
         }
         this.pushDialog('snapshots-modal');
         document.getElementById('snapshots-modal')?.classList.add('active');
+        void this.renderPersistenceNote();
         await this.renderSnapshotsList();
+    },
+
+    /** Whether the browser keeps this data for good — said where backups live. */
+    async renderPersistenceNote(): Promise<void> {
+        const el = document.getElementById('snapshots-persistence');
+        if (!el) return;
+        const state = await getPersistenceState();
+        const s = strings.snapshots;
+        el.textContent = state === 'persistent' ? s.persistent
+            : state === 'best-effort' ? s.notPersistent : s.unsupported;
+        el.hidden = false;
+    },
+
+    /**
+     * One-time notice after the persistence request settled: the browser may
+     * clear a tree big enough to hurt. The button opens the export dialog.
+     */
+    maybeWarnNotPersistent(state: PersistenceState): void {
+        const personCount = Object.keys(DataManager.getData().persons).length;
+        if (!shouldWarnNotPersistent({
+            state,
+            personCount,
+            alreadyShown: SettingsManager.isPersistenceWarningShown(),
+            viewMode: DataManager.isViewMode(),
+        })) return;
+        SettingsManager.setPersistenceWarningShown();
+        this.showStorageNotice('persistence-notice', strings.snapshots.persistenceWarning(personCount), {
+            label: strings.snapshots.persistenceSave,
+            run: () => {
+                document.getElementById('persistence-notice')?.remove();
+                this.showExportDialog();
+            },
+        });
     },
 
     closeSnapshotsDialog(): void {

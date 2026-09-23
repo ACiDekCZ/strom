@@ -8613,7 +8613,8 @@
         /* What a backup is NOT. Someone who reads these as their safety net and
            then reinstalls their laptop loses everything — better said here. */
         /* Storage note: a plain hint like .settings-hint, no colored side bar. */
-        .snapshots-note {
+        .snapshots-note,
+        .snapshots-persistence {
             margin: 12px 0 0;
             font-size: 12px;
             line-height: 1.5;
@@ -9983,6 +9984,7 @@
             </div>
             <div id="snapshots-total" class="snapshots-total"></div>
             <div id="snapshots-list" class="snapshots-list"></div>
+            <p class="snapshots-persistence" id="snapshots-persistence" hidden></p>
             <p class="snapshots-note" data-i18n="snapshots.inBrowser"></p>
             <div class="buttons snapshots-footer">
                 <button class="primary" onclick="window.Strom.UI.createManualSnapshot()" data-i18n="snapshots.createNow"></button>

@@ -21,12 +21,32 @@ export async function seedResearchPromoSeen(page: Page): Promise<void> {
 }
 
 /**
+ * Set one browser setting before the app starts, unless it is already set
+ * (on every navigation of the page).
+ */
+export async function seedSetting(page: Page, name: string, value: unknown): Promise<void> {
+    await page.addInitScript(([n, v]) => {
+        try {
+            const key = 'strom-settings';
+            const raw = localStorage.getItem(key);
+            const settings = raw ? JSON.parse(raw) : {};
+            if (settings[n as string] === undefined) {
+                settings[n as string] = v;
+                localStorage.setItem(key, JSON.stringify(settings));
+            }
+        } catch { /* no storage: nothing to seed */ }
+    }, [name, value] as const);
+}
+
+/**
  * Load the app and wait until the toolbar is interactive. By default the
  * Strom Research promotion counts as already seen (see seedResearchPromoSeen);
- * `{ researchPromo: true }` keeps the first-run state for suites testing it.
+ * `{ researchPromo: true }` keeps the first-run state for suites testing it;
+ * the one-time persistent-storage notice likewise (`{ persistenceWarning: true }`).
  */
-export async function openApp(page: Page, opts: { researchPromo?: boolean } = {}): Promise<void> {
+export async function openApp(page: Page, opts: { researchPromo?: boolean; persistenceWarning?: boolean } = {}): Promise<void> {
     if (!opts.researchPromo) await seedResearchPromoSeen(page);
+    if (!opts.persistenceWarning) await seedSetting(page, 'persistenceWarningShown', true);
     await page.goto('/strom.html');
     await expect(page.locator('.toolbar')).toBeVisible();
 }
