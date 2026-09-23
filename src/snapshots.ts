@@ -175,8 +175,43 @@ export async function hasAutoSnapshotOnDay(treeId: string, now: number): Promise
 
 /** Remove every snapshot belonging to a deleted tree (cascade cleanup). */
 export async function deleteSnapshotsForTree(treeId: string): Promise<void> {
-    const all = await StorageManager.getAll<{ id: string; treeId: string }>('snapshots');
-    for (const snap of all) {
-        if (snap?.treeId === treeId) await StorageManager.delete('snapshots', snap.id);
+    // Records keep id/treeId under `meta` (reading them top-level matched
+    // nothing, so a deleted tree's backups stayed forever — review V1).
+    for (const snap of await allForTree(treeId)) {
+        await StorageManager.delete('snapshots', snap.meta.id);
     }
+}
+
+/**
+ * Re-write every snapshot payload in the CURRENT encryption mode (called when
+ * encryption is switched on/off, with the session unlocked). A payload that
+ * cannot be decoded is left untouched and counted.
+ */
+export async function reencodeAllSnapshots(): Promise<number> {
+    const encryptionOn = SettingsManager.isEncryptionEnabled();
+    let failed = 0;
+    for (const s of await StorageManager.getAll<StoredSnapshot>('snapshots')) {
+        if (!s?.meta?.id) continue;
+        const isEnc = !!s.encrypted;
+        if (isEnc === encryptionOn) continue;   // already in the right form
+        try {
+            const json = await getSnapshotJson(s.meta.id);
+            if (json === null) { failed++; continue; }
+            const next: StoredSnapshot = { meta: { ...s.meta } };
+            if (encryptionOn) {
+                if (!CryptoSession.isUnlocked()) { failed++; continue; }
+                next.encrypted = await CryptoSession.encrypt(json);
+                next.meta.sizeBytes = JSON.stringify(next.encrypted).length;
+            } else {
+                const gz = await gzipToBase64(json);
+                if (gz !== null) { next.gzip = gz; next.meta.sizeBytes = gz.length; }
+                else { next.plain = json; next.meta.sizeBytes = json.length; }
+            }
+            await StorageManager.set('snapshots', s.meta.id, next);
+        } catch (err) {
+            console.error('Snapshot re-encoding failed', s.meta.id, err);
+            failed++;
+        }
+    }
+    return failed;
 }

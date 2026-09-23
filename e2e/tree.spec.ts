@@ -226,10 +226,11 @@ test('tree manager: Close button closes; the active tree has Open too', async ({
     await expect(manager).toBeHidden();
     await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Branch E');
 
-    // The footer has an explicit Close.
+    // The header × closes it (the footer is for actions only).
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     await expect(manager).toBeVisible();
-    await manager.locator('.tree-manager-close').click();
+    await expect(manager.locator('.tree-manager-footer')).not.toContainText('Close');
+    await manager.locator('.modal-header .close-btn').click();
     await expect(manager).toBeHidden();
 });
 
@@ -268,7 +269,7 @@ test('actions menu: current-view actions (poster, export selection) live in the 
     await expect(switcher.locator('.tree-switcher-action', { hasText: 'Poster' })).toHaveCount(0);
     await expect(switcher.locator('.tree-switcher-action', { hasText: 'Export this view' })).toHaveCount(0);
     await expect(switcher.locator('.tree-switcher-action', { hasText: 'Make a tree from this view' })).toHaveCount(0);
-    await expect(switcher.locator('.tree-switcher-action', { hasText: 'Manage Trees' })).toBeVisible();
+    await expect(switcher.locator('.tree-switcher-action', { hasText: 'Manage trees' })).toBeVisible();
     await page.keyboard.press('Escape');
 
     // Actions live in the desktop ⋯ menu, grouped under section headers.

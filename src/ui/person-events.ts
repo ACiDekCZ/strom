@@ -17,7 +17,7 @@ import { strings } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { SELECTABLE_EVENT_TYPES, sortLifeEvents, eventTakesParticipants, eventValueIsOnTag } from '../events.js';
 import { formatFlexDate, normalizeDateInput, formatDateForInput } from '../dates.js';
-import { chainLinkSvg } from '../icons.js';
+import { chainLinkSvg, iconSvg } from '../icons.js';
 import { uiModule } from './module.js';
 import { autoGrowAll } from './autogrow.js';
 
@@ -106,6 +106,14 @@ export const personEventsMethods = uiModule({
             container.innerHTML = `<div class="events-empty">${esc(strings.events.empty)}</div>`;
         } else {
             container.innerHTML = rows.join('');
+            // Event ids come from data files: handlers via data attributes,
+            // never inline JS (&#39; is decoded back to a quote in attributes).
+            container.querySelectorAll<HTMLElement>('.event-edit-btn[data-event-id]').forEach(btn => {
+                btn.addEventListener('click', () => this.showEditEventModal(btn.dataset.eventId ?? ''));
+            });
+            container.querySelectorAll<HTMLElement>('.event-delete-btn[data-event-id]').forEach(btn => {
+                btn.addEventListener('click', () => { void this.deleteEvent(btn.dataset.eventId ?? ''); });
+            });
         }
 
         // Add button visibility follows the lock state.
@@ -133,10 +141,10 @@ export const personEventsMethods = uiModule({
     eventRowHtml(typeLabel: string, meta: string, eventId: string | null, participants = ''): string {
         const actions = eventId === null ? '' : `
             <div class="event-actions">
-                <button type="button" title="${esc(strings.events.edit)}"
-                    onclick="window.Strom.UI.showEditEventModal('${esc(eventId)}')">&#9998;</button>
-                <button type="button" title="${esc(strings.events.delete)}"
-                    onclick="window.Strom.UI.deleteEvent('${esc(eventId)}')">&#128465;</button>
+                <button type="button" class="event-edit-btn" title="${esc(strings.events.edit)}" aria-label="${esc(strings.events.edit)}"
+                    data-event-id="${esc(eventId)}">${iconSvg('pencil')}</button>
+                <button type="button" class="event-delete-btn" title="${esc(strings.events.delete)}" aria-label="${esc(strings.events.delete)}"
+                    data-event-id="${esc(eventId)}">${iconSvg('trash')}</button>
             </div>`;
         const metaHtml = meta ? `<span class="event-meta"> — ${esc(meta)}</span>` : '';
         const peopleHtml = participants
@@ -230,7 +238,7 @@ export const personEventsMethods = uiModule({
                         ${chainLinkSvg({ stroke: 'currentColor', size: 11, strokeWidth: 2 })}${linked ? ` ${esc(strings.events.participantInTree)}` : ''}
                     </button>
                     <button type="button" class="participant-btn secondary participant-del"
-                            title="${esc(strings.events.delete)}">&#128465;</button>
+                            title="${esc(strings.events.delete)}" aria-label="${esc(strings.events.delete)}">${iconSvg('trash')}</button>
                 </div>`;
         }).join('');
 
@@ -428,15 +436,44 @@ export const personEventsMethods = uiModule({
         this.pushDialog('event-editor-modal');
         modal.classList.add('active');
         autoGrowAll(modal, '#input-event-note');
+        // Baseline for the "unsaved changes" question on close.
+        this.eventEditorSnapshot = this.eventEditorState();
     },
 
+    /** The editor's form values as one comparable string. */
+    eventEditorState(): string {
+        const val = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.value ?? '';
+        return JSON.stringify([
+            val('input-event-type'), val('input-event-custom-label'), val('input-event-date'),
+            val('input-event-place'), val('input-event-note'), this.collectEventParticipants(),
+        ]);
+    },
+
+    hasEventEditorChanges(): boolean {
+        if (this.eventEditorSnapshot === null) return false;
+        if (!document.getElementById('event-editor-modal')?.classList.contains('active')) return false;
+        return this.eventEditorState() !== this.eventEditorSnapshot;
+    },
+
+    /** Cancel / Escape: ask before throwing away edits, like the person modal. */
     closeEventEditor(): void {
+        if (this.hasEventEditorChanges()) {
+            this.showUnsavedEditorDialog(strings.events.unsavedMessage,
+                () => this.saveEventFromModal(),
+                () => this.forceCloseEventEditor());
+            return;
+        }
+        this.forceCloseEventEditor();
+    },
+
+    forceCloseEventEditor(): void {
         const modal = document.getElementById('event-editor-modal');
         if (modal) modal.classList.remove('active');
         if (this.dialogStack[this.dialogStack.length - 1] === 'event-editor-modal') {
             this.dialogStack.pop();
         }
         this.editingEventId = null;
+        this.eventEditorSnapshot = null;
     },
 
     /** Validate and persist the event editor, then refresh the list. */
@@ -472,6 +509,12 @@ export const personEventsMethods = uiModule({
         const participants = this.collectEventParticipants();
 
         if (this.editingEventId) {
+            // An emptied field must reach updateLifeEvent as an explicit
+            // undefined — a missing key would leave the old value in place.
+            if (type !== 'custom') payload.customLabel = undefined;
+            if (!date) payload.date = undefined;
+            if (!place) payload.place = undefined;
+            if (!note) payload.note = undefined;
             // The participants editor is always live, so always send the array —
             // even empty — or deleting the last participant would leave the old
             // list untouched (Object.assign never removes a key). updateLifeEvent
@@ -483,8 +526,10 @@ export const personEventsMethods = uiModule({
             DataManager.addLifeEvent(this.currentId, payload);
         }
 
-        this.closeEventEditor();
+        this.forceCloseEventEditor();
         this.renderEventsList();
+        // The quick occupation/residence fields mirror the newest such event.
+        this.refreshQuickFieldsFromEvents();
     },
 
     /** Confirm and remove an event, then refresh the list. */
@@ -497,9 +542,12 @@ export const personEventsMethods = uiModule({
         if (!event) return;
         const meta = eventMeta(event.date, event.place);
         const what = `${eventTypeLabel(event)}${meta ? ` — ${meta}` : ''}`;
-        const confirmed = await this.showConfirm(strings.events.deleteConfirm(what), strings.buttons.delete);
+        const d = strings.danger;
+        const confirmed = await this.showConfirm(`${what}\n\n${d.undoHint}`, d.deleteEventTitle(eventTypeLabel(event)),
+            { confirmLabel: d.deleteEvent, variant: 'danger' });
         if (!confirmed) return;
         DataManager.removeLifeEvent(this.currentId, eventId);
         this.renderEventsList();
+        this.refreshQuickFieldsFromEvents();
     },
 });

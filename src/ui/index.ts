@@ -78,9 +78,11 @@ import { splitMethods } from './split-ui.js';
 import { splitFamiliesMethods } from './split-families-ui.js';
 import { surnamesMethods } from './surnames-ui.js';
 import { shareUiMethods } from './share-ui.js';
+import { researchPromoMethods } from './research-promo-ui.js';
 import { familyWizardMethods } from './family-wizard.js';
 import { pwaUiMethods } from './pwa-ui.js';
 import { fileAccessMethods } from './file-access-ui.js';
+import { researchUiMethods } from './research-ui.js';
 import { tourMethods, TourStepDef } from './tour.js';
 
 export class UIClass {
@@ -116,6 +118,9 @@ export class UIClass {
     // Encryption state
     passwordPromptCallback: ((password: string) => void) | null = null;
     passwordPromptCallbackManagesDialog: boolean = false;  // If true, callback handles dialog close
+    passwordPromptOnCancel: (() => void) | null = null;    // Called once when the prompt is cancelled
+    onLocalDataUnlocked: (() => Promise<void>) | null = null;  // Set by main.ts: reload + first render after unlock
+    lockedDataReopen: (() => void) | null = null;          // The prompt the Unlock action reopens (null = default)
     exportPasswordCallback: ((password: string | null) => void) | null = null;
     // Per-category byte sizes of the tree in the open export dialog, measured
     // once when the dialog opens so toggling a content checkbox never
@@ -126,6 +131,11 @@ export class UIClass {
 
     // Dialog stack for ESC navigation (child -> parent)
     dialogStack: string[] = [];
+    /**
+     * Escape handler of the open promise-based alert/confirm/prompt: settles
+     * its promise (cancel) and closes it. Null when none is open.
+     */
+    confirmEscape: (() => void) | null = null;
 
     // Parent dialog the tree-health dashboard was opened from, remembered so an
     // in-place reopen (after "clean orphan places") keeps the Escape-back target.
@@ -158,10 +168,16 @@ export class UIClass {
         /** The narrative fields, as typed. */
         storyTitle: string;
         storyText: string;
+        /** "Deceased" checkbox state when the form opened. */
+        deceased: boolean;
+        /** Photo data URL in the preview when the form opened ('' = none). */
+        photo: string;
     } | null = null;
 
     // Debounce timer for the live search filter/highlight.
     searchFilterTimer: ReturnType<typeof setTimeout> | null = null;
+    /** Tree the current search query/filters belong to (reset on tree switch). */
+    searchTreeId: string | null = null;
 
     // Life-events editor state: the event being edited, or null when adding.
     editingEventId: string | null = null;
@@ -265,6 +281,13 @@ export class UIClass {
     // Relationships panel state
     relationshipsPanelPersonId: PersonId | null = null;
     returnToEditPersonId: PersonId | null = null;  // Track if we should return to edit dialog
+    /** Form values of the event / source editor at open (unsaved-changes check). */
+    eventEditorSnapshot: string | null = null;
+    sourceEditorSnapshot: string | null = null;
+    /** The panel owns an open DataManager edit session (review S9). */
+    relSessionOwned = false;
+    /** One-time registration of the panel's data-changed listener. */
+    relSessionListener = false;
     // Pending changes for relationships (not saved until user clicks Save)
     pendingPartnershipChanges: Map<PartnershipId, {
         status?: PartnershipStatus;
@@ -460,6 +483,14 @@ Object.assign(UIClass.prototype, pwaUiMethods);
 type FileAccessMethods = typeof fileAccessMethods;
 export interface UIClass extends FileAccessMethods {}
 Object.assign(UIClass.prototype, fileAccessMethods);
+
+type ResearchUiMethods = typeof researchUiMethods;
+export interface UIClass extends ResearchUiMethods {}
+Object.assign(UIClass.prototype, researchUiMethods);
+
+type ResearchPromoMethods = typeof researchPromoMethods;
+export interface UIClass extends ResearchPromoMethods {}
+Object.assign(UIClass.prototype, researchPromoMethods);
 
 type TourMethods = typeof tourMethods;
 export interface UIClass extends TourMethods {}

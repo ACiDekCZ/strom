@@ -10,6 +10,9 @@ export type {
     MatchReason,
     PersonMatch,
     FieldConflict,
+    PartnershipConflict,
+    PartnershipConflictField,
+    ConflictResolution,
     MatchDecision,
     MergePhase,
     MergeState,
@@ -51,7 +54,9 @@ export {
     restoreFromBackup,
     deleteBackup,
     buildIdMapping,
-    executeMerge
+    executeMerge,
+    detectPartnershipConflicts,
+    updatePartnershipConflictResolution
 } from './executor.js';
 
 // Persistence

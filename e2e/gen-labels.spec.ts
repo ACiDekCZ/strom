@@ -32,7 +32,9 @@ test('line mode: band names sit on the boundary rules and never collide with car
 
     // The overlay runs in line mode (the shipped default) and shows labels.
     await expect(page.locator('#gen-labels.gen-labels--line')).toBeAttached();
-    const firstLabel = page.locator('#gen-labels .gen-label').first();
+    // (The topmost band's label may be legitimately hidden: pinned below the
+    // two-row phone focus chip it would land on that band's cards — kolo 14 N1.)
+    const firstLabel = page.locator('#gen-labels .gen-label:visible').first();
     await expect(firstLabel).toBeVisible();
 
     // Drive a card's centre to the left edge (40, viewport centre) — the very

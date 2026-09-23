@@ -284,6 +284,40 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /**
+     * Strom Research promotion state (3.0): when the "New" marker was first
+     * shown, whether it went out for good, and whether the one-time "What's
+     * new" card was shown. Browser settings only — never part of tree data.
+     * Writes never throw (private mode / full storage just keeps it in memory).
+     */
+    getResearchPromoState(): { researchNewFirstSeen?: string; researchNewDismissed?: boolean; whatsNew30Shown?: boolean } {
+        const { researchNewFirstSeen, researchNewDismissed, whatsNew30Shown } = this.settings;
+        return { researchNewFirstSeen, researchNewDismissed, whatsNew30Shown };
+    }
+
+    setResearchNewFirstSeen(isoDate: string): void {
+        this.settings.researchNewFirstSeen = isoDate;
+        this.saveQuietly();
+    }
+
+    setResearchNewDismissed(): void {
+        this.settings.researchNewDismissed = true;
+        this.saveQuietly();
+    }
+
+    setWhatsNew30Shown(): void {
+        this.settings.whatsNew30Shown = true;
+        this.saveQuietly();
+    }
+
+    private saveQuietly(): void {
+        try {
+            this.save();
+        } catch {
+            // Storage unavailable: the state lives for this session only.
+        }
+    }
+
     private applyTheme(): void {
         const html = document.documentElement;
         let isDark = false;

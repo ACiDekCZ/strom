@@ -9,13 +9,15 @@ import { TreeRenderer } from '../renderer.js';
 import { UI } from '../ui.js';
 import { ZoomPan } from '../zoom.js';
 import { TreePreview, TreeCompare } from '../tree-preview.js';
-import { PersonId, Person, StromData, TreeId } from '../types.js';
+import { PersonId, PartnershipId, Person, StromData, TreeId, PartnershipStatus } from '../types.js';
 import { strings } from '../strings.js';
 import {
     MergeState,
     PersonMatch,
     MatchFilter,
-    MergeStats
+    MergeStats,
+    PartnershipConflict,
+    PartnershipConflictField
 } from './types.js';
 import {
     createMergeState,
@@ -24,7 +26,13 @@ import {
     updateConflictResolution,
     reanalyzeMatches
 } from './matching.js';
-import { executeMerge, deleteBackup, AUTO_CONFIRM_SCORE } from './executor.js';
+import {
+    executeMerge,
+    deleteBackup,
+    AUTO_CONFIRM_SCORE,
+    detectPartnershipConflicts,
+    updatePartnershipConflictResolution
+} from './executor.js';
 import { AuditLogManager } from '../audit-log.js';
 import { validateTreeData, ValidationResult } from '../validation.js';
 import { PersonPicker } from '../person-picker.js';
@@ -482,8 +490,9 @@ class MergerUIClass {
         // Calculate progress
         const totalItems = stats.total;
         const reviewedItems = this.mergeState?.decisions.size || 0;
-        const itemsWithConflicts = stats.withConflicts;
-        const resolvedConflicts = this.mergeState?.conflictResolutions.size || 0;
+        // Person conflicts and partnership conflicts share the resolve step.
+        const itemsWithConflicts = stats.withConflicts + stats.partnershipConflicts;
+        const resolvedConflicts = (this.mergeState?.conflictResolutions.size || 0) + stats.partnershipConflictsResolved;
 
         // Update step indicators: exactly ONE step reads as current (filled),
         // finished steps get an outlined checkmark style, upcoming stay muted.
@@ -524,7 +533,7 @@ class MergerUIClass {
         if (importCount) importCount.textContent = String(stats.total);
         if (existingCount) existingCount.textContent = String(Object.keys(this.mergeState!.existingData.persons).length);
         if (matchCount) matchCount.textContent = String(stats.matched);
-        if (conflictCount) conflictCount.textContent = String(stats.withConflicts);
+        if (conflictCount) conflictCount.textContent = String(stats.withConflicts + stats.partnershipConflicts);
         // Truthful "will add N": drops to 0 in updateOnly mode, and per-match
         // skip / manual matches don't count (see calculateMergeStats).
         if (newCount) newCount.textContent = String(stats.willAdd);
@@ -574,7 +583,7 @@ class MergerUIClass {
                 case 'medium': count = stats.mediumConfidence; break;
                 case 'low': count = stats.lowConfidence; break;
                 case 'unmatched': count = stats.unmatched; break;
-                case 'conflicts': count = stats.withConflicts; break;
+                case 'conflicts': count = stats.withConflicts + stats.partnershipConflicts; break;
             }
             el.textContent = String(count);
         }
@@ -609,13 +618,20 @@ class MergerUIClass {
         if (!listContainer) return;
 
         const items = this.getFilteredItems();
+        // Unions both trees know but describe differently are listed first
+        // in the "all" and "conflicts" views, like persons with conflicts.
+        const unionGroups = (this.currentFilter === 'all' || this.currentFilter === 'conflicts')
+            ? this.groupPartnershipConflicts()
+            : [];
 
-        if (items.length === 0) {
+        if (items.length === 0 && unionGroups.length === 0) {
             listContainer.innerHTML = `<div class="merge-empty">${strings.merge.noItems}</div>`;
             return;
         }
 
-        listContainer.innerHTML = items.map((item, index) => this.renderMatchItem(item, index)).join('');
+        listContainer.innerHTML =
+            unionGroups.map(group => this.renderPartnershipConflictItem(group)).join('')
+            + items.map((item, index) => this.renderMatchItem(item, index)).join('');
 
         // Attach event listeners
         this.attachMatchListeners();
@@ -736,7 +752,7 @@ class MergerUIClass {
 
         return `
             <div class="merge-item ${isConfirmed ? 'confirmed' : ''} ${isRejected ? 'rejected' : ''} ${isSkipped ? 'skipped' : ''} ${isPending ? 'pending' : ''}"
-                 data-index="${index}" data-incoming-id="${match.incomingId}">
+                 data-index="${index}" data-incoming-id="${this.escapeHtml(match.incomingId)}">
                 <div class="merge-item-header">
                     <span class="merge-item-status ${statusClass}">
                         ${statusSymbol}
@@ -788,7 +804,7 @@ class MergerUIClass {
             : `<span class="merge-item-badge skipped" title="${this.escapeHtml(strings.merge.skipTooltip)}">${strings.merge.skipped}</span>`;
 
         return `
-            <div class="merge-item unmatched ${isSkipped ? 'skipped' : ''}" data-index="${index}" data-incoming-id="${personId}">
+            <div class="merge-item unmatched ${isSkipped ? 'skipped' : ''}" data-index="${index}" data-incoming-id="${this.escapeHtml(personId)}">
                 <div class="merge-item-header">
                     <span class="merge-item-status ${isSkipped ? 'skipped' : 'new'}">${isSkipped ? '⊘' : '+'}</span>
                     <span class="merge-item-names">
@@ -857,6 +873,12 @@ class MergerUIClass {
                 const item = (e.target as HTMLElement).closest('.merge-item');
                 const incomingId = item?.getAttribute('data-incoming-id') as PersonId;
                 const action = (e.target as HTMLElement).dataset.action;
+
+                const partnershipId = item?.getAttribute('data-partnership-id');
+                if (action === 'resolve-partnership' && partnershipId) {
+                    this.showPartnershipConflictResolution(partnershipId as PartnershipId);
+                    return;
+                }
 
                 if (incomingId && action) {
                     this.handleMatchAction(incomingId, action);
@@ -1185,7 +1207,115 @@ class MergerUIClass {
             </div>
         `).join('');
 
+        dialog.removeAttribute('data-partnership-id');
         dialog.setAttribute('data-incoming-id', incomingId);
+        dialog.classList.add('active');
+    }
+
+    // ==================== PARTNERSHIP CONFLICTS ====================
+
+    /** Current partnership conflicts grouped per incoming union. */
+    private groupPartnershipConflicts(): PartnershipConflict[][] {
+        if (!this.mergeState) return [];
+        const groups = new Map<PartnershipId, PartnershipConflict[]>();
+        for (const c of detectPartnershipConflicts(this.mergeState)) {
+            const list = groups.get(c.incomingPartnershipId) ?? [];
+            list.push(c);
+            groups.set(c.incomingPartnershipId, list);
+        }
+        return [...groups.values()];
+    }
+
+    /** "A & B" for the existing union a conflict group refers to. */
+    private partnershipCoupleName(existingPartnershipId: PartnershipId): string {
+        const data = this.mergeState?.existingData;
+        const p = data?.partnerships[existingPartnershipId];
+        if (!data || !p) return '';
+        const name = (id: PersonId): string => {
+            const person = data.persons[id];
+            return person ? `${person.firstName} ${person.lastName}`.trim() : '';
+        };
+        return strings.merge.partnershipCouple(name(p.person1Id), name(p.person2Id));
+    }
+
+    private partnershipFieldLabel(field: PartnershipConflictField): string {
+        return strings.merge.partnershipFields[field];
+    }
+
+    /** A partnership conflict value as safe HTML; status is localized. */
+    private partnershipValueHtml(field: PartnershipConflictField, v: string): string {
+        if (field === 'status' && v in strings.partnershipStatus) {
+            return this.escapeHtml(strings.partnershipStatus[v as PartnershipStatus]);
+        }
+        return this.escapeHtml(v || '—');
+    }
+
+    /** One list row for a union with conflicts (same look as a person row). */
+    private renderPartnershipConflictItem(group: PartnershipConflict[]): string {
+        const first = group[0];
+        const resolved = this.mergeState?.partnershipResolutions?.has(first.incomingPartnershipId) ?? false;
+        const summary = group.map(c =>
+            `<span class="conflict-field">${this.escapeHtml(this.partnershipFieldLabel(c.field))}: ${this.partnershipValueHtml(c.field, c.existingValue)} → ${this.partnershipValueHtml(c.field, c.incomingValue)}</span>`
+        ).join('');
+        return `
+            <div class="merge-item partnership-conflict ${resolved ? 'confirmed' : 'pending'}"
+                 data-index="-1" data-partnership-id="${this.escapeHtml(first.incomingPartnershipId)}">
+                <div class="merge-item-header">
+                    <span class="merge-item-status ${resolved ? 'confirmed' : 'pending'}">${resolved ? '✓' : '?'}</span>
+                    <span class="merge-item-names">
+                        ${this.escapeHtml(strings.merge.partnershipConflict)}: ${this.escapeHtml(this.partnershipCoupleName(first.existingPartnershipId))}
+                    </span>
+                    <span class="conflict-indicator" title="${group.length}">⚠</span>
+                </div>
+                <div class="merge-item-conflicts">${summary}</div>
+                <div class="merge-item-actions">
+                    <button class="merge-btn-resolve" data-action="resolve-partnership">${strings.merge.resolveConflicts}</button>
+                </div>
+            </div>
+        `;
+    }
+
+    /** Open the conflict dialog for one union (same rows as for a person). */
+    showPartnershipConflictResolution(incomingPartnershipId: PartnershipId): void {
+        if (!this.mergeState) return;
+        const conflicts = detectPartnershipConflicts(this.mergeState)
+            .filter(c => c.incomingPartnershipId === incomingPartnershipId);
+        if (conflicts.length === 0) return;
+
+        const dialog = document.getElementById('merge-conflict-dialog');
+        const content = document.getElementById('merge-conflict-content');
+        if (!dialog || !content) return;
+
+        const titleEl = dialog.querySelector('.modal-header h2');
+        if (titleEl) {
+            const couple = this.partnershipCoupleName(conflicts[0].existingPartnershipId);
+            titleEl.textContent = couple ? `${strings.merge.conflicts}: ${couple}` : strings.merge.conflicts;
+        }
+
+        content.innerHTML = conflicts.map(conflict => `
+            <div class="conflict-row" data-field="${conflict.field}">
+                <div class="conflict-label">
+                    ${this.escapeHtml(this.partnershipFieldLabel(conflict.field))}
+                </div>
+                <div class="conflict-options">
+                    <label class="conflict-option">
+                        <input type="radio" name="conflict-${conflict.field}" value="keep_existing"
+                            ${conflict.resolution === 'keep_existing' ? 'checked' : ''}>
+                        <span class="conflict-value existing">${this.partnershipValueHtml(conflict.field, conflict.existingValue)}</span>
+                        <span class="conflict-badge existing">${strings.merge.keepExisting}</span>
+                    </label>
+                    <label class="conflict-option">
+                        <input type="radio" name="conflict-${conflict.field}" value="use_incoming"
+                            ${conflict.resolution === 'use_incoming' ? 'checked' : ''}>
+                        <span class="conflict-value incoming">${this.partnershipValueHtml(conflict.field, conflict.incomingValue)}</span>
+                        <span class="conflict-badge incoming">${strings.merge.useImport}</span>
+                    </label>
+                </div>
+            </div>
+        `).join('');
+
+        dialog.removeAttribute('data-incoming-id');
+        dialog.setAttribute('data-partnership-id', incomingPartnershipId);
         dialog.classList.add('active');
     }
 
@@ -1197,6 +1327,22 @@ class MergerUIClass {
 
         const dialog = document.getElementById('merge-conflict-dialog');
         if (!dialog) return;
+
+        const partnershipId = dialog.getAttribute('data-partnership-id') as PartnershipId | null;
+        if (partnershipId) {
+            dialog.querySelectorAll('.conflict-row').forEach(row => {
+                const field = row.getAttribute('data-field') as PartnershipConflictField;
+                const selected = row.querySelector('input[type="radio"]:checked') as HTMLInputElement;
+                if (field && selected) {
+                    updatePartnershipConflictResolution(this.mergeState!, partnershipId,
+                        field, selected.value as 'keep_existing' | 'use_incoming');
+                }
+            });
+            this.markUnsavedChanges();
+            this.closeConflictDialog();
+            this.renderModalContent();
+            return;
+        }
 
         const incomingId = dialog.getAttribute('data-incoming-id') as PersonId;
 
@@ -1364,7 +1510,9 @@ class MergerUIClass {
                 }
             }
         } else {
-            UI.showAlert(strings.merge.failed + '\n' + (result.errors?.join('\n') || ''), 'error');
+            // The technical detail is in the console (executeMerge logs it); the
+            // user gets the translated message, not a raw exception text.
+            UI.showAlert(strings.merge.failed, 'error');
         }
     }
 

@@ -308,7 +308,10 @@ describe('GEDCOM fidelity fixes (audit 2026-07)', () => {
             '0 @N1@ NOTE some floating note',
         ].join('\n'));
         const r = conv(ged);
-        expect(r.stats.unsupportedTags).toBe(4);
+        // The shared NOTE record is read now (pointers resolve to it), so it
+        // is not unsupported — and its text must never reach the summary.
+        expect(r.stats.unsupportedTags).toBe(3);
+        expect(r.stats.droppedTagSummary).not.toContain('floating');
         expect(r.stats.droppedTagSummary).toContain('NICK ×2');
         expect(r.stats.droppedTagSummary).toContain('RFN ×1');
     });

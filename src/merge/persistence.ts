@@ -3,14 +3,17 @@
  * Handles saving and loading merge sessions to/from IndexedDB
  */
 
-import { PersonId, StromData } from '../types.js';
+import { PersonId, PartnershipId, StromData } from '../types.js';
 import {
     MergeState,
     MergePhase,
     PersonMatch,
     FieldConflict,
-    MatchDecision
+    MatchDecision,
+    PartnershipConflictField,
+    ConflictResolution
 } from './types.js';
+import { detectPartnershipConflicts } from './executor.js';
 import { StorageManager } from '../storage.js';
 
 // ==================== IDB KEYS ====================
@@ -29,6 +32,8 @@ export interface SerializableMergeState {
     unmatchedIncoming: PersonId[];
     decisions: Array<[PersonId, MatchDecision]>;
     conflictResolutions: Array<[PersonId, FieldConflict[]]>;
+    /** Partnership conflict answers. Optional: old sessions lack it. */
+    partnershipResolutions?: Array<[PartnershipId, Partial<Record<PartnershipConflictField, ConflictResolution>>]>;
     phase: MergePhase;
     /** "Update existing only" mode (Primitive 1). Optional: old sessions lack it. */
     updateOnly?: boolean;
@@ -63,6 +68,7 @@ function serializeState(state: MergeState): SerializableMergeState {
         unmatchedIncoming: state.unmatchedIncoming,
         decisions: Array.from(state.decisions.entries()),
         conflictResolutions: Array.from(state.conflictResolutions.entries()),
+        partnershipResolutions: Array.from(state.partnershipResolutions?.entries() ?? []),
         phase: state.phase,
         updateOnly: state.updateOnly
     };
@@ -77,6 +83,7 @@ function deserializeState(serialized: SerializableMergeState): MergeState {
         unmatchedIncoming: serialized.unmatchedIncoming,
         decisions: new Map(serialized.decisions),
         conflictResolutions: new Map(serialized.conflictResolutions),
+        partnershipResolutions: new Map(serialized.partnershipResolutions ?? []),
         phase: serialized.phase,
         // Old saved sessions predate the flag → default to normal mode.
         updateOnly: serialized.updateOnly ?? false
@@ -96,6 +103,7 @@ function calculateStats(state: MergeState): SavedMergeSession['stats'] {
     for (const match of state.matches) {
         conflicts += match.conflicts.length;
     }
+    conflicts += detectPartnershipConflicts(state).length;
     for (const [personId, resolutions] of state.conflictResolutions) {
         const match = state.matches.find(m => m.incomingId === personId);
         if (match && resolutions.length === match.conflicts.length) {

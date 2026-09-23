@@ -149,7 +149,7 @@ export const slideshowMethods = uiModule({
             .filter(Boolean).join(' – ');
         const story = person.notes?.trim() ?? '';
         box.innerHTML = `
-            ${person.photo ? `<div class="slideshow-photo"><img src="${person.photo}" alt=""></div>` : ''}
+            ${person.photo ? `<div class="slideshow-photo"><img src="${this.escapeHtml(person.photo)}" alt=""></div>` : ''}
             <div class="slideshow-text">
                 <div class="slideshow-name">${this.escapeHtml(name)}</div>
                 ${years ? `<div class="slideshow-years">${this.escapeHtml(years)}</div>` : ''}
@@ -170,6 +170,7 @@ export const slideshowMethods = uiModule({
         if (!this.slideshowActive) return;
         this.slideshowPaused = !this.slideshowPaused;
         document.body.classList.toggle('slideshow-paused', this.slideshowPaused);
+        document.getElementById('slideshow-pause')?.setAttribute('aria-pressed', String(this.slideshowPaused));
         if (this.slideshowPaused) {
             if (this.slideshowTimer) { clearTimeout(this.slideshowTimer); this.slideshowTimer = null; }
         } else {

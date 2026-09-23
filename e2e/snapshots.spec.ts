@@ -21,7 +21,9 @@ test('a single backup can be deleted, and the tree is not touched', async ({ pag
     expect(before).toBeGreaterThan(1);
 
     await page.locator('.snapshot-delete').first().click();
-    await page.getByRole('button', { name: 'Yes' }).click();
+    // The confirm names the verb, never a bare "Yes".
+    await expect(page.locator('#confirm-ok-btn')).toHaveText('Delete backup');
+    await page.locator('#confirm-ok-btn').click();
 
     await expect(rows).toHaveCount(before - 1);
     // Only the backup went.

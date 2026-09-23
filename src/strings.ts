@@ -13,16 +13,69 @@ export const SUPPORTED_LANGUAGES: { code: Language; name: string }[] = [
 // Type definition for strings structure
 type StringsType = typeof stringsEN;
 
+const pluralRulesCache: Partial<Record<Language, Intl.PluralRules>> = {};
+
+/**
+ * CLDR plural category of `n` in `lang` (Intl.PluralRules, with a manual
+ * fallback for environments without Intl plural data).
+ */
+export function pluralCategory(lang: Language, n: number): Intl.LDMLPluralRule {
+    try {
+        let rules = pluralRulesCache[lang];
+        if (!rules) {
+            rules = new Intl.PluralRules(lang);
+            pluralRulesCache[lang] = rules;
+        }
+        return rules.select(n);
+    } catch {
+        if (n === 1) return 'one';
+        if (lang === 'cs' && Number.isInteger(n) && n >= 2 && n <= 4) return 'few';
+        return 'other';
+    }
+}
+
+/**
+ * Pick the grammatical form for a count.
+ * English/German: plural(lang, n, one, other).
+ * Czech: plural('cs', n, one, few, other) — one = 1, few = 2–4, other = 0 and 5+.
+ * Returns the bare word; callers put the number in themselves.
+ */
+export function plural(lang: Language, n: number, one: string, few: string, other?: string): string {
+    const cat = pluralCategory(lang, n);
+    if (cat === 'one') return one;
+    if (other === undefined) return few;
+    return cat === 'few' ? few : other;
+}
+
+/**
+ * Join list items with the language's "and" before the last one:
+ * "2 parents and 1 partner", "2 rodiče a 1 partner". (Intl.ListFormat is not
+ * in the ES2020 lib this project targets.)
+ */
+export function joinAnd(lang: Language, parts: string[]): string {
+    const items = parts.filter(Boolean);
+    if (items.length <= 1) return items[0] ?? '';
+    const and = lang === 'cs' ? 'a' : lang === 'de' ? 'und' : 'and';
+    return `${items.slice(0, -1).join(', ')} ${and} ${items[items.length - 1]}`;
+}
+
+/** Czech count form shorthand: `${n} ${word}`. */
+const nCs = (n: number, one: string, few: string, other: string): string => `${n} ${plural('cs', n, one, few, other)}`;
+/** English count form shorthand: `${n} ${word}`. */
+const nEn = (n: number, one: string, other: string): string => `${n} ${plural('en', n, one, other)}`;
+/** German count form shorthand: `${n} ${word}`. */
+const nDe = (n: number, one: string, other: string): string => `${n} ${plural('de', n, one, other)}`;
+
 const stringsEN = {
     // Toolbar
     toolbar: {
         title: 'Strom',
         // The "+" affordance is drawn by the button markup (glyph span), so the
         // label itself carries no leading plus — avoids a double plus.
-        addPerson: 'Add Person',
+        addPerson: 'Add person',
         export: 'Export ▾',
         import: 'Import ▾',
-        newTree: 'New Tree'
+        newTree: 'New tree'
     },
 
     // Menu dialogs
@@ -48,7 +101,7 @@ const stringsEN = {
         sectionView: 'View',
         sectionApp: 'App',
         exportFocusDesc: 'Download the shown people as a JSON file',
-        exportApp: 'Export App',
+        exportApp: 'Export app',
         exportAppDesc: 'Download standalone HTML',
         importJson: 'Import JSON',
         importJsonDesc: 'Load data from JSON file',
@@ -56,18 +109,17 @@ const stringsEN = {
         importGedcomDesc: 'Load family tree from GEDCOM file',
         exportGedcom: 'Export GEDCOM',
         exportGedcomDesc: 'Download as GEDCOM file',
-        newTree: 'New Tree',
-        newTreeDesc: 'Start a new empty family tree'
+        newTree: 'New tree',
     },
 
     // Export Focus dialog
 
     // Mobile menu
     mobileMenu: {
-        addPerson: 'Add Person',
+        addPerson: 'Add person',
         export: 'Export',
         import: 'Import',
-        newTree: 'New Tree',
+        newTree: 'New tree',
         more: 'More'
     },
 
@@ -75,9 +127,11 @@ const stringsEN = {
     emptyState: {
         title: 'Welcome to Strom',
         subtitle: 'Start building your family tree',
-        addFirst: 'Add First Person',
+        addFirst: 'Add first person',
         importFromFile: 'I have data elsewhere (GEDCOM from MyHeritage, Ancestry…)',
-        youCard: 'you?'
+        youCard: 'you?',
+        lockedTitle: 'Your data is locked — unlock to continue',
+        lockedSubtitle: 'Your tree is encrypted. Enter your password to view and edit it.'
     },
 
     demo: {
@@ -93,25 +147,33 @@ const stringsEN = {
         menuDesc: 'Printable book: chapters by family, photos, sources and a person index',
         toolbarPrint: 'Print',
         toolbarClose: 'Close',
-        title: 'Family Book',
+        title: 'Family book',
         dialogTitle: 'Family book',
         subtitle: 'The book of the family',
         families: 'Families',
         children: 'Children',
-        index: 'Person Index',
+        index: 'Person index',
         tree: 'Family tree',
         treeHint: 'A full, legible tree is available as a separate poster (Export → Poster).',
         sources: 'Sources',
         chapterShort: 'ch.',
         born: 'b.',
         died: 'd.',
-        persons: 'persons',
-        generations: 'generations',
+        persons: (n: number) => nEn(n, 'person', 'people'),
+        generations: (n: number) => nEn(n, 'generation', 'generations'),
         generate: 'Open book',
         optName: 'Title',
         optMaxGen: 'Max generations (optional)',
         compiled: (date: string) => `compiled ${date}`,
         empty: 'The tree is empty.',
+        // Marriage line: status and end of the union.
+        partners: 'Partners',
+        divorced: 'divorced',
+        separated: 'separated',
+        ended: 'ended',
+        // Child line: non-biological relation to the couple.
+        childRel: { adoptive: 'adopted', step: 'stepchild', foster: 'foster child' } as Record<'adoptive' | 'step' | 'foster', string>,
+        childRelOf: (label: string, parent: string) => `${label} of ${parent}`,
     },
 
     // Versioned backups
@@ -129,12 +191,8 @@ const stringsEN = {
         restored: 'Backup restored',
         created: 'Backup created',
         restoreConfirm: (what: string) => `Restore this backup? It overwrites the current tree — the current state is saved as a backup first.${what ? `\n\n${what}` : ''}`,
-        total: (count: number, size: string) => `${count} backups · ${size}`,
-        colDate: 'Date',
-        colReason: 'Reason',
-        colPersons: 'People',
-        persons: (count: number) => count === 1 ? '1 person' : `${count} people`,
-        colSize: 'Size',
+        total: (count: number, size: string) => [nEn(count, 'backup', 'backups'), size].filter(Boolean).join(' · '),
+        persons: (count: number) => nEn(count, 'person', 'people'),
         reasons: {
             auto: 'Automatic',
             manual: 'Manual',
@@ -147,7 +205,7 @@ const stringsEN = {
         postImportTitle: 'Several families in one file',
         postImport: (count: number) =>
             `The file you imported holds ${count} families that nothing connects — no parent, child or marriage leads from one to another. Each could be a tree of its own.`,
-        unrelated: (count: number) => `Holds ${count} families that nothing connects`,
+        unrelated: (count: number) => `Holds ${nEn(count, 'family', 'families')} that nothing connects`,
         unrelatedHint: 'Split them in Manage trees → ⋯ → Separate disconnected parts.',
         menu: 'Separate disconnected parts…',
         menuHint: 'Trees for islands nothing connects — no parent, child or marriage between them.',
@@ -155,13 +213,13 @@ const stringsEN = {
         intro: 'This tree holds families that nothing connects — no parent, child or marriage leads from one to another. Each can become a tree of its own.',
         single: 'Everyone in this tree is connected — there is one family here, so there is nothing to split.',
         familyName: (surname: string) => `${surname} family`,
-        persons: (count: number) => count === 1 ? '1 person' : `${count} people`,
+        persons: (count: number) => nEn(count, 'person', 'people'),
         oldest: (name: string, year: number) => `oldest ${name} (${year})`,
         noSurname: 'no surname',
         alone: 'Linked to nobody',
         selected: (count: number) => `Split off ${count}`,
         keepsOriginal: 'The original tree stays as it is — delete it yourself once you are happy with the split.',
-        done: (count: number) => `${count} trees created. The original is untouched.`,
+        done: (count: number) => `${nEn(count, 'tree', 'trees')} created. The original is untouched.`,
     },
     splitFamilies: {
         title: 'Split into families',
@@ -186,7 +244,7 @@ const stringsEN = {
         familyName: (name: string) => `${name} family`,
         focusHere: 'Selected person',
         connectsTo: (name: string) => `connected through ${name}`,
-        persons: (count: number) => count === 1 ? '1 person' : `${count} people`,
+        persons: (count: number) => nEn(count, 'person', 'people'),
         // "3 people", "1 person + 8 unknown" — real people counted plainly, the
         // unknown (placeholder) relatives stated separately so a family that is
         // mostly unknowns never reads as a big family.
@@ -198,7 +256,7 @@ const stringsEN = {
         namePlaceholder: 'Tree name',
         preview: 'Preview',
         summary: (trees: number, real: number, unknown: number) =>
-            `${trees} trees · ${real} people${unknown > 0 ? ` + ${unknown} unknown` : ''} · 100% covered`,
+            `${nEn(trees, 'tree', 'trees')} · ${nEn(real, 'person', 'people')}${unknown > 0 ? ` + ${unknown} unknown` : ''} · 100% covered`,
         create: (count: number) => count === 1 ? 'Create 1 tree' : `Create ${count} trees`,
         cancel: 'Cancel',
         keepsOriginal: 'The original tree is left exactly as it is. The new trees stay linked across their shared people — delete any you do not want in Manage trees.',
@@ -221,12 +279,15 @@ const stringsEN = {
         none: 'No spellings linked yet.',
         addTitle: 'Link spellings',
         addHint: 'Pick the spellings that mean one family.',
-        inTree: (count: number) => count === 1 ? '1 person' : `${count} people`,
+        inTree: (count: number) => nEn(count, 'person', 'people'),
         notInTree: 'not in the tree',
         addOther: 'Other spelling…',
         link: 'Link them',
         unlink: 'Unlink',
         linked: 'Spellings linked.',
+        introShort: 'Say once that spellings mean the same family, and search and merging find them all.',
+        more: 'More',
+        addSpelling: 'Add',
     },
 
     events: {
@@ -242,7 +303,6 @@ const stringsEN = {
         participantLink: 'Link to someone in the tree',
         participantUnlink: 'Not this person',
         participantInTree: 'in the tree',
-        participantNameRequired: 'Give a name, or link someone from the tree.',
         roles: {
             godparent: 'Godparent',
             witness: 'Witness',
@@ -262,6 +322,7 @@ const stringsEN = {
         note: 'Note',
         customLabel: 'Label',
         customLabelRequired: 'Enter a label for the custom event',
+        unsavedMessage: 'You have unsaved changes in this event.',
         deleteConfirm: (what: string) => `Delete this event?\n\n${what}`,
         types: {
             birth: 'Birth',
@@ -315,10 +376,11 @@ const stringsEN = {
         fieldUrl: 'URL',
         fieldNote: 'Note',
         titleRequired: 'Enter a source title',
+        unsavedMessage: 'You have unsaved changes in this source.',
         citations: (n: number) => `${n}×`,
         deleteConfirm: (title: string, n: number) =>
             n > 0
-                ? `Delete this source? It is cited in ${n} place(s); those citations will be removed.\n\n${title}`
+                ? `Delete this source? It is cited in ${nEn(n, 'place', 'places')}; those citations will be removed.\n\n${title}`
                 : `Delete this source?\n\n${title}`,
     },
 
@@ -330,7 +392,7 @@ const stringsEN = {
         delete: 'Delete',
         deleteConfirm: (what: string) => `Delete this attachment?\n\n${what}`,
         notePlaceholder: 'Note (optional)',
-        total: (count: number, size: string) => `${count} attachment(s), ${size} total`,
+        total: (count: number, size: string) => `${nEn(count, 'attachment', 'attachments')}, ${size} total`,
         pdfTooLarge: 'PDF is too large (max 2 MB).',
         unsupportedType: 'Unsupported file type. Use JPG, PNG or PDF.',
         readError: 'Could not read the file.',
@@ -338,12 +400,12 @@ const stringsEN = {
 
     // Duplicate suggestions
     duplicates: {
-        title: 'Similar persons already exist:',
+        title: 'Similar people already exist:',
         goToPerson: 'Go to person',
         useExisting: 'Use existing',
         parentsLabel: (names: string) => `parents: ${names}`,
         settingLabel: 'Duplicate suggestions',
-        settingHint: 'Suggest existing similar persons while entering a new one',
+        settingHint: 'Suggest existing similar people while entering a new one',
     },
 
     // Overview minimap
@@ -384,6 +446,7 @@ const stringsEN = {
         step4: 'The focus panel shows who the tree centres on. The arrows change how many generations of ancestors and descendants are visible.',
         step5: 'Switch views: Family, Descendants, Timeline or the ancestor Fan.',
         step6: 'Zoom and pan controls — you can also drag the canvas and zoom with the mouse wheel; 0 resets the view.',
+        step6Touch: 'Zoom controls — you can also drag the canvas with a finger and pinch to zoom.',
         step7: 'Search for anyone by name, and use the funnel to filter by surname, place, birth years, gender or living status.',
         step8: 'Trees, export and sharing live here. Strom exports as a single self-contained file you can email to a relative.',
     },
@@ -415,14 +478,13 @@ const stringsEN = {
         empty: 'No anniversaries in the next 30 days',
         today: 'today',
         tomorrow: 'tomorrow',
-        inDays: (n: number) => `in ${n} days`,
+        inDays: (n: number) => `in ${nEn(n, 'day', 'days')}`,
         yearsAgo: (n: number) => `${n} ${n === 1 ? 'year' : 'years'} ago`,
         birthday: (name: string, years: number) => `${name} turns ${years}`,
-        wedding: (a: string, b: string, years: number) => `${a} & ${b} — ${years} years married`,
-        birthMilestone: (name: string, years: number) => `${name} — ${years} years since birth`,
-        deathMilestone: (name: string, years: number) => `${name} — ${years} years since death`,
-        deathAnniversary: (name: string, years: number) => `${name} — ${years} years since death`,
-        otdTitle: 'On this day',
+        wedding: (a: string, b: string, years: number) => `${a} & ${b} — ${nEn(years, 'year', 'years')} married`,
+        birthMilestone: (name: string, years: number) => `${name} — ${nEn(years, 'year', 'years')} since birth`,
+        deathMilestone: (name: string, years: number) => `${name} — ${nEn(years, 'year', 'years')} since death`,
+        deathAnniversary: (name: string, years: number) => `${name} — ${nEn(years, 'year', 'years')} since death`,
         otdBirth: (name: string, ago: string, _female: boolean) => `${ago}, ${name} was born`,
         otdDeath: (name: string, ago: string, _female: boolean) => `${ago}, ${name} died`,
         otdWedding: (a: string, b: string, ago: string) => `${ago}, ${a} & ${b} were married`,
@@ -449,6 +511,7 @@ const stringsEN = {
         maybe: (name: string) => `Similar: ${name}`,
         useExisting: 'Use existing',
         linked: 'Linked to existing',
+        unlink: 'Unlink',
         added: (n: number) => n === 1 ? '1 person added' : `${n} people added`,
         continuePrompt: 'Continue with the rest of the family?',
         continueYes: 'Add family',
@@ -479,6 +542,84 @@ const stringsEN = {
         lockedRefuse: 'Unlock encryption before saving to a file',
     },
 
+    // Opening a research from Strom Research (file handler, link, drag & drop, live bridge)
+    research: {
+        defaultName: 'Research',
+        opened: (name: string, persons: number, families: number, date: string) =>
+            `Opened the research ${name} from Strom Research — ${nEn(persons, 'person', 'people')}, ${nEn(families, 'family', 'families')} (as of ${date})`,
+        updated: (name: string, persons: number, families: number, date: string) =>
+            `Updated the research ${name} from Strom Research — ${nEn(persons, 'person', 'people')}, ${nEn(families, 'family', 'families')} (as of ${date})`,
+        editedTitle: 'Changed in the app',
+        editedMessage: (name: string) =>
+            `The tree “${name}” was changed in this app since it last came from Strom Research. Updating it replaces those changes with the research (a backup is kept first). Or open the research as a new copy and leave this tree as it is.`,
+        update: 'Update',
+        openCopy: 'Open as copy',
+        changeWords: {
+            newPerson: 'New person',
+            newChild: 'New child',
+            newFamily: 'New family',
+            facts: { BIRT: 'birth', CHR: 'baptism', BAPM: 'baptism', DEAT: 'death', BURI: 'burial', MARR: 'marriage', OCCU: 'occupation', RESI: 'residence', CENS: 'census', NAME: 'name', SEX: 'sex' } as Record<string, string>,
+        },
+        copyName: (name: string, date: string) => `${name} (${date})`,
+        notLocal: 'The link pointed to a file that is not on this computer, so it was ignored.',
+        fetchFailedTitle: 'Could not open the file',
+        fetchFailed: 'The browser did not let the app read the file from Strom Research on this computer. You can import it by hand: choose “Import file” and pick the .ged file.',
+        importManually: 'Import file…',
+        safariBlocked: 'Safari does not let web pages connect to programs on this computer. Open the link in Chrome or Edge, or drag the file output/tree-strom.ged from the research folder into this window.',
+        notInViewMode: 'This is a read-only copy. Open the file in your own Strom app.',
+        onlyGedcom: 'Only GEDCOM files (.ged) can be dropped here.',
+        dropHint: 'Drop the .ged file to open it',
+        notReady: 'The app is still loading. Try again in a moment.',
+        panelTitle: 'Research now',
+        panelLabel: 'Live research from Strom Research',
+        following: (name: string) => `Following “${name}”. Changes arrive by themselves; the tree is read-only meanwhile.`,
+        ended: 'Following ended',
+        endedText: 'Strom Research is no longer sending updates. The tree shows the last state and can be edited again.',
+        stop: 'Stop following',
+        stopped: 'Stopped following the research.',
+        close: 'Close',
+        show: 'Show',
+        hide: 'Hide',
+        atWork: 'At work',
+        nobodyWorking: 'Nobody is working on it right now.',
+        changes: 'Latest changes',
+        noChanges: 'No changes yet.',
+        waiting: 'Waiting for you',
+        waitingOn: (on: string) => `waiting on: ${on}`,
+        since: (when: string) => `since ${when}`,
+        liveFailed: 'Could not connect to Strom Research on this computer. Is it still running (strom app --live)? The browser may also have blocked the connection.',
+        liveNoTree: 'Strom Research did not say which research it is sending.',
+        liveOtherTree: 'Strom Research is now sending a different research, so following stopped.',
+        // Strom Research in the app (3.0): empty-state offer, menu item, what's-new card, info dialog
+        brand: 'Strom Research',
+        offerEyebrow: 'Not sure where to start?',
+        offerTitle: 'Let an AI agent find your ancestors',
+        offerDesc: 'Strom Research searches parish registers and archives and backs every fact with its source.',
+        runsOnComputer: 'Runs on a computer (Windows, Mac, Linux)',
+        menuItem: 'AI ancestor research',
+        newBadge: 'New',
+        newSr: 'new',
+        triggerNewSr: 'new item',
+        cardTitle: 'New in Strom 3.0: research with an AI agent',
+        cardText: 'An AI agent on your computer searches parish registers and archives, records only what the records prove, and your tree grows in Strom by itself. Strom Research is free.',
+        learnMore: 'Learn more',
+        notNow: 'Not now',
+        alsoNew: 'Also in 3.0',
+        news1: 'Clearer delete confirmations',
+        news2: 'New settings and export',
+        news3: 'Dark mode',
+        dialogLead: 'An AI agent searches parish registers and archives for you and fills in your family tree — every fact with its source. Strom simply shows the tree, and it grows there live.',
+        point1Title: 'On your computer',
+        point1Text: 'The research is a folder on your disk. Your data stays with you.',
+        point2Title: 'Documented',
+        point2Text: 'The agent records only what the records prove and cites a source for every fact.',
+        point3Title: 'Grows in Strom',
+        point3Text: 'Open the result in Strom and watch your tree fill in live.',
+        needTitle: 'What you need',
+        needText: 'A computer (Windows, Mac, Linux) and an AI agent with an account from its maker — usually a subscription; we recommend Claude. Strom Research and Strom are free.',
+        openSite: 'Open the Strom Research page',
+    },
+
     // CSV export (spreadsheet person table)
     csv: {
         menuTitle: 'Export CSV',
@@ -491,10 +632,10 @@ const stringsEN = {
 
     // Zoom controls
     zoomControls: {
-        zoomIn: 'Zoom In',
-        zoomOut: 'Zoom Out',
-        reset: 'Reset View',
-        fitToScreen: 'Fit to Screen',
+        zoomIn: 'Zoom in',
+        zoomOut: 'Zoom out',
+        reset: 'Reset view',
+        fitToScreen: 'Fit to screen',
         settingLabel: 'Floating buttons',
         settingHint: 'Show the floating zoom buttons over the tree',
     },
@@ -504,39 +645,38 @@ const stringsEN = {
         nameVariants: 'Other spellings of the name',
         showHint: 'Show help for this field',
         nameVariantsHint: 'How the registers actually write it (Wischek, Vissek), an alias, or the farm the family was known by. Separate with commas. Search and merge find the person under any of them. Applies to this person only — surname spellings shared by the whole family belong in Manage trees → Surname spellings.',
-        firstName: 'First Name',
-        lastName: 'Last Name',
+        firstName: 'First name',
+        lastName: 'Last name',
         gender: 'Gender',
-        selectPerson: 'Select Person',
-        birthDate: 'Birth Date',
-        birthPlace: 'Birth Place',
-        deathDate: 'Death Date',
-        deathPlace: 'Death Place',
+        selectPerson: 'Select person',
+        birthDate: 'Birth date',
+        birthPlace: 'Birth place',
+        deathDate: 'Death date',
+        deathPlace: 'Death place',
         deceased: 'Deceased',
         photo: 'Photo',
         photoChoose: 'Choose photo',
         photoRemove: 'Remove',
         photoRotateLeft: 'Rotate left',
         photoRotateRight: 'Rotate right',
-        maidenName: 'Maiden Name',
+        maidenName: 'Maiden name',
         refn: 'Reference number',
         question: 'Open question',
         // Partnership dates - used based on status
-        startDateMarried: 'Wedding Date',
-        startDatePartners: 'Relationship Start',
+        startDateMarried: 'Wedding date',
+        startDatePartners: 'Relationship start',
         startPlace: 'Place',
-        endDateMarried: 'Divorce Date',
-        endDatePartners: 'Relationship End',
+        endDateMarried: 'Divorce date',
+        endDatePartners: 'Relationship end',
         note: 'Note',
         notes: 'Notes',
-        moreInfo: 'More Info',
+        moreInfo: 'More info',
         partner: 'Partner',
         isPrimary: 'Primary relationship'
     },
 
     // Tooltip
     tooltip: {
-        alsoWritten: 'also written',
         age: 'Age',
         born: 'Born',
         died: 'Died',
@@ -557,7 +697,8 @@ const stringsEN = {
         maidenName: 'Maiden name',
         refn: 'e.g. archive box 12, or an id from another program',
         question: 'e.g. does anyone know her birth date?',
-        flexDate: '5/15/1880 · 5/1880 · 1880 · about 1880'
+        flexDateShort: 'e.g. 1880',
+        flexDate: '15 May 1880 · 5/15/1880 · 1880-05-15 · about 1880'
     },
 
     // Archive search
@@ -585,14 +726,15 @@ const stringsEN = {
     // Context menu
     contextMenu: {
         edit: 'Edit',
+        view: 'View',
         focus: 'Focus',
         showDescendants: 'Show descendants',
         relationship: 'Find relationship…',
         archives: 'Search in archives…',
-        addParent: 'Add Parent',
-        addPartner: 'Add Partner',
-        addChild: 'Add Child',
-        addSibling: 'Add Sibling',
+        addParent: 'Add parent',
+        addPartner: 'Add partner',
+        addChild: 'Add child',
+        addSibling: 'Add sibling',
         delete: 'Delete'
     },
 
@@ -653,7 +795,7 @@ const stringsEN = {
             `Remove saved coordinates for ${count} ${count === 1 ? 'place' : 'places'} nobody in this tree uses any more? Nothing your family wrote is touched — only the leftover map pins go. This can be undone.`,
         cleanOrphansDone: (count: number) => `Removed ${count} orphaned ${count === 1 ? 'place' : 'places'}.`,
         wrongSpot: 'Wrong spot? Fix this place',
-        usedBy: (count: number) => count === 1 ? '1 person' : `${count} people`,
+        usedBy: (count: number) => nEn(count, 'person', 'people'),
         search: 'Search',
         searchLabel: 'Search for this place under another name',
         searching: 'Searching…',
@@ -706,7 +848,6 @@ const stringsEN = {
         countErrors: (n: number) => `${n} ${n === 1 ? 'error' : 'errors'}`,
         countWarnings: (n: number) => `${n} ${n === 1 ? 'warning' : 'warnings'}`,
         countInfos: (n: number) => `${n} ${n === 1 ? 'note' : 'notes'}`,
-        topIssues: 'Top issues',
         moreIssues: (n: number) => `and ${n} more…`,
         // Completeness block
         sectionCompleteness: 'Data completeness',
@@ -722,7 +863,7 @@ const stringsEN = {
         statGenerations: 'Generations',
         statIslands: 'Separate families',
         islandsOne: 'All people are connected into one family.',
-        islandsMany: (n: number) => `This tree holds ${n} separate families with no link between them.`,
+        islandsMany: (n: number) => `This tree holds ${nEn(n, 'separate family', 'separate families')} with no link between them.`,
         islandItem: (surname: string, count: number) => `${surname} — ${count} ${count === 1 ? 'person' : 'people'}`,
         islandUnnamed: 'Unnamed family',
         islandsSplitHint: 'Use “Split into families” below to give each its own tree.',
@@ -739,15 +880,17 @@ const stringsEN = {
     personModal: {
         birthEstimate: (year: number) => `Born no later than ~${year} (from other dates)`,
         birthEstimateApply: 'use',
-        addTitle: 'Add Person',
-        editTitle: 'Edit Person',
-        completeTitle: 'Complete Person',
+        addTitle: 'Add person',
+        editTitle: 'Edit person',
+        completeTitle: 'Complete person',
         enterName: 'Please enter first name or last name',
         unsavedMessage: 'You have unsaved changes in person details.',
         invalidDate: 'Invalid date. Use e.g. 5/15/1880, 5/1880, 1880 or "about 1880".',
         photoError: 'Could not process the image.',
         // Header + section labels (Letopis redesign)
         newPersonName: 'New person',
+        moreDetails: 'More details',
+        moreDetailsDesc: 'Death, occupation, photo, notes',
         sectionBasic: 'Basic info',
         sectionBirth: 'Birth',
         sectionOrigin: 'Occupation & residence',
@@ -767,7 +910,7 @@ const stringsEN = {
         lifelineChild: (name: string) => `Child born: ${name}`,
         lifelineChildUnknown: 'Child born',
         lifelineWith: (names: string) => `with ${names}`,
-        dateHint: '5/15/1880 · 5/1880 · 1880 · about 1880',
+        dateHint: 'Exact, year or estimate: 5/15/1880 · 5/1880 · about 1880 · before 1900',
         deletePerson: 'Delete person…',
         // Live summaries shown next to each section header
         sumParents: 'parents',
@@ -784,30 +927,29 @@ const stringsEN = {
 
     // Relation modal
     relationModal: {
-        addParent: 'Add Parent',
-        addPartner: 'Add Partner',
-        addChild: 'Add Child',
-        addSibling: 'Add Sibling',
-        linkExisting: 'Link Existing Person',
+        addParent: 'Add parent',
+        addPartner: 'Add partner',
+        addChild: 'Add child',
+        addSibling: 'Add sibling',
+        linkExisting: 'Link existing person',
         linkExistingTitle: 'Link existing person',
-        linkAsParent: 'Link as Parent',
-        linkAsPartner: 'Link as Partner',
-        linkAsChild: 'Link as Child',
-        linkAsSibling: 'Link as Sibling',
+        linkAsParent: 'Link as parent',
+        linkAsPartner: 'Link as partner',
+        linkAsChild: 'Link as child',
+        linkAsSibling: 'Link as sibling',
         createNewTitle: 'Create new person',
         selectPerson: '-- Select --',
         enterName: 'Please enter first name or last name',
         selectPersonError: 'Please select a person',
-        linkButton: 'Link'
+        linkButton: 'Link',
+        linkRefused: 'This link is not possible: a person can have at most two parents and cannot be their own ancestor.'
     },
 
     // Child confirmation
     childConfirm: {
-        title: 'Add Child',
+        title: 'Add child',
         message: (name: string, partnerName: string) =>
             `<strong>${name}</strong> has a partner (<strong>${partnerName}</strong>).`,
-        addToBoth: 'Add child to both parents',
-        addToOne: (name: string) => `Add child only to ${name}`
     },
 
     // Delete confirmation
@@ -821,6 +963,65 @@ const stringsEN = {
         title: 'Confirm'
     },
 
+    // Destructive confirmations: the button says the verb, the title names the
+    // object, the message says what goes with it and whether Undo brings it back.
+    danger: {
+        undoHint: 'You can bring it back with the Undo button.',
+        cannotUndo: 'This cannot be undone.',
+        deletePersonTitle: (name: string) => `Delete ${name}?`,
+        deletePerson: 'Delete person',
+        /** '' when the person has no links. */
+        personLinks: (gender: string, parents: number, partners: number, children: number): string => {
+            const list = joinAnd('en', [
+                parents ? nEn(parents, 'parent', 'parents') : '',
+                partners ? nEn(partners, 'partner', 'partners') : '',
+                children ? nEn(children, 'child', 'children') : '',
+            ]);
+            if (!list) return '';
+            const whose = gender === 'female' ? 'Her' : gender === 'male' ? 'His' : 'Their';
+            return `${whose} links are removed too: ${list}.`;
+        },
+        orphanMessage: (name: string) => `${name} has no relationships left in this tree.`,
+        deleteTreeTitle: (name: string) => `Delete tree ${name}?`,
+        deleteTree: 'Delete tree',
+        deleteTreeMessage: (persons: number) =>
+            `The tree is removed from this browser together with ${nEn(persons, 'person', 'people')} and all its backups. Export it first if you might want it back. This cannot be undone.`,
+        deleteBackupTitle: (when: string) => `Delete backup (${when})?`,
+        deleteBackup: 'Delete backup',
+        deleteBackupMessage: (persons: number) =>
+            `It holds ${nEn(persons, 'person', 'people')}. The tree itself is not touched. This cannot be undone.`,
+        restoreBackupTitle: (when: string) => `Restore backup (${when})?`,
+        restoreBackup: 'Restore backup',
+        deleteSourceTitle: (title: string) => `Delete source ${title}?`,
+        deleteSource: 'Delete source',
+        sourceCited: (n: number) => `It is cited in ${nEn(n, 'place', 'places')}; those citations are removed too.`,
+        deleteEventTitle: (type: string) => `Delete event “${type}”?`,
+        deleteEvent: 'Delete event',
+        deleteAttachmentTitle: (name: string) => `Delete attachment ${name}?`,
+        deleteAttachment: 'Delete attachment',
+        cleanPlacesTitle: (n: number) => `Remove ${nEn(n, 'unused place', 'unused places')}?`,
+        cleanPlaces: 'Remove places',
+        clearHistoryTitle: 'Clear change history?',
+        clearHistory: 'Clear history',
+        clearHistoryMessage: 'Every recorded change of this tree is deleted; the tree itself is not touched. This cannot be undone.',
+        discardMergeTitle: (name: string) => `Discard merge ${name}?`,
+        discardMerge: 'Discard merge',
+        discardMergeMessage: 'Your decisions in this merge are thrown away. The trees themselves are not touched. This cannot be undone.',
+    },
+
+    // Empty states: serif heading, one sentence of purpose, optional action.
+    emptyStates: {
+        sourcesTitle: 'No sources yet',
+        sourcesText: 'A source is the register, document or book a fact comes from. Once added, you cite it on a birth, a marriage and other facts.',
+        backupsTitle: 'No backups yet',
+        backupsText: 'A backup is a copy of the whole tree you can return to. The app also makes them itself — from time to time and before an import or merge.',
+        anniversariesTitle: 'No anniversaries in the next 30 days',
+        anniversariesText: 'Birthdays and wedding anniversaries show up here once people have full dates.',
+        attachmentsTitle: 'No attachments yet',
+        attachmentsText: 'Scans of certificates, letters or photos belonging to this person.',
+        surnamesTitle: 'No spellings linked yet',
+    },
+
     // Relationships panel
     relationships: {
         title: (name: string) => `Relationships: ${name}`,
@@ -828,10 +1029,10 @@ const stringsEN = {
         partners: 'Partners',
         children: 'Children',
         siblings: 'Siblings',
-        addParent: '+ Add Parent',
-        addPartner: '+ Add Partner',
-        addChild: '+ Add Child',
-        addSibling: '+ Add Sibling',
+        addParent: '+ Add parent',
+        addPartner: '+ Add partner',
+        addChild: '+ Add child',
+        addSibling: '+ Add sibling',
         remove: 'Remove',
         witnesses: 'Wedding witnesses',
         addWitness: '👥 Add witness',
@@ -841,11 +1042,11 @@ const stringsEN = {
         reassignHint: (child: string, oldParent: string) => `${child} will be unlinked from ${oldParent} and linked to the person you pick below. Nothing is retyped.`,
         reassignDone: (child: string, parent: string) => `${child} now links to ${parent}`,
         reassignFailed: 'The link could not be moved.',
-        noRelationships: 'No relationships yet',
-        unsavedTitle: 'Unsaved Changes',
+        removeLocked: 'A locked person\'s relationships cannot be changed. Unlock the person first.',
+        unsavedTitle: 'Unsaved changes',
         unsavedMessage: 'You have unsaved changes in relationship settings.',
-        unsavedSave: 'Save & Close',
-        unsavedDiscard: 'Discard Changes',
+        unsavedSave: 'Save & close',
+        unsavedDiscard: 'Discard changes',
         unsavedStay: 'Stay',
         orphanConfirm: (name: string) => `"${name}" has no remaining relationships. Delete this person?`,
         orphanDelete: 'Delete',
@@ -870,7 +1071,7 @@ const stringsEN = {
         add: 'Add',
         continue: 'Continue',
         delete: 'Delete',
-        manageRelationships: 'Manage Relationships',
+        manageRelationships: 'Manage relationships',
         ok: 'OK',
         yes: 'Yes',
         no: 'No',
@@ -911,7 +1112,7 @@ const stringsEN = {
     // Export
     export: {
         failed: 'Export failed. Please try again.',
-        devModeNotSupported: 'Export App is only available from the built version (strom.html). Run "npm run build" first.'
+        devModeNotSupported: 'Export app is only available from the built version (strom.html). Run "npm run build" first.'
     },
 
     // Focus mode
@@ -919,16 +1120,20 @@ const stringsEN = {
         focusedOn: 'Focused on',
         back: 'Back to previous person (Alt+←)',
         forward: 'Forward (Alt+→)',
-        showAll: 'Show All',
+        showAll: 'Show all',
         generationsUp: 'Generations up',
         generationsDown: 'Generations down',
-        exportFocus: 'Export Focus',
-        hiddenPartners: (count: number) => `+${count} partner${count > 1 ? 's' : ''} (click to focus)`,
-        hiddenFamilies: (count: number) => `${count} other famil${count > 1 ? 'ies' : 'y'} with children (click to focus)`,
+        // Depth stepper labels (focus chip, tablet toolbar, descendants badge).
+        ancestorsLabel: 'Ancestors',
+        descendantsLabel: 'Descendants',
+        depthLabel: 'Depth',
+        depthDecrease: 'Fewer generations',
+        depthIncrease: 'More generations',
+        exportFocus: 'Export focus',
+        hiddenPartners: (count: number) => `+${nEn(count, 'partner', 'partners')} (click to focus)`,
+        hiddenFamilies: (count: number) => `${nEn(count, 'other family', 'other families')} with children (click to focus)`,
         hiddenPartnersTooltip: 'Other partners',
         hiddenFamiliesTooltip: 'Other families',
-        collapsePartners: 'Collapse expanded partners',
-        collapsePartnersLabel: '−',
         hiddenSiblingsTooltip: 'Siblings',
         hiddenParentsTooltip: 'Parents',
         hiddenChildrenTooltip: 'Children',
@@ -936,7 +1141,7 @@ const stringsEN = {
         branchTabParents: 'parents',
         branchTabSiblings: 'siblings',
         branchTabChildren: 'family',
-        personCount: (visible: number, total: number) => `${visible} of ${total} persons`
+        personCount: (visible: number, total: number) => `${visible} of ${nEn(total, 'person', 'people')}`
     },
 
     // Generation guide labels (small-caps rules on the canvas, relative to focus)
@@ -951,8 +1156,6 @@ const stringsEN = {
 
     // Branch tabs (family context navigation)
     branchTabs: {
-        viewParents: 'View as child (show parents)',
-        viewSiblings: 'Show siblings',
         viewFamily: 'View as parent (show own family)'
     },
 
@@ -978,32 +1181,56 @@ const stringsEN = {
         living: 'Living only',
         deceased: 'Deceased only',
         clear: 'Clear',
-        resultCount: (n: number) => `${n} result(s)`,
+        resultCount: (n: number) => nEn(n, 'result', 'results'),
     },
 
     // Person picker
     personPicker: {
         placeholder: 'Search person...',
-        noResults: 'No matching persons'
+        noResults: 'No matching people'
     },
 
     // Errors
     errors: {
         saveFailed: 'Saving failed — your latest changes may not be stored! Free up space or unlock encryption, then edit again.',
-        parseStoredData: 'Failed to parse stored data',
         invalidJson: 'Invalid JSON file'
+    },
+
+    // Storage safety: encryption lock, other tabs, backups (review wave 1 B)
+    storageSafety: {
+        saveBlocked: 'This tree could not be decrypted with the current password, so changes to it are NOT being saved. Unlock with the right password first.',
+        lockedBanner: 'Your data is encrypted and locked.',
+        unlock: 'Unlock',
+        treeOtherKey: 'This tree was encrypted with a different password (set before a password change, or imported). Enter that password — the tree will then be re-encrypted with your current password.',
+        treeRecovered: 'Tree unlocked and re-encrypted with your current password.',
+        unlockToContinue: 'Unlock your encrypted data first — new trees are stored encrypted.',
+        otherTabSaved: 'This tree was changed in another tab. Reload to see those changes — edits made here would overwrite them.',
+        reload: 'Reload',
+        storageInitFailed: 'The browser storage could not be opened, so your data cannot be loaded or saved. Close other tabs of the app, make sure private browsing does not block storage, and reload the page.',
+        storageBlocked: 'Another tab with an older version of the app is blocking the storage. Close it to continue.',
+        storageClosed: 'The app was updated in another tab. Reload this tab before making further changes.',
+        treeLocked: 'This tree is locked. Unlock it in the tree manager to undo or redo changes.',
+        importedSuffix: (date: string, time: string) => `imported ${date} ${time}`,
+        backupTitle: 'Restore backup',
+        backupContains: (count: number) => `This backup contains ${count} ${count === 1 ? 'tree' : 'trees'}. Import all of them as new trees?`,
+        backupImportAll: 'Import all trees',
+        backupImported: (count: number) => `${count} ${count === 1 ? 'tree' : 'trees'} imported`,
+        backupSkipped: (count: number) => `${count} ${count === 1 ? 'tree' : 'trees'} could not be read and ${count === 1 ? 'was' : 'were'} skipped.`,
+        backupEmpty: 'The backup contains no readable trees.',
+        snapshotFailed: 'The backup operation failed.',
+        snapshotLocked: 'Unlock your encrypted data to work with backups.',
+        reencodeFailed: (count: number) => `${count} stored ${count === 1 ? 'item' : 'items'} (backups, logs) could not be converted and keep their previous form.`
     },
 
     // Partner selection dialog
     partnerSelection: {
-        title: 'Select Partner',
+        title: 'Select partner',
         description: (name: string) => `Show relationship branch for ${name}:`
     },
 
     // Add child - parent selection
     addChild: {
         selectParent: 'Select the other parent',
-        selectParentDesc: (name: string) => `${name} has multiple partners. Select the other parent:`,
         newPlaceholder: 'New person (unknown)',
         unknownPerson: 'Unknown person'
     },
@@ -1019,32 +1246,29 @@ const stringsEN = {
     about: {
         title: 'About Strom',
         version: 'Version',
+        support: 'Strom is free and open source. If it helps you, you can support its further development.',
+        coffee: 'Buy me a coffee',
+        betaBadge: 'Beta',
+        betaTitle: 'Test version before release. In this browser it shares your trees with the regular app, so make a backup first.',
         description: 'Family tree in browser or single HTML. Data stays with you.',
         createdBy: 'Created by',
-        license: 'License',
-        licenseType: 'MPL-2.0 / Commercial',
         author: 'Author',
         authorName: 'Milan Víšek',
-        website: 'Website',
-        websiteUrl: 'https://stromapp.info',
         close: 'Close',
-        currentData: 'Current Data',
+        currentData: 'Current data',
         stats: {
-            treeName: 'Tree',
-            trees: 'trees',
-            persons: 'Persons',
-            families: 'Families',
-            men: 'Men',
-            women: 'Women',
-            generations: 'Generations',
-            oldest: 'Oldest'
+            trees: (n: number) => nEn(n, 'tree', 'trees'),
+            persons: (n: number) => nEn(n, 'person', 'people'),
+            families: (n: number) => nEn(n, 'family', 'families'),
+            generations: (n: number) => nEn(n, 'generation', 'generations'),
+            since: (year: string) => `since ${year}`
         }
     },
 
     // GEDCOM import
     gedcom: {
-        resultTitle: 'GEDCOM Conversion',
-        persons: 'Persons',
+        resultTitle: 'GEDCOM conversion',
+        persons: 'People',
         partnerships: 'Partnerships',
         placeholders: 'Placeholders',
         unsupported: 'Unsupported',
@@ -1052,9 +1276,9 @@ const stringsEN = {
         saveAsJsonDesc: 'Download converted data as JSON file',
         importAsNew: 'Import as a new tree',
         importAsNewDesc: 'Add as a separate tree (your current tree stays)',
-        mergeExisting: 'Merge with Existing',
+        mergeExisting: 'Merge with existing',
         mergeExistingDesc: 'Smart merge into current tree',
-        insertToTree: 'Insert into Tree',
+        insertToTree: 'Insert into tree',
         insertToTreeDesc: 'Load converted data into current tree',
         parseError: 'Failed to parse GEDCOM file',
         skippedTags: 'Skipped records',
@@ -1106,6 +1330,7 @@ const stringsEN = {
             DIVF: 'Divorce filed',
             CENS: 'Census',
             EVEN: 'Event',
+            RESI: 'Residence',
         } as Record<string, string>,
         census: 'Census',
         genericEvent: 'Event',
@@ -1126,22 +1351,45 @@ const stringsEN = {
         parentAnd: ' and ',
         alsoRecorded: (kind: string, parents: string) => `Also recorded as ${kind} of ${parents}.`,
         alsoRecordedNoParents: (kind: string) => `Also recorded as ${kind} in another family.`,
+        /**
+         * Detail a register gives about one fact beyond its date and place
+         * (GEDCOM AGE / CAUS / ADDR under the fact). One labelled line in the
+         * fact's note — there is no field for them, and a line is all it takes.
+         */
+        age: (text: string) => `Age: ${text}`,
+        ageUnit: (n: number, unit: 'y' | 'm' | 'd') =>
+            `${n} ${{ y: n === 1 ? 'year' : 'years', m: n === 1 ? 'month' : 'months', d: n === 1 ? 'day' : 'days' }[unit]}`,
+        ageWords: { INFANT: 'infant', STILLBORN: 'stillborn', CHILD: 'child' } as Record<string, string>,
+        husbandAge: (text: string) => `Age of the husband: ${text}`,
+        wifeAge: (text: string) => `Age of the wife: ${text}`,
+        cause: (text: string) => `Cause: ${text}`,
+        address: (text: string) => `Address: ${text}`,
+        /** A date the file gave in another calendar; the stored date is read as Gregorian. */
+        calendarDate: (calendar: string, date: string) => `Date in the ${calendar} calendar: ${date}`,
+        calendars: { JULIAN: 'Julian', HEBREW: 'Hebrew', 'FRENCH R': 'French Republican', ROMAN: 'Roman' } as Record<string, string>,
+        /** Source record lines with no field of their own (TEXT, PUBL, AUTH, REPO > CALN). */
+        sourceText: (text: string) => `Transcript: ${text}`,
+        sourcePublication: (text: string) => `Publication: ${text}`,
+        sourceAuthor: (text: string) => `Author: ${text}`,
+        sourceCallNumber: (text: string) => `Call number: ${text}`,
+        /** A GEDCOM date phrase or a date that could not be read whole — kept as written. */
+        datePhrase: (text: string) => `Date as written: ${text}`,
     },
 
     // Save current data dialog
     saveCurrent: {
-        title: 'Save Current Data?',
+        title: 'Save current data?',
         message: 'You have existing data. Would you like to save it before continuing?',
         exportJson: 'Export JSON',
-        exportApp: 'Export App',
-        continueWithout: 'Continue Without Saving'
+        exportApp: 'Export app',
+        continueWithout: 'Continue without saving'
     },
 
     // Validation messages
     validation: {
         parseError: 'Error reading file',
         invalidStructure: 'Invalid file structure',
-        missingPersons: 'Missing persons data',
+        missingPersons: 'Missing people data',
         missingPartnerships: 'Missing partnerships data',
         missingField: 'Missing required field',
         invalidReference: 'Invalid reference in data',
@@ -1158,13 +1406,12 @@ const stringsEN = {
         olderVersion: 'File is from older version',
         newerVersion: 'File is from newer version (may have compatibility issues)',
         // Version mismatch dialogs
-        newerDataTitle: 'Newer Data Version Detected',
+        newerDataTitle: 'Newer data version detected',
         newerDataInStorage: 'Your stored data was created with a newer version of the application.',
         newerDataInImport: 'This file was created with a newer version of the application.',
         newerDataWarning: 'Opening with this older version may cause data loss or errors.',
         newerDataSolution: 'Recommended: Export your data as JSON and import it in the newer version.',
-        exportAndExit: 'Export JSON & Close',
-        getNewerVersion: 'Please use a newer version of the application to open this file.',
+        exportAndExit: 'Export JSON & close',
         yourVersion: 'Your app version',
         dataVersion: 'Data version',
         viewOnlyAllowed: 'You can view this data, but importing is disabled to prevent data loss.',
@@ -1176,11 +1423,11 @@ const stringsEN = {
 
     // Merge import
     merge: {
-        title: 'Merge Data',
-        analyzing: 'Analyzing persons...',
+        title: 'Merge data',
+        analyzing: 'Analyzing people...',
         matches: 'Matches',
         conflicts: 'Conflicts',
-        newPersons: 'New Persons',
+        newPersons: 'New people',
         tabAll: 'All',
         highConfidence: 'High',
         mediumConfidence: 'Medium',
@@ -1197,10 +1444,10 @@ const stringsEN = {
         changeMatch: 'Change',
         manualMatch: 'Match to existing',
         reanalyze: 'Re-analyze',
-        execute: 'Execute Merge',
+        execute: 'Execute merge',
         // "Update existing only" mode (Primitive 1)
         updateOnlyLabel: 'Only update existing people (don\'t add new)',
-        updateOnlyHint: 'Enrich matched people from the import, but add no new persons.',
+        updateOnlyHint: 'Enrich matched people from the import, but add no new people.',
         // "Merge this view into…" action (Primitive 3)
         mergeViewInto: 'Merge this view into…',
         mergeViewDescription: 'Merge the currently shown people into:',
@@ -1213,7 +1460,7 @@ const stringsEN = {
         failed: 'Merge failed',
         switchToNewTree: 'Switch to the new tree?',
         stats: (merged: number, added: number) =>
-            `${merged} persons merged, ${added} new persons added`,
+            `${merged} merged, ${nEn(added, 'new person', 'new people')} added`,
         noItems: 'No items to display',
         newPerson: 'New',
         selectExisting: '-- Select existing person --',
@@ -1226,21 +1473,21 @@ const stringsEN = {
         mergeInto: 'Merge into existing tree',
 
         // Workflow
-        wizardTitle: 'Merge Data',
-        wizardExplanation: 'Review how imported persons match with existing data. Green = confirmed match, Yellow = needs review, Blue = new person.',
+        wizardTitle: 'Merge data',
+        wizardExplanation: 'Review how imported people match with existing data. Green = confirmed match, Yellow = needs review, Blue = new person.',
         stepReview: 'Review matches',
         stepResolve: 'Resolve conflicts',
         stepExecute: 'Execute merge',
 
         // Close confirmation
-        closeConfirmTitle: 'Close Merge?',
+        closeConfirmTitle: 'Close merge?',
         closeConfirmMessage: 'You have unsaved merge progress.',
         closeDiscard: 'Discard changes',
         closeSave: 'Save for later',
         closeCancel: 'Continue merging',
 
         // Pending merges
-        pendingMerges: 'Pending Merges',
+        pendingMerges: 'Pending merges',
         pendingMergeFound: 'You have a pending merge session',
         resume: 'Resume',
         discard: 'Discard',
@@ -1276,12 +1523,22 @@ const stringsEN = {
 
         // New tree name prompt
         newTreeNamePrompt: 'Enter name for the merged tree:',
-        pendingGate: (n: number) => `${n} uncertain match${n === 1 ? '' : 'es'} left undecided — those people will be imported as SEPARATE persons (you can merge them later). Continue?`,
+        pendingGate: (n: number) => `${n} uncertain match${n === 1 ? '' : 'es'} left undecided — those people will be imported as SEPARATE people (you can merge them later). Continue?`,
         suggestedPrecise: 'suggested — more precise date',
         suggestedComplete: 'suggested — more complete value',
 
         // Photo conflict (two different portraits — shown as thumbnails in the dialog)
         photoConflict: 'two different photos',
+
+        // Partnership conflicts (a union both trees know, described differently)
+        partnershipConflict: 'Relationship',
+        partnershipCouple: (a: string, b: string) => `${a || '?'} & ${b || '?'}`,
+        partnershipFields: {
+            status: 'Relationship status',
+            startDate: 'Wedding / start date',
+            startPlace: 'Wedding place',
+            endDate: 'Divorce / end date'
+        },
 
         // Validation around the merge (non-blocking)
         preValidationWarning: (existing: number, incoming: number) =>
@@ -1295,19 +1552,18 @@ const stringsEN = {
         incomingPerson: 'Incoming person:',
 
         // Tree preview labels
-        existingTree: 'Existing Tree',
-        incomingTree: 'Incoming Data',
+        existingTree: 'Existing tree',
+        incomingTree: 'Incoming data',
 
         // Pending merge in tree manager
         pendingMergeLabel: 'Pending merge',
         pendingMergeInto: (source: string, target: string) => `${source} → ${target}`,
-        pendingMergeFrom: (source: string) => `from ${source}`,
-        pendingMergeConflicts: (count: number) => `${count} conflicts`
+        pendingMergeConflicts: (count: number) => nEn(count, 'conflict', 'conflicts')
     },
 
     // Person merge (duplicate resolution)
     personMerge: {
-        title: 'Merge Persons',
+        title: 'Merge people',
         keepPerson: 'Keep',
         mergeWith: 'Merge with',
         selectPerson: 'Select person to merge with...',
@@ -1318,15 +1574,46 @@ const stringsEN = {
         mergePartnership: 'Merge partnerships',
         keepBoth: 'Keep both partnerships',
         noConflicts: 'No conflicts - data will be combined',
-        confirmMerge: 'Merge persons',
-        mergeComplete: 'Persons merged successfully',
-        samePersonError: 'Cannot merge person with itself',
+        confirmMerge: 'Merge people',
+        mergeComplete: 'People merged successfully',
         willBeDeleted: 'will be deleted',
         relationshipsTransferred: 'Relationships will be transferred'
     },
 
     // Settings
+    // Export dialog (grouped menu)
+    exportMenu: {
+        groupShare: 'Share',
+        groupSave: 'Save and back up',
+        groupPrint: 'Print and image',
+        groupOther: 'For other programs',
+        groupSelection: 'Only the people shown',
+        share: 'Send to a relative',
+        linkFile: 'Link to a file on disk…',
+        linkFileDesc: 'Keeps this tree in a .json file — then just press Ctrl+S to save into it',
+        app: 'App with your data (HTML)',
+        appDesc: 'One file that opens in any browser, nothing to install',
+        backup: 'Data backup (JSON)',
+        backupDesc: 'The whole tree — to restore it or import it later',
+        poster: 'Poster',
+        posterDesc: 'The current view as SVG, PNG or a printable multi-page PDF',
+        book: 'Family book',
+        gedcom: 'GEDCOM',
+        gedcomDesc: 'Standard .ged file for other genealogy programs',
+        csv: 'Person table (CSV)',
+        csvDesc: 'For Excel or Google Sheets',
+        selJson: 'Save selection as JSON',
+        selJsonDesc: 'Only the people shown now, as a JSON file',
+        selTree: 'New tree from selection',
+        selTreeDesc: 'Creates a new tree in the app from the people shown now',
+    },
+
     settings: {
+        groupTree: 'Tree view',
+        groupNotifications: 'Notifications',
+        groupCard: 'Person card',
+        groupData: 'Data and privacy',
+        groupLanguage: 'Language and appearance',
         title: 'Settings',
         theme: 'Theme',
         themeSystem: 'System (follows OS)',
@@ -1340,11 +1627,11 @@ const stringsEN = {
     // Tree Manager
     treeManager: {
         defaultTreeName: 'My Family Tree',
-        newTree: 'New Tree',
-        manageTreesTitle: 'Manage Trees',
-        treeSwitcher: 'Tree',
+        newTree: 'New tree',
+        manageTreesTitle: 'Manage trees',
         open: 'Open',
         moreActions: 'More actions',
+        openAtStartup: 'Open at startup',
         searchTrees: 'Search trees…',
         pendingSection: 'Unfinished merges',
         cannotHideLastVisible: 'The last visible tree cannot be hidden — unhide another tree first.',
@@ -1353,7 +1640,7 @@ const stringsEN = {
         hiddenBadge: 'Hidden',
         rename: 'Rename',
         duplicate: 'Duplicate',
-        duplicateTitle: 'Duplicate Tree',
+        duplicateTitle: 'Duplicate tree',
         newTreeNameLabel: 'New tree name',
         mergeInto: 'Merge into...',
         delete: 'Delete',
@@ -1364,28 +1651,25 @@ const stringsEN = {
         selectTargetTree: 'Select target tree',
         mergeSourceTree: 'Merge tree',
         mergeIntoTree: 'into',
-        startMerge: 'Start Merge',
+        startMerge: 'Start merge',
         importTreeName: 'Imported Tree',
-        importAsNewTree: 'Import as New Tree',
+        importAsNewTree: 'Import as new tree',
         treeNameLabel: 'Tree name',
-        persons: 'persons',
-        families: 'families',
+        persons: (n: number) => nEn(n, 'person', 'people'),
+        families: (n: number) => nEn(n, 'family', 'families'),
         // Stats dialog
         stats: 'Statistics',
-        statsTitle: 'Tree Statistics',
+        statsTitle: 'Tree statistics',
         statsPeople: 'People',
-        statsTotal: 'Total',
         statsMales: 'Males',
         statsFemales: 'Females',
         statsLiving: 'Living',
         statsDeceased: 'Deceased',
         statsFamilies: 'Families',
-        statsPartnerships: 'Partnerships',
         statsAvgChildren: 'Avg. children',
-        statsDateRange: 'Date range',
         statsGenerations: 'Generations',
         statsYearSpan: 'Years covered',
-        statsData: 'Data Completeness',
+        statsData: 'Data completeness',
         statsWithBirthDate: 'With birth date',
         statsWithDeathDate: 'With death date',
         statsWithBirthPlace: 'With birth place',
@@ -1395,22 +1679,11 @@ const stringsEN = {
         statsSourceCoverage: 'Source coverage',
         statsAttachments: 'Attachments',
         statsMediaWarning: 'Over 10 MB of media — the file may be too big to email',
-        statsSize: 'Storage',
-        statsTreeSize: 'Tree size',
         // Anniversaries
-        statsAnniversaries: 'Upcoming Anniversaries',
+        statsAnniversaries: 'Upcoming anniversaries',
         statsAnniversariesNone: 'No anniversaries in the next 30 days',
-        statsToday: 'Today',
-        statsThisWeek: 'This week',
-        statsThisMonth: 'This month',
-        statsBirthday: 'birthday',
-        statsBirthAnniversary: 'would be',
-        statsWeddingAnniversary: 'wedding anniversary',
-        statsMemorial: 'memorial',
-        statsYears: 'years',
         // Validation
-        validateDesc: 'Check tree for errors',
-        validationTitle: 'Tree Validation',
+        validationTitle: 'Tree validation',
         postImportCheckTitle: 'Data check',
         postImportCheck: (n: number) => `We checked the imported data and found ${n} thing${n === 1 ? '' : 's'} worth a look. Review them?`,
         postImportReview: 'Review',
@@ -1418,7 +1691,6 @@ const stringsEN = {
         validationErrors: 'errors',
         validationWarnings: 'warnings',
         validationInfos: 'info',
-        validationIssuesFound: 'issues found',
         // Tree validation messages
         valCycle: 'Ancestor cycle detected',
         valSelfPartnership: 'Self-partnership',
@@ -1451,6 +1723,7 @@ const stringsEN = {
         valChildAfterFatherDeath: 'Child born long after the father\'s death',
         valCitationMissingSource: 'Citation points to a missing source',
         valAttachmentNoData: 'Attachment has no usable data',
+        valPhotoUnsafeData: 'Photo is not a supported image',
         valPartnerAgeGap: 'Extreme age difference between partners',
         valPossibleDuplicate: 'Possible duplicate person (same name and birth year)',
         valPlaceSpelling: 'One place written several ways',
@@ -1465,36 +1738,36 @@ const stringsEN = {
         valFixAll: 'Fix all',
         valFixed: (count: number) => `Fixed ${count} issue${count !== 1 ? 's' : ''}`,
         // Default person dialog
-        defaultPerson: 'Default Person',
+        defaultPerson: 'Default person',
         defaultPersonDesc: 'When opening this tree, focus on:',
         defaultPersonFirstPerson: 'First person',
         defaultPersonLastFocused: 'Last focused',
         defaultPersonSpecific: 'Specific person:',
         // Default tree dialog
-        defaultTree: 'Default Tree',
+        defaultTree: 'Default tree',
         defaultTreeDesc: 'When opening app, load:',
         defaultTreeFirstTree: 'First tree',
         defaultTreeLastFocused: 'Last focused',
         defaultTreeSpecific: 'Specific tree:',
         // New Tree Menu
-        newTreeMenu: 'New Tree',
-        emptyTree: 'Empty Tree',
+        newTreeMenu: 'New tree',
+        emptyTree: 'Empty tree',
         emptyTreeDesc: 'Start with a blank family tree',
         fromJson: 'From JSON',
         fromJsonDesc: 'Import from JSON file',
         fromGedcom: 'From GEDCOM',
         fromGedcomDesc: 'Import from GEDCOM file',
-        fromHtml: 'From HTML File',
+        fromHtml: 'From HTML file',
         fromHtmlDesc: 'Import from exported Strom HTML file',
         htmlNoData: 'No embedded data found in HTML file',
-        fromFocus: 'From Current View',
-        fromFocusDesc: 'Copy visible persons into a new separate tree',
+        fromFocus: 'From current view',
+        fromFocusDesc: 'Copy visible people into a new separate tree',
         noFocusedData: 'No focused data to create tree from',
         // Export All
-        exportAll: 'Export All Trees',
+        exportAll: 'Export all trees',
         exportAllJson: 'Export as JSON',
         exportAllJsonDesc: 'All trees in one JSON file',
-        exportAllApp: 'Export as App',
+        exportAllApp: 'Export as app',
         exportAllAppDesc: 'Standalone HTML with all trees',
         // Tree visibility
         showTree: 'Show tree',
@@ -1502,9 +1775,6 @@ const stringsEN = {
         // Short label for the "Tree: {name}" submenu, where the header already
         // names the tree (no need to repeat the noun).
         hide: 'Hide',
-        showTreeHint: 'Show tree',
-        hideTreeHint: 'Hide tree',
-        hiddenLabel: '(hidden)'
     },
 
     // Collaboration: send to a relative
@@ -1522,7 +1792,7 @@ const stringsEN = {
         messagePlaceholder: 'Hi! Could you fill in what you know about your branch?',
         createFile: 'Create file to send',
         welcomeTitle: (sender: string) => `${sender} sent you a family tree`,
-        welcomeCounts: (tree: string, persons: number) => `“${tree}” · ${persons} people`,
+        welcomeCounts: (tree: string, persons: number) => `“${tree}” · ${nEn(persons, 'person', 'people')}`,
         welcomeView: 'Just look around',
         welcomeEdit: 'Add what I know',
         collabBar: (sender: string) => `You are filling in a tree for ${sender}.`,
@@ -1573,15 +1843,14 @@ const stringsEN = {
         goOnlineHint: 'Recommended',
         stayOffline: 'Stay with this file',
         importButton: 'Import to storage',
-        existingTitle: 'Tree Already Exists',
+        existingTitle: 'Tree already exists',
         existingMessage: 'A tree from this export is already in your storage.',
         viewStored: 'View stored version',
         viewEmbedded: 'View embedded version',
         updateStored: 'Update storage',
-        importTitle: 'Import Tree',
+        importTitle: 'Import tree',
         importMessage: 'Import this tree to your local storage to enable editing?',
         createNew: 'Import to storage',
-        createCopy: 'Create copy',
         importSuccess: 'Tree imported successfully',
         importAllSuccess: (count: number) => `${count} tree${count !== 1 ? 's' : ''} imported successfully`,
         updateSuccess: 'Storage updated successfully'
@@ -1591,9 +1860,9 @@ const stringsEN = {
     encryption: {
         enable: 'Encrypt data',
         warning: 'If you forget the password, your data cannot be recovered.',
-        setPassword: 'Set Password',
-        confirmPassword: 'Confirm Password',
-        enterPassword: 'Enter Password',
+        setPassword: 'Set password',
+        confirmPassword: 'Confirm password',
+        enterPassword: 'Enter password',
         wrongPassword: 'Incorrect password',
         exportPassword: 'Export encryption',
         exportPasswordHint: 'Set a password to encrypt the file, or export without encryption.',
@@ -1603,14 +1872,9 @@ const stringsEN = {
         minLength: 'Password must be at least 6 characters',
         encryptionEnabled: 'Encryption enabled',
         encryptionDisabled: 'Encryption disabled',
-        unlockData: 'Unlock Data',
+        unlockData: 'Unlock data',
         decryptionFailed: 'Failed to decrypt data',
-        changePassword: 'Change Password',
-        currentPassword: 'Current Password',
-        newPassword: 'New Password',
-        passwordChanged: 'Password changed successfully',
         optional: '(optional)',
-        dataEncrypted: 'Data is encrypted',
         enterPasswordToView: 'Enter password to view'
     },
 
@@ -1618,11 +1882,10 @@ const stringsEN = {
     treePreview: {
         linkCardTitle: 'Shared link card — this person belongs to a neighbouring family; their own spouse and children live there.',
         bigFamilyHint: 'A large family — the preview starts at its head; click people to move around.',
-        title: 'Tree Preview',
+        title: 'Tree preview',
         close: 'Close',
         focusedOn: 'Focused on',
-        clickToFocus: 'Click a person to focus on them',
-        compare: 'Compare Trees',
+        compare: 'Compare trees',
         preview: 'Preview',
         comparePersons: 'Compare'
     },
@@ -1635,6 +1898,10 @@ const stringsEN = {
         runsInFamily: 'Slideshow runs in the Family view',
         hint: 'Space = pause · ← → = move · Esc = exit',
         paused: 'Paused',
+        previous: 'Previous',
+        pause: 'Pause',
+        next: 'Next',
+        exit: 'Exit slideshow',
     },
 
     cardDensity: {
@@ -1645,6 +1912,7 @@ const stringsEN = {
     },
 
     fanChart: {
+        kekuleSettingDesc: 'In the fan chart view',
         settingLabel: 'Fan chart',
         kekuleHint: 'Show Kekulé (ancestor) numbers',
     },
@@ -1655,6 +1923,7 @@ const stringsEN = {
         settingHint: 'Show a badge when a person also appears in another tree',
         tooltipHeader: 'Also in:',
         clickToSwitch: 'Click to switch',
+        moreMatches: (n: number) => `… ${n} more`,
         chooserHeader: 'Open in tree…'
     },
 
@@ -1665,15 +1934,15 @@ const stringsEN = {
         goOnline: 'stromapp.info',
         exportJson: 'Export JSON',
         exportJsonDesc: 'For import into online version',
-        saveFile: 'Save File',
+        saveFile: 'Save file',
         saveFileTitle: 'Download file with current data',
-        unsavedWarning: 'You have unsaved changes. Use "Save File" to keep them.',
-        infoTitle: 'About This File',
+        unsavedWarning: 'You have unsaved changes. Use "Save file" to keep them.',
+        infoTitle: 'About this file',
         infoText1: 'This is a standalone HTML file. Your data is saved in this browser\'s storage.',
         infoText2: 'The web app at stromapp.info has its own separate storage. Data is NOT synchronized between them.',
         infoHow: 'Your options:',
         infoStayOffline: 'Keep using this file',
-        infoStayOfflineDesc: 'Your data stays in this browser. Use "Save File" to download a copy with your changes.',
+        infoStayOfflineDesc: 'Your data stays in this browser. Use "Save file" to download a copy with your changes.',
         infoGoOnline: 'Switch to stromapp.info',
         infoGoOnlineDesc: 'Use the web app instead. You\'ll need to import this file there to transfer your data.'
     },
@@ -1694,9 +1963,9 @@ const stringsEN = {
 
     // Audit Log
     auditLog: {
-        title: 'Change History',
+        title: 'Change history',
         empty: 'No entries recorded yet.',
-        clear: 'Clear History',
+        clear: 'Clear history',
         clearConfirm: 'Clear the entire change history? This cannot be undone.',
         entries: (count: number) => `${count} ${count === 1 ? 'entry' : 'entries'}`,
         today: 'Today',
@@ -1704,7 +1973,7 @@ const stringsEN = {
         enableSetting: 'Change history',
         enabled: 'Change history enabled',
         disabled: 'Change history disabled',
-        viewLog: 'Change History',
+        viewLog: 'Change history',
         exportInclude: 'Include change history',
         exportTxt: 'Export TXT',
         // Action descriptions
@@ -1718,9 +1987,9 @@ const stringsEN = {
         addedParentChild: (parent: string, child: string) => `Added parent-child: ${parent} → ${child}`,
         addedFamily: (name: string, count: number) => `Added family around ${name} (${count} new)`,
         removedParentChild: (parent: string, child: string) => `Removed parent-child: ${parent} → ${child}`,
-        mergedPersons: (removed: string, kept: string, details: string) => `Merged persons: ${removed} → ${kept}${details ? ' (' + details + ')' : ''}`,
-        clearedData: (persons: number, partnerships: number) => `Cleared data: ${persons} persons, ${partnerships} partnerships`,
-        loadedData: (persons: number, partnerships: number) => `Loaded data: ${persons} persons, ${partnerships} partnerships`,
+        mergedPersons: (removed: string, kept: string, details: string) => `Merged people: ${removed} → ${kept}${details ? ' (' + details + ')' : ''}`,
+        clearedData: (persons: number, partnerships: number) => `Cleared data: ${nEn(persons, 'person', 'people')}, ${nEn(partnerships, 'partnership', 'partnerships')}`,
+        loadedData: (persons: number, partnerships: number) => `Loaded data: ${nEn(persons, 'person', 'people')}, ${nEn(partnerships, 'partnership', 'partnerships')}`,
         // Batch summaries
         addedChild: (parent: string, child: string) => `Added child: ${parent} → ${child}`,
         addedParent: (parent: string, child: string) => `Added parent: ${parent} → ${child}`,
@@ -1731,7 +2000,7 @@ const stringsEN = {
         // Change packet accepted (collaboration)
         appliedChanges: (sender: string) => `Applied changes from ${sender}`,
         // Split into families
-        splitFamilies: (trees: number, persons: number) => `Split into ${trees} family trees (${persons} people)`,
+        splitFamilies: (trees: number, persons: number) => `Split into ${nEn(trees, 'family tree', 'family trees')} (${nEn(persons, 'person', 'people')})`,
         // Auto-repair
         repairedIssue: (desc: string) => `Auto-repair: ${desc}`,
         restoredBackup: 'Restored a backup',
@@ -1761,7 +2030,7 @@ const stringsEN = {
         addPerson: (name: string) => `adding ${name}`,
         editPerson: (name: string) => `editing ${name}`,
         clearedData: 'clearing all data',
-        geocodePlaces: (count: number) => `looking up ${count} places`,
+        geocodePlaces: (count: number) => `looking up ${nEn(count, 'place', 'places')}`,
         clearPlaceGeo: 'removing a place from the map',
         cleanOrphanPlaces: (count: number) => `cleaning ${count} orphaned ${count === 1 ? 'place' : 'places'}`,
         renamePlace: (name: string) => `renaming a place to ${name}`,
@@ -1793,8 +2062,6 @@ const stringsEN = {
         applyChanges: (sender: string) => `applying changes from ${sender}`,
         undone: (desc: string) => `Undone: ${desc}`,
         redone: (desc: string) => `Redone: ${desc}`,
-        nothingToUndo: 'Nothing to undo',
-        nothingToRedo: 'Nothing to redo'
     },
 
     // Undo / redo entries in the ⋯ actions menu (labels carry the last change).
@@ -1807,7 +2074,7 @@ const stringsEN = {
     // Living-person privacy filter for exports
     privacy: {
         livingPerson: 'Living person',
-        label: 'Privacy of living persons',
+        label: 'Privacy of living people',
         tooltip: 'Hide details of people who are probably still alive when the tree leaves your family. The structure stays intact.',
         modeFull: 'Full data',
         modeInitials: 'Initials + birth year',
@@ -1838,11 +2105,9 @@ const stringsEN = {
         text: 'The story',
         hint: 'Prose written on top of the facts — it goes into the family book after them. Not a source. Text wrapped in double asterisks is set in bold in the book.',
         status: 'State',
-        statusNone: '—',
         statusDraft: 'Draft',
-        statusFinal: 'Approved',
         facts: 'Built on',
-        sumWords: (n: number) => `${n} words`,
+        sumWords: (n: number) => nEn(n, 'word', 'words'),
     },
 
     poster: {
@@ -1852,7 +2117,7 @@ const stringsEN = {
         printsView: 'Prints the current view:',
         viewFamily: (name: string, up: number, down: number) => `Family — from ${name} (depth ${up}/${down})`,
         viewDescendants: (name: string) => `Descendants of ${name}`,
-        viewFan: (name: string, gens: number) => `Fan — ancestors of ${name}, ${gens} generations`,
+        viewFan: (name: string, gens: number) => `Fan — ancestors of ${name}, ${nEn(gens, 'generation', 'generations')}`,
         viewTimeline: (name: string) => `Timeline — ${name}'s view`,
         viewMapBlocked: 'The map is not printable as a poster — switch to a tree view to print.',
         svg: 'SVG (vector)',
@@ -1872,7 +2137,7 @@ const stringsEN = {
         guideOption: 'Add an assembly-guide first page',
         guideTitle: 'Assembly guide',
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
-            `${pages} sheets (${rows} × ${cols}), ${overlap} mm overlap — glue by the grid below.`,
+            `${nEn(pages, 'sheet', 'sheets')} (${rows} × ${cols}), ${overlap} mm overlap — glue by the grid below.`,
         emptySheet: 'empty — not printed'
     }
 };
@@ -1921,7 +2186,6 @@ const stringsCZ: StringsType = {
         exportGedcom: 'Export GEDCOM',
         exportGedcomDesc: 'Stáhnout jako GEDCOM soubor',
         newTree: 'Nový strom',
-        newTreeDesc: 'Začít nový prázdný rodokmen'
     },
 
     // Export Focus dialog
@@ -1941,14 +2205,16 @@ const stringsCZ: StringsType = {
         subtitle: 'Začněte tvořit svůj rodokmen',
         addFirst: 'Přidat první osobu',
         importFromFile: 'Mám data jinde (GEDCOM z MyHeritage, Ancestry…)',
-        youCard: 'vy?'
+        youCard: 'vy?',
+        lockedTitle: 'Vaše data jsou zamčená — pro pokračování je odemkněte',
+        lockedSubtitle: 'Váš strom je zašifrovaný. Zadejte heslo, abyste ho mohli prohlížet a upravovat.'
     },
 
     demo: {
         tryDemo: 'Vyzkoušet ukázkový strom',
-        tryDemoDesc: 'Prohlédni si hotový historický rodokmen',
+        tryDemoDesc: 'Prohlédněte si hotový historický rodokmen',
         treeName: 'Ukázka: Přemyslovci',
-        hint: 'Klikni na kartu pro akce. Je to běžný strom — můžeš ho smazat ve správci stromů.'
+        hint: 'Klikněte na kartu pro akce. Je to běžný strom — můžete ho smazat ve správci stromů.'
     },
 
     // Family book
@@ -1969,13 +2235,19 @@ const stringsCZ: StringsType = {
         chapterShort: 'kap.',
         born: 'nar.',
         died: 'zem.',
-        persons: 'osob',
-        generations: 'generací',
+        persons: (n: number) => nCs(n, 'osoba', 'osoby', 'osob'),
+        generations: (n: number) => nCs(n, 'generace', 'generace', 'generací'),
         generate: 'Otevřít knihu',
         optName: 'Název',
         optMaxGen: 'Max generací (nepovinné)',
         compiled: (date: string) => `sestaveno ${date}`,
         empty: 'Strom je prázdný.',
+        partners: 'Partneři',
+        divorced: 'rozvod',
+        separated: 'odloučení',
+        ended: 'konec vztahu',
+        childRel: { adoptive: 'adoptované dítě', step: 'nevlastní dítě', foster: 'v pěstounské péči' } as Record<'adoptive' | 'step' | 'foster', string>,
+        childRelOf: (label: string, parent: string) => `${label} (${parent})`,
     },
 
     // Versioned backups
@@ -1993,12 +2265,8 @@ const stringsCZ: StringsType = {
         restored: 'Záloha obnovena',
         created: 'Záloha vytvořena',
         restoreConfirm: (what: string) => `Obnovit tuto zálohu? Přepíše aktuální strom — aktuální stav se před obnovou uloží jako záloha.${what ? `\n\n${what}` : ''}`,
-        total: (count: number, size: string) => `${count} záloh · ${size}`,
-        colDate: 'Datum',
-        colReason: 'Důvod',
-        colPersons: 'Osob',
-        persons: (count: number) => count === 1 ? '1 osoba' : (count < 5 ? `${count} osoby` : `${count} osob`),
-        colSize: 'Velikost',
+        total: (count: number, size: string) => [nCs(count, 'záloha', 'zálohy', 'záloh'), size].filter(Boolean).join(' · '),
+        persons: (count: number) => nCs(count, 'osoba', 'osoby', 'osob'),
         reasons: {
             auto: 'Automatická',
             manual: 'Ruční',
@@ -2010,8 +2278,8 @@ const stringsCZ: StringsType = {
     split: {
         postImportTitle: 'Víc rodin v jednom souboru',
         postImport: (count: number) =>
-            `Naimportovaný soubor obsahuje ${count} ${count >= 5 ? 'rodin' : 'rodiny'}, které nic nespojuje — nevede mezi nimi žádný rodič, dítě ani sňatek. Z každé může být samostatný strom.`,
-        unrelated: (count: number) => `Obsahuje ${count} ${count >= 5 ? 'rodin' : 'rodiny'}, které nic nespojuje`,
+            `Naimportovaný soubor obsahuje ${nCs(count, 'rodinu', 'rodiny', 'rodin')}, které nic nespojuje — nevede mezi nimi žádný rodič, dítě ani sňatek. Z každé může být samostatný strom.`,
+        unrelated: (count: number) => `Obsahuje ${nCs(count, 'rodinu', 'rodiny', 'rodin')}, které nic nespojuje`,
         unrelatedHint: 'Rozdělit je můžete ve Správě stromů → ⋯ → Oddělit nespojené části.',
         menu: 'Oddělit nespojené části…',
         menuHint: 'Stromy z ostrovů, které nic nespojuje — nevede mezi nimi rodič, dítě ani sňatek.',
@@ -2019,13 +2287,13 @@ const stringsCZ: StringsType = {
         intro: 'V tomto stromu jsou rodiny, které nic nespojuje — nevede mezi nimi žádný rodič, dítě ani sňatek. Z každé může být samostatný strom.',
         single: 'Všichni v tomto stromu jsou propojení — je tu jedna rodina, takže není co rozdělovat.',
         familyName: (surname: string) => `Rod ${surname}`,
-        persons: (count: number) => count === 1 ? '1 osoba' : (count < 5 ? `${count} osoby` : `${count} osob`),
+        persons: (count: number) => nCs(count, 'osoba', 'osoby', 'osob'),
         oldest: (name: string, year: number) => `nejstarší ${name} (${year})`,
         noSurname: 'bez příjmení',
         alone: 'Není napojen na nikoho',
         selected: (count: number) => `Vyčlenit ${count}`,
         keepsOriginal: 'Původní strom zůstává, jak je — smažte si ho sami, až budete s rozdělením spokojení.',
-        done: (count: number) => `Vytvořeno ${count} stromů. Původní je nedotčený.`,
+        done: (count: number) => `${plural('cs', count, 'Vytvořen', 'Vytvořeny', 'Vytvořeno')} ${nCs(count, 'strom', 'stromy', 'stromů')}. Původní je nedotčený.`,
     },
     splitFamilies: {
         title: 'Rozdělit na rodiny',
@@ -2037,7 +2305,7 @@ const stringsCZ: StringsType = {
         modeSurnameHint: 'Jedna rodina = jeden rod: děti patří k rodiči, jehož příjmení nesou, od zakladatele po posledního nositele. Přivdaná či přiženěná osoba bez vlastní rodiny v tomto stromu zůstává u partnera.',
         modeLineageHint: 'Jedna rodina = větev, jak strom rostl: hlavní linie se všemi přivdanými a přiženěnými, a každá připojená větev zvlášť.',
         modePerspective: 'Z pohledu osoby',
-        modePerspectiveHint: 'Základní strom je linie zvolené osoby: přímí předci, jejich pokrevní sourozenci, vlastní sourozenci a všichni potomci. Rodiny sourozenců, které si necháš, zůstanou v něm; ostatní se odříznou do vedlejších stromů. Na rozdíl od ostatních dvou řezů tenhle závisí na zvolených osobách.',
+        modePerspectiveHint: 'Základní strom je linie zvolené osoby: přímí předci, jejich pokrevní sourozenci, vlastní sourozenci a všichni potomci. Rodiny sourozenců, které si necháte, zůstanou v něm; ostatní se odříznou do vedlejších stromů. Na rozdíl od ostatních dvou řezů tenhle závisí na zvolených osobách.',
         perspDepthLabel: 'Rodiny sourozenců nechat po',
         perspDepthCousins: 'bratrance (sourozenci rodičů)',
         perspDepthSecond: 'druhé bratrance (sourozenci prarodičů)',
@@ -2045,30 +2313,30 @@ const stringsCZ: StringsType = {
         perspBasesLabel: 'Základní stromy z pohledu',
         perspAddPerson: 'Přidat osobu…',
         perspCutsLabel: (n: number) => `Řezy na sourozencích (${n})`,
-        perspCutHint: 'Zaškrtnuto = sourozenec zůstane v základním stromu sám a jeho rodina bude vedlejší strom. Odškrtnutím rodinu necháš v základním stromu.',
+        perspCutHint: 'Zaškrtnuto = sourozenec zůstane v základním stromu sám a jeho rodina bude vedlejší strom. Odškrtnutím rodinu necháte v základním stromu.',
         oneFamilyInMode: 'Při tomto pohledu je celý strom jedna rodina — není co rozdělovat.',
         familyName: (name: string) => `Rodina ${name}`,
         focusHere: 'Zvolená osoba',
         connectsTo: (name: string) => `napojeno přes ${name}`,
-        persons: (count: number) => count === 1 ? '1 osoba' : (count < 5 ? `${count} osoby` : `${count} osob`),
-        // „3 osoby", „1 osoba + 8 neznámých" — skutečné osoby zvlášť, neznámí
+        persons: (count: number) => nCs(count, 'osoba', 'osoby', 'osob'),
+        // „3 osoby“, „1 osoba + 8 neznámých“ — skutečné osoby zvlášť, neznámí
         // (placeholder) příbuzní zvlášť, ať rodina plná neznámých nevypadá velká.
-        unknown: (count: number) => count === 1 ? '1 neznámá' : (count < 5 ? `${count} neznámé` : `${count} neznámých`),
+        unknown: (count: number) => nCs(count, 'neznámá', 'neznámé', 'neznámých'),
         personsWithUnknown: (real: number, unknown: number) => {
-            const r = real === 1 ? '1 osoba' : (real < 5 ? `${real} osoby` : `${real} osob`);
-            const u = unknown === 1 ? '1 neznámá' : (unknown < 5 ? `${unknown} neznámé` : `${unknown} neznámých`);
+            const r = nCs(real, 'osoba', 'osoby', 'osob');
+            const u = nCs(unknown, 'neznámá', 'neznámé', 'neznámých');
             return unknown > 0 ? `${r} + ${u}` : r;
         },
         namePlaceholder: 'Název stromu',
         preview: 'Náhled',
         summary: (trees: number, real: number, unknown: number) => {
-            const u = unknown === 1 ? '1 neznámá' : (unknown < 5 ? `${unknown} neznámé` : `${unknown} neznámých`);
-            return `${trees} ${trees < 5 ? 'stromy' : 'stromů'} · ${real} osob${unknown > 0 ? ` + ${u}` : ''} · pokrytí 100 %`;
+            const u = nCs(unknown, 'neznámá', 'neznámé', 'neznámých');
+            return `${nCs(trees, 'strom', 'stromy', 'stromů')} · ${nCs(real, 'osoba', 'osoby', 'osob')}${unknown > 0 ? ` + ${u}` : ''} · pokrytí 100 %`;
         },
-        create: (count: number) => count === 1 ? 'Vytvořit 1 strom' : `Vytvořit ${count} ${count < 5 ? 'stromy' : 'stromů'}`,
+        create: (count: number) => `Vytvořit ${nCs(count, 'strom', 'stromy', 'stromů')}`,
         cancel: 'Zrušit',
         keepsOriginal: 'Původní strom zůstává přesně tak, jak je. Nové stromy zůstávají propojené přes společné osoby — nechtěné smažte ve Správě stromů.',
-        done: (count: number) => count === 1 ? 'Vytvořen 1 strom' : `Vytvořeno ${count} ${count < 5 ? 'stromy' : 'stromů'}`,
+        done: (count: number) => `${plural('cs', count, 'Vytvořen', 'Vytvořeny', 'Vytvořeno')} ${nCs(count, 'strom', 'stromy', 'stromů')}`,
         tooSmall: 'Tento strom obsahuje jen jednu rodinu — není co rozdělovat.',
         // Výběr osoby (dělíme strom, který není zobrazený — bez živého pohledu
         // uživatel zvolí osobu, jejíž rodina se vypíše první).
@@ -2087,12 +2355,15 @@ const stringsCZ: StringsType = {
         none: 'Zatím nic propojeného.',
         addTitle: 'Propojit tvary',
         addHint: 'Vyberte tvary, které znamenají jeden rod.',
-        inTree: (count: number) => count === 1 ? '1 osoba' : (count < 5 ? `${count} osoby` : `${count} osob`),
+        inTree: (count: number) => nCs(count, 'osoba', 'osoby', 'osob'),
         notInTree: 've stromu není',
         addOther: 'Jiný tvar…',
         link: 'Propojit',
         unlink: 'Zrušit propojení',
         linked: 'Tvary propojeny.',
+        introShort: 'Řekněte jednou, že tvary příjmení znamenají tentýž rod, a hledání i slučování je najdou všechny.',
+        more: 'Více',
+        addSpelling: 'Přidat',
     },
 
     events: {
@@ -2108,7 +2379,6 @@ const stringsCZ: StringsType = {
         participantLink: 'Propojit s osobou ve stromu',
         participantUnlink: 'Přece jen ne tato osoba',
         participantInTree: 've stromu',
-        participantNameRequired: 'Zadejte jméno, nebo vyberte osobu ze stromu.',
         roles: {
             godparent: 'Kmotr / kmotra',
             witness: 'Svědek',
@@ -2128,6 +2398,7 @@ const stringsCZ: StringsType = {
         note: 'Poznámka',
         customLabel: 'Popis',
         customLabelRequired: 'Zadejte popis vlastní události',
+        unsavedMessage: 'Máte neuložené změny v této události.',
         deleteConfirm: (what: string) => `Smazat tuto událost?\n\n${what}`,
         types: {
             birth: 'Narození',
@@ -2181,10 +2452,11 @@ const stringsCZ: StringsType = {
         fieldUrl: 'URL',
         fieldNote: 'Poznámka',
         titleRequired: 'Zadejte název pramene',
+        unsavedMessage: 'Máte neuložené změny v tomto prameni.',
         citations: (n: number) => `${n}×`,
         deleteConfirm: (title: string, n: number) =>
             n > 0
-                ? `Smazat tento pramen? Je citován na ${n} místech; citace budou odebrány.\n\n${title}`
+                ? `Smazat tento pramen? Je citován na ${nCs(n, 'místě', 'místech', 'místech')}; citace budou odebrány.\n\n${title}`
                 : `Smazat tento pramen?\n\n${title}`,
     },
 
@@ -2196,7 +2468,7 @@ const stringsCZ: StringsType = {
         delete: 'Smazat',
         deleteConfirm: (what: string) => `Smazat tuto přílohu?\n\n${what}`,
         notePlaceholder: 'Poznámka (nepovinné)',
-        total: (count: number, size: string) => `${count} příloh, celkem ${size}`,
+        total: (count: number, size: string) => `${nCs(count, 'příloha', 'přílohy', 'příloh')}, celkem ${size}`,
         pdfTooLarge: 'PDF je příliš velké (max 2 MB).',
         unsupportedType: 'Nepodporovaný typ souboru. Použijte JPG, PNG nebo PDF.',
         readError: 'Soubor se nepodařilo načíst.',
@@ -2250,6 +2522,7 @@ const stringsCZ: StringsType = {
         step4: 'Panel fokusu ukazuje, na koho je strom zaměřený. Šipkami měníte, kolik generací předků a potomků je vidět.',
         step5: 'Přepínejte pohledy: Rodina, Potomci, Časová osa nebo Vějíř předků.',
         step6: 'Ovládání přiblížení a posunu — plátno jde také táhnout myší a přibližovat kolečkem; 0 vrátí výchozí pohled.',
+        step6Touch: 'Ovládání přiblížení — plátno jde také posouvat prstem a přibližovat roztažením dvou prstů.',
         step7: 'Vyhledejte kohokoli podle jména a trychtýřem filtrujte podle příjmení, místa, let narození, pohlaví nebo žijící/zemřelí.',
         step8: 'Stromy, export a sdílení jsou tady. Strom se exportuje jako jeden samostatný soubor, který pošlete příbuznému.',
     },
@@ -2269,7 +2542,7 @@ const stringsCZ: StringsType = {
         sampleN: (n: number) => `n = ${n}`,
         notEnough: 'Zatím málo dat',
         largestFamily: 'Největší rodina',
-        childrenCount: (n: number) => n === 1 ? '1 dítě' : n < 5 ? `${n} děti` : `${n} dětí`,
+        childrenCount: (n: number) => nCs(n, 'dítě', 'děti', 'dětí'),
         months: ['Led', 'Úno', 'Bře', 'Dub', 'Kvě', 'Čer', 'Čvc', 'Srp', 'Zář', 'Říj', 'Lis', 'Pro'],
     },
 
@@ -2281,19 +2554,18 @@ const stringsCZ: StringsType = {
         empty: 'Žádná výročí v příštích 30 dnech',
         today: 'dnes',
         tomorrow: 'zítra',
-        inDays: (n: number) => `za ${n} ${n < 5 ? 'dny' : 'dní'}`,
+        inDays: (n: number) => `za ${nCs(n, 'den', 'dny', 'dní')}`,
         yearsAgo: (n: number) => n === 1 ? 'před 1 rokem' : `před ${n} lety`,
         birthday: (name: string, years: number) => `${name} slaví ${years}. narozeniny`,
         wedding: (a: string, b: string, years: number) => `${a} a ${b} — ${years}. výročí svatby`,
-        birthMilestone: (name: string, years: number) => `${name} — ${years} let od narození`,
-        deathMilestone: (name: string, years: number) => `${name} — ${years} let od úmrtí`,
-        deathAnniversary: (name: string, years: number) => `${name} — výročí úmrtí (${years} let)`,
-        otdTitle: 'V tento den',
+        birthMilestone: (name: string, years: number) => `${name} — ${nCs(years, 'rok', 'roky', 'let')} od narození`,
+        deathMilestone: (name: string, years: number) => `${name} — ${nCs(years, 'rok', 'roky', 'let')} od úmrtí`,
+        deathAnniversary: (name: string, years: number) => `${name} — výročí úmrtí (${nCs(years, 'rok', 'roky', 'let')})`,
         otdBirth: (name: string, ago: string, female: boolean) => `${ago} se narodil${female ? 'a' : ''} ${name}`,
         otdDeath: (name: string, ago: string, female: boolean) => `${ago} zemřel${female ? 'a' : ''} ${name}`,
         otdWedding: (a: string, b: string, ago: string) => `${ago} se vzali ${a} a ${b}`,
         settingLabel: 'V tento den',
-        settingHint: 'Při otevření stromu ukázat denní připomínku „v tento den"',
+        settingHint: 'Při otevření stromu ukázat denní připomínku „v tento den“',
     },
 
     // Family wizard (add a whole family at once)
@@ -2301,7 +2573,7 @@ const stringsCZ: StringsType = {
         menu: 'Přidat rodinu…',
         title: 'Přidat rodinu',
         settingLabel: 'Tlačítko Přidat rodinu',
-        settingHint: 'Zobrazovat v liště tlačítko „Přidat rodinu"',
+        settingHint: 'Zobrazovat v liště tlačítko „Přidat rodinu“',
         aroundName: (name: string) => `Kolem osoby ${name}`,
         roles: { father: 'Otec', mother: 'Matka', partner: 'Partner', sibling: 'Sourozenec', child: 'Dítě' },
         firstName: 'Jméno',
@@ -2315,7 +2587,8 @@ const stringsCZ: StringsType = {
         maybe: (name: string) => `Podobná osoba: ${name}`,
         useExisting: 'Použít existující',
         linked: 'Napojeno na existující',
-        added: (n: number) => n === 1 ? 'Přidána 1 osoba' : `Přidáno ${n} ${n < 5 ? 'osoby' : 'osob'}`,
+        unlink: 'Zrušit napojení',
+        added: (n: number) => `${plural('cs', n, 'Přidána', 'Přidány', 'Přidáno')} ${nCs(n, 'osoba', 'osoby', 'osob')}`,
         continuePrompt: 'Pokračovat zbytkem rodiny?',
         continueYes: 'Přidat rodinu',
     },
@@ -2342,7 +2615,85 @@ const stringsCZ: StringsType = {
         unlinked: 'Soubor odpojen',
         saveFailed: 'Nepodařilo se uložit do souboru',
         permissionDenied: 'Přístup k souboru byl odepřen — propojení zrušeno',
-        lockedRefuse: 'Před uložením do souboru odemkni šifrování',
+        lockedRefuse: 'Před uložením do souboru odemkněte šifrování',
+    },
+
+    // Otevření výzkumu ze Strom Research (obsluha souborů, odkaz, přetažení, živý most)
+    research: {
+        defaultName: 'Výzkum',
+        opened: (name: string, persons: number, families: number, date: string) =>
+            `Otevřen výzkum ${name} ze Strom Research — ${nCs(persons, 'osoba', 'osoby', 'osob')}, ${nCs(families, 'rodina', 'rodiny', 'rodin')} (stav k ${date})`,
+        updated: (name: string, persons: number, families: number, date: string) =>
+            `Aktualizován výzkum ${name} ze Strom Research — ${nCs(persons, 'osoba', 'osoby', 'osob')}, ${nCs(families, 'rodina', 'rodiny', 'rodin')} (stav k ${date})`,
+        editedTitle: 'Změněno v aplikaci',
+        editedMessage: (name: string) =>
+            `Rodokmen „${name}“ jste od posledního otevření ze Strom Research v aplikaci změnili. Aktualizace vaše změny přepíše výzkumem (předtím se uloží záloha). Nebo výzkum otevřete jako novou kopii a tento rodokmen zůstane beze změny.`,
+        update: 'Aktualizovat',
+        openCopy: 'Otevřít jako kopii',
+        changeWords: {
+            newPerson: 'Nová osoba',
+            newChild: 'Nové dítě',
+            newFamily: 'Nová rodina',
+            facts: { BIRT: 'narození', CHR: 'křest', BAPM: 'křest', DEAT: 'úmrtí', BURI: 'pohřeb', MARR: 'sňatek', OCCU: 'povolání', RESI: 'bydliště', CENS: 'sčítání lidu', NAME: 'jméno', SEX: 'pohlaví' } as Record<string, string>,
+        },
+        copyName: (name: string, date: string) => `${name} (${date})`,
+        notLocal: 'Odkaz mířil na soubor, který není na tomto počítači, proto byl ignorován.',
+        fetchFailedTitle: 'Soubor se nepodařilo otevřít',
+        fetchFailed: 'Prohlížeč aplikaci nedovolil přečíst soubor ze Strom Research na tomto počítači. Můžete ho naimportovat ručně: zvolte „Importovat soubor“ a vyberte soubor .ged.',
+        importManually: 'Importovat soubor…',
+        safariBlocked: 'Safari nedovolí webové stránce spojit se s programem na tomto počítači. Otevřete odkaz v Chrome nebo Edge, nebo přetáhněte do tohoto okna soubor output/tree-strom.ged ze složky výzkumu.',
+        notInViewMode: 'Toto je kopie jen pro čtení. Otevřete soubor ve své aplikaci Strom.',
+        onlyGedcom: 'Sem lze přetáhnout jen soubory GEDCOM (.ged).',
+        dropHint: 'Pusťte soubor .ged a otevře se',
+        notReady: 'Aplikace se ještě načítá. Zkuste to za chvíli znovu.',
+        panelTitle: 'Výzkum právě',
+        panelLabel: 'Živý výzkum ze Strom Research',
+        following: (name: string) => `Sledujete „${name}“. Změny přicházejí samy; rodokmen je mezitím jen pro čtení.`,
+        ended: 'Sledování skončilo',
+        endedText: 'Strom Research už neposílá změny. Rodokmen ukazuje poslední stav a můžete ho znovu upravovat.',
+        stop: 'Ukončit sledování',
+        stopped: 'Sledování výzkumu jste ukončili.',
+        close: 'Zavřít',
+        show: 'Zobrazit',
+        hide: 'Skrýt',
+        atWork: 'Pracuje se',
+        nobodyWorking: 'Právě na něm nikdo nepracuje.',
+        changes: 'Poslední změny',
+        noChanges: 'Zatím žádné změny.',
+        waiting: 'Čeká na vás',
+        waitingOn: (on: string) => `čeká na: ${on}`,
+        since: (when: string) => `od ${when}`,
+        liveFailed: 'Nepodařilo se spojit se Strom Research na tomto počítači. Běží ještě (strom app --live)? Spojení mohl zablokovat i prohlížeč.',
+        liveNoTree: 'Strom Research neuvedl, který výzkum posílá.',
+        liveOtherTree: 'Strom Research teď posílá jiný výzkum, proto sledování skončilo.',
+        // Strom Research in the app (3.0): empty-state offer, menu item, what's-new card, info dialog
+        brand: 'Strom Research',
+        offerEyebrow: 'Nevíte, kde začít?',
+        offerTitle: 'Nechte předky dohledat AI agenta',
+        offerDesc: 'Strom Research prohledá matriky a archivy a každý údaj doloží pramenem.',
+        runsOnComputer: 'Běží na počítači (Windows, Mac, Linux)',
+        menuItem: 'AI výzkum předků',
+        newBadge: 'Nové',
+        newSr: 'nové',
+        triggerNewSr: 'nová položka',
+        cardTitle: 'Nové ve Stromu 3.0: výzkum s AI agentem',
+        cardText: 'AI agent na vašem počítači hledá v matrikách a archivech, zapisuje jen to, co záznamy dokládají, a váš rodokmen ve Stromu roste sám. Strom Research je zdarma.',
+        learnMore: 'Zjistit víc',
+        notNow: 'Teď ne',
+        alsoNew: 'Také ve 3.0',
+        news1: 'Přehlednější potvrzení smazání',
+        news2: 'Nová nastavení a export',
+        news3: 'Tmavý režim',
+        dialogLead: 'AI agent za vás prohledá matriky a archivy a doplní váš rodokmen — každý údaj s pramenem. Strom rodokmen jen ukazuje a roste v něm živě.',
+        point1Title: 'Na vašem počítači',
+        point1Text: 'Výzkum je složka u vás na disku. Vaše data zůstávají u vás.',
+        point2Title: 'Doložené',
+        point2Text: 'Agent zapisuje jen to, co záznamy dokládají, a ke každému údaji uvede pramen.',
+        point3Title: 'Roste ve Stromu',
+        point3Text: 'Výsledek otevřete ve Stromu a rodokmen v něm přibývá živě.',
+        needTitle: 'Co budete potřebovat',
+        needText: 'Počítač (Windows, Mac, Linux) a AI agenta s účtem u výrobce — obvykle předplatné, doporučujeme Claude. Strom Research i Strom jsou zdarma.',
+        openSite: 'Otevřít stránku Strom Research',
     },
 
     // CSV export (spreadsheet person table)
@@ -2402,7 +2753,6 @@ const stringsCZ: StringsType = {
 
     // Tooltip
     tooltip: {
-        alsoWritten: 'psáno také',
         age: 'Věk',
         born: 'Narozen/a',
         died: 'Zemřel/a',
@@ -2423,7 +2773,8 @@ const stringsCZ: StringsType = {
         maidenName: 'Rodné příjmení',
         refn: 'např. archivní karton 12 nebo id z jiného programu',
         question: 'např. neví někdo, kdy se narodila?',
-        flexDate: '15.5.1880 · 5/1880 · 1880 · kolem 1880'
+        flexDateShort: 'např. 1880',
+        flexDate: '15.5.1880 · 5.1880 · 1880 · kolem 1880'
     },
 
     // Archive search
@@ -2451,6 +2802,7 @@ const stringsCZ: StringsType = {
     // Context menu
     contextMenu: {
         edit: 'Upravit',
+        view: 'Zobrazit',
         focus: 'Zaměřit',
         showDescendants: 'Zobrazit potomky',
         relationship: 'Zjistit vztah…',
@@ -2507,7 +2859,7 @@ const stringsCZ: StringsType = {
                 : `${strings.map.placeCount(missing)} zatím bez souřadnic.`,
         lookUp: (count: number) => `Dohledat ${strings.map.placeCount(count)}`,
         placeCount: (count: number) =>
-            `${count} ${count === 1 ? 'místo' : (count < 5 ? 'místa' : 'míst')}`,
+            `${count} ${plural('cs', count, 'místo', 'místa', 'míst')}`,
         managePlaces: 'Místa',
         allPlaced: (count: number) => `${strings.map.placeCount(count)} na mapě.`,
         placesTitle: 'Místa',
@@ -2521,10 +2873,10 @@ const stringsCZ: StringsType = {
         removePin: 'Odebrat',
         cleanOrphans: (count: number) => `Vyčistit osiřelá místa (${count})`,
         cleanOrphansConfirm: (count: number) =>
-            `Odebrat uložené souřadnice ${count} ${count === 1 ? 'místa' : count < 5 ? 'míst' : 'míst'}, která už nikdo ve stromu nepoužívá? Nic, co vaše rodina napsala, se nemění — zmizí jen zbylé špendlíky na mapě. Lze vrátit zpět.`,
-        cleanOrphansDone: (count: number) => `Odebráno ${count} ${count === 1 ? 'osiřelé místo' : count < 5 ? 'osiřelá místa' : 'osiřelých míst'}.`,
+            `Odebrat uložené souřadnice ${count} ${plural('cs', count, 'místa', 'míst', 'míst')}, která už nikdo ve stromu nepoužívá? Nic, co vaše rodina napsala, se nemění — zmizí jen zbylé špendlíky na mapě. Lze vrátit zpět.`,
+        cleanOrphansDone: (count: number) => `Odebráno ${count} ${plural('cs', count, 'osiřelé místo', 'osiřelá místa', 'osiřelých míst')}.`,
         wrongSpot: 'Špatné místo? Opravit',
-        usedBy: (count: number) => count === 1 ? '1 osoba' : (count < 5 ? `${count} osoby` : `${count} osob`),
+        usedBy: (count: number) => nCs(count, 'osoba', 'osoby', 'osob'),
         search: 'Hledat',
         searchLabel: 'Najít toto místo pod jiným názvem',
         searching: 'Hledám…',
@@ -2537,7 +2889,7 @@ const stringsCZ: StringsType = {
             `Na mapě je ${strings.map.placeCount(found)}. ${missed} se nepodařilo najít — zkuste opravit zápis nebo doplnit zemi.`,
         consentTitle: 'Dohledat souřadnice online?',
         consentBody: (count: number, service: string) =>
-            `Pro vykreslení mapy se do služby ${service} odešle ${count} ${count === 1 ? 'název místa' : (count < 5 ? 'názvy míst' : 'názvů míst')} (například „Praha“). `
+            `Pro vykreslení mapy se do služby ${service} odešle ${count} ${plural('cs', count, 'název místa', 'názvy míst', 'názvů míst')} (například „Praha“). `
             + 'Nic jiného aplikaci neopustí — žádná jména, data ani vztahy vaší rodiny. '
             + 'Souřadnice se uloží do vašeho stromu, takže se každé místo dohledává jen jednou a mapa pak funguje i offline.',
         consentConfirm: 'Dohledat',
@@ -2551,7 +2903,7 @@ const stringsCZ: StringsType = {
         timePause: 'Pozastavit',
         timeYear: 'Rok',
         timeUndated: (n: number) =>
-            `${n} ${n === 1 ? 'místo' : n < 5 ? 'místa' : 'míst'} bez data se na časové ose ${n === 1 ? 'nezobrazuje' : 'nezobrazují'}.`,
+            `${n} ${plural('cs', n, 'místo', 'místa', 'míst')} bez data se na časové ose ${plural('cs', n, 'nezobrazuje', 'nezobrazují', 'nezobrazuje')}.`,
     },
 
     fan: {
@@ -2563,7 +2915,7 @@ const stringsCZ: StringsType = {
         segment: 'Časová osa',
         wedding: 'Sňatek',
         empty: 'Žádné osoby se známým rokem narození',
-        omitted: (n: number) => `${n} ${n === 1 ? 'osoba' : (n < 5 ? 'osoby' : 'osob')} bez roku narození není zobrazena`,
+        omitted: (n: number) => `${n} ${plural('cs', n, 'osoba', 'osoby', 'osob')} bez roku narození ${plural('cs', n, 'není zobrazena', 'nejsou zobrazeny', 'není zobrazeno')}`,
     },
 
     // Přehled zdraví stromu (R4)
@@ -2574,10 +2926,9 @@ const stringsCZ: StringsType = {
         // Blok validace
         sectionValidation: 'Konzistence',
         allGood: 'Nenalezeny žádné nesrovnalosti',
-        countErrors: (n: number) => `${n} ${n === 1 ? 'chyba' : (n < 5 ? 'chyby' : 'chyb')}`,
+        countErrors: (n: number) => `${n} ${plural('cs', n, 'chyba', 'chyby', 'chyb')}`,
         countWarnings: (n: number) => `${n} ${n === 1 ? 'varování' : 'varování'}`,
-        countInfos: (n: number) => `${n} ${n === 1 ? 'poznámka' : (n < 5 ? 'poznámky' : 'poznámek')}`,
-        topIssues: 'Nejdůležitější nálezy',
+        countInfos: (n: number) => `${n} ${plural('cs', n, 'poznámka', 'poznámky', 'poznámek')}`,
         moreIssues: (n: number) => `a další ${n}…`,
         // Blok úplnosti
         sectionCompleteness: 'Úplnost dat',
@@ -2593,8 +2944,8 @@ const stringsCZ: StringsType = {
         statGenerations: 'Generace',
         statIslands: 'Nesouvislé rodiny',
         islandsOne: 'Všechny osoby jsou propojeny do jedné rodiny.',
-        islandsMany: (n: number) => `Tento strom obsahuje ${n} nesouvislých rodin bez vzájemné vazby.`,
-        islandItem: (surname: string, count: number) => `${surname} — ${count} ${count === 1 ? 'osoba' : (count < 5 ? 'osoby' : 'osob')}`,
+        islandsMany: (n: number) => `Tento strom obsahuje ${nCs(n, 'nesouvislou rodinu', 'nesouvislé rodiny', 'nesouvislých rodin')} bez vzájemné vazby.`,
+        islandItem: (surname: string, count: number) => `${surname} — ${count} ${plural('cs', count, 'osoba', 'osoby', 'osob')}`,
         islandUnnamed: 'Bezejmenná rodina',
         islandsSplitHint: 'Tlačítkem „Rozdělit na rodiny“ níže dáte každé vlastní strom.',
         // Rychlé akce
@@ -2615,10 +2966,12 @@ const stringsCZ: StringsType = {
         completeTitle: 'Doplnit osobu',
         enterName: 'Zadejte prosím jméno nebo příjmení',
         unsavedMessage: 'Máte neuložené změny v údajích osoby.',
-        invalidDate: 'Neplatné datum. Použijte např. 15.5.1880, 5/1880, 1880 nebo „kolem 1880".',
+        invalidDate: 'Neplatné datum. Použijte např. 15.5.1880, 5/1880, 1880 nebo „kolem 1880“.',
         photoError: 'Obrázek se nepodařilo zpracovat.',
         // Header + section labels (Letopis redesign)
         newPersonName: 'Nová osoba',
+        moreDetails: 'Více údajů',
+        moreDetailsDesc: 'Úmrtí, povolání, fotka, poznámky',
         sectionBasic: 'Základní údaje',
         sectionBirth: 'Narození',
         sectionOrigin: 'Povolání a bydliště',
@@ -2638,16 +2991,16 @@ const stringsCZ: StringsType = {
         lifelineChild: (name: string) => `Narození dítěte: ${name}`,
         lifelineChildUnknown: 'Narození dítěte',
         lifelineWith: (names: string) => `s ${names}`,
-        dateHint: '15.5.1880 · 5/1880 · 1880 · kolem 1880',
+        dateHint: 'Přesně, rok, nebo odhad: 15. 5. 1880 · 5/1880 · kolem 1880 · před 1900',
         deletePerson: 'Smazat osobu…',
         // Live summaries shown next to each section header
         sumParents: 'rodiče',
-        sumPartners: (n: number) => n === 1 ? '1 partner' : (n < 5 ? `${n} partneři` : `${n} partnerů`),
-        sumChildren: (n: number) => n === 1 ? '1 dítě' : (n < 5 ? `${n} děti` : `${n} dětí`),
-        sumEvents: (n: number) => n === 1 ? '1 událost' : (n < 5 ? `${n} události` : `${n} událostí`),
+        sumPartners: (n: number) => nCs(n, 'partner', 'partneři', 'partnerů'),
+        sumChildren: (n: number) => nCs(n, 'dítě', 'děti', 'dětí'),
+        sumEvents: (n: number) => nCs(n, 'událost', 'události', 'událostí'),
         sumDeceased: 'zemřel(a)',
-        sumCitations: (n: number) => n === 1 ? '1 citace' : (n < 5 ? `${n} citace` : `${n} citací`),
-        sumScans: (n: number) => n === 1 ? '1 sken' : (n < 5 ? `${n} skeny` : `${n} skenů`),
+        sumCitations: (n: number) => nCs(n, 'citace', 'citace', 'citací'),
+        sumScans: (n: number) => nCs(n, 'sken', 'skeny', 'skenů'),
         sumPhoto: 'fotografie',
         sumNote: 'poznámka',
         sumNone: 'prázdné',
@@ -2669,7 +3022,8 @@ const stringsCZ: StringsType = {
         selectPerson: '-- Vyberte --',
         enterName: 'Zadejte prosím jméno nebo příjmení',
         selectPersonError: 'Vyberte prosím osobu',
-        linkButton: 'Propojit'
+        linkButton: 'Propojit',
+        linkRefused: 'Tento vztah nelze vytvořit: osoba může mít nejvýše dva rodiče a nemůže být svým vlastním předkem.'
     },
 
     // Child confirmation
@@ -2677,19 +3031,75 @@ const stringsCZ: StringsType = {
         title: 'Přidat dítě',
         message: (name: string, partnerName: string) =>
             `<strong>${name}</strong> má partnera (<strong>${partnerName}</strong>).`,
-        addToBoth: 'Přidat dítě oběma rodičům',
-        addToOne: (name: string) => `Přidat dítě pouze k ${name}`
     },
 
     // Delete confirmation
     deleteConfirm: {
         message: (name: string, birthYear?: string) =>
-            birthYear ? `Smazat "${name}" (*${birthYear})?` : `Smazat "${name}"?`
+            birthYear ? `Smazat „${name}“ (*${birthYear})?` : `Smazat „${name}“?`
     },
 
     // Confirmation modal
     confirmation: {
         title: 'Potvrdit'
+    },
+
+    // Destructive confirmations: the button says the verb, the title names the
+    // object, the message says what goes with it and whether Undo brings it back.
+    danger: {
+        undoHint: 'Smazání můžete vrátit tlačítkem Zpět.',
+        cannotUndo: 'Toto nelze vrátit zpět.',
+        deletePersonTitle: (name: string) => `Smazat osobu ${name}?`,
+        deletePerson: 'Smazat osobu',
+        personLinks: (gender: string, parents: number, partners: number, children: number): string => {
+            const list = joinAnd('cs', [
+                parents ? nCs(parents, 'rodič', 'rodiče', 'rodičů') : '',
+                partners ? nCs(partners, 'partner', 'partneři', 'partnerů') : '',
+                children ? nCs(children, 'dítě', 'děti', 'dětí') : '',
+            ]);
+            if (!list) return '';
+            const whose = gender === 'female' ? 'její vazby' : gender === 'male' ? 'jeho vazby' : 'vazby této osoby';
+            return `Odstraní se i ${whose}: ${list}.`;
+        },
+        orphanMessage: (name: string) => `${name} už v tomto stromu nemá žádné vztahy.`,
+        deleteTreeTitle: (name: string) => `Smazat strom ${name}?`,
+        deleteTree: 'Smazat strom',
+        deleteTreeMessage: (persons: number) =>
+            `Z tohoto prohlížeče zmizí strom, v něm ${nCs(persons, 'osoba', 'osoby', 'osob')} a všechny jeho zálohy. Pokud ho možná budete chtít zpět, nejdřív ho exportujte. Toto nelze vrátit zpět.`,
+        deleteBackupTitle: (when: string) => `Smazat zálohu (${when})?`,
+        deleteBackup: 'Smazat zálohu',
+        deleteBackupMessage: (persons: number) =>
+            `Obsahuje ${nCs(persons, 'osobu', 'osoby', 'osob')}. Samotného stromu se to nedotkne. Toto nelze vrátit zpět.`,
+        restoreBackupTitle: (when: string) => `Obnovit zálohu (${when})?`,
+        restoreBackup: 'Obnovit zálohu',
+        deleteSourceTitle: (title: string) => `Smazat pramen ${title}?`,
+        deleteSource: 'Smazat pramen',
+        sourceCited: (n: number) => `Je citován na ${nCs(n, 'místě', 'místech', 'místech')}; tyto citace se odeberou také.`,
+        deleteEventTitle: (type: string) => `Smazat událost „${type}“?`,
+        deleteEvent: 'Smazat událost',
+        deleteAttachmentTitle: (name: string) => `Smazat přílohu ${name}?`,
+        deleteAttachment: 'Smazat přílohu',
+        cleanPlacesTitle: (n: number) => `Odstranit ${nCs(n, 'nepoužívané místo', 'nepoužívaná místa', 'nepoužívaných míst')}?`,
+        cleanPlaces: 'Odstranit místa',
+        clearHistoryTitle: 'Vymazat historii změn?',
+        clearHistory: 'Vymazat historii',
+        clearHistoryMessage: 'Smažou se všechny zaznamenané změny tohoto stromu; samotného stromu se to nedotkne. Toto nelze vrátit zpět.',
+        discardMergeTitle: (name: string) => `Zahodit slučování ${name}?`,
+        discardMerge: 'Zahodit slučování',
+        discardMergeMessage: 'Vaše rozhodnutí v tomto slučování se zahodí. Samotných stromů se to nedotkne. Toto nelze vrátit zpět.',
+    },
+
+    // Empty states: serif heading, one sentence of purpose, optional action.
+    emptyStates: {
+        sourcesTitle: 'Zatím žádné prameny',
+        sourcesText: 'Pramen je matrika, dokument nebo kniha, ze které údaj pochází. Pak ho citujete u narození, sňatku a dalších údajů.',
+        backupsTitle: 'Zatím žádné zálohy',
+        backupsText: 'Záloha je kopie celého stromu, ke které se můžete vrátit. Aplikace je dělá i sama — průběžně a před importem nebo slučováním.',
+        anniversariesTitle: 'Žádná výročí v příštích 30 dnech',
+        anniversariesText: 'Narozeniny a výročí sňatků se tu objeví, jakmile budou mít osoby úplná data.',
+        attachmentsTitle: 'Zatím žádné přílohy',
+        attachmentsText: 'Skeny listin, dopisy nebo fotografie, které k této osobě patří.',
+        surnamesTitle: 'Zatím žádné propojené tvary',
     },
 
     // Relationships panel
@@ -2712,13 +3122,13 @@ const stringsCZ: StringsType = {
         reassignHint: (child: string, oldParent: string) => `${child} se odpojí od: ${oldParent} a připojí ke zvolené osobě. Nic se nevyplňuje znovu.`,
         reassignDone: (child: string, parent: string) => `${child} je nyní napojen(a) na: ${parent}`,
         reassignFailed: 'Vazbu se nepodařilo přepojit.',
-        noRelationships: 'Zatím žádné vztahy',
+        removeLocked: 'Vztahy zamčené osoby nelze měnit. Nejprve osobu odemkněte.',
         unsavedTitle: 'Neuložené změny',
         unsavedMessage: 'Máte neuložené změny v nastavení vztahů.',
         unsavedSave: 'Uložit a zavřít',
         unsavedDiscard: 'Zahodit změny',
         unsavedStay: 'Zůstat',
-        orphanConfirm: (name: string) => `"${name}" nemá žádné zbývající vztahy. Smazat tuto osobu?`,
+        orphanConfirm: (name: string) => `„${name}“ nemá žádné zbývající vztahy. Smazat tuto osobu?`,
         orphanDelete: 'Smazat',
         orphanKeep: 'Ponechat'
     },
@@ -2782,7 +3192,7 @@ const stringsCZ: StringsType = {
     // Export
     export: {
         failed: 'Export selhal. Zkuste to prosím znovu.',
-        devModeNotSupported: 'Export aplikace je dostupný pouze ze sestaveného souboru (strom.html). Spusťte nejprve "npm run build".'
+        devModeNotSupported: 'Export aplikace je dostupný pouze ze sestaveného souboru (strom.html). Spusťte nejprve „npm run build“.'
     },
 
     // Focus mode
@@ -2793,13 +3203,17 @@ const stringsCZ: StringsType = {
         showAll: 'Zobrazit vše',
         generationsUp: 'Generací nahoru',
         generationsDown: 'Generací dolů',
+        // Depth stepper labels (focus chip, tablet toolbar, descendants badge).
+        ancestorsLabel: 'Předci',
+        descendantsLabel: 'Potomci',
+        depthLabel: 'Hloubka',
+        depthDecrease: 'Méně generací',
+        depthIncrease: 'Více generací',
         exportFocus: 'Exportovat výběr',
-        hiddenPartners: (count: number) => `+${count} partner${count > 1 ? 'ů' : ''} (klikněte pro zaměření)`,
-        hiddenFamilies: (count: number) => `${count} další rodin${count > 1 ? 'y' : 'a'} s dětmi (klikněte pro zaměření)`,
+        hiddenPartners: (count: number) => `+${nCs(count, 'partner', 'partneři', 'partnerů')} (klikněte pro zaměření)`,
+        hiddenFamilies: (count: number) => `${nCs(count, 'další rodina', 'další rodiny', 'dalších rodin')} s dětmi (klikněte pro zaměření)`,
         hiddenPartnersTooltip: 'Další partneři',
         hiddenFamiliesTooltip: 'Další rodiny',
-        collapsePartners: 'Sbalit rozbalené partnery',
-        collapsePartnersLabel: '−',
         hiddenSiblingsTooltip: 'Sourozenci',
         hiddenParentsTooltip: 'Rodiče',
         hiddenChildrenTooltip: 'Děti',
@@ -2807,7 +3221,7 @@ const stringsCZ: StringsType = {
         branchTabParents: 'rodiče',
         branchTabSiblings: 'sourozenci',
         branchTabChildren: 'rodina',
-        personCount: (visible: number, total: number) => `${visible} z ${total} osob`
+        personCount: (visible: number, total: number) => `${visible} z ${total} ${plural('cs', total, 'osoby', 'osob', 'osob')}`
     },
 
     // Generation guide labels (small-caps rules on the canvas, relative to focus)
@@ -2822,8 +3236,6 @@ const stringsCZ: StringsType = {
 
     // Branch tabs (family context navigation)
     branchTabs: {
-        viewParents: 'Zobrazit jako dítě (ukázat rodiče)',
-        viewSiblings: 'Ukázat sourozence',
         viewFamily: 'Zobrazit jako rodiče (ukázat vlastní rodinu)'
     },
 
@@ -2849,7 +3261,7 @@ const stringsCZ: StringsType = {
         living: 'Jen žijící',
         deceased: 'Jen zemřelí',
         clear: 'Vymazat',
-        resultCount: (n: number) => `${n} výsledků`,
+        resultCount: (n: number) => nCs(n, 'výsledek', 'výsledky', 'výsledků'),
     },
 
     // Person picker
@@ -2860,9 +3272,34 @@ const stringsCZ: StringsType = {
 
     // Errors
     errors: {
-        saveFailed: 'Uložení selhalo — poslední změny nemusí být zapsané! Uvolni místo nebo odemkni šifrování a uprav znovu.',
-        parseStoredData: 'Nepodařilo se načíst uložená data',
+        saveFailed: 'Uložení selhalo — poslední změny nemusí být zapsané! Uvolněte místo nebo odemkněte šifrování a upravte znovu.',
         invalidJson: 'Neplatný JSON soubor'
+    },
+
+    // Storage safety: encryption lock, other tabs, backups (review wave 1 B)
+    storageSafety: {
+        saveBlocked: 'Tento strom se nepodařilo dešifrovat aktuálním heslem, a proto se jeho změny NEUKLÁDAJÍ. Nejprve odemkněte data správným heslem.',
+        lockedBanner: 'Vaše data jsou zašifrovaná a zamčená.',
+        unlock: 'Odemknout',
+        treeOtherKey: 'Tento strom je zašifrovaný jiným heslem (z doby před změnou hesla nebo z importu). Zadejte toto heslo – strom se pak znovu zašifruje vaším současným heslem.',
+        treeRecovered: 'Strom je odemčený a znovu zašifrovaný vaším současným heslem.',
+        unlockToContinue: 'Nejprve odemkněte zašifrovaná data — nové stromy se ukládají zašifrovaně.',
+        otherTabSaved: 'Tento strom byl změněn v jiné záložce. Načtěte stránku znovu, abyste změny viděli — úpravy provedené zde by je přepsaly.',
+        reload: 'Načíst znovu',
+        storageInitFailed: 'Úložiště prohlížeče se nepodařilo otevřít, data proto nelze načíst ani uložit. Zavřete ostatní záložky aplikace, ověřte, že anonymní režim neblokuje úložiště, a stránku načtěte znovu.',
+        storageBlocked: 'Úložiště blokuje jiná záložka se starší verzí aplikace. Pro pokračování ji zavřete.',
+        storageClosed: 'Aplikace byla aktualizována v jiné záložce. Před dalšími změnami tuto záložku načtěte znovu.',
+        treeLocked: 'Tento strom je zamčený. Pro vrácení či opakování změn ho odemkněte ve správě stromů.',
+        importedSuffix: (date: string, time: string) => `import ze dne ${date} ${time}`,
+        backupTitle: 'Obnovit zálohu',
+        backupContains: (count: number) => `Tato záloha obsahuje ${count} ${count === 1 ? 'strom' : count >= 2 && count <= 4 ? 'stromy' : 'stromů'}. Importovat všechny jako nové stromy?`,
+        backupImportAll: 'Importovat všechny stromy',
+        backupImported: (count: number) => `Importováno: ${count} ${count === 1 ? 'strom' : count >= 2 && count <= 4 ? 'stromy' : 'stromů'}`,
+        backupSkipped: (count: number) => `Nečitelné stromy byly přeskočeny (${count}).`,
+        backupEmpty: 'Záloha neobsahuje žádný čitelný strom.',
+        snapshotFailed: 'Operace se zálohou selhala.',
+        snapshotLocked: 'Pro práci se zálohami odemkněte zašifrovaná data.',
+        reencodeFailed: (count: number) => `Některé uložené položky (zálohy, záznamy změn) se nepodařilo převést a zůstaly v původní podobě (${count}).`
     },
 
     // Partner selection dialog
@@ -2874,7 +3311,6 @@ const stringsCZ: StringsType = {
     // Add child - parent selection
     addChild: {
         selectParent: 'Vyberte druhého rodiče',
-        selectParentDesc: (name: string) => `${name} má více partnerů. Vyberte druhého rodiče:`,
         newPlaceholder: 'Nová osoba (neznámá)',
         unknownPerson: 'Neznámá osoba'
     },
@@ -2890,25 +3326,22 @@ const stringsCZ: StringsType = {
     about: {
         title: 'O aplikaci Strom',
         version: 'Verze',
+        support: 'Strom je zdarma a open source. Pokud vám pomáhá, můžete podpořit jeho další vývoj.',
+        coffee: 'Kupte mi kávu',
+        betaBadge: 'Beta',
+        betaTitle: 'Testovací verze před vydáním. V tomto prohlížeči sdílí vaše rodokmeny s běžnou aplikací, proto si nejdřív udělejte zálohu.',
         description: 'Rodokmen v prohlížeči nebo v jednom HTML. Data zůstávají u vás.',
         createdBy: 'Vytvořil',
-        license: 'Licence',
-        licenseType: 'MPL-2.0 / Komerční',
         author: 'Autor',
         authorName: 'Milan Víšek',
-        website: 'Webové stránky',
-        websiteUrl: 'https://stromapp.info',
         close: 'Zavřít',
         currentData: 'Aktuální data',
         stats: {
-            treeName: 'Strom',
-            trees: 'stromů',
-            persons: 'Osob',
-            families: 'Rodin',
-            men: 'Mužů',
-            women: 'Žen',
-            generations: 'Generací',
-            oldest: 'Nejstarší'
+            trees: (n: number) => nCs(n, 'strom', 'stromy', 'stromů'),
+            persons: (n: number) => nCs(n, 'osoba', 'osoby', 'osob'),
+            families: (n: number) => nCs(n, 'rodina', 'rodiny', 'rodin'),
+            generations: (n: number) => nCs(n, 'generace', 'generace', 'generací'),
+            since: (year: string) => `od ${year}`
         }
     },
 
@@ -2929,9 +3362,9 @@ const stringsCZ: StringsType = {
         insertToTreeDesc: 'Načíst převedená data do aktuálního stromu',
         parseError: 'Nepodařilo se zpracovat GEDCOM soubor',
         skippedTags: 'Přeskočené záznamy',
-        unknownSex: (n: number) => `${n} ${n === 1 ? 'osoba' : n < 5 ? 'osoby' : 'osob'} s neznámým pohlavím (odvozeno z role v rodině)`,
+        unknownSex: (n: number) => `${n} ${plural('cs', n, 'osoba', 'osoby', 'osob')} s neznámým pohlavím (odvozeno z role v rodině)`,
         otherFamilyLinks: (n: number) =>
-            `${n} ${n === 1 ? 'dítě je zapsáno' : n < 5 ? 'děti jsou zapsány' : 'dětí je zapsáno'} ve více rodinách `
+            `${n} ${plural('cs', n, 'dítě je zapsáno', 'děti jsou zapsány', 'dětí je zapsáno')} ve více rodinách `
             + `(např. adopce); zobrazeno u rodné rodiny, zbytek zapsán v poznámce osoby`,
         photos: 'Fotografie',
         documents: 'Dokumenty',
@@ -2941,7 +3374,7 @@ const stringsCZ: StringsType = {
         allImported: 'Vše ze souboru bylo naimportováno.',
         viewCutTooSmall: 'Nejdřív zobrazte více osob (pohled Rodina nebo Potomci), pak z pohledu vytvořte strom.',
         viewCutName: (name: string) => `${name} — výřez`,
-        externalMedia: (n: number) => `Soubor odkazuje na ${n} externích souborů médií (platformy exportují fotky zvlášť jako složku/zip — nejdřív jej rozbalte).`,
+        externalMedia: (n: number) => `Soubor odkazuje na ${nCs(n, 'externí soubor médií', 'externí soubory médií', 'externích souborů médií')} (platformy exportují fotky zvlášť jako složku/zip — nejdřív jej rozbalte).`,
         attachMedia: 'Napojit soubory médií…',
         downloadMedia: 'Stáhnout fotky z internetu',
         downloading: (done: number, total: number) => `Stahuji fotky… ${done}/${total}`,
@@ -2977,6 +3410,7 @@ const stringsCZ: StringsType = {
             DIVF: 'Podán návrh na rozvod',
             CENS: 'Sčítání lidu',
             EVEN: 'Událost',
+            RESI: 'Bydliště',
         } as Record<string, string>,
         census: 'Sčítání lidu',
         genericEvent: 'Událost',
@@ -2997,6 +3431,36 @@ const stringsCZ: StringsType = {
         parentAnd: ' a ',
         alsoRecorded: (kind: string, parents: string) => `Rovněž zapsáno jako ${kind} rodičů ${parents}.`,
         alsoRecordedNoParents: (kind: string) => `Rovněž zapsáno jako ${kind} v jiné rodině.`,
+        /**
+         * Detail a register gives about one fact beyond its date and place
+         * (GEDCOM AGE / CAUS / ADDR under the fact). One labelled line in the
+         * fact's note — there is no field for them, and a line is all it takes.
+         */
+        age: (text: string) => `Věk: ${text}`,
+        ageUnit: (n: number, unit: 'y' | 'm' | 'd') => {
+            const few = n >= 2 && n <= 4;
+            const words = {
+                y: n === 1 ? 'rok' : few ? 'roky' : 'let',
+                m: n === 1 ? 'měsíc' : few ? 'měsíce' : 'měsíců',
+                d: n === 1 ? 'den' : few ? 'dny' : 'dní',
+            };
+            return `${n} ${words[unit]}`;
+        },
+        ageWords: { INFANT: 'kojenec', STILLBORN: 'mrtvě narozené', CHILD: 'dítě' } as Record<string, string>,
+        husbandAge: (text: string) => `Věk ženicha: ${text}`,
+        wifeAge: (text: string) => `Věk nevěsty: ${text}`,
+        cause: (text: string) => `Příčina: ${text}`,
+        address: (text: string) => `Adresa: ${text}`,
+        /** A date the file gave in another calendar; the stored date is read as Gregorian. */
+        calendarDate: (calendar: string, date: string) => `Datum v ${calendar} kalendáři: ${date}`,
+        calendars: { JULIAN: 'juliánském', HEBREW: 'židovském', 'FRENCH R': 'francouzském revolučním', ROMAN: 'římském' } as Record<string, string>,
+        /** Source record lines with no field of their own (TEXT, PUBL, AUTH, REPO > CALN). */
+        sourceText: (text: string) => `Přepis: ${text}`,
+        sourcePublication: (text: string) => `Vydání: ${text}`,
+        sourceAuthor: (text: string) => `Autor: ${text}`,
+        sourceCallNumber: (text: string) => `Signatura: ${text}`,
+        /** A GEDCOM date phrase or a date that could not be read whole — kept as written. */
+        datePhrase: (text: string) => `Datum v záznamu: ${text}`,
     },
 
     // Save current data dialog
@@ -3035,7 +3499,6 @@ const stringsCZ: StringsType = {
         newerDataWarning: 'Otevření ve starší verzi může způsobit ztrátu dat nebo chyby.',
         newerDataSolution: 'Doporučení: Exportujte data jako JSON a importujte je v novější verzi.',
         exportAndExit: 'Exportovat JSON a zavřít',
-        getNewerVersion: 'Pro otevření tohoto souboru použijte novější verzi aplikace.',
         yourVersion: 'Vaše verze aplikace',
         dataVersion: 'Verze dat',
         viewOnlyAllowed: 'Data můžete prohlížet, ale import je zakázán kvůli prevenci ztráty dat.',
@@ -3084,7 +3547,7 @@ const stringsCZ: StringsType = {
         failed: 'Sloučení selhalo',
         switchToNewTree: 'Přepnout na nový strom?',
         stats: (merged: number, added: number) =>
-            `${merged} osob sloučeno, ${added} nových osob přidáno`,
+            `Sloučeno: ${nCs(merged, 'osoba', 'osoby', 'osob')}, přidáno: ${nCs(added, 'nová osoba', 'nové osoby', 'nových osob')}`,
         noItems: 'Žádné položky k zobrazení',
         newPerson: 'Nová',
         selectExisting: '-- Vyberte existující osobu --',
@@ -3147,20 +3610,30 @@ const stringsCZ: StringsType = {
 
         // New tree name prompt
         newTreeNamePrompt: 'Zadejte název pro sloučený strom:',
-        pendingGate: (n: number) => `${n} ${n === 1 ? 'nejistá shoda zůstala nerozhodnutá' : n < 5 ? 'nejisté shody zůstaly nerozhodnuté' : 'nejistých shod zůstalo nerozhodnutých'} — tito lidé se naimportují jako SAMOSTATNÉ osoby (sloučit je můžeš i později). Pokračovat?`,
+        pendingGate: (n: number) => `${n} ${plural('cs', n, 'nejistá shoda zůstala nerozhodnutá', 'nejisté shody zůstaly nerozhodnuté', 'nejistých shod zůstalo nerozhodnutých')} — tito lidé se naimportují jako SAMOSTATNÉ osoby (sloučit je můžete i později). Pokračovat?`,
         suggestedPrecise: 'navrženo — přesnější datum',
         suggestedComplete: 'navrženo — úplnější hodnota',
 
         // Photo conflict (dvě různé fotografie — v dialogu zobrazeny jako náhledy)
         photoConflict: 'dvě různé fotografie',
 
+        // Partnership conflicts
+        partnershipConflict: 'Vztah',
+        partnershipCouple: (a: string, b: string) => `${a || '?'} & ${b || '?'}`,
+        partnershipFields: {
+            status: 'Stav vztahu',
+            startDate: 'Datum sňatku / začátku',
+            startPlace: 'Místo sňatku',
+            endDate: 'Datum rozvodu / konce'
+        },
+
         // Validace kolem sloučení (neblokující)
         preValidationWarning: (existing: number, incoming: number) =>
-            `Stávající strom má ${existing} ${existing === 1 ? 'problém' : existing < 5 ? 'problémy' : 'problémů'}, příchozí ${incoming} — sloučením se přenesou dál.`,
+            `Stávající strom má ${existing} ${plural('cs', existing, 'problém', 'problémy', 'problémů')}, příchozí ${incoming} — sloučením se přenesou dál.`,
         preValidationHint: 'Můžete je nejdřív opravit přes validaci.',
         newIssuesTitle: 'Sloučení přineslo nové problémy',
         newIssues: (n: number) =>
-            `Sloučení přineslo ${n} ${n === 1 ? 'nový problém' : n < 5 ? 'nové problémy' : 'nových problémů'} — otevřít validaci?`,
+            `Sloučení přineslo ${n} ${plural('cs', n, 'nový problém', 'nové problémy', 'nových problémů')} — otevřít validaci?`,
 
         // Manual match dialog
         incomingPerson: 'Příchozí osoba:',
@@ -3172,8 +3645,7 @@ const stringsCZ: StringsType = {
         // Pending merge in tree manager
         pendingMergeLabel: 'Rozpracované sloučení',
         pendingMergeInto: (source: string, target: string) => `${source} → ${target}`,
-        pendingMergeFrom: (source: string) => `z ${source}`,
-        pendingMergeConflicts: (count: number) => `${count} konfliktů`
+        pendingMergeConflicts: (count: number) => nCs(count, 'konflikt', 'konflikty', 'konfliktů')
     },
 
     // Person merge (duplicate resolution)
@@ -3191,13 +3663,44 @@ const stringsCZ: StringsType = {
         noConflicts: 'Žádné konflikty - data budou spojena',
         confirmMerge: 'Sloučit osoby',
         mergeComplete: 'Osoby byly sloučeny',
-        samePersonError: 'Nelze sloučit osobu samu se sebou',
         willBeDeleted: 'bude smazána',
         relationshipsTransferred: 'Vztahy budou přeneseny'
     },
 
     // Settings
+    // Export dialog (grouped menu)
+    exportMenu: {
+        groupShare: 'Sdílet',
+        groupSave: 'Uložit a zálohovat',
+        groupPrint: 'Tisk a obraz',
+        groupOther: 'Pro jiné programy',
+        groupSelection: 'Jen zobrazené osoby',
+        share: 'Poslat příbuznému',
+        linkFile: 'Propojit se souborem na disku…',
+        linkFileDesc: 'Strom se ukládá do souboru .json — pak stačí ukládat klávesou Ctrl+S',
+        app: 'Aplikace i s daty (HTML)',
+        appDesc: 'Jeden soubor, který se otevře v každém prohlížeči, nic se neinstaluje',
+        backup: 'Záloha dat (JSON)',
+        backupDesc: 'Celý strom — pro obnovení nebo pozdější import',
+        poster: 'Plakát',
+        posterDesc: 'Aktuální pohled jako SVG, PNG nebo tisknutelné vícestránkové PDF',
+        book: 'Kniha rodu',
+        gedcom: 'GEDCOM',
+        gedcomDesc: 'Standardní soubor .ged pro jiné genealogické programy',
+        csv: 'Tabulka osob (CSV)',
+        csvDesc: 'Pro Excel nebo Google Sheets',
+        selJson: 'Uložit výběr jako JSON',
+        selJsonDesc: 'Jen právě zobrazené osoby jako soubor JSON',
+        selTree: 'Vytvořit z výběru nový strom',
+        selTreeDesc: 'Ze zobrazených osob vytvoří nový strom přímo v aplikaci',
+    },
+
     settings: {
+        groupTree: 'Zobrazení stromu',
+        groupNotifications: 'Upozornění',
+        groupCard: 'Karta osoby',
+        groupData: 'Data a soukromí',
+        groupLanguage: 'Jazyk a vzhled',
         title: 'Nastavení',
         theme: 'Vzhled',
         themeSystem: 'Systémový (podle OS)',
@@ -3213,9 +3716,9 @@ const stringsCZ: StringsType = {
         defaultTreeName: 'Můj rodokmen',
         newTree: 'Nový strom',
         manageTreesTitle: 'Správa stromů',
-        treeSwitcher: 'Strom',
         open: 'Otevřít',
         moreActions: 'Další akce',
+        openAtStartup: 'Otevírat při spuštění',
         searchTrees: 'Hledat strom…',
         pendingSection: 'Rozpracovaná sloučení',
         cannotHideLastVisible: 'Poslední viditelný strom nejde skrýt — nejdřív zobraz jiný strom.',
@@ -3230,7 +3733,7 @@ const stringsCZ: StringsType = {
         delete: 'Smazat',
         export: 'Exportovat',
         newTreePlaceholder: 'Název stromu',
-        confirmDelete: (name: string) => `Smazat strom "${name}"? Toto nelze vrátit zpět.`,
+        confirmDelete: (name: string) => `Smazat strom „${name}“? Toto nelze vrátit zpět.`,
         duplicateSuffix: '(kopie)',
         selectTargetTree: 'Vyberte cílový strom',
         mergeSourceTree: 'Sloučit strom',
@@ -3239,21 +3742,18 @@ const stringsCZ: StringsType = {
         importTreeName: 'Importovaný strom',
         importAsNewTree: 'Importovat jako nový strom',
         treeNameLabel: 'Název stromu',
-        persons: 'osob',
-        families: 'rodin',
+        persons: (n: number) => nCs(n, 'osoba', 'osoby', 'osob'),
+        families: (n: number) => nCs(n, 'rodina', 'rodiny', 'rodin'),
         // Stats dialog
         stats: 'Statistika',
         statsTitle: 'Statistika stromu',
         statsPeople: 'Osoby',
-        statsTotal: 'Celkem',
         statsMales: 'Muži',
         statsFemales: 'Ženy',
         statsLiving: 'Žijící',
         statsDeceased: 'Zesnulí',
         statsFamilies: 'Rodiny',
-        statsPartnerships: 'Partnerství',
         statsAvgChildren: 'Průměr dětí',
-        statsDateRange: 'Rozsah dat',
         statsGenerations: 'Generací',
         statsYearSpan: 'Rozpětí let',
         statsData: 'Úplnost dat',
@@ -3266,30 +3766,18 @@ const stringsCZ: StringsType = {
         statsSourceCoverage: 'Pokrytí prameny',
         statsAttachments: 'Přílohy',
         statsMediaWarning: 'Přes 10 MB médií — soubor už nemusí projít e-mailem',
-        statsSize: 'Úložiště',
-        statsTreeSize: 'Velikost stromu',
         // Anniversaries
         statsAnniversaries: 'Blížící se výročí',
         statsAnniversariesNone: 'Žádná výročí v příštích 30 dnech',
-        statsToday: 'Dnes',
-        statsThisWeek: 'Tento týden',
-        statsThisMonth: 'Tento měsíc',
-        statsBirthday: 'narozeniny',
-        statsBirthAnniversary: 'nedožitých',
-        statsWeddingAnniversary: 'výročí svatby',
-        statsMemorial: 'výročí úmrtí',
-        statsYears: 'let',
         // Validation
-        validateDesc: 'Zkontrolovat strom na chyby',
         validationTitle: 'Validace stromu',
         postImportCheckTitle: 'Kontrola dat',
-        postImportCheck: (n: number) => `Zkontrolovali jsme naimportovaná data a našli ${n} ${n === 1 ? 'věc k prohlédnutí' : n < 5 ? 'věci k prohlédnutí' : 'věcí k prohlédnutí'}. Zobrazit?`,
+        postImportCheck: (n: number) => `Zkontrolovali jsme naimportovaná data a našli ${n} ${plural('cs', n, 'věc k prohlédnutí', 'věci k prohlédnutí', 'věcí k prohlédnutí')}. Zobrazit?`,
         postImportReview: 'Zobrazit',
         validationPassed: 'Žádné problémy nenalezeny',
         validationErrors: 'chyby',
         validationWarnings: 'varování',
         validationInfos: 'info',
-        validationIssuesFound: 'nalezených problémů',
         // Tree validation messages
         valCycle: 'Zjištěn cyklus předků',
         valSelfPartnership: 'Partnerství sama se sebou',
@@ -3322,19 +3810,20 @@ const stringsCZ: StringsType = {
         valChildAfterFatherDeath: 'Dítě narozené dlouho po smrti otce',
         valCitationMissingSource: 'Citace odkazuje na neexistující pramen',
         valAttachmentNoData: 'Příloha nemá použitelná data',
+        valPhotoUnsafeData: 'Fotka není podporovaný obrázek',
         valPartnerAgeGap: 'Extrémní věkový rozdíl partnerů',
         valPossibleDuplicate: 'Možná duplicitní osoba (stejné jméno a rok narození)',
         valPlaceSpelling: 'Jedno místo zapsané víckrát jinak',
         valRecurringGodparent: 'Kmotr, který se opakuje — bývá to příbuzný',
         valRecurringGodparentDetail: (name: string, events: number, people: number, whose: string) =>
-            `${name} — u ${events} událostí ${people} osob · ${whose}`,
+            `${name} — u ${events} ${plural('cs', events, 'události', 'událostí', 'událostí')} ${people} ${plural('cs', people, 'osoby', 'osob', 'osob')} · ${whose}`,
         valRecurringGodparentByName: 'shoda podle jména',
         valOrphanedParticipantRef: 'Účastník události odkazuje na osobu, která už neexistuje',
         valOrphanedParticipantDetail: (person: string, event: string, who: string) =>
             `${person} · ${event}: ${who}`,
         valFix: 'Opravit',
         valFixAll: 'Opravit vše',
-        valFixed: (count: number) => `Opraveno ${count} ${count === 1 ? 'problém' : count < 5 ? 'problémy' : 'problémů'}`,
+        valFixed: (count: number) => `Opraveno ${count} ${plural('cs', count, 'problém', 'problémy', 'problémů')}`,
         // Default person dialog
         defaultPerson: 'Výchozí osoba',
         defaultPersonDesc: 'Při otevření tohoto stromu zaměřit na:',
@@ -3373,9 +3862,6 @@ const stringsCZ: StringsType = {
         // Short label for the "Strom: {name}" submenu, where the header already
         // names the tree (no need to repeat the noun).
         hide: 'Skrýt',
-        showTreeHint: 'Zobrazit strom',
-        hideTreeHint: 'Skrýt strom',
-        hiddenLabel: '(skrytý)'
     },
 
     // Collaboration: send to a relative
@@ -3393,7 +3879,7 @@ const stringsCZ: StringsType = {
         messagePlaceholder: 'Ahoj! Doplníš prosím, co víš o vaší větvi?',
         createFile: 'Vytvořit soubor k poslání',
         welcomeTitle: (sender: string) => `${sender} ti poslal(a) rodinný strom`,
-        welcomeCounts: (tree: string, persons: number) => `„${tree}“ · ${persons} osob`,
+        welcomeCounts: (tree: string, persons: number) => `„${tree}“ · ${nCs(persons, 'osoba', 'osoby', 'osob')}`,
         welcomeView: 'Jen se podívat',
         welcomeEdit: 'Doplnit, co vím',
         collabBar: (sender: string) => `Doplňuješ strom pro: ${sender}.`,
@@ -3431,7 +3917,7 @@ const stringsCZ: StringsType = {
         sectionUpdated: 'Upravené osoby',
         fieldOther: 'další údaje',
         changedFields: (fields: string) => `změněno: ${fields}`,
-        andMore: (n: number) => `+${n} dalších`,
+        andMore: (n: number) => `+${n} ${plural('cs', n, 'další', 'další', 'dalších')}`,
         applied: (added: number, updated: number) => `Přijato — ${added} přidáno, ${updated} upraveno`,
         alreadyApplied: 'Tyto změny už ve tvém stromu jsou — není co přijmout.',
     },
@@ -3452,9 +3938,8 @@ const stringsCZ: StringsType = {
         importTitle: 'Importovat strom',
         importMessage: 'Importovat tento strom do úložiště pro možnost editace?',
         createNew: 'Importovat do úložiště',
-        createCopy: 'Vytvořit kopii',
         importSuccess: 'Strom byl úspěšně importován',
-        importAllSuccess: (count: number) => `${count} strom${count === 1 ? '' : count < 5 ? 'y' : 'ů'} bylo úspěšně importováno`,
+        importAllSuccess: (count: number) => `${count} ${plural('cs', count, 'strom byl úspěšně importován', 'stromy byly úspěšně importovány', 'stromů bylo úspěšně importováno')}`,
         updateSuccess: 'Úložiště bylo aktualizováno'
     },
 
@@ -3467,7 +3952,7 @@ const stringsCZ: StringsType = {
         enterPassword: 'Zadejte heslo',
         wrongPassword: 'Nesprávné heslo',
         exportPassword: 'Šifrování exportu',
-        exportPasswordHint: 'Zadej heslo pro šifrování souboru, nebo exportuj bez šifrování.',
+        exportPasswordHint: 'Zadejte heslo pro šifrování souboru, nebo exportujte bez šifrování.',
         exportWithPassword: 'Exportovat šifrovaně',
         exportWithoutPassword: 'Exportovat bez šifrování',
         passwordMismatch: 'Hesla se neshodují',
@@ -3476,12 +3961,7 @@ const stringsCZ: StringsType = {
         encryptionDisabled: 'Šifrování vypnuto',
         unlockData: 'Odemknout data',
         decryptionFailed: 'Nepodařilo se dešifrovat data',
-        changePassword: 'Změnit heslo',
-        currentPassword: 'Aktuální heslo',
-        newPassword: 'Nové heslo',
-        passwordChanged: 'Heslo úspěšně změněno',
         optional: '(volitelné)',
-        dataEncrypted: 'Data jsou šifrována',
         enterPasswordToView: 'Zadejte heslo pro zobrazení'
     },
 
@@ -3492,7 +3972,6 @@ const stringsCZ: StringsType = {
         title: 'Náhled stromu',
         close: 'Zavřít',
         focusedOn: 'Fokus na',
-        clickToFocus: 'Klikněte na osobu pro změnu fokusu',
         compare: 'Porovnat stromy',
         preview: 'Náhled',
         comparePersons: 'Porovnat'
@@ -3506,6 +3985,10 @@ const stringsCZ: StringsType = {
         runsInFamily: 'Průlet běží v pohledu Rodina',
         hint: 'Mezerník = pauza · ← → = posun · Esc = konec',
         paused: 'Pozastaveno',
+        previous: 'Předchozí',
+        pause: 'Pozastavit',
+        next: 'Další',
+        exit: 'Ukončit prezentaci',
     },
 
     cardDensity: {
@@ -3516,16 +3999,18 @@ const stringsCZ: StringsType = {
     },
 
     fanChart: {
+        kekuleSettingDesc: 'V pohledu Vějíř',
         settingLabel: 'Vějíř',
         kekuleHint: 'Zobrazit Kekulého (ahnentafel) čísla předků',
     },
 
     crossTree: {
-        badgeTitle: (count: number) => `Nalezeno v ${count} ${count === 1 ? 'jiném stromu' : count < 5 ? 'jiných stromech' : 'jiných stromech'}`,
+        badgeTitle: (count: number) => `Nalezeno v ${count} ${plural('cs', count, 'jiném stromu', 'jiných stromech', 'jiných stromech')}`,
         settingLabel: 'Propojení mezi stromy',
         settingHint: 'Zobrazit odznak, když se osoba vyskytuje i v jiném stromu',
         tooltipHeader: 'Také v:',
         clickToSwitch: 'Kliknutím přepnout',
+        moreMatches: (n: number) => `… a ${n} ${plural('cs', n, 'další', 'další', 'dalších')}`,
         chooserHeader: 'Otevřít ve stromu…'
     },
 
@@ -3538,13 +4023,13 @@ const stringsCZ: StringsType = {
         exportJsonDesc: 'Pro import do webové aplikace',
         saveFile: 'Uložit soubor',
         saveFileTitle: 'Stáhnout soubor s aktuálními daty',
-        unsavedWarning: 'Máte neuložené změny. Použijte "Uložit soubor" pro jejich zachování.',
+        unsavedWarning: 'Máte neuložené změny. Použijte „Uložit soubor“ pro jejich zachování.',
         infoTitle: 'O tomto souboru',
         infoText1: 'Toto je samostatný HTML soubor. Vaše data se ukládají do úložiště tohoto prohlížeče.',
         infoText2: 'Webová aplikace na stromapp.info má vlastní oddělené úložiště. Data se mezi nimi NESYNCHRONIZUJÍ.',
         infoHow: 'Vaše možnosti:',
         infoStayOffline: 'Pokračovat s tímto souborem',
-        infoStayOfflineDesc: 'Vaše data zůstávají v tomto prohlížeči. Použijte "Uložit soubor" pro stažení kopie se změnami.',
+        infoStayOfflineDesc: 'Vaše data zůstávají v tomto prohlížeči. Použijte „Uložit soubor“ pro stažení kopie se změnami.',
         infoGoOnline: 'Přejít na stromapp.info',
         infoGoOnlineDesc: 'Používat webovou aplikaci. Pro přenos dat budete muset tento soubor importovat.'
     },
@@ -3569,7 +4054,7 @@ const stringsCZ: StringsType = {
         empty: 'Zatím žádné záznamy.',
         clear: 'Vyčistit historii',
         clearConfirm: 'Vyčistit celou historii změn? Toto nelze vrátit zpět.',
-        entries: (count: number) => `${count} ${count === 1 ? 'záznam' : count < 5 ? 'záznamy' : 'záznamů'}`,
+        entries: (count: number) => `${count} ${plural('cs', count, 'záznam', 'záznamy', 'záznamů')}`,
         today: 'Dnes',
         yesterday: 'Včera',
         enableSetting: 'Historie změn',
@@ -3590,18 +4075,18 @@ const stringsCZ: StringsType = {
         addedFamily: (name: string, count: number) => `Přidána rodina kolem ${name} (${count} nových)`,
         removedParentChild: (parent: string, child: string) => `Odebrán rodič-dítě: ${parent} → ${child}`,
         mergedPersons: (removed: string, kept: string, details: string) => `Sloučeny osoby: ${removed} → ${kept}${details ? ' (' + details + ')' : ''}`,
-        clearedData: (persons: number, partnerships: number) => `Vymazána data: ${persons} osob, ${partnerships} vztahů`,
-        loadedData: (persons: number, partnerships: number) => `Načtena data: ${persons} osob, ${partnerships} vztahů`,
+        clearedData: (persons: number, partnerships: number) => `Vymazána data: ${nCs(persons, 'osoba', 'osoby', 'osob')}, ${nCs(partnerships, 'vztah', 'vztahy', 'vztahů')}`,
+        loadedData: (persons: number, partnerships: number) => `Načtena data: ${nCs(persons, 'osoba', 'osoby', 'osob')}, ${nCs(partnerships, 'vztah', 'vztahy', 'vztahů')}`,
         // Batch summaries
         addedChild: (parent: string, child: string) => `Přidáno dítě: ${parent} → ${child}`,
         addedParent: (parent: string, child: string) => `Přidán rodič: ${parent} → ${child}`,
         addedSibling: (person: string, sibling: string) => `Přidán sourozenec: ${person} + ${sibling}`,
         addedPartner: (person: string, partner: string) => `Přidán partner: ${person} & ${partner}`,
         // Tree merge
-        treeMerge: (merged: number, added: number, source: string) => `Sloučení stromů z "${source}": ${merged} sloučeno, ${added} přidáno`,
+        treeMerge: (merged: number, added: number, source: string) => `Sloučení stromů z „${source}“: ${merged} sloučeno, ${added} přidáno`,
         appliedChanges: (sender: string) => `Přijaty změny od ${sender}`,
         // Split into families
-        splitFamilies: (trees: number, persons: number) => `Rozděleno na ${trees} rodinné stromy (${persons} osob)`,
+        splitFamilies: (trees: number, persons: number) => `Rozděleno na ${nCs(trees, 'rodinný strom', 'rodinné stromy', 'rodinných stromů')} (${nCs(persons, 'osoba', 'osoby', 'osob')})`,
         // Auto-repair
         repairedIssue: (desc: string) => `Automatická oprava: ${desc}`,
         restoredBackup: 'Obnovena záloha',
@@ -3609,10 +4094,10 @@ const stringsCZ: StringsType = {
         addedEvent: (name: string) => `Přidána událost k ${name}`,
         updatedEvent: (name: string) => `Upravena událost u ${name}`,
         removedEvent: (name: string) => `Odebrána událost u ${name}`,
-        cleanedOrphanPlaces: (count: number) => `Vyčištěno ${count} ${count === 1 ? 'osiřelé místo' : count < 5 ? 'osiřelá místa' : 'osiřelých míst'}`,
-        addedSource: (title: string) => `Přidán pramen „${title}"`,
-        updatedSource: (title: string) => `Upraven pramen „${title}"`,
-        removedSource: (title: string) => `Odebrán pramen „${title}"`,
+        cleanedOrphanPlaces: (count: number) => `Vyčištěno ${count} ${plural('cs', count, 'osiřelé místo', 'osiřelá místa', 'osiřelých míst')}`,
+        addedSource: (title: string) => `Přidán pramen „${title}“`,
+        updatedSource: (title: string) => `Upraven pramen „${title}“`,
+        removedSource: (title: string) => `Odebrán pramen „${title}“`,
         citedSource: (name: string) => `Přidána citace u ${name}`,
         uncitedSource: (name: string) => `Odebrána citace u ${name}`,
         addedAttachment: (name: string) => `Přidána příloha k ${name}`,
@@ -3631,9 +4116,9 @@ const stringsCZ: StringsType = {
         addPerson: (name: string) => `přidání osoby ${name}`,
         editPerson: (name: string) => `úprava osoby ${name}`,
         clearedData: 'smazání všech dat',
-        geocodePlaces: (count: number) => `dohledání ${count} míst`,
+        geocodePlaces: (count: number) => `dohledání ${count} ${plural('cs', count, 'místa', 'míst', 'míst')}`,
         clearPlaceGeo: 'odebrání místa z mapy',
-        cleanOrphanPlaces: (count: number) => `vyčištění ${count} ${count === 1 ? 'osiřelého místa' : count < 5 ? 'osiřelých míst' : 'osiřelých míst'}`,
+        cleanOrphanPlaces: (count: number) => `vyčištění ${count} ${plural('cs', count, 'osiřelého místa', 'osiřelých míst', 'osiřelých míst')}`,
         renamePlace: (name: string) => `přejmenování místa na ${name}`,
         addSurnameGroup: (names: string) => `propojení tvarů ${names}`,
         removeSurnameGroup: (name: string) => `zrušení propojení tvarů ${name}`,
@@ -3651,9 +4136,9 @@ const stringsCZ: StringsType = {
         editEvent: (name: string) => `úprava události u ${name}`,
         removeEvent: (name: string) => `odebrání události u ${name}`,
         restoreBackup: 'obnovení zálohy',
-        addSource: (title: string) => `pramen „${title}"`,
-        editSource: (title: string) => `úprava pramene „${title}"`,
-        removeSource: (title: string) => `odebrání pramene „${title}"`,
+        addSource: (title: string) => `pramen „${title}“`,
+        editSource: (title: string) => `úprava pramene „${title}“`,
+        removeSource: (title: string) => `odebrání pramene „${title}“`,
         cite: (name: string) => `citace u ${name}`,
         uncite: (name: string) => `odebrání citace u ${name}`,
         addAttachment: (name: string) => `příloha u ${name}`,
@@ -3663,8 +4148,6 @@ const stringsCZ: StringsType = {
         applyChanges: (sender: string) => `přijetí změn od ${sender}`,
         undone: (desc: string) => `Vráceno: ${desc}`,
         redone: (desc: string) => `Znovu provedeno: ${desc}`,
-        nothingToUndo: 'Není co vrátit',
-        nothingToRedo: 'Není co zopakovat'
     },
 
     // Undo / redo entries in the ⋯ actions menu (labels carry the last change).
@@ -3686,7 +4169,7 @@ const stringsCZ: StringsType = {
         stripPhotos: 'Exportovat bez fotek a příloh',
         // Granular export content (R8)
         contentLabel: 'Obsah',
-        contentTooltip: 'Vyber, co se uloží do souboru. Struktura stromu a jména zůstanou vždy zachována.',
+        contentTooltip: 'Vyberte, co se uloží do souboru. Struktura stromu a jména zůstanou vždy zachována.',
         contentEstimate: (size: string) => `Odhadovaná velikost: ${size}`,
         presetComplete: 'Kompletní archiv',
         presetSmall: 'Malý soubor k odeslání',
@@ -3704,23 +4187,21 @@ const stringsCZ: StringsType = {
         text: 'Text vyprávění',
         hint: 'Souvislý text sestavený nad fakty — v knize rodu stojí až za nimi. Není to pramen. Text mezi dvojicemi hvězdiček se v knize vysází tučně.',
         status: 'Stav',
-        statusNone: '—',
         statusDraft: 'Návrh',
-        statusFinal: 'Hotovo',
         facts: 'Opírá se o',
-        sumWords: (n: number) => `${n} slov`,
+        sumWords: (n: number) => nCs(n, 'slovo', 'slova', 'slov'),
     },
 
     poster: {
         menu: 'Export plakátu',
         title: 'Export jako plakát',
-        description: 'Exportuj aktuální zobrazení jako vektor, obrázek nebo tisknutelný plakát na více stran.',
+        description: 'Exportujte aktuální zobrazení jako vektor, obrázek nebo tisknutelný plakát na více stran.',
         printsView: 'Vytiskne aktuální zobrazení:',
         viewFamily: (name: string, up: number, down: number) => `Rodina — od ${name} (hloubka ${up}/${down})`,
         viewDescendants: (name: string) => `Potomci osoby ${name}`,
         viewFan: (name: string, gens: number) => `Vějíř — předci osoby ${name}, generací: ${gens}`,
         viewTimeline: (name: string) => `Časová osa — pohled osoby ${name}`,
-        viewMapBlocked: 'Mapa se jako plakát tisknout nedá — pro tisk přepni na stromové zobrazení.',
+        viewMapBlocked: 'Mapa se jako plakát tisknout nedá — pro tisk přepněte na stromové zobrazení.',
         svg: 'SVG (vektor)',
         svgDesc: 'Škálovatelný vektor, otevře se v prohlížeči nebo Inkscape',
         png: 'PNG (obrázek)',
@@ -3731,14 +4212,14 @@ const stringsCZ: StringsType = {
         orientation: 'Orientace',
         portrait: 'Na výšku',
         landscape: 'Na šířku',
-        empty: 'Není co exportovat — nejdřív otevři strom.',
+        empty: 'Není co exportovat — nejdřív otevřete strom.',
         pngScaledDown: 'Obrázek byl zmenšen kvůli limitu velikosti.',
         pngError: 'Obrázek se nepodařilo vytvořit.',
         pageLabel: (row: number, col: number) => `řádek ${row} · sloupec ${col}`,
         guideOption: 'Přidat úvodní stranu s návodem na slepení',
         guideTitle: 'Návod na slepení',
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
-            `${pages} listů (${rows} × ${cols}), přesah ${overlap} mm — slepte podle mřížky níže.`,
+            `${nCs(pages, 'list', 'listy', 'listů')} (${rows} × ${cols}), přesah ${overlap} mm — slepte podle mřížky níže.`,
         emptySheet: 'prázdný — netiskne se'
     }
 };
@@ -3785,7 +4266,6 @@ const stringsDE: StringsType = {
         exportGedcom: 'GEDCOM exportieren',
         exportGedcomDesc: 'Als GEDCOM-Datei herunterladen',
         newTree: 'Neuer Stammbaum',
-        newTreeDesc: 'Einen neuen, leeren Stammbaum beginnen'
     },
 
     // Mobile menu
@@ -3803,7 +4283,9 @@ const stringsDE: StringsType = {
         subtitle: 'Beginnen Sie mit Ihrem Stammbaum',
         addFirst: 'Erste Person hinzufügen',
         importFromFile: 'Ich habe Daten woanders (GEDCOM von MyHeritage, Ancestry…)',
-        youCard: 'Sie?'
+        youCard: 'Sie?',
+        lockedTitle: 'Ihre Daten sind gesperrt — entsperren Sie sie, um fortzufahren',
+        lockedSubtitle: 'Ihr Stammbaum ist verschlüsselt. Geben Sie Ihr Passwort ein, um ihn anzusehen und zu bearbeiten.'
     },
 
     demo: {
@@ -3831,13 +4313,19 @@ const stringsDE: StringsType = {
         chapterShort: 'Kap.',
         born: '*',
         died: '†',
-        persons: 'Personen',
-        generations: 'Generationen',
+        persons: (n: number) => nDe(n, 'Person', 'Personen'),
+        generations: (n: number) => nDe(n, 'Generation', 'Generationen'),
         generate: 'Buch öffnen',
         optName: 'Titel',
         optMaxGen: 'Max. Generationen (optional)',
         compiled: (date: string) => `erstellt ${date}`,
         empty: 'Der Stammbaum ist leer.',
+        partners: 'Partner',
+        divorced: 'geschieden',
+        separated: 'getrennt',
+        ended: 'Ende',
+        childRel: { adoptive: 'Adoptivkind', step: 'Stiefkind', foster: 'Pflegekind' } as Record<'adoptive' | 'step' | 'foster', string>,
+        childRelOf: (label: string, parent: string) => `${label} von ${parent}`,
     },
 
     // Versioned backups
@@ -3855,12 +4343,8 @@ const stringsDE: StringsType = {
         restored: 'Sicherung wiederhergestellt',
         created: 'Sicherung erstellt',
         restoreConfirm: (what: string) => `Diese Sicherung wiederherstellen? Sie überschreibt den aktuellen Stammbaum — der aktuelle Stand wird zuvor als Sicherung gespeichert.${what ? `\n\n${what}` : ''}`,
-        total: (count: number, size: string) => `${count} Sicherungen · ${size}`,
-        colDate: 'Datum',
-        colReason: 'Grund',
-        colPersons: 'Personen',
-        persons: (count: number) => count === 1 ? '1 Person' : `${count} Personen`,
-        colSize: 'Größe',
+        total: (count: number, size: string) => [nDe(count, 'Sicherung', 'Sicherungen'), size].filter(Boolean).join(' · '),
+        persons: (count: number) => nDe(count, 'Person', 'Personen'),
         reasons: {
             auto: 'Automatisch',
             manual: 'Manuell',
@@ -3873,7 +4357,7 @@ const stringsDE: StringsType = {
         postImportTitle: 'Mehrere Familien in einer Datei',
         postImport: (count: number) =>
             `Die importierte Datei enthält ${count} Familien, die nichts verbindet — kein Elternteil, kein Kind und keine Ehe führt von einer zur anderen. Aus jeder könnte ein eigener Stammbaum werden.`,
-        unrelated: (count: number) => `Enthält ${count} Familien, die nichts verbindet`,
+        unrelated: (count: number) => `Enthält ${nDe(count, 'Familie', 'Familien')}, die nichts verbindet`,
         unrelatedHint: 'Teilen Sie sie unter Stammbäume verwalten → ⋯ → Nicht verbundene Teile trennen.',
         menu: 'Nicht verbundene Teile trennen…',
         menuHint: 'Stammbäume für Inseln, die nichts verbindet — kein Elternteil, kein Kind und keine Ehe zwischen ihnen.',
@@ -3881,13 +4365,13 @@ const stringsDE: StringsType = {
         intro: 'Dieser Stammbaum enthält Familien, die nichts verbindet — kein Elternteil, kein Kind und keine Ehe führt von einer zur anderen. Aus jeder kann ein eigener Stammbaum werden.',
         single: 'Alle in diesem Stammbaum sind verbunden — es gibt hier nur eine Familie, also gibt es nichts zu teilen.',
         familyName: (surname: string) => `Familie ${surname}`,
-        persons: (count: number) => count === 1 ? '1 Person' : `${count} Personen`,
+        persons: (count: number) => nDe(count, 'Person', 'Personen'),
         oldest: (name: string, year: number) => `älteste(r) ${name} (${year})`,
         noSurname: 'ohne Nachname',
         alone: 'Mit niemandem verbunden',
         selected: (count: number) => `${count} abtrennen`,
         keepsOriginal: 'Der ursprüngliche Stammbaum bleibt, wie er ist — löschen Sie ihn selbst, sobald Sie mit der Aufteilung zufrieden sind.',
-        done: (count: number) => `${count} Stammbäume erstellt. Der ursprüngliche bleibt unberührt.`,
+        done: (count: number) => `${nDe(count, 'Stammbaum', 'Stammbäume')} erstellt. Der ursprüngliche bleibt unberührt.`,
     },
     splitFamilies: {
         title: 'In Familien aufteilen',
@@ -3911,7 +4395,7 @@ const stringsDE: StringsType = {
         familyName: (name: string) => `Familie ${name}`,
         focusHere: 'Gewählte Person',
         connectsTo: (name: string) => `verbunden über ${name}`,
-        persons: (count: number) => count === 1 ? '1 Person' : `${count} Personen`,
+        persons: (count: number) => nDe(count, 'Person', 'Personen'),
         unknown: (count: number) => `${count} unbekannt`,
         personsWithUnknown: (real: number, unknown: number) => {
             const r = real === 1 ? '1 Person' : `${real} Personen`;
@@ -3920,7 +4404,7 @@ const stringsDE: StringsType = {
         namePlaceholder: 'Stammbaum-Name',
         preview: 'Vorschau',
         summary: (trees: number, real: number, unknown: number) =>
-            `${trees} Stammbäume · ${real} Personen${unknown > 0 ? ` + ${unknown} unbekannt` : ''} · 100 % abgedeckt`,
+            `${nDe(trees, 'Stammbaum', 'Stammbäume')} · ${nDe(real, 'Person', 'Personen')}${unknown > 0 ? ` + ${unknown} unbekannt` : ''} · 100 % abgedeckt`,
         create: (count: number) => count === 1 ? '1 Stammbaum erstellen' : `${count} Stammbäume erstellen`,
         cancel: 'Abbrechen',
         keepsOriginal: 'Der ursprüngliche Stammbaum bleibt genau so, wie er ist. Die neuen Stammbäume bleiben über ihre gemeinsamen Personen verbunden — löschen Sie unerwünschte unter Stammbäume verwalten.',
@@ -3941,28 +4425,30 @@ const stringsDE: StringsType = {
         none: 'Noch keine Schreibweisen verknüpft.',
         addTitle: 'Schreibweisen verknüpfen',
         addHint: 'Wählen Sie die Schreibweisen, die eine Familie meinen.',
-        inTree: (count: number) => count === 1 ? '1 Person' : `${count} Personen`,
+        inTree: (count: number) => nDe(count, 'Person', 'Personen'),
         notInTree: 'nicht im Stammbaum',
         addOther: 'Andere Schreibweise…',
         link: 'Verknüpfen',
         unlink: 'Verknüpfung lösen',
         linked: 'Schreibweisen verknüpft.',
+        introShort: 'Sagen Sie einmal, dass Schreibweisen dieselbe Familie meinen, und Suche und Zusammenführen finden sie alle.',
+        more: 'Mehr',
+        addSpelling: 'Hinzufügen',
     },
 
     events: {
         occupationLabel: 'Beruf / Gewerbe',
-        occupationHint: 'Nur das Gewerbe selbst — „Schmied", nicht „arbeitete in Kladno als Schmied". Es wird als Beruf in GEDCOM ausgegeben.',
+        occupationHint: 'Nur das Gewerbe selbst — „Schmied“, nicht „arbeitete in Kladno als Schmied“. Es wird als Beruf in GEDCOM ausgegeben.',
         religionLabel: 'Konfession',
-        religionHint: 'Nur die Konfession selbst — „römisch-katholisch", „evangelisch A.B.". Ein Übertritt ist ein eigenes Ereignis; tragen Sie ihn dort ein, wo er stattfand.',
+        religionHint: 'Nur die Konfession selbst — „römisch-katholisch“, „evangelisch A.B.“. Ein Übertritt ist ein eigenes Ereignis; tragen Sie ihn dort ein, wo er stattfand.',
         participants: 'Paten & Zeugen',
         participantsHint: 'Wen der Eintrag sonst noch nennt. Ein Pate, der immer wieder auftaucht, ist meist ein Verwandter.',
         addParticipant: '+ Hinzufügen',
         participantName: 'Name wie geschrieben',
-        participantNote: 'Detail (Gewerbe, „Nachbar"…)',
+        participantNote: 'Detail (Gewerbe, „Nachbar“…)',
         participantLink: 'Mit jemandem im Stammbaum verknüpfen',
         participantUnlink: 'Nicht diese Person',
         participantInTree: 'im Stammbaum',
-        participantNameRequired: 'Geben Sie einen Namen an oder verknüpfen Sie jemanden aus dem Stammbaum.',
         roles: {
             godparent: 'Pate/Patin',
             witness: 'Zeuge',
@@ -3982,6 +4468,7 @@ const stringsDE: StringsType = {
         note: 'Notiz',
         customLabel: 'Bezeichnung',
         customLabelRequired: 'Geben Sie eine Bezeichnung für das eigene Ereignis ein',
+        unsavedMessage: 'Sie haben ungespeicherte Änderungen an diesem Ereignis.',
         deleteConfirm: (what: string) => `Dieses Ereignis löschen?\n\n${what}`,
         types: {
             birth: 'Geburt',
@@ -4035,6 +4522,7 @@ const stringsDE: StringsType = {
         fieldUrl: 'URL',
         fieldNote: 'Notiz',
         titleRequired: 'Geben Sie einen Quellentitel ein',
+        unsavedMessage: 'Sie haben ungespeicherte Änderungen an dieser Quelle.',
         citations: (n: number) => `${n}×`,
         deleteConfirm: (title: string, n: number) =>
             n > 0
@@ -4104,6 +4592,7 @@ const stringsDE: StringsType = {
         step4: 'Das Fokus-Panel zeigt, auf wen der Stammbaum zentriert ist. Mit den Pfeilen ändern Sie, wie viele Generationen an Vorfahren und Nachkommen sichtbar sind.',
         step5: 'Ansichten wechseln: Familie, Nachkommen, Zeitleiste oder der Ahnen-Fächer.',
         step6: 'Zoom- und Verschiebe-Steuerung — Sie können die Arbeitsfläche auch mit der Maus ziehen und mit dem Mausrad zoomen; 0 setzt die Ansicht zurück.',
+        step6Touch: 'Zoom-Steuerung — Sie können die Arbeitsfläche auch mit dem Finger verschieben und mit zwei Fingern zoomen.',
         step7: 'Suchen Sie jemanden nach Namen und filtern Sie mit dem Trichter nach Nachname, Ort, Geburtsjahren, Geschlecht oder Lebendstatus.',
         step8: 'Stammbäume, Export und Teilen finden Sie hier. Strom exportiert sich als eine einzige, in sich geschlossene Datei, die Sie einem Verwandten per E-Mail schicken können.',
     },
@@ -4135,27 +4624,26 @@ const stringsDE: StringsType = {
         empty: 'Keine Jahrestage in den nächsten 30 Tagen',
         today: 'heute',
         tomorrow: 'morgen',
-        inDays: (n: number) => `in ${n} Tagen`,
+        inDays: (n: number) => `in ${nDe(n, 'Tag', 'Tagen')}`,
         yearsAgo: (n: number) => `vor ${n} ${n === 1 ? 'Jahr' : 'Jahren'}`,
         birthday: (name: string, years: number) => `${name} wird ${years}`,
-        wedding: (a: string, b: string, years: number) => `${a} & ${b} — ${years} Jahre verheiratet`,
-        birthMilestone: (name: string, years: number) => `${name} — ${years} Jahre seit der Geburt`,
-        deathMilestone: (name: string, years: number) => `${name} — ${years} Jahre seit dem Tod`,
-        deathAnniversary: (name: string, years: number) => `${name} — ${years} Jahre seit dem Tod`,
-        otdTitle: 'An diesem Tag',
+        wedding: (a: string, b: string, years: number) => `${a} & ${b} — ${nDe(years, 'Jahr', 'Jahre')} verheiratet`,
+        birthMilestone: (name: string, years: number) => `${name} — ${nDe(years, 'Jahr', 'Jahre')} seit der Geburt`,
+        deathMilestone: (name: string, years: number) => `${name} — ${nDe(years, 'Jahr', 'Jahre')} seit dem Tod`,
+        deathAnniversary: (name: string, years: number) => `${name} — ${nDe(years, 'Jahr', 'Jahre')} seit dem Tod`,
         otdBirth: (name: string, ago: string, _female: boolean) => `${ago} wurde ${name} geboren`,
         otdDeath: (name: string, ago: string, _female: boolean) => `${ago} starb ${name}`,
         otdWedding: (a: string, b: string, ago: string) => `${ago} heirateten ${a} & ${b}`,
         settingLabel: 'An diesem Tag',
-        settingHint: 'Beim Öffnen eines Stammbaums eine tägliche „An diesem Tag"-Erinnerung anzeigen',
+        settingHint: 'Beim Öffnen eines Stammbaums eine tägliche „An diesem Tag“-Erinnerung anzeigen',
     },
 
     // Family wizard (add a whole family at once)
     familyWizard: {
         menu: 'Familie hinzufügen…',
         title: 'Familie hinzufügen',
-        settingLabel: 'Schaltfläche „Familie hinzufügen"',
-        settingHint: 'Eine Schaltfläche „Familie hinzufügen" in der Symbolleiste anzeigen',
+        settingLabel: 'Schaltfläche „Familie hinzufügen“',
+        settingHint: 'Eine Schaltfläche „Familie hinzufügen“ in der Symbolleiste anzeigen',
         aroundName: (name: string) => `Rund um ${name}`,
         roles: { father: 'Vater', mother: 'Mutter', partner: 'Partner', sibling: 'Geschwister', child: 'Kind' },
         firstName: 'Vorname',
@@ -4169,6 +4657,7 @@ const stringsDE: StringsType = {
         maybe: (name: string) => `Ähnlich: ${name}`,
         useExisting: 'Vorhandene verwenden',
         linked: 'Mit vorhandener verknüpft',
+        unlink: 'Verknüpfung aufheben',
         added: (n: number) => n === 1 ? '1 Person hinzugefügt' : `${n} Personen hinzugefügt`,
         continuePrompt: 'Mit dem Rest der Familie fortfahren?',
         continueYes: 'Familie hinzufügen',
@@ -4197,6 +4686,84 @@ const stringsDE: StringsType = {
         saveFailed: 'Speichern in die Datei nicht möglich',
         permissionDenied: 'Der Dateizugriff wurde verweigert — die Verknüpfung wurde entfernt',
         lockedRefuse: 'Entsperren Sie die Verschlüsselung, bevor Sie in eine Datei speichern',
+    },
+
+    // Opening a research from Strom Research (file handler, link, drag & drop, live bridge)
+    research: {
+        defaultName: 'Forschung',
+        opened: (name: string, persons: number, families: number, date: string) =>
+            `Forschung ${name} aus Strom Research geöffnet — ${nDe(persons, 'Person', 'Personen')}, ${nDe(families, 'Familie', 'Familien')} (Stand ${date})`,
+        updated: (name: string, persons: number, families: number, date: string) =>
+            `Forschung ${name} aus Strom Research aktualisiert — ${nDe(persons, 'Person', 'Personen')}, ${nDe(families, 'Familie', 'Familien')} (Stand ${date})`,
+        editedTitle: 'In der App geändert',
+        editedMessage: (name: string) =>
+            `Sie haben den Stammbaum „${name}“ in dieser App geändert, seit er zuletzt aus Strom Research kam. Beim Aktualisieren werden diese Änderungen durch die Forschung ersetzt (vorher wird eine Sicherung angelegt). Oder öffnen Sie die Forschung als neue Kopie und lassen diesen Stammbaum unverändert.`,
+        update: 'Aktualisieren',
+        openCopy: 'Als Kopie öffnen',
+        changeWords: {
+            newPerson: 'Neue Person',
+            newChild: 'Neues Kind',
+            newFamily: 'Neue Familie',
+            facts: { BIRT: 'Geburt', CHR: 'Taufe', BAPM: 'Taufe', DEAT: 'Tod', BURI: 'Beerdigung', MARR: 'Heirat', OCCU: 'Beruf', RESI: 'Wohnort', CENS: 'Volkszählung', NAME: 'Name', SEX: 'Geschlecht' } as Record<string, string>,
+        },
+        copyName: (name: string, date: string) => `${name} (${date})`,
+        notLocal: 'Der Link verwies auf eine Datei, die nicht auf diesem Computer liegt, und wurde daher ignoriert.',
+        fetchFailedTitle: 'Datei konnte nicht geöffnet werden',
+        fetchFailed: 'Der Browser hat der App nicht erlaubt, die Datei von Strom Research auf diesem Computer zu lesen. Sie können sie von Hand importieren: Wählen Sie „Datei importieren“ und dann die .ged-Datei.',
+        importManually: 'Datei importieren…',
+        safariBlocked: 'Safari erlaubt Webseiten keine Verbindung zu Programmen auf diesem Computer. Öffnen Sie den Link in Chrome oder Edge, oder ziehen Sie die Datei output/tree-strom.ged aus dem Forschungsordner in dieses Fenster.',
+        notInViewMode: 'Dies ist eine schreibgeschützte Kopie. Öffnen Sie die Datei in Ihrer eigenen Strom-App.',
+        onlyGedcom: 'Hier können nur GEDCOM-Dateien (.ged) abgelegt werden.',
+        dropHint: 'Legen Sie die .ged-Datei ab, um sie zu öffnen',
+        notReady: 'Die App lädt noch. Versuchen Sie es gleich noch einmal.',
+        panelTitle: 'Forschung jetzt',
+        panelLabel: 'Live-Forschung aus Strom Research',
+        following: (name: string) => `Sie verfolgen „${name}“. Änderungen kommen von selbst; der Stammbaum ist so lange schreibgeschützt.`,
+        ended: 'Verfolgung beendet',
+        endedText: 'Strom Research sendet keine Änderungen mehr. Der Stammbaum zeigt den letzten Stand und kann wieder bearbeitet werden.',
+        stop: 'Verfolgung beenden',
+        stopped: 'Sie verfolgen die Forschung nicht mehr.',
+        close: 'Schließen',
+        show: 'Anzeigen',
+        hide: 'Ausblenden',
+        atWork: 'In Arbeit',
+        nobodyWorking: 'Gerade arbeitet niemand daran.',
+        changes: 'Letzte Änderungen',
+        noChanges: 'Noch keine Änderungen.',
+        waiting: 'Wartet auf Sie',
+        waitingOn: (on: string) => `wartet auf: ${on}`,
+        since: (when: string) => `seit ${when}`,
+        liveFailed: 'Keine Verbindung zu Strom Research auf diesem Computer. Läuft es noch (strom app --live)? Möglicherweise hat auch der Browser die Verbindung blockiert.',
+        liveNoTree: 'Strom Research hat nicht angegeben, welche Forschung es sendet.',
+        liveOtherTree: 'Strom Research sendet jetzt eine andere Forschung, daher wurde die Verfolgung beendet.',
+        // Strom Research in the app (3.0): empty-state offer, menu item, what's-new card, info dialog
+        brand: 'Strom Research',
+        offerEyebrow: 'Sie wissen nicht, wo Sie anfangen sollen?',
+        offerTitle: 'Lassen Sie einen KI-Agenten Ihre Vorfahren finden',
+        offerDesc: 'Strom Research durchsucht Kirchenbücher und Archive und belegt jede Angabe mit ihrer Quelle.',
+        runsOnComputer: 'Läuft auf einem Computer (Windows, Mac, Linux)',
+        menuItem: 'KI-Ahnenforschung',
+        newBadge: 'Neu',
+        newSr: 'neu',
+        triggerNewSr: 'neuer Eintrag',
+        cardTitle: 'Neu in Strom 3.0: Forschung mit einem KI-Agenten',
+        cardText: 'Ein KI-Agent auf Ihrem Computer durchsucht Kirchenbücher und Archive, hält nur fest, was die Einträge belegen, und Ihr Stammbaum wächst in Strom von selbst. Strom Research ist kostenlos.',
+        learnMore: 'Mehr erfahren',
+        notNow: 'Jetzt nicht',
+        alsoNew: 'Außerdem in 3.0',
+        news1: 'Übersichtlichere Löschbestätigungen',
+        news2: 'Neue Einstellungen und Export',
+        news3: 'Dunkler Modus',
+        dialogLead: 'Ein KI-Agent durchsucht für Sie Kirchenbücher und Archive und ergänzt Ihren Stammbaum — jede Angabe mit Quelle. Strom zeigt den Stammbaum nur an, und er wächst darin live.',
+        point1Title: 'Auf Ihrem Computer',
+        point1Text: 'Die Forschung ist ein Ordner auf Ihrer Festplatte. Ihre Daten bleiben bei Ihnen.',
+        point2Title: 'Belegt',
+        point2Text: 'Der Agent hält nur fest, was die Einträge belegen, und nennt zu jeder Angabe die Quelle.',
+        point3Title: 'Wächst in Strom',
+        point3Text: 'Öffnen Sie das Ergebnis in Strom und sehen Sie Ihren Stammbaum live wachsen.',
+        needTitle: 'Was Sie brauchen',
+        needText: 'Einen Computer (Windows, Mac, Linux) und einen KI-Agenten mit Konto beim Anbieter — meist ein Abo, wir empfehlen Claude. Strom Research und Strom sind kostenlos.',
+        openSite: 'Strom-Research-Seite öffnen',
     },
 
     // CSV export (spreadsheet person table)
@@ -4255,7 +4822,6 @@ const stringsDE: StringsType = {
 
     // Tooltip
     tooltip: {
-        alsoWritten: 'auch geschrieben',
         age: 'Alter',
         born: 'Geboren',
         died: 'Gestorben',
@@ -4273,6 +4839,7 @@ const stringsDE: StringsType = {
         maidenName: 'Geburtsname',
         refn: 'z. B. Archivkasten 12 oder eine ID aus einem anderen Programm',
         question: 'z. B. Kennt jemand ihr Geburtsdatum?',
+        flexDateShort: 'z. B. 1880',
         flexDate: '15.5.1880 · 5.1880 · 1880 · um 1880'
     },
 
@@ -4301,6 +4868,7 @@ const stringsDE: StringsType = {
     // Context menu
     contextMenu: {
         edit: 'Bearbeiten',
+        view: 'Anzeigen',
         focus: 'Fokussieren',
         showDescendants: 'Nachkommen anzeigen',
         relationship: 'Verwandtschaft finden…',
@@ -4369,7 +4937,7 @@ const stringsDE: StringsType = {
             `Gespeicherte Koordinaten für ${count} ${count === 1 ? 'Ort' : 'Orte'} entfernen, die niemand in diesem Stammbaum mehr verwendet? Nichts, was Ihre Familie geschrieben hat, wird angetastet — nur die übrig gebliebenen Kartenmarkierungen verschwinden. Das lässt sich rückgängig machen.`,
         cleanOrphansDone: (count: number) => `${count} verwaiste ${count === 1 ? 'Ort' : 'Orte'} entfernt.`,
         wrongSpot: 'Falsche Stelle? Diesen Ort korrigieren',
-        usedBy: (count: number) => count === 1 ? '1 Person' : `${count} Personen`,
+        usedBy: (count: number) => nDe(count, 'Person', 'Personen'),
         search: 'Suchen',
         searchLabel: 'Diesen Ort unter einem anderen Namen suchen',
         searching: 'Suche läuft…',
@@ -4382,7 +4950,7 @@ const stringsDE: StringsType = {
             `${strings.map.placeCount(found)} platziert. ${missed} konnten nicht gefunden werden — prüfen Sie die Schreibweise oder fügen Sie das Land hinzu.`,
         consentTitle: 'Koordinaten online nachschlagen?',
         consentBody: (count: number, service: string) =>
-            `Um die Karte zu zeichnen, ${count === 1 ? 'wird 1 Ortsname' : `werden ${count} Ortsnamen`} (zum Beispiel „Prag") an ${service} gesendet. `
+            `Um die Karte zu zeichnen, ${count === 1 ? 'wird 1 Ortsname' : `werden ${count} Ortsnamen`} (zum Beispiel „Prag“) an ${service} gesendet. `
             + 'Sonst verlässt nichts die App — keine Namen, Daten oder Verwandtschaften Ihrer Familie. '
             + 'Die Koordinaten werden in Ihren Stammbaum gespeichert, sodass jeder Ort nur einmal nachgeschlagen wird und die Karte danach offline funktioniert.',
         consentConfirm: 'Nachschlagen',
@@ -4421,7 +4989,6 @@ const stringsDE: StringsType = {
         countErrors: (n: number) => `${n} Fehler`,
         countWarnings: (n: number) => `${n} ${n === 1 ? 'Warnung' : 'Warnungen'}`,
         countInfos: (n: number) => `${n} ${n === 1 ? 'Hinweis' : 'Hinweise'}`,
-        topIssues: 'Wichtigste Probleme',
         moreIssues: (n: number) => `und ${n} weitere…`,
         sectionCompleteness: 'Datenvollständigkeit',
         completenessHint: 'Anteil der Personen mit dem jeweils erfassten Fakt.',
@@ -4435,10 +5002,10 @@ const stringsDE: StringsType = {
         statGenerations: 'Generationen',
         statIslands: 'Getrennte Familien',
         islandsOne: 'Alle Personen sind zu einer Familie verbunden.',
-        islandsMany: (n: number) => `Dieser Stammbaum enthält ${n} getrennte Familien ohne Verbindung zueinander.`,
+        islandsMany: (n: number) => `Dieser Stammbaum enthält ${nDe(n, 'getrennte Familie', 'getrennte Familien')} ohne Verbindung zueinander.`,
         islandItem: (surname: string, count: number) => `${surname} — ${count} ${count === 1 ? 'Person' : 'Personen'}`,
         islandUnnamed: 'Unbenannte Familie',
-        islandsSplitHint: 'Verwenden Sie unten „In Familien aufteilen", um jeder einen eigenen Stammbaum zu geben.',
+        islandsSplitHint: 'Verwenden Sie unten „In Familien aufteilen“, um jeder einen eigenen Stammbaum zu geben.',
         sectionActions: 'Schnellaktionen',
         actionValidate: 'Prüfungsdetails',
         actionCleanPlaces: (n: number) => n > 0 ? `Verwaiste Orte bereinigen (${n})` : 'Verwaiste Orte bereinigen',
@@ -4455,9 +5022,11 @@ const stringsDE: StringsType = {
         completeTitle: 'Person vervollständigen',
         enterName: 'Bitte geben Sie einen Vor- oder Nachnamen ein',
         unsavedMessage: 'Sie haben ungespeicherte Änderungen in den Personendetails.',
-        invalidDate: 'Ungültiges Datum. Verwenden Sie z. B. 15.5.1880, 5.1880, 1880 oder „um 1880".',
+        invalidDate: 'Ungültiges Datum. Verwenden Sie z. B. 15.5.1880, 5.1880, 1880 oder „um 1880“.',
         photoError: 'Das Bild konnte nicht verarbeitet werden.',
         newPersonName: 'Neue Person',
+        moreDetails: 'Weitere Angaben',
+        moreDetailsDesc: 'Tod, Beruf, Foto, Notizen',
         sectionBasic: 'Grunddaten',
         sectionBirth: 'Geburt',
         sectionOrigin: 'Beruf & Wohnort',
@@ -4476,7 +5045,7 @@ const stringsDE: StringsType = {
         lifelineChild: (name: string) => `Kind geboren: ${name}`,
         lifelineChildUnknown: 'Kind geboren',
         lifelineWith: (names: string) => `mit ${names}`,
-        dateHint: '15.5.1880 · 5.1880 · 1880 · um 1880',
+        dateHint: 'Genau, Jahr oder Schätzung: 15.5.1880 · 5/1880 · um 1880 · vor 1900',
         deletePerson: 'Person löschen…',
         sumParents: 'Eltern',
         sumPartners: (n: number) => n === 1 ? '1 Partner' : `${n} Partner`,
@@ -4506,7 +5075,8 @@ const stringsDE: StringsType = {
         selectPerson: '-- Auswählen --',
         enterName: 'Bitte geben Sie einen Vor- oder Nachnamen ein',
         selectPersonError: 'Bitte wählen Sie eine Person',
-        linkButton: 'Verknüpfen'
+        linkButton: 'Verknüpfen',
+        linkRefused: 'Diese Verknüpfung ist nicht möglich: Eine Person kann höchstens zwei Eltern haben und nicht ihr eigener Vorfahre sein.'
     },
 
     // Child confirmation
@@ -4514,19 +5084,75 @@ const stringsDE: StringsType = {
         title: 'Kind hinzufügen',
         message: (name: string, partnerName: string) =>
             `<strong>${name}</strong> hat einen Partner (<strong>${partnerName}</strong>).`,
-        addToBoth: 'Kind zu beiden Eltern hinzufügen',
-        addToOne: (name: string) => `Kind nur zu ${name} hinzufügen`
     },
 
     // Delete confirmation
     deleteConfirm: {
         message: (name: string, birthYear?: string) =>
-            birthYear ? `„${name}" (*${birthYear}) löschen?` : `„${name}" löschen?`
+            birthYear ? `„${name}“ (*${birthYear}) löschen?` : `„${name}“ löschen?`
     },
 
     // Confirmation modal
     confirmation: {
         title: 'Bestätigen'
+    },
+
+    // Destructive confirmations: the button says the verb, the title names the
+    // object, the message says what goes with it and whether Undo brings it back.
+    danger: {
+        undoHint: 'Sie können das Löschen mit „Rückgängig“ zurücknehmen.',
+        cannotUndo: 'Das kann nicht rückgängig gemacht werden.',
+        deletePersonTitle: (name: string) => `${name} löschen?`,
+        deletePerson: 'Person löschen',
+        personLinks: (gender: string, parents: number, partners: number, children: number): string => {
+            const list = joinAnd('de', [
+                parents ? nDe(parents, 'Elternteil', 'Elternteile') : '',
+                partners ? nDe(partners, 'Partner', 'Partner') : '',
+                children ? nDe(children, 'Kind', 'Kinder') : '',
+            ]);
+            if (!list) return '';
+            const whose = gender === 'female' ? 'Ihre Verbindungen werden' : gender === 'male' ? 'Seine Verbindungen werden' : 'Die Verbindungen dieser Person werden';
+            return `${whose} ebenfalls entfernt: ${list}.`;
+        },
+        orphanMessage: (name: string) => `${name} hat in diesem Stammbaum keine Beziehungen mehr.`,
+        deleteTreeTitle: (name: string) => `Stammbaum ${name} löschen?`,
+        deleteTree: 'Stammbaum löschen',
+        deleteTreeMessage: (persons: number) =>
+            `Der Stammbaum wird mit ${nDe(persons, 'Person', 'Personen')} und allen Sicherungen aus diesem Browser entfernt. Exportieren Sie ihn vorher, wenn Sie ihn vielleicht zurückhaben möchten. Das kann nicht rückgängig gemacht werden.`,
+        deleteBackupTitle: (when: string) => `Sicherung (${when}) löschen?`,
+        deleteBackup: 'Sicherung löschen',
+        deleteBackupMessage: (persons: number) =>
+            `Sie enthält ${nDe(persons, 'Person', 'Personen')}. Der Stammbaum selbst bleibt unberührt. Das kann nicht rückgängig gemacht werden.`,
+        restoreBackupTitle: (when: string) => `Sicherung (${when}) wiederherstellen?`,
+        restoreBackup: 'Sicherung wiederherstellen',
+        deleteSourceTitle: (title: string) => `Quelle ${title} löschen?`,
+        deleteSource: 'Quelle löschen',
+        sourceCited: (n: number) => `Sie wird an ${nDe(n, 'Stelle', 'Stellen')} zitiert; diese Zitate werden ebenfalls entfernt.`,
+        deleteEventTitle: (type: string) => `Ereignis „${type}“ löschen?`,
+        deleteEvent: 'Ereignis löschen',
+        deleteAttachmentTitle: (name: string) => `Anhang ${name} löschen?`,
+        deleteAttachment: 'Anhang löschen',
+        cleanPlacesTitle: (n: number) => `${nDe(n, 'unbenutzten Ort', 'unbenutzte Orte')} entfernen?`,
+        cleanPlaces: 'Orte entfernen',
+        clearHistoryTitle: 'Änderungsverlauf löschen?',
+        clearHistory: 'Verlauf löschen',
+        clearHistoryMessage: 'Alle aufgezeichneten Änderungen dieses Stammbaums werden gelöscht; der Stammbaum selbst bleibt unberührt. Das kann nicht rückgängig gemacht werden.',
+        discardMergeTitle: (name: string) => `Zusammenführung ${name} verwerfen?`,
+        discardMerge: 'Zusammenführung verwerfen',
+        discardMergeMessage: 'Ihre Entscheidungen in dieser Zusammenführung werden verworfen. Die Stammbäume selbst bleiben unberührt. Das kann nicht rückgängig gemacht werden.',
+    },
+
+    // Empty states: serif heading, one sentence of purpose, optional action.
+    emptyStates: {
+        sourcesTitle: 'Noch keine Quellen',
+        sourcesText: 'Eine Quelle ist das Kirchenbuch, Dokument oder Buch, aus dem eine Angabe stammt. Danach zitieren Sie sie bei Geburt, Heirat und weiteren Angaben.',
+        backupsTitle: 'Noch keine Sicherungen',
+        backupsText: 'Eine Sicherung ist eine Kopie des ganzen Stammbaums, zu der Sie zurückkehren können. Die App legt sie auch selbst an — regelmäßig und vor einem Import oder einer Zusammenführung.',
+        anniversariesTitle: 'Keine Jahrestage in den nächsten 30 Tagen',
+        anniversariesText: 'Geburtstage und Hochzeitstage erscheinen hier, sobald Personen vollständige Daten haben.',
+        attachmentsTitle: 'Noch keine Anhänge',
+        attachmentsText: 'Scans von Urkunden, Briefe oder Fotos, die zu dieser Person gehören.',
+        surnamesTitle: 'Noch keine verknüpften Schreibweisen',
     },
 
     // Relationships panel
@@ -4549,13 +5175,13 @@ const stringsDE: StringsType = {
         reassignHint: (child: string, oldParent: string) => `${child} wird von ${oldParent} gelöst und mit der unten gewählten Person verknüpft. Nichts wird neu eingegeben.`,
         reassignDone: (child: string, parent: string) => `${child} ist jetzt mit ${parent} verknüpft`,
         reassignFailed: 'Die Verknüpfung konnte nicht verschoben werden.',
-        noRelationships: 'Noch keine Beziehungen',
+        removeLocked: 'Die Beziehungen einer gesperrten Person können nicht geändert werden. Entsperren Sie die Person zuerst.',
         unsavedTitle: 'Ungespeicherte Änderungen',
         unsavedMessage: 'Sie haben ungespeicherte Änderungen in den Beziehungseinstellungen.',
         unsavedSave: 'Speichern & schließen',
         unsavedDiscard: 'Änderungen verwerfen',
         unsavedStay: 'Bleiben',
-        orphanConfirm: (name: string) => `„${name}" hat keine verbleibenden Beziehungen. Diese Person löschen?`,
+        orphanConfirm: (name: string) => `„${name}“ hat keine verbleibenden Beziehungen. Diese Person löschen?`,
         orphanDelete: 'Löschen',
         orphanKeep: 'Behalten'
     },
@@ -4616,7 +5242,7 @@ const stringsDE: StringsType = {
     // Export
     export: {
         failed: 'Export fehlgeschlagen. Bitte versuchen Sie es erneut.',
-        devModeNotSupported: 'App exportieren ist nur aus der gebauten Version (strom.html) verfügbar. Führen Sie zuerst „npm run build" aus.'
+        devModeNotSupported: 'App exportieren ist nur aus der gebauten Version (strom.html) verfügbar. Führen Sie zuerst „npm run build“ aus.'
     },
 
     // Focus mode
@@ -4627,20 +5253,24 @@ const stringsDE: StringsType = {
         showAll: 'Alle anzeigen',
         generationsUp: 'Generationen nach oben',
         generationsDown: 'Generationen nach unten',
+        // Depth stepper labels (focus chip, tablet toolbar, descendants badge).
+        ancestorsLabel: 'Vorfahren',
+        descendantsLabel: 'Nachkommen',
+        depthLabel: 'Tiefe',
+        depthDecrease: 'Weniger Generationen',
+        depthIncrease: 'Mehr Generationen',
         exportFocus: 'Fokus exportieren',
         hiddenPartners: (count: number) => `+${count} Partner (zum Fokussieren klicken)`,
-        hiddenFamilies: (count: number) => `${count} weitere ${count > 1 ? 'Familien' : 'Familie'} mit Kindern (zum Fokussieren klicken)`,
+        hiddenFamilies: (count: number) => `${nDe(count, 'weitere Familie', 'weitere Familien')} mit Kindern (zum Fokussieren klicken)`,
         hiddenPartnersTooltip: 'Andere Partner',
         hiddenFamiliesTooltip: 'Andere Familien',
-        collapsePartners: 'Erweiterte Partner einklappen',
-        collapsePartnersLabel: '−',
         hiddenSiblingsTooltip: 'Geschwister',
         hiddenParentsTooltip: 'Eltern',
         hiddenChildrenTooltip: 'Kinder',
         branchTabParents: 'Eltern',
         branchTabSiblings: 'Geschwister',
         branchTabChildren: 'Familie',
-        personCount: (visible: number, total: number) => `${visible} von ${total} Personen`
+        personCount: (visible: number, total: number) => `${visible} von ${nDe(total, 'Person', 'Personen')}`
     },
 
     // Generation guide labels (small-caps rules on the canvas, relative to focus)
@@ -4655,8 +5285,6 @@ const stringsDE: StringsType = {
 
     // Branch tabs (family context navigation)
     branchTabs: {
-        viewParents: 'Als Kind ansehen (Eltern zeigen)',
-        viewSiblings: 'Geschwister anzeigen',
         viewFamily: 'Als Elternteil ansehen (eigene Familie zeigen)'
     },
 
@@ -4682,7 +5310,7 @@ const stringsDE: StringsType = {
         living: 'Nur Lebende',
         deceased: 'Nur Verstorbene',
         clear: 'Zurücksetzen',
-        resultCount: (n: number) => `${n} ${n === 1 ? 'Ergebnis' : 'Ergebnisse'}`,
+        resultCount: (n: number) => nDe(n, 'Ergebnis', 'Ergebnisse'),
     },
 
     // Person picker
@@ -4694,8 +5322,33 @@ const stringsDE: StringsType = {
     // Errors
     errors: {
         saveFailed: 'Speichern fehlgeschlagen — Ihre letzten Änderungen wurden möglicherweise nicht gespeichert! Schaffen Sie Speicherplatz oder entsperren Sie die Verschlüsselung und bearbeiten Sie es erneut.',
-        parseStoredData: 'Gespeicherte Daten konnten nicht gelesen werden',
         invalidJson: 'Ungültige JSON-Datei'
+    },
+
+    // Storage safety: encryption lock, other tabs, backups (review wave 1 B)
+    storageSafety: {
+        saveBlocked: 'Dieser Stammbaum konnte mit dem aktuellen Passwort nicht entschlüsselt werden, daher werden Änderungen daran NICHT gespeichert. Entsperren Sie zuerst mit dem richtigen Passwort.',
+        lockedBanner: 'Ihre Daten sind verschlüsselt und gesperrt.',
+        unlock: 'Entsperren',
+        treeOtherKey: 'Dieser Stammbaum wurde mit einem anderen Passwort verschlüsselt (vor einer Passwortänderung oder beim Import). Geben Sie dieses Passwort ein – danach wird der Stammbaum mit Ihrem aktuellen Passwort neu verschlüsselt.',
+        treeRecovered: 'Stammbaum entsperrt und mit Ihrem aktuellen Passwort neu verschlüsselt.',
+        unlockToContinue: 'Entsperren Sie zuerst Ihre verschlüsselten Daten — neue Stammbäume werden verschlüsselt gespeichert.',
+        otherTabSaved: 'Dieser Stammbaum wurde in einem anderen Tab geändert. Laden Sie neu, um die Änderungen zu sehen — Änderungen hier würden sie überschreiben.',
+        reload: 'Neu laden',
+        storageInitFailed: 'Der Browserspeicher konnte nicht geöffnet werden, daher können Ihre Daten weder geladen noch gespeichert werden. Schließen Sie andere Tabs der App, stellen Sie sicher, dass der private Modus den Speicher nicht blockiert, und laden Sie die Seite neu.',
+        storageBlocked: 'Ein anderer Tab mit einer älteren Version der App blockiert den Speicher. Schließen Sie ihn, um fortzufahren.',
+        storageClosed: 'Die App wurde in einem anderen Tab aktualisiert. Laden Sie diesen Tab neu, bevor Sie weitere Änderungen vornehmen.',
+        treeLocked: 'Dieser Stammbaum ist gesperrt. Entsperren Sie ihn in der Stammbaumverwaltung, um Änderungen rückgängig zu machen oder zu wiederholen.',
+        importedSuffix: (date: string, time: string) => `importiert am ${date} ${time}`,
+        backupTitle: 'Sicherung wiederherstellen',
+        backupContains: (count: number) => `Diese Sicherung enthält ${count} ${count === 1 ? 'Stammbaum' : 'Stammbäume'}. Alle als neue Stammbäume importieren?`,
+        backupImportAll: 'Alle Stammbäume importieren',
+        backupImported: (count: number) => `${count} ${count === 1 ? 'Stammbaum' : 'Stammbäume'} importiert`,
+        backupSkipped: (count: number) => `${count} ${count === 1 ? 'Stammbaum konnte' : 'Stammbäume konnten'} nicht gelesen werden und ${count === 1 ? 'wurde' : 'wurden'} übersprungen.`,
+        backupEmpty: 'Die Sicherung enthält keinen lesbaren Stammbaum.',
+        snapshotFailed: 'Der Vorgang mit der Sicherung ist fehlgeschlagen.',
+        snapshotLocked: 'Entsperren Sie Ihre verschlüsselten Daten, um mit Sicherungen zu arbeiten.',
+        reencodeFailed: (count: number) => `${count} gespeicherte ${count === 1 ? 'Element' : 'Elemente'} (Sicherungen, Protokolle) konnten nicht umgewandelt werden und bleiben unverändert.`
     },
 
     // Partner selection dialog
@@ -4707,7 +5360,6 @@ const stringsDE: StringsType = {
     // Add child - parent selection
     addChild: {
         selectParent: 'Anderen Elternteil auswählen',
-        selectParentDesc: (name: string) => `${name} hat mehrere Partner. Wählen Sie den anderen Elternteil:`,
         newPlaceholder: 'Neue Person (unbekannt)',
         unknownPerson: 'Unbekannte Person'
     },
@@ -4723,25 +5375,22 @@ const stringsDE: StringsType = {
     about: {
         title: 'Über Strom',
         version: 'Version',
+        support: 'Strom ist kostenlos und Open Source. Wenn es Ihnen hilft, können Sie die weitere Entwicklung unterstützen.',
+        coffee: 'Spendieren Sie mir einen Kaffee',
+        betaBadge: 'Beta',
+        betaTitle: 'Testversion vor der Veröffentlichung. In diesem Browser teilt sie Ihre Stammbäume mit der regulären App – erstellen Sie daher zuerst eine Sicherung.',
         description: 'Stammbaum im Browser oder als einzelne HTML-Datei. Die Daten bleiben bei Ihnen.',
         createdBy: 'Erstellt von',
-        license: 'Lizenz',
-        licenseType: 'MPL-2.0 / Kommerziell',
         author: 'Autor',
         authorName: 'Milan Víšek',
-        website: 'Website',
-        websiteUrl: 'https://stromapp.info',
         close: 'Schließen',
         currentData: 'Aktuelle Daten',
         stats: {
-            treeName: 'Stammbaum',
-            trees: 'Stammbäume',
-            persons: 'Personen',
-            families: 'Familien',
-            men: 'Männer',
-            women: 'Frauen',
-            generations: 'Generationen',
-            oldest: 'Älteste'
+            trees: (n: number) => nDe(n, 'Stammbaum', 'Stammbäume'),
+            persons: (n: number) => nDe(n, 'Person', 'Personen'),
+            families: (n: number) => nDe(n, 'Familie', 'Familien'),
+            generations: (n: number) => nDe(n, 'Generation', 'Generationen'),
+            since: (year: string) => `seit ${year}`
         }
     },
 
@@ -4809,6 +5458,7 @@ const stringsDE: StringsType = {
             DIVF: 'Scheidung eingereicht',
             CENS: 'Volkszählung',
             EVEN: 'Ereignis',
+            RESI: 'Wohnort',
         } as Record<string, string>,
         census: 'Volkszählung',
         genericEvent: 'Ereignis',
@@ -4829,6 +5479,29 @@ const stringsDE: StringsType = {
         parentAnd: ' und ',
         alsoRecorded: (kind: string, parents: string) => `Auch erfasst als ${kind} von ${parents}.`,
         alsoRecordedNoParents: (kind: string) => `Auch als ${kind} in einer anderen Familie erfasst.`,
+        /**
+         * Detail a register gives about one fact beyond its date and place
+         * (GEDCOM AGE / CAUS / ADDR under the fact). One labelled line in the
+         * fact's note — there is no field for them, and a line is all it takes.
+         */
+        age: (text: string) => `Alter: ${text}`,
+        ageUnit: (n: number, unit: 'y' | 'm' | 'd') =>
+            `${n} ${{ y: n === 1 ? 'Jahr' : 'Jahre', m: n === 1 ? 'Monat' : 'Monate', d: n === 1 ? 'Tag' : 'Tage' }[unit]}`,
+        ageWords: { INFANT: 'Säugling', STILLBORN: 'totgeboren', CHILD: 'Kind' } as Record<string, string>,
+        husbandAge: (text: string) => `Alter des Bräutigams: ${text}`,
+        wifeAge: (text: string) => `Alter der Braut: ${text}`,
+        cause: (text: string) => `Ursache: ${text}`,
+        address: (text: string) => `Adresse: ${text}`,
+        /** A date the file gave in another calendar; the stored date is read as Gregorian. */
+        calendarDate: (calendar: string, date: string) => `Datum im ${calendar}: ${date}`,
+        calendars: { JULIAN: 'julianischen Kalender', HEBREW: 'jüdischen Kalender', 'FRENCH R': 'französischen Revolutionskalender', ROMAN: 'römischen Kalender' } as Record<string, string>,
+        /** Source record lines with no field of their own (TEXT, PUBL, AUTH, REPO > CALN). */
+        sourceText: (text: string) => `Abschrift: ${text}`,
+        sourcePublication: (text: string) => `Veröffentlichung: ${text}`,
+        sourceAuthor: (text: string) => `Autor: ${text}`,
+        sourceCallNumber: (text: string) => `Signatur: ${text}`,
+        /** A GEDCOM date phrase or a date that could not be read whole — kept as written. */
+        datePhrase: (text: string) => `Datum laut Eintrag: ${text}`,
     },
 
     // Save current data dialog
@@ -4866,7 +5539,6 @@ const stringsDE: StringsType = {
         newerDataWarning: 'Das Öffnen mit dieser älteren Version kann zu Datenverlust oder Fehlern führen.',
         newerDataSolution: 'Empfohlen: Exportieren Sie Ihre Daten als JSON und importieren Sie sie in der neueren Version.',
         exportAndExit: 'JSON exportieren & schließen',
-        getNewerVersion: 'Bitte verwenden Sie eine neuere Version der Anwendung, um diese Datei zu öffnen.',
         yourVersion: 'Ihre App-Version',
         dataVersion: 'Datenversion',
         viewOnlyAllowed: 'Sie können diese Daten ansehen, aber der Import ist deaktiviert, um Datenverlust zu verhindern.',
@@ -4913,7 +5585,7 @@ const stringsDE: StringsType = {
         failed: 'Zusammenführen fehlgeschlagen',
         switchToNewTree: 'Zum neuen Stammbaum wechseln?',
         stats: (merged: number, added: number) =>
-            `${merged} Personen zusammengeführt, ${added} neue Personen hinzugefügt`,
+            `${nDe(merged, 'Person', 'Personen')} zusammengeführt, ${nDe(added, 'neue Person', 'neue Personen')} hinzugefügt`,
         noItems: 'Keine Einträge zum Anzeigen',
         newPerson: 'Neu',
         selectExisting: '-- Vorhandene Person auswählen --',
@@ -4975,6 +5647,16 @@ const stringsDE: StringsType = {
 
         photoConflict: 'zwei verschiedene Fotos',
 
+        // Partnership conflicts
+        partnershipConflict: 'Beziehung',
+        partnershipCouple: (a: string, b: string) => `${a || '?'} & ${b || '?'}`,
+        partnershipFields: {
+            status: 'Beziehungsstatus',
+            startDate: 'Hochzeits- / Beginndatum',
+            startPlace: 'Ort der Hochzeit',
+            endDate: 'Scheidungs- / Enddatum'
+        },
+
         preValidationWarning: (existing: number, incoming: number) =>
             `Der vorhandene Stammbaum hat ${existing} ${existing === 1 ? 'Problem' : 'Probleme'}, der neue ${incoming} — beim Zusammenführen werden sie übernommen.`,
         preValidationHint: 'Sie können sie zuerst über die Prüfung beheben.',
@@ -4989,8 +5671,7 @@ const stringsDE: StringsType = {
 
         pendingMergeLabel: 'Ausstehende Zusammenführung',
         pendingMergeInto: (source: string, target: string) => `${source} → ${target}`,
-        pendingMergeFrom: (source: string) => `aus ${source}`,
-        pendingMergeConflicts: (count: number) => `${count} Konflikte`
+        pendingMergeConflicts: (count: number) => nDe(count, 'Konflikt', 'Konflikte')
     },
 
     // Person merge (duplicate resolution)
@@ -5008,13 +5689,44 @@ const stringsDE: StringsType = {
         noConflicts: 'Keine Konflikte — die Daten werden kombiniert',
         confirmMerge: 'Personen zusammenführen',
         mergeComplete: 'Personen erfolgreich zusammengeführt',
-        samePersonError: 'Eine Person kann nicht mit sich selbst zusammengeführt werden',
         willBeDeleted: 'wird gelöscht',
         relationshipsTransferred: 'Beziehungen werden übertragen'
     },
 
     // Settings
+    // Export dialog (grouped menu)
+    exportMenu: {
+        groupShare: 'Teilen',
+        groupSave: 'Speichern und sichern',
+        groupPrint: 'Druck und Bild',
+        groupOther: 'Für andere Programme',
+        groupSelection: 'Nur angezeigte Personen',
+        share: 'An Verwandte senden',
+        linkFile: 'Mit einer Datei auf dem Datenträger verbinden…',
+        linkFileDesc: 'Der Stammbaum wird in einer .json-Datei gehalten — danach genügt Strg+S zum Speichern',
+        app: 'App mit Ihren Daten (HTML)',
+        appDesc: 'Eine einzige Datei, die sich in jedem Browser öffnet, ohne Installation',
+        backup: 'Datensicherung (JSON)',
+        backupDesc: 'Der ganze Stammbaum — zum Wiederherstellen oder späteren Import',
+        poster: 'Poster',
+        posterDesc: 'Die aktuelle Ansicht als SVG, PNG oder druckbares mehrseitiges PDF',
+        book: 'Familienbuch',
+        gedcom: 'GEDCOM',
+        gedcomDesc: 'Standard-.ged-Datei für andere Genealogieprogramme',
+        csv: 'Personentabelle (CSV)',
+        csvDesc: 'Für Excel oder Google Sheets',
+        selJson: 'Auswahl als JSON speichern',
+        selJsonDesc: 'Nur die gerade angezeigten Personen als JSON-Datei',
+        selTree: 'Neuer Stammbaum aus der Auswahl',
+        selTreeDesc: 'Erstellt aus den angezeigten Personen einen neuen Stammbaum in der App',
+    },
+
     settings: {
+        groupTree: 'Stammbaumansicht',
+        groupNotifications: 'Hinweise',
+        groupCard: 'Personenkarte',
+        groupData: 'Daten und Datenschutz',
+        groupLanguage: 'Sprache und Erscheinungsbild',
         title: 'Einstellungen',
         theme: 'Erscheinungsbild',
         themeSystem: 'System (folgt dem Betriebssystem)',
@@ -5030,9 +5742,9 @@ const stringsDE: StringsType = {
         defaultTreeName: 'Mein Stammbaum',
         newTree: 'Neuer Stammbaum',
         manageTreesTitle: 'Stammbäume verwalten',
-        treeSwitcher: 'Stammbaum',
         open: 'Öffnen',
         moreActions: 'Weitere Aktionen',
+        openAtStartup: 'Beim Start öffnen',
         searchTrees: 'Stammbäume durchsuchen…',
         pendingSection: 'Unfertige Zusammenführungen',
         cannotHideLastVisible: 'Der letzte sichtbare Stammbaum kann nicht ausgeblendet werden — blenden Sie zuerst einen anderen ein.',
@@ -5047,7 +5759,7 @@ const stringsDE: StringsType = {
         delete: 'Löschen',
         export: 'Export',
         newTreePlaceholder: 'Stammbaum-Name',
-        confirmDelete: (name: string) => `Stammbaum „${name}" löschen? Das kann nicht rückgängig gemacht werden.`,
+        confirmDelete: (name: string) => `Stammbaum „${name}“ löschen? Das kann nicht rückgängig gemacht werden.`,
         duplicateSuffix: '(Kopie)',
         selectTargetTree: 'Zielstammbaum auswählen',
         mergeSourceTree: 'Stammbaum zusammenführen',
@@ -5056,20 +5768,17 @@ const stringsDE: StringsType = {
         importTreeName: 'Importierter Stammbaum',
         importAsNewTree: 'Als neuen Stammbaum importieren',
         treeNameLabel: 'Stammbaum-Name',
-        persons: 'Personen',
-        families: 'Familien',
+        persons: (n: number) => nDe(n, 'Person', 'Personen'),
+        families: (n: number) => nDe(n, 'Familie', 'Familien'),
         stats: 'Statistik',
         statsTitle: 'Stammbaum-Statistik',
         statsPeople: 'Personen',
-        statsTotal: 'Gesamt',
         statsMales: 'Männer',
         statsFemales: 'Frauen',
         statsLiving: 'Lebend',
         statsDeceased: 'Verstorben',
         statsFamilies: 'Familien',
-        statsPartnerships: 'Partnerschaften',
         statsAvgChildren: 'Durchschn. Kinder',
-        statsDateRange: 'Zeitraum',
         statsGenerations: 'Generationen',
         statsYearSpan: 'Abgedeckte Jahre',
         statsData: 'Datenvollständigkeit',
@@ -5082,19 +5791,8 @@ const stringsDE: StringsType = {
         statsSourceCoverage: 'Quellenabdeckung',
         statsAttachments: 'Anhänge',
         statsMediaWarning: 'Über 10 MB an Medien — die Datei könnte für den E-Mail-Versand zu groß sein',
-        statsSize: 'Speicher',
-        statsTreeSize: 'Stammbaumgröße',
         statsAnniversaries: 'Bevorstehende Jahrestage',
         statsAnniversariesNone: 'Keine Jahrestage in den nächsten 30 Tagen',
-        statsToday: 'Heute',
-        statsThisWeek: 'Diese Woche',
-        statsThisMonth: 'Diesen Monat',
-        statsBirthday: 'Geburtstag',
-        statsBirthAnniversary: 'wäre',
-        statsWeddingAnniversary: 'Hochzeitstag',
-        statsMemorial: 'Gedenktag',
-        statsYears: 'Jahre',
-        validateDesc: 'Stammbaum auf Fehler prüfen',
         validationTitle: 'Stammbaum-Prüfung',
         postImportCheckTitle: 'Datenprüfung',
         postImportCheck: (n: number) => `Wir haben die importierten Daten geprüft und ${n} ${n === 1 ? 'Sache' : 'Sachen'} gefunden, die einen Blick wert ${n === 1 ? 'ist' : 'sind'}. Ansehen?`,
@@ -5103,7 +5801,6 @@ const stringsDE: StringsType = {
         validationErrors: 'Fehler',
         validationWarnings: 'Warnungen',
         validationInfos: 'Infos',
-        validationIssuesFound: 'Probleme gefunden',
         valCycle: 'Vorfahrenzyklus erkannt',
         valSelfPartnership: 'Partnerschaft mit sich selbst',
         valDuplicatePartnership: 'Doppelte Partnerschaft',
@@ -5135,6 +5832,7 @@ const stringsDE: StringsType = {
         valChildAfterFatherDeath: 'Kind lange nach dem Tod des Vaters geboren',
         valCitationMissingSource: 'Zitat verweist auf eine fehlende Quelle',
         valAttachmentNoData: 'Anhang hat keine verwendbaren Daten',
+        valPhotoUnsafeData: 'Foto ist kein unterstütztes Bild',
         valPartnerAgeGap: 'Extremer Altersunterschied zwischen Partnern',
         valPossibleDuplicate: 'Mögliche doppelte Person (gleicher Name und Geburtsjahr)',
         valPlaceSpelling: 'Ein Ort auf mehrere Arten geschrieben',
@@ -5179,9 +5877,6 @@ const stringsDE: StringsType = {
         showTree: 'Stammbaum einblenden',
         hideTree: 'Stammbaum ausblenden',
         hide: 'Ausblenden',
-        showTreeHint: 'Stammbaum einblenden',
-        hideTreeHint: 'Stammbaum ausblenden',
-        hiddenLabel: '(ausgeblendet)'
     },
 
     // Collaboration: send to a relative
@@ -5199,7 +5894,7 @@ const stringsDE: StringsType = {
         messagePlaceholder: 'Hallo! Könntest du ergänzen, was du über deinen Zweig weißt?',
         createFile: 'Datei zum Senden erstellen',
         welcomeTitle: (sender: string) => `${sender} hat Ihnen einen Stammbaum geschickt`,
-        welcomeCounts: (tree: string, persons: number) => `„${tree}" · ${persons} Personen`,
+        welcomeCounts: (tree: string, persons: number) => `„${tree}“ · ${nDe(persons, 'Person', 'Personen')}`,
         welcomeView: 'Nur umsehen',
         welcomeEdit: 'Ergänzen, was ich weiß',
         collabBar: (sender: string) => `Sie ergänzen einen Stammbaum für ${sender}.`,
@@ -5207,7 +5902,7 @@ const stringsDE: StringsType = {
         collabHide: 'Ausblenden',
         collabBadgeTitle: 'Zusammenarbeit läuft',
         replyTitle: (sender: string) => `${sender} hat Ihren Stammbaum zurückgeschickt`,
-        replyIntro: (tree: string) => `Diese Datei antwortet auf Ihren geteilten Stammbaum „${tree}". Ihre Ergänzungen einfügen?`,
+        replyIntro: (tree: string) => `Diese Datei antwortet auf Ihren geteilten Stammbaum „${tree}“. Ihre Ergänzungen einfügen?`,
         replyMerge: 'Prüfen und zusammenführen',
         replyView: 'Erst nur ansehen',
         replyImport: 'Als neuen Stammbaum importieren',
@@ -5223,7 +5918,7 @@ const stringsDE: StringsType = {
         baselineMissing: 'Die Ausgangsbasis für diese Änderungen fehlt — bitten Sie stattdessen um die ganze Datei',
         treeNotFound: 'Kein passender Stammbaum für diese Änderungen — bitten Sie den Absender stattdessen um die ganze Datei',
         previewTitle: (sender: string) => `${sender} hat Ihnen Änderungen geschickt`,
-        previewIntro: (tree: string) => tree ? `Diese Ergänzungen aktualisieren Ihren Stammbaum „${tree}".` : 'Diese Ergänzungen aktualisieren Ihren Stammbaum.',
+        previewIntro: (tree: string) => tree ? `Diese Ergänzungen aktualisieren Ihren Stammbaum „${tree}“.` : 'Diese Ergänzungen aktualisieren Ihren Stammbaum.',
         accept: 'Änderungen übernehmen',
         reviewDetail: 'Im Detail prüfen',
         newPeople: (n: number) => `${n} neue ${n === 1 ? 'Person' : 'Personen'}`,
@@ -5257,7 +5952,6 @@ const stringsDE: StringsType = {
         importTitle: 'Stammbaum importieren',
         importMessage: 'Diesen Stammbaum in Ihren lokalen Speicher importieren, um die Bearbeitung zu ermöglichen?',
         createNew: 'In den Speicher importieren',
-        createCopy: 'Kopie erstellen',
         importSuccess: 'Stammbaum erfolgreich importiert',
         importAllSuccess: (count: number) => `${count} ${count === 1 ? 'Stammbaum' : 'Stammbäume'} erfolgreich importiert`,
         updateSuccess: 'Speicher erfolgreich aktualisiert'
@@ -5281,12 +5975,7 @@ const stringsDE: StringsType = {
         encryptionDisabled: 'Verschlüsselung deaktiviert',
         unlockData: 'Daten entsperren',
         decryptionFailed: 'Daten konnten nicht entschlüsselt werden',
-        changePassword: 'Passwort ändern',
-        currentPassword: 'Aktuelles Passwort',
-        newPassword: 'Neues Passwort',
-        passwordChanged: 'Passwort erfolgreich geändert',
         optional: '(optional)',
-        dataEncrypted: 'Daten sind verschlüsselt',
         enterPasswordToView: 'Passwort eingeben, um anzusehen'
     },
 
@@ -5297,7 +5986,6 @@ const stringsDE: StringsType = {
         title: 'Stammbaum-Vorschau',
         close: 'Schließen',
         focusedOn: 'Fokussiert auf',
-        clickToFocus: 'Klicken Sie auf eine Person, um sie zu fokussieren',
         compare: 'Stammbäume vergleichen',
         preview: 'Vorschau',
         comparePersons: 'Vergleichen'
@@ -5311,6 +5999,10 @@ const stringsDE: StringsType = {
         runsInFamily: 'Die Diashow läuft in der Familienansicht',
         hint: 'Leertaste = Pause · ← → = bewegen · Esc = beenden',
         paused: 'Pausiert',
+        previous: 'Zurück',
+        pause: 'Pause',
+        next: 'Weiter',
+        exit: 'Diashow beenden',
     },
 
     cardDensity: {
@@ -5321,6 +6013,7 @@ const stringsDE: StringsType = {
     },
 
     fanChart: {
+        kekuleSettingDesc: 'In der Fächeransicht',
         settingLabel: 'Fächerdiagramm',
         kekuleHint: 'Kekulé-(Ahnen-)Nummern anzeigen',
     },
@@ -5331,6 +6024,7 @@ const stringsDE: StringsType = {
         settingHint: 'Ein Abzeichen anzeigen, wenn eine Person auch in einem anderen Stammbaum vorkommt',
         tooltipHeader: 'Auch in:',
         clickToSwitch: 'Zum Wechseln klicken',
+        moreMatches: (n: number) => `… ${n} weitere`,
         chooserHeader: 'In Stammbaum öffnen…'
     },
 
@@ -5343,13 +6037,13 @@ const stringsDE: StringsType = {
         exportJsonDesc: 'Für den Import in die Online-Version',
         saveFile: 'Datei speichern',
         saveFileTitle: 'Datei mit aktuellen Daten herunterladen',
-        unsavedWarning: 'Sie haben ungespeicherte Änderungen. Verwenden Sie „Datei speichern", um sie zu behalten.',
+        unsavedWarning: 'Sie haben ungespeicherte Änderungen. Verwenden Sie „Datei speichern“, um sie zu behalten.',
         infoTitle: 'Über diese Datei',
         infoText1: 'Dies ist eine eigenständige HTML-Datei. Ihre Daten werden im Speicher dieses Browsers gespeichert.',
         infoText2: 'Die Web-App auf stromapp.info hat ihren eigenen, getrennten Speicher. Die Daten werden NICHT zwischen ihnen synchronisiert.',
         infoHow: 'Ihre Möglichkeiten:',
         infoStayOffline: 'Diese Datei weiter verwenden',
-        infoStayOfflineDesc: 'Ihre Daten bleiben in diesem Browser. Verwenden Sie „Datei speichern", um eine Kopie mit Ihren Änderungen herunterzuladen.',
+        infoStayOfflineDesc: 'Ihre Daten bleiben in diesem Browser. Verwenden Sie „Datei speichern“, um eine Kopie mit Ihren Änderungen herunterzuladen.',
         infoGoOnline: 'Zu stromapp.info wechseln',
         infoGoOnlineDesc: 'Verwenden Sie stattdessen die Web-App. Sie müssen diese Datei dort importieren, um Ihre Daten zu übertragen.'
     },
@@ -5394,24 +6088,24 @@ const stringsDE: StringsType = {
         addedFamily: (name: string, count: number) => `Familie rund um ${name} hinzugefügt (${count} neu)`,
         removedParentChild: (parent: string, child: string) => `Eltern-Kind entfernt: ${parent} → ${child}`,
         mergedPersons: (removed: string, kept: string, details: string) => `Personen zusammengeführt: ${removed} → ${kept}${details ? ' (' + details + ')' : ''}`,
-        clearedData: (persons: number, partnerships: number) => `Daten gelöscht: ${persons} Personen, ${partnerships} Partnerschaften`,
-        loadedData: (persons: number, partnerships: number) => `Daten geladen: ${persons} Personen, ${partnerships} Partnerschaften`,
+        clearedData: (persons: number, partnerships: number) => `Daten gelöscht: ${nDe(persons, 'Person', 'Personen')}, ${nDe(partnerships, 'Partnerschaft', 'Partnerschaften')}`,
+        loadedData: (persons: number, partnerships: number) => `Daten geladen: ${nDe(persons, 'Person', 'Personen')}, ${nDe(partnerships, 'Partnerschaft', 'Partnerschaften')}`,
         addedChild: (parent: string, child: string) => `Kind hinzugefügt: ${parent} → ${child}`,
         addedParent: (parent: string, child: string) => `Elternteil hinzugefügt: ${parent} → ${child}`,
         addedSibling: (person: string, sibling: string) => `Geschwister hinzugefügt: ${person} + ${sibling}`,
         addedPartner: (person: string, partner: string) => `Partner hinzugefügt: ${person} & ${partner}`,
-        treeMerge: (merged: number, added: number, source: string) => `Stammbaum-Zusammenführung aus „${source}": ${merged} zusammengeführt, ${added} hinzugefügt`,
+        treeMerge: (merged: number, added: number, source: string) => `Stammbaum-Zusammenführung aus „${source}“: ${merged} zusammengeführt, ${added} hinzugefügt`,
         appliedChanges: (sender: string) => `Änderungen von ${sender} übernommen`,
-        splitFamilies: (trees: number, persons: number) => `In ${trees} Familienstammbäume aufgeteilt (${persons} Personen)`,
+        splitFamilies: (trees: number, persons: number) => `In ${nDe(trees, 'Familienstammbaum', 'Familienstammbäume')} aufgeteilt (${nDe(persons, 'Person', 'Personen')})`,
         repairedIssue: (desc: string) => `Automatische Reparatur: ${desc}`,
         restoredBackup: 'Eine Sicherung wiederhergestellt',
         addedEvent: (name: string) => `Ereignis zu ${name} hinzugefügt`,
         updatedEvent: (name: string) => `Ereignis von ${name} aktualisiert`,
         removedEvent: (name: string) => `Ereignis von ${name} entfernt`,
         cleanedOrphanPlaces: (count: number) => `${count} verwaiste ${count === 1 ? 'Ort' : 'Orte'} bereinigt`,
-        addedSource: (title: string) => `Quelle „${title}" hinzugefügt`,
-        updatedSource: (title: string) => `Quelle „${title}" aktualisiert`,
-        removedSource: (title: string) => `Quelle „${title}" entfernt`,
+        addedSource: (title: string) => `Quelle „${title}“ hinzugefügt`,
+        updatedSource: (title: string) => `Quelle „${title}“ aktualisiert`,
+        removedSource: (title: string) => `Quelle „${title}“ entfernt`,
         citedSource: (name: string) => `Quelle bei ${name} zitiert`,
         uncitedSource: (name: string) => `Zitat von ${name} entfernt`,
         addedAttachment: (name: string) => `Anhang zu ${name} hinzugefügt`,
@@ -5429,7 +6123,7 @@ const stringsDE: StringsType = {
         addPerson: (name: string) => `${name} hinzufügen`,
         editPerson: (name: string) => `${name} bearbeiten`,
         clearedData: 'alle Daten löschen',
-        geocodePlaces: (count: number) => `${count} Orte nachschlagen`,
+        geocodePlaces: (count: number) => `${nDe(count, 'Ort', 'Orte')} nachschlagen`,
         clearPlaceGeo: 'einen Ort von der Karte entfernen',
         cleanOrphanPlaces: (count: number) => `${count} verwaiste ${count === 1 ? 'Ort' : 'Orte'} bereinigen`,
         renamePlace: (name: string) => `einen Ort in ${name} umbenennen`,
@@ -5449,9 +6143,9 @@ const stringsDE: StringsType = {
         editEvent: (name: string) => `Ereignis von ${name} bearbeiten`,
         removeEvent: (name: string) => `Ereignis von ${name} entfernen`,
         restoreBackup: 'Sicherung wiederherstellen',
-        addSource: (title: string) => `Quelle „${title}"`,
-        editSource: (title: string) => `Quelle „${title}" bearbeiten`,
-        removeSource: (title: string) => `Quelle „${title}" entfernen`,
+        addSource: (title: string) => `Quelle „${title}“`,
+        editSource: (title: string) => `Quelle „${title}“ bearbeiten`,
+        removeSource: (title: string) => `Quelle „${title}“ entfernen`,
         cite: (name: string) => `Zitat bei ${name}`,
         uncite: (name: string) => `Zitat von ${name} entfernen`,
         addAttachment: (name: string) => `Anhang von ${name}`,
@@ -5461,8 +6155,6 @@ const stringsDE: StringsType = {
         applyChanges: (sender: string) => `Änderungen von ${sender} übernehmen`,
         undone: (desc: string) => `Rückgängig gemacht: ${desc}`,
         redone: (desc: string) => `Wiederholt: ${desc}`,
-        nothingToUndo: 'Nichts rückgängig zu machen',
-        nothingToRedo: 'Nichts zu wiederholen'
     },
 
     // Undo / redo entries in the ⋯ actions menu (labels carry the last change).
@@ -5501,11 +6193,9 @@ const stringsDE: StringsType = {
         text: 'Der Text',
         hint: 'Zusammenhängender Text über den Fakten — im Familienbuch steht er hinter ihnen. Keine Quelle. Text zwischen doppelten Sternchen wird im Buch fett gesetzt.',
         status: 'Stand',
-        statusNone: '—',
         statusDraft: 'Entwurf',
-        statusFinal: 'Fertig',
         facts: 'Stützt sich auf',
-        sumWords: (n: number) => `${n} Wörter`,
+        sumWords: (n: number) => nDe(n, 'Wort', 'Wörter'),
     },
 
     poster: {
@@ -5515,7 +6205,7 @@ const stringsDE: StringsType = {
         printsView: 'Druckt die aktuelle Ansicht:',
         viewFamily: (name: string, up: number, down: number) => `Familie — ab ${name} (Tiefe ${up}/${down})`,
         viewDescendants: (name: string) => `Nachkommen von ${name}`,
-        viewFan: (name: string, gens: number) => `Fächer — Vorfahren von ${name}, ${gens} Generationen`,
+        viewFan: (name: string, gens: number) => `Fächer — Vorfahren von ${name}, ${nDe(gens, 'Generation', 'Generationen')}`,
         viewTimeline: (name: string) => `Zeitleiste — Ansicht von ${name}`,
         viewMapBlocked: 'Die Karte lässt sich nicht als Poster drucken — wechseln Sie für den Druck in eine Stammbaumansicht.',
         svg: 'SVG (Vektor)',
@@ -5535,7 +6225,7 @@ const stringsDE: StringsType = {
         guideOption: 'Eine erste Seite mit Zusammenbau-Anleitung hinzufügen',
         guideTitle: 'Zusammenbau-Anleitung',
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
-            `${pages} Blätter (${rows} × ${cols}), ${overlap} mm Überlappung — nach dem Raster unten zusammenkleben.`,
+            `${nDe(pages, 'Blatt', 'Blätter')} (${rows} × ${cols}), ${overlap} mm Überlappung — nach dem Raster unten zusammenkleben.`,
         emptySheet: 'leer — nicht gedruckt'
     }
 };
@@ -5572,6 +6262,11 @@ export function setLanguage(lang: Language): void {
     if (languagePacks[lang]) {
         currentLanguage = lang;
         strings = languagePacks[lang];
+        // Keep <html lang> in sync so screen readers, hyphenation and
+        // spell-checkers use the active UI language.
+        if (typeof document !== 'undefined' && document.documentElement) {
+            document.documentElement.lang = lang;
+        }
     }
 }
 

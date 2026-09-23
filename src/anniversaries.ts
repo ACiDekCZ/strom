@@ -113,6 +113,9 @@ export function upcomingAnniversaries(
         const md = monthDay(u.startDate);
         const weddingYear = fullYear(u.startDate);
         if (!md || weddingYear === null) continue;
+        // "N years married" only for a marriage that still lasts: not for
+        // divorced/separated couples, a recorded end, or unmarried partners.
+        if (u.status !== 'married' || u.endDate) continue;
         const p1 = data.persons[u.person1Id], p2 = data.persons[u.person2Id];
         if (!p1 || !p2) continue;
         // Living couples only (both partners presumed living).
@@ -154,6 +157,9 @@ export function onThisDay(data: StromData, today: Date): OnThisDayEvent[] {
         if (dAgo !== null && dAgo > 0) out.push({ type: 'death', personIds: [p.id], years: dAgo });
     }
     for (const u of Object.values(data.partnerships)) {
+        // History keeps weddings that later ended (the wedding happened), but
+        // a union that was never a marriage has no wedding day.
+        if (u.status === 'partners') continue;
         const wAgo = matches(u.startDate);
         if (wAgo !== null && wAgo > 0) {
             out.push({ type: 'wedding', personIds: [u.person1Id, u.person2Id], years: wAgo, partnershipId: u.id });

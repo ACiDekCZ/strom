@@ -52,6 +52,30 @@ export function readFileAsDataUrl(file: File): Promise<string> {
     });
 }
 
+/**
+ * Decode a non-image attachment into a Blob that is safe to open in a new tab.
+ * Attachments arrive in foreign files, and a blob URL shares the app's origin:
+ * opening e.g. `data:text/html` as-is would run its scripts with access to all
+ * trees. Only PDFs are opened, and the blob type is always forced to
+ * application/pdf regardless of what the data URL claims. Returns null for
+ * anything else (or an undecodable payload).
+ */
+export function pdfBlobFromDataUrl(dataUrl: string, mimeType: string): Blob | null {
+    const header = /^data:([^;,]*)(;[^,]*)?,/i.exec(dataUrl);
+    if (!header) return null;
+    const declared = header[1].trim().toLowerCase();
+    if (declared !== 'application/pdf' || mimeType.toLowerCase() !== 'application/pdf') return null;
+    if (!/;base64$/i.test(header[2] ?? '')) return null;
+    try {
+        const bin = atob(dataUrl.slice(header[0].length));
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return new Blob([arr], { type: 'application/pdf' });
+    } catch {
+        return null;
+    }
+}
+
 /** Total bytes of all attachment payloads in a tree. */
 export function totalAttachmentBytes(data: StromData): number {
     let total = 0;

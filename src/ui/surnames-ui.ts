@@ -16,6 +16,7 @@ import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import { surnamesInTree, surnameKey } from '../surnames.js';
 import { uiModule } from './module.js';
+import { emptyStateHtml } from './empty-state.js';
 
 export const surnamesMethods = uiModule({
     /** @param parentDialogId dialog to return to on close (the tree manager) */
@@ -28,32 +29,37 @@ export const surnamesMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = 'surnames-modal';
         overlay.innerHTML = `
-            <div class="modal surnames-modal">
+            <div class="modal surnames-modal modal--md" role="dialog" aria-modal="true">
                 <div class="modal-header">
                     <h2>${strings.surnames.title}</h2>
-                    <button class="close-btn" id="surnames-close-x">&times;</button>
+                    <button class="close-btn" id="surnames-close-x" aria-label="${strings.buttons.close}">&times;</button>
                 </div>
-                <p class="surnames-intro">${strings.surnames.intro}</p>
+                <div class="surnames-intro">
+                    <p>${strings.surnames.introShort}</p>
+                    <details class="surnames-more">
+                        <summary>${strings.surnames.more}</summary>
+                        <p>${strings.surnames.intro}</p>
+                    </details>
+                </div>
                 <div id="surnames-groups"></div>
                 <div class="surnames-add">
                     <div class="surnames-add-title">${strings.surnames.addTitle}</div>
                     <p class="surnames-hint">${strings.surnames.addHint}</p>
                     <div id="surnames-picker" class="surnames-picker"></div>
                     <div class="surnames-add-row">
-                        <input type="text" id="surname-other" placeholder="${strings.surnames.addOther}">
-                        <button type="button" class="secondary" id="surname-other-add">+</button>
+                        <input type="text" id="surname-other" placeholder="${strings.surnames.addOther}"
+                               aria-label="${strings.surnames.addOther}">
+                        <button type="button" class="secondary" id="surname-other-add">${strings.surnames.addSpelling}</button>
                     </div>
-                    <button type="button" class="primary" id="surnames-link" disabled>${strings.surnames.link}</button>
                 </div>
                 <div class="modal-buttons">
-                    <button type="button" class="secondary" id="surnames-close">${strings.buttons.close}</button>
+                    <button type="button" class="primary" id="surnames-link" disabled>${strings.surnames.link}</button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);
 
         const close = (): void => this.closeSurnamesDialog();
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
-        (overlay.querySelector('#surnames-close') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#surnames-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#surnames-link') as HTMLButtonElement).onclick = () => this.linkSurnames();
 
@@ -87,8 +93,14 @@ export const surnamesMethods = uiModule({
         const box = document.getElementById('surnames-groups');
         if (!box) return;
         const groups = DataManager.getData().surnameVariants ?? [];
+        // Empty: heading only — the one-sentence intro right above already
+        // says what linking is for, and the "Link spellings" form follows.
         if (groups.length === 0) {
-            box.innerHTML = `<p class="surnames-none">${strings.surnames.none}</p>`;
+            box.innerHTML = emptyStateHtml({
+                title: strings.emptyStates.surnamesTitle,
+                className: 'surnames-none',
+                compact: true,
+            });
             return;
         }
         box.innerHTML = `<div class="surnames-groups-title">${strings.surnames.groupsTitle}</div>`

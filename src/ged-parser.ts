@@ -12,9 +12,9 @@
  * (OCCU value <-> event note). Sources map both ways: 0 @Sx@ SOUR records
  * (TITL/REPO/PAGE->reference/WWW->url/NOTE) with 1 SOUR refs on individuals and
  * 2 SOUR refs on events <-> the per-tree source catalog + sourceIds. Partnership
- * statuses 'partners'/'separated' and the isPrimary flag, and the
- * 'military'/'custom' event types, have no GEDCOM equivalent (known-unsupported)
- * and are dropped on export.
+ * statuses 'partners'/'separated' ride on 1 _STAT, 'military' on EVEN + TYPE,
+ * 'custom' on EVEN + TYPE <label>. The isPrimary flag has no GEDCOM equivalent
+ * and is dropped on export. docs/GEDCOM-IMPORT.md is the full contract.
  */
 
 import {
@@ -22,6 +22,7 @@ import {
     PartnershipId,
     Person,
     Partnership,
+    PartnershipStatus,
     StromData,
     LifeEvent,
     EventParticipant,
@@ -41,22 +42,56 @@ import {
 import { dateSortKey, formatFlexDate } from './dates';
 import { placeKey } from './places';
 import { eventValueIsOnTag } from './events';
-import { strings } from './strings';
+import { strings, getStringsForLang } from './strings';
 import { SURNAME_GROUPS_MARKER, SURNAME_GROUP_SEP } from './ged-exporter';
 
 /**
+ * Words that name a role in RELA, in the languages registers and genealogy
+ * programs write them, compared without diacritics or case. A stem of five
+ * letters or more also matches the words it begins ("svědkyně", "kmotra");
+ * shorter ones only match whole ("Pate", never "Patenkind", the godchild).
+ */
+const ROLE_WORDS: [Exclude<ParticipantRole, 'other'>, string[]][] = [
+    ['godparent', ['godparent', 'godfather', 'godmother', 'sponsor', 'kmotr', 'pate', 'patin',
+        'taufpate', 'taufpatin', 'chrzestny', 'chrzestna', 'parrain', 'marraine', 'padrino', 'madrina']],
+    ['witness', ['witness', 'svedek', 'svedk', 'trauzeuge', 'trauzeugin', 'zeuge', 'zeugin',
+        'swiadek', 'swiadk', 'temoin', 'testigo']],
+    ['officiant', ['officiant', 'clergy', 'priest', 'minister', 'knez', 'oddavajici', 'krtici',
+        'farar', 'kaplan', 'pfarrer', 'ksiadz', 'cure', 'sacerdote']],
+];
+
+/** RELA values that say nothing beyond "was there" — not worth keeping as a note. */
+const PLAIN_PRESENCE = new Set(['present', 'other', 'participant']);
+
+function relaWords(rela: string): string[] {
+    return rela.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+        .split(/[^a-z]+/).filter(Boolean);
+}
+
+/**
  * RELA text -> role. Other programs write these freely ("Godparent", "godmother",
- * "Kmotr"), so match loosely and fall back to 'other' rather than dropping the
- * person: knowing someone was there beats knowing nothing.
+ * "Kmotr", "Taufpate"), so match loosely and fall back to 'other' rather than
+ * dropping the person: knowing someone was there beats knowing nothing.
  */
 function relaToRole(rela: string | undefined): ParticipantRole {
-    const r = (rela ?? '').toLowerCase();
-    if (r.includes('godparent') || r.includes('godfather') || r.includes('godmother')
-        || r.includes('kmotr') || r.includes('sponsor')) return 'godparent';
-    if (r.includes('witness') || r.includes('svěd') || r.includes('sved')) return 'witness';
-    if (r.includes('officiant') || r.includes('clergy') || r.includes('priest')
-        || r.includes('minister') || r.includes('kněz') || r.includes('knez')) return 'officiant';
+    const words = relaWords(rela ?? '');
+    for (const [role, stems] of ROLE_WORDS) {
+        if (words.some(w => stems.some(s => w === s || (s.length >= 5 && w.startsWith(s))))) return role;
+    }
     return 'other';
+}
+
+/**
+ * The note a participant keeps. A role the app has no name for (informant,
+ * midwife, "porodní bába") becomes 'other', and the file's own word for it goes
+ * in front of the note — dropping it left "Other: Marie" and no way of knowing
+ * she was the midwife.
+ */
+function participantNote(rela: string | undefined, role: ParticipantRole, note: string | undefined): string | undefined {
+    const label = rela?.trim();
+    if (role !== 'other' || !label || PLAIN_PRESENCE.has(label.toLowerCase())) return note || undefined;
+    if (note?.trim().toLowerCase().startsWith(label.toLowerCase())) return note;
+    return note ? `${label} — ${note}` : label;
 }
 
 /**
@@ -100,7 +135,22 @@ const EVENT_TAG_TO_TYPE: Record<string, LifeEventType> = {
     CHR: 'baptism',
     CHRA: 'baptism',
     GRAD: 'education',
+    // Military service has no GEDCOM 5.5.1 tag; programs that record it use
+    // their own (FTM/RootsMagic _MILT, PAF _MILI, some MILI). Strom writes the
+    // portable 1 EVEN / 2 TYPE Military service and reads both back.
+    _MILT: 'military',
+    _MILI: 'military',
+    MILI: 'military',
 };
+
+/** An EVEN TYPE that names military service, in any language the app speaks. */
+function isMilitaryLabel(label: string): boolean {
+    const key = label.trim().toLowerCase();
+    if (!key) return false;
+    return (['en', 'cs', 'de'] as const).some(lang =>
+        getStringsForLang(lang).events.types.military.toLowerCase() === key)
+        || key === 'military';
+}
 
 /**
  * Standard GEDCOM facts the model has no field for.
@@ -119,7 +169,7 @@ const EVENT_TAG_TO_TYPE: Record<string, LifeEventType> = {
 const NOTED_INDI_TAGS = new Set(['BLES', 'RETI', 'CAST', 'DSCR', 'IDNO', 'NCHI',
     'NMR', 'PROP', 'SSN', 'FACT', 'ALIA']);
 const NOTED_FAM_TAGS = new Set(['MARB', 'MARC', 'MARL', 'MARS', 'ANUL', 'DIVF',
-    'CENS', 'EVEN', 'NCHI']);
+    'CENS', 'EVEN', 'NCHI', 'RESI']);
 
 /** A fact being read: its value on the tag line, its date and place below it. */
 interface RawNoteFact {
@@ -144,15 +194,84 @@ function factToNoteLine(fact: RawNoteFact): string {
 /**
  * A level-2 line under such a fact. TYPE names what a generic FACT/EVEN is
  * about, so it reads better as the value than the bare word "Fact"; a NOTE
- * written under it joins the same line rather than starting a stray one.
+ * written under it joins the same line rather than starting a stray one, and
+ * so does an ADDR (the house a family lived in: "Residence: čp. 12 · 1910").
  */
 function attachToFact(fact: RawNoteFact, tag: string, value: string): void {
     if (tag === 'DATE') fact.date = parseGedcomDate(value);
     else if (tag === 'PLAC') fact.place = value;
-    else if ((tag === 'TYPE' || tag === 'NOTE') && value) {
+    else if ((tag === 'TYPE' || tag === 'NOTE' || tag === 'ADDR') && value) {
         fact.value = fact.value ? `${fact.value} · ${value}` : value;
     }
 }
+
+/**
+ * A GEDCOM AGE value in words: "27y 3m" -> "27 let 3 měsíce", "<1y" ->
+ * "<1 rok", INFANT -> "kojenec". A bare number is years (several programs drop
+ * the unit); anything else is kept as written rather than guessed at.
+ */
+function formatGedcomAge(raw: string): string {
+    const v = raw.trim();
+    const word = strings.gedcomNotes.ageWords[v.toUpperCase()];
+    if (word) return word;
+    const bare = v.match(/^([<>])?\s*(\d+)$/);
+    if (bare) return `${bare[1] ?? ''}${strings.gedcomNotes.ageUnit(Number(bare[2]), 'y')}`;
+    const m = v.match(/^([<>])?\s*(?:(\d+)\s*y)?\s*(?:(\d+)\s*m)?\s*(?:(\d+)\s*d)?$/i);
+    if (!m || (!m[2] && !m[3] && !m[4])) return v;
+    const parts: string[] = [];
+    if (m[2]) parts.push(strings.gedcomNotes.ageUnit(Number(m[2]), 'y'));
+    if (m[3]) parts.push(strings.gedcomNotes.ageUnit(Number(m[3]), 'm'));
+    if (m[4]) parts.push(strings.gedcomNotes.ageUnit(Number(m[4]), 'd'));
+    return `${m[1] ?? ''}${parts.join(' ')}`;
+}
+
+/**
+ * The note line for a date written in another calendar ("@#DJULIAN@ 12 MAR
+ * 1875"), or null for a Gregorian one. The date field itself keeps the numbers
+ * as written — there is no calendar in the model — so without this line a
+ * Julian date would pass for a Gregorian one without a word.
+ */
+function calendarNoteLine(raw: string): string | null {
+    const m = raw.match(/@#D([^@]+)@/i);
+    if (!m) return null;
+    const calendar = m[1].trim().toUpperCase();
+    if (calendar === 'GREGORIAN' || calendar === 'UNKNOWN') return null;
+    const date = raw.replace(/@#D[^@]*@\s*/gi, '').trim();
+    return strings.gedcomNotes.calendarDate(strings.gedcomNotes.calendars[calendar] ?? calendar, date);
+}
+
+/**
+ * CHIL > _FREL / _MREL -> the child's relationship to that parent. 'biological'
+ * is said explicitly (it overrides a PEDI covering both parents); undefined
+ * means the file does not say, and PEDI decides as before.
+ */
+function childRelType(value: string | undefined): ParentChildRelType | undefined {
+    switch ((value ?? '').trim().toLowerCase()) {
+        case 'natural': case 'birth': case 'biological': return 'biological';
+        case 'adopted': return 'adoptive';
+        case 'step': return 'step';
+        case 'foster': return 'foster';
+        default: return undefined;
+    }
+}
+
+/** Set (or, for 'biological', clear) a child's relationship to one parent. */
+function setParentRel(child: Person, parentId: PersonId, rel: ParentChildRelType | undefined): void {
+    if (!rel) return;
+    if (rel === 'biological') {
+        if (child.parentRelTypes) {
+            delete child.parentRelTypes[parentId];
+            if (Object.keys(child.parentRelTypes).length === 0) delete child.parentRelTypes;
+        }
+        return;
+    }
+    (child.parentRelTypes ??= {})[parentId] = rel;
+}
+
+/** Embedded portraits: raster images only. */
+const SAFE_PHOTO_DATA_URL = /^data:image\/(jpeg|png|webp|gif);base64,/i;
+/** Embedded documents: the same images, or a PDF. */
+const SAFE_ATTACHMENT_DATA_URL = /^data:(image\/(jpeg|png|webp|gif)|application\/pdf);base64,/i;
 
 /** Raw OBJE media object under an individual. */
 interface RawMedia {
@@ -176,6 +295,8 @@ interface RawEvent {
     sourceRefs?: string[];
     /** Godparents / witnesses: ASSO (a person ref) or _WITN (a bare name). */
     participants?: RawParticipant[];
+    /** `1 EVEN value`: the value on the tag line, kept when a TYPE takes the label. */
+    tagValue?: string;
 }
 
 /**
@@ -218,6 +339,8 @@ interface RawSource {
     note: string;
     /** QUAY seen on the record or a citation (first wins). */
     quality?: number;
+    /** ABBR: the short title, used when the record has no TITL. */
+    abbr?: string;
 }
 
 // ==================== TYPES ====================
@@ -230,6 +353,13 @@ interface GedcomIndividual {
     lastName: string;
     /** Extra 1 NAME lines: the file's other spellings of this person. */
     nameVariants: string[];
+    /**
+     * NAME > TYPE of the primary name and of each variant (same index as
+     * nameVariants). Read for one purpose only: a married name the file put
+     * first must not take the place of the birth surname the model keeps.
+     */
+    primaryNameType: string;
+    variantNameTypes: string[];
     sex: string;
     birthDate: string;
     birthPlace: string;
@@ -238,6 +368,10 @@ interface GedcomIndividual {
     notes: string;
     /** User reference number (1 REFN) — id in a paper archive / other program. */
     refn: string;
+    /** Strom's open question about the person (1 _QUESTION). */
+    question: string;
+    /** REFN > TYPE: who issued the number. */
+    refnType: string;
     /** Life events (BAPM/BURI/OCCU/RESI/EMIG/IMMI/EDUC). */
     events: RawEvent[];
     /** GEDCOM ids (@Sx@) of sources cited on this individual. */
@@ -301,8 +435,19 @@ interface GedcomFamily {
     sourceRefs: string[];
     /** Witnesses named under 1 MARR (2 ASSO / 2 _WITN). */
     marriageParticipants: RawParticipant[];
+    /**
+     * CHIL > _FREL / _MREL: the child's relationship to the father and to the
+     * mother separately (Legacy, RootsMagic, FTM). PEDI sits on the child's
+     * FAMC and covers both parents at once, so it cannot say "stepfather,
+     * own mother" — the most common case in a remarried household.
+     */
+    childRels: Map<string, { frel?: string; mrel?: string }>;
     /** The couple's narrative (1 _STORY). */
     story?: RawStory;
+    /** 1 _STAT: the relationship status as written (Married, Partners …). */
+    stat?: string;
+    /** The CHIL line being read (its _FREL/_MREL follow it). */
+    lastChil?: string;
 }
 
 /** Parsed GEDCOM data */
@@ -360,6 +505,8 @@ export interface GedcomConversionResult {
          * on the child.
          */
         otherFamilyLinks: number;
+        /** Embedded media skipped because of their type (only images and PDFs come in). */
+        skippedMedia: number;
         totalGedFamilies: number;
     };
 }
@@ -380,7 +527,29 @@ const MONTHS: Record<string, string> = {
  * "JUN 1900" -> "1900-06", "3 JUN 1900" -> "1900-06-03", "BEF 1900" -> "<1900".
  */
 export function parseGedcomDate(dateStr: string): string {
-    if (!dateStr) return '';
+    return readGedcomDate(dateStr).date;
+}
+
+/**
+ * The part of a GEDCOM date the date field cannot hold, to be kept as a note
+ * line — or null when the date was read whole. A date phrase ("INT 1900 (per
+ * census)", "(about Easter 1900)") gives its phrase; a date that was only
+ * partly understood ("3 XYZ 1900" keeps just the year) gives the value as
+ * written, so what the record said is never silently narrowed.
+ */
+export function gedcomDatePhrase(dateStr: string): string | null {
+    const read = readGedcomDate(dateStr);
+    if (!read.phrase && !read.lossy) return null;
+    // A bare phrase is given as its words; a phrase riding on a date, or a
+    // date read only in part, as the whole value — the context matters.
+    if (read.phrase && !read.date) return read.phrase;
+    return dateStr.replace(/@#D[^@]*@\s*/gi, '').trim() || null;
+}
+
+const YEAR_RE = /^\d{3,4}$/;
+
+function readGedcomDate(dateStr: string): { date: string; lossy: boolean; phrase: string } {
+    if (!dateStr || !dateStr.trim()) return { date: '', lossy: false, phrase: '' };
 
     // Calendar escape (@#DJULIAN@, @#DGREGORIAN@ …): the calendar itself has
     // no representation here, but the date after it is an ordinary date —
@@ -388,24 +557,41 @@ export function parseGedcomDate(dateStr: string): string {
     // to '' (which silently lost every pre-1752 Julian date).
     dateStr = dateStr.trim().replace(/^@#D[^@]*@\s*/i, '');
 
+    // A date phrase in parentheses — the whole value ("(about Easter 1900)")
+    // or the tail of an interpreted date ("INT 1900 (per census)"). The phrase
+    // is the record's own words; the date in front of it, if any, is read.
+    let phrase = '';
+    const withPhrase = /^(.*?)\s*\(([^)]*)\)\s*$/.exec(dateStr);
+    if (withPhrase) {
+        phrase = withPhrase[2].trim();
+        dateStr = withPhrase[1].trim();
+        if (!dateStr) return { date: '', lossy: !phrase, phrase };
+    }
+
     // Ranges/periods: BET X AND Y, FROM X TO Y -> 'x..y' (both bounds kept —
     // previously these were mangled and the information silently lost).
     // One-sided periods degrade to qualifiers: FROM X -> '>x', TO Y -> '<y'.
     const range = /^(BET|BETWEEN|FROM)\s+(.+?)\s+(AND|TO)\s+(.+)$/i.exec(dateStr.trim());
     if (range) {
-        const a = parseGedcomDate(range[2]);
-        const b = parseGedcomDate(range[4]);
-        if (a && b && !/^[~<>]/.test(a) && !/^[~<>]/.test(b)) return `${a}..${b}`;
-        return a || b || '';
+        const a = readGedcomDate(range[2]);
+        const b = readGedcomDate(range[4]);
+        const lossy = a.lossy || b.lossy;
+        if (a.date && b.date && !/^[~<>]/.test(a.date) && !/^[~<>]/.test(b.date)) {
+            return { date: `${a.date}..${b.date}`, lossy, phrase };
+        }
+        return { date: a.date || b.date || '', lossy: true, phrase };
     }
     const oneSided = /^(FROM|TO)\s+(.+)$/i.exec(dateStr.trim());
     if (oneSided) {
-        const d = parseGedcomDate(oneSided[2]);
-        if (d && !/^[~<>]/.test(d)) return `${oneSided[1].toUpperCase() === 'FROM' ? '>' : '<'}${d}`;
-        return d;
+        const d = readGedcomDate(oneSided[2]);
+        if (d.date && !/^[~<>]/.test(d.date)) {
+            return { date: `${oneSided[1].toUpperCase() === 'FROM' ? '>' : '<'}${d.date}`, lossy: d.lossy, phrase };
+        }
+        return { date: d.date, lossy: true, phrase };
     }
 
-    // Qualifier prefixes map to flex-date qualifiers instead of being dropped
+    // Qualifier prefixes map to flex-date qualifiers instead of being dropped.
+    // INT (interpreted) is an approximation of what the phrase says.
     let qualifier = '';
     let cleaned = dateStr.trim().replace(
         /^(ABT|ABOUT|EST|CAL|INT|BEF|BEFORE|AFT|AFTER)\s+/i,
@@ -426,24 +612,26 @@ export function parseGedcomDate(dateStr: string): string {
     // both notations name the same moment. The flex-date model has no dual-year
     // form, so the year AS WRITTEN in the record (the first one) is kept — the
     // least lossy single value, and the one a reader finds in the source.
-    const parts = cleaned.split(/\s+/).map(p => p.replace(/^(\d{3,4})\/\d{1,2}$/, '$1'));
+    const parts = cleaned.split(/\s+/).filter(Boolean).map(p => p.replace(/^(\d{3,4})\/\d{1,2}$/, '$1'));
+    const monthOf = (p: string | undefined): string | undefined => p ? MONTHS[p.toUpperCase()] : undefined;
+    const lastIsYear = parts.length > 0 && YEAR_RE.test(parts[parts.length - 1]);
 
-    if (parts.length === 3) {
+    if (parts.length === 3 && monthOf(parts[1]) && /^\d{1,2}$/.test(parts[0])
+        && +parts[0] >= 1 && +parts[0] <= 31 && lastIsYear) {
         // "3 JUN 1900" -> "1900-06-03"
-        const day = parts[0].padStart(2, '0');
-        const month = MONTHS[parts[1].toUpperCase()] || '01';
-        const year = parts[2];
-        return `${qualifier}${year}-${month}-${day}`;
-    } else if (parts.length === 2 && MONTHS[parts[0].toUpperCase()]) {
+        return { date: `${qualifier}${parts[2]}-${monthOf(parts[1])}-${parts[0].padStart(2, '0')}`, lossy: false, phrase };
+    } else if (parts.length === 2 && monthOf(parts[0]) && lastIsYear) {
         // "JUN 1900" -> "1900-06" (month precision, no fabricated day)
-        const month = MONTHS[parts[0].toUpperCase()];
-        const year = parts[1];
-        return `${qualifier}${year}-${month}`;
-    } else if (parts.length === 1 && /^\d{3,4}$/.test(parts[0])) {
+        return { date: `${qualifier}${parts[1]}-${monthOf(parts[0])}`, lossy: false, phrase };
+    } else if (parts.length === 1 && lastIsYear) {
         // "1900" -> "1900" (year precision, no fabricated month/day)
-        return `${qualifier}${parts[0]}`;
+        return { date: `${qualifier}${parts[0]}`, lossy: false, phrase };
+    } else if (lastIsYear) {
+        // A day or month that is not a GEDCOM one ("3 XYZ 1900"): the year is
+        // certain, the rest is not — keep the year, never invent a month.
+        return { date: `${qualifier}${parts[parts.length - 1]}`, lossy: true, phrase };
     }
-    return '';
+    return { date: '', lossy: parts.length > 0, phrase };
 }
 
 /**
@@ -595,14 +783,105 @@ export function decodeGedcomFile(buffer: ArrayBuffer): string {
 
 // ==================== MAIN PARSER ====================
 
+/** A cross-reference pointer value (@I1@, @N12@ …). */
+const GED_POINTER = /^@[^@\s]+@$/;
+
+/** One physical GEDCOM line, split into its parts. */
+interface GedLine {
+    level: number;
+    tag: string;
+    value: string;
+}
+
+/**
+ * Values that may run over several physical lines (CONC joins, CONT breaks)
+ * although the reader below takes them from their own line only: a long place,
+ * name, witness, citation page, web address or label. Joined up front, so a
+ * value split to respect the 255-byte line limit reads back whole.
+ */
+const JOINED_VALUE_TAGS = new Set(['PLAC', 'NAME', '_WITN', 'WITN', 'PAGE', 'WWW', 'URL', 'REFN', 'TYPE', 'SOUR', '_QUESTION']);
+
+/**
+ * Split the file into lines and do the reading that needs the whole file:
+ * - join continuation lines of JOINED_VALUE_TAGS into their value;
+ * - collect shared note records (0 @N1@ NOTE text + CONT/CONC; GEDCOM 7
+ *   SNOTE), which may be defined after the records pointing at them;
+ * - turn an inline source (`1 SOUR free text`, no pointer) into a pointer at
+ *   a source record made for it, so the reader treats it like any citation.
+ *   The same text twice is one source.
+ */
+function preprocessGedcomLines(lines: string[]): {
+    records: GedLine[];
+    noteRecords: Map<string, string>;
+    inlineSources: Map<string, string>;
+} {
+    const parsed: GedLine[] = [];
+    for (const line of lines) {
+        const match = line.match(/^(\d+)\s+(@[^@\s]+@|\w+)\s*(.*)?$/);
+        if (!match) continue;
+        let tag = match[2];
+        // GEDCOM escapes a literal '@' as '@@' (pointers never contain it).
+        const value = (match[3] || '').trim().replace(/@@/g, '@');
+        // GEDCOM 7 shared-note pointer: the same thing as a NOTE pointer.
+        if (tag === 'SNOTE' && GED_POINTER.test(value)) tag = 'NOTE';
+        parsed.push({ level: parseInt(match[1]), tag, value });
+    }
+
+    const noteRecords = new Map<string, string>();
+    const inlineSources = new Map<string, string>();
+    const inlineByText = new Map<string, string>();
+    const records: GedLine[] = [];
+    let inHead = false;
+    for (let i = 0; i < parsed.length; i++) {
+        const rec = parsed[i];
+        if (rec.level === 0) inHead = rec.tag === 'HEAD';
+        // 0 @N1@ NOTE text / 1 CONT … / 1 CONC …
+        if (rec.level === 0 && GED_POINTER.test(rec.tag)) {
+            const m = /^(NOTE|SNOTE)(?:\s+(.*))?$/.exec(rec.value);
+            if (m) {
+                let text = m[2] ?? '';
+                while (i + 1 < parsed.length && parsed[i + 1].level === 1
+                    && (parsed[i + 1].tag === 'CONT' || parsed[i + 1].tag === 'CONC')) {
+                    const next = parsed[++i];
+                    text += (next.tag === 'CONT' ? '\n' : '') + next.value;
+                }
+                noteRecords.set(rec.tag, text);
+                records.push({ level: 0, tag: rec.tag, value: m[1] });
+                continue;
+            }
+        }
+        if (rec.level > 0 && JOINED_VALUE_TAGS.has(rec.tag)) {
+            let value = rec.value;
+            while (i + 1 < parsed.length && parsed[i + 1].level === rec.level + 1
+                && (parsed[i + 1].tag === 'CONC' || parsed[i + 1].tag === 'CONT')) {
+                const next = parsed[++i];
+                value += (next.tag === 'CONT' ? '\n' : '') + next.value;
+            }
+            if (rec.tag === 'SOUR' && !inHead && value && !GED_POINTER.test(value)) {
+                let id = inlineByText.get(value);
+                if (!id) {
+                    id = `@__inlineSour${inlineByText.size}__@`;
+                    inlineByText.set(value, id);
+                    inlineSources.set(id, value);
+                }
+                value = id;
+            }
+            records.push({ level: rec.level, tag: rec.tag, value });
+            continue;
+        }
+        records.push(rec);
+    }
+    return { records, noteRecords, inlineSources };
+}
+
 /**
  * Parse GEDCOM file content into structured data
  */
 /** Level-1 INDI tags the parser understands (everything else is counted as dropped). */
-const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT', 'OBJE', 'REFN', 'ASSO', '_STORY',
+const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT', 'OBJE', 'REFN', 'ASSO', '_STORY', '_QUESTION',
     ...Object.keys(EVENT_TAG_TO_TYPE)]);
 /** Level-1 FAM tags the parser understands. */
-const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', 'SOUR', '_STORY']);
+const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', 'SOUR', '_STORY', '_STAT']);
 /** Level-0 record types (handled or structural). */
 /**
  * Labels for ALTERNATIVE birth/death facts. Platforms (MyHeritage) allow several
@@ -613,7 +892,7 @@ const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', '
 // Labels are read from strings at USE time (not module load) so the note lands
 // in the app's current language — see each call site.
 
-const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'REPO', 'HEAD', 'TRLR', 'SUBM', 'SUBN']);
+const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'REPO', 'HEAD', 'TRLR', 'SUBM', 'SUBN', 'NOTE', 'SNOTE']);
 
 /**
  * Pure bookkeeping tags (platform sync ids, change stamps). Ignored WITHOUT
@@ -683,12 +962,30 @@ function resolveUnionStatus(fam: GedcomFamily): {
     return { status: 'divorced', startDate, endDate: fam.divorceDate, remarriage: null };
 }
 
+/**
+ * 1 _STAT (Strom's own tag, also written by Legacy and FTM in similar words)
+ * -> the relationship status, or undefined for a value it does not name.
+ * MARR/DIV can only say married or divorced; partners and separated need it.
+ */
+function statusFromStat(value: string | undefined): PartnershipStatus | undefined {
+    const v = (value ?? '').trim().toLowerCase();
+    if (!v) return undefined;
+    if (v === 'married') return 'married';
+    if (v === 'divorced') return 'divorced';
+    if (v === 'separated') return 'separated';
+    if (['partners', 'partner', 'unmarried', 'unmarried couple', 'never married',
+        'cohabiting', 'living together', 'domestic partnership'].includes(v)) return 'partners';
+    return undefined;
+}
+
 /** Put the resolved marriage/divorce outcome onto a partnership. */
 function applyUnionOutcome(partnership: Partnership, fam: GedcomFamily): void {
     const outcome = resolveUnionStatus(fam);
     if (outcome.startDate) partnership.startDate = outcome.startDate;
     if (outcome.endDate) partnership.endDate = outcome.endDate;
-    partnership.status = outcome.status;
+    // An explicit status wins over what MARR/DIV imply: a couple of partners
+    // whose start date rides on MARR (the only place for it) is not married.
+    partnership.status = statusFromStat(fam.stat) ?? outcome.status;
     if (outcome.remarriage) {
         const { divorced, married } = outcome.remarriage;
         const line = divorced
@@ -755,6 +1052,8 @@ export function parseGedcom(content: string): ParsedGedcom {
      */
     let currentFactSubTag: string | null = null;
     let currentSource: RawSource | null = null;
+    /** Which name the current 1 NAME line was: -1 the primary, else its variant index. */
+    let currentNameSlot: number | null = null;
     let currentMedia: RawMedia | null = null;
     /** Level-2 tag inside the current OBJE (for level-3 FILE continuations). */
     let currentMediaSubTag: string | null = null;
@@ -762,6 +1061,44 @@ export function parseGedcom(content: string): ParsedGedcom {
     let currentCitationId: string | null = null;
     /** 0 @Rx@ REPO record currently open. */
     let currentRepoId: string | null = null;
+    /**
+     * Where a detail line under the current fact goes: the event's note, the
+     * person's note labelled "Birth:"/"Death:" (birth and death are fields,
+     * with no note of their own), or the couple's note for a marriage. Null
+     * where no fact is open — a detail line there has no fact to belong to.
+     */
+    const factDetailSink = (): ((line: string) => void) | null => {
+        const join = (text: string, line: string): string => text ? `${text}\n${line}` : line;
+        if (currentType === 'INDI' && currentRecord) {
+            const indi = currentRecord as GedcomIndividual;
+            const ev = currentEvent;
+            if (ev) {
+                return line => {
+                    // For OCCU/RELI/… the note IS the fact; an empty one must
+                    // not be taken over by a detail line, so it goes to the person.
+                    if (!ev.note && eventValueIsOnTag(ev.type)) indi.notes = join(indi.notes, line);
+                    else ev.note = join(ev.note ?? '', line);
+                };
+            }
+            if (currentSubTag === 'BIRT') return line => { indi.notes = join(indi.notes, strings.gedcomNotes.birthNote(line)); };
+            if (currentSubTag === 'DEAT') return line => { indi.notes = join(indi.notes, strings.gedcomNotes.deathNote(line)); };
+        } else if (currentType === 'FAM' && currentRecord
+            && (currentSubTag === 'MARR' || currentSubTag === 'DIV' || currentSubTag === 'ENGA')) {
+            const fam = currentRecord as GedcomFamily;
+            return line => { fam.note = join(fam.note, line); };
+        }
+        return null;
+    };
+    /**
+     * A detail line being read (AGE, CAUS, ADDR under a fact), open until the
+     * next line at its own level or above, so its CONT/CONC lines join it.
+     */
+    let openDetail: { level: number; text: string; format: (text: string) => string; sink: (line: string) => void; sep: string } | null = null;
+    const flushDetail = (): void => {
+        const text = openDetail?.text.trim();
+        if (openDetail && text) openDetail.sink(openDetail.format(text));
+        openDetail = null;
+    };
     /** Coordinates gathered from PLAC > MAP > LATI/LONG, keyed by placeKey(). */
     const placeCoords = new Map<string, PlaceGeo>();
     /** The PLAC value a MAP substructure is currently describing. */
@@ -772,14 +1109,18 @@ export function parseGedcom(content: string): ParsedGedcom {
     let inSurnameNote = false;
     const surnameGroups: string[][] = [];
 
-    for (const line of lines) {
-        const match = line.match(/^(\d+)\s+(@\w+@|\w+)\s*(.*)?$/);
-        if (!match) continue;
+    const { records: gedLines, noteRecords, inlineSources } = preprocessGedcomLines(lines);
 
-        const level = parseInt(match[1]);
-        const tag = match[2];
-        // GEDCOM escapes a literal '@' as '@@' (pointers never contain it).
-        const value = (match[3] || '').trim().replace(/@@/g, '@');
+    for (const rec of gedLines) {
+        const level = rec.level;
+        const tag = rec.tag;
+        let value = rec.value;
+        // A pointer to a shared note record (1 NOTE @N1@, GEDCOM 7 SNOTE) reads
+        // as the note's text wherever a NOTE may stand. A pointer to a note the
+        // file never defines says nothing and is read as an empty note.
+        if (tag === 'NOTE' && level > 0 && GED_POINTER.test(value)) {
+            value = noteRecords.get(value) ?? '';
+        }
 
         // Place coordinates ride under a PLAC as MAP > LATI/LONG. They can hang
         // off a person's birth/death, an event or a marriage, so they are read
@@ -800,6 +1141,46 @@ export function parseGedcom(content: string): ParsedGedcom {
             continue;
         }
 
+        // Detail lines under a fact — the age the register gives, the cause of
+        // death, the house (ADDR), a date in another calendar. The model has no
+        // field for any of them, and dropping them lost exactly what a register
+        // entry is read for: an age at death dates a birth nobody recorded, a
+        // house number ties a family together. Each becomes one labelled line
+        // in the fact's note. Read before the per-record dispatch, which never
+        // looks at these tags.
+        if (openDetail) {
+            if (level > openDetail.level && (tag === 'CONT' || tag === 'CONC')) {
+                openDetail.text += (tag === 'CONT' ? openDetail.sep : '') + value;
+                continue;
+            }
+            if (level <= openDetail.level) flushDetail();
+        }
+        if (level === 2 && (tag === 'AGE' || tag === 'CAUS' || tag === 'ADDR' || tag === 'DATE')) {
+            const sink = factDetailSink();
+            if (sink && tag === 'DATE') {
+                const line = calendarNoteLine(value);
+                if (line) sink(line);
+                // The words the date field cannot hold ("INT 1900 (per
+                // census)", "3 XYZ 1900") stay with the fact, as written.
+                const phrase = gedcomDatePhrase(value);
+                if (phrase) sink(strings.gedcomNotes.datePhrase(phrase));
+            } else if (sink) {
+                // ADDR: only its own value and CONT lines. ADR1/CITY/POST
+                // repeat the place or carry junk ("ADR1 Email", MyHeritage).
+                const g = strings.gedcomNotes;
+                const format = tag === 'AGE' ? (t: string) => g.age(formatGedcomAge(t))
+                    : tag === 'CAUS' ? g.cause : g.address;
+                openDetail = { level, text: value, format, sink, sep: tag === 'ADDR' ? ', ' : '\n' };
+            }
+        } else if (level === 3 && tag === 'AGE' && currentType === 'FAM' && currentSubTag === 'MARR'
+            && (currentFactSubTag === 'HUSB' || currentFactSubTag === 'WIFE')) {
+            // 1 MARR / 2 HUSB / 3 AGE 25y — each partner's age at the wedding.
+            const sink = factDetailSink();
+            const g = strings.gedcomNotes;
+            const label = currentFactSubTag === 'HUSB' ? g.husbandAge : g.wifeAge;
+            if (sink) openDetail = { level, text: value, format: t => label(formatGedcomAge(t)), sink, sep: ' ' };
+        }
+
         if (level === 0) {
             // What KIND of record this is comes from the type word, never from
             // the shape of the id. An xref is an opaque label: nothing obliges a
@@ -809,7 +1190,10 @@ export function parseGedcom(content: string): ParsedGedcom {
             // A record with no xref at all (legal in GEDCOM 7) still holds a
             // person, so it gets an internal id nothing can point at.
             const hasXref = /^@[^@]+@$/.test(tag);
-            const recordType = hasXref ? value : tag;
+            // The type is the first word: a NOTE record carries its text on the
+            // same line (0 @N1@ NOTE text), which is not part of the type — and
+            // must never reach the unsupported-tag summary.
+            const recordType = hasXref ? value.split(/\s+/)[0] : tag;
             const recordId = hasXref ? tag : `@__anon${anonRecordSeq++}__@`;
 
             if (recordType === 'INDI') {
@@ -825,8 +1209,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                     deathPlace: '',
                     notes: '',
                     refn: '',
+                    question: '',
+                    refnType: '',
                     events: [],
                     nameVariants: [],
+                    primaryNameType: '',
+                    variantNameTypes: [],
                     sourceRefs: [],
                     media: [],
                     deceased: false,
@@ -870,6 +1258,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     engagementDate: '',
                     sourceRefs: [],
                     marriageParticipants: [],
+                    childRels: new Map(),
                     noteFacts: []
                 };
                 currentType = 'FAM';
@@ -909,26 +1298,55 @@ export function parseGedcom(content: string): ParsedGedcom {
             repositories.set(currentRepoId, value);
         } else if (currentType === 'SOUR' && currentSource) {
             // Source record sub-lines. reference <- PAGE (spec mapping).
+            //
+            // The source has one note, and everything the record says that has
+            // no field of its own lands there: every NOTE (a second one used to
+            // overwrite the first), the transcript (TEXT), the publication
+            // (PUBL), the author (AUTH) and the call number the repository
+            // files it under (REPO > CALN) — each labelled, each with its
+            // continuation lines. Writing the tail of a TEXT nowhere kept the
+            // first line of a transcript and lost the rest.
+            const src = currentSource;
+            const addLine = (line: string, sep: string): void => {
+                src.note = src.note ? `${src.note}${sep}${line}` : line;
+            };
+            const plain = (text: string): string =>
+                currentSubTag === 'TEXT' || currentSubTag === 'PUBL' ? text.replace(/<[^>]*>/g, '') : text;
             if (level === 1) {
                 currentSubTag = tag;
-                if (tag === 'TITL') currentSource.title = value;
-                else if (tag === 'REPO') currentSource.repository = value;
-                else if (tag === 'PAGE') currentSource.reference = value;
-                else if (tag === 'PUBL' || tag === 'TEXT') {
-                    const text = value.replace(/<[^>]*>/g, '').trim();
-                    if (text) currentSource.note = currentSource.note ? `${currentSource.note}\n${text}` : text;
+                if (tag === 'TITL') src.title = value;
+                else if (tag === 'REPO') src.repository = value;
+                else if (tag === 'PAGE') src.reference = value;
+                else if (tag === 'PUBL' || tag === 'TEXT' || tag === 'AUTH') {
+                    const label = tag === 'TEXT' ? strings.gedcomNotes.sourceText
+                        : tag === 'PUBL' ? strings.gedcomNotes.sourcePublication
+                        : strings.gedcomNotes.sourceAuthor;
+                    // A transcript is a block of its own, set apart like a NOTE.
+                    addLine(label(plain(value).trim()).trimEnd(), tag === 'TEXT' ? '\n\n' : '\n');
                 }
-                else if (tag === 'QUAY') { const q = parseInt(value, 10); if (q >= 0 && q <= 3) currentSource.quality = q; }
-                else if (tag === 'WWW' || tag === 'URL') currentSource.url = value;
-                else if (tag === 'NOTE') currentSource.note = value;
+                else if (tag === 'QUAY') { const q = parseInt(value, 10); if (q >= 0 && q <= 3) src.quality = q; }
+                else if (tag === 'WWW' || tag === 'URL') src.url = value;
+                // Separate notes stay separate: a blank line between them. A
+                // NOTE whose text starts on its CONT line opens with one break
+                // fewer, since that CONT brings its own.
+                else if (tag === 'NOTE') addLine(value, value ? '\n\n' : '\n');
+                // The short title some programs write beside (or instead of)
+                // TITL: the title when there is no other.
+                else if (tag === 'ABBR') src.abbr = value;
+                // Anything else on the record (DATA, OBJE, REFN …) reached us
+                // and was not read — the contract says so, and so does the summary.
+                else if (!IGNORED_BOOKKEEPING_TAGS.has(tag)) drop(tag);
             } else if (level === 2) {
-                // Multi-line continuations for title / note.
+                // Multi-line continuations for title / note / the labelled lines.
                 if (currentSubTag === 'TITL') {
-                    if (tag === 'CONT') currentSource.title += '\n' + value;
-                    else if (tag === 'CONC') currentSource.title += value;
-                } else if (currentSubTag === 'NOTE') {
-                    if (tag === 'CONT') currentSource.note += '\n' + value;
-                    else if (tag === 'CONC') currentSource.note += value;
+                    if (tag === 'CONT') src.title += '\n' + value;
+                    else if (tag === 'CONC') src.title += value;
+                } else if (currentSubTag === 'NOTE' || currentSubTag === 'TEXT'
+                    || currentSubTag === 'PUBL' || currentSubTag === 'AUTH') {
+                    if (tag === 'CONT') src.note += (src.note ? '\n' : '') + plain(value);
+                    else if (tag === 'CONC') src.note += plain(value);
+                } else if (currentSubTag === 'REPO' && tag === 'CALN' && value) {
+                    addLine(strings.gedcomNotes.sourceCallNumber(value), '\n');
                 }
             }
         } else if (currentRecord) {
@@ -952,9 +1370,15 @@ export function parseGedcom(content: string): ParsedGedcom {
                             // used to overwrite, so the primary name was silently
                             // replaced by the last variant in the file.
                             if (indi.name) {
-                                if (value.trim()) indi.nameVariants.push(value.trim());
+                                currentNameSlot = null;
+                                if (value.trim()) {
+                                    indi.nameVariants.push(value.trim());
+                                    indi.variantNameTypes.push('');
+                                    currentNameSlot = indi.nameVariants.length - 1;
+                                }
                                 break;
                             }
+                            currentNameSlot = -1;
                             const parsed = parseName(value);
                             indi.name = value;
                             indi.firstName = parsed.firstName;
@@ -982,6 +1406,11 @@ export function parseGedcom(content: string): ParsedGedcom {
                             break;
                         case 'REFN':
                             indi.refn = value;
+                            break;
+                        case '_QUESTION':
+                            // Strom's own tag: the open question about this
+                            // person, CONT/CONC joined (see preprocessGedcomLines).
+                            indi.question = value;
                             break;
                         case '_STORY':
                             // The narrative written about this person. Not a
@@ -1034,6 +1463,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 // (`1 OCCU blacksmith`); the rest hang their
                                 // detail on level-2 sub-lines.
                                 if (value && eventValueIsOnTag(evType)) ev.note = value;
+                                // `1 _MILT Army`: the service itself, kept as the note.
+                                else if (value && evType === 'military' && value !== 'Y') ev.note = value;
                                 indi.events.push(ev);
                                 currentEvent = ev;
                             } else if (tag === 'EVEN' || tag === 'CENS') {
@@ -1045,6 +1476,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                                     customLabel: tag === 'CENS'
                                         ? strings.gedcomNotes.census
                                         : (value || strings.gedcomNotes.genericEvent),
+                                    ...(tag === 'EVEN' && value ? { tagValue: value } : {}),
                                 };
                                 indi.events.push(ev);
                                 currentEvent = ev;
@@ -1069,7 +1501,13 @@ export function parseGedcom(content: string): ParsedGedcom {
                             fam.wife = value;
                             break;
                         case 'CHIL':
-                            fam.children.push(value);
+                            // The same child listed twice is one child.
+                            if (value && !fam.children.includes(value)) fam.children.push(value);
+                            fam.lastChil = value;
+                            break;
+                        case '_STAT':
+                            // Strom's relationship status (see resolveStatTag).
+                            fam.stat = value;
                             break;
                         case 'NOTE':
                             fam.note = fam.note ? `${fam.note}\n${value}` : value;
@@ -1186,6 +1624,23 @@ export function parseGedcom(content: string): ParsedGedcom {
                         if (tag === 'PEDI' && indi.famcLinks.length > 0) {
                             indi.famcLinks[indi.famcLinks.length - 1].pedi = value.toLowerCase();
                         }
+                    } else if (currentSubTag === 'NAME') {
+                        // 2 TYPE birth/married/aka — what kind of name this is.
+                        // 2 SOUR — the record the name comes from (a
+                        // grandmother's maiden name is often known only from a
+                        // grandchild's baptism): a citation of the person.
+                        currentFactSubTag = tag;
+                        if (tag === 'TYPE' && currentNameSlot !== null) {
+                            const type = value.trim().toLowerCase();
+                            if (currentNameSlot === -1) indi.primaryNameType = type;
+                            else indi.variantNameTypes[currentNameSlot] = type;
+                        } else if (tag === 'SOUR' && value) {
+                            indi.sourceRefs.push(value);
+                            currentCitationId = value;
+                        }
+                    } else if (currentSubTag === 'REFN') {
+                        // Who issued the number — kept so it goes back out with it.
+                        if (tag === 'TYPE') indi.refnType = value;
                     } else if (currentSubTag === 'NOTE') {
                         // Multi-line notes: CONT = new line, CONC = continuation.
                         if (tag === 'CONT') indi.notes += '\n' + value;
@@ -1217,7 +1672,19 @@ export function parseGedcom(content: string): ParsedGedcom {
                         else if (tag === 'PLAC') currentEvent.place = value;
                         else if (tag === 'TYPE' && currentEvent.type === 'custom' && value) {
                             // 1 EVEN / 2 TYPE Rychtář — the TYPE is the label.
-                            currentEvent.customLabel = value;
+                            // A value on the EVEN line itself is the fact's
+                            // content, not a label: it moves to the note.
+                            if (isMilitaryLabel(value)) {
+                                currentEvent.type = 'military';
+                                delete currentEvent.customLabel;
+                            } else {
+                                currentEvent.customLabel = value;
+                            }
+                            const tagValue = currentEvent.tagValue;
+                            if (tagValue) {
+                                currentEvent.note = currentEvent.note ? `${tagValue}\n${currentEvent.note}` : tagValue;
+                                delete currentEvent.tagValue;
+                            }
                         }
                         else if (tag === 'SOUR' && value) {
                             (currentEvent.sourceRefs ??= []).push(value);
@@ -1284,12 +1751,20 @@ export function parseGedcom(content: string): ParsedGedcom {
                     } else if (currentSubTag === 'NOTE') {
                         if (tag === 'CONT') fam.note += '\n' + value;
                         else if (tag === 'CONC') fam.note += value;
+                    } else if (currentSubTag === 'CHIL' && (tag === '_FREL' || tag === '_MREL')) {
+                        const child = fam.lastChil;
+                        if (child) {
+                            const rels = fam.childRels.get(child) ?? {};
+                            if (tag === '_FREL') rels.frel = value; else rels.mrel = value;
+                            fam.childRels.set(child, rels);
+                        }
                     } else if (NOTED_FAM_TAGS.has(currentSubTag ?? '') && fam.noteFacts.length > 0) {
                         attachToFact(fam.noteFacts[fam.noteFacts.length - 1], tag, value);
                     }
                 }
             } else if (level === 3 && currentFactSubTag
-                && (currentSubTag === 'BIRT' || currentSubTag === 'DEAT' || currentSubTag === 'MARR')) {
+                && (currentSubTag === 'BIRT' || currentSubTag === 'DEAT' || currentSubTag === 'MARR'
+                    || (currentSubTag === 'NAME' && currentFactSubTag === 'SOUR'))) {
                 // Level-3 lines under the field-backed facts: the citation's
                 // PAGE/QUAY, a witness's RELA/NOTE, a note's continuation.
                 const indi = currentType === 'INDI' ? currentRecord as GedcomIndividual : null;
@@ -1343,6 +1818,42 @@ export function parseGedcom(content: string): ParsedGedcom {
         }
     }
 
+    // A detail line on the very last line of the file has no successor to close it.
+    flushDetail();
+
+    // A person's surname here is the birth one (a woman's maiden name). A file
+    // that lists her married name first and marks another NAME as the birth
+    // one would otherwise file her under her husband's surname: swap them.
+    for (const indi of individuals.values()) {
+        if (indi.primaryNameType !== 'married') continue;
+        const k = indi.variantNameTypes.findIndex(t => t === 'birth' || t === 'maiden');
+        if (k < 0) continue;
+        const birthName = indi.nameVariants[k];
+        indi.nameVariants[k] = indi.name;
+        indi.variantNameTypes[k] = indi.primaryNameType;
+        indi.name = birthName;
+        indi.primaryNameType = 'birth';
+        const parsed = parseName(birthName);
+        indi.firstName = parsed.firstName;
+        indi.lastName = parsed.lastName;
+    }
+
+    // A child the file links only from its own side (INDI > FAMC, no CHIL in
+    // the FAM) is still that family's child. Listing it on the family makes
+    // every reader below see one consistent structure.
+    for (const indi of individuals.values()) {
+        for (const link of indi.famcLinks) {
+            const fam = families.get(link.famId);
+            if (fam && !fam.children.includes(indi.id)) fam.children.push(indi.id);
+        }
+    }
+
+    // Inline sources (`1 SOUR free text`): a source record of their own, so
+    // the words the file gave as evidence are kept, and cited where they stood.
+    for (const [id, text] of inlineSources) {
+        sources.set(id, { id, title: text, repository: '', reference: '', url: '', note: '' });
+    }
+
     // Resolve repository pointers (1 REPO @Rx@) to names, and citation PAGEs
     // into the source's reference when the record itself carried none.
     for (const src of sources.values()) {
@@ -1384,6 +1895,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     }
     let unknownSexPersons = 0;
     let otherFamilyLinks = 0;
+    let skippedMedia = 0;
 
     // Build the source catalog and a GEDCOM-id -> new-id map for citations.
     const sourceIdMap = new Map<string, string>();
@@ -1391,7 +1903,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     for (const [gedId, raw] of gedSources) {
         const newId = generateSourceId();
         sourceIdMap.set(gedId, newId);
-        const src: Source = { id: newId, title: raw.title || '?' };
+        const src: Source = { id: newId, title: raw.title || raw.abbr || '?' };
         if (raw.repository) src.repository = raw.repository;
         if (raw.reference) src.reference = raw.reference;
         if (raw.url) src.url = raw.url;
@@ -1408,7 +1920,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     const validIndividuals = individuals;
     let placeholderPersons = 0;
     for (const indi of individuals.values()) {
-        if (!indi.firstName && !indi.lastName) placeholderPersons++;
+        const noFirst = !indi.firstName || indi.firstName === '?' || indi.firstName === '//';
+        const noLast = !indi.lastName || indi.lastName === '?';
+        if (noFirst && noLast) placeholderPersons++;
     }
 
     // Create ID mappings (only for valid individuals)
@@ -1435,12 +1949,18 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             unknownSexPersons++;
             gender = husbIds.has(gedId) ? 'male' : 'female';
         }
+        // A placeholder is someone the file gives no name at all. A surname
+        // alone ("1 NAME /Nováková/") is a real, known person — treating her
+        // as a stand-in exported her past the privacy filter and kept her out
+        // of merge matching. '?' counts as no name.
+        const noFirst = !indi.firstName || indi.firstName === '?' || indi.firstName === '//';
+        const noLast = !indi.lastName || indi.lastName === '?';
         const person: Person = {
             id: personId,
             firstName: indi.firstName || '?',
-            lastName: indi.lastName || '',
+            lastName: noLast ? '' : indi.lastName,
             gender,
-            isPlaceholder: !indi.firstName || indi.firstName === '?' || indi.firstName === '//',
+            isPlaceholder: noFirst && noLast,
             partnerships: [],
             parentIds: [],
             childIds: []
@@ -1460,6 +1980,8 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         const allNotes = [...factLines, ...(indi.notes ? [indi.notes] : [])];
         if (allNotes.length > 0) person.notes = allNotes.join('\n');
         if (indi.refn) person.refn = indi.refn;
+        if (indi.question) person.question = indi.question;
+        if (indi.refn && indi.refnType) person.refnType = indi.refnType;
         // Other spellings from the file, kept as written.
         const variants = indi.nameVariants.map(v => v.replace(/\//g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
         if (variants.length > 0) person.nameVariants = variants;
@@ -1471,12 +1993,14 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         const toParticipant = (raw: RawParticipant): EventParticipant | null => {
             const linked = raw.ref ? personIdMap.get(raw.ref) : undefined;
             if (!linked && !raw.name) return null;
+            const role = relaToRole(raw.rela);
+            const note = participantNote(raw.rela, role, raw.note);
             return {
                 id: generateParticipantId(),
-                role: relaToRole(raw.rela),
+                role,
                 ...(linked ? { personId: linked } : {}),
                 ...(raw.name ? { name: raw.name } : {}),
-                ...(raw.note ? { note: raw.note } : {}),
+                ...(note ? { note } : {}),
             };
         };
 
@@ -1572,7 +2096,17 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         // as dropped so the import summary mentions them.
         for (const media of indi.media) {
             if (media.file.startsWith('data:')) {
-                if (media.stromKind === 'photo' && media.file.startsWith('data:image')) {
+                // Only the formats the app itself stores come in: a portrait
+                // is a raster image, a document an image or a PDF. Anything
+                // else (SVG, HTML, script …) could run when opened, so it is
+                // skipped — and counted, so the summary says so.
+                const wantsPhoto = media.stromKind === 'photo';
+                if (!(wantsPhoto ? SAFE_PHOTO_DATA_URL : SAFE_ATTACHMENT_DATA_URL).test(media.file)) {
+                    skippedMedia++;
+                    droppedTags.set('OBJE', (droppedTags.get('OBJE') ?? 0) + 1);
+                    continue;
+                }
+                if (wantsPhoto) {
                     person.photo = media.file;
                     if (media.title) person.photoOriginalName = media.title;
                 } else {
@@ -1648,6 +2182,115 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
 
     // Create partnerships and link relationships
     const partnerships: Record<PartnershipId, Partnership> = {};
+
+    /** A wedding witness as the file wrote them (see toParticipant above). */
+    const toWitness = (raw: RawParticipant): EventParticipant | null => {
+        const linked = raw.ref ? personIdMap.get(raw.ref) : undefined;
+        if (!linked && !raw.name) return null;
+        const role = relaToRole(raw.rela);
+        const note = participantNote(raw.rela, role, raw.note);
+        return {
+            id: generateParticipantId(),
+            role,
+            ...(linked ? { personId: linked } : {}),
+            ...(raw.name ? { name: raw.name } : {}),
+            ...(note ? { note } : {}),
+        };
+    };
+
+    /**
+     * Everything a FAM says about the couple itself — one builder for the
+     * two-parent and the single-parent path, so neither can forget a part
+     * (the single-parent path once lost the witnesses and the story).
+     */
+    const fillUnion = (partnership: Partnership, fam: GedcomFamily): void => {
+        if (fam.marriagePlace) partnership.startPlace = fam.marriagePlace;
+        if (fam.note) partnership.note = fam.note;
+        applyUnionOutcome(partnership, fam);
+
+        if (fam.engagementDate && fam.engagementDate !== '?') {
+            const line = strings.gedcomNotes.engagement(fam.engagementDate);
+            partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
+        }
+
+        // Banns, a marriage contract, an annulment: recorded about the couple,
+        // with no field of their own (see NOTED_FAM_TAGS).
+        for (const fact of fam.noteFacts) {
+            const line = factToNoteLine(fact);
+            partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
+        }
+
+        const famRefs = mapRefs(fam.sourceRefs);
+        if (famRefs.length > 0) partnership.sourceIds = [...new Set(famRefs)];
+
+        // Witnesses at the wedding, named under 1 MARR.
+        const witnesses = fam.marriageParticipants.map(toWitness)
+            .filter((p): p is EventParticipant => !!p);
+        if (witnesses.length > 0) partnership.participants = witnesses;
+
+        const famStory = toStory(fam.story);
+        if (famStory) partnership.story = famStory;
+    };
+
+    /**
+     * A second FAM of the same couple (some programs write one per marriage
+     * record) is the same union: its facts join the first instead of drawing
+     * the couple twice.
+     */
+    const joinUnion = (into: Partnership, from: Partnership): void => {
+        if (!into.startDate && from.startDate) into.startDate = from.startDate;
+        if (!into.startPlace && from.startPlace) into.startPlace = from.startPlace;
+        if (!into.endDate && from.endDate) into.endDate = from.endDate;
+        if (from.note && !(into.note ?? '').includes(from.note)) {
+            into.note = into.note ? `${into.note}\n${from.note}` : from.note;
+        }
+        if (from.sourceIds?.length) into.sourceIds = [...new Set([...(into.sourceIds ?? []), ...from.sourceIds])];
+        if (from.participants?.length) {
+            const seen = new Set((into.participants ?? []).map(p => p.personId ?? p.name));
+            for (const part of from.participants) {
+                if (seen.has(part.personId ?? part.name)) continue;
+                (into.participants ??= []).push(part);
+            }
+        }
+        if (!into.story && from.story) into.story = from.story;
+    };
+    const unionOfCouple = new Map<string, PartnershipId>();
+
+    /** Hang one child under a partnership (both parents, PEDI, _FREL/_MREL). */
+    const linkChild = (
+        partnership: Partnership, childGedId: string, gedFamId: string, fam: GedcomFamily,
+        realParents: { husb?: PersonId; wife?: PersonId },
+    ): void => {
+        const childId = personIdMap.get(childGedId);
+        if (!childId || !persons[childId]) return;
+        const { person1Id, person2Id } = partnership;
+        if (!partnership.childIds.includes(childId)) partnership.childIds.push(childId);
+        const child = persons[childId];
+        for (const pid of [person1Id, person2Id]) {
+            if (!child.parentIds.includes(pid)) child.parentIds.push(pid);
+            if (!persons[pid].childIds.includes(childId)) persons[pid].childIds.push(childId);
+        }
+
+        // Pedigree type (PEDI) applies to the child's link to THIS family →
+        // set the real parents' relationship type accordingly. Read from the
+        // FAMC naming this family: a PEDI under another FAMC says nothing
+        // about these parents, and taking any PEDI the person carried marked
+        // Joe's birth parents adoptive in 555SAMPLE.
+        const pedi = pediFor(childGedId, gedFamId);
+        const relType: ParentChildRelType | null =
+            pedi === 'adopted' ? 'adoptive' : pedi === 'foster' ? 'foster' : null;
+        if (relType) {
+            for (const pid of [realParents.husb, realParents.wife]) {
+                if (pid) (child.parentRelTypes ??= {})[pid] = relType;
+            }
+        }
+        // _FREL/_MREL name each parent separately and win over PEDI, which
+        // can only speak for both: "stepfather, own mother" survives.
+        const rels = fam.childRels.get(childGedId);
+        if (realParents.husb) setParentRel(child, realParents.husb, childRelType(rels?.frel));
+        if (realParents.wife) setParentRel(child, realParents.wife, childRelType(rels?.mrel));
+    };
+
     for (const [gedFamId, fam] of families) {
         const partnershipId = partnershipIdMap.get(gedFamId)!;
 
@@ -1670,98 +2313,36 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             childIds: [],
             status: 'married'
         };
+        fillUnion(partnership, fam);
 
-        if (fam.marriagePlace) {
-            partnership.startPlace = fam.marriagePlace;
-        }
-        if (fam.note) {
-            partnership.note = fam.note;
-        }
-
-        applyUnionOutcome(partnership, fam);
-
-        if (fam.engagementDate && fam.engagementDate !== '?') {
-            const line = strings.gedcomNotes.engagement(fam.engagementDate);
-            partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
-        }
-
-        // Banns, a marriage contract, an annulment: recorded about the couple,
-        // with no field of their own (see NOTED_FAM_TAGS).
-        for (const fact of fam.noteFacts) {
-            const line = factToNoteLine(fact);
-            partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
+        const coupleKey = [person1Id, person2Id].sort().join('|');
+        const sameCouple = unionOfCouple.get(coupleKey);
+        let target: Partnership;
+        if (sameCouple) {
+            target = partnerships[sameCouple];
+            joinUnion(target, partnership);
+        } else {
+            unionOfCouple.set(coupleKey, partnershipId);
+            partnerships[partnershipId] = partnership;
+            target = partnership;
+            persons[person1Id]?.partnerships.push(partnershipId);
+            persons[person2Id]?.partnerships.push(partnershipId);
         }
 
-        const famRefs = mapRefs(fam.sourceRefs);
-        if (famRefs.length > 0) partnership.sourceIds = famRefs;
-
-        // Witnesses at the wedding, named under 1 MARR.
-        const witnesses = fam.marriageParticipants.map(raw => {
-            const linked = raw.ref ? personIdMap.get(raw.ref) : undefined;
-            if (!linked && !raw.name) return null;
-            return {
-                id: generateParticipantId(),
-                role: relaToRole(raw.rela),
-                ...(linked ? { personId: linked } : {}),
-                ...(raw.name ? { name: raw.name } : {}),
-                ...(raw.note ? { note: raw.note } : {}),
-            };
-        }).filter((p): p is EventParticipant => !!p);
-        if (witnesses.length > 0) partnership.participants = witnesses;
-
-        const famStory = toStory(fam.story);
-        if (famStory) partnership.story = famStory;
-
-        partnerships[partnershipId] = partnership;
-
-        // Add partnership to both persons
-        if (persons[person1Id]) {
-            persons[person1Id].partnerships.push(partnershipId);
-        }
-        if (persons[person2Id]) {
-            persons[person2Id].partnerships.push(partnershipId);
-        }
-
-        // Process children
         for (const childGedId of childrenOf(gedFamId, fam)) {
-            const childId = personIdMap.get(childGedId);
-            if (!childId || !persons[childId]) continue;
-
-            // Add to partnership's childIds
-            partnerships[partnershipId].childIds.push(childId);
-
-            // Add parents to child's parentIds
-            if (!persons[childId].parentIds.includes(person1Id)) {
-                persons[childId].parentIds.push(person1Id);
-            }
-            if (!persons[childId].parentIds.includes(person2Id)) {
-                persons[childId].parentIds.push(person2Id);
-            }
-
-            // Pedigree type (PEDI) applies to the child's link to THIS family →
-            // set both parents' relationship type accordingly. Read from the
-            // FAMC naming this family: a PEDI under another FAMC says nothing
-            // about these parents, and taking any PEDI the person carried marked
-            // Joe's birth parents adoptive in 555SAMPLE.
-            const pedi = pediFor(childGedId, gedFamId);
-            const relType: ParentChildRelType | null =
-                pedi === 'adopted' ? 'adoptive' : pedi === 'foster' ? 'foster' : null;
-            if (relType) {
-                const child = persons[childId];
-                if (!child.parentRelTypes) child.parentRelTypes = {};
-                child.parentRelTypes[person1Id] = relType;
-                child.parentRelTypes[person2Id] = relType;
-            }
-
-            // Add child to parents' childIds
-            if (!persons[person1Id].childIds.includes(childId)) {
-                persons[person1Id].childIds.push(childId);
-            }
-            if (!persons[person2Id].childIds.includes(childId)) {
-                persons[person2Id].childIds.push(childId);
-            }
+            linkChild(target, childGedId, gedFamId, fam, { husb: person1Id, wife: person2Id });
         }
     }
+
+    /** A "?" stand-in for a parent the family does not name. */
+    const makePlaceholder = (gender: 'male' | 'female'): PersonId => {
+        const id = toPersonId(generateId('p'));
+        persons[id] = {
+            id, firstName: '?', lastName: '', gender,
+            parentIds: [], childIds: [], partnerships: [], isPlaceholder: true,
+        };
+        return id;
+    };
 
     // Handle single-parent families (only HUSB or only WIFE)
     // Create placeholder for the missing parent + partnership so layout engine can render children
@@ -1776,38 +2357,41 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         // every child was born in another one has nobody to render, so inventing
         // a spouse for it would put a "?" card in the tree standing for a person
         // the file never claimed existed — the placeholder in the 555SAMPLE render.
-        const ownChildren = childrenOf(gedFamId, fam);
+        const ownChildren = childrenOf(gedFamId, fam).filter(c => {
+            const id = personIdMap.get(c);
+            return !!id && !!persons[id];
+        });
         if (ownChildren.length === 0) continue;
 
-        const parentId = husbId ?? wifeId;
-        if (!parentId || !persons[parentId]) continue;
+        const knownParentId = husbId ?? wifeId;
+        const parentId = knownParentId && persons[knownParentId] ? knownParentId : undefined;
+
+        // A family naming children but neither parent still says they are
+        // SIBLINGS. The model knows siblings only through shared parents, so
+        // two stand-ins keep them together; a lone child gains nothing from
+        // invented parents and stays as it is.
+        if (!parentId && ownChildren.length < 2) continue;
 
         // The dropped pointer's stand-in IS the placeholder created below —
         // count it so the import summary owns up to the swap.
-        if ((fam.husb && !husbId) || (fam.wife && !wifeId)) placeholderPersons++;
+        if (parentId && ((fam.husb && !husbId) || (fam.wife && !wifeId))) placeholderPersons++;
 
-        // Create placeholder for the missing parent (opposite gender)
-        const placeholderId = toPersonId(generateId('p'));
-        const parentGender = persons[parentId].gender;
-        const placeholderGender = parentGender === 'male' ? 'female' : 'male';
-        const placeholder: Person = {
-            id: placeholderId,
-            firstName: '?',
-            lastName: '',
-            gender: placeholderGender,
-            parentIds: [],
-            childIds: [],
-            partnerships: [],
-            isPlaceholder: true
-        };
-        persons[placeholderId] = placeholder;
-
-        // Create partnership. Keep the male partner as person1 (HUSB), matching
-        // the two-parent path and the exporter, so import->export->import is
-        // order-stable even when the known parent is the mother.
-        const parentIsMale = parentGender === 'male';
-        const person1Id = parentIsMale ? parentId : placeholderId;
-        const person2Id = parentIsMale ? placeholderId : parentId;
+        let person1Id: PersonId;
+        let person2Id: PersonId;
+        if (parentId) {
+            // Create placeholder for the missing parent (opposite gender). Keep
+            // the male partner as person1 (HUSB), matching the two-parent path
+            // and the exporter, so import->export->import is order-stable even
+            // when the known parent is the mother.
+            const parentIsMale = persons[parentId].gender === 'male';
+            const placeholderId = makePlaceholder(parentIsMale ? 'female' : 'male');
+            person1Id = parentIsMale ? parentId : placeholderId;
+            person2Id = parentIsMale ? placeholderId : parentId;
+        } else {
+            person1Id = makePlaceholder('male');
+            person2Id = makePlaceholder('female');
+            placeholderPersons += 2;
+        }
 
         const partnershipId = toPartnershipId(generateId('u'));
         const partnership: Partnership = {
@@ -1817,64 +2401,20 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             childIds: [],
             status: 'married'
         };
-        if (fam.marriagePlace) partnership.startPlace = fam.marriagePlace;
-        if (fam.note) partnership.note = fam.note;
-        applyUnionOutcome(partnership, fam);
-
-        if (fam.engagementDate && fam.engagementDate !== '?') {
-            const line = strings.gedcomNotes.engagement(fam.engagementDate);
-            partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
-        }
-
-        // Banns, a marriage contract, an annulment: recorded about the couple,
-        // with no field of their own (see NOTED_FAM_TAGS).
-        for (const fact of fam.noteFacts) {
-            const line = factToNoteLine(fact);
-            partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
-        }
-
-        const famRefs = mapRefs(fam.sourceRefs);
-        if (famRefs.length > 0) partnership.sourceIds = famRefs;
+        fillUnion(partnership, fam);
         partnerships[partnershipId] = partnership;
 
         // Add partnership to both persons
         persons[person1Id].partnerships.push(partnershipId);
         persons[person2Id].partnerships.push(partnershipId);
 
-        // Process children
+        // PEDI / _FREL / _MREL apply to the real parent only: a child adopted
+        // by a lone parent is still adopted.
+        const real = parentId
+            ? (husbId === parentId ? { husb: parentId } : { wife: parentId })
+            : {};
         for (const childGedId of ownChildren) {
-            const childId = personIdMap.get(childGedId);
-            if (!childId || !persons[childId]) continue;
-
-            // Add to partnership's childIds
-            partnership.childIds.push(childId);
-
-            // Add parents to child's parentIds (person1, then person2)
-            if (!persons[childId].parentIds.includes(person1Id)) {
-                persons[childId].parentIds.push(person1Id);
-            }
-            if (!persons[childId].parentIds.includes(person2Id)) {
-                persons[childId].parentIds.push(person2Id);
-            }
-
-            // PEDI applies here too: a child adopted by a lone parent is still
-            // adopted, and the two-parent path above has always said so.
-            const pedi = pediFor(childGedId, gedFamId);
-            const relType: ParentChildRelType | null =
-                pedi === 'adopted' ? 'adoptive' : pedi === 'foster' ? 'foster' : null;
-            if (relType) {
-                const child = persons[childId];
-                if (!child.parentRelTypes) child.parentRelTypes = {};
-                child.parentRelTypes[parentId] = relType;
-            }
-
-            // Add child to parents' childIds
-            if (!persons[person1Id].childIds.includes(childId)) {
-                persons[person1Id].childIds.push(childId);
-            }
-            if (!persons[person2Id].childIds.includes(childId)) {
-                persons[person2Id].childIds.push(childId);
-            }
+            linkChild(partnership, childGedId, gedFamId, fam, real);
         }
     }
 
@@ -1945,6 +2485,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 .map(([tag, n]) => `${tag} ×${n}`)
                 .join(', '),
             unknownSexPersons,
+            skippedMedia,
             totalGedFamilies: families.size
         }
     };

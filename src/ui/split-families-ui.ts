@@ -65,7 +65,7 @@ export const splitFamiliesMethods = uiModule({
      * partition is the same whatever it is.
      */
     showSplitFamiliesDialog(): void {
-        if (DataManager.isViewMode()) return;
+        if (DataManager.isReadOnly()) return;
         const treeId = DataManager.getCurrentTreeId();
         const data = DataManager.getData();
         const focus = TreeRenderer.getFocusPersonId();
@@ -169,10 +169,10 @@ export const splitFamiliesMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = 'split-families-modal';
         overlay.innerHTML = `
-            <div class="modal splitfam-modal">
+            <div class="modal splitfam-modal modal--lg" role="dialog" aria-modal="true">
                 <div class="modal-header">
                     <h2>${s.title}</h2>
-                    <button class="close-btn" id="splitfam-close-x">&times;</button>
+                    <button class="close-btn" id="splitfam-close-x" aria-label="${strings.buttons.close}">&times;</button>
                 </div>
                 <p class="splitfam-intro">${s.intro}</p>
                 <div class="splitfam-mode" role="radiogroup" aria-label="${s.modeLabel}">
@@ -247,8 +247,8 @@ export const splitFamiliesMethods = uiModule({
         const persp = this.splitFamiliesPerspectiveOpts(run);
         const cuts = perspectiveCutCandidates(run.data, run.focusPersonId, persp);
         const chip = (id: PersonId): string => `
-            <span class="splitfam-persp-chip" data-id="${id}">${this.escapeHtml(this.splitFamilyPersonLabel(id))}${
-                persp.baseIds.length > 1 ? `<button type="button" class="splitfam-persp-chip-x" data-id="${id}" aria-label="${s.cancel}">&times;</button>` : ''
+            <span class="splitfam-persp-chip" data-id="${this.escapeHtml(id)}">${this.escapeHtml(this.splitFamilyPersonLabel(id))}${
+                persp.baseIds.length > 1 ? `<button type="button" class="splitfam-persp-chip-x" data-id="${this.escapeHtml(id)}" aria-label="${s.cancel}">&times;</button>` : ''
             }</span>`;
         return `
             <div class="splitfam-persp">
@@ -273,7 +273,7 @@ export const splitFamiliesMethods = uiModule({
                     <div class="splitfam-persp-cut-list">
                         ${cuts.map(c => `
                         <label class="splitfam-persp-cut">
-                            <input type="checkbox" class="splitfam-persp-cut-box" data-id="${c.id}"${c.kept ? '' : ' checked'}>
+                            <input type="checkbox" class="splitfam-persp-cut-box" data-id="${this.escapeHtml(c.id)}"${c.kept ? '' : ' checked'}>
                             <span>${this.escapeHtml(this.splitFamilyPersonLabel(c.id))} — ${s.persons(c.familySize)}</span>
                         </label>`).join('')}
                     </div>

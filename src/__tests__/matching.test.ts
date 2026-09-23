@@ -30,16 +30,14 @@ describe('normalizeName', () => {
     it('removes German diacritics', () => {
         expect(normalizeName('Müller')).toBe('muller');
         expect(normalizeName('Schröder')).toBe('schroder');
-        // Note: 'ß' is a special character, not a diacritic, so it's removed
-        expect(normalizeName('Größe')).toBe('groe');
+        // 'ß' has no decomposition; it is folded to 'ss' explicitly
+        expect(normalizeName('Größe')).toBe('grosse');
     });
 
     it('removes Polish diacritics', () => {
-        // Note: Polish letters Ł, ł are not diacritics but separate letters
-        // NFD doesn't decompose them, they get stripped as non a-z characters
-        expect(normalizeName('Łódź')).toBe('odz');
-        // 'ł' in 'żółć' also gets stripped
-        expect(normalizeName('Żółć')).toBe('zoc');
+        // Ł/ł have no decomposition in Unicode; they are folded to 'l'
+        expect(normalizeName('Łódź')).toBe('lodz');
+        expect(normalizeName('Żółć')).toBe('zolc');
     });
 
     it('removes special characters', () => {
@@ -101,8 +99,8 @@ describe('stringSimilarity', () => {
         });
 
         it('returns 0 for both empty strings', () => {
-            // Actually, identical strings return 1, even if empty
-            expect(stringSimilarity('', '')).toBe(1);
+            // No name is not the same name: two blanks never match
+            expect(stringSimilarity('', '')).toBe(0);
         });
     });
 

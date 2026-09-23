@@ -44,7 +44,9 @@ import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { normalizeDateInput, formatDateForInput } from '../dates.js';
 import { autoGrowAll } from './autogrow.js';
+import { onAllDialogsClosed } from './dialog-focus.js';
 
+import { iconSvg } from '../icons.js';
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
         // Setup dialog stack for standalone mode (when opened directly from card, not from edit dialog)
@@ -62,6 +64,11 @@ export const relationshipsPanelMethods = uiModule({
         this.returnToEditPersonId = returnToEdit ? personId : null;
         const person = DataManager.getPerson(personId);
         if (!person) return;
+
+        // A fresh open starts the staged session: immediate operations
+        // (relation type, witnesses, citations, add/remove, reassign) apply
+        // live, but only Save keeps them — as one undo step (review S9).
+        if (!preservePending) this.beginRelationshipsSession();
 
         this.relationshipsPanelPersonId = personId;
 
@@ -149,7 +156,7 @@ export const relationshipsPanelMethods = uiModule({
             });
         });
 
-        // Partnership citations: cite opens the source picker, ✕ uncites.
+        // Partnership citations: cite opens the source picker, the remove cross uncites.
         content.querySelectorAll('.partnership-cite-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const partnershipId = (e.currentTarget as HTMLElement).dataset.partnershipId as PartnershipId;
@@ -167,7 +174,7 @@ export const relationshipsPanelMethods = uiModule({
         });
 
         // Wedding witnesses: the register names them, so they are typed in as
-        // written; ✕ removes one.
+        // written; the remove cross removes one.
         content.querySelectorAll('.partnership-witness-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const partnershipId = (e.currentTarget as HTMLElement).dataset.partnershipId as PartnershipId;
@@ -205,7 +212,8 @@ export const relationshipsPanelMethods = uiModule({
                 const normalized = normalizeDateInput(target.value);
                 target.classList.toggle('invalid', normalized === null);
                 if (normalized === null) return;
-                target.value = normalized;
+                // Keep the locale's input form (15.5.1880), not raw ISO.
+                target.value = formatDateForInput(normalized);
                 this.setPendingPartnershipChange(partnershipId, { startDate: normalized });
             });
         });
@@ -227,7 +235,7 @@ export const relationshipsPanelMethods = uiModule({
                 const normalized = normalizeDateInput(target.value);
                 target.classList.toggle('invalid', normalized === null);
                 if (normalized === null) return;
-                target.value = normalized;
+                target.value = formatDateForInput(normalized);
                 this.setPendingPartnershipChange(partnershipId, { endDate: normalized });
             });
         });
@@ -265,23 +273,23 @@ export const relationshipsPanelMethods = uiModule({
         });
 
         // Setup Enter key navigation for partnership fields (date → place → note)
-        content.querySelectorAll('.partnership-wedding-date').forEach(input => {
+        content.querySelectorAll('.partnership-start-date').forEach(input => {
             (input as HTMLInputElement).onkeydown = (e: KeyboardEvent) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     const partnershipId = (input as HTMLInputElement).dataset.partnershipId;
-                    const placeInput = content.querySelector(`.partnership-wedding-place[data-partnership-id="${partnershipId}"]`) as HTMLInputElement;
+                    const placeInput = content.querySelector(`.partnership-start-place[data-partnership-id="${CSS.escape(partnershipId ?? '')}"]`) as HTMLInputElement;
                     placeInput?.focus();
                 }
             };
         });
 
-        content.querySelectorAll('.partnership-wedding-place').forEach(input => {
+        content.querySelectorAll('.partnership-start-place').forEach(input => {
             (input as HTMLInputElement).onkeydown = (e: KeyboardEvent) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     const partnershipId = (input as HTMLInputElement).dataset.partnershipId;
-                    const noteInput = content.querySelector(`.partnership-note[data-partnership-id="${partnershipId}"]`) as HTMLTextAreaElement;
+                    const noteInput = content.querySelector(`.partnership-note[data-partnership-id="${CSS.escape(partnershipId ?? '')}"]`) as HTMLTextAreaElement;
                     noteInput?.focus();
                 }
             };
@@ -317,7 +325,7 @@ export const relationshipsPanelMethods = uiModule({
                 const current = childPerson?.parentRelTypes?.[parentId] ?? 'biological';
                 const opt = (v: string, label: string) => `<option value="${v}" ${current === v ? 'selected' : ''}>${label}</option>`;
                 relTypeHtml = `
-                    <select class="parent-rel-type-select" data-rel-child="${childId}" data-rel-parent="${parentId}">
+                    <select class="parent-rel-type-select" data-rel-child="${this.escapeHtml(childId)}" data-rel-parent="${this.escapeHtml(parentId)}">
                         ${opt('biological', strings.parentRelType.biological)}
                         ${opt('adoptive', strings.parentRelType.adoptive)}
                         ${opt('step', strings.parentRelType.step)}
@@ -330,7 +338,7 @@ export const relationshipsPanelMethods = uiModule({
                 if (partnership) {
                     const status = partnership.status || 'married';
                     statusHtml = `
-                        <select class="rel-status-select" data-partnership-id="${partnership.id}">
+                        <select class="rel-status-select" data-partnership-id="${this.escapeHtml(partnership.id)}">
                             <option value="married" ${status === 'married' ? 'selected' : ''}>${strings.partnershipStatus.married}</option>
                             <option value="partners" ${status === 'partners' ? 'selected' : ''}>${strings.partnershipStatus.partners}</option>
                             <option value="divorced" ${status === 'divorced' ? 'selected' : ''}>${strings.partnershipStatus.divorced}</option>
@@ -345,8 +353,8 @@ export const relationshipsPanelMethods = uiModule({
                     const primaryCheckboxHtml = showPrimaryCheckbox ? `
                         <label class="partnership-primary-label">
                             <input type="checkbox" class="partnership-primary-checkbox"
-                                data-partnership-id="${partnership.id}"
-                                data-person-id="${currentPersonId}"
+                                data-partnership-id="${this.escapeHtml(partnership.id)}"
+                                data-person-id="${this.escapeHtml(currentPersonId)}"
                                 ${partnership.isPrimary ? 'checked' : ''}>
                             ${strings.labels.isPrimary}
                         </label>
@@ -356,22 +364,22 @@ export const relationshipsPanelMethods = uiModule({
                         <div class="partnership-dates">
                             <input type="text" class="partnership-start-date flex-date" autocomplete="off"
                                 placeholder="${strings.placeholders.flexDate}"
-                                data-partnership-id="${partnership.id}"
-                                value="${formatDateForInput(partnership.startDate)}"
+                                data-partnership-id="${this.escapeHtml(partnership.id)}"
+                                value="${this.escapeHtml(formatDateForInput(partnership.startDate))}"
                                 title="${startDateLabel}">
                             <input type="text" class="partnership-start-place" list="places-datalist"
-                                data-partnership-id="${partnership.id}"
-                                value="${partnership.startPlace || ''}"
+                                data-partnership-id="${this.escapeHtml(partnership.id)}"
+                                value="${this.escapeHtml(partnership.startPlace || '')}"
                                 placeholder="${strings.labels.startPlace}">
                             <input type="text" class="partnership-end-date flex-date" autocomplete="off"
                                 placeholder="${strings.placeholders.flexDate}"
-                                data-partnership-id="${partnership.id}"
-                                value="${partnership.endDate || ''}"
+                                data-partnership-id="${this.escapeHtml(partnership.id)}"
+                                value="${this.escapeHtml(formatDateForInput(partnership.endDate))}"
                                 title="${endDateLabel}">
                         </div>
                         ${primaryCheckboxHtml}
-                        <textarea class="partnership-note" data-partnership-id="${partnership.id}"
-                            placeholder="${strings.labels.note}...">${partnership.note || ''}</textarea>
+                        <textarea class="partnership-note" data-partnership-id="${this.escapeHtml(partnership.id)}"
+                            placeholder="${strings.labels.note}...">${this.escapeHtml(partnership.note || '')}</textarea>
                         <div class="partnership-citations sources-chips"${
                             // Citing a marriage record is research: same rule as on a
                             // person — hidden unless asked for, but never hidden once
@@ -380,9 +388,9 @@ export const relationshipsPanelMethods = uiModule({
                                 ? '' : ' style="display:none"'}>
                             ${(partnership.sourceIds ?? []).map(sid => {
                                 const src = DataManager.getData().sources?.[sid];
-                                return src ? `<span class="source-chip"><span class="source-chip-label" title="${this.escapeHtml(src.title)}">${this.escapeHtml(src.title)}</span><button type="button" class="source-chip-remove partnership-uncite" data-partnership-id="${partnership.id}" data-source-id="${sid}">&times;</button></span>` : '';
+                                return src ? `<span class="source-chip"><span class="source-chip-label" title="${this.escapeHtml(src.title)}">${this.escapeHtml(src.title)}</span><button type="button" class="source-chip-remove partnership-uncite" title="${this.escapeHtml(strings.sources.remove)}" aria-label="${this.escapeHtml(strings.sources.remove)}" data-partnership-id="${this.escapeHtml(partnership.id)}" data-source-id="${this.escapeHtml(sid)}">&times;</button></span>` : '';
                             }).join('')}
-                            <button type="button" class="partnership-cite-btn" data-partnership-id="${partnership.id}">📚 ${strings.sources.citePartnership}</button>
+                            <button type="button" class="partnership-cite-btn" data-partnership-id="${this.escapeHtml(partnership.id)}">${iconSvg('book', { size: 13 })} ${strings.sources.citePartnership}</button>
                         </div>
                         <div class="partnership-witnesses sources-chips"${
                             // Wedding witnesses: research, like the citation
@@ -394,9 +402,9 @@ export const relationshipsPanelMethods = uiModule({
                                 const linked = part.personId ? DataManager.getPerson(part.personId) : null;
                                 const name = linked ? `${linked.firstName} ${linked.lastName}`.trim() : (part.name ?? '');
                                 const title = [name, part.note].filter(Boolean).join(' — ');
-                                return `<span class="source-chip"><span class="source-chip-label" title="${this.escapeHtml(title)}">${this.escapeHtml(name)}</span><button type="button" class="source-chip-remove partnership-witness-remove" data-partnership-id="${partnership.id}" data-participant-id="${part.id}">&times;</button></span>`;
+                                return `<span class="source-chip"><span class="source-chip-label" title="${this.escapeHtml(title)}">${this.escapeHtml(name)}</span><button type="button" class="source-chip-remove partnership-witness-remove" title="${this.escapeHtml(strings.relationships.remove)}" aria-label="${this.escapeHtml(strings.relationships.remove)}" data-partnership-id="${this.escapeHtml(partnership.id)}" data-participant-id="${this.escapeHtml(part.id)}">&times;</button></span>`;
                             }).join('')}
-                            <button type="button" class="partnership-witness-btn" data-partnership-id="${partnership.id}">${strings.relationships.addWitness}</button>
+                            <button type="button" class="partnership-witness-btn" data-partnership-id="${this.escapeHtml(partnership.id)}">${strings.relationships.addWitness}</button>
                         </div>
                     `;
                 }
@@ -404,15 +412,15 @@ export const relationshipsPanelMethods = uiModule({
             return `
                 <div class="rel-item">
                     <span class="rel-item-name">
-                        <span class="rel-item-icon">${p.gender === 'male' ? '👤' : '👤'}</span>
-                        ${p.firstName} ${p.lastName}
+                        <span class="rel-item-icon">${iconSvg('user', { size: 16 })}</span>
+                        ${this.escapeHtml(`${p.firstName} ${p.lastName}`)}
                     </span>
                     ${statusHtml}
                     ${relTypeHtml}
                     ${!isLocked && (type === 'parents' || type === 'children')
-                        ? `<button class="rel-reassign-btn" data-rel-type="${relType[type]}" data-rel-id="${p.id}" title="${strings.relationships.reassignHeading}">⇄ ${strings.relationships.reassign}</button>`
+                        ? `<button class="rel-reassign-btn" data-rel-type="${relType[type]}" data-rel-id="${this.escapeHtml(p.id)}" title="${strings.relationships.reassignHeading}">⇄ ${strings.relationships.reassign}</button>`
                         : ''}
-                    ${!isLocked ? `<button class="rel-remove-btn" data-rel-type="${relType[type]}" data-rel-id="${p.id}">
+                    ${!isLocked ? `<button class="rel-remove-btn" data-rel-type="${relType[type]}" data-rel-id="${this.escapeHtml(p.id)}">
                         ${strings.relationships.remove}
                     </button>` : ''}
                 </div>
@@ -447,10 +455,10 @@ export const relationshipsPanelMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = 'reassign-modal';
         overlay.innerHTML = `
-            <div class="modal reassign-modal">
+            <div class="modal reassign-modal modal--sm" role="dialog" aria-modal="true">
                 <div class="modal-header">
                     <h2>${strings.relationships.reassignHeading}</h2>
-                    <button class="close-btn" id="reassign-close">&times;</button>
+                    <button class="close-btn" id="reassign-close" aria-label="${strings.buttons.close}">&times;</button>
                 </div>
                 <p class="reassign-hint">${this.escapeHtml(strings.relationships.reassignHint(name(child), name(oldParent)))}</p>
                 <div id="reassign-picker"></div>
@@ -490,6 +498,19 @@ export const relationshipsPanelMethods = uiModule({
     },
 
     async removeRelationship(personId: PersonId, relatedId: PersonId, type: 'parent' | 'partner' | 'child' | 'sibling'): Promise<void> {
+        // A locked person's links cannot change — say so instead of silently
+        // doing nothing (the data layer refuses the removal).
+        const involved: PersonId[] = [personId, relatedId];
+        if (type === 'sibling') {
+            const sib = DataManager.getPerson(relatedId);
+            for (const par of DataManager.getPerson(personId)?.parentIds ?? []) {
+                if (sib?.parentIds.includes(par)) involved.push(par);
+            }
+        }
+        if (involved.some(id => DataManager.isPersonLocked(id))) {
+            this.showToast(strings.relationships.removeLocked);
+            return;
+        }
         switch (type) {
             case 'parent':
                 DataManager.removeParentChild(relatedId, personId);
@@ -506,11 +527,14 @@ export const relationshipsPanelMethods = uiModule({
                 const person = DataManager.getPerson(personId);
                 const sibling = DataManager.getPerson(relatedId);
                 if (person && sibling) {
-                    for (const parentId of person.parentIds) {
-                        if (sibling.parentIds.includes(parentId)) {
-                            DataManager.removeParentChild(parentId, relatedId);
+                    // One removal for the user, one undo step.
+                    DataManager.runBatch(null, () => {
+                        for (const parentId of [...person.parentIds]) {
+                            if (sibling.parentIds.includes(parentId)) {
+                                DataManager.removeParentChild(parentId, relatedId);
+                            }
                         }
-                    }
+                    });
                 }
                 break;
             }
@@ -530,10 +554,10 @@ export const relationshipsPanelMethods = uiModule({
             this.clearDialogStack();
             this.pushDialog('relationships-modal');
 
-            const shouldDelete = await this.showConfirm(
-                strings.relationships.orphanConfirm(name),
-                strings.relationships.orphanDelete,
-                { ok: strings.relationships.orphanDelete, cancel: strings.relationships.orphanKeep }
+            const shouldDelete = await this.confirmDeletePersonDialog(
+                relatedId,
+                strings.danger.orphanMessage(name),
+                strings.relationships.orphanKeep,
             );
 
             if (shouldDelete) {
@@ -586,10 +610,12 @@ export const relationshipsPanelMethods = uiModule({
             AuditLogManager.beginBatch();
         }
 
-        // Apply all pending partnership changes
-        for (const [partnershipId, changes] of this.pendingPartnershipChanges) {
-            DataManager.updatePartnership(partnershipId, changes);
-        }
+        // Apply all pending partnership changes — one Save, one undo step.
+        DataManager.runBatch(null, () => {
+            for (const [partnershipId, changes] of this.pendingPartnershipChanges) {
+                DataManager.updatePartnership(partnershipId, changes);
+            }
+        });
 
         if (this.pendingPartnershipChanges.size > 1) {
             const treeId = DataManager.getCurrentTreeId();
@@ -600,6 +626,12 @@ export const relationshipsPanelMethods = uiModule({
         // Clear pending changes
         this.pendingPartnershipChanges.clear();
 
+        // Keep everything done in the dialog: ONE undo step, one save.
+        if (this.relSessionOwned) {
+            this.relSessionOwned = false;
+            DataManager.commitEditSession(null);
+        }
+
         // Re-render tree
         TreeRenderer.render();
 
@@ -607,11 +639,56 @@ export const relationshipsPanelMethods = uiModule({
         this.closeRelationshipsPanel();
     },
 
+    /** Open the panel's DataManager edit session (see beginEditSession). */
+    beginRelationshipsSession(): void {
+        if (this.relSessionOwned) DataManager.rollbackEditSession();
+        this.relSessionOwned = DataManager.beginEditSession();
+        if (this.relSessionListener) return;
+        this.relSessionListener = true;
+        // The data was replaced under the panel (tree switch, restore, ...):
+        // the data layer already dropped the session, so the panel goes too.
+        window.addEventListener('strom:data-changed', () => {
+            if (this.relSessionOwned && !DataManager.isEditSessionActive()) {
+                this.relSessionOwned = false;
+                this.pendingPartnershipChanges.clear();
+                this.closeRelationshipsPanel();
+            }
+        });
+        // Safety net: some flow closed every dialog without going through the
+        // panel (e.g. "go to person" from a suggestion) — never leave the
+        // session open behind a closed panel.
+        onAllDialogsClosed(() => {
+            if (!this.relSessionOwned) return;
+            this.pendingPartnershipChanges.clear();
+            this.relationshipsPanelPersonId = null;
+            this.returnToEditPersonId = null;
+            const idx = this.dialogStack.indexOf('relationships-modal');
+            if (idx !== -1) this.dialogStack.splice(idx, 1);
+            this.endRelationshipsSession();
+        });
+    },
+
+    /** Discard the session's changes (no-op when nothing was changed). */
+    endRelationshipsSession(): void {
+        if (!this.relSessionOwned) return;
+        this.relSessionOwned = false;
+        if (DataManager.rollbackEditSession()) {
+            TreeRenderer.render();
+            this.refreshSearch();
+        }
+    },
+
+    /** Unsaved = a pending form change OR an immediate operation since open. */
+    hasRelationshipsChanges(): boolean {
+        return this.pendingPartnershipChanges.size > 0
+            || (this.relSessionOwned && DataManager.editSessionHasChanges());
+    },
+
     /**
      * Cancel relationship editing - check for unsaved changes first
      */
     cancelRelationshipsPanel(): void {
-        if (this.pendingPartnershipChanges.size > 0) {
+        if (this.hasRelationshipsChanges()) {
             this.showUnsavedChangesDialog();
             return;
         }
@@ -634,8 +711,10 @@ export const relationshipsPanelMethods = uiModule({
 
         // Set dialog type class
         modal.className = 'modal-overlay dialog-warning';
+        // Not a promise dialog — drop any stale Escape handler of one.
+        this.confirmEscape = null;
 
-        titleEl.innerHTML = `<span class="dialog-icon">⚠️</span>${strings.relationships.unsavedTitle}`;
+        titleEl.innerHTML = `<span class="dialog-dot"></span>${strings.relationships.unsavedTitle}`;
         messageEl.textContent = strings.relationships.unsavedMessage;
 
         // Hide options
@@ -690,6 +769,9 @@ export const relationshipsPanelMethods = uiModule({
 
     closeRelationshipsPanel(): void {
         document.getElementById('relationships-modal')?.classList.remove('active');
+        // Closing without Save discards the staged session (after Save it is
+        // already committed and this is a no-op).
+        this.endRelationshipsSession();
 
         // Check if we should return to edit person dialog
         const returnToId = this.returnToEditPersonId;

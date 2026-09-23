@@ -48,6 +48,7 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { safeFileName } from '../filenames.js';
+import { isMultiTreeBackup, readEmbeddedHtml, readWindowAssignment, BackupTrees } from '../backup-formats.js';
 
 export const importExportMethods = uiModule({
     // ---- EXPORT/IMPORT DIALOGS ----
@@ -155,7 +156,8 @@ export const importExportMethods = uiModule({
         this.closeExportDialog();
 
         // GEDCOM cannot be encrypted, so show the export dialog in passwordless
-        // mode purely to pick the living-privacy level.
+        // mode to pick the living-privacy level and what content (photos,
+        // attachments — embedded as base64) goes into the file.
         this.showExportPasswordDialog(async () => {
             const { exportToGedcom } = await import('../ged-exporter.js');
             const { applyLivingPrivacy } = await import('../privacy.js');
@@ -164,7 +166,7 @@ export const importExportMethods = uiModule({
             if (!data) return;
 
             const filtered = applyLivingPrivacy(data, this.readExportPrivacyMode());
-            const result = exportToGedcom(filtered, metadata?.name);
+            const result = exportToGedcom(filtered, metadata?.name, { content: this.readExportContentOptions() });
 
             // Download file
             const blob = new Blob([result.content], { type: 'text/plain;charset=utf-8' });
@@ -174,7 +176,7 @@ export const importExportMethods = uiModule({
             a.download = `${safeFileName(metadata?.name, 'family-tree')}.ged`;
             a.click();
             URL.revokeObjectURL(url);
-        }, false, { defaultPrivacy: 'initials', passwordless: true });
+        }, false, { defaultPrivacy: 'initials', passwordless: true, content: true });
     },
 
     /**
@@ -232,7 +234,8 @@ export const importExportMethods = uiModule({
             const includeAuditLog = (document.getElementById('export-audit-log-toggle') as HTMLInputElement)?.checked || false;
             const { AppExporter } = await import('../export.js');
             await AppExporter.exportAllAsApp(password, includeAuditLog, this.readExportPrivacyMode(), this.readExportContentOptions());
-        }, true, { defaultPrivacy: 'initials' });
+        // A full backup: every tree, unfiltered (like the JSON "Export all").
+        }, true, { defaultPrivacy: 'full' });
     },
 
     /**
@@ -253,7 +256,7 @@ export const importExportMethods = uiModule({
      * WYSIWYG cut — the naming dialog then creates and switches to it.
      */
     makeTreeFromCurrentView(): void {
-        if (DataManager.isViewMode()) return;
+        if (DataManager.isReadOnly()) return;
         const visibleIds = TreeRenderer.getVisiblePersonIds();
         // The fan/timeline views don't populate the layout positions; this is
         // a family/descendants-view action.
@@ -649,6 +652,13 @@ export const importExportMethods = uiModule({
             return;
         }
 
+        // "Export all" backup ({ treeId: { name, data } }) — restore every
+        // tree instead of rejecting the file (review V5).
+        if (isMultiTreeBackup(parsed)) {
+            await this.importMultiTreeBackup(parsed);
+            return;
+        }
+
         const result = validateJsonImport(content);
         if (!result.valid) {
             this.showValidationDialog(result);
@@ -737,21 +747,8 @@ export const importExportMethods = uiModule({
             this.passwordPromptCallbackManagesDialog = false;
             this.pendingEncryptedImport = null;
 
-            // Validate decrypted content
-            const result = validateJsonImport(decrypted);
-
-            if (!result.valid) {
-                this.showValidationDialog(result);
-                return;
-            }
-
-            if (result.warnings.length > 0) {
-                this.showValidationDialog(result, () => {
-                    this.processJsonImport(result.data!);
-                });
-            } else {
-                this.processJsonImport(result.data!);
-            }
+            // Same routing as a plain file (single tree or "Export all" backup)
+            await this.importJsonString(decrypted);
         } catch {
             // Wrong password - show error and keep dialog open
             if (error) {
@@ -796,6 +793,8 @@ export const importExportMethods = uiModule({
      * Show import file dialog for empty state
      */
     showImportFileDialog(): void {
+        // Importing into the current tree edits it: never into locked data.
+        if (DataManager.isReadOnly()) return;
         this.clearDialogStack();
         this.pushDialog('import-file-modal');
         document.getElementById('import-file-modal')?.classList.add('active');
@@ -913,16 +912,7 @@ export const importExportMethods = uiModule({
                 return;
             }
 
-            const data = this.extractDataFromHtml(htmlContent);
-
-            if (!data) {
-                this.showAlert(strings.treeManager.htmlNoData, 'warning');
-                input.value = '';
-                return;
-            }
-
-            // Use the same flow as JSON import
-            this.processJsonImport(data);
+            void this.importHtmlContent(htmlContent);
         };
         reader.readAsText(file);
         input.value = '';
@@ -934,54 +924,158 @@ export const importExportMethods = uiModule({
      * builds may carry a stale first envelope (the runtime uses the last one).
      */
     extractEnvelopeFromHtml(html: string): EmbeddedDataEnvelope | null {
-        const matches = [...html.matchAll(/window\.STROM_EMBEDDED_DATA\s*=\s*(\{[\s\S]*?\});?\s*<\/script>/g)];
-        const m = matches[matches.length - 1];
-        if (!m) return null;
-        try { return JSON.parse(m[1]) as EmbeddedDataEnvelope; } catch { return null; }
+        // Balanced scan, not a lazy regex: an "Export all" file puts a second
+        // assignment into the same script tag (review V5).
+        const value = readWindowAssignment(html, 'STROM_EMBEDDED_DATA');
+        return value && typeof value === 'object' ? value as EmbeddedDataEnvelope : null;
+    },
+
+    /**
+     * Import an exported Strom HTML file: an "Export all" file restores every
+     * tree, a single-tree file goes through the regular JSON import flow.
+     * Encrypted files ask for the FILE password (decrypted with a key of
+     * their own — the local session is untouched).
+     */
+    async importHtmlContent(html: string): Promise<void> {
+        const content = readEmbeddedHtml(html);
+        const envData = content.envelope?.data;
+        const allEnc = content.allTrees && isEncrypted(content.allTrees) ? content.allTrees : null;
+        const envEnc = isEncrypted(envData) ? envData : null;
+
+        if (allEnc || envEnc) {
+            this.promptFilePassword(async (password) => {
+                let trees: BackupTrees | null = null;
+                let single: StromData | null = null;
+                try {
+                    if (allEnc) {
+                        const parsed = JSON.parse(await decrypt(allEnc, password));
+                        if (isMultiTreeBackup(parsed)) trees = parsed;
+                    }
+                    if (envEnc) single = JSON.parse(await decrypt(envEnc, password)) as StromData;
+                } catch {
+                    return false;
+                }
+                await this.continueHtmlImport(trees, single ?? (envData as StromData | undefined) ?? null);
+                return true;
+            });
+            return;
+        }
+
+        const trees = content.allTrees && !isEncrypted(content.allTrees) ? content.allTrees : null;
+        await this.continueHtmlImport(trees, (envData as StromData | undefined) ?? null);
+    },
+
+    /** Second half of importHtmlContent, with plain (decrypted) payloads. */
+    async continueHtmlImport(trees: BackupTrees | null, single: StromData | null): Promise<void> {
+        if (trees && Object.keys(trees).length > 1) {
+            await this.importMultiTreeBackup(trees);
+            return;
+        }
+        const data = single ?? (trees ? Object.values(trees)[0]?.data ?? null : null);
+        if (!data || typeof data !== 'object') {
+            this.showAlert(strings.treeManager.htmlNoData, 'warning');
+            return;
+        }
+        // Use the same flow as JSON import
+        await this.importJsonString(JSON.stringify(data));
+    },
+
+    /**
+     * Ask for a file's password in the shared prompt. `tryPassword` resolves
+     * false on a wrong password (the prompt stays open for a retry).
+     */
+    promptFilePassword(tryPassword: (password: string) => Promise<boolean>): void {
+        const modal = document.getElementById('password-prompt-modal');
+        const input = document.getElementById('password-prompt-input') as HTMLInputElement;
+        const error = document.getElementById('password-prompt-error');
+        if (!modal || !input) return;
+
+        input.value = '';
+        if (error) {
+            error.style.display = 'none';
+            error.textContent = '';
+        }
+        this.pendingEncryptedData = null;
+        this.passwordPromptOnCancel = null;
+        this.passwordPromptCallback = async (password: string) => {
+            // Close BEFORE continuing: the import flow opens its own dialogs.
+            modal.classList.remove('active');
+            const ok = await tryPassword(password);
+            if (ok) {
+                this.passwordPromptCallbackManagesDialog = false;
+                return;
+            }
+            modal.classList.add('active');
+            if (error) {
+                error.textContent = strings.encryption.wrongPassword;
+                error.style.display = 'block';
+            }
+            input.value = '';
+            input.focus();
+        };
+        this.passwordPromptCallbackManagesDialog = true;
+        modal.classList.add('active');
+        input.focus();
+    },
+
+    /**
+     * Restore an "Export all" backup (JSON or HTML): validate every tree,
+     * confirm, then import all of them as NEW trees (review V5).
+     */
+    async importMultiTreeBackup(trees: BackupTrees): Promise<void> {
+        const valid: Array<{ name: string; data: StromData; isHidden?: boolean; auditLog?: AuditLog }> = [];
+        let skipped = 0;
+        for (const entry of Object.values(trees)) {
+            const result = validateJsonImport(JSON.stringify(entry.data));
+            if (result.valid && result.data) {
+                valid.push({ name: entry.name, data: result.data, isHidden: entry.isHidden, auditLog: entry.auditLog });
+            } else {
+                skipped++;
+            }
+        }
+        if (valid.length === 0) {
+            this.showAlert(strings.storageSafety.backupEmpty, 'warning');
+            return;
+        }
+        const ok = await this.showConfirm(
+            strings.storageSafety.backupContains(valid.length),
+            strings.storageSafety.backupTitle,
+            { ok: strings.storageSafety.backupImportAll, cancel: strings.buttons.cancel }
+        );
+        if (!ok) return;
+        if (!await this.ensureLocalUnlocked()) return;
+
+        this.importToCurrentTree = false;
+        this.importFromTreeManager = false;
+        this.closeImportDialog();
+        const ids = await DataManager.importTreesAsNew(valid);
+
+        this.updateTreeSwitcher();
+        this.updateTreeManagerList();
+        TreeRenderer.render();
+        TreeRenderer.resetFocusHistory();
+        this.refreshSearch();
+        const current = DataManager.getCurrentTreeId();
+        if (current) this.updateUrlTreeParam(current);
+        this.showToast(strings.storageSafety.backupImported(ids.length));
+        if (skipped > 0) this.showToast(strings.storageSafety.backupSkipped(skipped), 5000);
     },
 
     /**
      * Extract embedded data from Strom HTML file
      */
     extractDataFromHtml(html: string): StromData | null {
-        // Try to find STROM_EMBEDDED_DATA (single tree)
-        const singleMatch = html.match(/window\.STROM_EMBEDDED_DATA\s*=\s*(\{[\s\S]*?\});?\s*<\/script>/);
-        if (singleMatch) {
-            try {
-                const envelope = JSON.parse(singleMatch[1]);
-                // Handle encrypted data
-                if (envelope.data && typeof envelope.data === 'object') {
-                    if ('encrypted' in envelope.data && envelope.data.encrypted === true) {
-                        // Encrypted data - would need password, show error for now
-                        this.showAlert('Encrypted HTML files are not supported for import', 'warning');
-                        return null;
-                    }
-                    return envelope.data as StromData;
-                }
-            } catch {
-                // Parse error
-            }
+        // Single-tree envelope first; else the first tree of an "Export all"
+        // bundle. Encrypted payloads return null (importHtmlContent prompts).
+        const content = readEmbeddedHtml(html);
+        const envData = content.envelope?.data;
+        if (envData && typeof envData === 'object' && !isEncrypted(envData)) {
+            return envData as StromData;
         }
-
-        // Try to find STROM_EMBEDDED_ALL (multiple trees) - use first tree
-        const allMatch = html.match(/window\.STROM_EMBEDDED_ALL\s*=\s*(\{[\s\S]*?\});?\s*<\/script>/);
-        if (allMatch) {
-            try {
-                const envelope = JSON.parse(allMatch[1]);
-                if (envelope.trees && typeof envelope.trees === 'object') {
-                    const treeIds = Object.keys(envelope.trees);
-                    if (treeIds.length > 0) {
-                        const firstTree = envelope.trees[treeIds[0]];
-                        if (firstTree.data) {
-                            return firstTree.data as StromData;
-                        }
-                    }
-                }
-            } catch {
-                // Parse error
-            }
+        if (content.allTrees && !isEncrypted(content.allTrees)) {
+            const first = Object.values(content.allTrees)[0];
+            if (first?.data) return first.data;
         }
-
         return null;
     },
 
@@ -1104,8 +1198,8 @@ export const importExportMethods = uiModule({
      * as a new tree, focus an interesting person and show a hint toast.
      */
     async loadDemoTree(): Promise<void> {
-        // Read-only viewers must not create trees
-        if (DataManager.isViewMode()) return;
+        // Read-only viewers (and locked data) must not create trees
+        if (DataManager.isReadOnly()) return;
         this.closeMobileMenu();
         this.closeNewTreeMenu();
         const lang = getCurrentLanguage() === 'cs' ? 'cs' : 'en';

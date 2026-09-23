@@ -11,6 +11,9 @@ import {
     Partnership,
     StromData,
     LifeEvent,
+    EventParticipant,
+    Attachment,
+    Source,
     generatePersonId,
     generatePartnershipId
 } from '../types.js';
@@ -19,7 +22,9 @@ import {
     MergeState,
     MergeResult,
     IdMapping,
-    FieldConflict
+    FieldConflict,
+    PartnershipConflict,
+    PartnershipConflictField
 } from './types.js';
 import { StorageManager } from '../storage.js';
 
@@ -68,6 +73,75 @@ export function isEffectivelyConfirmed(state: MergeState, match: { incomingId: P
     const decision = state.decisions.get(match.incomingId);
     if (decision) return decision.type === 'confirm';
     return match.score >= AUTO_CONFIRM_SCORE;
+}
+
+/**
+ * The EXISTING person an incoming person merges into under the current
+ * decisions, or undefined when it is added as new / skipped. Mirrors
+ * buildIdMapping for the persons that keep an existing id.
+ */
+export function existingTargetOf(state: MergeState, incomingId: PersonId): PersonId | undefined {
+    const decision = state.decisions.get(incomingId);
+    if (decision?.type === 'manual_match') return decision.targetId;
+    const match = state.matches.find(m => m.incomingId === incomingId);
+    if (match && isEffectivelyConfirmed(state, match)) return match.existingId;
+    return undefined;
+}
+
+const PARTNERSHIP_CONFLICT_FIELDS: readonly PartnershipConflictField[] = ['status', 'startDate', 'startPlace', 'endDate'];
+
+/**
+ * Unions both trees know (both partners merge into existing persons who
+ * already share a partnership) whose status, start date, start place or end
+ * date differ. Only fields filled on BOTH sides conflict; a value present on
+ * one side only is filled in by mergePartnershipData. Recomputed from the
+ * current decisions every time: confirming or rejecting a person changes which
+ * unions coincide. The resolution comes from state.partnershipResolutions,
+ * defaulting to keep_existing.
+ */
+export function detectPartnershipConflicts(state: MergeState): PartnershipConflict[] {
+    const conflicts: PartnershipConflict[] = [];
+    const target = new Map<PersonId, PersonId | undefined>();
+    const targetOf = (id: PersonId): PersonId | undefined => {
+        if (!target.has(id)) target.set(id, existingTargetOf(state, id));
+        return target.get(id);
+    };
+    for (const [incomingPshipId, incoming] of Object.entries(state.incomingData.partnerships)) {
+        const p1 = targetOf(incoming.person1Id);
+        const p2 = targetOf(incoming.person2Id);
+        if (!p1 || !p2 || p1 === p2) continue;
+        if (!state.existingData.persons[p1] || !state.existingData.persons[p2]) continue;
+        const existing = findExistingPartnership(state.existingData, p1, p2);
+        if (!existing) continue;
+        const answers = state.partnershipResolutions?.get(incomingPshipId as PartnershipId);
+        for (const field of PARTNERSHIP_CONFLICT_FIELDS) {
+            const a = existing[field];
+            const b = incoming[field];
+            if (!a || !b || a === b) continue;
+            conflicts.push({
+                incomingPartnershipId: incomingPshipId as PartnershipId,
+                existingPartnershipId: existing.id,
+                field,
+                existingValue: a,
+                incomingValue: b,
+                resolution: answers?.[field] ?? 'keep_existing',
+            });
+        }
+    }
+    return conflicts;
+}
+
+/** Record the user's answer for one partnership conflict field. */
+export function updatePartnershipConflictResolution(
+    state: MergeState,
+    incomingPartnershipId: PartnershipId,
+    field: PartnershipConflictField,
+    resolution: 'keep_existing' | 'use_incoming'
+): void {
+    const map = (state.partnershipResolutions ??= new Map());
+    const entry = map.get(incomingPartnershipId) ?? {};
+    entry[field] = resolution;
+    map.set(incomingPartnershipId, entry);
 }
 
 export function buildIdMapping(state: MergeState): IdMapping {
@@ -139,9 +213,11 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
 
         // Union the source catalogs (ids are unique per tree). Incoming persons'
         // sourceIds keep resolving because their catalog entries come along.
-        if (state.incomingData.sources) {
-            mergedData.sources = { ...(mergedData.sources ?? {}), ...structuredClone(state.incomingData.sources) };
-        }
+        // A source the tree already holds under another id (every GEDCOM
+        // import mints fresh ids, so re-merging the same file would otherwise
+        // double the catalog) is not added again: its citations are pointed at
+        // the kept entry once the merge is done (remapSourceReferences).
+        const sourceRemap = mergeSourceCatalogs(mergedData, state.incomingData.sources);
 
         // Tree-level registries come along too — the user curated them.
         // Coordinates: union, the existing tree wins where both know a place.
@@ -295,6 +371,18 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             }
         }
 
+        // Partnership conflicts the user resolved towards the incoming value,
+        // per incoming union: applied only onto the existing union they were
+        // detected against.
+        const partnershipWins = new Map<PartnershipId, { existingId: PartnershipId; fields: PartnershipConflictField[] }>();
+        for (const c of detectPartnershipConflicts(state)) {
+            if (c.resolution !== 'use_incoming') continue;
+            const entry = partnershipWins.get(c.incomingPartnershipId)
+                ?? { existingId: c.existingPartnershipId, fields: [] };
+            entry.fields.push(c.field);
+            partnershipWins.set(c.incomingPartnershipId, entry);
+        }
+
         // Process partnerships
         for (const [incomingPshipId, partnership] of Object.entries(state.incomingData.partnerships)) {
             const pshipId = incomingPshipId as PartnershipId;
@@ -310,12 +398,22 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
 
             if (existingPartnership) {
                 // Merge partnership data
-                mergePartnershipData(existingPartnership, partnership);
+                mergePartnershipData(existingPartnership, partnership, mapping.persons, state.incomingData.persons);
+                const wins = partnershipWins.get(pshipId);
+                if (wins && wins.existingId === existingPartnership.id) {
+                    for (const field of wins.fields) {
+                        if (field === 'status') existingPartnership.status = partnership.status;
+                        else if (partnership[field]) existingPartnership[field] = partnership[field];
+                    }
+                }
             } else {
-                // Create new partnership with remapped IDs
+                // Create new partnership with remapped IDs. Cloned wholesale so
+                // nothing (witnesses, story, citations) stays shared with the
+                // incoming tree; witnesses' person ids are the incoming tree's.
                 const newPshipId = mapping.partnerships.get(pshipId)!;
+                const cloned = structuredClone(partnership);
                 const newPartnership: Partnership = {
-                    ...partnership,
+                    ...cloned,
                     id: newPshipId,
                     person1Id,
                     person2Id,
@@ -323,6 +421,9 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                         .map(cid => mapping.persons.get(cid))
                         .filter((cid): cid is PersonId => cid !== undefined)
                 };
+                if (newPartnership.participants) {
+                    remapParticipants(newPartnership.participants, mapping.persons, state.incomingData.persons);
+                }
 
                 mergedData.partnerships[newPshipId] = newPartnership;
 
@@ -347,7 +448,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
 
         // No participant may point outside the merged tree: whoever did not
         // come along stays by name (snapshotted during remap), never as a
-        // dangling id.
+        // dangling id. Wedding witnesses included.
         for (const person of Object.values(mergedData.persons)) {
             for (const ev of person.events ?? []) {
                 for (const part of ev.participants ?? []) {
@@ -355,6 +456,14 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 }
             }
         }
+        for (const partnership of Object.values(mergedData.partnerships)) {
+            for (const part of partnership.participants ?? []) {
+                if (part.personId && !mergedData.persons[part.personId]) delete part.personId;
+            }
+        }
+
+        // Citations of a source that was already in the tree now name the kept entry.
+        remapSourceReferences(mergedData, sourceRemap);
 
         // Validate result
         const validationErrors = validateMergedData(mergedData);
@@ -399,15 +508,105 @@ function remapEventParticipants(
     incomingPersons: Record<PersonId, Person>,
 ): void {
     for (const ev of events ?? []) {
-        for (const part of ev.participants ?? []) {
-            if (!part.personId) continue;
-            const source = incomingPersons[part.personId];
-            const written = `${source?.firstName ?? ''} ${source?.lastName ?? ''}`.trim();
-            if (!part.name && written && written !== '?') part.name = written;
-            const mapped = idMap.get(part.personId);
-            if (mapped) part.personId = mapped;
-            else delete part.personId;
+        if (ev.participants) remapParticipants(ev.participants, idMap, incomingPersons);
+    }
+}
+
+/** Same as remapEventParticipants, for one list (event or wedding witnesses). */
+function remapParticipants(
+    participants: EventParticipant[],
+    idMap: Map<PersonId, PersonId>,
+    incomingPersons: Record<PersonId, Person>,
+): void {
+    for (const part of participants) {
+        if (!part.personId) continue;
+        const source = incomingPersons[part.personId];
+        const written = `${source?.firstName ?? ''} ${source?.lastName ?? ''}`.trim();
+        if (!part.name && written && written !== '?') part.name = written;
+        const mapped = idMap.get(part.personId);
+        if (mapped) part.personId = mapped;
+        else delete part.personId;
+    }
+}
+
+// ==================== DUPLICATE CONTENT ====================
+//
+// Every GEDCOM import mints fresh ids, so merging the same file twice cannot
+// recognise its events, sources or documents by id. They are recognised by
+// what they say instead.
+
+/** Case-, accent- and whitespace-insensitive form of one free-text field. */
+function contentKey(text: string | undefined): string {
+    return (text ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * What makes two events the same record: kind, date, place, label — and the
+ * note, because for occupations and titles the note IS the fact
+ * ("blacksmith" vs "innkeeper" with no date are two events, not one).
+ */
+function eventKey(ev: LifeEvent): string {
+    return [ev.type, ev.date ?? '', contentKey(ev.place), contentKey(ev.customLabel), contentKey(ev.note)].join('\u0001');
+}
+
+/** Title + repository + reference; '' for a source with none of them (never deduplicated). */
+function sourceKey(src: Source): string {
+    const parts = [contentKey(src.title), contentKey(src.repository), contentKey(src.reference)];
+    return parts.some(Boolean) ? parts.join('\u0001') : '';
+}
+
+/** Two attachments are the same document when they carry the same bytes. */
+function sameAttachment(a: Attachment, b: Attachment): boolean {
+    return a.id === b.id || (!!a.dataUrl && a.dataUrl === b.dataUrl);
+}
+
+/**
+ * Add the incoming source catalog to the merged tree. A source whose title,
+ * repository and reference match one the tree already has is NOT added; the
+ * returned map sends its id to the kept one. Same id = same source (the two
+ * trees share an ancestry) — the incoming copy replaces it as before.
+ */
+function mergeSourceCatalogs(
+    mergedData: StromData,
+    incoming: Record<string, Source> | undefined,
+): Map<string, string> {
+    const remap = new Map<string, string>();
+    if (!incoming || Object.keys(incoming).length === 0) return remap;
+    const catalog = (mergedData.sources ??= {});
+    const byKey = new Map<string, string>();
+    for (const src of Object.values(catalog)) {
+        const key = sourceKey(src);
+        if (key && !byKey.has(key)) byKey.set(key, src.id);
+    }
+    for (const [id, src] of Object.entries(incoming)) {
+        const key = sourceKey(src);
+        const kept = key ? byKey.get(key) : undefined;
+        if (kept && kept !== id && !catalog[id]) {
+            remap.set(id, kept);
+            continue;
         }
+        catalog[id] = structuredClone(src);
+        if (key && !byKey.has(key)) byKey.set(key, id);
+    }
+    return remap;
+}
+
+/** Point every citation of a deduplicated source at the kept entry (no duplicates left in a list). */
+function remapSourceReferences(data: StromData, remap: Map<string, string>): void {
+    if (remap.size === 0) return;
+    const fix = (ids: string[] | undefined): string[] | undefined =>
+        ids ? [...new Set(ids.map(id => remap.get(id) ?? id))] : ids;
+    for (const person of Object.values(data.persons)) {
+        if (person.sourceIds) person.sourceIds = fix(person.sourceIds);
+        for (const ev of person.events ?? []) {
+            if (ev.sourceIds) ev.sourceIds = fix(ev.sourceIds);
+        }
+        for (const att of person.attachments ?? []) {
+            if (att.sourceId && remap.has(att.sourceId)) att.sourceId = remap.get(att.sourceId);
+        }
+    }
+    for (const partnership of Object.values(data.partnerships)) {
+        if (partnership.sourceIds) partnership.sourceIds = fix(partnership.sourceIds);
     }
 }
 
@@ -488,7 +687,10 @@ export function mergePersonData(
 
     // Open question / reference number / death-status: fill when missing.
     if (!existing.question && incoming.question) existing.question = incoming.question;
-    if (!existing.refn && incoming.refn) existing.refn = incoming.refn;
+    if (!existing.refn && incoming.refn) {
+        existing.refn = incoming.refn;
+        if (incoming.refnType) existing.refnType = incoming.refnType;
+    }
     if (existing.isDeceased === undefined && incoming.isDeceased !== undefined) {
         existing.isDeceased = incoming.isDeceased;
     }
@@ -546,20 +748,34 @@ export function mergePersonData(
         // 'keep_existing' on non-name fields - do nothing
     }
 
+    // Narrative: fill when missing (two different texts are not merged).
+    if (!existing.story && incoming.story) existing.story = structuredClone(incoming.story);
+
     // Merge life events: union by id, keeping the existing event on id clash.
+    // An event with a fresh id but the same content (kind, date, place, label,
+    // note) is the same record imported again — its citations join the kept
+    // event instead of a second copy appearing.
     if (incoming.events && incoming.events.length > 0) {
         if (!existing.events) existing.events = [];
         const seen = new Set(existing.events.map(e => e.id));
+        const byContent = new Map(existing.events.map(e => [eventKey(e), e] as const));
         for (const event of incoming.events) {
-            if (!seen.has(event.id)) {
-                // Wholesale clone: participants and sourceIds must not stay
-                // shared with the incoming tree. Participant ids are the
-                // incoming tree's — remap them like parentRelTypes below.
-                const cloned = structuredClone(event);
-                if (personIdMap) remapEventParticipants([cloned], personIdMap, incomingPersons ?? {});
-                existing.events.push(cloned);
-                seen.add(event.id);
+            if (seen.has(event.id)) continue;
+            const twin = byContent.get(eventKey(event));
+            if (twin) {
+                if (event.sourceIds?.length) {
+                    twin.sourceIds = [...new Set([...(twin.sourceIds ?? []), ...event.sourceIds])];
+                }
+                continue;
             }
+            // Wholesale clone: participants and sourceIds must not stay
+            // shared with the incoming tree. Participant ids are the
+            // incoming tree's — remap them like parentRelTypes below.
+            const cloned = structuredClone(event);
+            if (personIdMap) remapEventParticipants([cloned], personIdMap, incomingPersons ?? {});
+            existing.events.push(cloned);
+            seen.add(event.id);
+            byContent.set(eventKey(cloned), cloned);
         }
     }
 
@@ -599,14 +815,12 @@ export function mergePersonData(
     }
 
     // Merge attachments: union by id, keeping the existing one on id clash.
+    // The same document under a fresh id (identical data URL) is not added twice.
     if (incoming.attachments && incoming.attachments.length > 0) {
         if (!existing.attachments) existing.attachments = [];
-        const seenAtt = new Set(existing.attachments.map(a => a.id));
         for (const att of incoming.attachments) {
-            if (!seenAtt.has(att.id)) {
-                existing.attachments.push({ ...att });
-                seenAtt.add(att.id);
-            }
+            if (existing.attachments.some(a => sameAttachment(a, att))) continue;
+            existing.attachments.push({ ...att });
         }
     }
 
@@ -634,9 +848,20 @@ function findExistingPartnership(
 }
 
 /**
- * Merge partnership data
+ * Merge partnership data. The incoming union's children and witnesses carry
+ * the incoming tree's person ids — remapped through personIdMap, like events.
+ *
+ * Status, start date/place and end date: when both sides say something
+ * different, the existing value stays here; the user's choice from the
+ * partnership conflict dialog (detectPartnershipConflicts) is applied by
+ * executeMerge afterwards.
  */
-function mergePartnershipData(existing: Partnership, incoming: Partnership): void {
+export function mergePartnershipData(
+    existing: Partnership,
+    incoming: Partnership,
+    personIdMap?: Map<PersonId, PersonId>,
+    incomingPersons?: Record<PersonId, Person>,
+): void {
     // Fill in missing values
     if (!existing.startDate && incoming.startDate) {
         existing.startDate = incoming.startDate;
@@ -662,6 +887,31 @@ function mergePartnershipData(existing: Partnership, incoming: Partnership): voi
     if (!existing.status && incoming.status) {
         existing.status = incoming.status;
     }
+
+    // Children: a child the incoming tree gives this couple belongs under it
+    // (enforceRelationshipSymmetry later keeps only children that list both).
+    const remapId = (id: PersonId): PersonId | undefined => personIdMap ? personIdMap.get(id) : id;
+    for (const cid of incoming.childIds) {
+        const mapped = remapId(cid);
+        if (mapped && !existing.childIds.includes(mapped)) existing.childIds.push(mapped);
+    }
+
+    // Wedding witnesses: union, one entry per person (or written name) and role.
+    if (incoming.participants && incoming.participants.length > 0) {
+        const incomingParts = structuredClone(incoming.participants);
+        if (personIdMap) remapParticipants(incomingParts, personIdMap, incomingPersons ?? {});
+        const list = (existing.participants ??= []);
+        const who = (p: EventParticipant): string => `${p.role}\u0001${p.personId ?? ''}\u0001${p.personId ? '' : contentKey(p.name)}`;
+        const have = new Set(list.map(who));
+        for (const part of incomingParts) {
+            if (have.has(who(part))) continue;
+            list.push(part);
+            have.add(who(part));
+        }
+    }
+
+    // The couple's narrative: fill when missing.
+    if (!existing.story && incoming.story) existing.story = structuredClone(incoming.story);
 }
 
 /**

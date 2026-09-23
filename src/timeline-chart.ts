@@ -119,7 +119,7 @@ function rowSvg(
     const fadeW = Math.max(0, Math.min(26, rowWidth - x2 - 2));
     const fade = !r.endKnown && fadeW > 4
         ? `<rect x="${x2.toFixed(1)}" y="${barY}" width="${fadeW.toFixed(1)}" height="14"`
-          + ` fill="url(#tl-fade-${r.gender})"/>`
+          + ` fill="url(#tl-fade-${r.gender === 'female' ? 'female' : 'male'})"/>`
         : '';
 
     // Name label: HTML in <foreignObject> on screen (ellipsis, flex); a plain

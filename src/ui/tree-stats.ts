@@ -40,7 +40,7 @@ import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
 import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
-import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
+import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue, translateValidationType } from '../validation.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
@@ -49,58 +49,6 @@ import { yearOf, parseFlexDate } from '../dates.js';
 import { computeFamilyStats, computeCompleteness } from '../stats.js';
 import { findComponents, componentName } from '../components.js';
 import { orphanedPlaceKeys } from '../places.js';
-
-/** Maps a validation issue `type` to its localized treeManager string key. */
-const VALIDATION_TYPE_KEYS: Record<string, string> = {
-    'cycle': 'valCycle',
-    'selfPartnership': 'valSelfPartnership',
-    'duplicatePartnership': 'valDuplicatePartnership',
-    'missingChildRef': 'valMissingChildRef',
-    'missingParentRef': 'valMissingParentRef',
-    'missingPartnershipRef': 'valMissingPartnershipRef',
-    'partnershipChildMismatch': 'valPartnershipChildMismatch',
-    'orphanedParentRef': 'valOrphanedRef',
-    'orphanedChildRef': 'valOrphanedRef',
-    'orphanedPartnershipRef': 'valOrphanedRef',
-    'orphanedPartnerRef': 'valOrphanedRef',
-    'orphanedPartnershipChildRef': 'valOrphanedRef',
-    'orphanedParticipantRef': 'valOrphanedParticipantRef',
-    'tooManyParents': 'valTooManyParents',
-    'parentYoungerThanChild': 'valParentYoungerThanChild',
-    'parentTooYoung': 'valParentTooYoung',
-    'parentTooOld': 'valParentTooOld',
-    'generationConflict': 'valGenerationConflict',
-    'partnerIsParent': 'valPartnerIsParent',
-    'partnerIsChild': 'valPartnerIsChild',
-    'siblingIsParent': 'valSiblingIsParent',
-    'siblingIsChild': 'valSiblingIsChild',
-    'event-birth-death': 'valEventBirthDeath',
-    'event-no-label': 'valEventNoLabel',
-    'event-bad-date': 'valEventBadDate',
-    'deathBeforeBirth': 'valDeathBeforeBirth',
-    'implausibleLifespan': 'valImplausibleLifespan',
-    'eventBeforeBirth': 'valEventBeforeBirth',
-    'eventAfterDeath': 'valEventAfterDeath',
-    'weddingBeforeBirth': 'valWeddingBeforeBirth',
-    'weddingAfterDeath': 'valWeddingAfterDeath',
-    'childMarriage': 'valChildMarriage',
-    'childAfterMotherDeath': 'valChildAfterMotherDeath',
-    'childAfterFatherDeath': 'valChildAfterFatherDeath',
-    'citationMissingSource': 'valCitationMissingSource',
-    'attachmentNoData': 'valAttachmentNoData',
-    'partnerAgeGap': 'valPartnerAgeGap',
-    'possibleDuplicate': 'valPossibleDuplicate',
-    'placeSpelling': 'valPlaceSpelling',
-    'recurringGodparent': 'valRecurringGodparent',
-};
-
-/** Localized message for a validation issue type (falls back to the raw type). */
-function translateValidationType(type: string): string {
-    const s = strings.treeManager as Record<string, unknown>;
-    const key = VALIDATION_TYPE_KEYS[type];
-    const val = key ? s[key] : undefined;
-    return typeof val === 'string' ? val : type;
-}
 
 /** Escape text for safe inclusion in SVG/HTML (names come from user data). */
 function escXml(s: string): string {
@@ -399,7 +347,7 @@ export const treeStatsMethods = uiModule({
             const personLinks = issue.personIds?.map(id => {
                 const person = treeData.persons[id];
                 const name = person ? `${person.firstName} ${person.lastName}`.trim() : id;
-                return `<a href="#" class="validation-person-link" data-tree-id="${treeId}" data-person-id="${id}">${this.escapeHtml(name)}</a>`;
+                return `<a href="#" class="validation-person-link" data-tree-id="${this.escapeHtml(treeId)}" data-person-id="${this.escapeHtml(id)}">${this.escapeHtml(name)}</a>`;
             }).join(', ') || '';
 
             const fixBtn = isFixable
@@ -670,7 +618,9 @@ export const treeStatsMethods = uiModule({
      * Generate HTML for tree statistics
      */
     generateTreeStatsHtml(treeData: StromData): string {
-        const persons = Object.values(treeData.persons);
+        // Placeholders ("unknown parent" frames) are not people: excluded from
+        // every count and denominator, as in the statistics and tree health.
+        const persons = Object.values(treeData.persons).filter(p => !p.isPlaceholder);
         const partnerships = Object.values(treeData.partnerships);
         const currentYear = new Date().getFullYear();
 
@@ -762,7 +712,8 @@ export const treeStatsMethods = uiModule({
 
         // A tree that holds several unconnected families is worth saying out
         // loud — it is usually a surprise, and it is the thing the split acts on.
-        const components = findComponents(treeData);
+        // A stray placeholder alone is not a family.
+        const components = findComponents(treeData).filter(c => c.count > 0);
         const unrelated = components.length > 1
             ? `<div class="tree-stats-unrelated">
                    <strong>${strings.split.unrelated(components.length)}</strong>

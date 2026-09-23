@@ -1,24 +1,3 @@
-Strom - Dual License
-====================
-
-This software is available under two licensing options:
-
-1. OPEN SOURCE LICENSE (MPL 2.0)
-   For personal, educational, and non-commercial use.
-   See the full MPL 2.0 text below.
-
-2. COMMERCIAL LICENSE
-   Commercial use of this project requires a separate agreement.
-
-   This includes (but is not limited to):
-   - Paid SaaS products
-   - Proprietary desktop/mobile applications
-   - Commercial services built on top of this engine
-
-   Please contact: milan@stromapp.info
-
---------------------------------------------------------------------------------
-
 Mozilla Public License Version 2.0
 ==================================
 
@@ -378,7 +357,7 @@ Exhibit A - Source Code Form License Notice
 
   This Source Code Form is subject to the terms of the Mozilla Public
   License, v. 2.0. If a copy of the MPL was not distributed with this
-  file, You can obtain one at http://mozilla.org/MPL/2.0/.
+  file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 If it is not possible or desirable to put the notice in a particular
 file, then You may include the notice in a location (such as a LICENSE
@@ -392,22 +371,3 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 
   This Source Code Form is "Incompatible With Secondary Licenses", as
   defined by the Mozilla Public License, v. 2.0.
-
---------------------------------------------------------------------------------
-
-Copyright (c) 2026 Milan Víšek
-
-Additional Attribution Requirements
------------------------------------
-
-In addition to the requirements of the Mozilla Public License 2.0,
-any use of this software must include:
-
-1. Clear attribution to the original author (Milan Víšek)
-2. A link to the official website: https://stromapp.info
-
-This attribution must be visible in any derivative work, whether in
-documentation, user interface (such as an "About" dialog), or source code.
-
-Official website: https://stromapp.info
-Source code: https://github.com/ACiDekCZ/strom

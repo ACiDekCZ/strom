@@ -75,6 +75,7 @@ export function validateTreeData(data: StromData): ValidationResult {
     checkCrossbranchAnomalies(data, addIssue);
     checkLifeEvents(data, addIssue);
     checkDateConsistency(data, addIssue);
+    checkPhotoData(data, addIssue);
     checkSourceIntegrity(data, addIssue);
     checkPossibleDuplicates(data, addIssue);
     checkPlaceSpellings(data, addIssue);
@@ -412,6 +413,24 @@ function checkOrphanedReferences(
                 [partnershipId]
             );
         }
+        // Wedding witnesses linked to a person who no longer exists (same
+        // class as the event participants above; review S6).
+        for (const part of partnership.participants ?? []) {
+            if (part.personId && !personIds.has(part.personId)) {
+                const couple = `${getPersonName(data.persons[partnership.person1Id])} & ${getPersonName(data.persons[partnership.person2Id])}`;
+                const who = part.name?.trim()
+                    || strings.events.roles[part.role] || part.role;
+                addIssue(
+                    'error',
+                    'orphanedParticipantRef',
+                    `Partnership ${partnershipId} has a witness referencing a non-existent person: ${part.personId}`,
+                    undefined,
+                    [partnershipId],
+                    strings.treeManager.valOrphanedParticipantDetail(
+                        couple, strings.partnershipStatus[partnership.status] ?? partnership.status, who)
+                );
+            }
+        }
         for (const childId of partnership.childIds) {
             if (!personIds.has(childId)) {
                 addIssue(
@@ -461,33 +480,42 @@ function checkAgePlausibility(
     const MAX_PARENT_AGE = 80; // Maximum plausible age to have a child
 
     for (const [personId, person] of Object.entries(data.persons) as [PersonId, Person][]) {
-        const childBirth = parseYear(person.birthDate);
-        if (childBirth === null) continue;
+        const childDate = parseFlexDate(person.birthDate);
+        if (!childDate) continue;
+        const childRange = monthRange(childDate);
 
         for (const parentId of person.parentIds) {
             const parent = data.persons[parentId];
             if (!parent) continue;
 
-            const parentBirth = parseYear(parent.birthDate);
-            if (parentBirth === null) continue;
+            const parentDate = parseFlexDate(parent.birthDate);
+            if (!parentDate) continue;
+            const parentRange = monthRange(parentDate);
 
+            // Qualifiers and ranges widen each date (see monthRange): only a
+            // CERTAIN violation is reported — '~1850' vs '~1848' is not an
+            // error (review S7).
+            const childBirth = childDate.year;
+            const parentBirth = parentDate.year;
             const ageAtBirth = childBirth - parentBirth;
+            const maxAgeYears = (childRange.max - parentRange.min) / 12;
+            const minAgeYears = (childRange.min - parentRange.max) / 12;
 
-            if (ageAtBirth < 0) {
+            if (childRange.max < parentRange.min) {
                 addIssue(
                     'error',
                     'parentYoungerThanChild',
                     `${getPersonName(parent)} (${parentBirth}) is younger than their child ${getPersonName(person)} (${childBirth})`,
                     [parentId, personId]
                 );
-            } else if (ageAtBirth < MIN_PARENT_AGE) {
+            } else if (maxAgeYears < MIN_PARENT_AGE) {
                 addIssue(
                     'warning',
                     'parentTooYoung',
                     `${getPersonName(parent)} was only ${ageAtBirth} when ${getPersonName(person)} was born`,
                     [parentId, personId]
                 );
-            } else if (ageAtBirth > MAX_PARENT_AGE) {
+            } else if (minAgeYears > MAX_PARENT_AGE) {
                 addIssue(
                     'warning',
                     'parentTooOld',
@@ -648,6 +676,57 @@ function checkCrossbranchAnomalies(
     }
 }
 
+// ==================== MEDIA DATA URLS ====================
+
+const SAFE_IMAGE_DATA_URL = /^data:image\/(jpeg|png|webp|gif);base64,/i;
+const SAFE_PDF_DATA_URL = /^data:application\/pdf;base64,/i;
+
+/** A person photo must be a base64 JPEG/PNG/WebP/GIF data URL. */
+export function isSafePhotoDataUrl(url: string): boolean {
+    return SAFE_IMAGE_DATA_URL.test(url);
+}
+
+/** An attachment may also be a base64 PDF — nothing else (no HTML, SVG, script). */
+export function isSafeAttachmentDataUrl(url: string): boolean {
+    return SAFE_IMAGE_DATA_URL.test(url) || SAFE_PDF_DATA_URL.test(url);
+}
+
+/**
+ * Drop photos and attachments whose payload is not an allowed data URL
+ * (e.g. data:text/html from a crafted file — it would open with the app's
+ * origin). Mutates `data`; returns how many were dropped. Run on load, so
+ * such payloads never reach storage or the DOM.
+ */
+export function stripUnsafeMediaDataUrls(data: StromData): number {
+    let dropped = 0;
+    for (const person of Object.values(data.persons ?? {}) as Person[]) {
+        if (!person || typeof person !== 'object') continue;
+        if (person.photo !== undefined && (typeof person.photo !== 'string' || !isSafePhotoDataUrl(person.photo))) {
+            delete person.photo;
+            dropped++;
+        }
+        if (Array.isArray(person.attachments)) {
+            const kept = person.attachments.filter(att =>
+                att && typeof att.dataUrl === 'string' && isSafeAttachmentDataUrl(att.dataUrl));
+            dropped += person.attachments.length - kept.length;
+            if (kept.length > 0) person.attachments = kept;
+            else delete person.attachments;
+        }
+    }
+    return dropped;
+}
+
+/** Warn about photos whose payload is not an allowed image data URL. */
+function checkPhotoData(data: StromData, addIssue: AddIssue): void {
+    for (const [personId, person] of Object.entries(data.persons) as [PersonId, Person][]) {
+        if (person.photo && !isSafePhotoDataUrl(person.photo)) {
+            addIssue('warning', 'photoUnsafeData',
+                `${getPersonName(person)}: photo is not a JPEG/PNG/WebP/GIF image`,
+                [personId]);
+        }
+    }
+}
+
 // ==================== CHECK: DATE CONSISTENCY ====================
 
 type AddIssue = (
@@ -664,6 +743,13 @@ type AddIssue = (
 function monthRange(d: FlexDate): { min: number; max: number } {
     let min = d.year * 12 + ((d.month ?? 1) - 1);
     let max = d.year * 12 + ((d.month ?? 12) - 1);
+    // A range ('1900..1910') reaches to its END bound, not just its start.
+    if (d.end) {
+        const endMax = d.end.year * 12 + ((d.end.month ?? 12) - 1);
+        const endMin = d.end.year * 12 + ((d.end.month ?? 1) - 1);
+        max = Math.max(max, endMax);
+        min = Math.min(min, endMin);
+    }
     if (d.qualifier === '~') { min -= 24; max += 24; }
     if (d.qualifier === '<') min -= 240;
     if (d.qualifier === '>') max += 240;
@@ -830,7 +916,8 @@ function checkSourceIntegrity(data: StromData, addIssue: AddIssue): void {
                     `${name}: attachment links a source that no longer exists`,
                     [personId], undefined, att.name);
             }
-            if (!att.dataUrl || !att.dataUrl.startsWith('data:') || att.dataUrl.length < 32) {
+            // Only an image or a PDF payload is usable (and safe to open).
+            if (!att.dataUrl || !isSafeAttachmentDataUrl(att.dataUrl) || att.dataUrl.length < 32) {
                 addIssue('warning', 'attachmentNoData',
                     `${name}: attachment "${att.name}" has no usable data`,
                     [personId], undefined, att.name);
@@ -955,4 +1042,57 @@ function parseYear(dateStr: string | undefined): number | null {
     // "1985", "1985-03-15", "15.3.1985", "March 1985", etc.
     const match = dateStr.match(/\b(1[0-9]{3}|20[0-9]{2})\b/);
     return match ? parseInt(match[1], 10) : null;
+}
+
+/** Maps a validation issue `type` to its localized treeManager string key. */
+const VALIDATION_TYPE_KEYS: Record<string, string> = {
+    'cycle': 'valCycle',
+    'selfPartnership': 'valSelfPartnership',
+    'duplicatePartnership': 'valDuplicatePartnership',
+    'missingChildRef': 'valMissingChildRef',
+    'missingParentRef': 'valMissingParentRef',
+    'missingPartnershipRef': 'valMissingPartnershipRef',
+    'partnershipChildMismatch': 'valPartnershipChildMismatch',
+    'orphanedParentRef': 'valOrphanedRef',
+    'orphanedChildRef': 'valOrphanedRef',
+    'orphanedPartnershipRef': 'valOrphanedRef',
+    'orphanedPartnerRef': 'valOrphanedRef',
+    'orphanedPartnershipChildRef': 'valOrphanedRef',
+    'orphanedParticipantRef': 'valOrphanedParticipantRef',
+    'tooManyParents': 'valTooManyParents',
+    'parentYoungerThanChild': 'valParentYoungerThanChild',
+    'parentTooYoung': 'valParentTooYoung',
+    'parentTooOld': 'valParentTooOld',
+    'generationConflict': 'valGenerationConflict',
+    'partnerIsParent': 'valPartnerIsParent',
+    'partnerIsChild': 'valPartnerIsChild',
+    'siblingIsParent': 'valSiblingIsParent',
+    'siblingIsChild': 'valSiblingIsChild',
+    'event-birth-death': 'valEventBirthDeath',
+    'event-no-label': 'valEventNoLabel',
+    'event-bad-date': 'valEventBadDate',
+    'deathBeforeBirth': 'valDeathBeforeBirth',
+    'implausibleLifespan': 'valImplausibleLifespan',
+    'eventBeforeBirth': 'valEventBeforeBirth',
+    'eventAfterDeath': 'valEventAfterDeath',
+    'weddingBeforeBirth': 'valWeddingBeforeBirth',
+    'weddingAfterDeath': 'valWeddingAfterDeath',
+    'childMarriage': 'valChildMarriage',
+    'childAfterMotherDeath': 'valChildAfterMotherDeath',
+    'childAfterFatherDeath': 'valChildAfterFatherDeath',
+    'citationMissingSource': 'valCitationMissingSource',
+    'attachmentNoData': 'valAttachmentNoData',
+    'partnerAgeGap': 'valPartnerAgeGap',
+    'possibleDuplicate': 'valPossibleDuplicate',
+    'placeSpelling': 'valPlaceSpelling',
+    'recurringGodparent': 'valRecurringGodparent',
+    'photoUnsafeData': 'valPhotoUnsafeData',
+};
+
+/** Localized message for a validation issue type (falls back to the raw type). */
+export function translateValidationType(type: string): string {
+    const s = strings.treeManager as Record<string, unknown>;
+    const key = VALIDATION_TYPE_KEYS[type];
+    const val = key ? s[key] : undefined;
+    return typeof val === 'string' ? val : type;
 }

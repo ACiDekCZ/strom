@@ -21,7 +21,8 @@ import {
     LAST_FOCUSED,
     LastFocusedMarker
 } from '../types.js';
-import { strings } from '../strings.js';
+import { strings, getCurrentLanguage } from '../strings.js';
+import { formatFileSize, formatRelativeDateTime } from '../format.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -42,6 +43,7 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 
+import { iconSvg } from '../icons.js';
 export const treeManagementMethods = uiModule({
     // ---- TREE SWITCHER ----
     /**
@@ -111,19 +113,19 @@ export const treeManagementMethods = uiModule({
                 if (embeddedTrees.length > 1) {
                     for (const tree of embeddedTrees) {
                         html += `
-                            <div class="tree-switcher-item ${tree.isActive ? 'active' : ''}"
-                                 onclick="window.Strom.UI.switchEmbeddedTree('${tree.id}')">
+                            <div class="tree-switcher-item ${tree.isActive ? 'active' : ''}" role="menuitem" tabindex="0"
+                                 data-embedded-tree-id="${this.escapeHtml(tree.id)}">
                                 <span class="tree-item-name">${this.escapeHtml(tree.name)}</span>
-                                ${tree.isActive ? '<span class="tree-item-check">✓</span>' : ''}
+                                ${tree.isActive ? `<span class="tree-item-check">${iconSvg('check')}</span>` : ''}
                             </div>
                         `;
                     }
                 } else if (embeddedTrees.length === 1) {
                     // Single tree - just show it as active (no click handler needed)
                     html += `
-                        <div class="tree-switcher-item active">
+                        <div class="tree-switcher-item active" role="menuitem" tabindex="0" aria-current="true">
                             <span class="tree-item-name">${this.escapeHtml(embeddedTrees[0].name)}</span>
-                            <span class="tree-item-check">✓</span>
+                            <span class="tree-item-check">${iconSvg('check')}</span>
                         </div>
                     `;
                 }
@@ -131,12 +133,17 @@ export const treeManagementMethods = uiModule({
                 // Divider and actions (hidden by CSS in view mode, but include for consistency)
                 html += `
                     <div class="tree-switcher-divider"></div>
-                    <div class="tree-switcher-action" onclick="window.Strom.UI.showTreeManagerDialog()">
+                    <div class="tree-switcher-action" role="menuitem" tabindex="0" onclick="window.Strom.UI.showTreeManagerDialog()">
                         ${strings.treeManager.manageTreesTitle}...
                     </div>
                 `;
 
                 dropdown.innerHTML = html;
+                // Embedded tree ids are keys of a shared HTML file's payload:
+                // handlers via data attributes, never inline JS.
+                dropdown.querySelectorAll<HTMLElement>('[data-embedded-tree-id]').forEach(item => {
+                    item.addEventListener('click', () => { void this.switchEmbeddedTree(item.dataset.embeddedTreeId ?? ''); });
+                });
             }
             return;
         }
@@ -159,19 +166,19 @@ export const treeManagementMethods = uiModule({
         for (const tree of trees) {
             const isActive = tree.id === activeId;
             html += `
-                <div class="tree-switcher-item ${isActive ? 'active' : ''}"
+                <div class="tree-switcher-item ${isActive ? 'active' : ''}" role="menuitem" tabindex="0"
                      onclick="window.Strom.UI.switchToTree('${tree.id}')">
                     <span class="tree-item-name">${this.escapeHtml(tree.name)}</span>
-                    ${isActive ? '<span class="tree-item-check">✓</span>' : ''}
+                    ${isActive ? `<span class="tree-item-check">${iconSvg('check')}</span>` : ''}
                 </div>
             `;
         }
 
         // The switcher is trees only now: view/tree actions moved to the ⋯
-        // actions menu (desktop) and the mobile "More" sheet (≤1024).
+        // actions menu (desktop) and the mobile "More" sheet (≤900px).
         html += `
             <div class="tree-switcher-divider"></div>
-            <div class="tree-switcher-action" onclick="window.Strom.UI.showTreeManagerDialog()">
+            <div class="tree-switcher-action" role="menuitem" tabindex="0" onclick="window.Strom.UI.showTreeManagerDialog()">
                 ${strings.treeManager.manageTreesTitle}...
             </div>
         `;
@@ -204,6 +211,8 @@ export const treeManagementMethods = uiModule({
         // "Change history" row is only offered when the audit log is enabled.
         const auditRow = document.getElementById('actions-tree-audit-row');
         if (auditRow) auditRow.style.display = SettingsManager.isAuditLogEnabled() ? '' : 'none';
+        // Strom Research "New" marker (its dot yields to the anniversaries dot).
+        this.refreshResearchNewMarker(count);
         this.refreshActionsUndoRedo();
     },
 
@@ -269,6 +278,7 @@ export const treeManagementMethods = uiModule({
     /** Toggle the desktop ⋯ actions menu (mirrors the tree switcher dropdown). */
     toggleActionsMenu(): void {
         this.closeAllMenusExcept('actions');
+        this.hideWhatsNewCard();
         const dropdown = document.getElementById('actions-menu-dropdown');
         if (!dropdown) return;
         dropdown.classList.toggle('active');
@@ -429,10 +439,12 @@ export const treeManagementMethods = uiModule({
      */
     updateUrlTreeParam(treeId: string): void {
         const treeSlug = TreeManager.getTreeSlug(treeId as TreeId);
-        if (!treeSlug) return;
 
         const url = new URL(window.location.href);
-        url.searchParams.set('tree', treeSlug);
+        // No slug → drop the parameter; keeping the previous tree's value
+        // made a reload open the WRONG tree (review S19).
+        if (treeSlug) url.searchParams.set('tree', treeSlug);
+        else url.searchParams.delete('tree');
         url.searchParams.delete('search');
         history.replaceState(null, '', url.toString());
     },
@@ -514,6 +526,7 @@ export const treeManagementMethods = uiModule({
         const visibleTrees = filter ? trees.filter(t => t.name.toLowerCase().includes(filter)) : trees;
 
         let html = '';
+        const defaultTree = TreeManager.getDefaultTree();
         for (const tree of visibleTrees) {
             const isActive = tree.id === activeId;
 
@@ -523,7 +536,8 @@ export const treeManagementMethods = uiModule({
 
             // Get tree size from metadata
             const treeSize = tree.sizeBytes;
-            const treeSizeFormatted = TreeManager.formatBytes(treeSize);
+            // Only sizes worth noticing (1 MB and up), rounded: "1,4 MB".
+            const treeSizeFormatted = formatFileSize(treeSize, getCurrentLanguage());
 
             // Get default person setting
             const defaultPersonSetting = treeData?.defaultPersonId;
@@ -554,6 +568,11 @@ export const treeManagementMethods = uiModule({
             const menuItem = (onclick: string, label: string, cls = '', title = '') =>
                 `<button class="tree-row-menu-item ${cls}" onclick="${onclick}"${title ? ` title="${this.escapeHtml(title)}"` : ''}>${label}</button>`;
 
+            // "Open at startup" replaces the old footer "Default tree" dialog:
+            // a checkable row per tree (unchecking falls back to the first tree).
+            const isStartup = defaultTree === tree.id;
+            const startupItem = `<button class="tree-row-menu-item edit-only tree-startup-toggle${isStartup ? ' checked' : ''}" role="menuitemcheckbox" aria-checked="${isStartup}" onclick="window.Strom.UI.toggleStartupTree('${tree.id}')"><span class="tree-row-menu-check" aria-hidden="true">${isStartup ? iconSvg('check', { size: 12 }) : ''}</span>${s.openAtStartup}</button>`;
+
             const auditItem = (AuditLogManager.isEnabled() || await AuditLogManager.hasEntries(tree.id))
                 ? menuItem(`window.Strom.UI.showAuditLogDialog('${tree.id}', 'tree-manager-modal')`, strings.auditLog.viewLog)
                 : '';
@@ -564,22 +583,23 @@ export const treeManagementMethods = uiModule({
                         <span class="tree-manager-item-indicator"></span>
                         <span class="tree-manager-item-name clickable" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${this.escapeHtml(tree.name)}</span>
                         ${badges}
-                        <span class="tree-manager-item-size">${treeSizeFormatted}</span>
+                        ${treeSizeFormatted ? `<span class="tree-manager-item-size">${treeSizeFormatted}</span>` : ''}
                     </div>
                     <div class="tree-manager-item-stats-row">
-                        ${tree.personCount} ${s.persons} • ${familyCount} ${s.families}
+                        ${s.persons(tree.personCount)} • ${s.families(familyCount)}
                         ${defaultPersonDisplay ? ` • ${this.escapeHtml(defaultPersonDisplay)}` : ''}
                     </div>
                     <div class="tree-manager-item-actions">
                         <button class="tree-open-btn" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${s.open}</button>
                         <div class="tree-row-menu-wrap">
-                            <button class="tree-row-menu-btn" data-tip="${s.moreActions}">⋯</button>
+                            <button class="tree-row-menu-btn" data-tip="${s.moreActions}" aria-label="${s.moreActions}" aria-haspopup="menu">⋯</button>
                             <div class="tree-row-menu">
                                 ${menuItem(`window.Strom.UI.showTreeStatsDialog('${tree.id}', 'tree-manager-modal')`, s.stats)}
                                 ${menuItem(`window.Strom.UI.showTreeHealthDialog('${tree.id}', 'tree-manager-modal')`, strings.treeHealth.menu)}
                                 ${menuItem(`window.Strom.UI.showExportDialogFromManager('${tree.id}')`, s.export)}
                                 ${menuItem(`window.Strom.UI.showRenameTreeDialog('${tree.id}', 'tree-manager-modal')`, s.rename, 'edit-only tree-row-menu-divider')}
                                 ${menuItem(`window.Strom.UI.showDefaultPersonDialog('${tree.id}', 'tree-manager-modal')`, s.defaultPerson, 'edit-only')}
+                                ${startupItem}
                                 ${menuItem(`window.Strom.UI.showSnapshotsDialog('${tree.id}', 'tree-manager-modal')`, strings.snapshots.menu, 'edit-only')}
                                 ${isActive ? menuItem(`window.Strom.UI.showPlacesManager(undefined, 'tree-manager-modal')`, strings.map.placesTitle, 'edit-only') : ''}
                                 ${isActive ? menuItem(`window.Strom.UI.showSurnamesDialog('tree-manager-modal')`, strings.surnames.menu, 'edit-only') : ''}
@@ -609,7 +629,7 @@ export const treeManagementMethods = uiModule({
             html += `<div class="tree-manager-section">${strings.treeManager.pendingSection}</div>`;
         }
         for (const session of pendingMerges) {
-            const date = new Date(session.savedAt).toLocaleString();
+            const date = formatRelativeDateTime(new Date(session.savedAt).getTime(), getCurrentLanguage());
 
             // Display name - use incomingFileName or generate from tree names
             const displayName = session.incomingFileName
@@ -627,25 +647,32 @@ export const treeManagementMethods = uiModule({
             const progressInfo = strings.merge.reviewedCount(session.stats.reviewed, session.stats.total);
             const statsText = mergeInfo ? `${mergeInfo}${conflictsInfo} • ${progressInfo}` : `${progressInfo}${conflictsInfo}`;
 
-            const escapedName = this.escapeHtml(displayName).replace(/'/g, "\\'");
             html += `
                 <div class="tree-manager-item pending-merge">
                     <div class="tree-manager-item-header">
                         <span class="tree-manager-item-indicator pending"></span>
                         <span class="tree-manager-item-name">${this.escapeHtml(displayName)}</span>
-                        <span class="tree-manager-item-stats">${statsText}</span>
+                        <span class="tree-manager-item-stats">${this.escapeHtml(statsText)}</span>
                         <span class="tree-manager-item-size">${date}</span>
                     </div>
                     <div class="tree-manager-item-actions">
                         <button class="tree-open-btn edit-only" onclick="window.Strom.UI.resumePendingMergeFromManager('${session.id}')">${strings.merge.resume}</button>
-                        <button class="edit-only tree-text-action" onclick="window.Strom.UI.renamePendingMergeFromManager('${session.id}', '${escapedName}')">${strings.treeManager.rename}</button>
-                        <button class="danger edit-only tree-text-action" onclick="window.Strom.UI.discardPendingMergeFromManager('${session.id}', '${escapedName}')">${strings.merge.discard}</button>
+                        <button class="edit-only tree-text-action pending-merge-rename" data-session-id="${this.escapeHtml(session.id)}" data-merge-name="${this.escapeHtml(displayName)}">${strings.treeManager.rename}</button>
+                        <button class="danger edit-only tree-text-action pending-merge-discard" data-session-id="${this.escapeHtml(session.id)}" data-merge-name="${this.escapeHtml(displayName)}">${strings.merge.discard}</button>
                     </div>
                 </div>
             `;
         }
 
         list.innerHTML = html || `<p class="tree-manager-empty">${strings.merge.noItems}</p>`;
+        // Merge names come from file/tree names: no inline JS (a quote in the
+        // name would break out of the handler string).
+        list.querySelectorAll<HTMLElement>('.pending-merge-rename').forEach(btn => {
+            btn.addEventListener('click', () => { void this.renamePendingMergeFromManager(btn.dataset.sessionId ?? '', btn.dataset.mergeName ?? ''); });
+        });
+        list.querySelectorAll<HTMLElement>('.pending-merge-discard').forEach(btn => {
+            btn.addEventListener('click', () => { void this.discardPendingMergeFromManager(btn.dataset.sessionId ?? '', btn.dataset.mergeName ?? ''); });
+        });
         this.wireTreeRowMenus(list);
     },
 
@@ -1007,7 +1034,9 @@ export const treeManagementMethods = uiModule({
         this.clearDialogStack();
         this.pushDialog('tree-manager-modal');
 
-        const confirmed = await this.showConfirm(strings.treeManager.confirmDelete(tree.name), strings.buttons.delete);
+        const d = strings.danger;
+        const confirmed = await this.showConfirm(d.deleteTreeMessage(tree.personCount), d.deleteTreeTitle(tree.name),
+            { confirmLabel: d.deleteTree, variant: 'danger' });
         if (confirmed) {
             const wasActive = TreeManager.getActiveTreeId() === treeId;
             await TreeManager.deleteTree(treeId as TreeId);
@@ -1181,6 +1210,13 @@ export const treeManagementMethods = uiModule({
 
         this.closeDefaultPersonDialog();
         this.updateTreeManagerList();
+    },
+
+    /** Tree row menu: make this tree the one opened at startup, or undo that. */
+    toggleStartupTree(treeId: string): void {
+        const current = TreeManager.getDefaultTree();
+        TreeManager.setDefaultTree(current === treeId ? undefined : treeId as TreeId);
+        void this.updateTreeManagerList();
     },
 
     // ---- DEFAULT TREE DIALOG ----

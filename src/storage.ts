@@ -17,6 +17,11 @@ const DB_NAME = 'strom-db';
 // the next open.
 const DB_VERSION = 4;
 
+/** Notify the UI layer (no-op outside a browser, e.g. in unit tests). */
+function dispatchStorageEvent(name: string): void {
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name));
+}
+
 const STORES = ['trees', 'audit', 'merge', 'snapshots', 'fileHandles', 'shareBaselines'] as const;
 export type StoreName = typeof STORES[number];
 
@@ -43,13 +48,30 @@ class StorageManagerClass {
             };
 
             request.onsuccess = () => {
-                this.db = request.result;
+                const db = request.result;
+                // Another tab (a newer build) wants to upgrade the schema: close
+                // so its upgrade is not blocked forever, and tell the UI — any
+                // further write from this tab fails loudly instead of hanging.
+                db.onversionchange = () => {
+                    db.close();
+                    if (this.db === db) this.db = null;
+                    dispatchStorageEvent('strom:storage-closed');
+                };
+                this.db = db;
                 resolve();
             };
 
             request.onerror = () => {
                 console.error('Failed to open IndexedDB:', request.error);
-                reject(request.error);
+                reject(request.error ?? new Error('IndexedDB open failed'));
+            };
+
+            // An older connection in another tab holds the database open during
+            // an upgrade. The request keeps waiting (it succeeds once that tab
+            // closes) — surface it so the user is not left with a blank app.
+            request.onblocked = () => {
+                console.warn('IndexedDB open blocked by another tab');
+                dispatchStorageEvent('strom:storage-blocked');
             };
         });
     }
@@ -63,6 +85,7 @@ class StorageManagerClass {
         return new Promise<T | null>((resolve, reject) => {
             const tx = this.db!.transaction(store, 'readonly');
             const req = tx.objectStore(store).get(key);
+            tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
             req.onsuccess = () => resolve(req.result ?? null);
             req.onerror = () => reject(req.error);
         });
@@ -74,13 +97,18 @@ class StorageManagerClass {
      * The write is tracked internally; use flush() to wait for all pending writes.
      */
     set(store: StoreName, key: string, value: unknown): Promise<void> {
-        if (!this.db) throw new Error('StorageManager not initialized');
+        // Reject (never throw synchronously): fire-and-forget callers would
+        // otherwise blow up mid-operation once the connection was closed.
+        if (!this.db) return Promise.reject(new Error('StorageManager not initialized'));
 
         const promise = new Promise<void>((resolve, reject) => {
             const tx = this.db!.transaction(store, 'readwrite');
             tx.objectStore(store).put(value, key);
             tx.oncomplete = () => resolve();
             tx.onerror = () => reject(tx.error);
+            // QuotaExceededError arrives as an ABORT in Chrome — without this
+            // the promise never settled and the whole save queue hung.
+            tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
         });
 
         this.pendingWrites.push(promise);
@@ -88,7 +116,7 @@ class StorageManagerClass {
         promise.finally(() => {
             const idx = this.pendingWrites.indexOf(promise);
             if (idx >= 0) this.pendingWrites.splice(idx, 1);
-        });
+        }).catch(() => { /* reported through the returned promise */ });
 
         return promise;
     }
@@ -104,6 +132,7 @@ class StorageManagerClass {
             tx.objectStore(store).delete(key);
             tx.oncomplete = () => resolve();
             tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
         });
     }
 
@@ -116,6 +145,7 @@ class StorageManagerClass {
         return new Promise<string[]>((resolve, reject) => {
             const tx = this.db!.transaction(store, 'readonly');
             const req = tx.objectStore(store).getAllKeys();
+            tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
             req.onsuccess = () => resolve(req.result.map(k => String(k)));
             req.onerror = () => reject(req.error);
         });
@@ -130,6 +160,7 @@ class StorageManagerClass {
         return new Promise<T[]>((resolve, reject) => {
             const tx = this.db!.transaction(store, 'readonly');
             const req = tx.objectStore(store).getAll();
+            tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
             req.onsuccess = () => resolve(req.result as T[]);
             req.onerror = () => reject(req.error);
         });
@@ -141,7 +172,9 @@ class StorageManagerClass {
      */
     async flush(): Promise<void> {
         if (this.pendingWrites.length === 0) return;
-        await Promise.all([...this.pendingWrites]);
+        // Settle, never throw: a failed write is reported by its own caller
+        // (save-failed toast); flush only orders reads after writes.
+        await Promise.allSettled([...this.pendingWrites]);
     }
 
 }

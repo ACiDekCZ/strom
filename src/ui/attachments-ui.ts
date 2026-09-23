@@ -12,10 +12,12 @@ import { strings } from '../strings.js';
 import { dataUrlByteSize } from '../photo.js';
 import {
     compressImageAttachment, readFileAsDataUrl, totalAttachmentBytes,
-    MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES, ATTACHMENT_WARN_BYTES,
+    MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES, ATTACHMENT_WARN_BYTES, pdfBlobFromDataUrl,
 } from '../attachments.js';
 import { uiModule } from './module.js';
+import { emptyStateHtml } from './empty-state.js';
 
+import { iconSvg } from '../icons.js';
 function esc(text: string): string {
     return text
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -41,15 +43,6 @@ function isImage(att: Attachment): boolean {
 let attachmentOverlayEscHandler: ((e: KeyboardEvent) => void) | null = null;
 
 /** Convert a data URL to a Blob (for opening PDFs via an object URL). */
-function dataUrlToBlob(dataUrl: string): Blob {
-    const comma = dataUrl.indexOf(',');
-    const mime = dataUrl.slice(5, dataUrl.indexOf(';'));
-    const bin = atob(dataUrl.slice(comma + 1));
-    const arr = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-    return new Blob([arr], { type: mime || 'application/octet-stream' });
-}
-
 export const attachmentsMethods = uiModule({
     /** Render the attachments list + total for the currently edited person. */
     renderAttachmentsList(): void {
@@ -63,21 +56,27 @@ export const attachmentsMethods = uiModule({
         const locked = DataManager.isPersonLocked(this.currentId);
 
         if (attachments.length === 0) {
-            container.innerHTML = `<div class="attachments-empty">${esc(strings.attachments.empty)}</div>`;
+            // Compact empty state: the "Add attachment" button sits right below.
+            container.innerHTML = emptyStateHtml({
+                title: strings.emptyStates.attachmentsTitle,
+                text: strings.emptyStates.attachmentsText,
+                className: 'attachments-empty',
+                compact: true,
+            });
         } else {
             container.innerHTML = attachments.map(att => {
                 const thumb = isImage(att)
-                    ? `<span class="attachment-thumb" onclick="window.Strom.UI.previewAttachment('${esc(att.id)}')"><img src="${att.dataUrl}" alt=""></span>`
-                    : `<span class="attachment-thumb" title="PDF" onclick="window.Strom.UI.previewAttachment('${esc(att.id)}')">&#128196;</span>`;
+                    ? `<span class="attachment-thumb" data-attachment-id="${esc(att.id)}"><img src="${esc(att.dataUrl)}" alt=""></span>`
+                    : `<span class="attachment-thumb" title="PDF" data-attachment-id="${esc(att.id)}">${iconSvg('file', { size: 18 })}</span>`;
                 const noteField = locked
                     ? (att.note ? `<span class="attachment-size">${esc(att.note)}</span>` : '')
                     : `<input type="text" class="attachment-note-input" value="${esc(att.note ?? '')}"
                            data-i18n-placeholder="attachments.notePlaceholder"
-                           onchange="window.Strom.UI.updateAttachmentNoteFromInput('${esc(att.id)}', this.value)">`;
+                           data-attachment-id="${esc(att.id)}">`;
                 const del = locked ? '' : `
                     <div class="attachment-actions">
-                        <button type="button" title="${esc(strings.attachments.delete)}"
-                            onclick="window.Strom.UI.deleteAttachment('${esc(att.id)}')">&#128465;</button>
+                        <button type="button" class="attachment-delete-btn" title="${esc(strings.attachments.delete)}" aria-label="${esc(strings.attachments.delete)}"
+                            data-attachment-id="${esc(att.id)}">${iconSvg('trash')}</button>
                     </div>`;
                 return `
                     <div class="attachment-row">
@@ -90,6 +89,18 @@ export const attachmentsMethods = uiModule({
                         ${del}
                     </div>`;
             }).join('');
+            // Attachment ids come from data files: wire handlers via data
+            // attributes, never inline JS (the browser decodes &#39; back to a
+            // quote inside an attribute, so escaping cannot protect onclick).
+            container.querySelectorAll<HTMLElement>('.attachment-thumb[data-attachment-id]').forEach(el => {
+                el.addEventListener('click', () => this.previewAttachment(el.dataset.attachmentId ?? ''));
+            });
+            container.querySelectorAll<HTMLInputElement>('.attachment-note-input[data-attachment-id]').forEach(el => {
+                el.addEventListener('change', () => this.updateAttachmentNoteFromInput(el.dataset.attachmentId ?? '', el.value));
+            });
+            container.querySelectorAll<HTMLElement>('.attachment-delete-btn[data-attachment-id]').forEach(el => {
+                el.addEventListener('click', () => { void this.deleteAttachment(el.dataset.attachmentId ?? ''); });
+            });
         }
 
         // Total + email-size warning.
@@ -171,7 +182,13 @@ export const attachmentsMethods = uiModule({
                 document.addEventListener('keydown', attachmentOverlayEscHandler, true);
             }
         } else {
-            const url = URL.createObjectURL(dataUrlToBlob(att.dataUrl));
+            // Only a PDF is ever opened, and always as application/pdf.
+            const blob = pdfBlobFromDataUrl(att.dataUrl, att.mimeType);
+            if (!blob) {
+                this.showAlert(strings.attachments.unsupportedType, 'warning');
+                return;
+            }
+            const url = URL.createObjectURL(blob);
             window.open(url, '_blank');
             // The tab keeps its own reference; revoke shortly after.
             setTimeout(() => URL.revokeObjectURL(url), 60_000);
@@ -200,8 +217,9 @@ export const attachmentsMethods = uiModule({
         const person = DataManager.getPerson(this.currentId);
         const att = person?.attachments?.find(a => a.id === attachmentId);
         if (!att) return;
-        const confirmed = await this.showConfirm(
-            strings.attachments.deleteConfirm(att.name), strings.attachments.delete);
+        const d = strings.danger;
+        const confirmed = await this.showConfirm(d.undoHint, d.deleteAttachmentTitle(att.name),
+            { confirmLabel: d.deleteAttachment, variant: 'danger' });
         if (!confirmed) return;
         DataManager.removeAttachment(this.currentId, attachmentId);
         this.renderAttachmentsList();

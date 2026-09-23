@@ -1,8 +1,8 @@
 /**
- * Mobile bottom sheet: the touch counterpart of the desktop context menu.
- * A long-press on a card opens a sheet with the SAME actions (shared from
- * context-menu.ts — same action list + dispatch, different markup). Desktop
- * behaviour is untouched. See src/ui/module.ts for the composition pattern.
+ * Bottom sheet: the touch / bottom-navigation counterpart of the desktop
+ * context menu. A tap (or long-press) on a card opens a sheet with the SAME
+ * actions (shared from context-menu.ts — same action list + dispatch,
+ * different markup). Desktop (> 1024px, fine pointer) keeps the floating menu. See src/ui/module.ts for the composition pattern.
  */
 
 import { PersonId } from '../types.js';
@@ -14,11 +14,17 @@ import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
 
 /** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
-interface MenuRow { label: string; run: () => void; danger?: boolean; badge?: number; active?: boolean; }
+interface MenuRow {
+    label: string; run: () => void; danger?: boolean; badge?: number; active?: boolean;
+    /** Carries the "New" label (Strom Research menu item while it is new). */
+    isNew?: boolean;
+    /** Accessible name when it differs from the visible label. */
+    ariaLabel?: string;
+}
 /** The prominent "Strom: {name}" row that opens the second-level tree sheet
  *  (serif name + chevron + tinted background — mirrors the desktop submenu row). */
 interface TreeRow { prefix: string; name: string; run: () => void; badge?: number; }
-interface MenuBlock { header?: string; rows: MenuRow[]; pair?: MenuRow[]; treeRow?: TreeRow; }
+interface MenuBlock { header?: string; rows: MenuRow[]; pair?: MenuRow[]; treeRow?: TreeRow; divider?: boolean; }
 
 /** Coarse pointer = touch device; used to gate touch-only behaviour. */
 export function isCoarsePointer(): boolean {
@@ -36,24 +42,32 @@ const MOVE_CANCEL_PX = 10;
 const SWIPE_CLOSE_PX = 80;
 
 export const bottomSheetMethods = uiModule({
-    /** Open the mobile action sheet for a person (built from the shared list). */
+    /**
+     * Open the person action sheet (touch, and every viewport in the
+     * bottom-navigation regime). Built from the shared action list, with the
+     * same chrome as the "More" sheet: serif title naming the person, text-only
+     * rows, a divider between action groups.
+     */
     showPersonBottomSheet(personId: PersonId): void {
         this.hideBottomSheet();
         const actions = this.getPersonMenuActions(personId);
         if (actions.length === 0) return;
 
+        const person = DataManager.getPerson(personId);
+        const personName = person ? `${person.firstName} ${person.lastName}`.trim() : '';
+
         const overlay = document.createElement('div');
         overlay.className = 'bottom-sheet-overlay';
         overlay.innerHTML = `
-            <div class="bottom-sheet" role="menu">
+            <div class="bottom-sheet bottom-sheet-person" role="menu"${personName ? ` aria-label="${esc(personName)}"` : ''}>
                 <div class="bottom-sheet-handle"></div>
+                ${personName ? `<div class="bottom-sheet-menu-title">${esc(personName)}</div>` : ''}
                 <div class="bottom-sheet-items">
                     ${actions.map(a => {
                         // Keep the class out of the attribute (see context-menu.ts note).
                         const cls = a.danger ? 'bottom-sheet-item danger' : 'bottom-sheet-item';
-                        return `<button type="button" class="${cls}" data-action="${esc(a.action)}">
-                            <span class="bottom-sheet-icon">${a.icon}</span> ${esc(a.label)}
-                        </button>`;
+                        const divider = a.divider ? '<div class="bottom-sheet-divider" role="separator"></div>' : '';
+                        return `${divider}<button type="button" class="${cls}" role="menuitem" data-action="${esc(a.action)}">${esc(a.label)}</button>`;
                     }).join('')}
                 </div>
             </div>
@@ -123,9 +137,11 @@ export const bottomSheetMethods = uiModule({
     showMoreMenuSheet(): void {
         this.hideBottomSheet();
         this.closeAllMenusExcept('sheet');
+        this.hideWhatsNewCard();
 
         const s = strings;
-        const isView = document.body.classList.contains('view-mode');
+        // Read-only: an embedded file's view mode or locked local data.
+        const isView = DataManager.isReadOnly();
         const mode = TreeRenderer.getViewMode();
 
         const blocks: MenuBlock[] = [];
@@ -168,6 +184,11 @@ export const bottomSheetMethods = uiModule({
             }
         }
 
+        // 3b) Strom Research — right below the tree row, above the fold on a
+        //     phone (never in read-only views or exported files).
+        const research = this.researchMenuSheetRow();
+        if (research) blocks.push({ divider: true, rows: [research] });
+
         // 4) Extra views (Fan/Map) — no bottom-bar tab of their own.
         blocks.push({ header: s.menu.sectionView, rows: [
             { label: s.viewModeSwitch.fan, run: () => this.setDisplayViewMode('fan'), active: mode === 'fan' },
@@ -199,7 +220,7 @@ export const bottomSheetMethods = uiModule({
         const s = strings;
         const active = TreeManager.getActiveTreeMetadata();
         const id = TreeManager.getActiveTreeId();
-        if (!active || !id || DataManager.isViewMode()) return;
+        if (!active || !id || DataManager.isReadOnly()) return;
         const isFsa = document.body.classList.contains('fsa-supported');
 
         const rows: MenuRow[] = [
@@ -209,6 +230,7 @@ export const bottomSheetMethods = uiModule({
             // WYSIWYG: the active tree IS the live view, so no person picker.
             { label: s.menu.splitFamilies, run: () => this.showSplitFamiliesDialog() },
             { label: s.treeManager.stats, run: () => this.showActiveTreeStats() },
+            { label: s.treeHealth.menu, run: () => void this.showTreeHealthDialog(id) },
             { label: s.book.menu, run: () => this.showBookDialog() },
             { label: s.menu.export, run: () => this.showExportDialog() },
         ];
@@ -262,6 +284,14 @@ export const bottomSheetMethods = uiModule({
                 badge.textContent = String(row.badge);
                 btn.appendChild(badge);
             }
+            if (row.isNew) {
+                const badge = document.createElement('span');
+                badge.className = 'research-new-badge research-new-badge--sheet';
+                badge.setAttribute('aria-hidden', 'true');
+                badge.textContent = strings.research.newBadge;
+                btn.appendChild(badge);
+            }
+            if (row.ariaLabel) btn.setAttribute('aria-label', row.ariaLabel);
             btn.addEventListener('click', () => {
                 this.hideBottomSheet();
                 row.run();
@@ -301,6 +331,12 @@ export const bottomSheetMethods = uiModule({
         };
 
         for (const block of blocks) {
+            if (block.divider) {
+                const divider = document.createElement('div');
+                divider.className = 'bottom-sheet-divider';
+                divider.setAttribute('role', 'separator');
+                list.appendChild(divider);
+            }
             if (block.header) {
                 const header = document.createElement('div');
                 header.className = 'bottom-sheet-section';

@@ -15,10 +15,12 @@ import { AuditLogManager } from './audit-log.js';
 import { TreePreview, TreeCompare } from './tree-preview.js';
 import { initModalSkeleton } from './ui/modal-skeleton.js';
 import { DebugOptions, DebugStep, DebugPhase } from './layout/pipeline/debug-types.js';
-import { decrypt, CryptoSession } from './crypto.js';
-import { StromData, AppMode, PWA_HOSTNAME, APP_VERSION } from './types.js';
+import { CryptoSession } from './crypto.js';
+import { AppMode, PWA_HOSTNAME, APP_VERSION, TreeId } from './types.js';
+import { strings } from './strings.js';
+import { onTreeSavedElsewhere } from './tab-sync.js';
 import { StorageManager } from './storage.js';
-import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest } from './pwa.js';
+import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild } from './pwa.js';
 
 // Make modules available globally for HTML event handlers
 declare global {
@@ -143,8 +145,99 @@ function handleUrlImportParam(): boolean {
     return false;
 }
 
+/**
+ * Sync the `?tree=` URL parameter with the current tree (refresh persistence
+ * and bookmarking). Drops the parameter when there is no tree to name.
+ */
+function syncUrlTreeParam(): void {
+    const currentTreeId = DataManager.getCurrentTreeId();
+    const url = new URL(window.location.href);
+    const currentUrlSlug = url.searchParams.get('tree');
+    const treeSlug = currentTreeId ? TreeManager.getTreeSlug(currentTreeId) : null;
+    if (treeSlug) {
+        // Only update if slug changed
+        if (currentUrlSlug === treeSlug) return;
+        url.searchParams.set('tree', treeSlug);
+    } else {
+        if (currentUrlSlug === null || DataManager.isViewMode()) return;
+        url.searchParams.delete('tree');
+    }
+    history.replaceState(null, '', url.toString());
+}
+
+/** Listeners every startup path needs — including the locked ones (V3). */
+function registerAppListeners(): void {
+    // Listen for data changes (e.g., after import)
+    window.addEventListener('strom:data-changed', () => {
+        // Locked ↔ readable flips with every tree (re)load: sync the
+        // read-only gating before the render reads it.
+        UI.syncLockedState();
+        TreeRenderer.render();
+        UI.refreshSearch();
+        // Track changes for embedded mode unsaved warning
+        UI.markDataChanged();
+    });
+
+    // Listen for tree switches
+    window.addEventListener('strom:tree-switched', () => {
+        UI.updateTreeSwitcher();
+        UI.updateCollabBar();
+        void UI.updateFileIndicator();
+        // A warning about another tab belongs to the tree it was raised for.
+        document.getElementById('other-tab-notice')?.remove();
+    });
+
+    // Persistence failures (quota, locked session) must reach the user —
+    // they used to be swallowed rejections with memory/disk divergence.
+    window.addEventListener('strom:save-failed', () => {
+        UI.showToast(UI.getString('errors.saveFailed'), 6000);
+    });
+
+    // A tree that could not be decrypted is never saved over (K8).
+    window.addEventListener('strom:save-blocked', () => {
+        UI.showToast(strings.storageSafety.saveBlocked, 6000);
+    });
+    window.addEventListener('strom:tree-unreadable', (e) => {
+        // Locked session → Unlock banner; unlocked but another key → ask for
+        // that tree's password and re-encrypt it (K8).
+        UI.handleUnreadableTree((e as CustomEvent<{ treeId?: TreeId }>).detail?.treeId);
+        UI.syncLockedState();
+    });
+
+    // Another tab saved the tree open here: warn and offer a reload — this
+    // tab's next save would silently overwrite that work (V6).
+    onTreeSavedElsewhere((treeId) => {
+        if (DataManager.isViewMode() || treeId !== DataManager.getCurrentTreeId()) return;
+        UI.showStorageNotice('other-tab-notice', strings.storageSafety.otherTabSaved, {
+            label: strings.storageSafety.reload,
+            run: () => window.location.reload(),
+        });
+    });
+
+    // A locked start is read-only from the first paint (no add/edit entry
+    // points behind the password prompt).
+    UI.syncLockedState();
+}
+
+/** IndexedDB could not be opened: say so instead of a blank page (S22). */
+function showStartupError(err: unknown): void {
+    console.error('Startup failed', err);
+    void UI.showAlert(strings.storageSafety.storageInitFailed, 'error');
+}
+
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', async () => {
+    // Opening a research from outside (?import-url= / ?live=): keep the canvas
+    // blank until that tree is in, instead of flashing the last-opened tree.
+    // Cleared by UI.initExternalOpen when the open settles (with a safety net).
+    try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('import-url') || params.has('live')) {
+            document.documentElement.classList.add('external-opening');
+            setTimeout(() => document.documentElement.classList.remove('external-opening'), 20000);
+        }
+    } catch { /* no URLSearchParams: nothing to hide */ }
+
     // Initialize settings (theme) early for smooth loading
     SettingsManager.init();
 
@@ -178,21 +271,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Check if we have embedded data (from exported HTML)
     const hasEmbeddedData = !!(window as Window & { STROM_EMBEDDED_DATA?: unknown }).STROM_EMBEDDED_DATA;
 
-    // Initialize IndexedDB
-    await StorageManager.init();
+    // Storage connection problems (registered before init: onblocked can
+    // fire while the database is opening).
+    window.addEventListener('strom:storage-blocked', () => {
+        UI.showStorageNotice('storage-blocked-notice', strings.storageSafety.storageBlocked);
+    });
+    window.addEventListener('strom:storage-closed', () => {
+        UI.showStorageNotice('storage-closed-notice', strings.storageSafety.storageClosed, {
+            label: strings.storageSafety.reload,
+            run: () => window.location.reload(),
+        });
+    });
 
-    // Initialize data (includes TreeManager initialization)
-    await DataManager.init();
+    try {
+        // Initialize IndexedDB
+        await StorageManager.init();
 
-    // Check for tree ID in URL - if specified and valid, switch to it
-    const urlTreeId = getTreeIdFromUrl();
-    if (urlTreeId && DataManager.getCurrentTreeId() !== urlTreeId) {
-        await DataManager.switchTree(urlTreeId as any);
+        // Initialize data (includes TreeManager initialization)
+        await DataManager.init();
+
+        // Check for tree ID in URL - if specified and valid, switch to it
+        const urlTreeId = getTreeIdFromUrl();
+        if (urlTreeId && DataManager.getCurrentTreeId() !== urlTreeId) {
+            await DataManager.switchTree(urlTreeId as any);
+        }
+    } catch (err) {
+        showStartupError(err);
+        return;
     }
+    document.getElementById('storage-blocked-notice')?.remove();
 
-    // A tree that already cites sources belongs to someone who uses the
-    // research fields — keep them visible for that user (one-time default).
-    SettingsManager.defaultAdvancedFieldsFromData(DataManager.getData());
+    // ---- Shell: everything that does not need readable data ----
 
     // Initialize zoom/pan
     ZoomPan.init();
@@ -223,43 +332,131 @@ document.addEventListener('DOMContentLoaded', async () => {
         TreeRenderer.setDebugOptions(debugOptions);
     }
 
-    // Check for encrypted embedded data that needs password
-    if (DataManager.hasPendingEncryptedData()) {
-        const encryptedData = DataManager.getPendingEncryptedData();
-        if (encryptedData) {
-            // Set pending data for password validation
-            UI.setPendingEncryptedData(encryptedData);
+    // Listeners (save failures, tree switches, other tabs) — before any
+    // password prompt, so a locked start never saves silently (V3).
+    registerAppListeners();
 
-            // Show password prompt
-            UI.showPasswordPrompt(async (password: string) => {
-                try {
-                    // Decrypt the data
-                    const decryptedStr = await decrypt(encryptedData, password);
-                    const decryptedData = JSON.parse(decryptedStr) as StromData;
-
-                    // Unlock session with this password
-                    const salt = new Uint8Array(atob(encryptedData.salt).split('').map(c => c.charCodeAt(0)));
-                    await CryptoSession.unlock(password, salt);
-
-                    // Load the decrypted data (this now handles view mode)
-                    DataManager.loadDecryptedEmbeddedData(decryptedData);
-
-                    // Initialize view mode UI if needed
-                    UI.initViewMode();
-
-                    // Restore focus and render
-                    TreeRenderer.restoreFromSession();
-                    await TreeRenderer.renderAsync();
-                    ZoomPan.centerOnFocusWithContext();
-                } catch {
-                    UI.showAlert(UI.getString('encryption.decryptionFailed'), 'error');
-                }
-            });
-
-            // Don't render yet - wait for password
-            return;
+    // PWA: offline indicator always; register the service worker only on the
+    // hosted PWA (never in embedded/file:// exports or dev).
+    UI.initOnlineIndicator();
+    if (shouldRegisterServiceWorker(APP_MODE)) {
+        linkManifest();
+        registerServiceWorker(() => UI.showUpdateAvailable());
+    }
+    // The pre-release test build (/beta/) says so next to the wordmark.
+    if (isBetaBuild(APP_MODE)) {
+        const logo = document.querySelector('.app-wordmark');
+        if (logo && !logo.querySelector('.beta-badge')) {
+            const badge = document.createElement('span');
+            badge.className = 'beta-badge';
+            badge.textContent = strings.about.betaBadge;
+            badge.title = strings.about.betaTitle;
+            logo.appendChild(badge);
         }
     }
+
+    // File System Access (reveal controls if supported; sync the file indicator).
+    UI.initFileAccess();
+
+    // A .ged dropped anywhere onto the window opens it (no-op without drag and drop).
+    UI.initFileDrop();
+
+    // Initialize embedded mode UI (for file:// or non-PWA domains)
+    UI.initEmbeddedMode(APP_MODE);
+
+    // Strom Research in the app: welcome-screen offer + menu item gating.
+    UI.initResearchPromo();
+
+    // ---- Data: runs once the data is readable ----
+
+    /** URL parameters and idle extras after the first real render. */
+    const afterFirstRender = (): void => {
+        // Handle URL search parameter after render (may override fitToScreen)
+        handleUrlSearchParam();
+
+        // Opening from outside: ?import-url= / ?live= (Strom Research on this
+        // computer) and the installed app's file handler (launchQueue). Reads
+        // its parameters before handleUrlImportParam may clear the address.
+        UI.initExternalOpen();
+
+        // Handle URL import parameter (from offline version redirect)
+        handleUrlImportParam();
+
+        // Sync URL with current tree slug (for refresh persistence and bookmarking)
+        syncUrlTreeParam();
+
+        // Strom Research: light the "New" marker, maybe the one-time 3.0 card.
+        UI.researchPromoAfterFirstRender();
+
+        // "On this day" reminder — after the first render, off the critical path.
+        const showOtd = () => UI.maybeShowOnThisDay();
+        if ('requestIdleCallback' in window) {
+            (window as unknown as { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback(showOtd);
+        } else {
+            setTimeout(showOtd, 800);
+        }
+    };
+
+    let dataInitDone = false;
+    const finishDataInit = async (): Promise<void> => {
+        dataInitDone = true;
+
+        // A tree that already cites sources belongs to someone who uses the
+        // research fields — keep them visible for that user (one-time default).
+        SettingsManager.defaultAdvancedFieldsFromData(DataManager.getData());
+
+        // Check storage version compatibility (for non-embedded data) — after
+        // unlocking too, so an older build never migrates newer data (V3).
+        if (!hasEmbeddedData) {
+            if (!await UI.checkStorageVersionOnStartup()) {
+                // Newer version detected in storage - dialog shown, stop here
+                return;
+            }
+        }
+
+        // Initialize view mode UI if we have embedded data
+        if (hasEmbeddedData) {
+            UI.initViewMode();
+            // If newer version dialog is shown, stop here
+            if (DataManager.hasNewerVersionData()) {
+                return;
+            }
+        }
+
+        // Restore focus based on tree's defaultPersonId setting
+        if (!hasEmbeddedData || !DataManager.isViewMode()) {
+            // Normal app: use tree's defaultPersonId setting (first person, last focused, or specific)
+            TreeRenderer.restoreFromSession();
+        }
+        // For view mode with embedded data: use data as-is (no saved focus state)
+
+        // Initial render
+        await TreeRenderer.renderAsync();
+
+        // Center on focused person with context on initial load
+        ZoomPan.centerOnFocusWithContext();
+
+        afterFirstRender();
+    };
+
+    // Local data unlocked (startup prompt, the "Unlock" banner, or before an
+    // import): reload the tree now readable, then run the data init once.
+    UI.onLocalDataUnlocked = async () => {
+        if (!DataManager.isViewMode()) {
+            await DataManager.reloadCurrentTree();
+            const treeId = DataManager.getCurrentTreeId();
+            if (treeId) await AuditLogManager.loadForTree(treeId);
+        }
+        if (!dataInitDone) {
+            await finishDataInit();
+            return;
+        }
+        // Viewing an embedded file: unlocking only prepares a later import.
+        if (DataManager.isViewMode()) return;
+        TreeRenderer.restoreFromSession();
+        await TreeRenderer.renderAsync();
+        ZoomPan.centerOnFocusWithContext();
+    };
 
     // Reconcile the encryption FLAG (localStorage) with what actually sits
     // on disk (IndexedDB): browsers can evict them independently, and a lost
@@ -269,133 +466,39 @@ document.addEventListener('DOMContentLoaded', async () => {
         SettingsManager.setEncryption(true);
     }
 
-    // Check for encrypted localStorage data that needs password
-    if (SettingsManager.isEncryptionEnabled() && await TreeManager.hasEncryptedTrees()) {
-        const encryptedData = await TreeManager.getFirstEncryptedData();
-        if (encryptedData) {
-            // Set pending data for password validation
-            UI.setPendingEncryptedData(encryptedData);
+    // Encrypted embedded file: its password decrypts only this file, with a
+    // key of its own — the local session key is never replaced (K8).
+    if (DataManager.hasPendingEncryptedData()) {
+        UI.showEmbeddedPasswordPrompt(async () => {
+            dataInitDone = true;
+            // Initialize view mode UI if needed
+            UI.initViewMode();
 
-            // Show password prompt
-            UI.showPasswordPrompt(async (password: string) => {
-                try {
-                    // Verify password by decrypting
-                    await decrypt(encryptedData, password);
-
-                    // Unlock session with this password
-                    const salt = new Uint8Array(atob(encryptedData.salt).split('').map(c => c.charCodeAt(0)));
-                    await CryptoSession.unlock(password, salt);
-
-                    // Now we can load the data - re-init DataManager to load decrypted data
-                    await DataManager.reloadCurrentTree();
-
-                    // Restore focus and render
-                    TreeRenderer.restoreFromSession();
-                    await TreeRenderer.renderAsync();
-                    ZoomPan.centerOnFocusWithContext();
-                } catch {
-                    UI.showAlert(UI.getString('encryption.decryptionFailed'), 'error');
-                }
-            });
-
-            // Don't render yet - wait for password
-            return;
-        }
+            // Restore focus and render
+            TreeRenderer.restoreFromSession();
+            await TreeRenderer.renderAsync();
+            ZoomPan.centerOnFocusWithContext();
+            afterFirstRender();
+        });
+        console.log(`Strom v${APP_VERSION} initialized (awaiting file password)`);
+        return;
     }
 
-    // Check storage version compatibility (for non-embedded data)
-    if (!hasEmbeddedData) {
-        if (!await UI.checkStorageVersionOnStartup()) {
-            // Newer version detected in storage - dialog shown, stop here
-            return;
-        }
+    // Encrypted local data: prompt; the data init runs after unlocking.
+    // Cancelling leaves an "Unlock" banner (V3). A plain embedded file is
+    // shown right away — the local password is asked for only when the
+    // file is saved into local storage (ensureLocalUnlocked).
+    const showingEmbedded = DataManager.isViewMode() || DataManager.hasNewerVersionData();
+    if (!showingEmbedded && SettingsManager.isEncryptionEnabled() && !CryptoSession.isUnlocked()
+        && await TreeManager.hasEncryptedTrees()) {
+        void UI.showLocalUnlockPrompt(async () => {
+            await UI.onLocalDataUnlocked?.();
+        });
+        console.log(`Strom v${APP_VERSION} initialized (locked)`);
+        return;
     }
 
-    // Initialize view mode UI if we have embedded data
-    if (hasEmbeddedData) {
-        UI.initViewMode();
-        // If newer version dialog is shown, stop here
-        if (DataManager.hasNewerVersionData()) {
-            return;
-        }
-    }
-
-    // Initialize embedded mode UI (for file:// or non-PWA domains)
-    UI.initEmbeddedMode(APP_MODE);
-
-    // Restore focus based on tree's defaultPersonId setting
-    if (!hasEmbeddedData || !DataManager.isViewMode()) {
-        // Normal app: use tree's defaultPersonId setting (first person, last focused, or specific)
-        TreeRenderer.restoreFromSession();
-    }
-    // For view mode with embedded data: use data as-is (no saved focus state)
-
-    // Initial render
-    await TreeRenderer.renderAsync();
-
-    // Center on focused person with context on initial load
-    ZoomPan.centerOnFocusWithContext();
-
-    // Handle URL search parameter after render (may override fitToScreen)
-    handleUrlSearchParam();
-
-    // Handle URL import parameter (from offline version redirect)
-    handleUrlImportParam();
-
-    // Sync URL with current tree slug (for refresh persistence and bookmarking)
-    const currentTreeId = DataManager.getCurrentTreeId();
-    if (currentTreeId) {
-        const treeSlug = TreeManager.getTreeSlug(currentTreeId);
-        if (treeSlug) {
-            const url = new URL(window.location.href);
-            const currentUrlSlug = url.searchParams.get('tree');
-            // Only update if slug changed
-            if (currentUrlSlug !== treeSlug) {
-                url.searchParams.set('tree', treeSlug);
-                history.replaceState(null, '', url.toString());
-            }
-        }
-    }
-
-    // Listen for data changes (e.g., after import)
-    window.addEventListener('strom:data-changed', () => {
-        TreeRenderer.render();
-        UI.refreshSearch();
-        // Track changes for embedded mode unsaved warning
-        UI.markDataChanged();
-    });
-
-    // Listen for tree switches
-    window.addEventListener('strom:tree-switched', () => {
-        UI.updateTreeSwitcher();
-        UI.updateCollabBar();
-        void UI.updateFileIndicator();
-    });
-
-    // Persistence failures (quota, locked session) must reach the user —
-    // they used to be swallowed rejections with memory/disk divergence.
-    window.addEventListener('strom:save-failed', () => {
-        UI.showToast(UI.getString('errors.saveFailed'), 6000);
-    });
-
-    // PWA: offline indicator always; register the service worker only on the
-    // hosted PWA (never in embedded/file:// exports or dev).
-    UI.initOnlineIndicator();
-    if (shouldRegisterServiceWorker(APP_MODE)) {
-        linkManifest();
-        registerServiceWorker(() => UI.showUpdateAvailable());
-    }
-
-    // File System Access (reveal controls if supported; sync the file indicator).
-    UI.initFileAccess();
-
-    // "On this day" reminder — after the first render, off the critical path.
-    const showOtd = () => UI.maybeShowOnThisDay();
-    if ('requestIdleCallback' in window) {
-        (window as unknown as { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback(showOtd);
-    } else {
-        setTimeout(showOtd, 800);
-    }
+    await finishDataInit();
 
     console.log(`Strom v${APP_VERSION} initialized`);
 });

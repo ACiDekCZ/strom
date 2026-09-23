@@ -152,6 +152,8 @@ export const appModeMethods = uiModule({
      */
     async viewStoredVersion(): Promise<void> {
         this.closeExistingExportDialog();
+        // The stored tree may be encrypted: unlock the LOCAL data first.
+        if (!await this.ensureLocalUnlocked()) return;
         await DataManager.switchToStoredVersion();
         this.hideViewModeBanner();
         await TreeRenderer.renderAsync();
@@ -173,7 +175,8 @@ export const appModeMethods = uiModule({
      */
     async updateStoredVersion(): Promise<void> {
         this.closeExistingExportDialog();
-        DataManager.importFromViewMode('update');
+        if (!await this.ensureLocalUnlocked()) return;
+        await DataManager.importFromViewMode('update');
         this.hideViewModeBanner();
         this.showToast(strings.viewMode.updateSuccess);
         await TreeRenderer.renderAsync();
@@ -202,12 +205,29 @@ export const appModeMethods = uiModule({
     },
 
     /**
+     * View-mode banner "Stay with this file": keep the file in this browser.
+     * When a tree from this very export is already stored, offer that tree
+     * again (view / update) instead of silently adding another copy (V7) —
+     * closing the offer and clicking the banner used to duplicate the tree.
+     */
+    async stayWithFile(): Promise<void> {
+        if (DataManager.getExistingTreeFromExport()) {
+            this.showExistingExportDialog();
+            return;
+        }
+        await this.importAsNew();
+    },
+
+    /**
      * Import embedded trees to storage (handles both single and multiple trees)
      * Always creates new trees, adds date suffix if name already exists
      */
     async importAsNew(): Promise<void> {
         this.closeImportViewModeDialog();
         this.closeExistingExportDialog();
+        // New trees are written encrypted when local encryption is on — the
+        // local session must be unlocked (the file's own password never is).
+        if (!await this.ensureLocalUnlocked()) return;
 
         // Import all embedded trees (works for single tree too)
         const result = await DataManager.importAllEmbeddedTrees();
@@ -229,6 +249,7 @@ export const appModeMethods = uiModule({
      */
     async importAsCopy(): Promise<void> {
         this.closeImportViewModeDialog();
+        if (!await this.ensureLocalUnlocked()) return;
         await DataManager.importFromViewMode('copy');
         this.hideViewModeBanner();
         this.showToast(strings.viewMode.importSuccess);
@@ -259,9 +280,19 @@ export const appModeMethods = uiModule({
                 this.showViewModeBanner();
                 // Update tree switcher to show embedded trees
                 this.updateTreeSwitcher();
-                // Collaboration surfaces (reply-merge offer / welcome screen)
-                // sit on top of the regular view-mode banner.
-                this.maybeShowShareSurface();
+                // Reopening a file already saved locally offers that tree
+                // instead of silently adding another copy (V7). A reply to
+                // one of my shares keeps its merge offer.
+                const envelope = DataManager.getEmbeddedEnvelope();
+                const isReply = !!envelope?.replyToExportId
+                    && !!TreeManager.findTreeByExportId(envelope.replyToExportId);
+                if (!isReply && DataManager.getExistingTreeFromExport()) {
+                    this.showExistingExportDialog();
+                } else {
+                    // Collaboration surfaces (reply-merge offer / welcome screen)
+                    // sit on top of the regular view-mode banner.
+                    this.maybeShowShareSurface();
+                }
             }
         }
         // Local trees saved from a shared file show the collaboration bar.
@@ -317,22 +348,23 @@ export const appModeMethods = uiModule({
     /**
      * Export storage data and close (for storage version mismatch)
      */
-    exportStorageAndClose(): void {
-        // Export all trees as JSON
+    async exportStorageAndClose(): Promise<void> {
+        // Export all trees as JSON — read through TreeManager (IndexedDB,
+        // decrypted); the legacy localStorage keys are empty (review S18).
         const trees = TreeManager.getTrees();
         const allData: Record<string, unknown> = {};
 
         for (const tree of trees) {
-            const rawData = localStorage.getItem(`strom-tree-${tree.id}`);
-            if (rawData) {
-                try {
+            try {
+                const data = await TreeManager.getTreeData(tree.id);
+                if (data) {
                     allData[tree.id] = {
                         name: tree.name,
-                        data: JSON.parse(rawData)
+                        data
                     };
-                } catch {
-                    // Skip invalid data
                 }
+            } catch {
+                // Skip unreadable data
             }
         }
 
@@ -849,8 +881,8 @@ export const appModeMethods = uiModule({
 
     /** Action → inline SVG glyph + a colour class. Inline SVG (not a font glyph)
      *  so the mark is monochrome and obeys `color` in every browser — a bare
-     *  ✎/⇄/↓ renders as a colour emoji on macOS/iOS and ignores CSS colour.
-     *  Shapes keep the established mapping: pencil ＋ − ⇄ ! ↓. */
+     *  dingbat/arrow character renders as a colour emoji on macOS/iOS and ignores CSS colour.
+     *  Shapes keep the established mapping: pencil, plus, minus, swap, alert, download. */
     auditLogGlyph(action: string): { glyph: string; cls: string } {
         const svg = (paths: string): string =>
             `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
@@ -914,7 +946,9 @@ export const appModeMethods = uiModule({
         const treeId = modal?.dataset.treeId as TreeId;
         if (!treeId) return;
 
-        const confirmed = await this.showConfirm(strings.auditLog.clearConfirm);
+        const d = strings.danger;
+        const confirmed = await this.showConfirm(d.clearHistoryMessage, d.clearHistoryTitle,
+            { confirmLabel: d.clearHistory, variant: 'danger' });
         if (!confirmed) return;
 
         await AuditLogManager.clear(treeId);

@@ -25,20 +25,19 @@ export const kinshipUiMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = 'kinship-modal';
         overlay.innerHTML = `
-            <div class="modal kinship-modal">
+            <div class="modal kinship-modal modal--sm" role="dialog" aria-modal="true">
                 <div class="modal-header">
                     <h2>${strings.kinship.title}</h2>
-                    <button class="close-btn" id="kinship-close-x">&times;</button>
+                    <button class="close-btn" id="kinship-close-x" aria-label="${strings.buttons.close}">&times;</button>
                 </div>
-                <p class="kinship-from">${strings.kinship.fromLabel}: <strong>${personName(fromId)}</strong></p>
+                <p class="kinship-from">${strings.kinship.fromLabel}: <strong>${this.escapeHtml(personName(fromId))}</strong></p>
                 <div id="kinship-picker-container">
                     <label>${strings.kinship.pickLabel}</label>
                     <div id="kinship-picker"></div>
                 </div>
                 <div id="kinship-result" class="kinship-result" style="display:none"></div>
-                <div class="modal-buttons">
-                    <button type="button" class="secondary" id="kinship-close">${strings.kinship.close}</button>
-                    <button type="button" class="primary" id="kinship-highlight" style="display:none">${strings.kinship.highlight}</button>
+                <div class="modal-buttons" id="kinship-footer" hidden>
+                    <button type="button" class="primary" id="kinship-highlight">${strings.kinship.highlight}</button>
                 </div>
             </div>
         `;
@@ -48,20 +47,21 @@ export const kinshipUiMethods = uiModule({
 
         const close = () => this.closeRelationshipCalculator();
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
-        (overlay.querySelector('#kinship-close') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#kinship-close-x') as HTMLButtonElement).onclick = close;
         // ESC support via the shared dialog stack (see misc.ts keyboard handler).
         this.clearDialogStack();
         this.pushDialog('kinship-modal');
 
         const highlightBtn = overlay.querySelector('#kinship-highlight') as HTMLButtonElement;
+        const footer = overlay.querySelector('#kinship-footer') as HTMLElement;
         highlightBtn.onclick = () => {
             TreeRenderer.highlightPath(currentPath);
             close();
         };
 
         const treeData = DataManager.getData();
-        const persons = Object.values(treeData?.persons ?? {}).filter(p => p.id !== fromId);
+        // Placeholders ("unknown parent") are not people one asks about.
+        const persons = Object.values(treeData?.persons ?? {}).filter(p => p.id !== fromId && !p.isPlaceholder);
 
         this.kinshipPicker = new PersonPicker({
             containerId: 'kinship-picker',
@@ -75,21 +75,23 @@ export const kinshipUiMethods = uiModule({
 
                 if (!relation) {
                     resultEl.innerHTML = `<p>${strings.kinship.noRelation}</p>`;
-                    highlightBtn.style.display = 'none';
+                    footer.hidden = true;
                     currentPath = [];
                     return;
                 }
 
-                const lang = getCurrentLanguage() === 'cs' ? 'cs' : 'en';
-                const pathNames = relation.path.map(personName).join(' → ');
+                const cur = getCurrentLanguage();
+                const lang = cur === 'cs' ? 'cs' : cur === 'de' ? 'de' : 'en';
+                const pathNames = relation.path.map(id => this.escapeHtml(personName(id))).join(' → ');
                 resultEl.innerHTML = `
-                    <p class="kinship-sentence"><strong>${personName(toId)}</strong>
-                        ${strings.kinship.isOf} <strong>${personName(fromId)}</strong>:
-                        <span class="kinship-term">${relation.term[lang]}</span></p>
+                    <p class="kinship-sentence"><strong>${this.escapeHtml(personName(toId))}</strong>
+                        ${strings.kinship.isOf} <strong>${this.escapeHtml(personName(fromId))}</strong>:
+                        <span class="kinship-term">${this.escapeHtml(relation.term[lang])}</span></p>
                     <p class="kinship-path">${pathNames}</p>
                 `;
                 currentPath = relation.path;
-                highlightBtn.style.display = relation.path.some(id => TreeRenderer.isVisible(id)) ? '' : 'none';
+                // The footer holds only this action — no empty bar without it.
+                footer.hidden = !relation.path.some(id => TreeRenderer.isVisible(id));
             },
         });
     },

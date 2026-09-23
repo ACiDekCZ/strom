@@ -10,7 +10,7 @@ test('export dialog: privacy select applies; JSON download hides living names wi
     await page.evaluate(() => window.Strom.UI.showExportDialog());
     const exportModal = page.locator('#export-modal');
     await expect(exportModal).toBeVisible();
-    await exportModal.locator('.menu-option', { hasText: 'Export JSON' }).click();
+    await exportModal.locator('.menu-option', { hasText: 'Data backup (JSON)' }).click();
 
     const pwd = page.locator('#export-password-modal');
     await expect(pwd).toBeVisible();
@@ -38,7 +38,7 @@ test('poster dialog opens above the export dialog; SVG download is valid XML', a
     await page.evaluate(() => window.Strom.UI.showExportDialog());
     const exportModal = page.locator('#export-modal');
     await expect(exportModal).toBeVisible();
-    await exportModal.locator('.menu-option', { hasText: 'Export as poster' }).click();
+    await exportModal.locator('.menu-option', { hasText: 'Poster' }).click();
 
     const poster = page.locator('#poster-modal');
     await expect(poster).toBeVisible();
@@ -63,7 +63,7 @@ test('poster PNG export downloads a non-empty PNG image', async ({ page }) => {
     await createFirstPerson(page, 'Jan', 'Novak');
 
     await page.evaluate(() => window.Strom.UI.showExportDialog());
-    await page.locator('#export-modal').locator('.menu-option', { hasText: 'Export as poster' }).click();
+    await page.locator('#export-modal').locator('.menu-option', { hasText: 'Poster' }).click();
     const poster = page.locator('#poster-modal');
     await expect(poster).toBeVisible();
 

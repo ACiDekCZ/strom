@@ -85,7 +85,7 @@ describe('buildFamilyBook (demo)', () => {
     it('renders the English variant', () => {
         const en = buildFamilyBook(demo, { lang: 'en', privacyMode: 'full' });
         expect(en).toContain('Families');
-        expect(en).toContain('Person Index');
+        expect(en).toContain('Person index');
     });
 });
 

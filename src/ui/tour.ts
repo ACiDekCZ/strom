@@ -31,7 +31,7 @@ const TOUR_STEPS: TourStepDef[] = [
     { key: 'step1', selectors: ['.person-card.focused', '.person-card'] },
     { key: 'step2', selectors: ['.person-card.focused', '.person-card'], reveal: true, pad: 18, skipOnCoarse: true },
     { key: 'step3', selectors: ['.toolbar-buttons button', '.bottom-bar-fab'] },
-    { key: 'step4', selectors: ['#focus-controls', '#toolbar-focus-name'] },
+    { key: 'step4', selectors: ['#focus-controls', '.toolbar .toolbar-focus'] },
     { key: 'step5', selectors: ['#view-mode-segment', '.bottom-bar'] },
     { key: 'step6', selectors: ['.zoom-controls'] },
     { key: 'step7', selectors: ['#toolbar-search-picker'] },
@@ -42,16 +42,32 @@ function isCoarse(): boolean {
     return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 }
 
+/** Smallest target (CSS px) worth spotlighting — a squeezed sliver is not. */
+const MIN_TARGET = 24;
+
+/**
+ * The first candidate that is actually on screen: rendered (not display:none /
+ * hidden — offsetParent can't be used, it is null for position:fixed bars like
+ * the bottom bar and the focus chip), big enough to point at, and inside the
+ * viewport. Every match of a selector is tried, not only the first one.
+ */
 function firstVisible(selectors: string[]): HTMLElement | null {
     for (const sel of selectors) {
-        const el = document.querySelector(sel) as HTMLElement | null;
-        if (el && el.offsetParent !== null) {
+        for (const el of Array.from(document.querySelectorAll<HTMLElement>(sel))) {
+            if (el.getClientRects().length === 0) continue;
+            const cs = getComputedStyle(el);
+            if (cs.visibility === 'hidden' || cs.display === 'none') continue;
             const r = el.getBoundingClientRect();
-            if (r.width > 0 && r.height > 0) return el;
+            if (r.width < MIN_TARGET || r.height < MIN_TARGET / 2) continue;
+            if (r.right <= 0 || r.bottom <= 0 || r.left >= window.innerWidth || r.top >= window.innerHeight) continue;
+            return el;
         }
     }
     return null;
 }
+
+/** Last geometry the spotlight was placed for (skip no-op repositions). */
+let lastPlacement = '';
 
 export const tourMethods = uiModule({
     /** Offer the tour once, unobtrusively, after the demo tree loads. */
@@ -67,7 +83,7 @@ export const tourMethods = uiModule({
         el.className = 'tour-offer';
         el.innerHTML = `<span>${this.escapeHtml(t.offer)}</span>`
             + `<button type="button" class="tour-offer-btn">${this.escapeHtml(t.offerYes)}</button>`
-            + `<button type="button" class="tour-offer-close" aria-label="close">&times;</button>`;
+            + `<button type="button" class="tour-offer-close" aria-label="${strings.buttons.close}">&times;</button>`;
         el.querySelector('.tour-offer-btn')!.addEventListener('click', () => { el.remove(); this.startTour(); });
         el.querySelector('.tour-offer-close')!.addEventListener('click', () => el.remove());
         document.body.appendChild(el);
@@ -94,10 +110,19 @@ export const tourMethods = uiModule({
         }
         document.getElementById('tour-overlay')?.classList.add('active');
         this.renderTourStep();
+        // The canvas pans/zooms by transform (no scroll event) and the tree may
+        // still be settling after the demo loads: follow the target every frame.
+        const follow = () => {
+            if (!this.tourActive) return;
+            this.positionTourStep(true);
+            requestAnimationFrame(follow);
+        };
+        requestAnimationFrame(follow);
     },
 
     endTour(): void {
         this.tourActive = false;
+        lastPlacement = '';
         document.querySelectorAll('.person-card.tour-reveal').forEach(c => c.classList.remove('tour-reveal'));
         document.getElementById('tour-overlay')?.classList.remove('active');
         if (this.tourReposition) {
@@ -122,41 +147,64 @@ export const tourMethods = uiModule({
         const textEl = document.getElementById('tour-text');
         const stepEl = document.getElementById('tour-step');
         const nextEl = document.getElementById('tour-next');
-        if (textEl) textEl.textContent = t[step.key];
+        // Mouse wording (drag, wheel, 0 key) has a touch variant.
+        if (textEl) textEl.textContent = step.key === 'step6' && isCoarse() ? t.step6Touch : t[step.key];
         if (stepEl) stepEl.textContent = `${this.tourIndex + 1}/${this.tourSteps.length}`;
         if (nextEl) nextEl.textContent = (this.tourIndex === this.tourSteps.length - 1) ? t.done : t.next;
         this.positionTourStep();
     },
 
-    /** Place the spotlight hole and the bubble relative to the target element. */
-    positionTourStep(): void {
+    /**
+     * Place the spotlight hole and the bubble relative to the target element.
+     * `following`: called from the per-frame follow loop — a target that is
+     * momentarily gone (the tree re-rendering, panned off screen) keeps the
+     * last placement instead of skipping the step.
+     */
+    positionTourStep(following = false): void {
         if (!this.tourActive) return;
         const step = this.tourSteps[this.tourIndex];
         const target = step ? firstVisible(step.selectors) : null;
-        const hole = document.getElementById('tour-hole');
+        const holeEl = document.getElementById('tour-hole');
         const bubble = document.getElementById('tour-bubble');
-        if (!target || !hole || !bubble) { if (this.tourActive) this.nextTourStep(); return; }
+        if (!target || !holeEl || !bubble) {
+            if (!following) this.nextTourStep();
+            return;
+        }
 
         // Hover-only card buttons: force-show them while their step is up.
-        document.querySelectorAll('.person-card.tour-reveal').forEach(c => c.classList.remove('tour-reveal'));
-        if (step.reveal) (target.closest('.person-card') ?? target).classList.add('tour-reveal');
+        const revealEl = step.reveal ? (target.closest('.person-card') as HTMLElement | null) ?? target : null;
+        document.querySelectorAll('.person-card.tour-reveal').forEach(c => { if (c !== revealEl) c.classList.remove('tour-reveal'); });
+        if (revealEl && !revealEl.classList.contains('tour-reveal')) revealEl.classList.add('tour-reveal');
 
         const r = target.getBoundingClientRect();
         const pad = step.pad ?? 6;
-        hole.style.left = `${r.left - pad}px`;
-        hole.style.top = `${r.top - pad}px`;
-        hole.style.width = `${r.width + pad * 2}px`;
-        hole.style.height = `${r.height + pad * 2}px`;
-
-        // Bubble: below the target if there's room, otherwise above.
         const bubbleRect = bubble.getBoundingClientRect();
         const bh = bubbleRect.height || 120;
         const bw = bubbleRect.width || 280;
-        const below = r.bottom + 12 + bh <= window.innerHeight;
-        const top = below ? r.bottom + 12 : Math.max(12, r.top - bh - 12);
+        const key = [this.tourIndex, r.left, r.top, r.width, r.height, bw, bh, window.innerWidth, window.innerHeight].map(Math.round).join(',');
+        if (key === lastPlacement) return;
+        // Glide between steps; follow the same target (pan, zoom) without lag.
+        const sameStep = lastPlacement.startsWith(`${this.tourIndex},`);
+        holeEl.style.transition = sameStep ? 'none' : '';
+        lastPlacement = key;
+
+        const hole = { left: r.left - pad, top: r.top - pad, right: r.right + pad, bottom: r.bottom + pad };
+        holeEl.style.left = `${hole.left}px`;
+        holeEl.style.top = `${hole.top}px`;
+        holeEl.style.width = `${hole.right - hole.left}px`;
+        holeEl.style.height = `${hole.bottom - hole.top}px`;
+
+        // Bubble: below the spotlight if there's room, otherwise above it;
+        // never over the spotlit area (the padding holds the card's + buttons).
+        const gap = 12;
+        const fitsBelow = hole.bottom + gap + bh <= window.innerHeight - gap;
+        const fitsAbove = hole.top - gap - bh >= gap;
+        const top = fitsBelow || !fitsAbove
+            ? Math.min(hole.bottom + gap, window.innerHeight - bh - gap)
+            : hole.top - gap - bh;
         let left = r.left + r.width / 2 - bw / 2;
-        left = Math.max(12, Math.min(left, window.innerWidth - bw - 12));
-        bubble.style.top = `${top}px`;
+        left = Math.max(gap, Math.min(left, window.innerWidth - bw - gap));
+        bubble.style.top = `${Math.max(gap, top)}px`;
         bubble.style.left = `${left}px`;
     },
 });

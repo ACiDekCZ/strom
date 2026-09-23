@@ -16,6 +16,7 @@ import {
 } from '../archives.js';
 import { uiModule } from './module.js';
 
+import { iconSvg } from '../icons.js';
 export const archivesUiMethods = uiModule({
     showArchiveSearch(personId: PersonId): void {
         this.closeArchiveSearch();
@@ -35,20 +36,20 @@ export const archivesUiMethods = uiModule({
         }
 
         const czech = isCzechRelevant(person, lang);
-        const coverageLang = lang === 'cs' ? 'cs' : 'en';
+        const coverageLang = lang === 'cs' ? 'cs' : lang === 'de' ? 'de' : 'en';
 
-        const link = (url: string, label: string, hint?: string) => `
-            <a class="archive-link" href="${url}" target="_blank" rel="noopener noreferrer">
-                <span class="archive-link-name">${label}</span>
-                ${hint ? `<span class="archive-link-hint">${hint}</span>` : ''}
+        const link = (url: string, label: string, hint?: string, suggested = false) => `
+            <a class="archive-link" href="${this.escapeHtml(url)}" target="_blank" rel="noopener noreferrer">
+                <span class="archive-link-name">${suggested ? `${iconSvg('star', { size: 13, className: 'archive-link-star' })} ` : ''}${this.escapeHtml(label)}</span>
+                ${hint ? `<span class="archive-link-hint">${this.escapeHtml(hint)}</span>` : ''}
             </a>`;
 
         let czechHtml = '';
         if (czech) {
             const suggestedHtml = [...suggested.values()]
                 .map(({ portal, place }) => link(portal.url,
-                    `⭐ ${portal.name} — ${portal.institution}`,
-                    `${strings.archives.suggestedFor} „${place}" · ${portal.coverage[coverageLang]}`))
+                    `${portal.name} — ${portal.institution}`,
+                    `${strings.archives.suggestedFor} „${place}" · ${portal.coverage[coverageLang]}`, true))
                 .join('');
             const restHtml = ARCHIVE_PORTALS
                 .filter(p => !suggested.has(p.id))
@@ -67,25 +68,21 @@ export const archivesUiMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = 'archives-modal';
         overlay.innerHTML = `
-            <div class="modal archives-modal">
+            <div class="modal archives-modal modal--md" role="dialog" aria-modal="true">
                 <div class="modal-header">
                     <h2>${strings.archives.title}</h2>
-                    <button class="close-btn" id="archives-close-x">&times;</button>
+                    <button class="close-btn" id="archives-close-x" aria-label="${strings.buttons.close}">&times;</button>
                 </div>
-                <p class="kinship-from"><strong>${name}</strong>${places.length ? ` · ${places.join(', ')}` : ''}</p>
+                <p class="kinship-from"><strong>${this.escapeHtml(name)}</strong>${places.length ? ` · ${this.escapeHtml(places.join(', '))}` : ''}</p>
                 <h3>${strings.archives.internationalSection}</h3>
                 ${link(familySearchUrl(person), 'FamilySearch', strings.archives.familySearchHint)}
                 ${czechHtml}
                 <p class="archive-disclaimer">${strings.archives.disclaimer}</p>
-                <div class="modal-buttons">
-                    <button type="button" class="secondary" id="archives-close">${strings.kinship.close}</button>
-                </div>
             </div>
         `;
         document.body.appendChild(overlay);
         const close = () => this.closeArchiveSearch();
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
-        (overlay.querySelector('#archives-close') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#archives-close-x') as HTMLButtonElement).onclick = close;
         // ESC support via the shared dialog stack (see misc.ts keyboard handler).
         this.clearDialogStack();

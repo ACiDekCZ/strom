@@ -5,7 +5,7 @@
  * 2n+1 = mother of n. The father's line fills the left half of the fan.
  */
 
-import { StromData, Person, PersonId } from './types.js';
+import { StromData, Person, PersonId, ParentChildRelType } from './types.js';
 import { displayYear } from './dates.js';
 import {
     posterFooterSvg, PosterFooterMeta, FOOTER_HEIGHT, POSTER_PADDING, POSTER_FONT, POSTER_BG,
@@ -22,6 +22,8 @@ export interface FanSector {
     person: Person | null;
     /** The person whose parent this slot is (always known for empty slots). */
     childId: PersonId;
+    /** Adoptive/step/foster tie to the child below; undefined = biological. */
+    relType?: Exclude<ParentChildRelType, 'biological'>;
 }
 
 export interface FanModel {
@@ -77,12 +79,15 @@ export function buildFanModel(data: StromData, focusId: PersonId, generations: n
         for (let i = 2 ** g; i < 2 ** (g + 1); i++) {
             const child = slots[Math.floor(i / 2)];
             if (!child) continue; // no known child below → nothing to attach to
+            const parent = slots[i];
+            const rt = parent ? child.parentRelTypes?.[parent.id] : undefined;
             sectors.push({
                 ahnentafel: i,
                 generation: g,
                 indexInGen: i - 2 ** g,
-                person: slots[i],
+                person: parent,
                 childId: child.id,
+                ...(rt && rt !== 'biological' ? { relType: rt } : {}),
             });
             if (slots[i]) maxKnownGen = Math.max(maxKnownGen, g);
         }
@@ -108,6 +113,8 @@ export interface FanSvgOptions {
      * variables; the poster export must stand alone).
      */
     embedStyles?: boolean;
+    /** Label for a non-biological tie (tooltip suffix), e.g. "Adoptive". */
+    relTypeLabel?: (type: Exclude<ParentChildRelType, 'biological'>) => string;
 }
 
 /**
@@ -120,6 +127,7 @@ const FAN_LIGHT_STYLE =
     '.fan-sector path{stroke:#888;stroke-width:1}'
     + '.fan-sector.male path{fill:#e3f2fd}'
     + '.fan-sector.female path{fill:#fce4ec}'
+    + '.fan-sector.fan-nonbio path{stroke-dasharray:5 3}'
     + '.fan-focus circle{stroke:#5a9a5a;stroke-width:2}'
     + '.fan-focus.male circle{fill:#e3f2fd}'
     + '.fan-focus.female circle{fill:#fce4ec}'
@@ -334,11 +342,15 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
             kekuleSvg = `<text class="fan-kekule" x="${fmt(kx)}" y="${fmt(ky)}"`
                 + ` transform="rotate(${fmt(krot)} ${fmt(kx)} ${fmt(ky)})" text-anchor="middle">${s.ahnentafel}</text>`;
         }
-        parts.push(`<g class="fan-sector ${gcls}" data-fan-person="${esc(p.id)}">`
+        // Adoptive/step/foster parent: dashed outline, as the tree draws
+        // non-biological lines dashed; the tooltip names the tie.
+        const nonBio = s.relType ? ' fan-nonbio' : '';
+        const relLabel = s.relType && opts.relTypeLabel ? opts.relTypeLabel(s.relType) : '';
+        parts.push(`<g class="fan-sector ${gcls}${nonBio}" data-fan-person="${esc(p.id)}">`
             + `<path d="${path}"/>`
             + textSvg
             + kekuleSvg
-            + `<title>#${s.ahnentafel} · ${esc(name)}${years ? ` (${years})` : ''}</title></g>`);
+            + `<title>#${s.ahnentafel} · ${esc(name)}${years ? ` (${esc(years)})` : ''}${relLabel ? ` · ${esc(relLabel)}` : ''}</title></g>`);
     }
 
     // Focus disc at the fan's center bottom.

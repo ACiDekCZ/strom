@@ -4,17 +4,41 @@
  *
  * Media: photos and attachments export as OBJE structures with the data URL in
  * FILE (CONC-wrapped). This round-trips within Strom; other tools will see an
- * unresolvable FILE value and skip the media (strip photos in the export dialog
- * to produce a lean file for them). Repositories export as standard 0 @Rx@ REPO
- * records with pointers; the source reference is emitted as a citation PAGE.
+ * unresolvable FILE value and skip the media. The export dialog's Content
+ * options (photos / attachments / notes / sources, see GedcomExportOptions)
+ * leave them out to produce a lean file for other programs. Repositories
+ * export as standard 0 @Rx@ REPO records with pointers; the source reference
+ * is emitted as a citation PAGE.
  * Parent→child relationship types map to FAMC PEDI (adoptive→adopted,
- * foster→foster); 'step' has no GEDCOM equivalent and exports without PEDI.
+ * foster→foster); 'step' has no PEDI value. Whenever a child's tie to either
+ * parent is 'step', or the two ties differ (stepfather, own mother), the FAM
+ * carries CHIL > _FREL/_MREL, the Legacy/RootsMagic/FTM convention.
+ *
+ * Beyond the standard: 1 _STAT names a status MARR/DIV cannot (partners,
+ * separated), 1 _QUESTION carries the open question about a person, and
+ * 1 DEAT Y marks a person known to be dead without a date. Military service
+ * goes out as 1 EVEN / 2 TYPE Military service. Every value that can run long
+ * (names, places, witnesses, pages, web addresses, labels) is CONC-wrapped to
+ * the 255-byte line limit, and the importer joins it back.
  */
 
-import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story } from './types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType } from './types.js';
 import { strings } from './strings.js';
 import { eventValueIsOnTag } from './events.js';
 import { placeKey } from './places.js';
+import { applyContentOptions, ContentOptions } from './privacy.js';
+
+/** What to leave out of a GEDCOM export (the export dialog's Content section). */
+export interface GedcomExportOptions {
+    /** Omitted = everything; photos/attachments off drop the embedded base64 media. */
+    content?: ContentOptions;
+}
+
+/** Partnership statuses MARR/DIV cannot express, written as 1 _STAT. */
+const GEDCOM_STAT: Partial<Record<Partnership['status'], string>> = {
+    partners: 'Partners',
+    separated: 'Separated',
+};
 
 /**
  * Header NOTE marker under which surname-variant groups are written. GEDCOM has
@@ -47,6 +71,14 @@ const GEDCOM_RELA: Record<ParticipantRole, string> = {
     witness: 'Witness',
     officiant: 'Officiant',
     other: 'Present',
+};
+
+/** _FREL/_MREL values for the child's relationship to one parent. */
+const GEDCOM_CHILD_REL: Record<ParentChildRelType, string> = {
+    biological: 'Natural',
+    adoptive: 'Adopted',
+    step: 'Step',
+    foster: 'Foster',
 };
 
 export interface GedcomExportResult {
@@ -129,7 +161,7 @@ function formatGedcomLon(lon: number): string {
  * and travel to other genealogy tools.
  */
 function pushPlace(lines: string[], level: number, place: string, places?: Record<string, PlaceGeo>): void {
-    lines.push(`${level} PLAC ${escapeGedcomText(place)}`);
+    pushWrapped(lines, level, 'PLAC', place);
     const geo = places?.[placeKey(place)];
     if (geo && Number.isFinite(geo.lat) && Number.isFinite(geo.lon)) {
         lines.push(`${level + 1} MAP`);
@@ -266,7 +298,8 @@ function pushStory(lines: string[], level: number, story: Story): void {
 /**
  * Export StromData to GEDCOM 5.5.1 format
  */
-export function exportToGedcom(data: StromData, treeName?: string): GedcomExportResult {
+export function exportToGedcom(data: StromData, treeName?: string, options: GedcomExportOptions = {}): GedcomExportResult {
+    if (options.content) data = applyContentOptions(data, options.content);
     const lines: string[] = [];
 
     // Create ID mappings (PersonId -> @I1@, PartnershipId -> @F1@)
@@ -339,13 +372,13 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
     if (surnameGroups.length > 0) {
         lines.push(`1 NOTE ${SURNAME_GROUPS_MARKER}`);
         for (const group of surnameGroups) {
-            lines.push(`2 CONT ${escapeGedcomText(group.join(SURNAME_GROUP_SEP))}`);
+            pushWrapped(lines, 2, 'CONT', group.join(SURNAME_GROUP_SEP));
         }
     }
 
     // ==================== SUBMITTER ====================
     lines.push('0 @SUBM1@ SUBM');
-    lines.push(`1 NAME ${escapeGedcomText(treeName || 'Strom User')}`);
+    pushWrapped(lines, 1, 'NAME', treeName || 'Strom User');
 
     // ==================== INDIVIDUALS ====================
     for (const [personId, person] of Object.entries(data.persons) as [PersonId, Person][]) {
@@ -360,12 +393,12 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
             lines.push('1 NAME //');
         } else {
             const name = formatGedcomName(person.firstName, person.lastName);
-            lines.push(`1 NAME ${escapeGedcomText(name)}`);
+            pushWrapped(lines, 1, 'NAME', name);
         }
         // Other spellings as further NAME lines — the first one above stays the
         // primary, which is what every reader expects.
         for (const variant of person.nameVariants ?? []) {
-            lines.push(`1 NAME ${escapeGedcomText(variant)}`);
+            pushWrapped(lines, 1, 'NAME', variant);
         }
 
         // Sex
@@ -393,12 +426,21 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
             if (person.deathPlace) {
                 pushPlace(lines, 2, person.deathPlace, data.places);
             }
+        } else if (person.isDeceased === true) {
+            // Known to be dead, date unknown: the standard way to say so.
+            // Without it the person came back as possibly living.
+            lines.push('1 DEAT Y');
         }
 
         // User reference number (id in a paper archive / another program)
         if (person.refn) {
-            lines.push(`1 REFN ${escapeGedcomText(person.refn)}`);
+            pushWrapped(lines, 1, 'REFN', person.refn);
+            if (person.refnType) pushWrapped(lines, 2, 'TYPE', person.refnType);
         }
+
+        // The open question about this person ("does anyone know when she
+        // was born?") — Strom's own tag, so it travels with the file.
+        if (person.question) pushLongValue(lines, 1, '_QUESTION', person.question);
 
         // Note
         if (person.story) {
@@ -459,7 +501,7 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
                 if (xref) {
                     lines.push(`2 ASSO ${xref}`);
                 } else if (part.name) {
-                    lines.push(`2 _WITN ${escapeGedcomText(part.name)}`);
+                    pushWrapped(lines, 2, '_WITN', part.name);
                 } else {
                     // Linked to someone who is not in this export — cut out by a
                     // subtree export, or removed by the privacy filter. Their
@@ -561,6 +603,16 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
             const childGedcomId = personIdMap.get(childId);
             if (childGedcomId) {
                 lines.push(`1 CHIL ${childGedcomId}`);
+                // Different ties to the two parents: say which is which.
+                const rels = data.persons[childId]?.parentRelTypes ?? {};
+                const toHusb = rels[husbId] ?? 'biological';
+                const toWife = rels[wifeId] ?? 'biological';
+                // Also when both ties are 'step': PEDI has no such value, so
+                // this is the only place a stepchild of both can be said.
+                if (toHusb !== toWife || toHusb === 'step') {
+                    lines.push(`2 _FREL ${GEDCOM_CHILD_REL[toHusb]}`);
+                    lines.push(`2 _MREL ${GEDCOM_CHILD_REL[toWife]}`);
+                }
             }
         }
 
@@ -582,7 +634,7 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
                 if (xref) {
                     lines.push(`2 ASSO ${xref}`);
                 } else if (part.name) {
-                    lines.push(`2 _WITN ${escapeGedcomText(part.name)}`);
+                    pushWrapped(lines, 2, '_WITN', part.name);
                 } else {
                     continue;
                 }
@@ -599,6 +651,10 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
                 if (date) lines.push(`2 DATE ${date}`);
             }
         }
+
+        // A status MARR/DIV cannot say (partners, separated).
+        const stat = GEDCOM_STAT[partnership.status];
+        if (stat) lines.push(`1 _STAT ${stat}`);
 
         if (partnership.story) {
             pushStory(lines, 1, partnership.story);
@@ -629,15 +685,15 @@ export function exportToGedcom(data: StromData, treeName?: string): GedcomExport
             const repoRef = repoIdMap.get(source.repository);
             if (repoRef) lines.push(`1 REPO ${repoRef}`);
         }
-        if (source.reference) lines.push(`1 PAGE ${escapeGedcomText(source.reference)}`);
-        if (source.url) lines.push(`1 WWW ${escapeGedcomText(source.url)}`);
+        if (source.reference) pushLongValue(lines, 1, 'PAGE', source.reference);
+        if (source.url) pushWrapped(lines, 1, 'WWW', source.url);
         if (source.note) pushNote(lines, 1, source.note);
     }
 
     // ==================== REPOSITORIES ====================
     for (const [name, repoId] of repoIdMap) {
         lines.push(`0 ${repoId} REPO`);
-        lines.push(`1 NAME ${escapeGedcomText(name)}`);
+        pushWrapped(lines, 1, 'NAME', name);
     }
 
     // ==================== TRAILER ====================

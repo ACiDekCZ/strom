@@ -6,6 +6,7 @@
 import { parseFlexDate, yearOf } from '../dates.js';
 import { PersonId, Person, Partnership, StromData } from '../types.js';
 import { sameSurname } from '../surnames.js';
+import { detectPartnershipConflicts } from './executor.js';
 import {
     PersonMatch,
     MatchConfidence,
@@ -18,17 +19,31 @@ import {
 // ==================== NAME NORMALIZATION ====================
 
 /**
+ * Letters that carry no combining mark in Unicode, so NFD leaves them intact
+ * although a reader of Latin script treats them as a plain letter with an
+ * accent (Łukasz = Lukasz, Straße = Strasse). Folded explicitly.
+ */
+const LETTER_FOLDS: Record<string, string> = {
+    'ł': 'l', 'ß': 'ss', 'ø': 'o', 'æ': 'ae', 'œ': 'oe', 'đ': 'd', 'ð': 'd',
+    'þ': 'th', 'ħ': 'h', 'ı': 'i', 'ŀ': 'l', 'ŧ': 't', 'ĸ': 'k', 'ŋ': 'n',
+};
+
+/**
  * Normalize text for comparison
- * Removes diacritics, converts to lowercase, trims
+ * Removes diacritics, converts to lowercase, trims. Letters and digits of
+ * EVERY script survive (Cyrillic, Greek, CJK …) — only punctuation and marks
+ * are dropped. A name made only of punctuation normalizes to '' and means
+ * "no name": callers must treat '' as unknown, never as equal to another ''.
  */
 export function normalizeName(text: string): string {
     return text
         .toLowerCase()
         .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')  // Remove diacritics
-        .replace(/[^a-z0-9\s]/g, '')      // Remove special characters
+        .replace(/\p{M}/gu, '')                           // Remove diacritics
+        .replace(/[łßøæœđðþħıŀŧĸŋ]/g, ch => LETTER_FOLDS[ch] ?? ch)
+        .replace(/[^\p{L}\p{N}\s]/gu, '')                // Remove special characters
         .trim()
-        .replace(/\s+/g, ' ');            // Normalize spaces
+        .replace(/\s+/g, ' ');                             // Normalize spaces
 }
 
 /**
@@ -39,8 +54,10 @@ export function stringSimilarity(a: string, b: string): number {
     const normalizedA = normalizeName(a);
     const normalizedB = normalizeName(b);
 
-    if (normalizedA === normalizedB) return 1;
+    // No name is not a name: two blanks (or two names in a script the
+    // normalizer cannot read) must never count as the same name.
     if (normalizedA.length === 0 || normalizedB.length === 0) return 0;
+    if (normalizedA === normalizedB) return 1;
 
     const distance = levenshteinDistance(normalizedA, normalizedB);
     const maxLength = Math.max(normalizedA.length, normalizedB.length);
@@ -133,6 +150,11 @@ function firstNamesMatch(name1: string, name2: string): { exact: boolean; firstW
     const n1 = normalizeName(name1);
     const n2 = normalizeName(name2);
 
+    // A missing name matches nothing
+    if (!n1 || !n2) {
+        return { exact: false, firstWord: false, anyWord: false, prefix: false };
+    }
+
     // Exact match
     if (n1 === n2) {
         return { exact: true, firstWord: true, anyWord: true, prefix: true };
@@ -206,6 +228,11 @@ function lastNamesSimilar(name1: string, name2: string): { exact: boolean; simil
     const n1 = normalizeName(name1);
     const n2 = normalizeName(name2);
 
+    // A missing surname is unknown, not equal to another missing one
+    if (!n1 || !n2) {
+        return { exact: false, similar: false, similarity: 0 };
+    }
+
     if (n1 === n2) {
         return { exact: true, similar: true, similarity: 1.0 };
     }
@@ -272,7 +299,6 @@ interface MatchCandidate {
     existingId: PersonId;
     score: number;
     reasons: MatchReason[];
-    bonusFromRelations: number;
 }
 
 /**
@@ -353,8 +379,7 @@ function findDirectMatches(
                 candidates.push({
                     existingId: existing.id,
                     score: result.score,
-                    reasons: result.reasons,
-                    bonusFromRelations: 0
+                    reasons: result.reasons
                 });
             }
         }
@@ -585,8 +610,7 @@ function findRemainingMatches(
                 candidates.push({
                     existingId: existing.id,
                     score: result.score,
-                    reasons: result.reasons,
-                    bonusFromRelations: 0
+                    reasons: result.reasons
                 });
             }
         }
@@ -1118,6 +1142,7 @@ export function createMergeState(
         unmatchedIncoming,
         decisions: new Map(),
         conflictResolutions: new Map(),
+        partnershipResolutions: new Map(),
         phase: 'analyzing'
     };
 }
@@ -1130,6 +1155,11 @@ export function calculateMergeStats(state: MergeState): MergeStats {
     const mediumConfidence = state.matches.filter(m => m.confidence === 'medium').length;
     const lowConfidence = state.matches.filter(m => m.confidence === 'low').length;
     const withConflicts = state.matches.filter(m => m.conflicts.length > 0).length;
+    const conflictingUnions = new Set(detectPartnershipConflicts(state).map(c => c.incomingPartnershipId));
+    let partnershipConflictsResolved = 0;
+    for (const id of conflictingUnions) {
+        if (state.partnershipResolutions?.has(id)) partnershipConflictsResolved++;
+    }
 
     // How many incoming persons the user chose to skip (independent of updateOnly).
     let skipped = 0;
@@ -1143,7 +1173,9 @@ export function calculateMergeStats(state: MergeState): MergeStats {
     let willAdd = 0;
     if (!state.updateOnly) {
         for (const id of state.unmatchedIncoming) {
-            if (!state.decisions.has(id)) willAdd++;
+            const decision = state.decisions.get(id);
+            // A rejected match lands here after reanalyzeMatches: still added.
+            if (!decision || decision.type === 'reject') willAdd++;
         }
         for (const match of state.matches) {
             if (state.decisions.get(match.incomingId)?.type === 'reject') willAdd++;
@@ -1158,6 +1190,8 @@ export function calculateMergeStats(state: MergeState): MergeStats {
         lowConfidence,
         unmatched: state.unmatchedIncoming.length,
         withConflicts,
+        partnershipConflicts: conflictingUnions.size,
+        partnershipConflictsResolved,
         willAdd,
         skipped
     };
@@ -1276,9 +1310,10 @@ export function reanalyzeMatches(state: MergeState): void {
 
     // Recalculate unmatched
     const matchedIncoming = new Set(uniqueMatches.map(m => m.incomingId));
+    // A rejected person ("not the same person") stays in unmatchedIncoming:
+    // it is added as new, exactly like any other person without a match.
     state.unmatchedIncoming = Object.keys(state.incomingData.persons)
         .filter(id => !matchedIncoming.has(id as PersonId))
-        .filter(id => !rejectedIncoming.has(id as PersonId))
         .filter(id => !state.incomingData.persons[id as PersonId].isPlaceholder)
         .map(id => id as PersonId);
 }

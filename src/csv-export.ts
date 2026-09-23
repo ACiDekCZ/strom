@@ -11,8 +11,23 @@ import { strings } from './strings.js';
 
 const SEP = ';';
 
-function csvField(value: string): string {
-    if (value === '') return '';
+/**
+ * Neutralize spreadsheet formula injection (OWASP "CSV injection"): a cell
+ * starting with = + - @ (or tab/CR, which some programs skip before parsing)
+ * is evaluated as a formula by Excel/LibreOffice/Sheets. Names and notes come
+ * from foreign files, so such cells get a leading apostrophe and are shown as
+ * text. Plain numbers (e.g. "-5") cannot be formulas and stay untouched.
+ */
+function neutralizeFormula(value: string): string {
+    if (!/^[=+\-@\t\r]/.test(value)) return value;
+    if (/^[+-]?\d+([.,]\d+)?$/.test(value)) return value;
+    return `'${value}`;
+}
+
+/** Exported for tests. */
+export function csvField(raw: string): string {
+    if (raw === '') return '';
+    const value = neutralizeFormula(raw);
     if (/[";\n\r]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
     return value;
 }

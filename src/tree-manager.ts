@@ -6,6 +6,7 @@
 import {
     TreeId,
     TreeMetadata,
+    ResearchLink,
     TreeIndex,
     StromData,
     PersonId,
@@ -18,11 +19,27 @@ import {
     STROM_DATA_VERSION
 } from './types.js';
 import { strings } from './strings.js';
-import { isEncrypted, EncryptedData, CryptoSession } from './crypto.js';
+import { isEncrypted, EncryptedData, CryptoSession, decrypt } from './crypto.js';
 import { SettingsManager } from './settings.js';
 import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
 import { asciiSlug } from './filenames.js';
+import { announceTreeSaved } from './tab-sync.js';
+
+/**
+ * Outcome of reading a tree record. `locked` / `undecryptable` are NOT the
+ * same as an empty tree: loading them as empty and saving afterwards used to
+ * overwrite the real (encrypted) family with nothing (review K8).
+ */
+export type TreeReadResult =
+    | { status: 'ok'; data: StromData }
+    | { status: 'missing' }
+    | { status: 'locked' }
+    | { status: 'undecryptable' };
+
+/** Separator between the readable slug and the id suffix in `?tree=`. A
+ * slug never contains two hyphens in a row (asciiSlug collapses them). */
+const SLUG_ID_SEPARATOR = '--';
 
 /** Current tree index version */
 const TREE_INDEX_VERSION = 1;
@@ -104,7 +121,10 @@ class TreeManagerClass {
 
     /** Save index to IDB (fire-and-forget) */
     private saveIndex(): void {
-        void StorageManager.set('trees', INDEX_KEY, this.index);
+        StorageManager.set('trees', INDEX_KEY, this.index).catch((err) => {
+            console.error('Saving the tree index failed', err);
+            dispatchSaveFailed(null, err);
+        });
     }
 
     /**
@@ -233,12 +253,12 @@ class TreeManagerClass {
             sizeBytes
         };
 
-        // Save tree data (fire-and-forget)
-        void StorageManager.set('trees', treeId, emptyData);
-
-        // Add to index
+        // Add to index first (queued saves skip trees missing from the index)
         this.index.trees.push(metadata);
         this.saveIndex();
+
+        // Save through the encrypting path (fire-and-forget)
+        this.saveTreeData(treeId, emptyData);
 
         return treeId;
     }
@@ -250,8 +270,12 @@ class TreeManagerClass {
         const idx = this.index.trees.findIndex(t => t.id === id);
         if (idx === -1) return false;
 
-        // Flush pending writes before delete (ensure index is up to date)
-        await StorageManager.flush();
+        // Remove from the index FIRST: a save still queued for this tree
+        // checks the index and skips, so it cannot resurrect the record after
+        // the delete below (review S20). Then drain the tree's queue.
+        this.index.trees.splice(idx, 1);
+        this.unreadableTrees.delete(id);
+        await this.flush(id);
 
         // Remove tree data from IDB
         await StorageManager.delete('trees', id);
@@ -268,9 +292,6 @@ class TreeManagerClass {
         await dropHandle(id).catch(() => {});
         const { deleteBaselinesForTree } = await import('./share-baselines.js');
         await deleteBaselinesForTree(id).catch(() => {});
-
-        // Remove from index
-        this.index.trees.splice(idx, 1);
 
         // If this was the active tree, switch to another VISIBLE one (never
         // land on a hidden tree) or null
@@ -318,12 +339,11 @@ class TreeManagerClass {
             sizeBytes
         };
 
-        // Save tree data (fire-and-forget)
-        void StorageManager.set('trees', newId, sourceData);
-
-        // Add to index
+        // Add to index, then save through the encrypting path — a direct
+        // StorageManager.set wrote PLAINTEXT while encryption was on (V4).
         this.index.trees.push(metadata);
         this.saveIndex();
+        this.saveTreeData(newId, sourceData);
 
         return newId;
     }
@@ -334,26 +354,95 @@ class TreeManagerClass {
      * Get tree data by ID (async, handles encryption)
      */
     async getTreeData(id: TreeId): Promise<StromData | null> {
-        // Ensure any pending writes are flushed before reading
-        await StorageManager.flush();
+        const result = await this.readTreeData(id);
+        return result.status === 'ok' ? result.data : null;
+    }
+
+    /**
+     * Read a tree and say WHY it could not be read. A tree that is encrypted
+     * but locked / undecryptable with the current key is remembered as
+     * unreadable and saving it is refused until a read succeeds — otherwise
+     * an "empty" in-memory copy would overwrite the real data.
+     */
+    async readTreeData(id: TreeId): Promise<TreeReadResult> {
+        // Ensure this tree's queued saves (and any other pending writes) have
+        // landed before reading (review S20).
+        await this.flush(id);
         const raw = await StorageManager.get<StromData | EncryptedData>('trees', id);
-        if (!raw) return null;
-
-        try {
-            // If data is encrypted, decrypt it
-            if (isEncrypted(raw)) {
-                if (!CryptoSession.isUnlocked()) {
-                    return null;
-                }
-                const decrypted = await CryptoSession.decrypt(raw as EncryptedData);
-                return JSON.parse(decrypted) as StromData;
-            }
-
-            return raw as StromData;
-        } catch (err) {
-            console.error('Failed to parse/decrypt tree data:', id, err);
-            return null;
+        if (!raw) {
+            this.unreadableTrees.delete(id);
+            return { status: 'missing' };
         }
+
+        if (isEncrypted(raw)) {
+            if (!CryptoSession.isUnlocked()) {
+                this.unreadableTrees.add(id);
+                return { status: 'locked' };
+            }
+            try {
+                const decrypted = await CryptoSession.decrypt(raw as EncryptedData);
+                const data = JSON.parse(decrypted) as StromData;
+                this.unreadableTrees.delete(id);
+                return { status: 'ok', data };
+            } catch (err) {
+                console.error('Failed to decrypt tree data:', id, err);
+                this.unreadableTrees.add(id);
+                return { status: 'undecryptable' };
+            }
+        }
+
+        this.unreadableTrees.delete(id);
+        return { status: 'ok', data: raw as StromData };
+    }
+
+    /**
+     * Rescue a tree encrypted with a DIFFERENT key than the session (created
+     * under another password before a password change, or imported): decrypt
+     * it with that tree's own password and re-encrypt it with the session key,
+     * so every tree shares one key afterwards and the tree reads and saves
+     * normally again.
+     * - 'ok': readable now (re-encrypted, or it already was readable);
+     * - 'wrong-password': the password does not open this tree, nothing changed;
+     * - 'locked': the session itself is locked — unlock it first;
+     * - 'missing': no such record.
+     */
+    async recoverTreeWithPassword(id: TreeId, password: string): Promise<'ok' | 'wrong-password' | 'locked' | 'missing'> {
+        const current = await this.readTreeData(id);
+        if (current.status === 'ok') return 'ok';
+        if (current.status === 'missing') return 'missing';
+        if (current.status === 'locked' || !CryptoSession.isUnlocked()) return 'locked';
+
+        const raw = await StorageManager.get<unknown>('trees', id);
+        if (!isEncrypted(raw)) return 'missing';
+        let plainText: string;
+        let data: StromData;
+        try {
+            plainText = await decrypt(raw, password);
+            data = JSON.parse(plainText) as StromData;
+        } catch {
+            return 'wrong-password';
+        }
+        const reencrypted = await CryptoSession.encrypt(plainText);
+        await StorageManager.set('trees', id, reencrypted);
+        await StorageManager.flush();
+        this.unreadableTrees.delete(id);
+        this.updateMetadata(id, data, new Blob([JSON.stringify(reencrypted)]).size);
+        return 'ok';
+    }
+
+    /** True when the last read of this tree failed (locked / wrong key). */
+    isTreeUnreadable(id: TreeId): boolean {
+        return this.unreadableTrees.has(id);
+    }
+
+    /**
+     * Wait until the tree's save queue (or every tree's, without an id) and
+     * all pending IndexedDB writes have settled. Never throws.
+     */
+    async flush(id?: TreeId): Promise<void> {
+        const queues = id ? [this.saveQueues.get(id)] : [...this.saveQueues.values()];
+        await Promise.allSettled(queues.filter((q): q is Promise<void> => !!q));
+        await StorageManager.flush();
     }
 
     /**
@@ -398,6 +487,9 @@ class TreeManagerClass {
     /** Per-tree write queue: keeps saves ordered (see saveTreeData). */
     private saveQueues = new Map<TreeId, Promise<void>>();
 
+    /** Trees whose stored data could not be read (see readTreeData). */
+    private unreadableTrees = new Set<TreeId>();
+
     /**
      * Save tree data. Still fire-and-forget for callers, but internally each
      * tree's writes are SERIALIZED on a queue — the encrypted path used to
@@ -407,6 +499,14 @@ class TreeManagerClass {
      * of a swallowed rejection.
      */
     saveTreeData(id: TreeId, data: StromData): void {
+        // Never overwrite a tree we could not read: the in-memory copy is a
+        // stand-in, not the family (review K8).
+        if (this.unreadableTrees.has(id)) {
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('strom:save-blocked', { detail: { treeId: id } }));
+            }
+            return;
+        }
         // Ensure version is set
         data.version = STROM_DATA_VERSION;
         // Snapshot NOW: the caller keeps mutating the live object.
@@ -414,6 +514,8 @@ class TreeManagerClass {
 
         const prev = this.saveQueues.get(id) ?? Promise.resolve();
         const next = prev.then(async () => {
+            // Deleted meanwhile: never resurrect the record (review S20).
+            if (!this.index.trees.some(t => t.id === id)) return;
             if (SettingsManager.isEncryptionEnabled()) {
                 if (!CryptoSession.isUnlocked()) throw new Error('locked');
                 const encrypted = await CryptoSession.encrypt(plainText);
@@ -425,15 +527,13 @@ class TreeManagerClass {
                 await StorageManager.set('trees', id, JSON.parse(plainText) as StromData);
                 this.updateMetadata(id, data, sizeBytes);
             }
+            // Other tabs with this tree open must learn their copy is stale.
+            announceTreeSaved(id);
         }).catch((err) => {
             // Surface instead of swallowing: quota/lock failures used to be
             // completely silent, leaving memory and disk divergent.
             console.error('saveTreeData failed', id, err);
-            if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('strom:save-failed', {
-                    detail: { treeId: id, reason: err instanceof Error ? err.message : String(err) },
-                }));
-            }
+            dispatchSaveFailed(id, err);
         });
         this.saveQueues.set(id, next);
     }
@@ -486,9 +586,6 @@ class TreeManagerClass {
             sizeBytes
         };
 
-        // Save tree data (fire-and-forget)
-        void StorageManager.set('trees', treeId, data);
-
         // Add to index
         this.index.trees.push(metadata);
 
@@ -496,6 +593,9 @@ class TreeManagerClass {
         this.index.activeTreeId = treeId;
 
         this.saveIndex();
+
+        // Save through the encrypting path (V4: this wrote plaintext before)
+        this.saveTreeData(treeId, data);
         return treeId;
     }
 
@@ -526,14 +626,43 @@ class TreeManagerClass {
         return this.index.trees.length > 0 ? this.index.trees[0] : null;
     }
 
+    /**
+     * Resolve the `?tree=` URL parameter. Current form is `slug--idsuffix`
+     * (or just the id suffix for names without Latin letters); old bookmarks
+     * with a plain slug still resolve by name.
+     */
     getTreeBySlug(slug: string): TreeMetadata | null {
-        const normalizedSlug = slug.toLowerCase().replace(/^-+|-+$/g, '');
+        const param = slug.trim().toLowerCase();
+        if (!param) return null;
+        const sepIdx = param.lastIndexOf(SLUG_ID_SEPARATOR);
+        const suffix = sepIdx >= 0 ? param.slice(sepIdx + SLUG_ID_SEPARATOR.length) : param;
+        if (suffix) {
+            const byId = this.index.trees.find(t => this.treeIdSuffix(t.id).toLowerCase() === suffix);
+            if (byId) return byId;
+        }
+        const normalizedSlug = (sepIdx >= 0 ? param.slice(0, sepIdx) : param).replace(/^-+|-+$/g, '');
+        if (!normalizedSlug) return null;
         return this.index.trees.find(t => slugify(t.name) === normalizedSlug) || null;
     }
 
+    /**
+     * URL parameter identifying a tree: readable slug plus a short id suffix,
+     * so "Novák" and "Novak" (same slug) or a non-Latin name (empty slug)
+     * still point to exactly one tree (review S19).
+     */
     getTreeSlug(treeId: TreeId): string | null {
         const tree = this.getTreeMetadata(treeId);
-        return tree ? slugify(tree.name) : null;
+        if (!tree) return null;
+        const slug = slugify(tree.name);
+        const suffix = this.treeIdSuffix(tree.id);
+        return slug ? `${slug}${SLUG_ID_SEPARATOR}${suffix}` : suffix;
+    }
+
+    /** Short, unique-within-this-index id fragment (the random tail of the id). */
+    private treeIdSuffix(id: TreeId): string {
+        const tail = String(id).split('_').pop() || String(id);
+        const clash = this.index.trees.some(t => t.id !== id && (String(t.id).split('_').pop() || String(t.id)) === tail);
+        return (clash ? String(id) : tail).toLowerCase().replace(/[^a-z0-9_]+/g, '');
     }
 
     // ==================== DEFAULT TREE SETTINGS ====================
@@ -679,6 +808,31 @@ class TreeManagerClass {
     updateTreeFromImport(treeId: TreeId, data: StromData): void {
         this.saveTreeData(treeId, data);
     }
+
+    // ==================== STROM RESEARCH LINK ====================
+
+    /** The tree that holds the research with this UUID, if any. */
+    findTreeByResearchId(researchId: string): TreeMetadata | null {
+        const id = researchId.toLowerCase();
+        return this.index.trees.find(t => t.research?.id === id) || null;
+    }
+
+    /** Link a tree to a research (or drop the link with `undefined`). */
+    setResearchLink(treeId: TreeId, link: ResearchLink | undefined): void {
+        const tree = this.index.trees.find(t => t.id === treeId);
+        if (!tree) return;
+        if (link) tree.research = { ...link, id: link.id.toLowerCase() };
+        else delete tree.research;
+        this.saveIndex();
+    }
+}
+
+/** Raise the app-wide "saving failed" signal (toast in main.ts). */
+function dispatchSaveFailed(treeId: TreeId | null, err: unknown): void {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('strom:save-failed', {
+        detail: { treeId, reason: err instanceof Error ? err.message : String(err) },
+    }));
 }
 
 // Export singleton instance

@@ -61,6 +61,27 @@ export interface FieldConflict {
     suggestedReason?: 'more_precise_date' | 'more_complete';
 }
 
+/** Partnership fields that can conflict when both trees know the same union. */
+export type PartnershipConflictField = 'status' | 'startDate' | 'startPlace' | 'endDate';
+
+/** Resolution of one conflicting value. */
+export type ConflictResolution = 'keep_existing' | 'use_incoming';
+
+/**
+ * A union that exists in both trees (both partners resolve to existing
+ * persons who already share a partnership) and disagrees on one field.
+ * Derived from the current decisions, never stored: which unions coincide
+ * depends on which person matches the user confirmed.
+ */
+export interface PartnershipConflict {
+    incomingPartnershipId: PartnershipId;
+    existingPartnershipId: PartnershipId;
+    field: PartnershipConflictField;
+    existingValue: string;
+    incomingValue: string;
+    resolution: ConflictResolution;
+}
+
 // ==================== MERGE DECISIONS ====================
 
 /**
@@ -90,6 +111,13 @@ export interface MergeState {
     unmatchedIncoming: PersonId[];
     decisions: Map<PersonId, MatchDecision>;
     conflictResolutions: Map<PersonId, FieldConflict[]>;
+    /**
+     * The user's answers for partnership conflicts, keyed by the INCOMING
+     * partnership id. A union with an entry counts as resolved; a field
+     * without an answer keeps the existing value. Optional: sessions saved
+     * before partnership conflicts existed lack it.
+     */
+    partnershipResolutions?: Map<PartnershipId, Partial<Record<PartnershipConflictField, ConflictResolution>>>;
     phase: MergePhase;
     /**
      * "Update existing only" mode. When true, the merge only enriches persons
@@ -139,6 +167,10 @@ export interface MergeStats {
     lowConfidence: number;
     unmatched: number;
     withConflicts: number;
+    /** Unions present in both trees that disagree on status or dates. */
+    partnershipConflicts: number;
+    /** Of those, how many the user already went through in the dialog. */
+    partnershipConflictsResolved: number;
     /**
      * Persons that will actually be ADDED as new given the current decisions
      * and updateOnly mode (0 in updateOnly mode). Unlike `unmatched` (how many

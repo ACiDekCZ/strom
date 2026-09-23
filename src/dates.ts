@@ -7,8 +7,9 @@
  * Legacy full ISO dates ('YYYY-MM-DD') are valid canonical values, so existing
  * data needs no migration.
  *
- * User input accepts Czech and English forms: '15.5.1880', '5/1880', '1880',
- * 'kolem 1880', 'před 1880', 'po 1880', 'about 1880', 'bef 1880', '~1880'...
+ * User input accepts Czech, English and German forms: '15.5.1880', '5/1880',
+ * '1880', '15 May 1880', 'May 15, 1880', 'kolem 1880', 'před 1880', 'po 1880',
+ * 'about 1880', 'bef 1880', 'um 1880', 'vor 1880', 'nach 1880', '~1880'...
  */
 
 import { getCurrentLanguage } from './strings.js';
@@ -34,6 +35,16 @@ const QUALIFIER_WORDS: Record<string, DateQualifier> = {
     '~': '~', 'kolem': '~', 'okolo': '~', 'cca': '~', 'circa': '~', 'about': '~', 'abt': '~', 'ca': '~',
     '<': '<', 'před': '<', 'pred': '<', 'do': '<', 'before': '<', 'bef': '<',
     '>': '>', 'po': '>', 'od': '>', 'after': '>', 'aft': '>',
+    // German (the DE placeholder offers 'um 1880')
+    'um': '~', 'etwa': '~', 'zirka': '~', 'vor': '<', 'nach': '>',
+};
+
+/** English month names and abbreviations (GEDCOM uses JAN…DEC too). */
+const MONTH_NAMES: Record<string, number> = {
+    jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4,
+    may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8,
+    sep: 9, sept: 9, september: 9, oct: 10, october: 10, nov: 11, november: 11,
+    dec: 12, december: 12,
 };
 
 function daysInMonth(year: number, month: number): number {
@@ -87,21 +98,32 @@ export function toCanonical(date: FlexDate): string {
 }
 
 /**
- * Normalize free-form user input (Czech or English) into the canonical
- * storage format. Returns '' for empty input, null for unparseable input.
+ * Normalize free-form user input (Czech, English or German) into the
+ * canonical storage format. Returns '' for empty input, null for unparseable
+ * input.
+ *
+ * All-numeric day/month order follows the UI language, the same way
+ * formatFlexDate displays it: dotted input ('15.5.1880') is always day-first;
+ * slash input is month-first in English ('5/15/1880', matching the M/D/Y
+ * display) and day-first in Czech and German. An English slash date whose
+ * first number cannot be a month ('15/5/1880') is read day-first, since that
+ * is the only valid reading. `lang` defaults to the current UI language;
+ * importers (GEDCOM etc.) never go through here.
  */
-export function normalizeDateInput(input: string): string | null {
+export function normalizeDateInput(input: string, lang?: 'cs' | 'en' | 'de'): string | null {
     let s = input.trim();
     if (!s) return '';
+    const cur = lang ?? getCurrentLanguage();
+    const monthFirstSlash = cur !== 'cs' && cur !== 'de';
 
     // Range: 'A..B', 'mezi A a B', 'between A and B' — sides normalize
     // through the single-date path (no qualifiers inside a range).
-    const rangeMatch = /^(?:mezi|between)\s+(.+?)\s+(?:a|and)\s+(.+)$/i.exec(s);
+    const rangeMatch = /^(?:mezi|between|zwischen)\s+(.+?)\s+(?:a|and|und)\s+(.+)$/i.exec(s);
     const sides = rangeMatch ? [rangeMatch[1], rangeMatch[2]]
         : s.includes('..') ? s.split('..', 2) : null;
     if (sides) {
-        const a = normalizeDateInput(sides[0]);
-        const b = normalizeDateInput(sides[1]);
+        const a = normalizeDateInput(sides[0], lang);
+        const b = normalizeDateInput(sides[1], lang);
         if (!a || !b || /^[~<>]/.test(a) || /^[~<>]/.test(b) || a.includes('..') || b.includes('..')) return null;
         return `${a}..${b}`;
     }
@@ -139,16 +161,35 @@ export function normalizeDateInput(input: string): string | null {
         // '1880-05'
         year = parseInt(m[1], 10);
         month = parseInt(m[2], 10);
-    } else if ((m = /^(\d{1,2})\s*[./]\s*(\d{1,2})\s*[./]\s*(\d{3,4})$/.exec(s))) {
-        // '15.5.1880', '15/5/1880' (day first — Czech convention)
-        day = parseInt(m[1], 10);
-        month = parseInt(m[2], 10);
-        year = parseInt(m[3], 10);
+    } else if ((m = /^(\d{1,2})\s*([./])\s*(\d{1,2})\s*([./])\s*(\d{3,4})$/.exec(s))) {
+        // '15.5.1880' (always day first), '15/5/1880' (cs/de) or
+        // '5/15/1880' (en, month first — see the function comment)
+        const first = parseInt(m[1], 10);
+        const second = parseInt(m[3], 10);
+        const slashes = m[2] === '/' && m[4] === '/';
+        const monthFirst = slashes && monthFirstSlash && first <= 12;
+        day = monthFirst ? second : first;
+        month = monthFirst ? first : second;
+        year = parseInt(m[5], 10);
     } else if ((m = /^(\d{3,4})-(\d{1,2})-(\d{1,2})$/.exec(s))) {
         // ISO '1880-05-15'
         year = parseInt(m[1], 10);
         month = parseInt(m[2], 10);
         day = parseInt(m[3], 10);
+    } else if ((m = /^(\d{1,2})\.?\s+([a-zA-Z]+)\.?,?\s+(\d{3,4})$/.exec(s)) && MONTH_NAMES[m[2].toLowerCase()]) {
+        // '15 May 1880', '15 MAY 1880' (unambiguous in every locale)
+        day = parseInt(m[1], 10);
+        month = MONTH_NAMES[m[2].toLowerCase()];
+        year = parseInt(m[3], 10);
+    } else if ((m = /^([a-zA-Z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{3,4})$/.exec(s)) && MONTH_NAMES[m[1].toLowerCase()]) {
+        // 'May 15, 1880'
+        month = MONTH_NAMES[m[1].toLowerCase()];
+        day = parseInt(m[2], 10);
+        year = parseInt(m[3], 10);
+    } else if ((m = /^([a-zA-Z]+)\.?\s+(\d{3,4})$/.exec(s)) && MONTH_NAMES[m[1].toLowerCase()]) {
+        // 'May 1880'
+        month = MONTH_NAMES[m[1].toLowerCase()];
+        year = parseInt(m[2], 10);
     } else {
         return null;
     }
@@ -230,19 +271,19 @@ export function formatFlexDate(value?: string, lang?: 'cs' | 'en' | 'de'): strin
 }
 
 /**
- * Locale-aware form for EDIT INPUTS. Czech users see the Czech convention
- * ('15.5.1880', '5.1880', '~1880') — every emitted form parses back through
- * normalizeDateInput. English keeps the canonical ISO form: 'M/D/YYYY' would
- * be ambiguous with the day-first parsing the inputs accept.
+ * Locale-aware form for EDIT INPUTS. Czech and German users see the dotted
+ * day-first convention ('15.5.1880', '5.1880', '~1880'); English keeps the
+ * canonical ISO form ('1880-05-15'), which no reader can misread. Every
+ * emitted form parses back to the same value through normalizeDateInput in
+ * the same language.
  */
 export function formatDateForInput(value?: string): string {
     if (!value) return '';
     const d = parseFlexDate(value);
     if (!d) return value;
     if (d.end) return value;  // ranges stay canonical ('1880..1885')
-    // Czech and German both write dates day-first with dots ('15.5.1880'), and
-    // every emitted form parses back through normalizeDateInput. English keeps
-    // the canonical ISO form: 'M/D/YYYY' would clash with day-first parsing.
+    // Czech and German both write dates day-first with dots ('15.5.1880').
+    // English keeps ISO: unambiguous for readers of either convention.
     const inputLang = getCurrentLanguage();
     if (inputLang !== 'cs' && inputLang !== 'de') return value;
     const q = d.qualifier;

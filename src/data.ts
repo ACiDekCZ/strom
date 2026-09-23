@@ -32,9 +32,9 @@ import {
     FamilyWizardMember,
     PlaceGeo,
 } from './types.js';
-import { strings } from './strings.js';
+import { strings, getCurrentLanguage, getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
 import { TreeManager } from './tree-manager.js';
-import { isEncrypted, EncryptedData } from './crypto.js';
+import { isEncrypted, EncryptedData, decrypt } from './crypto.js';
 import * as CrossTree from './cross-tree.js';
 import { AuditLogManager } from './audit-log.js';
 import { extractSubtree } from './subtree.js';
@@ -42,8 +42,8 @@ import { collectPlaces, renamePlace, placeKey, orphanedPlaceKeys } from './place
 import { StorageManager } from './storage.js';
 import { surnameForms, addSurnameGroup, removeSurnameGroup } from './surnames.js';
 import { ChangePacket, applyPacketOntoData } from './share-diff.js';
-import { createSnapshot, getSnapshotJson, SnapshotReason } from './snapshots.js';
-import { ValidationIssue } from './validation.js';
+import { createSnapshot, getSnapshotJson, SnapshotReason, hasAutoSnapshotOnDay } from './snapshots.js';
+import { ValidationIssue, stripUnsafeMediaDataUrls, translateValidationType } from './validation.js';
 import { UndoManager } from './undo.js';
 import { applyLivingPrivacy, applyContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
 import { safeFileName } from './filenames.js';
@@ -59,6 +59,14 @@ function normalizeText(text: string): string {
         .toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '');  // Remove diacritics
+}
+
+/** Delete keys whose value is undefined (an emptied optional field). */
+function dropUndefinedKeys(obj: object): void {
+    const rec = obj as Record<string, unknown>;
+    for (const key of Object.keys(rec)) {
+        if (rec[key] === undefined) delete rec[key];
+    }
 }
 
 /** Import action types for view mode */
@@ -121,6 +129,10 @@ export function migrateData(data: unknown): StromData {
         persons: (d.persons || {}) as Record<PersonId, Person>,
         partnerships
     };
+    // Photos/attachments must be image (or PDF) data URLs — anything else
+    // (data:text/html…) from a crafted file is dropped before it can be
+    // stored or rendered.
+    stripUnsafeMediaDataUrls(result);
 
     // Preserve the source catalog if present.
     if (d.sources && typeof d.sources === 'object') {
@@ -155,6 +167,18 @@ export function migrateData(data: unknown): StromData {
     return result;
 }
 
+/**
+ * Thrown by a mutation attempted while the local data is locked (see
+ * DataManager.isLocked). The UI never offers one; this only guarantees that
+ * an overlooked path cannot change the unsaved stand-in tree.
+ */
+export class DataLockedError extends Error {
+    constructor() {
+        super('Local data is locked; unlock it before editing');
+        this.name = 'DataLockedError';
+    }
+}
+
 class DataManagerClass {
     private data: StromData = {
         persons: {} as Record<PersonId, Person>,
@@ -167,6 +191,12 @@ class DataManagerClass {
     private pendingBefore: StromData | null = null;
     /** True while a batch (multiple mutations → one undo step) is in progress. */
     private batchActive = false;
+    /** Nesting depth of beginBatch/commitBatch (a batch may run inside a batch). */
+    private batchDepth = 0;
+    /** Whether any inner mutation committed during the current batch. */
+    private batchDirty = false;
+    /** Description of the first inner mutation of the current batch. */
+    private batchFirstDescription: string | null = null;
 
     /**
      * Notified after every single user mutation is committed (with the audit-log
@@ -189,9 +219,17 @@ class DataManagerClass {
 
     // Pending encrypted embedded data (requires password to unlock)
     private pendingEncryptedEmbedded: EncryptedData | null = null;
+    // "Export all" trees of an encrypted file (same password as the envelope)
+    private pendingEncryptedAllTrees: EncryptedData | null = null;
 
     // View mode state
     private viewMode = false;
+    /**
+     * The tree that follows a running Strom Research (live bridge). While
+     * followed it is read-only — the research is its source of truth — and
+     * updates arrive through replaceWithSourceData().
+     */
+    private liveTreeId: TreeId | null = null;
     private embeddedEnvelope: EmbeddedDataEnvelope | null = null;
     private embeddedAllTrees: Record<string, { name: string; data: StromData; isHidden?: boolean }> | null = null;
     private activeEmbeddedTreeId: string | null = null;
@@ -227,10 +265,11 @@ class DataManagerClass {
 
             // Store all trees if present (from "Export All" functionality)
             if (allTrees && typeof allTrees === 'object' && !isEncrypted(allTrees)) {
-                this.embeddedAllTrees = allTrees;
-                // Set active tree to first one (or the one matching envelope)
-                const treeIds = Object.keys(allTrees);
-                this.activeEmbeddedTreeId = treeIds.length > 0 ? treeIds[0] : null;
+                this.setEmbeddedAllTrees(allTrees, embedded.data as StromData);
+            } else if (isEncrypted(allTrees)) {
+                // Password-protected "Export all": decrypted together with the
+                // envelope (it used to be dropped, restoring only one tree).
+                this.pendingEncryptedAllTrees = allTrees;
             }
 
             // Check if embedded data is encrypted
@@ -305,6 +344,53 @@ class DataManagerClass {
     }
 
     /**
+     * Remember the "Export all" trees and mark the one the envelope shows as
+     * active (the switcher used to highlight simply the first tree).
+     */
+    private setEmbeddedAllTrees(
+        allTrees: Record<string, { name: string; data: StromData; isHidden?: boolean }>,
+        shown: StromData | null
+    ): void {
+        this.embeddedAllTrees = allTrees;
+        const ids = Object.keys(allTrees);
+        const name = this.embeddedEnvelope?.treeName;
+        const shownJson = shown ? JSON.stringify(shown) : null;
+        const exact = shownJson !== null
+            ? ids.find(id => allTrees[id].name === name && JSON.stringify(allTrees[id].data) === shownJson)
+            : undefined;
+        const byName = ids.find(id => allTrees[id].name === name);
+        this.activeEmbeddedTreeId = exact ?? byName ?? ids[0] ?? null;
+    }
+
+    /**
+     * Decrypt the pending embedded file with ITS password. Uses a key derived
+     * just for this file — it must never replace the local session key, or
+     * the user's own encrypted trees become unreadable and get overwritten
+     * (review K8). Returns false on a wrong password.
+     */
+    async decryptEmbeddedData(password: string): Promise<boolean> {
+        const pending = this.pendingEncryptedEmbedded;
+        if (!pending) return false;
+        let data: StromData;
+        try {
+            data = JSON.parse(await decrypt(pending, password)) as StromData;
+        } catch {
+            return false;
+        }
+        if (this.pendingEncryptedAllTrees) {
+            try {
+                const all = JSON.parse(await decrypt(this.pendingEncryptedAllTrees, password));
+                if (all && typeof all === 'object') this.setEmbeddedAllTrees(all, data);
+            } catch {
+                // Different password for the trees bundle: keep the single tree.
+            }
+            this.pendingEncryptedAllTrees = null;
+        }
+        this.loadDecryptedEmbeddedData(data);
+        return true;
+    }
+
+    /**
      * Load decrypted embedded data after password verification
      * @param decryptedData The decrypted StromData
      */
@@ -325,6 +411,7 @@ class DataManagerClass {
      * Check if a person is locked (either individually or via tree lock)
      */
     isPersonLocked(personId: PersonId): boolean {
+        if (this.isLocked()) return true;
         const person = this.data.persons[personId];
         if (person?.isLocked) return true;
         return this.isTreeLocked();
@@ -334,8 +421,24 @@ class DataManagerClass {
      * Check if the active tree is locked
      */
     isTreeLocked(): boolean {
+        if (this.liveTreeId !== null && this.liveTreeId === this.currentTreeId) return true;
         const meta = TreeManager.getActiveTreeMetadata();
         return meta?.isLocked === true;
+    }
+
+    /** Mark the tree that follows a live research (null = none). */
+    setLiveTree(treeId: TreeId | null): void {
+        this.liveTreeId = treeId;
+    }
+
+    /** The tree that follows a live research, if any. */
+    getLiveTreeId(): TreeId | null {
+        return this.liveTreeId;
+    }
+
+    /** The open tree is following a live research (read-only meanwhile). */
+    isLiveFollowing(): boolean {
+        return this.liveTreeId !== null && this.liveTreeId === this.currentTreeId;
     }
 
     /**
@@ -343,6 +446,24 @@ class DataManagerClass {
      */
     isViewMode(): boolean {
         return this.viewMode;
+    }
+
+    /**
+     * The local data is locked: encryption is on and the session was not
+     * unlocked (startup prompt cancelled), the open tree could not be
+     * decrypted with the session key, or an encrypted embedded file still
+     * waits for its password. The in-memory tree is then an empty stand-in
+     * that is never saved, so nothing may be edited until unlocking.
+     */
+    isLocked(): boolean {
+        if (this.viewMode) return false;
+        if (this.pendingEncryptedEmbedded) return true;
+        return this.currentTreeId !== null && TreeManager.isTreeUnreadable(this.currentTreeId);
+    }
+
+    /** No edits allowed: read-only view of an embedded file, or locked data. */
+    isReadOnly(): boolean {
+        return this.viewMode || this.isLocked();
     }
 
     /**
@@ -395,6 +516,7 @@ class DataManagerClass {
      * Switch to a different embedded tree (view mode only)
      */
     switchEmbeddedTree(treeId: string): boolean {
+        this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         if (!this.viewMode || !this.embeddedAllTrees) return false;
 
         const tree = this.embeddedAllTrees[treeId];
@@ -428,11 +550,13 @@ class DataManagerClass {
             return baseName;
         }
 
-        // Add date/time suffix
+        // Add date/time suffix (in the UI language and its locale)
         const now = new Date();
-        const dateStr = now.toLocaleDateString('cs-CZ');
-        const timeStr = now.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
-        const suffix = `import ze dne ${dateStr} ${timeStr}`;
+        const lang = getCurrentLanguage();
+        const locale = lang === 'cs' ? 'cs-CZ' : lang === 'de' ? 'de-DE' : 'en-US';
+        const dateStr = now.toLocaleDateString(locale);
+        const timeStr = now.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+        const suffix = strings.storageSafety.importedSuffix(dateStr, timeStr);
         let name = `${baseName} (${suffix})`;
 
         // If still exists (unlikely), add counter
@@ -457,23 +581,36 @@ class DataManagerClass {
         let imported = 0;
         const skipped = 0;
         const existingNames = new Set(TreeManager.getTrees().map(t => t.name.toLowerCase()));
+        const exportId = this.embeddedEnvelope?.exportId;
+        let lastImportedId: TreeId | null = null;
 
         // If we have all trees (from "Export All")
         if (this.embeddedAllTrees) {
-            for (const [, tree] of Object.entries(this.embeddedAllTrees)) {
+            for (const [embeddedId, tree] of Object.entries(this.embeddedAllTrees)) {
                 const name = this.getUniqueTreeName(tree.name, existingNames);
                 const newTreeId = TreeManager.createTreeFromImport(migrateData(tree.data), name);
                 // Apply isHidden flag if it was set in the export
                 if (tree.isHidden) {
                     TreeManager.setTreeVisibility(newTreeId, true);
                 }
+                // The envelope's tree carries the export id, so reopening the
+                // same file offers this tree instead of another copy (V7).
+                if (exportId && embeddedId === this.activeEmbeddedTreeId) {
+                    TreeManager.setSourceExportId(newTreeId, exportId);
+                }
                 existingNames.add(name.toLowerCase());
+                lastImportedId = newTreeId;
                 imported++;
             }
         } else if (this.embeddedEnvelope) {
             // Single tree
             const name = this.getUniqueTreeName(this.embeddedEnvelope.treeName, existingNames);
-            TreeManager.createTreeFromImport(this.data, name);
+            const newTreeId = TreeManager.createTreeFromImport(this.data, name);
+            if (exportId) TreeManager.setSourceExportId(newTreeId, exportId);
+            if (this.embeddedEnvelope.auditLog) {
+                await AuditLogManager.importForTree(newTreeId, this.embeddedEnvelope.auditLog);
+            }
+            lastImportedId = newTreeId;
             imported = 1;
         }
 
@@ -490,9 +627,11 @@ class DataManagerClass {
 
         // Switch to last imported tree
         const trees = TreeManager.getTrees();
-        if (trees.length > 0) {
-            const lastTree = trees[trees.length - 1];
-            await this.switchTree(lastTree.id);
+        const target = lastImportedId && TreeManager.getTreeMetadata(lastImportedId)
+            ? lastImportedId
+            : trees.length > 0 ? trees[trees.length - 1].id : null;
+        if (target) {
+            await this.switchTree(target);
         }
 
         if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
@@ -503,10 +642,43 @@ class DataManagerClass {
     }
 
     /**
+     * Restore an "Export all" backup: every entry becomes a NEW tree (names
+     * made unique), with its audit log when the backup carries one. Switches
+     * to the last imported tree. Returns the new tree ids.
+     */
+    async importTreesAsNew(
+        entries: Array<{ name: string; data: StromData; isHidden?: boolean; auditLog?: import('./types.js').AuditLog }>
+    ): Promise<TreeId[]> {
+        if (this.viewMode) return [];
+        const existingNames = new Set(TreeManager.getTrees().map(t => t.name.toLowerCase()));
+        const ids: TreeId[] = [];
+        for (const entry of entries) {
+            const name = this.getUniqueTreeName(entry.name || strings.treeManager.importTreeName, existingNames);
+            const id = TreeManager.createTreeFromImport(migrateData(entry.data), name);
+            if (entry.isHidden) TreeManager.setTreeVisibility(id, true);
+            if (entry.auditLog) await AuditLogManager.importForTree(id, entry.auditLog);
+            existingNames.add(name.toLowerCase());
+            ids.push(id);
+        }
+        if (ids.length === 0) return ids;
+        await this.removeEmptyDefaultTree();
+        CrossTree.invalidateCache();
+        // Land on a visible imported tree (never activate a hidden one).
+        const target = [...ids].reverse().find(id => !TreeManager.getTreeMetadata(id)?.isHidden) ?? null;
+        if (target) await this.switchTree(target);
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('strom:data-changed'));
+            window.dispatchEvent(new CustomEvent('strom:tree-switched'));
+        }
+        return ids;
+    }
+
+    /**
      * Import from view mode with specified action
      * @param action 'new' = create new tree, 'update' = update existing, 'copy' = create copy
      */
     async importFromViewMode(action: ViewModeImportAction): Promise<void> {
+        this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         if (!this.embeddedEnvelope || !this.viewMode) return;
 
         const data = this.data;
@@ -699,11 +871,15 @@ class DataManagerClass {
             // Load audit log cache for startup tree
             await AuditLogManager.loadForTree(startupTreeId);
 
+            // Locked / undecryptable data loads as an empty stand-in, but
+            // TreeManager refuses to save over it (review K8).
             const treeData = await TreeManager.getTreeData(startupTreeId);
             if (treeData) {
                 this.data = migrateData(treeData);
                 return;
             }
+            this.data = this.createEmptyData();
+            return;
         }
 
         // No startup tree or tree data not found - create empty data
@@ -723,8 +899,10 @@ class DataManagerClass {
     }
 
     async switchTree(treeId: TreeId): Promise<boolean> {
-        // Flush pending writes before switching (ensure current tree data is persisted)
-        await StorageManager.flush();
+        this.rollbackEditSession();   // whole-data replacement ends a staged dialog
+        // Flush pending writes (including the per-tree save queues) before
+        // switching (ensure current tree data is persisted)
+        await TreeManager.flush();
 
         if (!TreeManager.setActiveTree(treeId)) {
             return false;
@@ -736,6 +914,11 @@ class DataManagerClass {
             this.data = migrateData(treeData);
         } else {
             this.data = this.createEmptyData();
+            // Locked / wrong key: an empty stand-in that is never saved (K8);
+            // let the UI offer unlocking.
+            if (TreeManager.isTreeUnreadable(treeId) && typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('strom:tree-unreadable', { detail: { treeId } }));
+            }
         }
 
         // Load audit log cache for the new tree
@@ -753,13 +936,21 @@ class DataManagerClass {
      * Used after unlocking crypto session to load decrypted data
      */
     async reloadCurrentTree(): Promise<void> {
+        this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         if (!this.currentTreeId) return;
 
-        const treeData = await TreeManager.getTreeData(this.currentTreeId);
+        const treeId = this.currentTreeId;
+        const treeData = await TreeManager.getTreeData(treeId);
         if (treeData) {
             this.data = migrateData(treeData);
         } else {
             this.data = this.createEmptyData();
+            // Unlocked, but this tree carries another key (e.g. the startup
+            // prompt opened a different tree's password): let the UI ask for
+            // this tree's own password (K8).
+            if (TreeManager.isTreeUnreadable(treeId) && typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('strom:tree-unreadable', { detail: { treeId } }));
+            }
         }
 
         if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
@@ -777,8 +968,11 @@ class DataManagerClass {
     }
 
     private save(): void {
-        // Never save in view mode (read-only)
-        if (this.viewMode) return;
+        // Never save in view mode (read-only) or over locked data (the
+        // in-memory tree is a stand-in; TreeManager would refuse it anyway).
+        if (this.viewMode || this.isLocked()) return;
+        // A staged dialog persists on commit only; a rollback re-saves.
+        if (this.editSession) return;
 
         if (this.currentTreeId) {
             TreeManager.saveTreeData(this.currentTreeId, this.data);
@@ -792,6 +986,9 @@ class DataManagerClass {
      * Called at the start of every undoable mutation. No-op in view mode.
      */
     private beginMutation(): void {
+        // Locked data is an empty stand-in: refuse before anything changes
+        // (defense in depth — the UI hides every edit entry point).
+        if (this.isLocked()) throw new DataLockedError();
         if (this.viewMode) return;
         // Inside a batch the pre-state was captured once by beginBatch; the inner
         // mutations must not re-snapshot (that would split the batch into steps).
@@ -805,7 +1002,11 @@ class DataManagerClass {
      * mutation methods. During a batch this defers to commitBatch (no push/save).
      */
     private commitMutation(description: string, silent = false): void {
-        if (this.batchActive) return;
+        if (this.batchActive) {
+            this.batchDirty = true;
+            if (this.batchFirstDescription === null) this.batchFirstDescription = description;
+            return;
+        }
         UndoManager.setActiveTree(this.currentTreeId);
         if (this.pendingBefore) {
             // Auto-backup the FIRST mutation of the day (state before it).
@@ -838,17 +1039,136 @@ class DataManagerClass {
      * family wizard). Non-invasive: no mutation method needs to change.
      */
     beginBatch(): void {
-        if (this.viewMode || this.batchActive) return;
+        if (this.viewMode || this.isLocked()) return;
+        // Nested batches (e.g. the family wizard inside a UI-level runBatch)
+        // join the outermost one: only the outermost commit records the step.
+        if (this.batchActive) {
+            this.batchDepth++;
+            return;
+        }
         this.beginMutation();      // one pre-state snapshot for the whole batch
         this.batchActive = true;
+        this.batchDepth = 1;
+        this.batchDirty = false;
+        this.batchFirstDescription = null;
     }
 
-    /** Commit the batch as a single undo entry, then persist. */
-    commitBatch(description: string): void {
+    /**
+     * Commit the batch as a single undo entry, then persist. Only the
+     * outermost commit of nested batches records the step; a batch in which
+     * nothing was committed records no step at all. `silent` (the default,
+     * for flows with their own result UI such as the family wizard) skips the
+     * Undo toast. `description === null` uses the first inner mutation's.
+     */
+    commitBatch(description: string | null, silent = true): void {
         if (!this.batchActive) return;
+        if (--this.batchDepth > 0) return;
         this.batchActive = false;
-        // Batches (family wizard) show their own toast — no Undo toast.
-        this.commitMutation(description, true);
+        const dirty = this.batchDirty;
+        const desc = description ?? this.batchFirstDescription ?? '';
+        this.batchDirty = false;
+        this.batchFirstDescription = null;
+        if (!dirty) {
+            this.pendingBefore = null;   // nothing changed — no undo step
+            return;
+        }
+        this.commitMutation(desc, silent);
+    }
+
+    /**
+     * Run one user action made of several mutations as ONE undo step with ONE
+     * Undo toast (review V12). The batch is closed on every path, including a
+     * throw. `description === null` names the step after the first inner
+     * mutation (e.g. "adding Jan Novák" for a create-then-edit save).
+     */
+    runBatch<T>(description: string | null, fn: () => T): T {
+        this.beginBatch();
+        try {
+            return fn();
+        } finally {
+            this.commitBatch(description, false);
+        }
+    }
+
+    // ==================== EDIT SESSIONS (staged dialogs) ====================
+
+    /**
+     * An edit session makes a dialog "staged" from the user's point of view
+     * while its operations still apply live (review S9): everything between
+     * beginEditSession() and commitEditSession() lands as ONE undo step, and
+     * rollbackEditSession() restores the state captured at the start without
+     * recording anything. It is a batch underneath, so nested runBatch calls
+     * of the individual operations join it instead of recording their own
+     * steps; nothing is persisted and no audit entry is written until commit.
+     */
+    private editSession: { treeId: TreeId | null; before: StromData } | null = null;
+
+    /** Start a session. Returns false (and does nothing) when one cannot start. */
+    beginEditSession(): boolean {
+        if (this.isReadOnly() || this.editSession || this.batchActive) return false;
+        this.editSession = { treeId: this.currentTreeId, before: structuredClone(this.data) };
+        this.beginBatch();
+        AuditLogManager.beginHold();
+        return true;
+    }
+
+    isEditSessionActive(): boolean {
+        return this.editSession !== null;
+    }
+
+    /** Whether the data now differs from the state at the start of the session. */
+    editSessionHasChanges(): boolean {
+        const s = this.editSession;
+        if (!s) return false;
+        return JSON.stringify(this.data) !== JSON.stringify(s.before);
+    }
+
+    /** Leave batch mode without recording anything (session end paths). */
+    private resetBatchState(): void {
+        this.batchActive = false;
+        this.batchDepth = 0;
+        this.batchDirty = false;
+        this.batchFirstDescription = null;
+        this.pendingBefore = null;
+    }
+
+    /**
+     * Keep the session's changes: one undo step (with the Undo toast), one
+     * save, and the held audit entries written. `description === null` names
+     * the step after the first operation of the session.
+     */
+    commitEditSession(description: string | null): void {
+        const s = this.editSession;
+        if (!s) return;
+        this.editSession = null;
+        if (this.currentTreeId !== s.treeId || !this.batchActive) {
+            // The tree changed under the session: its data is gone anyway.
+            this.resetBatchState();
+            AuditLogManager.dropHold();
+            return;
+        }
+        AuditLogManager.flushHold();
+        this.batchDepth = 1;   // an operation left unbalanced must not keep it open
+        this.commitBatch(description, false);
+    }
+
+    /**
+     * Throw the session's changes away: restore the data captured at the
+     * start. No undo step, no audit entry. Returns true when data changed
+     * (the caller re-renders).
+     */
+    rollbackEditSession(): boolean {
+        const s = this.editSession;
+        if (!s) return false;
+        this.editSession = null;
+        this.resetBatchState();
+        AuditLogManager.dropHold();
+        if (this.currentTreeId !== s.treeId) return false;
+        if (JSON.stringify(this.data) === JSON.stringify(s.before)) return false;
+        this.data = s.before;
+        this.save();
+        if (this.currentTreeId) CrossTree.invalidateCacheForTree(this.currentTreeId);
+        return true;
     }
 
     // ==================== VERSIONED BACKUPS (snapshots) ====================
@@ -863,11 +1183,17 @@ class DataManagerClass {
         // (the first MEANINGFUL mutation of the day should still snapshot).
         if (!Object.values(before.persons).some(p => !p.isPlaceholder)) return;
         const treeId = this.currentTreeId;
-        const today = new Date().toISOString().slice(0, 10);
+        const now = Date.now();
+        const today = new Date(now).toISOString().slice(0, 10);
         if (this.lastAutoSnapshotDay.get(treeId) === today) return;
         this.lastAutoSnapshotDay.set(treeId, today);
         // Fire-and-forget; backups are best-effort (storage may be unavailable).
-        void createSnapshot(treeId, before, 'auto', Date.now()).catch(() => {});
+        // The in-memory guard resets on reload — check the store too, so the
+        // first edit after every reload does not replace the day's backup
+        // with a later state.
+        void hasAutoSnapshotOnDay(treeId, now)
+            .then(exists => exists ? undefined : createSnapshot(treeId, before, 'auto', now))
+            .catch(() => {});
     }
 
     /** Take a snapshot of the current tree now (manual / pre-import / pre-merge). */
@@ -882,7 +1208,8 @@ class DataManagerClass {
      * reverts the restore. Returns true on success.
      */
     async restoreSnapshot(snapshotId: string): Promise<boolean> {
-        if (this.viewMode || !this.currentTreeId) return false;
+        this.rollbackEditSession();   // whole-data replacement ends a staged dialog
+        if (this.isReadOnly() || !this.currentTreeId) return false;
         const json = await getSnapshotJson(snapshotId);
         if (!json) return false;
         const migrated = migrateData(JSON.parse(json));
@@ -896,11 +1223,13 @@ class DataManagerClass {
     }
 
     canUndo(): boolean {
+        if (this.isLocked()) return false;
         UndoManager.setActiveTree(this.currentTreeId);
         return UndoManager.canUndo();
     }
 
     canRedo(): boolean {
+        if (this.isLocked()) return false;
         UndoManager.setActiveTree(this.currentTreeId);
         return UndoManager.canRedo();
     }
@@ -910,7 +1239,11 @@ class DataManagerClass {
      * description (for the toast), or null when there is nothing to undo.
      */
     undo(): { description: string } | null {
-        if (this.viewMode || !this.currentTreeId) return null;
+        if (this.isReadOnly() || !this.currentTreeId) return null;
+        // A staged dialog is open: its own Save/Discard settle the data.
+        if (this.editSession) return null;
+        // A locked tree is read-only — undo would rewrite it (review S21).
+        if (this.isTreeLocked()) return null;
         UndoManager.setActiveTree(this.currentTreeId);
         const restored = UndoManager.undo(structuredClone(this.data));
         if (!restored) return null;
@@ -921,7 +1254,10 @@ class DataManagerClass {
 
     /** Replay the last undone snapshot. Symmetric to undo(). */
     redo(): { description: string } | null {
-        if (this.viewMode || !this.currentTreeId) return null;
+        if (this.isReadOnly() || !this.currentTreeId) return null;
+        // A staged dialog is open: its own Save/Discard settle the data.
+        if (this.editSession) return null;
+        if (this.isTreeLocked()) return null;
         UndoManager.setActiveTree(this.currentTreeId);
         const restored = UndoManager.redo(structuredClone(this.data));
         if (!restored) return null;
@@ -1140,7 +1476,7 @@ class DataManagerClass {
      */
     addFamily(spec: FamilyWizardSpec): number {
         const anchor = this.data.persons[spec.anchorId];
-        if (this.viewMode || !anchor) return 0;
+        if (this.isReadOnly() || !anchor) return 0;
 
         let created = 0;
         // Resolve a member to a person id: link existing, create new, or skip.
@@ -1165,24 +1501,43 @@ class DataManagerClass {
         // begin/commitMutation (no undo entries, no saves) until reload — the
         // batch MUST close on every path.
         try {
-            const fatherId = resolve(spec.father);
-            const motherId = resolve(spec.mother);
-            // Parents' partnership (so anchor + siblings share the same couple).
-            let parentUnion: PartnershipId | undefined;
-            if (fatherId && motherId) {
-                const u = this.createPartnership(fatherId, motherId);
-                parentUnion = u?.id;
-            }
+            // The anchor keeps the parents it already has: a wizard parent is
+            // either one of them (linked by existingId) or fills a FREE slot.
+            // With both slots taken, a new parent is not even created — it
+            // could only become a third parent (review V11).
+            let freeSlots = 2 - anchor.parentIds.length;
+            const resolveParent = (m?: FamilyWizardMember): PersonId | null => {
+                if (!m) return null;
+                if (m.existingId && anchor.parentIds.includes(m.existingId)) return m.existingId;
+                if (freeSlots <= 0) return null;
+                const id = resolve(m);
+                if (!id) return null;
+                if (!this.canAddParentChild(id, spec.anchorId)) return null;
+                freeSlots--;
+                return id;
+            };
+            const fatherId = resolveParent(spec.father);
+            const motherId = resolveParent(spec.mother);
             for (const pid of [fatherId, motherId]) {
-                if (pid) this.addParentChild(pid, spec.anchorId, parentUnion);
+                if (pid) this.addParentChild(pid, spec.anchorId);
+            }
+            // Parents' partnership (so anchor + siblings share the same couple)
+            // — only between the anchor's actual two parents, never between a
+            // new parent and someone who is not the anchor's other parent.
+            let parentUnion: PartnershipId | undefined;
+            const parents = [...anchor.parentIds];
+            if (parents.length === 2) {
+                const u = this.createPartnership(parents[0], parents[1]);
+                parentUnion = u?.id;
+                if (parentUnion) this.addParentChild(parents[0], spec.anchorId, parentUnion);
             }
 
             // Siblings share the anchor's parents.
             for (const s of spec.siblings) {
                 const sid = resolve(s);
                 if (!sid) continue;
-                for (const pid of [fatherId, motherId]) {
-                    if (pid) this.addParentChild(pid, sid, parentUnion);
+                for (const pid of parents) {
+                    this.addParentChild(pid, sid, parentUnion);
                 }
             }
 
@@ -1214,6 +1569,8 @@ class DataManagerClass {
         if (!person) return null;
 
         this.beginMutation();
+        // To tell a real edit from "Save without changes" (no undo step then).
+        const personBefore = JSON.stringify(person);
 
         // Allow toggling isLocked even when person is locked
         if (updates.isLocked !== undefined) {
@@ -1257,14 +1614,21 @@ class DataManagerClass {
         if (updates.refn !== undefined && (updates.refn || undefined) !== person.refn) diff(strings.labels.refn, person.refn, updates.refn);
         if (updates.question !== undefined && (updates.question || undefined) !== person.question) diff(strings.labels.question, person.question, updates.question);
 
-        if (updates.firstName !== undefined) {
-            person.firstName = updates.firstName;
-            // If firstName is set and was placeholder, remove placeholder status
-            if (person.isPlaceholder && updates.firstName && updates.firstName !== '?') {
+        const lastNameBefore = person.lastName ?? '';
+        if (updates.firstName !== undefined) person.firstName = updates.firstName;
+        if (updates.lastName !== undefined) person.lastName = updates.lastName;
+        // A placeholder that got a real name — first OR last — is a person now
+        // (a surname alone is enough, like in the relation modal). A surname
+        // the placeholder was created with (the "?" father of a new sibling)
+        // does not count until it is actually edited.
+        if (person.isPlaceholder && (updates.firstName !== undefined || updates.lastName !== undefined)) {
+            const first = (person.firstName ?? '').trim();
+            const last = (person.lastName ?? '').trim();
+            if ((first && first !== '?') || (last && person.lastName !== lastNameBefore)) {
                 person.isPlaceholder = false;
+                if (first === '?') person.firstName = '';
             }
         }
-        if (updates.lastName !== undefined) person.lastName = updates.lastName;
         if (updates.gender !== undefined) person.gender = updates.gender;
 
         // Extended info
@@ -1273,7 +1637,12 @@ class DataManagerClass {
         if (updates.deathDate !== undefined) person.deathDate = updates.deathDate || undefined;
         if (updates.deathPlace !== undefined) person.deathPlace = updates.deathPlace || undefined;
         if (updates.notes !== undefined) person.notes = updates.notes || undefined;
-        if (updates.refn !== undefined) person.refn = updates.refn || undefined;
+        if (updates.refn !== undefined) {
+            // The number's issuer (GEDCOM REFN > TYPE) describes the number it
+            // came with; a number typed over it is no longer theirs.
+            if ((updates.refn || undefined) !== person.refn) delete person.refnType;
+            person.refn = updates.refn || undefined;
+        }
         if (updates.question !== undefined) person.question = updates.question || undefined;
         // Empty list means none — do not keep an empty array around.
         if (updates.nameVariants !== undefined) {
@@ -1288,6 +1657,10 @@ class DataManagerClass {
         if ('isDeceased' in updates) person.isDeceased = updates.isDeceased;
         if ('photo' in updates) person.photo = updates.photo || undefined;
 
+        if (JSON.stringify(person) === personBefore) {
+            this.pendingBefore = null;   // nothing changed — no undo step, no toast
+            return person;
+        }
         this.commitMutation(strings.undo.editPerson(auditPersonName(person)));
         // Audit log
         if (changedFields.length > 0) {
@@ -1335,6 +1708,9 @@ class DataManagerClass {
 
         this.beginMutation();
         Object.assign(ev, updates);
+        // An explicit undefined means "field emptied" — drop the key, or the
+        // old value would survive the save (Object.assign never removes keys).
+        dropUndefinedKeys(ev);
         // An empty participants array means "all participants removed" — drop the
         // property so exported JSON stays clean (Object.assign would keep []).
         if (Array.isArray(updates.participants) && updates.participants.length === 0) {
@@ -1383,6 +1759,8 @@ class DataManagerClass {
 
         this.beginMutation();
         Object.assign(src, updates);
+        // Explicit undefined = field emptied (see updateLifeEvent).
+        dropUndefinedKeys(src);
         this.commitMutation(strings.undo.editSource(src.title));
         AuditLogManager.log(this.currentTreeId, 'source.update', strings.auditLog.updatedSource(src.title));
         return true;
@@ -1694,16 +2072,21 @@ class DataManagerClass {
         // instead of a dangling id — the record loses the link, not the fact.
         // (Same contract as merge and split.)
         const writtenName = `${person.firstName ?? ''} ${person.lastName ?? ''}`.trim();
+        const unlinkParticipant = (part: { personId?: PersonId; name?: string }) => {
+            if (part.personId !== id) return;
+            if (!part.name && writtenName && writtenName !== '?' && !person.isPlaceholder) {
+                part.name = writtenName;
+            }
+            delete part.personId;
+        };
         for (const other of Object.values(this.data.persons)) {
             for (const event of other.events ?? []) {
-                for (const part of event.participants ?? []) {
-                    if (part.personId !== id) continue;
-                    if (!part.name && writtenName && writtenName !== '?') {
-                        part.name = writtenName;
-                    }
-                    delete part.personId;
-                }
+                for (const part of event.participants ?? []) unlinkParticipant(part);
             }
+        }
+        // Wedding witnesses of other couples, likewise (review S6).
+        for (const union of Object.values(this.data.partnerships)) {
+            for (const part of union.participants ?? []) unlinkParticipant(part);
         }
 
         delete this.data.persons[id];
@@ -1758,6 +2141,7 @@ class DataManagerClass {
         const partnership = this.data.partnerships[partnershipId];
         if (!partnership) return false;
 
+        if (partnership.status === status) return true;
         this.beginMutation();
         partnership.status = status;
         const sp1 = this.data.persons[partnership.person1Id];
@@ -1781,7 +2165,10 @@ class DataManagerClass {
         if (updates.note !== undefined && (updates.note || undefined) !== partnership.note) { partnership.note = updates.note || undefined; changed = true; }
         if (updates.isPrimary !== undefined && (updates.isPrimary || undefined) !== partnership.isPrimary) { partnership.isPrimary = updates.isPrimary || undefined; changed = true; }
 
-        if (!changed) return partnership;
+        if (!changed) {
+            this.pendingBefore = null;   // nothing changed — no undo step
+            return partnership;
+        }
 
         // Audit log
         const up1 = this.data.persons[partnership.person1Id];
@@ -1858,6 +2245,8 @@ class DataManagerClass {
 
         // Block if either person is locked
         if (this.isPersonLocked(parentId) || this.isPersonLocked(childId)) return false;
+        // No third parent, no cycle — refused without touching anything.
+        if (!this.canAddParentChild(parentId, childId)) return false;
 
         this.beginMutation();
 
@@ -1866,8 +2255,9 @@ class DataManagerClass {
             parent.childIds.push(childId);
         }
 
-        // Add to child's parentIds if not already there (max 2 parents)
-        if (!child.parentIds.includes(parentId) && child.parentIds.length < 2) {
+        // Add to child's parentIds if not already there (max 2 parents,
+        // guaranteed by canAddParentChild above)
+        if (!child.parentIds.includes(parentId)) {
             child.parentIds.push(parentId);
         }
 
@@ -1886,6 +2276,22 @@ class DataManagerClass {
             strings.auditLog.addedParentChild(auditPersonName(parent), auditPersonName(child))
         );
         return true;
+    }
+
+    /**
+     * Whether `parentId` may become a parent of `childId`: an existing link is
+     * fine (idempotent); otherwise the child must have a free parent slot (at
+     * most two parents) and the parent must be neither the child itself nor
+     * one of its descendants (that would be a cycle in the ancestry). Pickers
+     * use it to offer only people the link would accept.
+     */
+    canAddParentChild(parentId: PersonId, childId: PersonId): boolean {
+        const parent = this.data.persons[parentId];
+        const child = this.data.persons[childId];
+        if (!parent || !child) return false;
+        if (child.parentIds.includes(parentId)) return true;
+        if (child.parentIds.length >= 2) return false;
+        return !this.isSelfOrDescendantOf(parentId, childId);
     }
 
     /** True when `candidateId` is `rootId` itself or one of its descendants. */
@@ -1916,7 +2322,17 @@ class DataManagerClass {
         if (!child.parentIds.includes(oldParentId)) return false;
         // A parent from the child's own descendants would be a cycle.
         if (this.isSelfOrDescendantOf(newParentId, childId)) return false;
+        // Locked people cannot be relinked — refuse before touching anything.
+        if (this.isPersonLocked(childId) || this.isPersonLocked(oldParentId) || this.isPersonLocked(newParentId)) return false;
 
+        // One user action = one undo step: a single Ctrl+Z must not leave the
+        // child with the old link removed and the new one still present.
+        return this.runBatch(
+            strings.undo.addRelation(auditPersonName(this.data.persons[newParentId]), auditPersonName(child)),
+            () => this.reassignParentChildInner(child, childId, oldParentId, newParentId));
+    }
+
+    private reassignParentChildInner(child: Person, childId: PersonId, oldParentId: PersonId, newParentId: PersonId): boolean {
         const keptType = child.parentRelTypes?.[oldParentId];
         const oldUnion = Object.values(this.data.partnerships).find(u =>
             (u.person1Id === oldParentId || u.person2Id === oldParentId) && u.childIds.includes(childId));
@@ -2273,6 +2689,7 @@ class DataManagerClass {
      * Clear all data and start fresh (in current tree)
      */
     clearData(): void {
+        this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         // Capture counts before clearing for audit log
         const personCount = Object.keys(this.data.persons).length;
         const partnershipCount = Object.keys(this.data.partnerships).length;
@@ -2295,7 +2712,7 @@ class DataManagerClass {
      * @param value undefined = first person, LAST_FOCUSED = where user left off, PersonId = specific
      */
     setDefaultPerson(value: PersonId | LastFocusedMarker | undefined): void {
-        if (!this.currentTreeId) return;
+        if (!this.currentTreeId || this.isLocked()) return;
 
         if (value === undefined) {
             delete this.data.defaultPersonId;
@@ -2366,6 +2783,7 @@ class DataManagerClass {
      * Load new data, replacing existing data in current tree
      */
     loadStromData(newData: StromData): void {
+        this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         // Undo choke point (see clearData) — an accidental import-over is
         // now one Ctrl+Z away instead of silently corrupting the stack.
         this.beginMutation();
@@ -2384,12 +2802,30 @@ class DataManagerClass {
     }
 
     /**
+     * Replace the open tree with a newer state from its source (the live
+     * research bridge). Not an edit of the user's: no undo step — the history
+     * before it described a state that no longer exists, so it is dropped.
+     */
+    replaceWithSourceData(newData: StromData): void {
+        this.rollbackEditSession();   // whole-data replacement ends a staged dialog
+        if (this.viewMode || this.isLocked() || !this.currentTreeId) return;
+        this.data = migrateData(newData);
+        this.save();
+        UndoManager.setActiveTree(this.currentTreeId);
+        UndoManager.clear();
+        this.onUndoRedoChanged?.();
+        CrossTree.invalidateCacheForTree(this.currentTreeId);
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:data-changed'));
+    }
+
+    /**
      * Apply a collaboration change packet straight onto the current tree as a
      * single undoable step (the "Accept" path). Goes through the same
      * begin/commitMutation choke point as every other edit, so one Ctrl+Z
      * reverts the whole acceptance. The caller surfaces its own result toast.
      */
     applyChangePacketDirect(packet: ChangePacket): void {
+        this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         const sender = packet.senderName || strings.share.unknownSender;
         this.beginMutation();
         this.data = applyPacketOntoData(this.data, packet);
@@ -2406,6 +2842,7 @@ class DataManagerClass {
      * @returns The new tree's ID
      */
     async importAsNewTree(data: StromData, treeName: string): Promise<TreeId> {
+        this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         const migratedData = migrateData(data);
         const treeId = TreeManager.createTreeFromImport(migratedData, treeName);
         this.currentTreeId = treeId;
@@ -2425,6 +2862,7 @@ class DataManagerClass {
      * @returns The new tree's ID
      */
     createNewTree(name: string): TreeId {
+        this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         const treeId = TreeManager.createTree(name);
         this.currentTreeId = treeId;
         TreeManager.setActiveTree(treeId);
@@ -2446,7 +2884,8 @@ class DataManagerClass {
         if (first.personCount !== 0) return;
 
         // Only remove if it still has the default name (not renamed by user)
-        const defaultNames = ['My Family Tree', 'Můj rodokmen'];
+        // — in ANY UI language (the tree may predate a language switch).
+        const defaultNames = SUPPORTED_LANGUAGES.map(l => getStringsForLang(l.code).treeManager.defaultTreeName);
         if (!defaultNames.includes(first.name)) return;
 
         await TreeManager.deleteTree(first.id);
@@ -2966,6 +3405,17 @@ class DataManagerClass {
                 // person; keep whatever written name the row still carries.
                 // (The linked person is already gone, so its name cannot be
                 // recovered here — the snapshot has to happen at delete time.)
+                // A wedding witness (the issue names the partnership instead).
+                const unionId = issue.partnershipIds?.[0];
+                if (unionId) {
+                    for (const part of this.data.partnerships[unionId]?.participants ?? []) {
+                        if (part.personId && !this.data.persons[part.personId]) {
+                            delete part.personId;
+                            repaired = true;
+                        }
+                    }
+                    break;
+                }
                 const personId = issue.personIds?.[0];
                 if (!personId) break;
                 const person = this.data.persons[personId];
@@ -3086,9 +3536,16 @@ class DataManagerClass {
 
         if (repaired) {
             this.commitMutation(strings.undo.repairedIssue);
+            // Log the localized issue type (issue.message is English-only
+            // diagnostic text) plus the people it concerned.
+            const who = (issue.personIds ?? [])
+                .map(id => this.data.persons[id])
+                .filter(Boolean)
+                .map(p => auditPersonName(p));
+            const desc = translateValidationType(issue.type) + (who.length ? ` (${who.join(', ')})` : '');
             AuditLogManager.log(
                 this.currentTreeId, 'data.repair',
-                strings.auditLog.repairedIssue(issue.message)
+                strings.auditLog.repairedIssue(desc)
             );
         } else {
             this.pendingBefore = null;   // nothing changed — drop the snapshot

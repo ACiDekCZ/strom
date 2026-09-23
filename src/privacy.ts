@@ -8,7 +8,7 @@
  * still renders.
  */
 
-import { StromData, Person } from './types.js';
+import { StromData, Person, Partnership } from './types.js';
 import { strings } from './strings.js';
 import { yearOf } from './dates.js';
 import { stripPhotos } from './photo.js';
@@ -228,6 +228,31 @@ function stripDetails(person: Person): void {
     delete person.sourceIds;
     // Attachments (scans, letters) are private documents — always drop.
     delete person.attachments;
+    // Name variants carry the full real name (e.g. a GEDCOM second NAME line
+    // under "Living person"); the open question is free text about the person;
+    // a REFN is an identifier that finds them in other databases.
+    delete person.nameVariants;
+    delete person.question;
+    delete person.refn;
+    delete person.refnType;
+}
+
+/**
+ * Drop a couple's details when either partner is living: when and where they
+ * married (or split), the note and the witnesses. The union itself (partners,
+ * status, children) is structure and stays. 'initials' keeps the start YEAR,
+ * mirroring the birth year it keeps on the person.
+ */
+function stripPartnershipDetails(partnership: Partnership, mode: PrivacyMode): void {
+    const startYear = mode === 'initials' ? yearOf(partnership.startDate) : null;
+    delete partnership.startDate;
+    delete partnership.startPlace;
+    delete partnership.endDate;
+    delete partnership.note;
+    delete partnership.participants;
+    delete partnership.story;
+    delete partnership.sourceIds;
+    if (startYear !== null) partnership.startDate = String(startYear);
 }
 
 /**
@@ -266,11 +291,12 @@ export function applyLivingPrivacy(
             .map(p => p.id)
     );
 
-    // A couple's narrative tells the story of both of them, so it goes as soon
-    // as either one is living — there is no half of it to keep.
+    // A couple's details (dates, place, note, witnesses, narrative) describe
+    // both of them, so they go as soon as either one is living — there is no
+    // half of them to keep.
     for (const partnership of Object.values(copy.partnerships)) {
         if (living.has(partnership.person1Id) || living.has(partnership.person2Id)) {
-            delete partnership.story;
+            stripPartnershipDetails(partnership, mode);
         }
     }
 

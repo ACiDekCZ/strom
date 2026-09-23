@@ -3,8 +3,9 @@ import { openApp, createFirstPerson } from './helpers.js';
 
 /**
  * Responsive toolbar regimes. The toolbar has exactly two regimes, split at
- * the 1024px tablet boundary (the app's real boundary — CLAUDE.md's generic
- * "three modes / 900px" note does not apply to this toolbar):
+ * the 1024px toolbar boundary — the documented content-driven exception to the
+ * 499/900 breakpoint map (index.html, src/breakpoints.ts), because the desktop
+ * toolbar does not fit below it:
  *
  *   > 1024  desktop   : the view-mode segment is shown, the bottom bar hidden,
  *                       the ⋯ actions menu present, generation controls live in
@@ -14,7 +15,9 @@ import { openApp, createFirstPerson } from './helpers.js';
  *                        tabs), the desktop ⋯ menu is hidden (its items live in
  *                        the "More" sheet, opened by the bottom-bar "More" tab
  *                        and the top-bar ⋯), generation controls live inline in
- *                        .toolbar-focus (600–1024) or the floating chip (≤ 600).
+ *                        .toolbar-focus (641–1024) or the floating chip (≤ 640,
+ *                        the phone-chrome exception: the inline toolbar does
+ *                        not fit below it).
  *
  * Invariants asserted at every probed width:
  *   1. exactly one view surface — segment XOR bottom-bar tabs,
@@ -24,7 +27,7 @@ import { openApp, createFirstPerson } from './helpers.js';
  *      with a long tree name and the opt-in family-wizard button enabled.
  */
 
-const WIDTHS = [360, 500, 700, 900, 1000, 1024, 1100, 1280, 1400];
+const WIDTHS = [360, 499, 500, 600, 640, 641, 700, 768, 900, 1000, 1024, 1100, 1280, 1400];
 
 /** Read the responsive state of the toolbar in one page round-trip. */
 async function probe(page: Page) {
@@ -56,8 +59,9 @@ async function probe(page: Page) {
             (standaloneSettings ? 1 : 0) + (foldedSettings ? 1 : 0) + (moreSheetHome ? 1 : 0);
 
         // Generation-depth controls: inline (.toolbar-focus) or floating bar.
-        const toolbarDepth = shown(document.getElementById('toolbar-depth-up'));
-        const floatingDepth = shown(document.getElementById('focus-depth-up'));
+        // The visible control is the stepper fronting each (hidden) select.
+        const toolbarDepth = shown(document.getElementById('toolbar-depth-up')?.closest('.depth-stepper') ?? null);
+        const floatingDepth = shown(document.getElementById('focus-depth-up')?.closest('.depth-stepper') ?? null);
         const depthSurfaces = (toolbarDepth ? 1 : 0) + (floatingDepth ? 1 : 0);
 
         // Clip audit: every visible toolbar child stays within the bar.

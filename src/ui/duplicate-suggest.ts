@@ -88,7 +88,11 @@ export const duplicateSuggestMethods = uiModule({
         const excludeId = context === 'relation'
             ? (this.relationContext as RelationContext | null)?.personId
             : undefined;
-        const results = findSimilarPersons(DataManager.getData(), { firstName: first, lastName: last, gender, birthDate }, excludeId);
+        let results = findSimilarPersons(DataManager.getData(), { firstName: first, lastName: last, gender, birthDate }, excludeId);
+        // "Use existing" must not offer someone the link would refuse (a third
+        // parent, a cycle in the ancestry) — same rule as the link picker.
+        const ctx = context === 'relation' ? this.relationContext as RelationContext | null : null;
+        if (ctx) results = results.filter(r => this.canLinkRelation(ctx.personId, r.person.id, ctx.relationType));
         this.renderDuplicateSuggest(context, results.slice(0, MAX_SUGGESTIONS));
     },
 
@@ -98,7 +102,6 @@ export const duplicateSuggestMethods = uiModule({
         if (results.length === 0) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
 
         const action = context === 'person' ? strings.duplicates.goToPerson : strings.duplicates.useExisting;
-        const handler = context === 'person' ? 'goToSuggestedPerson' : 'useSuggestedPerson';
         panel.innerHTML = `
             <div class="duplicate-suggest-title">${esc(strings.duplicates.title)}</div>
             ${results.map(({ person }) => {
@@ -117,10 +120,19 @@ export const duplicateSuggestMethods = uiModule({
                             <span class="duplicate-suggest-name">${esc(name)}</span>
                             ${meta ? `<span class="duplicate-suggest-meta"> — ${esc(meta)}</span>` : ''}
                         </div>
-                        <button type="button" onclick="window.Strom.UI.${handler}('${esc(person.id)}')">${esc(action)}</button>
+                        <button type="button" class="duplicate-suggest-action" data-person-id="${esc(person.id)}">${esc(action)}</button>
                     </div>`;
             }).join('')}
         `;
+        // Person ids come from data files: never inline them into onclick JS
+        // (the browser decodes &#39; back to a quote inside an attribute).
+        panel.querySelectorAll<HTMLButtonElement>('.duplicate-suggest-action').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.dataset.personId ?? '';
+                if (context === 'person') this.goToSuggestedPerson(id);
+                else this.useSuggestedPerson(id);
+            });
+        });
         panel.style.display = '';
     },
 
@@ -136,7 +148,9 @@ export const duplicateSuggestMethods = uiModule({
         const ctx = this.relationContext as RelationContext | null;
         if (!ctx) return;
         if (personId === ctx.personId) return; // never link a person to themself
-        this.createRelationship(ctx.personId, personId as PersonId, ctx.relationType);
+        // Refused (third parent / cycle): the toast says why, the modal stays.
+        if (!this.createRelationship(ctx.personId, personId as PersonId, ctx.relationType,
+            this.selectedOtherParent())) return;
         this.closeRelationModal();
         TreeRenderer.render();
         this.refreshSearch();

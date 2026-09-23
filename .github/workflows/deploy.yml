@@ -2,7 +2,8 @@ name: Build and Deploy
 
 on:
   push:
-    branches: [main]
+    # main = the public app (/run/); beta = the pre-release test build (/beta/)
+    branches: [main, beta]
     tags: ['v*']
 
 jobs:
@@ -79,6 +80,37 @@ jobs:
           sed -i "s/const APP_VERSION = '[^']*'/const APP_VERSION = '${VERSION}'/" run/sw.js
           git add run/index.html run/sw.js
           git diff --staged --quiet || git commit -m "Update PWA from GitHub build"
+          git push origin main
+
+  # Pre-release test build: push to the `beta` branch deploys to
+  # https://stromapp.info/beta/ only. The public app (/run/), the `latest`
+  # pre-release and the tagged releases are untouched.
+  deploy-beta:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/beta'
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: strom-build
+
+      - name: Push to GitLab (beta)
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          git config --global user.email "deploy@stromapp.info"
+          git config --global user.name "Deploy Bot"
+          git clone https://oauth2:${GITLAB_TOKEN}@gitlab.com/acidek/strom-app-info.git deploy-repo
+          test -f deploy-repo/beta/sw.js || { echo "beta/ is not set up in strom-app-info"; exit 1; }
+          cp strom.html deploy-repo/beta/index.html
+          cd deploy-repo
+          HASH=$(sha256sum beta/index.html | cut -c1-12)
+          sed -i "s/const CACHE_NAME = 'strom-beta-[^']*'/const CACHE_NAME = 'strom-beta-${HASH}'/" beta/sw.js
+          VERSION=$(grep -o 'id="about-version">[^<]*' beta/index.html | cut -d'>' -f2)
+          sed -i "s/const APP_VERSION = '[^']*'/const APP_VERSION = '${VERSION}'/" beta/sw.js
+          git add beta/index.html beta/sw.js
+          git diff --staged --quiet || git commit -m "Update beta from GitHub build"
           git push origin main
 
   release-latest:

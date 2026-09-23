@@ -40,26 +40,17 @@ export function invalidateCache(): void {
 
 /**
  * Invalidate cache for a specific tree
- * Call when only that tree's data changes
+ * Call when only that tree's data changes.
+ *
+ * Every cached result can be stale, not just this tree's own: a person added
+ * or renamed here may now match someone in ANY other tree, and filtering this
+ * tree out of the other trees' cached lists would drop valid matches instead
+ * of adding new ones. So all match results go; only the other trees' loaded
+ * data (keyed by their own lastModifiedAt) is kept.
  */
 export function invalidateCacheForTree(treeId: TreeId): void {
-    // Remove all entries that involve this tree
-    for (const key of matchCache.keys()) {
-        if (key.startsWith(`${treeId}:`)) {
-            matchCache.delete(key);
-        }
-    }
-    // Also remove entries where this tree appears as a match target
-    for (const [key, matches] of matchCache.entries()) {
-        const filtered = matches.filter(m => m.treeId !== treeId);
-        if (filtered.length !== matches.length) {
-            if (filtered.length === 0) {
-                matchCache.delete(key);
-            } else {
-                matchCache.set(key, filtered);
-            }
-        }
-    }
+    matchCache.clear();
+    treeDataCache.delete(treeId);
 }
 
 // ==================== MAIN FUNCTIONS ====================

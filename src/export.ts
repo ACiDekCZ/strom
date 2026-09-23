@@ -50,6 +50,115 @@ function cleanDynamicMarkup(html: string): string {
     return result;
 }
 
+/**
+ * Containers the app fills at runtime with person data (tree cards and lines,
+ * alternative views, person dialog sections, pickers, lists). They are empty
+ * in the page template, so emptying them in the export clone is always safe.
+ * Defense in depth: the export normally starts from the pristine template
+ * captured at load; this list also covers a fallback to the live document.
+ */
+export const EXPORT_DYNAMIC_CONTAINER_IDS: readonly string[] = [
+    // Tree view + alternative views
+    'tree-canvas', 'tree-lines', 'gen-labels', 'timeline-container', 'map-container',
+    'fan-chart', 'slideshow-caption', 'places-datalist',
+    // Toolbar / focus / badges
+    'current-tree-name', 'toolbar-search-picker', 'search-result-count', 'toolbar-focus-name',
+    'toolbar-focus-count', 'focus-name', 'focus-person-count', 'actions-tree-name',
+    'collab-bar-text', 'descendants-badge-text', 'otd-text', 'tree-switcher-dropdown',
+    // Person dialog
+    'pm-avatar', 'pm-name', 'modal-title', 'birthdate-estimate', 'duplicate-suggest-person',
+    'pm-sum-relations', 'pm-lifeline-body', 'pm-sum-deathevents', 'events-list', 'pm-sum-sources',
+    'person-sources-chips', 'attachments-list', 'attachments-total', 'pm-sum-story', 'story-facts',
+    'pm-sum-photonotes', 'photo-preview', 'photo-size',
+    // Event / source / relation dialogs and pickers
+    'event-editor-title', 'event-participants-list', 'event-sources-chips', 'sources-list',
+    'source-editor-title', 'participant-picker', 'source-picker-list', 'relation-title',
+    'rel-other-parent-select', 'duplicate-suggest-relation', 'existing-person-picker',
+    'confirm-title', 'confirm-message', 'confirm-options', 'relationships-title',
+    'relationships-content', 'default-person-picker',
+    // Lists and summaries
+    'about-stats-row', 'about-stats-total-row', 'snapshots-list', 'anniversaries-list',
+    'audit-log-list', 'export-modal-tree-name', 'existing-export-tree-name',
+    // Wizards, merge and share dialogs
+    'family-wizard-anchor', 'wiz-parents', 'wiz-partner', 'wiz-siblings', 'wiz-children',
+    'merge-wizard-explanation', 'merge-validation-banner', 'merge-manual-incoming',
+    'merge-manual-picker', 'person-merge-keep', 'person-merge-picker', 'person-merge-other',
+    'person-merge-delete-info', 'person-merge-field-conflicts', 'person-merge-partnership-list',
+    'merge-trees-description', 'share-welcome-title', 'share-welcome-counts', 'share-reply-title',
+    'share-reply-intro', 'share-packet-title', 'share-packet-intro', 'share-packet-body',
+];
+
+/** Minimal element surface used by the export sanitizer (keeps it testable without a DOM). */
+interface SanitizableElement {
+    readonly id: string;
+    readonly children: ArrayLike<SanitizableElement>;
+    remove(): void;
+    replaceChildren(): void;
+}
+
+/**
+ * Empty every runtime-filled container in an export clone. The tree canvas
+ * keeps its (emptied) #tree-lines SVG, which the renderer looks up by id.
+ * Exported for tests.
+ */
+export function sanitizeExportClone(root: { querySelector(selector: string): unknown }): void {
+    for (const id of EXPORT_DYNAMIC_CONTAINER_IDS) {
+        const el = root.querySelector('#' + id) as SanitizableElement | null;
+        if (!el) continue;
+        if (id === 'tree-canvas') {
+            Array.from(el.children).forEach(c => { if (c.id !== 'tree-lines') c.remove(); });
+        } else {
+            el.replaceChildren();
+        }
+    }
+}
+
+/**
+ * Drop embedded-data scripts from a document clone. DOM-based removal, NOT a
+ * regex over the HTML: the bundle's own code contains the literal
+ * '<script>window.STROM_EMBEDDED_DATA =' inside a template string, and a regex
+ * sweep would eat the rest of the bundle.
+ */
+function stripEmbeddedDataScripts(root: HTMLElement): void {
+    root.querySelectorAll('script').forEach(s => {
+        const t = s.textContent?.trimStart() ?? '';
+        if (t.startsWith('window.STROM_EMBEDDED_')) s.remove();
+    });
+}
+
+/**
+ * The page as parsed, before any rendering. The bundle script is the last
+ * element of <body>, so at module evaluation the whole template is in the DOM
+ * but nothing has been rendered yet. Embedded data is stripped right away so
+ * the snapshot does not keep a second copy of a large tree in memory.
+ */
+let pristineTemplate: HTMLElement | null = null;
+if (typeof document !== 'undefined' && document.documentElement) {
+    pristineTemplate = document.documentElement.cloneNode(true) as HTMLElement;
+    stripEmbeddedDataScripts(pristineTemplate);
+}
+
+/**
+ * Serialize a value for embedding inside an inline <script>. '<' is escaped
+ * so no string value can close the script element ('</script>') or open a
+ * comment/CDATA; U+2028/U+2029 are escaped for pre-ES2019 parsers. The output
+ * is still valid JSON, so readers can JSON.parse it unchanged.
+ */
+export function jsonForScript(value: unknown): string {
+    return JSON.stringify(value)
+        .replace(/</g, '\\u003c')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+}
+
+/**
+ * Insert a script before </head>. The function form of replace() is required:
+ * a string replacement would interpret "$'", "$&" etc. inside user data.
+ */
+export function injectBeforeHeadEnd(html: string, script: string): string {
+    return html.replace('</head>', () => `${script}\n</head>`);
+}
+
 /** Collaboration fields carried into the export envelope ("send to a relative"). */
 export interface ShareOptions {
     senderMessage?: string;
@@ -76,14 +185,13 @@ class AppExporterClass {
      * read the first one get stale data.
      */
     private getExportHtml(): string {
-        // DOM-based removal, NOT a regex over the HTML: the bundle's own code
-        // contains the literal '<script>window.STROM_EMBEDDED_DATA =' inside a
-        // template string, and a regex sweep would eat the rest of the bundle.
-        const clone = document.documentElement.cloneNode(true) as HTMLElement;
-        clone.querySelectorAll('script').forEach(s => {
-            const t = s.textContent?.trimStart() ?? '';
-            if (t.startsWith('window.STROM_EMBEDDED_')) s.remove();
-        });
+        // Start from the page as it was BEFORE anything rendered (captured at
+        // bundle load); the live DOM carries the on-screen tree, open dialogs
+        // and view contents of whatever tree is displayed, which must never
+        // leak into an export of another (privacy-filtered, encrypted) tree.
+        const clone = (pristineTemplate ?? document.documentElement).cloneNode(true) as HTMLElement;
+        stripEmbeddedDataScripts(clone);
+        sanitizeExportClone(clone);
         return cleanDynamicState(clone.outerHTML);
     }
 
@@ -152,10 +260,10 @@ class AppExporterClass {
             void saveBaseline(targetTreeId, exportId, data, Date.now()).catch(() => {});
 
             // Create embedded data script
-            const dataScript = `<script>window.STROM_EMBEDDED_DATA = ${JSON.stringify(envelope)};<\/script>`;
+            const dataScript = `<script>window.STROM_EMBEDDED_DATA = ${jsonForScript(envelope)};<\/script>`;
 
             // Insert data before </head>
-            let exportedHtml = html.replace('</head>', `${dataScript}\n</head>`);
+            let exportedHtml = injectBeforeHeadEnd(html, dataScript);
 
             // Get tree name for filename
             const filename = `strom-${safeFileName(treeName, 'family-tree')}.html`;
@@ -237,10 +345,10 @@ class AppExporterClass {
             } : null;
 
             // Create embedded data script (with active tree data as envelope)
-            const dataScript = `<script>window.STROM_EMBEDDED_DATA = ${JSON.stringify(envelope)};window.STROM_ALL_TREES = ${JSON.stringify(embedAllTrees)};<\/script>`;
+            const dataScript = `<script>window.STROM_EMBEDDED_DATA = ${jsonForScript(envelope)};window.STROM_ALL_TREES = ${jsonForScript(embedAllTrees)};<\/script>`;
 
             // Insert data before </head>
-            let exportedHtml = html.replace('</head>', `${dataScript}\n</head>`);
+            let exportedHtml = injectBeforeHeadEnd(html, dataScript);
 
             // Download with "all-trees" filename
             this.downloadHtml(exportedHtml, 'strom-all-trees.html');
@@ -302,10 +410,10 @@ class AppExporterClass {
             }
 
             // Create embedded data script with focused data
-            const dataScript = `<script>window.STROM_EMBEDDED_DATA = ${JSON.stringify(envelope)};<\/script>`;
+            const dataScript = `<script>window.STROM_EMBEDDED_DATA = ${jsonForScript(envelope)};<\/script>`;
 
             // Insert data before </head>
-            const exportedHtml = html.replace('</head>', `${dataScript}\n</head>`);
+            const exportedHtml = injectBeforeHeadEnd(html, dataScript);
 
             // Download
             this.downloadHtml(exportedHtml, filename);

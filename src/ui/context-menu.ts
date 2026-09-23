@@ -1,6 +1,6 @@
 /**
  * Context menu shown when clicking a person card, plus the shared per-person
- * action model (also used by the mobile bottom sheet — see bottom-sheet.ts).
+ * action model (also used by the bottom sheet — see bottom-sheet.ts).
  * The action LIST and the DISPATCH are shared; only the markup differs.
  * Split from the original UIClass; see src/ui/module.ts for the pattern.
  */
@@ -11,62 +11,69 @@ import { strings } from '../strings.js';
 import { PersonId, RelationType } from '../types.js';
 import { uiModule } from './module.js';
 import { isCoarsePointer } from './bottom-sheet.js';
+import { isToolbarCompact } from '../breakpoints.js';
 
 /** One entry in the person action menu (context menu / bottom sheet). */
 export interface PersonMenuAction {
     action: string;
-    icon: string;
     label: string;
     danger?: boolean;
-    /** Render a divider before this item. */
+    /** Render a divider before this item (starts a new group). */
     divider?: boolean;
 }
 
 export const contextMenuMethods = uiModule({
     /**
      * The per-person actions, depending on view/lock state. Both the desktop
-     * context menu and the mobile bottom sheet build their markup from this.
+     * context menu and the bottom sheet build their markup from this.
+     * Groups: the person itself (edit / focus / descendants) → add relatives →
+     * everything else (kinship, archives, lock, merge, delete).
      */
     getPersonMenuActions(personId: PersonId): PersonMenuAction[] {
         const person = DataManager.getPerson(personId);
         if (!person) return [];
-        const isViewMode = DataManager.isViewMode();
+        // Read-only: an embedded file's view mode or locked local data.
+        const isViewMode = DataManager.isReadOnly();
         const isPersonLocked = DataManager.isPersonLocked(personId);
         const isTreeLocked = DataManager.isTreeLocked();
 
         if (isViewMode) {
             return [
-                { action: 'focus', icon: '\u{1F3AF}', label: strings.contextMenu.focus },
-                { action: 'relationship', icon: '\u{1F91D}', label: strings.contextMenu.relationship },
-                { action: 'archives', icon: '\u{1F4DA}', label: strings.contextMenu.archives },
+                { action: 'focus', label: strings.contextMenu.focus },
+                { action: 'relationship', label: strings.contextMenu.relationship, divider: true },
+                { action: 'archives', label: strings.contextMenu.archives },
             ];
         }
         if (isPersonLocked) {
             const items: PersonMenuAction[] = [
-                { action: 'focus', icon: '\u{1F3AF}', label: strings.contextMenu.focus },
+                // Read-only look at the record (the edit form in its locked mode).
+                { action: 'view', label: strings.contextMenu.view },
+                { action: 'focus', label: strings.contextMenu.focus },
             ];
             if (!isTreeLocked) {
-                items.push({ action: 'toggle-lock', icon: '\u{1F513}', label: strings.lock.unlockPerson, divider: true });
+                items.push({ action: 'toggle-lock', label: strings.lock.unlockPerson, divider: true });
             }
             return items;
         }
         const items: PersonMenuAction[] = [
-            { action: 'edit', icon: '\u{270E}', label: strings.contextMenu.edit },
-            { action: 'focus', icon: '\u{1F3AF}', label: strings.contextMenu.focus },
-            { action: 'descendants', icon: '\u{1F333}', label: strings.contextMenu.showDescendants },
-            { action: 'relationship', icon: '\u{1F91D}', label: strings.contextMenu.relationship },
-            { action: 'archives', icon: '\u{1F4DA}', label: strings.contextMenu.archives },
+            { action: 'edit', label: strings.contextMenu.edit },
+            { action: 'focus', label: strings.contextMenu.focus },
+            { action: 'descendants', label: strings.contextMenu.showDescendants },
         ];
+        // Add… group
         if (person.parentIds.length < 2) {
-            items.push({ action: 'parent', icon: '↑', label: strings.contextMenu.addParent, divider: true });
+            items.push({ action: 'parent', label: strings.contextMenu.addParent, divider: true });
         }
-        items.push({ action: 'partner', icon: '↔', label: strings.contextMenu.addPartner, divider: person.parentIds.length >= 2 });
-        items.push({ action: 'child', icon: '↓', label: strings.contextMenu.addChild });
-        items.push({ action: 'sibling', icon: '↔', label: strings.contextMenu.addSibling });
-        items.push({ action: 'add-family', icon: '\u{1F46A}', label: strings.familyWizard.menu });
-        items.push({ action: 'toggle-lock', icon: '\u{1F512}', label: strings.lock.lockPerson, divider: true });
-        items.push({ action: 'merge', icon: '\u{1F517}', label: `${strings.personMerge.mergeWith}...` });
-        items.push({ action: 'delete', icon: '\u{1F5D1}', label: strings.contextMenu.delete, danger: true });
+        items.push({ action: 'partner', label: strings.contextMenu.addPartner, divider: person.parentIds.length >= 2 });
+        items.push({ action: 'child', label: strings.contextMenu.addChild });
+        items.push({ action: 'sibling', label: strings.contextMenu.addSibling });
+        items.push({ action: 'add-family', label: strings.familyWizard.menu });
+        // Everything else
+        items.push({ action: 'relationship', label: strings.contextMenu.relationship, divider: true });
+        items.push({ action: 'archives', label: strings.contextMenu.archives });
+        items.push({ action: 'toggle-lock', label: strings.lock.lockPerson });
+        items.push({ action: 'merge', label: `${strings.personMerge.mergeWith}...` });
+        items.push({ action: 'delete', label: strings.contextMenu.delete, danger: true });
         return items;
     },
 
@@ -74,6 +81,7 @@ export const contextMenuMethods = uiModule({
     runPersonMenuAction(personId: PersonId, action: string): void {
         switch (action) {
             case 'edit':
+            case 'view':
                 this.clearDialogStack();
                 this.pushDialog('person-modal');
                 this.showEditPersonModal(personId);
@@ -133,9 +141,10 @@ export const contextMenuMethods = uiModule({
         event.preventDefault();
         event.stopPropagation();
 
-        // Touch devices: the first tap opens the person menu directly, same as
-        // a desktop click — but as the mobile bottom sheet (same action list).
-        if (isCoarsePointer()) {
+        // Touch devices and the bottom-navigation regime (≤ 1024px): the person
+        // menu opens as a bottom sheet (same action list), like the "More" menu.
+        // A floating menu there collided with the bottom bar and the FAB.
+        if (isCoarsePointer() || isToolbarCompact()) {
             this.hideContextMenu();
             this.showPersonBottomSheet(personId);
             return;
@@ -147,6 +156,7 @@ export const contextMenuMethods = uiModule({
 
         const menu = document.createElement('div');
         menu.className = 'context-menu';
+        menu.setAttribute('role', 'menu');
         // Header names the person the menu acts on (serif, per the Letopis design).
         const person = DataManager.getPerson(personId);
         const personName = person ? `${person.firstName} ${person.lastName}`.trim() : '';
@@ -160,7 +170,7 @@ export const contextMenuMethods = uiModule({
         menu.innerHTML = header + actions.map(a => {
             const cls = a.danger ? 'context-menu-item danger' : 'context-menu-item';
             const divider = a.divider ? '<div class="context-menu-divider"></div>' : '';
-            return `${divider}<div class="${cls}" data-action="${a.action}">${a.label}</div>`;
+            return `${divider}<div class="${cls}" role="menuitem" tabindex="-1" data-action="${a.action}">${a.label}</div>`;
         }).join('');
 
         // Position menu near click (adjusted after DOM insert)
@@ -179,26 +189,39 @@ export const contextMenuMethods = uiModule({
         document.body.appendChild(menu);
         this.contextMenu = menu;
 
-        // Adjust position to keep menu on screen
-        requestAnimationFrame(() => {
-            const menuRect = menu.getBoundingClientRect();
+        // The menu lives between the toolbar's bottom edge and the window's
+        // bottom edge (8px margins) — it never covers the toolbar; a list
+        // taller than that space scrolls. Set synchronously so the menu is
+        // never painted over the toolbar, then refine the horizontal side.
+        const EDGE = 8;
+        const toolbarBottom = document.querySelector('.toolbar')?.getBoundingClientRect().bottom ?? 0;
+        const minTop = Math.max(EDGE, toolbarBottom + EDGE);
+        const maxHeight = Math.max(120, window.innerHeight - EDGE - minTop);
+        menu.style.maxHeight = `${maxHeight}px`;
+        const place = () => {
+            // Layout size, not getBoundingClientRect(): the open animation
+            // scales the menu, which would under-report its height.
+            const width = menu.offsetWidth;
+            const height = menu.offsetHeight;
             const viewportWidth = window.innerWidth;
-            const viewportHeight = window.innerHeight;
             const padding = 10;
 
             let newLeft = parseFloat(menu.style.left);
             let newTop = parseFloat(menu.style.top);
 
-            if (menuRect.right > viewportWidth - padding) {
-                newLeft = rect ? rect.left - menuRect.width - 10 : viewportWidth - menuRect.width - padding;
+            if (newLeft + width > viewportWidth - padding) {
+                newLeft = rect ? rect.left - width - 10 : viewportWidth - width - padding;
             }
             if (newLeft < padding) newLeft = padding;
-            if (menuRect.bottom > viewportHeight - padding) newTop = viewportHeight - menuRect.height - padding;
-            if (newTop < padding) newTop = padding;
+            const maxTop = window.innerHeight - EDGE - height;
+            if (newTop > maxTop) newTop = maxTop;
+            if (newTop < minTop) newTop = minTop;
 
             menu.style.left = `${newLeft}px`;
             menu.style.top = `${newTop}px`;
-        });
+        };
+        place();
+        requestAnimationFrame(place);
 
         // Close menu when clicking/touching outside
         this.contextMenuCloseHandler = (e: Event) => {

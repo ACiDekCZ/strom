@@ -11,9 +11,9 @@ import { openApp, createFirstPerson, addRelation, cardAction, card } from './hel
  * ↓ depth select (the chart forces ancestorDepth=0, so ↑ is not carried).
  */
 
-// 360 (mobile), 600 (tablet-focus starts), 900 + 1024 (tablet band, where
-// .toolbar-focus is shown in Family view), 1200 + 1440 (desktop).
-const WIDTHS = [360, 600, 900, 1024, 1200, 1440];
+// 360 (mobile), 500 (tablet-focus starts), 600 + 900 + 1024 (tablet toolbar
+// band, where .toolbar-focus is shown in Family view), 1200 + 1440 (desktop).
+const WIDTHS = [360, 500, 600, 900, 1024, 1200, 1440];
 
 test('descendants view: exactly one chrome element bears the root name at every width', async ({ page }) => {
     await page.setViewportSize({ width: 1200, height: 850 });
@@ -57,7 +57,7 @@ test('descendants view: exactly one chrome element bears the root name at every 
     await expect(page.locator('#toolbar-focus-name')).toBeVisible();
 });
 
-test('descendants badge: the ↓ depth select re-renders the chart', async ({ page }) => {
+test('descendants badge: the ↓ depth stepper re-renders the chart', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
@@ -67,18 +67,29 @@ test('descendants badge: the ↓ depth select re-renders the chart', async ({ pa
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('descendants'));
     await expect(page.locator('#descendants-badge')).toBeVisible();
 
-    const select = page.locator('#descendants-depth-down');
-    await expect(select).toBeVisible();
-    // Two generations down → options 1 and 2, defaulting to the max (2).
+    // The native select stays as the hidden source of truth; the visible
+    // control is the "− n +" stepper.
+    const stepper = page.locator('#descendants-badge .depth-stepper');
+    await expect(stepper).toBeVisible();
+    await expect(page.locator('#descendants-depth-down')).toBeHidden();
+    const dec = stepper.locator('.depth-stepper-btn[data-step="-1"]');
+    const inc = stepper.locator('.depth-stepper-btn[data-step="1"]');
+    const value = stepper.locator('.depth-stepper-value');
+    // Two generations down → range 1..2, defaulting to the max (2).
+    await expect(value).toHaveText('2');
+    await expect(inc).toBeDisabled();
     await expect(card(page, 'Emil')).toBeVisible();
 
     // Shrink the depth to 1 → the grandchild drops out and the state follows.
-    await select.selectOption('1');
+    await dec.click();
+    await expect(value).toHaveText('1');
+    await expect(dec).toBeDisabled();
     await expect(card(page, 'Emil')).toBeHidden();
     expect(await page.evaluate(() => window.Strom.TreeRenderer.getFocusDepthDown())).toBe(1);
 
     // Grow it back to 2 → the grandchild returns.
-    await select.selectOption('2');
+    await inc.click();
+    await expect(value).toHaveText('2');
     await expect(card(page, 'Emil')).toBeVisible();
     expect(await page.evaluate(() => window.Strom.TreeRenderer.getFocusDepthDown())).toBe(2);
 });

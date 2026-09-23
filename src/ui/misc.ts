@@ -3,6 +3,8 @@
  * see src/ui/module.ts for the composition pattern.
  */
 
+import { initDialogFocus } from './dialog-focus.js';
+import { initKeyboardAccess } from './keyboard-access.js';
 import { DataManager, auditPersonName } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -92,13 +94,13 @@ export const miscMethods = uiModule({
         const statsRow = document.getElementById('about-stats-row');
         if (statsRow) {
             const parts = [
-                `${realPersons.length} persons`,
+                strings.about.stats.persons(realPersons.length),
                 `${men}♂ ${women}♀`,
-                `${families} families`,
-                `${generations} gen`
+                strings.about.stats.families(families),
+                strings.about.stats.generations(generations)
             ];
             if (oldest !== '-') {
-                parts.push(`since ${oldest}`);
+                parts.push(strings.about.stats.since(oldest));
             }
             statsRow.textContent = parts.join(' • ');
         }
@@ -139,10 +141,10 @@ export const miscMethods = uiModule({
         }
 
         const parts = [
-            `${trees.length} ${strings.about.stats.trees}`,
-            `${totalPersons} ${strings.about.stats.persons.toLowerCase()}`,
+            strings.about.stats.trees(trees.length),
+            strings.about.stats.persons(totalPersons),
             `${totalMen}♂ ${totalWomen}♀`,
-            `${totalFamilies} ${strings.about.stats.families.toLowerCase()}`
+            strings.about.stats.families(totalFamilies)
         ];
 
         totalStatsRow.textContent = parts.join(' • ');
@@ -286,7 +288,21 @@ export const miscMethods = uiModule({
         const advancedToggle = document.getElementById('advanced-fields-toggle') as HTMLInputElement | null;
         if (advancedToggle) advancedToggle.checked = SettingsManager.isAdvancedFields();
 
+        this.syncSettingsDependents();
         modal.classList.add('active');
+    },
+
+    /**
+     * Dependent settings rows only apply while their parent option is on:
+     * "death anniversaries" belongs to "On this day". The child keeps its
+     * stored value but is disabled while the parent is off.
+     */
+    syncSettingsDependents(): void {
+        const parent = document.getElementById('on-this-day-toggle') as HTMLInputElement | null;
+        const child = document.getElementById('death-anniversaries-toggle') as HTMLInputElement | null;
+        if (!parent || !child) return;
+        child.disabled = !parent.checked;
+        child.closest('.settings-row')?.classList.toggle('is-disabled', !parent.checked);
     },
 
     closeSettingsDialog(): void {
@@ -462,6 +478,10 @@ export const miscMethods = uiModule({
     },
 
     initKeyboard(): void {
+        // Central dialog focus (open → into the dialog, Tab trapped, close →
+        // back to the opener) and keyboard access for click-only controls.
+        initDialogFocus();
+        initKeyboardAccess();
         // Every single user mutation raises the Undo toast (bulk import/merge
         // pass silent — they have their own UI). Registered once, at startup.
         DataManager.onMutationCommitted = (description: string) => {
@@ -495,11 +515,24 @@ export const miscMethods = uiModule({
                     TreeCompare.close();
                     return;
                 }
+                // An open alert/confirm/prompt sits above every other dialog:
+                // Escape = cancel, which settles its promise (closing it bare
+                // left the caller awaiting forever).
+                if (this.confirmEscape
+                    && document.getElementById('confirmation-modal')?.classList.contains('active')) {
+                    this.confirmEscape();
+                    return;
+                }
                 // The cross-tree chooser (a floating menu, not a modal) closes
                 // first and ONLY itself — it must not fall through to the
                 // dialog-stack handling below.
                 if (this.crossTreeChooser) {
                     this.hideCrossTreeChooser();
+                    return;
+                }
+                // The one-time "What's new" card (not a modal): Escape = "Not now".
+                if (this.isWhatsNewCardOpen()) {
+                    this.dismissWhatsNewCard(false);
                     return;
                 }
                 // The interactive tour takes precedence (it is not a modal).
@@ -512,6 +545,11 @@ export const miscMethods = uiModule({
                 // menu and the tree switcher.
                 if (this.bottomSheet) {
                     this.hideBottomSheet();
+                    return;
+                }
+                // The person menu (a floating menu) closes first and only itself.
+                if (this.contextMenu) {
+                    this.hideContextMenu();
                     return;
                 }
                 // A tree-manager row ⋯ menu is a floating menu inside the modal:
@@ -573,13 +611,34 @@ export const miscMethods = uiModule({
                     return;
                 }
 
+                // The source editor sits above whatever opened it (manager,
+                // picker, person modal) and is not on the stack: it closes
+                // first, asking about unsaved edits; with that question open,
+                // Escape = stay in the form.
+                if (document.getElementById('source-editor-modal')?.classList.contains('active')) {
+                    const confirmModal = document.getElementById('confirmation-modal');
+                    if (confirmModal?.classList.contains('active')) {
+                        confirmModal.classList.remove('active');
+                        return;
+                    }
+                    this.closeSourceEditor();
+                    return;
+                }
+
                 // Handle dialog stack - return to parent dialog
                 if (this.dialogStack.length > 0) {
                     const currentDialog = this.dialogStack[this.dialogStack.length - 1];
 
-                    // Intercept Escape for relationships-modal to check pending changes
-                    if (currentDialog === 'relationships-modal' && this.pendingPartnershipChanges.size > 0) {
-                        this.showUnsavedChangesDialog();
+                    // Relationships panel: the "unsaved changes" question open →
+                    // Escape = stay; otherwise cancel, which asks before throwing
+                    // away staged or immediate changes (review S9).
+                    if (currentDialog === 'relationships-modal') {
+                        const confirmModal = document.getElementById('confirmation-modal');
+                        if (confirmModal?.classList.contains('active')) {
+                            confirmModal.classList.remove('active');
+                            return;
+                        }
+                        this.cancelRelationshipsPanel();
                         return;
                     }
 
@@ -593,6 +652,10 @@ export const miscMethods = uiModule({
                     // element + its stack entry, not just the 'active' class.
                     if (currentDialog === 'archives-modal') {
                         this.closeArchiveSearch();
+                        return;
+                    }
+                    if (currentDialog === 'research-info-modal') {
+                        this.closeResearchInfoDialog();
                         return;
                     }
                     if (currentDialog === 'kinship-modal') {
@@ -636,30 +699,33 @@ export const miscMethods = uiModule({
                     // Event editor: close only itself and pop its own entry,
                     // leaving the person modal it was opened from on screen.
                     if (currentDialog === 'event-editor-modal') {
+                        // Its "unsaved changes" question open: Escape = stay.
+                        const confirmModal = document.getElementById('confirmation-modal');
+                        if (confirmModal?.classList.contains('active')) {
+                            confirmModal.classList.remove('active');
+                            return;
+                        }
                         this.closeEventEditor();
+                        return;
+                    }
+
+                    // Person modal: go through closeModal(), which asks before
+                    // throwing away unsaved edits (Escape used to discard them).
+                    if (currentDialog === 'person-modal') {
+                        // The "unsaved changes" question itself is open:
+                        // Escape = stay in the form.
+                        const confirmModal = document.getElementById('confirmation-modal');
+                        if (confirmModal?.classList.contains('active')) {
+                            confirmModal.classList.remove('active');
+                            return;
+                        }
+                        this.closeModal();
                         return;
                     }
 
                     this.dialogStack.pop();
 
                     this.closeDialogById(currentDialog);
-
-                    // Special handling for relationships-modal: use closeRelationshipsPanel for proper cleanup
-                    if (currentDialog === 'relationships-modal') {
-                        // Don't re-close (already closed above), but do the cleanup
-                        this.pendingPartnershipChanges.clear();
-                        const returnToId = this.returnToEditPersonId;
-                        this.relationshipsPanelPersonId = null;
-                        this.returnToEditPersonId = null;
-                        if (this.dialogStack.length > 0) {
-                            const parentDialog = this.dialogStack[this.dialogStack.length - 1];
-                            if (returnToId && parentDialog === 'person-modal') {
-                                this.openDialogById(parentDialog);
-                            }
-                            this.dialogStack = [];
-                        }
-                        return;
-                    }
 
                     // Reopen parent if exists
                     if (this.dialogStack.length > 0) {
@@ -671,7 +737,7 @@ export const miscMethods = uiModule({
 
                 // Close all dialogs (fallback for dialogs not in stack)
                 // Check for unsaved relationship changes before closing
-                if (this.relationshipsPanelPersonId && this.pendingPartnershipChanges.size > 0) {
+                if (this.relationshipsPanelPersonId && this.hasRelationshipsChanges()) {
                     this.showUnsavedChangesDialog();
                     return;
                 }
@@ -772,6 +838,12 @@ export const miscMethods = uiModule({
 
             // Delete: delete focused person (skip if locked)
             if (e.key === 'Delete' || e.key === 'Backspace') {
+                // Only where the focused card is on screen and editable: not in
+                // the read-only view mode or with locked data, not in the fan/map/timeline views
+                // (the focus person is not even visible there).
+                if (DataManager.isReadOnly()) return;
+                const viewMode = TreeRenderer.getViewMode();
+                if (viewMode !== 'family' && viewMode !== 'descendants') return;
                 const focusId = TreeRenderer.getFocusPersonId();
                 if (focusId && !DataManager.isPersonLocked(focusId)) {
                     this.confirmDelete(focusId);
@@ -850,7 +922,7 @@ export const miscMethods = uiModule({
                         ${strings.validation.errors} (${result.errors.length})
                     </div>
                     ${result.errors.map(err => `
-                        <div class="validation-item">${this.formatValidationMessage(err)}</div>
+                        <div class="validation-item">${this.escapeHtml(this.formatValidationMessage(err))}</div>
                     `).join('')}
                 </div>
             `;
@@ -864,7 +936,7 @@ export const miscMethods = uiModule({
                         ${strings.validation.warnings} (${result.warnings.length})
                     </div>
                     ${result.warnings.map(warn => `
-                        <div class="validation-item">${this.formatValidationMessage(warn)}</div>
+                        <div class="validation-item">${this.escapeHtml(this.formatValidationMessage(warn))}</div>
                     `).join('')}
                 </div>
             `;
@@ -1160,6 +1232,11 @@ export const miscMethods = uiModule({
      */
     performUndo(): void {
         this.dismissUndoToast();
+        // A locked tree is read-only: say why nothing happens (review S21).
+        if (DataManager.isTreeLocked() && !DataManager.isViewMode() && DataManager.canUndo()) {
+            this.showToast(strings.storageSafety.treeLocked);
+            return;
+        }
         const result = DataManager.undo();
         if (!result) return;
         void TreeRenderer.renderAsync();
@@ -1172,6 +1249,10 @@ export const miscMethods = uiModule({
     /** Replay the last undone mutation. Symmetric to performUndo(). */
     performRedo(): void {
         this.dismissUndoToast();
+        if (DataManager.isTreeLocked() && !DataManager.isViewMode() && DataManager.canRedo()) {
+            this.showToast(strings.storageSafety.treeLocked);
+            return;
+        }
         const result = DataManager.redo();
         if (!result) return;
         void TreeRenderer.renderAsync();

@@ -179,9 +179,9 @@ test('the "More" sheet mirrors the desktop actions menu: Undo/Redo pair, then Cu
     await page.waitForTimeout(350);
     await expect(treeRow).toBeInViewport({ ratio: 1 });
 
-    // The old top-level "Manage Trees" duplicate is gone — it now lives only in
+    // The old top-level "Manage trees" duplicate is gone — it now lives only in
     // the second-level tree sheet.
-    await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Manage Trees' })).toHaveCount(0);
+    await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Manage trees' })).toHaveCount(0);
 });
 
 test('tapping the Tree row opens the second-level tree sheet with the full desktop submenu', async ({ page }) => {
@@ -199,7 +199,7 @@ test('tapping the Tree row opens the second-level tree sheet with the full deskt
     // Every whole-tree action from the desktop submenu is present (all except
     // Delete, which stays in the tree manager).
     for (const label of ['Rename', 'Duplicate', 'Merge into', 'Split into families',
-        'Statistics', 'Family book', 'Export', 'Anniversaries', 'Hide', 'Manage Trees']) {
+        'Statistics', 'Family book', 'Export', 'Anniversaries', 'Hide', 'Manage trees']) {
         await expect(tree.locator('.bottom-sheet-item', { hasText: label }).first()).toBeVisible();
     }
     // The standalone "Validate" row is gone — validation now lives behind the
@@ -207,7 +207,7 @@ test('tapping the Tree row opens the second-level tree sheet with the full deskt
     await expect(tree).not.toContainText('Validate');
 
     // Manage Trees opens the tree manager (proves the second-level rows dispatch).
-    await tree.locator('.bottom-sheet-item', { hasText: 'Manage Trees' }).click();
+    await tree.locator('.bottom-sheet-item', { hasText: 'Manage trees' }).click();
     await expect(page.locator('#tree-manager-modal')).toHaveClass(/active/);
 });
 

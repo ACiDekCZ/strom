@@ -166,7 +166,9 @@ export const mergeUiMethods = uiModule({
      */
     async discardPendingMergeFromManager(sessionId: string, displayName: string): Promise<void> {
         this.pushDialog('tree-manager-modal');
-        const confirmed = await this.showConfirm(`${strings.merge.discard} "${displayName}"?`);
+        const d = strings.danger;
+        const confirmed = await this.showConfirm(d.discardMergeMessage, d.discardMergeTitle(displayName),
+            { confirmLabel: d.discardMerge, variant: 'danger' });
         if (!confirmed) return;
 
         deleteMergeSession(sessionId);
@@ -339,17 +341,17 @@ export const mergeUiMethods = uiModule({
             partnershipList.innerHTML = partnershipConflicts.map(conflict => {
                 const partnerName = `${conflict.partner.firstName} ${conflict.partner.lastName}`.trim();
                 return `
-                    <div class="person-merge-conflict-row" data-partnership="${conflict.keepPartnership.id}">
+                    <div class="person-merge-conflict-row" data-partnership="${this.escapeHtml(conflict.keepPartnership.id)}">
                         <div class="person-merge-conflict-label">
                             ${strings.labels.partner}: ${this.escapeHtml(partnerName)}
                         </div>
                         <div class="person-merge-conflict-options">
                             <label class="person-merge-conflict-option selected" data-value="merge">
-                                <input type="radio" name="partnership-${conflict.keepPartnership.id}" value="merge" checked>
+                                <input type="radio" name="partnership-${this.escapeHtml(conflict.keepPartnership.id)}" value="merge" checked>
                                 <span class="person-merge-conflict-value">${strings.personMerge.mergePartnership}</span>
                             </label>
                             <label class="person-merge-conflict-option" data-value="keep_both">
-                                <input type="radio" name="partnership-${conflict.keepPartnership.id}" value="keep_both">
+                                <input type="radio" name="partnership-${this.escapeHtml(conflict.keepPartnership.id)}" value="keep_both">
                                 <span class="person-merge-conflict-value">${strings.personMerge.keepBoth}</span>
                             </label>
                         </div>
@@ -571,7 +573,7 @@ export const mergeUiMethods = uiModule({
             this.closeModal();
             TreeRenderer.render();
         } else {
-            this.showAlert('Merge failed', 'error');
+            this.showAlert(strings.merge.failed, 'error');
         }
     },
 
@@ -583,7 +585,7 @@ export const mergeUiMethods = uiModule({
      * lives only in memory as the merge source. Edit-flow only.
      */
     mergeViewInto(): void {
-        if (DataManager.isViewMode()) return;
+        if (DataManager.isReadOnly()) return;
         const visibleIds = TreeRenderer.getVisiblePersonIds();
         // Empty view (e.g. fan/timeline/map don't populate layout positions, or
         // nothing is focused): nothing to merge.
@@ -639,7 +641,7 @@ export const mergeUiMethods = uiModule({
                     <input type="radio" name="merge-target" value="${tree.id}">
                     <div class="merge-trees-option-info">
                         <div class="merge-trees-option-name">${this.escapeHtml(tree.name)}</div>
-                        <div class="merge-trees-option-stats">${tree.personCount} ${strings.treeManager.persons}</div>
+                        <div class="merge-trees-option-stats">${strings.treeManager.persons(tree.personCount)}</div>
                     </div>
                 </div>
             `;
@@ -683,7 +685,7 @@ export const mergeUiMethods = uiModule({
                     <input type="radio" name="merge-target" value="${tree.id}">
                     <div class="merge-trees-option-info">
                         <div class="merge-trees-option-name">${this.escapeHtml(tree.name)}</div>
-                        <div class="merge-trees-option-stats">${tree.personCount} ${strings.treeManager.persons}</div>
+                        <div class="merge-trees-option-stats">${strings.treeManager.persons(tree.personCount)}</div>
                     </div>
                 </div>
             `;

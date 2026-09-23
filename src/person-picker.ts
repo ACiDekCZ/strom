@@ -3,19 +3,10 @@
  * Replaces plain <select> elements with searchable dropdown
  */
 
-import { Person, PersonId } from './types.js';
+import { Person, PersonId, StromData } from './types.js';
 import { strings } from './strings.js';
 import { DataManager } from './data.js';
-
-/**
- * Normalize text for search - removes diacritics and converts to lowercase
- */
-function normalizeText(text: string): string {
-    return text
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '');  // Remove diacritics
-}
+import { normalizeSearchText as normalizeText, alternateNames, nameMatchesQuery } from './name-search.js';
 
 /**
  * Sort persons by name (lastName, firstName)
@@ -30,7 +21,7 @@ function sortByName(a: Person, b: Person): number {
  * Calculate match score for a person against a query
  * Higher score = better match
  */
-function calculateMatchScore(person: Person, query: string): number {
+function calculateMatchScore(person: Person, query: string, data: StromData | null): number {
     const firstName = normalizeText(person.firstName);
     const lastName = normalizeText(person.lastName);
     const fullName = `${firstName} ${lastName}`;
@@ -47,6 +38,14 @@ function calculateMatchScore(person: Person, query: string): number {
     if (firstNameIdx >= 0) return 70 - firstNameIdx;  // Earlier position = higher score
     if (lastNameIdx >= 0) return 60 - lastNameIdx;
 
+    // Other forms of the surname and the person's name variants: someone
+    // searching "Visek" must find "Víšková", "Wischek" the alias.
+    const alternates = alternateNames(person, data);
+    if (alternates.some(n => n.startsWith(query))) return 55;
+    if (alternates.some(n => n.includes(query))) return 45;
+    // Multi-word query spread over first name and an alternate surname.
+    if (query.includes(' ') && nameMatchesQuery(person, query, data)) return 40;
+
     // Birth year match
     const birthYear = person.birthDate?.split('-')[0] || '';
     if (birthYear && birthYear.includes(query)) return 30;
@@ -57,7 +56,7 @@ function calculateMatchScore(person: Person, query: string): number {
 /**
  * Filter and sort persons based on search query
  */
-function filterAndSort(query: string, persons: Person[]): Person[] {
+export function filterAndSort(query: string, persons: Person[], data: StromData | null): Person[] {
     const normalized = normalizeText(query.trim());
 
     if (!normalized) {
@@ -69,7 +68,7 @@ function filterAndSort(query: string, persons: Person[]): Person[] {
     return persons
         .map(p => ({
             person: p,
-            score: calculateMatchScore(p, normalized)
+            score: calculateMatchScore(p, normalized, data)
         }))
         .filter(item => item.score > 0)
         .sort((a, b) => {
@@ -88,6 +87,8 @@ export interface PersonPickerOptions {
     placeholder?: string;
     showBirthYear?: boolean;
     persons?: Person[];
+    /** Tree the persons belong to (surname groups); defaults to the active tree. */
+    data?: StromData;
 }
 
 const BATCH_SIZE = 50;
@@ -357,12 +358,22 @@ export class PersonPicker {
         this.options.onSelect(personId);
     }
 
+    /** Tree data used to resolve other surname forms while searching. */
+    private searchData(): StromData | null {
+        if (this.options.data) return this.options.data;
+        try {
+            return DataManager.getData();
+        } catch {
+            return null;
+        }
+    }
+
     /**
      * Render dropdown items
      */
     private renderDropdown(): void {
         const query = this.input.value.trim();
-        this.filteredPersons = filterAndSort(query, this.allPersons);
+        this.filteredPersons = filterAndSort(query, this.allPersons, this.searchData());
         this.selectedIndex = -1;
         this.displayedCount = BATCH_SIZE;
 
@@ -428,12 +439,12 @@ export class PersonPicker {
     private renderItem(person: Person, index: number): string {
         const name = this.formatPersonName(person);
         const birthYear = this.options.showBirthYear && person.birthDate
-            ? `<span class="birth-year">(*${person.birthDate.split('-')[0]})</span>`
+            ? `<span class="birth-year">(*${this.escapeHtml(person.birthDate.split('-')[0])})</span>`
             : '';
 
         return `
             <div class="person-picker-item${index === this.selectedIndex ? ' selected' : ''}"
-                 data-id="${person.id}">
+                 data-id="${this.escapeHtml(person.id)}">
                 ${this.escapeHtml(name)} ${birthYear}
             </div>
         `;

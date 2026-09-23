@@ -32,11 +32,16 @@ export const bookUiMethods = uiModule({
         const dropMedia = document.getElementById('book-drop-media') as HTMLInputElement | null;
         if (dropMedia) dropMedia.checked = false;
 
+        // Own the dialog stack (as the poster does): the first Escape closes
+        // the book, and no parent dialog can reopen on top of it.
+        this.clearDialogStack();
+        this.pushDialog('book-modal');
         document.getElementById('book-modal')?.classList.add('active');
     },
 
     closeBookDialog(): void {
         document.getElementById('book-modal')?.classList.remove('active');
+        this.clearDialogStack();
     },
 
     generateFamilyBook(): void {

@@ -10,7 +10,7 @@
  * so the result is internally consistent and passes validation.
  */
 
-import { StromData, Person, PersonId, Partnership, PartnershipId } from './types.js';
+import { StromData, Person, PersonId, Partnership, PartnershipId, EventParticipant } from './types.js';
 import { placeKey } from './places.js';
 
 /**
@@ -48,14 +48,7 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
         // written name instead of a dangling id — the record loses the link,
         // not the fact.
         for (const ev of copy.events ?? []) {
-            for (const part of ev.participants ?? []) {
-                if (part.personId && !kept.has(part.personId)) {
-                    const gone = data.persons[part.personId];
-                    const written = `${gone?.firstName ?? ''} ${gone?.lastName ?? ''}`.trim();
-                    if (!part.name && written && written !== '?') part.name = written;
-                    delete part.personId;
-                }
-            }
+            snapshotDepartedParticipants(ev.participants, kept, data);
         }
         copy.partnerships = [];   // rebuilt below from the kept partnerships
         persons[id] = copy;
@@ -67,6 +60,8 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
         if (!kept.has(union.person1Id) || !kept.has(union.person2Id)) continue;
         const copy: Partnership = structuredClone(union);
         copy.childIds = copy.childIds.filter(c => kept.has(c));
+        // Wedding witnesses follow the same rule as event participants.
+        snapshotDepartedParticipants(copy.participants, kept, data);
         partnerships[uid] = copy;
         persons[union.person1Id]?.partnerships.push(uid);
         persons[union.person2Id]?.partnerships.push(uid);
@@ -109,6 +104,25 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
         result.surnameVariants = structuredClone(data.surnameVariants);
     }
     return result;
+}
+
+/**
+ * A participant linked to someone outside the kept set keeps their written
+ * name instead of a dangling id — the record loses the link, not the fact.
+ */
+function snapshotDepartedParticipants(
+    participants: EventParticipant[] | undefined,
+    kept: Set<PersonId>,
+    data: StromData,
+): void {
+    for (const part of participants ?? []) {
+        if (part.personId && !kept.has(part.personId)) {
+            const gone = data.persons[part.personId];
+            const written = `${gone?.firstName ?? ''} ${gone?.lastName ?? ''}`.trim();
+            if (!part.name && written && written !== '?') part.name = written;
+            delete part.personId;
+        }
+    }
 }
 
 /** Every placeKey the extracted persons/partnerships still refer to. */

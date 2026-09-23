@@ -35,10 +35,11 @@ test.describe('Minimap', () => {
     /**
      * Regression guard: the minimap must stay docked in its bottom-right control
      * block wherever it is shown, and disappear together with that block when a
-     * narrow regime dissolves it (CSS `display: contents` ≤600px). It previously
-     * escaped to the top-left of the page — landing on top of the focus chip and
-     * the generation arrows — in the 501–600px window, because the panel was
-     * only hidden at ≤500px while the block dissolved at ≤600px.
+     * narrow regime dissolves it (CSS `display: contents` in the phone chrome,
+     * ≤640px). It
+     * previously escaped to the top-left of the page — landing on top of the
+     * focus chip and the generation arrows — in a window where the panel's
+     * hide rule and the block's dissolve rule used different breakpoints.
      */
     test('stays docked in the control block and is never orphaned at the top-left', async ({ page }) => {
         await page.setViewportSize({ width: 1200, height: 850 });
@@ -47,7 +48,7 @@ test.describe('Minimap', () => {
         await expect(card(page, 'Henry VIII')).toBeVisible();
         for (let i = 0; i < 6; i++) await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
 
-        for (const w of [1200, 900, 700, 620, 601, 600, 560, 520, 500]) {
+        for (const w of [1200, 900, 700, 641, 640, 620, 601, 600, 560, 520, 500, 499, 420]) {
             await page.setViewportSize({ width: w, height: 850 });
             await page.waitForTimeout(120);
             const s = await page.evaluate(() => {

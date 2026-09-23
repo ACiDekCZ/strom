@@ -167,7 +167,7 @@ test('R3: a silent bulk flow clears the redo stack AND greys the Redo button', a
 
     await createFirstPerson(page, 'Jan', 'Novak');
     // Add a second (disconnected) person, then undo it → redo is pending.
-    await page.getByRole('button', { name: 'Add Person' }).first().click();
+    await page.getByRole('button', { name: 'Add person' }).first().click();
     await page.locator('#input-firstname').fill('Petr');
     await page.locator('#input-lastname').fill('Svoboda');
     await page.getByRole('button', { name: 'Save' }).click();

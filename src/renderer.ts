@@ -6,7 +6,7 @@
 import { DataManager } from './data.js';
 import { UI } from './ui.js';
 import { ZoomPan } from './zoom.js';
-import { strings, getCurrentLanguage } from './strings.js';
+import { strings } from './strings.js';
 import {
     Person,
     PersonId,
@@ -16,7 +16,7 @@ import {
     StromData
 } from './types.js';
 import { TreeManager } from './tree-manager.js';
-import { chainLinkSvg } from './icons.js';
+import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
 import { CARD_SIZE, ViewMode, STANDALONE_VIEWS } from './types.js';
 import {
@@ -34,10 +34,10 @@ import {
 } from './layout/index.js';
 import { renderDebugOverlay, clearDebugOverlay } from './debug-overlay.js';
 import { debugPanel } from './debug-panel.js';
-import { yearOf, displayYear, formatFlexDate } from './dates.js';
+import { yearOf, displayYear, formatFlexDate, ageBetween } from './dates.js';
 import { computeTimelineModel } from './timeline.js';
 import { buildTimelineSvg } from './timeline-chart.js';
-import { sortLifeEvents } from './events.js';
+import { newestLifeEvent } from './events.js';
 import { classifyBranches, Branch } from './branch-colors.js';
 import { presumedDeceasedSet, isLivingPerson } from './privacy.js';
 import { placeList } from './places.js';
@@ -46,6 +46,9 @@ import { personInitials } from './initials.js';
 import { extractSubtree } from './subtree.js';
 import { buildFanModel, buildFanSvg } from './fan-chart.js';
 import { computeIndirectIds } from './indirect.js';
+import { isMobile as isMobileViewport } from './breakpoints.js';
+import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
+import { syncDepthStepper } from './ui/depth-stepper.js';
 
 /**
  * One generation band's world-space geometry, consumed by the sticky HTML
@@ -81,6 +84,8 @@ class TreeRendererClass {
     private suppressHistoryPush = false;
     /** Search highlight: hits get 'search-hit', everyone else 'search-dim'. */
     private highlightIds: Set<PersonId> | null = null;
+    /** People the last live-research change touched: 'live-changed' glow. */
+    private changedIds: Set<PersonId> | null = null;
     private focusDepthUp: number = 3;
     private focusDepthDown: number = 3;
 
@@ -115,6 +120,10 @@ class TreeRendererClass {
 
     /** Blood descendants of the focus (incl. focus) — filled in descendants view. */
     private bloodDescendantIds: Set<PersonId> | null = null;
+    /** Incremented per render; stale async renders bail out (see renderInternal). */
+    private renderSeq = 0;
+    /** Signature of the last places datalist, to skip rebuilding it unchanged. */
+    private placesDatalistSig: string | null = null;
 
     /** Fan chart: how many ancestor rings to draw (4–8, persisted globally). */
     private fanGenerations = ((): number => {
@@ -142,6 +151,9 @@ class TreeRendererClass {
     }
 
     private async renderInternal(): Promise<void> {
+        // Sequence token: a newer render started while this one awaited must
+        // win, or both append their cards to the same canvas (duplicates).
+        const seq = ++this.renderSeq;
         const canvas = document.getElementById('tree-canvas');
         const svg = document.getElementById('tree-lines') as SVGSVGElement | null;
         const empty = document.getElementById('empty-state');
@@ -274,7 +286,8 @@ class TreeRendererClass {
 
         canvas.style.display = '';
 
-        await this.renderCards(canvas);
+        const current = await this.renderCards(canvas, seq);
+        if (!current) return;
         this.renderLines(svg);
         this.updateSVGSize(svg);
         // Fit long names once, after the cards are in the DOM and measurable.
@@ -570,7 +583,13 @@ class TreeRendererClass {
     private updatePlacesDatalist(): void {
         const list = document.getElementById('places-datalist');
         if (!list) return;
-        list.innerHTML = placeList(DataManager.getData())
+        const places = placeList(DataManager.getData());
+        // Rebuilding the datalist on every render is wasted DOM work; only
+        // refresh it when the place list actually changed.
+        const sig = places.map(p => p.display).join('\u0001');
+        if (sig === this.placesDatalistSig && list.childElementCount === places.length) return;
+        this.placesDatalistSig = sig;
+        list.innerHTML = places
             .map(p => `<option value="${this.escapeHtml(p.display)}"></option>`)
             .join('');
     }
@@ -616,7 +635,9 @@ class TreeRendererClass {
      * toggling — the layout is never recomputed.
      */
     setHighlight(ids: Set<PersonId> | null): void {
-        this.highlightIds = ids && ids.size > 0 ? ids : null;
+        // An empty set is an active search with no match: dim everything.
+        // Only null (no search) clears the highlight.
+        this.highlightIds = ids;
         document.querySelectorAll('.person-card').forEach(el => {
             const card = el as HTMLElement;
             card.classList.remove('search-hit', 'search-dim');
@@ -631,6 +652,19 @@ class TreeRendererClass {
             if (!this.highlightIds) return;
             const id = bar.getAttribute('data-person-id') as PersonId | null;
             if (id) bar.classList.add(this.highlightIds.has(id) ? 'search-hit' : 'search-dim');
+        });
+    }
+
+    /**
+     * Mark the people a live research change just touched ('live-changed').
+     * Pass null to clear. Class toggling only; re-applied on every render.
+     */
+    setChangedIds(ids: Set<PersonId> | null): void {
+        this.changedIds = ids && ids.size > 0 ? ids : null;
+        document.querySelectorAll('.person-card').forEach(el => {
+            const card = el as HTMLElement;
+            const id = card.dataset.id as PersonId | undefined;
+            card.classList.toggle('live-changed', !!(id && this.changedIds?.has(id)));
         });
     }
 
@@ -741,6 +775,9 @@ class TreeRendererClass {
         } else if (select.id === 'focus-depth-down' && clampedValue !== this.focusDepthDown) {
             this.focusDepthDown = clampedValue;
         }
+
+        // The visible "− n +" stepper fronting this (hidden) select.
+        syncDepthStepper(select);
     }
 
     exportFocusedData(): void {
@@ -845,9 +882,14 @@ class TreeRendererClass {
         return CrossTree.getTreesDataForMatching(TreeManager);
     }
 
-    private async renderCards(canvas: HTMLElement): Promise<void> {
+    /** Returns false when a newer render superseded this one during the await. */
+    private async renderCards(canvas: HTMLElement, seq: number): Promise<boolean> {
         // Get all trees for cross-tree matching (only if not in view mode)
         const allTrees = await this.getAllTreesForCrossTreeMatching();
+        if (seq !== this.renderSeq) return false;
+        // Clear again after the await: nothing may have been added in between,
+        // but a card left by an interrupted render must never survive.
+        canvas.querySelectorAll('.person-card').forEach(c => c.remove());
         const currentTreeId = DataManager.getCurrentTreeId();
 
         // Optional branch colouring: classify once per render (never in timeline).
@@ -870,6 +912,15 @@ class TreeRendererClass {
             }
             indirectIds = computeIndirectIds(data, this.focusPersonId, this.viewMode, this.positions.keys());
         }
+
+        // Persons that are a child of some partnership (the layout engine only
+        // treats those as siblings) — computed once, not per card.
+        const partnershipChildIds = new Set<PersonId>();
+        for (const p of Object.values(DataManager.getData().partnerships)) {
+            for (const cid of p.childIds) partnershipChildIds.add(cid);
+        }
+        // Deceased cue without a death date (same rule as the poster export).
+        const presumedDeceased = this.computePresumedDeceased();
 
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);
@@ -900,6 +951,7 @@ class TreeRendererClass {
             if (this.highlightIds && !person.isPlaceholder) {
                 classes += this.highlightIds.has(id) ? ' search-hit' : ' search-dim';
             }
+            if (this.changedIds?.has(id)) classes += ' live-changed';
             // Optional branch colour stripe (focus and placeholders never tagged).
             if (branchMap && !person.isPlaceholder) {
                 const b = branchMap.get(id);
@@ -927,6 +979,18 @@ class TreeRendererClass {
                 if (target.closest('.hidden-partners-btn') || target.closest('.hidden-families-btn')) return;
                 UI.showContextMenu(id, e);
             };
+
+            // Keyboard (review S37): the card is a button; Enter / Space open
+            // the same person menu as a click. setAttribute keeps the name
+            // plain text (never parsed as HTML).
+            card.tabIndex = 0;
+            card.setAttribute('role', 'button');
+            card.setAttribute('aria-label', `${person.firstName} ${person.lastName}`.trim() || '?');
+            card.addEventListener('keydown', (e) => {
+                if (e.target !== card || (e.key !== 'Enter' && e.key !== ' ')) return;
+                e.preventDefault();
+                openCardMenuFromKeyboard(card);
+            });
 
             // Touch: long-press opens the mobile bottom sheet (coarse pointer only).
             UI.attachCardLongPress(card, id);
@@ -972,11 +1036,7 @@ class TreeRendererClass {
 
             // Check if siblings are currently visible
             // Filter to only siblings that are in a partnership.childIds (same as layout engine)
-            const siblings = DataManager.getSiblings(id).filter(s =>
-                Object.values(DataManager.getData().partnerships).some(
-                    p => p.childIds.includes(s.id)
-                )
-            );
+            const siblings = DataManager.getSiblings(id).filter(s => partnershipChildIds.has(s.id));
             const hasSiblings = siblings.length > 0;
             const siblingsVisible = hasSiblings &&
                 siblings.some(s => this.positions.has(s.id));
@@ -1004,8 +1064,8 @@ class TreeRendererClass {
                         .filter((p): p is Person => p !== null);
                     const parentItems = hiddenParents.map(p => {
                         const name = `${p.firstName || '?'} ${p.lastName || ''}`.trim();
-                        const year = p.birthDate ? p.birthDate.split('-')[0] : '';
-                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
+                        const year = displayYear(p.birthDate);
+                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
                     }).join('');
                     branchTabsHtml += `<button class="branch-tab" data-action="focus-parent"><span class="pill-glyph">◂</span><span class="pill-text">${strings.focus.branchTabParents}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenParentsTooltip}</div>${parentItems}</div></button>`;
                 }
@@ -1013,8 +1073,8 @@ class TreeRendererClass {
                     const hiddenSiblings = siblings.filter(s => !this.positions.has(s.id));
                     const siblingItems = hiddenSiblings.map(s => {
                         const name = `${s.firstName || '?'} ${s.lastName || ''}`.trim();
-                        const year = s.birthDate ? s.birthDate.split('-')[0] : '';
-                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
+                        const year = displayYear(s.birthDate);
+                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
                     }).join('');
                     branchTabsHtml += `<button class="branch-tab" data-action="focus-sibling"><span class="pill-glyph">◆</span><span class="pill-text">${strings.focus.branchTabSiblings}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${siblingItems}</div></button>`;
                 }
@@ -1025,8 +1085,8 @@ class TreeRendererClass {
                         .filter((c): c is Person => c !== null);
                     const childItems = hiddenChildren.map(c => {
                         const name = `${c.firstName || '?'} ${c.lastName || ''}`.trim();
-                        const year = c.birthDate ? c.birthDate.split('-')[0] : '';
-                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
+                        const year = displayYear(c.birthDate);
+                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
                     }).join('');
                     branchTabsHtml += `<button class="branch-tab" data-action="focus-child"><span class="pill-glyph">▸</span><span class="pill-text">${strings.focus.branchTabChildren}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenChildrenTooltip}</div>${childItems}</div></button>`;
                 }
@@ -1041,8 +1101,8 @@ class TreeRendererClass {
                     const hiddenPartners = allPartners.filter(p => !this.positions.has(p.id));
                     const partnerItems = hiddenPartners.map(p => {
                         const name = `${p.firstName || '?'} ${p.lastName || ''}`.trim();
-                        const year = p.birthDate ? p.birthDate.split('-')[0] : '';
-                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${year}</span>` : ''}</div>`;
+                        const year = displayYear(p.birthDate);
+                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
                     }).join('');
                     hiddenIndicatorsHtml += `<button class="hidden-partners-btn" data-action="focus"><span class="pill-glyph">∞</span><span class="pill-count">${hiddenPartnersCount}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenPartnersTooltip}</div>${partnerItems}</div></button>`;
                 }
@@ -1057,16 +1117,16 @@ class TreeRendererClass {
                             const pid = p.person1Id === id ? p.person2Id : p.person1Id;
                             const partner = DataManager.getPerson(pid);
                             const partnerName = partner ? `${partner.firstName || '?'} ${partner.lastName || ''}`.trim() : '?';
-                            const partnerYear = partner?.birthDate ? partner.birthDate.split('-')[0] : '';
+                            const partnerYear = displayYear(partner?.birthDate);
                             const childLabels = p.childIds
                                 .map(cid => DataManager.getPerson(cid))
                                 .filter((c): c is Person => c !== null)
                                 .map(c => {
                                     const name = `${c.firstName || '?'} ${c.lastName || ''}`.trim();
-                                    const year = c.birthDate ? c.birthDate.split('-')[0] : '';
-                                    return this.escapeHtml(name) + (year ? ` *${year}` : '');
+                                    const year = displayYear(c.birthDate);
+                                    return this.escapeHtml(name) + (year ? ` *${this.escapeHtml(year)}` : '');
                                 });
-                            return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(partnerName)}</span>${partnerYear ? `<span class="badge-tooltip-detail"> *${partnerYear}</span>` : ''}<div class="badge-tooltip-detail">${childLabels.join(', ')}</div></div>`;
+                            return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(partnerName)}</span>${partnerYear ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(partnerYear)}</span>` : ''}<div class="badge-tooltip-detail">${childLabels.join(', ')}</div></div>`;
                         }).join('');
                     hiddenIndicatorsHtml += `<button class="hidden-families-btn" data-action="focus"><span class="pill-glyph">⌂</span><span class="pill-count">${hiddenFamiliesCount}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenFamiliesTooltip}</div>${hiddenFamilyItems}</div></button>`;
                 }
@@ -1093,8 +1153,10 @@ class TreeRendererClass {
             // person reads "1902 – 1968", a living one "* 1958".
             const deathYear = person.deathDate ? displayYear(person.deathDate) : '';
             let metaYears = '';
+            const presumedDead = !person.isPlaceholder && presumedDeceased.has(id);
             if (deathYear) metaYears = `${birthYear || '?'} – ${deathYear}`;
-            else if (birthYear) metaYears = `* ${birthYear}`;
+            else if (birthYear) metaYears = presumedDead ? `${birthYear} †` : `* ${birthYear}`;
+            else if (presumedDead) metaYears = '†';
             const metaPlace = person.birthPlace?.trim() ?? '';
             // Normal cards pack "years · place" onto one ellipsized meta row.
             // Detailed cards give the place its own two-line row below and put
@@ -1105,7 +1167,7 @@ class TreeRendererClass {
                 : [metaYears, metaPlace].filter(Boolean).join(' · ');
 
             const avatarInner = showPhoto
-                ? `<img src="${person.photo}" alt="">`
+                ? `<img src="${this.escapeHtml(person.photo ?? '')}" alt="">`
                 : `<span class="avatar-initials">${this.escapeHtml(initials)}</span>`;
 
             html += `
@@ -1116,7 +1178,7 @@ class TreeRendererClass {
                     ${trade ? `<div class="card-trade">${this.escapeHtml(trade)}</div>` : ''}
                     ${density === 'detailed' && metaPlace ? `<div class="card-place">${this.escapeHtml(metaPlace)}</div>` : ''}
                 </div>
-                ${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">&#128274;</span>` : ''}
+                ${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">${iconSvg('lock', { size: 10 })}</span>` : ''}
             `;
 
             // Chain-link "relations" tab — lives in the top-right edge slot,
@@ -1155,12 +1217,12 @@ class TreeRendererClass {
                     ).join('');
                     const moreCount = crossTreeMatches.length > 5 ? crossTreeMatches.length - 5 : 0;
 
-                    crossTreeHtml = `<div class="cross-tree-badge" data-person-id="${id}" title="${strings.crossTree.badgeTitle(crossTreeMatches.length)}">
+                    crossTreeHtml = `<div class="cross-tree-badge" data-person-id="${this.escapeHtml(id)}" title="${strings.crossTree.badgeTitle(crossTreeMatches.length)}">
                         <span class="pill-glyph">⇄</span><span class="pill-count">${crossTreeMatches.length}</span>
                         <div class="cross-tree-tooltip">
                             <div class="cross-tree-tooltip-header">${strings.crossTree.tooltipHeader}</div>
                             ${tooltipItems}
-                            ${moreCount > 0 ? `<div class="cross-tree-tooltip-item">...${moreCount} more</div>` : ''}
+                            ${moreCount > 0 ? `<div class="cross-tree-tooltip-item">${strings.crossTree.moreMatches(moreCount)}</div>` : ''}
                             <div class="cross-tree-tooltip-hint">${strings.crossTree.clickToSwitch}</div>
                         </div>
                     </div>`;
@@ -1234,7 +1296,7 @@ class TreeRendererClass {
                 // a fresh fetch. No photo → no column at all (initials live on the
                 // card below the tooltip, not here).
                 const ttHasPhoto = !person.isPlaceholder && !!person.photo;
-                const ttPhoto = ttHasPhoto ? `<img class="tt-photo" src="${person.photo}" alt="">` : '';
+                const ttPhoto = ttHasPhoto ? `<img class="tt-photo" src="${this.escapeHtml(person.photo ?? '')}" alt="">` : '';
                 html += `<div class="card-tooltip${ttHasPhoto ? ' has-photo' : ''}">${ttPhoto}<div class="tt-body">${rows}</div></div>`;
             }
 
@@ -1318,17 +1380,19 @@ class TreeRendererClass {
 
             canvas.appendChild(card);
         }
+        return true;
     }
 
     /**
      * What this person did. Occupation is an event (it changes over a life:
-     * apprentice, journeyman, master), so for a one-line summary take the last
-     * one recorded — the trade they ended up with.
+     * apprentice, journeyman, master), so for a one-line summary take the
+     * newest dated one — the trade they ended up with; same rule as the
+     * occupation field in the person dialog.
      */
     private occupationOf(person: Person): string | null {
         const jobs = (person.events ?? []).filter(e => e.type === 'occupation' && e.note?.trim());
         if (jobs.length === 0) return null;
-        return sortLifeEvents(jobs)[jobs.length - 1].note?.trim() ?? null;
+        return newestLifeEvent(jobs)?.note?.trim() ?? null;
     }
 
     /**
@@ -1765,21 +1829,8 @@ class TreeRendererClass {
     }
 
     private formatDateFull(dateStr: string): string {
-        const parts = dateStr.split('-');
-        if (parts.length !== 3 || parts[1] === '00' || parts[2] === '00') {
-            return parts[0]; // year only
-        }
-        const day = parseInt(parts[2], 10);
-        const month = parseInt(parts[1], 10);
-        const year = parts[0];
-        const lang = getCurrentLanguage();
-        if (lang === 'cs') {
-            return `${day}. ${month}. ${year}`;
-        }
-        if (lang === 'de') {
-            return `${day}.${month}.${year}`;
-        }
-        return `${month}/${day}/${year}`;
+        // Shared formatter: qualifiers ('about 1880') and ranges read as text.
+        return formatFlexDate(dateStr);
     }
 
     /**
@@ -1790,35 +1841,9 @@ class TreeRendererClass {
     private calculateAge(person: Person): number | null {
         if (!person.birthDate) return null;
         if (!person.deathDate && !isLivingPerson(person, new Date().getFullYear())) return null;
-        const birthParts = person.birthDate.split('-');
-        if (birthParts.length < 1) return null;
-        const birthYear = parseInt(birthParts[0], 10);
-        if (isNaN(birthYear)) return null;
-
-        let endYear: number;
-        let endMonth = 0;
-        let endDay = 0;
-        if (person.deathDate) {
-            const deathParts = person.deathDate.split('-');
-            endYear = parseInt(deathParts[0], 10);
-            if (isNaN(endYear)) return null;
-            endMonth = deathParts.length >= 2 ? parseInt(deathParts[1], 10) : 0;
-            endDay = deathParts.length >= 3 ? parseInt(deathParts[2], 10) : 0;
-        } else {
-            const now = new Date();
-            endYear = now.getFullYear();
-            endMonth = now.getMonth() + 1;
-            endDay = now.getDate();
-        }
-
-        const birthMonth = birthParts.length >= 2 ? parseInt(birthParts[1], 10) : 0;
-        const birthDay = birthParts.length >= 3 ? parseInt(birthParts[2], 10) : 0;
-
-        let age = endYear - birthYear;
-        if (birthMonth && endMonth && (endMonth < birthMonth || (endMonth === birthMonth && endDay < birthDay))) {
-            age--;
-        }
-        return age >= 0 ? age : null;
+        // Shared age rule (handles qualified / partial / range dates).
+        const age = ageBetween(person.birthDate, person.deathDate || undefined);
+        return age ? age.years : null;
     }
 
     // ==================== TIMELINE VIEW ====================
@@ -1847,7 +1872,7 @@ class TreeRendererClass {
                 if (!el) return;
                 if (el.dataset.fanPerson) {
                     this.setFocus(el.dataset.fanPerson as PersonId);
-                } else if (el.dataset.fanAdd && !DataManager.isViewMode()) {
+                } else if (el.dataset.fanAdd && !DataManager.isReadOnly()) {
                     UI.addRelation(el.dataset.fanAdd as PersonId, 'parent');
                 }
             });
@@ -1865,9 +1890,10 @@ class TreeRendererClass {
         if (!model) { chart.innerHTML = ''; return; }
         chart.innerHTML = buildFanSvg(model, {
             esc: (t) => this.escapeHtml(t),
-            editable: !DataManager.isViewMode() && !DataManager.isTreeLocked(),
+            editable: !DataManager.isReadOnly() && !DataManager.isTreeLocked(),
             addParentLabel: strings.contextMenu.addParent,
             showKekule: SettingsManager.isFanKekuleEnabled(),
+            relTypeLabel: (t) => strings.parentRelType[t],
         });
 
         // Mobile: the fan keeps a minimum drawing width and overflows the
@@ -1892,7 +1918,7 @@ class TreeRendererClass {
         const model = computeTimelineModel(DataManager.getData(), ids, todayYear);
         const S = strings.timeline;
 
-        const isMobile = window.innerWidth < 500;
+        const isMobile = isMobileViewport();
         const ROW_H = isMobile ? 28 : 30;
         const LABEL_W = isMobile ? 96 : 160;
         const W = Math.max(320, container.clientWidth || 800);

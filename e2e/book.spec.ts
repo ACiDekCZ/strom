@@ -7,9 +7,9 @@ test('family book: dialog generates a printable book in a new window', async ({ 
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(page.locator('#empty-state')).toBeHidden();
 
-    // Open the export menu and pick "Family Book".
+    // Open the export menu and pick "Family book".
     await page.evaluate(() => window.Strom.UI.showExportDialog());
-    await page.locator('#export-modal').locator('.menu-option', { hasText: 'Family Book' }).click();
+    await page.locator('#export-modal').locator('.menu-option', { hasText: 'Family book' }).click();
 
     const dialog = page.locator('#book-modal');
     await expect(dialog).toBeVisible();
@@ -26,7 +26,7 @@ test('family book: dialog generates a printable book in a new window', async ({ 
     // The book contains the demo tree's people and the expected structure.
     await expect(book.locator('body')).toContainText('Henry VIII');
     await expect(book.locator('.book-families > h2')).toHaveText('Families');
-    await expect(book.locator('.book-index-page > h2')).toHaveText('Person Index');
+    await expect(book.locator('.book-index-page > h2')).toHaveText('Person index');
     await expect(book.locator('.book-chapter').first()).toBeVisible();
 });
 

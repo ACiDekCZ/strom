@@ -18,7 +18,7 @@ export interface ArchivePortal {
     institution: string;
     url: string;
     /** Region description shown as hint. */
-    coverage: { cs: string; en: string };
+    coverage: { cs: string; en: string; de: string };
     /** Lowercase, diacritics-stripped district/city keywords for matching. */
     keywords: string[];
 }
@@ -34,7 +34,7 @@ export const ARCHIVE_PORTALS: ArchivePortal[] = [
         name: 'Archiv hl. m. Prahy (AMP katalog)',
         institution: 'Archiv hlavního města Prahy',
         url: 'https://katalog.ahmp.cz/pragapublica/',
-        coverage: { cs: 'Praha', en: 'Prague' },
+        coverage: { cs: 'Praha', en: 'Prague', de: 'Prag' },
         keywords: ['praha', 'prague'],
     },
     {
@@ -42,7 +42,7 @@ export const ARCHIVE_PORTALS: ArchivePortal[] = [
         name: 'eBadatelna',
         institution: 'SOA Praha',
         url: 'https://ebadatelna.soapraha.cz/',
-        coverage: { cs: 'Středočeský kraj', en: 'Central Bohemia' },
+        coverage: { cs: 'Středočeský kraj', en: 'Central Bohemia', de: 'Mittelböhmen' },
         keywords: ['benesov', 'beroun', 'kladno', 'kolin', 'kutna hora', 'melnik',
             'mlada boleslav', 'nymburk', 'pribram', 'rakovnik', 'brandys', 'ricany', 'slany'],
     },
@@ -51,7 +51,7 @@ export const ARCHIVE_PORTALS: ArchivePortal[] = [
         name: 'DigiArchiv',
         institution: 'SOA Třeboň',
         url: 'https://digi.ceskearchivy.cz/',
-        coverage: { cs: 'Jihočeský kraj + Pelhřimovsko', en: 'South Bohemia' },
+        coverage: { cs: 'Jihočeský kraj + Pelhřimovsko', en: 'South Bohemia', de: 'Südböhmen' },
         keywords: ['ceske budejovice', 'cesky krumlov', 'jindrichuv hradec', 'pisek',
             'prachatice', 'strakonice', 'tabor', 'pelhrimov', 'trebon'],
     },
@@ -60,7 +60,7 @@ export const ARCHIVE_PORTALS: ArchivePortal[] = [
         name: 'Porta fontium',
         institution: 'SOA Plzeň',
         url: 'https://www.portafontium.eu/',
-        coverage: { cs: 'Plzeňský a Karlovarský kraj', en: 'Pilsen and Karlovy Vary regions' },
+        coverage: { cs: 'Plzeňský a Karlovarský kraj', en: 'Pilsen and Karlovy Vary regions', de: 'Region Pilsen und Karlsbad' },
         keywords: ['plzen', 'domazlice', 'klatovy', 'rokycany', 'tachov',
             'cheb', 'karlovy vary', 'sokolov'],
     },
@@ -69,7 +69,7 @@ export const ARCHIVE_PORTALS: ArchivePortal[] = [
         name: 'Vademecum',
         institution: 'SOA Litoměřice',
         url: 'http://vademecum.soalitomerice.cz/vademecum/',
-        coverage: { cs: 'Ústecký a Liberecký kraj', en: 'Ústí and Liberec regions' },
+        coverage: { cs: 'Ústecký a Liberecký kraj', en: 'Ústí and Liberec regions', de: 'Region Ústí und Liberec' },
         keywords: ['usti nad labem', 'decin', 'chomutov', 'litomerice', 'louny', 'most',
             'teplice', 'ceska lipa', 'jablonec', 'liberec', 'semily', 'zatec'],
     },
@@ -78,7 +78,7 @@ export const ARCHIVE_PORTALS: ArchivePortal[] = [
         name: 'Východočeské archivy (ARON)',
         institution: 'SOA Zámrsk',
         url: 'https://aron.vychodoceskearchivy.cz/',
-        coverage: { cs: 'Královéhradecký a Pardubický kraj', en: 'Hradec Králové and Pardubice regions' },
+        coverage: { cs: 'Královéhradecký a Pardubický kraj', en: 'Hradec Králové and Pardubice regions', de: 'Region Hradec Králové und Pardubice' },
         keywords: ['hradec kralove', 'jicin', 'nachod', 'rychnov', 'trutnov',
             'chrudim', 'pardubice', 'svitavy', 'usti nad orlici', 'jaromer'],
     },
@@ -87,7 +87,7 @@ export const ARCHIVE_PORTALS: ArchivePortal[] = [
         name: 'Acta Publica',
         institution: 'Moravský zemský archiv v Brně',
         url: 'https://www.actapublica.eu/',
-        coverage: { cs: 'Jihomoravský a Zlínský kraj + Vysočina', en: 'South Moravia, Zlín and Vysočina regions' },
+        coverage: { cs: 'Jihomoravský a Zlínský kraj + Vysočina', en: 'South Moravia, Zlín and Vysočina regions', de: 'Südmähren, Region Zlín und Hochland (Vysočina)' },
         keywords: ['brno', 'blansko', 'breclav', 'hodonin', 'vyskov', 'znojmo',
             'kromeriz', 'uherske hradiste', 'vsetin', 'zlin',
             'jihlava', 'trebic', 'zdar nad sazavou', 'havlickuv brod', 'rajecko'],
@@ -97,7 +97,7 @@ export const ARCHIVE_PORTALS: ArchivePortal[] = [
         name: 'Digitální archiv ZA Opava',
         institution: 'Zemský archiv v Opavě',
         url: 'https://digi.archives.cz/da/',
-        coverage: { cs: 'Moravskoslezský a Olomoucký kraj', en: 'Moravia-Silesia and Olomouc regions' },
+        coverage: { cs: 'Moravskoslezský a Olomoucký kraj', en: 'Moravia-Silesia and Olomouc regions', de: 'Mährisch-Schlesien und Region Olomouc' },
         keywords: ['bruntal', 'frydek', 'mistek', 'karvina', 'novy jicin', 'opava', 'ostrava',
             'jesenik', 'olomouc', 'prostejov', 'prerov', 'sumperk'],
     },

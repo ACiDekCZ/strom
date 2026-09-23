@@ -80,7 +80,24 @@ export const searchMethods = uiModule({
      * Refresh toolbar search picker (e.g., after data import)
      */
     refreshSearch(): void {
+        // Keep the typed query across a refresh (save, undo, import) and
+        // re-apply the highlight for the new data, so the search box and the
+        // dimmed cards never disagree. A different tree starts clean: the
+        // old query/filters (and their person ids) mean nothing there.
+        const treeId = DataManager.getCurrentTreeId();
+        const sameTree = this.searchTreeId === null || this.searchTreeId === treeId;
+        this.searchTreeId = treeId;
+        const oldInput = document.querySelector('#toolbar-search-picker .person-picker-input') as HTMLInputElement | null;
+        const query = sameTree ? (oldInput?.value ?? '') : '';
         this.initSearch();
+        if (this.searchFilterTimer) clearTimeout(this.searchFilterTimer);
+        if (!sameTree) {
+            this.clearSearchFilters();
+            return;
+        }
+        const newInput = document.querySelector('#toolbar-search-picker .person-picker-input') as HTMLInputElement | null;
+        if (newInput && query) newInput.value = query;
+        this.applySearchFilter();
     },
 
     // ==================== SEARCH FILTERS + HIGHLIGHT ====================
@@ -167,6 +184,8 @@ export const searchMethods = uiModule({
 
     showSearchResultsModal(results: import('../types.js').Person[], _query: string): void {
         // Use confirmation modal for search results
+        // Fresh Cancel / OK pair — not whatever the last confirm left there.
+        this.resetConfirmButtons();
         const modal = document.getElementById('confirmation-modal');
         const title = document.getElementById('confirm-title');
         const message = document.getElementById('confirm-message');
@@ -186,8 +205,8 @@ export const searchMethods = uiModule({
             const opt = document.createElement('div');
             opt.className = 'confirm-option';
             opt.innerHTML = `
-                <input type="radio" name="search-result" value="${person.id}">
-                <span>${this.escapeHtml(person.firstName)} ${this.escapeHtml(person.lastName)} ${birthYear ? `(${birthYear})` : ''}</span>
+                <input type="radio" name="search-result" value="${this.escapeHtml(person.id)}">
+                <span>${this.escapeHtml(person.firstName)} ${this.escapeHtml(person.lastName)} ${birthYear ? `(${this.escapeHtml(birthYear)})` : ''}</span>
             `;
             opt.onclick = () => {
                 options.querySelectorAll('.confirm-option').forEach(o => o.classList.remove('selected'));

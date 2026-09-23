@@ -68,6 +68,18 @@ export function eventTakesParticipants(type: LifeEventType, hasParticipants = fa
 }
 
 /**
+ * The most recent of the given events: the newest DATED one; an undated event
+ * only when none has a date (sortLifeEvents puts undated events last, which
+ * would make any undated entry "the latest").
+ */
+export function newestLifeEvent(events: LifeEvent[]): LifeEvent | null {
+    if (events.length === 0) return null;
+    const sorted = sortLifeEvents(events);
+    const dated = sorted.filter(e => yearOf(e.date) !== null);
+    return dated.length > 0 ? dated[dated.length - 1] : sorted[sorted.length - 1];
+}
+
+/**
  * Chronological order by year (flex-date aware). Undated events sort last;
  * ties break by id for a stable order.
  */

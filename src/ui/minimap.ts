@@ -14,15 +14,12 @@ import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
 import { DEFAULT_LAYOUT_CONFIG, PersonId, Position, STANDALONE_VIEWS } from '../types.js';
 import { uiModule } from './module.js';
+import { isPhoneChrome } from '../breakpoints.js';
 
 // Panel geometry (CSS px). Kept small; the card loop is a bare fillRect sweep.
 const MINIMAP_W = 180;
 const MINIMAP_H = 120;
 const MINIMAP_PAD = 8;
-// At/below this width the control block dissolves (CSS `display: contents`),
-// so the minimap has no docked home and CSS hides it — mirror that here so the
-// JS never re-shows a detached panel. Keep in sync with the ≤600px CSS rule.
-const MOBILE_MAX = 600;
 // Below this world-overflow ratio the tree fits comfortably — hide the minimap.
 const FIT_MARGIN = 1.05;
 
@@ -120,7 +117,10 @@ export const minimapMethods = uiModule({
         if (!panel || !canvas) return;
 
         const positions = TreeRenderer.getPosterLayout().positions;
-        const isMobile = window.innerWidth <= MOBILE_MAX;
+        // On mobile the control block dissolves (CSS `display: contents`), so
+        // the minimap has no docked home and CSS hides it — mirror that here so
+        // the JS never re-shows a detached panel.
+        const isMobile = isPhoneChrome();
         const { cardWidth, cardHeight } = DEFAULT_LAYOUT_CONFIG;
         const box = worldBoundingBox(positions, cardWidth, cardHeight);
 
@@ -165,12 +165,13 @@ export const minimapMethods = uiModule({
         const positions = TreeRenderer.getPosterLayout().positions;
         const data = DataManager.getData();
 
-        // Resolve the gender tokens once per render (canvas cannot use CSS vars).
+        // Resolve the gender + accent tokens once per render (canvas cannot use CSS vars).
         // A theme switch redraws the minimap (see initMinimap), so these stay
         // in step with the active theme's --male/--female values.
         const rootStyle = getComputedStyle(document.documentElement);
         const maleColor = rootStyle.getPropertyValue('--male').trim() || '#5b7f9e';
         const femaleColor = rootStyle.getPropertyValue('--female').trim() || '#a1706e';
+        const frameColor = rootStyle.getPropertyValue('--accent').trim() || '#b0703c';
 
         for (const [id, pos] of positions) {
             const person = data.persons[id];
@@ -189,7 +190,7 @@ export const minimapMethods = uiModule({
             const vy = wy0 * t.scale + t.offsetY;
             const vw = (vpW / scale) * t.scale;
             const vh = (vpH / scale) * t.scale;
-            ctx.strokeStyle = '#d33';
+            ctx.strokeStyle = frameColor;
             ctx.lineWidth = 1.5;
             ctx.strokeRect(
                 Math.max(0, vx), Math.max(0, vy),

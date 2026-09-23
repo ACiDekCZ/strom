@@ -35,7 +35,7 @@ export const familyWizardMethods = uiModule({
     /** Open the wizard for the given anchor person. */
     showFamilyWizard(anchorId: PersonId): void {
         const anchor = DataManager.getPerson(anchorId);
-        if (!anchor || DataManager.isViewMode()) return;
+        if (!anchor || DataManager.isReadOnly()) return;
         this.clearDialogStack?.();
         this.closeMobileMenu?.();
         this.hideContextMenu?.();
@@ -52,6 +52,44 @@ export const familyWizardMethods = uiModule({
 
         document.getElementById('family-wizard-modal')!.classList.add('active');
         this.wireFamilyWizardOnce();
+        this.prefillWizardParents(anchorId);
+    },
+
+    /**
+     * The anchor's existing parents fill their rows as fixed links: the wizard
+     * never adds a third parent next to them, nor pairs a new father with a
+     * mother who is not the anchor's (review V11). Only a free slot stays
+     * editable.
+     */
+    prefillWizardParents(anchorId: PersonId): void {
+        const anchor = DataManager.getPerson(anchorId);
+        if (!anchor) return;
+        const fatherRow = document.querySelector<HTMLElement>('#wiz-parents .wiz-row[data-kind="father"]');
+        const motherRow = document.querySelector<HTMLElement>('#wiz-parents .wiz-row[data-kind="mother"]');
+        const free = [fatherRow, motherRow];
+        const parents = anchor.parentIds
+            .map(id => DataManager.getPerson(id))
+            .filter((p): p is NonNullable<typeof p> => !!p);
+        const place = (parent: NonNullable<typeof parents[number]>, row: HTMLElement | null) => {
+            if (!row) return;
+            free.splice(free.indexOf(row), 1);
+            this.useWizardExisting(row, parent.id);
+            if (parent.isPlaceholder) (row.querySelector('.wiz-first') as HTMLInputElement).value = '?';
+            row.querySelectorAll<HTMLInputElement>('input').forEach(i => { i.readOnly = true; });
+            const gender = row.querySelector('.wiz-gender') as HTMLSelectElement | null;
+            if (gender) gender.disabled = true;
+            // A fixed link: no "unlink" — the parent is already the anchor's.
+            row.querySelector('.wiz-unlink')?.remove();
+            row.dataset.fixed = '1';
+        };
+        // Gender picks the row; whoever does not fit takes the row left over.
+        const rest: typeof parents = [];
+        for (const parent of parents) {
+            const row = parent.gender === 'female' ? motherRow : fatherRow;
+            if (row && free.includes(row)) place(parent, row);
+            else rest.push(parent);
+        }
+        for (const parent of rest) place(parent, free[0] ?? null);
     },
 
     closeFamilyWizard(): void {
@@ -75,7 +113,7 @@ export const familyWizardMethods = uiModule({
         pill.className = 'family-offer-pill';
         pill.innerHTML = `<span>${this.escapeHtml(fw.continuePrompt)}</span>`
             + `<button type="button" class="family-offer-btn">${this.escapeHtml(fw.continueYes)}</button>`
-            + `<button type="button" class="family-offer-close" aria-label="close">&times;</button>`;
+            + `<button type="button" class="family-offer-close" aria-label="${strings.buttons.close}">&times;</button>`;
         el.appendChild(pill);
 
         let done = false;
@@ -109,7 +147,7 @@ export const familyWizardMethods = uiModule({
         const label = fw.roles[kind];
         const removable = kind === 'sibling' || kind === 'child';
         const ls = this.escapeHtml(lastName);
-        return `<div class="wiz-row" data-kind="${kind}">
+        return `<div class="wiz-row" data-kind="${kind}" data-default-last="${ls}">
             <span class="wiz-role">${label}</span>
             <input class="wiz-first" type="text" placeholder="${fw.firstName}">
             <input class="wiz-last" type="text" placeholder="${fw.lastName}" value="${ls}">
@@ -119,7 +157,7 @@ export const familyWizardMethods = uiModule({
             </select>
             <input class="wiz-birth" type="text" placeholder="${fw.year}">
             ${kind === 'partner' ? `<input class="wiz-wedding" type="text" placeholder="${fw.weddingYear}">` : ''}
-            ${removable ? `<button class="wiz-remove" type="button" title="${fw.remove}">×</button>` : '<span class="wiz-spacer"></span>'}
+            ${removable ? `<button class="wiz-remove" type="button" title="${fw.remove}" aria-label="${fw.remove}">×</button>` : '<span class="wiz-spacer"></span>'}
             <div class="wiz-hint"></div>
         </div>`;
     },
@@ -140,6 +178,14 @@ export const familyWizardMethods = uiModule({
         // like "5.6.1980" must not land in the data unparsed.
         const birth = normalizeDateInput(val('.wiz-birth'));
         const wedding = normalizeDateInput(val('.wiz-wedding'));
+        // The surname is prefilled for convenience; a row with nothing but
+        // that default is an untouched row, not a surname-only person
+        // (otherwise every blank parent/sibling/child row became a nameless
+        // relative).
+        if (!existingId && !val('.wiz-first') && !birth && !wedding
+            && val('.wiz-last') === (row.dataset.defaultLast ?? '').trim()) {
+            return { firstName: '', lastName: '', gender: 'male' };
+        }
         return {
             ...(existingId ? { existingId } : {}),
             firstName: val('.wiz-first'),
@@ -150,9 +196,31 @@ export const familyWizardMethods = uiModule({
         };
     },
 
+    /**
+     * Mark every date field that does not parse; true when all are valid.
+     * An unreadable date used to be dropped silently (review S5) — like the
+     * person modal, the wizard now refuses to save it.
+     */
+    validateWizardDates(): boolean {
+        let ok = true;
+        document.querySelectorAll<HTMLInputElement>('#family-wizard-modal .wiz-birth, #family-wizard-modal .wiz-wedding')
+            .forEach(input => {
+                const invalid = !input.readOnly && normalizeDateInput(input.value) === null;
+                input.classList.toggle('invalid', invalid);
+                if (invalid) ok = false;
+            });
+        return ok;
+    },
+
     saveFamilyWizard(): void {
         const anchorId = this.wizardAnchorId;
         if (!anchorId) return;
+        if (!this.validateWizardDates()) {
+            this.clearDialogStack();
+            this.pushDialog('family-wizard-modal');
+            this.showAlert(strings.personModal.invalidDate, 'warning');
+            return;
+        }
         const rows = (sel: string) => Array.from(document.querySelectorAll<HTMLElement>(sel));
         const one = (sel: string) => {
             const el = document.querySelector<HTMLElement>(sel);
@@ -190,7 +258,7 @@ export const familyWizardMethods = uiModule({
         if (!top) { hint.innerHTML = ''; return; }
         const name = `${top.person.firstName} ${top.person.lastName}`.trim();
         hint.innerHTML = `<span class="wiz-hint-text">${strings.familyWizard.maybe(this.escapeHtml(name))}</span>`
-            + `<button class="wiz-use" type="button" data-existing="${top.person.id}">${strings.familyWizard.useExisting}</button>`;
+            + `<button class="wiz-use" type="button" data-existing="${this.escapeHtml(top.person.id)}">${strings.familyWizard.useExisting}</button>`;
     },
 
     /** Link a row to an existing person instead of creating a new one. */
@@ -204,7 +272,7 @@ export const familyWizardMethods = uiModule({
         row.classList.add('wiz-linked');
         const hint = row.querySelector('.wiz-hint') as HTMLElement | null;
         if (hint) hint.innerHTML = `<span class="wiz-linked-label">${strings.familyWizard.linked}</span>`
-            + `<button class="wiz-unlink" type="button">×</button>`;
+            + `<button class="wiz-unlink" type="button" title="${strings.familyWizard.unlink}" aria-label="${strings.familyWizard.unlink}">×</button>`;
     },
 
     /** Attach the modal's delegated listeners exactly once. */
@@ -230,6 +298,13 @@ export const familyWizardMethods = uiModule({
         modal.addEventListener('change', (e) => {
             const row = (e.target as HTMLElement).closest('.wiz-row') as HTMLElement | null;
             if (row && !row.dataset.existingId) this.checkWizardDuplicate(row);
+        });
+        // Live red border on an unreadable date, like the person modal.
+        modal.addEventListener('input', (e) => {
+            const t = e.target as HTMLInputElement;
+            if (t.classList.contains('wiz-birth') || t.classList.contains('wiz-wedding')) {
+                t.classList.toggle('invalid', normalizeDateInput(t.value) === null);
+            }
         });
     },
 });

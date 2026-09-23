@@ -1,6 +1,6 @@
 {
   "name": "strom",
-  "version": "2.8.0",
+  "version": "3.0.0",
   "description": "Family tree application",
   "main": "dist/bundle.js",
   "scripts": {
@@ -22,7 +22,7 @@
     "genealogy"
   ],
   "author": "Milan Víšek",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "MPL-2.0",
   "type": "module",
   "devDependencies": {
     "@playwright/test": "^1.61.1",

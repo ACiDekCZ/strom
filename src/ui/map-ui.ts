@@ -29,6 +29,7 @@ import {
 import { GEOCODER_NAME, geocodeCandidates, geocodePlaces } from '../geocode.js';
 import { uiModule } from './module.js';
 
+import { iconSvg } from '../icons.js';
 /** A place that has coordinates and therefore something to draw. */
 export interface MappedPlace {
     key: string;
@@ -87,14 +88,14 @@ export const mapMethods = uiModule({
                     <button type="button" class="map-fit" onclick="window.Strom.UI.fitMapToPlaces()"
                             aria-label="${strings.map.fit}" title="${strings.map.fit}">⤢</button>
                     <button type="button" class="map-time-toggle" onclick="window.Strom.UI.toggleMapTime()"
-                            aria-pressed="false" aria-label="${strings.map.timeMode}" title="${strings.map.timeMode}">⏱</button>
+                            aria-pressed="false" aria-label="${strings.map.timeMode}" title="${strings.map.timeMode}">${iconSvg('timer')}</button>
                 </div>
                 <div class="map-scope">
                     <button type="button" id="map-scope-view" onclick="window.Strom.UI.setMapScope('view')">${strings.map.scopeView}</button>
                     <button type="button" id="map-scope-tree" onclick="window.Strom.UI.setMapScope('tree')">${strings.map.scopeTree}</button>
                 </div>
                 <div class="map-timebar" id="map-timebar" hidden>
-                    <button type="button" class="map-time-play" aria-label="${strings.map.timePlay}" title="${strings.map.timePlay}">⏵</button>
+                    <button type="button" class="map-time-play" aria-label="${strings.map.timePlay}" title="${strings.map.timePlay}">${iconSvg('play')}</button>
                     <input type="range" class="map-time-range" aria-label="${strings.map.timeYear}" value="0" min="0" max="0">
                     <span class="map-time-year">0</span>
                 </div>
@@ -411,7 +412,7 @@ export const mapMethods = uiModule({
     updateMapTimePlayIcon(): void {
         const play = document.querySelector('.map-time-play') as HTMLButtonElement | null;
         if (!play) return;
-        play.textContent = this.mapTimePlaying ? '⏸' : '⏵';
+        play.innerHTML = iconSvg(this.mapTimePlaying ? 'pause' : 'play');
         const label = this.mapTimePlaying ? strings.map.timePause : strings.map.timePlay;
         play.setAttribute('aria-label', label);
         play.title = label;
@@ -438,7 +439,7 @@ export const mapMethods = uiModule({
         play?.addEventListener('click', () => this.toggleMapTimePlay());
     },
 
-    /** ⏱ toggle: reveal the timebar starting at the earliest year, or hide it. */
+    /** Timer toggle: reveal the timebar starting at the earliest year, or hide it. */
     toggleMapTime(): void {
         const harvest = this.mapTimeHarvest();
         if (harvest.minYear === null) return;   // nothing dated (button is disabled)
@@ -459,7 +460,7 @@ export const mapMethods = uiModule({
         this.renderMapStatus(this.mapPlaces());
     },
 
-    /** ⏵/⏸: step the year forward once every ~120ms until the last year. */
+    /** Play/pause: step the year forward once every ~120ms until the last year. */
     toggleMapTimePlay(): void {
         if (this.mapTimePlaying) { this.stopMapTimePlay(); return; }
         if (!this.mapTimeOn) return;
@@ -538,7 +539,7 @@ export const mapMethods = uiModule({
             .map(id => DataManager.getPerson(id))
             .filter((p): p is NonNullable<typeof p> => !!p)
             .map(p => `
-                <button type="button" class="map-popup-person" data-person-id="${p.id}">
+                <button type="button" class="map-popup-person" data-person-id="${this.escapeHtml(p.id)}">
                     ${this.escapeHtml(`${p.firstName} ${p.lastName}`.trim() || '?')}
                 </button>`)
             .join('');
@@ -862,10 +863,10 @@ export const mapMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = 'places-modal';
         overlay.innerHTML = `
-            <div class="modal places-modal">
+            <div class="modal places-modal modal--lg" role="dialog" aria-modal="true">
                 <div class="modal-header">
                     <h2>${strings.map.placesTitle}</h2>
-                    <button class="close-btn" id="places-close-x">&times;</button>
+                    <button class="close-btn" id="places-close-x" aria-label="${strings.buttons.close}">&times;</button>
                 </div>
                 <p class="places-intro">${strings.map.placesIntro}</p>
                 <div class="places-list">
@@ -874,14 +875,12 @@ export const mapMethods = uiModule({
                 <div class="modal-buttons places-footer">
                     <button type="button" class="secondary places-clean-orphans" id="places-clean-orphans"
                         ${orphanCount === 0 ? 'disabled' : ''}>${strings.map.cleanOrphans(orphanCount)}</button>
-                    <button type="button" class="secondary" id="places-close">${strings.buttons.close}</button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);
 
         const close = (): void => this.closePlacesManager();
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
-        (overlay.querySelector('#places-close') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#places-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#places-clean-orphans') as HTMLButtonElement).onclick = () => void this.cleanOrphanPlaces();
         overlay.querySelectorAll('.place-row').forEach(row => this.bindPlaceRow(row as HTMLElement));
@@ -905,7 +904,7 @@ export const mapMethods = uiModule({
     renderPlaceRow(p: { key: string; usage: PlaceUsage; geo?: PlaceGeo }): string {
         const pinned = p.geo
             ? `<div class="place-pin">
-                   <span class="place-pin-label">📍 ${this.escapeHtml(p.geo.label ?? `${p.geo.lat.toFixed(3)}, ${p.geo.lon.toFixed(3)}`)}</span>
+                   <span class="place-pin-label">${iconSvg('pin', { size: 12 })} ${this.escapeHtml(p.geo.label ?? `${p.geo.lat.toFixed(3)}, ${p.geo.lon.toFixed(3)}`)}</span>
                    <button type="button" class="place-change secondary">${strings.map.changePin}</button>
                    <button type="button" class="place-remove secondary">${strings.map.removePin}</button>
                </div>`
@@ -995,7 +994,8 @@ export const mapMethods = uiModule({
     async cleanOrphanPlaces(): Promise<void> {
         const count = orphanedPlaceKeys(DataManager.getData()).length;
         if (count === 0) return;
-        if (!await this.showConfirm(strings.map.cleanOrphansConfirm(count))) return;
+        if (!await this.showConfirm(strings.map.cleanOrphansConfirm(count), strings.danger.cleanPlacesTitle(count),
+            { confirmLabel: strings.danger.cleanPlaces, variant: 'danger' })) return;
         const removed = DataManager.clearOrphanPlaces();
         if (removed > 0) this.showToast(strings.map.cleanOrphansDone(removed));
         this.refreshPlacesManager();

@@ -215,6 +215,7 @@ export const shareUiMethods = uiModule({
         if (badge) {
             badge.style.display = active && hidden ? '' : 'none';
             badge.title = strings.share.collabBadgeTitle;
+            badge.setAttribute('aria-label', strings.share.collabBadgeTitle);
         }
     },
 

@@ -31,6 +31,14 @@ the table honest.
 | Invalid JSON import | `data-import-export.spec.ts` | covered | validation dialog, existing data intact |
 | Invalid/garbage GEDCOM import | `data-import-export.spec.ts` | covered | lenient parser → empty result dialog, app stays alive |
 | Demo → export → import | `data-import-export.spec.ts` | covered | person count matches |
+| Local encryption across reload | `data-safety.spec.ts` | covered | enable in settings, IndexedDB holds ciphertext only, reload → password prompt → tree intact |
+| Cancelled startup unlock | `data-safety.spec.ts` | covered | "Unlock" banner (`storage-notice`); an edit while locked is refused with a toast and never overwrites the encrypted tree; banner reopens the prompt |
+| Wrong password then right one | `data-safety.spec.ts` | covered | 2 trees encrypted; error shown, retry unlocks; both trees' persons identical to before |
+| Two tabs on the same tree | `data-safety.spec.ts` | covered | save in tab B → tab A shows the other-tab notice; its Reload brings in B's change; B does not warn itself |
+| "Export all" JSON → import | `data-safety.spec.ts` | covered | via `#file-input`; confirm "Import all trees" restores both trees with 2/3 persons |
+| "Export all" HTML → import | `data-safety.spec.ts` | covered | via `#html-input`; same checks as JSON |
+| Reopen exported HTML (`file://`) | `data-safety.spec.ts` | covered | 2nd/3rd open offers the stored tree (existing-export dialog); view stored / view embedded + "Stay with this file" / update storage never duplicate it (bug fixed: the banner link used to import a second copy) |
+| Deleting a tree deletes its backups | `data-safety.spec.ts` | covered | manual backups for 2 trees; after deleting one, the IndexedDB `snapshots` store holds only the other tree's backup |
 
 ## Functional sweep
 
@@ -75,6 +83,7 @@ the table honest.
 | Expanded mode (multi-marriage inline) | `interaction.spec.ts` | covered | all of Henry VIII's wives laid out; refocus re-lays-out |
 | Hidden-relatives "+N" badge / collapse (−) | — | n-a | focus depth auto-expands to the whole connected tree, so badges do not appear in normal-size trees; expansion is focus-driven, there is no separate collapse control |
 | Runtime language switch (CS ↔ EN) | `settings-lock.spec.ts`, `cs.spec.ts` | covered | settings radios; about labels switch without reload |
+| German UI smoke (no English leaks) | `de.spec.ts` | covered | locale de-DE → `<html lang="de">`; add/edit person, relationships panel, export + privacy step, context menu, anniversaries, tree manager, settings, stats, kinship, book dialog scanned for common English words (text + placeholders) |
 | Tree stats dialog | `settings-lock.spec.ts` | covered | shows the person count |
 | Family statistics (visual charts) | `stats.spec.ts` | covered | collapsible section renders inline-SVG bar charts |
 | Anniversaries panel + "on this day" | `anniversaries.spec.ts` | covered | today's birthday triggers the once-a-day card (gone after dismiss+reload); panel lists it |
@@ -114,6 +123,76 @@ the table honest.
 | Merge smart: flex dates + transitive propagation | — (`merge-scoring.test.ts` unit) | covered | ~dates match exact dates; chains resolve through generations |
 | CSV person-table export | `data-import-export.spec.ts` + `csv-export.test.ts` (unit) | covered | localized headers, escaping, BOM |
 | Locale date form in edit inputs | — (`dates.test.ts` unit) | covered | round-trip guaranteed by tests; visual form is cosmetic |
+| Relationships dialog staged as a whole (status + relation type + witness) | `editing-review.spec.ts` | covered | Cancel→Discard rolls back all three (data + reopened dialog, no undo entry); Save applies all, one Ctrl+Z reverts all |
+| "Add child" to a single person = one undo step | `editing-review.spec.ts` | covered | child + "?" placeholder partner removed by one Ctrl+Z, card count back to 1 |
+| Escape asks before discarding edits (person / event / source editor) | `editing-review.spec.ts` | covered | Stay keeps typed text, Discard closes without saving; event and source editors on EXISTING records |
+| No third parent / no ancestry cycle | `editing-review.spec.ts` | covered | full-parent child: no "Add parent", link picker empty; own father not offered as child; data layer refuses |
+| Emptied field stays empty (event place, source repository/URL) | `editing-review.spec.ts` | covered | clear → save → reopen empty, key gone from data |
+| "Deceased" on create + no-op Save adds no undo step | `editing-review.spec.ts` | covered | card shows †; unchanged Save leaves the undo description and top step as is |
+| Family wizard keeps the anchor's existing parent | `editing-review.spec.ts` | covered | mother row fixed/read-only; father fills the free slot; exactly 3 persons, 1 union (untouched surname-prefilled rows add nobody — bug fixed) |
+| Keyboard only: first person + child from the empty state | `editing-review.spec.ts` | covered | Tab/Enter/arrows/typing only; card menu → Add child |
+
+## Opening from outside (Strom Research)
+
+| Area | Test file | Status | Notes |
+|------|-----------|--------|-------|
+| Drag & drop a Strom Research `.ged` → its tree; again → same tree updated, no duplicate | `research-open.spec.ts` | covered | `_STROM_TREE` link stored in tree metadata; summary toast; 1 tree after two drops |
+| Drop overlay + non-GEDCOM file refused | `research-open.spec.ts` | covered | overlay on dragenter, toast on a `.json` drop |
+| Plain GEDCOM dropped → normal import dialog | `research-open.spec.ts` | covered | `#gedcom-result-modal` |
+| Edited in the app → ask; "Open as new copy" / "Update" | `research-open.spec.ts` | covered | copy takes the link, edited tree keeps its edit; Update replaces it, still one tree |
+| `?import-url=` on 127.0.0.1 | `research-open.spec.ts` | covered | request answered by `page.route`; address cleaned |
+| `?import-url=` fetch refused → manual import offered | `research-open.spec.ts` | covered | dialog with "Import file…" |
+| `?import-url=` to another host ignored, no request | `research-open.spec.ts` | covered | `127.0.0.1.evil.com`; allow-list details in vitest `research-link.test.ts` |
+| File handler (`launchQueue`) | `research-open.spec.ts` | partial | simulated `window.launchQueue` via `addInitScript`; the real OS "open with" / install prompt cannot be driven headlessly |
+| `?live=` bridge: read-only tree, panel (working / changes / waiting), refresh + highlight on `change`, "following ended" | `research-open.spec.ts` | covered | status, tree.ged and the SSE stream answered by `page.route`; bridge text with markup shown as text |
+| `?live=` stop following | `research-open.spec.ts` | covered | panel removed, read-only lifted |
+| No `launchQueue` / `EventSource`, phone viewport, bogus `?live=` / `?import-url=` | `research-open.spec.ts` | covered | no `pageerror`, toolbar visible, params removed; valid `?live=` without EventSource still opens the research (polling fallback) |
+| Real browsers reaching a loopback bridge from https (PNA / mixed content) | — | n-a | depends on the browser's network policy; not reproducible in the headless suite |
+
+## Strom Research in the app (3.0 promotion)
+
+Suites that test something else start with the promotion "already seen":
+`openApp()` seeds `whatsNew30Shown` / `researchNewDismissed` into the browser
+settings (`seedResearchPromoSeen`); `research-promo.spec.ts` opts out with
+`openApp(page, { researchPromo: true })`. The website is answered by
+`context.route` — no request leaves the test. Gating + URL builder: vitest
+`research-promo.test.ts`.
+
+| Area | Test file | Status | Notes |
+|------|-----------|--------|-------|
+| Welcome-screen offer at 1440 / 400 / 700px, between "I have data elsewhere" and the demo link; opens the site in a new tab (EN bare, CS `?lang=cs`, DE `?lang=de`) | `research-promo.spec.ts` | covered | popup via `context.waitForEvent('page')`; new user gets `whatsNew30Shown` right away |
+| "Runs on a computer" line at 400px and on touch, not on desktop | `research-promo.spec.ts` | covered | touch = `hasTouch` + `isMobile` at 820px |
+| One-time 3.0 card on an existing tree: desktop card anchored under Actions (14px gap, 384px, arrow on the button centre, ≥16px from the edge); shown once (also when just ignored) | `research-promo.spec.ts` | covered | "Learn more" opens the site; reload shows nothing |
+| "Not now" / "Learn more" / Esc / backdrop tap put the dot and the label out | `research-promo.spec.ts` | covered | desktop, phone sheet, 1024px tablet sheet |
+| Dot on Actions (desktop) and on the bottom-bar More tab (≤1024px); none on the top ⋯; red anniversaries dot wins | `research-promo.spec.ts` | covered | `aria-label` "Actions, new item" / "More, new item" while lit |
+| Menu item (desktop menu below "Strom:", More sheet below the tree row) → explanation dialog; dialog puts "New" out; item stays; primary opens the site; Close / outside click close | `research-promo.spec.ts` | covered | ≤499px: stacked full-width buttons, primary on top, ≥48px |
+| "New" out after 30 days | `research-promo.spec.ts` | covered | `researchNewFirstSeen` moved 31 days back |
+| Hidden: view mode (exported HTML with data), exported app from disk, locked data / password prompt, research tree (card + label, item stays), command-line open (card; "New" stays) | `research-promo.spec.ts` | covered | CLI open simulated with `?open=file` |
+| Keyboard: ArrowUp / Tab reach the item, Enter opens the dialog, Esc closes card and dialog, focus back to the trigger / the tree | `research-promo.spec.ts` | covered | |
+| Dark theme: card + dialog on dark tokens, screenshots to `screenshots/` | `research-promo.spec.ts` | covered | local-only folder |
+| State only in browser settings — not in IndexedDB tree data, not in the JSON export | `research-promo.spec.ts` | covered | |
+| 360 × 780 in German: offer, 3.0 sheet, More sheet and dialog without horizontal overflow | `research-promo.spec.ts` | covered | |
+| Real `window.open` behaviour of Safari / installed PWA | — | n-a | headless Chromium only |
+
+## Security & privacy
+
+| Area | Test file | Status | Notes |
+|------|-----------|--------|-------|
+| XSS via imported JSON (names, places, notes, quote-breaking person id, attribute-breaking wedding place) | `security-privacy.spec.ts` | covered | card + tooltip, person edit, relationships panel, anniversaries (birthday in 3 days; row click focuses the odd id), kinship, archives: literal text shown, no `window.__xss`, no JS dialog |
+| XSS in the tree-merge compare preview of a foreign file | `security-privacy.spec.ts` | covered | same file imported twice, merge wizard match list + side-by-side compare overlay |
+| XSS via GEDCOM import (markup in NAME/PLAC/NOTE, attribute-breaking MARR PLAC) | `security-privacy.spec.ts` | covered | import result dialog, card + tooltip, edit dialog, relationships panel |
+| HTML export carries only the exported tree | `security-privacy.spec.ts` | covered | tree A on screen, tree B exported from the tree manager (anonymous + full): none of A's names in the file |
+| HTML export: `</script>` / `$'` in a note | `security-privacy.spec.ts` | covered | exported file opened via `file://` loads B in view mode, no script runs, note round-trips byte-for-byte |
+| GEDCOM export living privacy (initials, anonymous) | `security-privacy.spec.ts` | covered | living person's name variant, note, birth place, wedding date/place, witness, couple note dropped (initials keeps the wedding year by design); deceased couple keeps all of it |
+| CSV formula injection | `security-privacy.spec.ts` | covered | `=cmd…` name written as `'=cmd…` |
+
+## Responsive layout
+
+| Area | Test file | Status | Notes |
+|------|-----------|--------|-------|
+| No horizontal document overflow (360/499/550/768/900/1024/1280/1440, light + dark) | `layout-overflow.spec.ts` | covered | demo tree; `scrollWidth <= clientWidth + 1` on html/body, also with each dialog open |
+| Toolbar controls never overlap | `layout-overflow.spec.ts` | covered | visible buttons/inputs/selects of the bar pairwise non-intersecting at every width |
+| Key dialogs fit the viewport, no inner horizontal scroll | `layout-overflow.spec.ts` | covered | person edit, relationships, export, tree manager, settings; relationships rows overflowed at 360px — fixed (rows wrap ≤499px) |
 
 ## Deliberately not covered (`n-a`)
 

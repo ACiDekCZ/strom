@@ -1,7 +1,32 @@
 import { Page, expect, Locator } from '@playwright/test';
 
-/** Load the app and wait until the toolbar is interactive. */
-export async function openApp(page: Page): Promise<void> {
+/**
+ * Mark the Strom Research promotion (3.0) as already seen in this page's
+ * browser settings: the one-time "What's new" card and the "New" marker would
+ * otherwise appear over suites that test something else. Only keys the
+ * settings do not have yet are set, on every navigation of the page.
+ */
+export async function seedResearchPromoSeen(page: Page): Promise<void> {
+    await page.addInitScript(() => {
+        try {
+            const key = 'strom-settings';
+            const raw = localStorage.getItem(key);
+            const settings = raw ? JSON.parse(raw) : {};
+            let changed = false;
+            if (settings.whatsNew30Shown === undefined) { settings.whatsNew30Shown = true; changed = true; }
+            if (settings.researchNewDismissed === undefined) { settings.researchNewDismissed = true; changed = true; }
+            if (changed) localStorage.setItem(key, JSON.stringify(settings));
+        } catch { /* no storage: nothing to seed */ }
+    });
+}
+
+/**
+ * Load the app and wait until the toolbar is interactive. By default the
+ * Strom Research promotion counts as already seen (see seedResearchPromoSeen);
+ * `{ researchPromo: true }` keeps the first-run state for suites testing it.
+ */
+export async function openApp(page: Page, opts: { researchPromo?: boolean } = {}): Promise<void> {
+    if (!opts.researchPromo) await seedResearchPromoSeen(page);
     await page.goto('/strom.html');
     await expect(page.locator('.toolbar')).toBeVisible();
 }
@@ -45,7 +70,7 @@ export async function createFirstPerson(
     if (await addFirst.isVisible().catch(() => false)) {
         await addFirst.click();
     } else {
-        await page.getByRole('button', { name: 'Add Person' }).first().click();
+        await page.getByRole('button', { name: 'Add person' }).first().click();
     }
     await fillPerson(page, firstName, lastName, opts);
 }
@@ -61,12 +86,16 @@ export function card(page: Page, firstName: string): Locator {
     }).first();
 }
 
-/** Open the context menu for a card and click an action. */
+/**
+ * Open the person menu for a card and click an action. Above 1024px (fine
+ * pointer) it is the floating `.context-menu`; in the bottom-navigation regime
+ * (≤ 1024px) and on touch it is the `.bottom-sheet-person` sheet.
+ */
 export async function cardAction(page: Page, firstName: string, action: string): Promise<void> {
     await card(page, firstName).click();
-    const menu = page.locator('.context-menu');
+    const menu = page.locator('.context-menu, .bottom-sheet-person');
     await expect(menu).toBeVisible();
-    await menu.locator(`.context-menu-item[data-action="${action}"]`).click();
+    await menu.locator(`[data-action="${action}"]`).click();
 }
 
 /**

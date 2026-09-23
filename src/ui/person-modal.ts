@@ -23,7 +23,7 @@ import {
     LAST_FOCUSED,
     LastFocusedMarker
 } from '../types.js';
-import { sortLifeEvents } from '../events.js';
+import { newestLifeEvent } from '../events.js';
 import { strings } from '../strings.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import { compressPhoto, dataUrlByteSize, rotatePhotoDataUrl } from '../photo.js';
@@ -53,8 +53,8 @@ import { computePersonLifeline, LifelinePoint } from '../timeline.js';
 
 export const personModalMethods = uiModule({
     showAddPersonModal(): void {
-        // Block adding persons when tree is locked
-        if (DataManager.isTreeLocked()) return;
+        // Block adding persons when the tree is locked or read-only
+        if (DataManager.isTreeLocked() || DataManager.isReadOnly()) return;
 
         this.currentId = null;
         const modal = document.getElementById('person-modal');
@@ -75,14 +75,7 @@ export const personModalMethods = uiModule({
         if (!modal || !title || !deleteBtn || !firstNameInput || !lastNameInput || !genderSelect) return;
 
         // Reset readonly states (may have been set by edit modal for locked person)
-        firstNameInput.readOnly = false;
-        lastNameInput.readOnly = false;
-        genderSelect.disabled = false;
-        if (birthDateInput) birthDateInput.readOnly = false;
-        if (birthPlaceInput) birthPlaceInput.readOnly = false;
-        if (deathDateInput) deathDateInput.readOnly = false;
-        if (deathPlaceInput) deathPlaceInput.readOnly = false;
-        if (notesInput) notesInput.readOnly = false;
+        this.setPersonFormReadOnly(false);
         if (saveBtn) saveBtn.style.display = '';
 
         deleteBtn.style.display = 'none';
@@ -118,7 +111,9 @@ export const personModalMethods = uiModule({
 
         // Header LAST — it reads the name inputs and the photo preview, so it
         // must run after they are reset, or it shows the previous person.
-        this.updatePersonModalHeader(null, strings.personModal.addTitle);
+        // The big title is "New person" until a name is typed (then the typed
+        // name, live); no mode subtitle — it would just repeat the title.
+        this.updatePersonModalHeader(null, '');
 
         this.applyAdvancedFieldVisibility(null);
 
@@ -129,6 +124,7 @@ export const personModalMethods = uiModule({
             nameVariants: '', refn: '', question: '',
             occupation: '', residence: '',
             storyTitle: '', storyText: '',
+            deceased: false, photo: '',
         };
 
         // Setup gender change listener for dynamic labels
@@ -160,6 +156,27 @@ export const personModalMethods = uiModule({
 
         // Setup Enter as Tab for form fields
         this.setupEnterAsTab('person-modal', ['input-firstname', 'input-lastname', 'input-gender', 'input-birthdate', 'input-birthplace', 'input-deathdate', 'input-deathplace'], () => this.savePerson());
+    },
+
+    /**
+     * Switch every editable control of the person form between editable and
+     * read-only (a locked person is only viewed). Called with false at the
+     * start of every open, so a locked person's read-only state never leaks
+     * into the next edit.
+     */
+    setPersonFormReadOnly(readOnly: boolean): void {
+        for (const id of ['input-firstname', 'input-lastname', 'input-birthdate', 'input-birthplace',
+            'input-deathdate', 'input-deathplace', 'input-notes', 'input-name-variants', 'input-refn',
+            'input-question', 'input-occupation', 'input-residence', 'input-story-title', 'input-story']) {
+            const el = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
+            if (el) el.readOnly = readOnly;
+        }
+        const gender = document.getElementById('input-gender') as HTMLSelectElement | null;
+        if (gender) gender.disabled = readOnly;
+        const deceased = document.getElementById('input-is-deceased') as HTMLInputElement | null;
+        if (deceased) deceased.disabled = readOnly;
+        document.querySelectorAll<HTMLButtonElement>('#person-modal .photo-actions button, #btn-add-event')
+            .forEach(b => { b.disabled = readOnly; });
     },
 
     /**
@@ -244,17 +261,37 @@ export const personModalMethods = uiModule({
 
     /** Compose the modal header: name (serif), context line and avatar. */
     updatePersonModalHeader(person: Person | null, modeTitle: string): void {
-        const nameEl = document.getElementById('pm-name');
         const ctxEl = document.getElementById('modal-title');
+        if (ctxEl) {
+            const summary = this.personBirthSummary(person);
+            ctxEl.textContent = [modeTitle, summary].filter(Boolean).join(' · ');
+            ctxEl.style.display = ctxEl.textContent ? '' : 'none';
+        }
+        this.bindLivePersonModalName();
+        this.updatePersonModalName();
+    },
+
+    /**
+     * The header name mirrors the name inputs — only ever the name being typed
+     * in THIS form, never another person's (e.g. the focused one).
+     */
+    updatePersonModalName(): void {
+        const nameEl = document.getElementById('pm-name');
         const first = (document.getElementById('input-firstname') as HTMLInputElement | null)?.value.trim() || '';
         const last = (document.getElementById('input-lastname') as HTMLInputElement | null)?.value.trim() || '';
         const full = `${first} ${last}`.trim();
         if (nameEl) nameEl.textContent = full || strings.personModal.newPersonName;
-        if (ctxEl) {
-            const summary = this.personBirthSummary(person);
-            ctxEl.textContent = summary ? `${modeTitle} · ${summary}` : modeTitle;
-        }
         this.updateHeaderAvatar();
+    },
+
+    /** Wire the name inputs to the header once (listeners survive reopening). */
+    bindLivePersonModalName(): void {
+        for (const id of ['input-firstname', 'input-lastname']) {
+            const input = document.getElementById(id) as HTMLInputElement | null;
+            if (!input || input.dataset.liveHeader) continue;
+            input.dataset.liveHeader = '1';
+            input.addEventListener('input', () => this.updatePersonModalName());
+        }
     },
 
     /** "* 1958 Praha" — a compact birth line for the header context. */
@@ -277,10 +314,10 @@ export const personModalMethods = uiModule({
         const last = (document.getElementById('input-lastname') as HTMLInputElement | null)?.value.trim() || '';
         const photo = (document.querySelector('#photo-preview img') as HTMLImageElement | null)?.getAttribute('src');
         if (photo) {
-            avatar.innerHTML = `<img src="${photo}" alt="">`;
+            avatar.innerHTML = `<img src="${this.escapeHtml(photo)}" alt="">`;
         } else {
             const initials = personInitials(first, last);
-            avatar.innerHTML = `<span class="pm-avatar-initials">${initials || '?'}</span>`;
+            avatar.innerHTML = `<span class="pm-avatar-initials">${this.escapeHtml(initials || '?')}</span>`;
         }
     },
 
@@ -453,19 +490,23 @@ export const personModalMethods = uiModule({
         const extendedFields = document.getElementById('extended-fields');
         if (!expandBtn || !extendedFields) return;
 
+        const icon = expandBtn.querySelector('.pm-expand-icon');
+        const setExpanded = (expanded: boolean) => {
+            expandBtn.classList.toggle('expanded', expanded);
+            extendedFields.classList.toggle('visible', expanded);
+            expandBtn.setAttribute('aria-expanded', String(expanded));
+            if (icon) icon.textContent = expanded ? '▾' : '▸';
+        };
+
         if (!collapsible) {
             expandBtn.style.display = 'none';
-            extendedFields.classList.add('visible');
+            setExpanded(true);
             return;
         }
 
         expandBtn.style.display = '';
-        expandBtn.classList.remove('expanded');
-        extendedFields.classList.remove('visible');
-        expandBtn.onclick = () => {
-            expandBtn.classList.toggle('expanded');
-            extendedFields.classList.toggle('visible');
-        };
+        setExpanded(false);
+        expandBtn.onclick = () => setExpanded(!extendedFields.classList.contains('visible'));
     },
 
     showEditPersonModal(id: PersonId): void {
@@ -488,6 +529,13 @@ export const personModalMethods = uiModule({
         const mergeBtn = document.getElementById('btn-merge');
 
         if (!modal || !title || !deleteBtn || !firstNameInput || !lastNameInput || !genderSelect) return;
+
+        // Start editable with Save visible — the locked branch below switches
+        // back to read-only; without this reset a viewed locked person's state
+        // leaked into the next edit (review S8).
+        this.setPersonFormReadOnly(false);
+        const saveBtnReset = document.getElementById('btn-save');
+        if (saveBtnReset) saveBtnReset.style.display = '';
 
         deleteBtn.style.display = 'block';
         if (mergeBtn) mergeBtn.style.display = 'block';
@@ -556,6 +604,8 @@ export const personModalMethods = uiModule({
             occupation: occupationInput?.value || '',
             residence: residenceInput?.value || '',
             ...this.storySnapshot(),
+            deceased: deceasedInput?.checked ?? false,
+            photo: person.photo || '',
         };
 
         // Setup gender change listener for dynamic labels
@@ -585,20 +635,7 @@ export const personModalMethods = uiModule({
         // Lock handling: make form read-only if person is locked
         const saveBtn = document.getElementById('btn-save');
         if (DataManager.isPersonLocked(id)) {
-            firstNameInput.readOnly = true;
-            lastNameInput.readOnly = true;
-            genderSelect.disabled = true;
-            if (birthDateInput) birthDateInput.readOnly = true;
-            if (birthPlaceInput) birthPlaceInput.readOnly = true;
-            if (deathDateInput) deathDateInput.readOnly = true;
-            if (deathPlaceInput) deathPlaceInput.readOnly = true;
-            if (notesInput) notesInput.readOnly = true;
-            if (occupationInput) occupationInput.readOnly = true;
-            if (residenceInput) residenceInput.readOnly = true;
-            const storyTitleInput = document.getElementById('input-story-title') as HTMLInputElement | null;
-            const storyTextInput = document.getElementById('input-story') as HTMLTextAreaElement | null;
-            if (storyTitleInput) storyTitleInput.readOnly = true;
-            if (storyTextInput) storyTextInput.readOnly = true;
+            this.setPersonFormReadOnly(true);
             if (saveBtn) saveBtn.style.display = 'none';
             deleteBtn.style.display = 'none';
             if (mergeBtn) mergeBtn.style.display = 'none';
@@ -789,7 +826,7 @@ export const personModalMethods = uiModule({
         if (preview) {
             // Note: this slot's <img> IS the person's photo when saving, so
             // nothing decorative may be put here — it would be saved as theirs.
-            preview.innerHTML = dataUrl ? `<img src="${dataUrl}" alt="">` : '';
+            preview.innerHTML = dataUrl ? `<img src="${this.escapeHtml(dataUrl)}" alt="">` : '';
         }
         if (removeBtn) removeBtn.style.display = dataUrl ? '' : 'none';
         for (const id of ['photo-rotate-left', 'photo-rotate-right']) {
@@ -838,8 +875,32 @@ export const personModalMethods = uiModule({
      */
     latestQuickEvent(person: Person, type: 'occupation' | 'residence', field: 'note' | 'place'): LifeEvent | null {
         const hits = (person.events ?? []).filter(e => e.type === type && e[field]?.trim());
-        if (hits.length === 0) return null;
-        return sortLifeEvents(hits)[hits.length - 1];
+        // The newest DATED one — an undated entry is not "the latest" (review).
+        return newestLifeEvent(hits);
+    },
+
+    /**
+     * The event list was edited while the form is open: bring the quick
+     * occupation/residence fields (and their snapshot) up to date, unless the
+     * user has typed into them — then their text wins on Save (review S1).
+     */
+    refreshQuickFieldsFromEvents(): void {
+        if (!this.currentId || !this.personModalSnapshot) return;
+        const person = DataManager.getPerson(this.currentId);
+        if (!person) return;
+        const snap = this.personModalSnapshot;
+        const occupationInput = document.getElementById('input-occupation') as HTMLInputElement | null;
+        if (occupationInput && occupationInput.value === snap.occupation) {
+            const value = this.latestQuickEvent(person, 'occupation', 'note')?.note?.trim() || '';
+            occupationInput.value = value;
+            snap.occupation = value;
+        }
+        const residenceInput = document.getElementById('input-residence') as HTMLInputElement | null;
+        if (residenceInput && residenceInput.value === snap.residence) {
+            const value = this.latestQuickEvent(person, 'residence', 'place')?.place?.trim() || '';
+            residenceInput.value = value;
+            snap.residence = value;
+        }
     },
 
     /**
@@ -888,8 +949,11 @@ export const personModalMethods = uiModule({
         const occupation = (document.getElementById('input-occupation') as HTMLInputElement | null)?.value.trim() || '';
         const residence = (document.getElementById('input-residence') as HTMLInputElement | null)?.value.trim() || '';
         // Explicit alive/deceased override; a death date already implies deceased.
+        // The box opens showing the HEURISTIC status, so only a real toggle is
+        // an explicit statement — writing it on every save froze a guess
+        // forever (review S2).
         const deceasedChecked = (document.getElementById('input-is-deceased') as HTMLInputElement)?.checked || false;
-        const isDeceased = deathDate ? undefined : deceasedChecked;
+        const deceasedToggled = !!this.personModalSnapshot && deceasedChecked !== this.personModalSnapshot.deceased;
         // Current photo from the preview (data URL) or none.
         const photoImg = document.querySelector('#photo-preview img') as HTMLImageElement | null;
         const photo = photoImg?.getAttribute('src') || undefined;
@@ -901,7 +965,10 @@ export const personModalMethods = uiModule({
             return;
         }
 
-        if (!firstName && !lastName && !this.currentId) {
+        // A name is required when adding AND when editing — emptying both on
+        // an existing person left a nameless card (placeholders keep "?").
+        const editedPlaceholder = !!this.currentId && !!DataManager.getPerson(this.currentId)?.isPlaceholder;
+        if (!firstName && !lastName && !editedPlaceholder) {
             this.clearDialogStack();
             this.pushDialog('person-modal');
             this.showAlert(strings.personModal.enterName, 'warning');
@@ -909,35 +976,16 @@ export const personModalMethods = uiModule({
         }
 
         let createdFirstId: PersonId | null = null;
+        const snapshot = this.personModalSnapshot;
 
         if (this.currentId) {
-            // Update existing
-            DataManager.updatePerson(this.currentId, {
-                firstName,
-                lastName,
-                gender,
-                birthDate,
-                birthPlace,
-                deathDate,
-                deathPlace,
-                notes,
-                nameVariants,
-                refn,
-                question,
-                isDeceased,
-                photo,
-                story: this.collectStory(DataManager.getPerson(this.currentId)?.story)
-            });
-            this.syncQuickEvent(this.currentId, 'occupation', 'note', occupation);
-            this.syncQuickEvent(this.currentId, 'residence', 'place', residence);
-        } else {
-            // Create new
-            const newPerson = DataManager.createPerson({ firstName, lastName, gender });
-            const story = this.collectStory(undefined);
-            // Update with extended info if provided
-            if (birthDate || birthPlace || deathDate || deathPlace || notes || refn || question
-                || photo || story || nameVariants.length > 0) {
-                DataManager.updatePerson(newPerson.id, {
+            // Update existing — person fields and quick events are ONE undo step.
+            const id = this.currentId;
+            DataManager.runBatch(strings.undo.editPerson(auditPersonName(DataManager.getPerson(id))), () => {
+                DataManager.updatePerson(id, {
+                    firstName,
+                    lastName,
+                    gender,
                     birthDate,
                     birthPlace,
                     deathDate,
@@ -946,13 +994,49 @@ export const personModalMethods = uiModule({
                     nameVariants,
                     refn,
                     question,
+                    // A death date implies deceased; otherwise only a toggle speaks.
+                    ...(deathDate ? { isDeceased: undefined }
+                        : deceasedToggled ? { isDeceased: deceasedChecked } : {}),
                     photo,
-                    story
+                    story: this.collectStory(DataManager.getPerson(id)?.story)
                 });
-            }
-            // Register-style quick entry: "Jan Novák, blacksmith of Lipany".
-            if (occupation) DataManager.addLifeEvent(newPerson.id, { type: 'occupation', note: occupation });
-            if (residence) DataManager.addLifeEvent(newPerson.id, { type: 'residence', place: residence });
+                // Only a quick field the user actually changed touches the
+                // events — an untouched one may be older than the event list.
+                if (!snapshot || occupation !== snapshot.occupation.trim()) {
+                    this.syncQuickEvent(id, 'occupation', 'note', occupation);
+                }
+                if (!snapshot || residence !== snapshot.residence.trim()) {
+                    this.syncQuickEvent(id, 'residence', 'place', residence);
+                }
+            });
+        } else {
+            // Create new — create + details + quick events are ONE undo step.
+            const story = this.collectStory(undefined);
+            const newPerson = DataManager.runBatch(null, () => {
+                const created = DataManager.createPerson({ firstName, lastName, gender });
+                // Update with extended info if provided
+                if (birthDate || birthPlace || deathDate || deathPlace || notes || refn || question
+                    || photo || story || nameVariants.length > 0 || (deceasedChecked && !deathDate)) {
+                    DataManager.updatePerson(created.id, {
+                        birthDate,
+                        birthPlace,
+                        deathDate,
+                        deathPlace,
+                        notes,
+                        nameVariants,
+                        refn,
+                        question,
+                        // Ticked while adding = known to be deceased (was ignored).
+                        ...(deceasedChecked && !deathDate ? { isDeceased: true } : {}),
+                        photo,
+                        story
+                    });
+                }
+                // Register-style quick entry: "Jan Novák, blacksmith of Lipany".
+                if (occupation) DataManager.addLifeEvent(created.id, { type: 'occupation', note: occupation });
+                if (residence) DataManager.addLifeEvent(created.id, { type: 'residence', place: residence });
+                return created;
+            });
             // A person added from the toolbar has no relatives yet — the form
             // cannot offer relationships, because there was nobody to relate
             // until Save. Rather than leaving them floating (the tree's own
@@ -976,16 +1060,13 @@ export const personModalMethods = uiModule({
         const person = DataManager.getPerson(personId);
         if (!person) return;
 
-        const name = person.firstName + (person.lastName ? ' ' + person.lastName : '');
-        const birthYear = person.birthDate?.split('-')[0];
-
         // Setup dialog stack if there's a parent dialog
         this.clearDialogStack();
         if (parentDialogId) {
             this.pushDialog(parentDialogId);
         }
 
-        const confirmed = await this.showConfirm(strings.deleteConfirm.message(name, birthYear), strings.buttons.delete);
+        const confirmed = await this.confirmDeletePersonDialog(personId);
 
         if (confirmed) {
             DataManager.deletePerson(personId);
@@ -1028,6 +1109,11 @@ export const personModalMethods = uiModule({
         document.getElementById('person-modal')?.classList.remove('active');
         this.currentId = null;
         this.personModalSnapshot = null;
+        // Opened from the context menu the modal is on the dialog stack; a
+        // stale entry would keep swallowing Escape and keyboard shortcuts.
+        if (this.dialogStack[this.dialogStack.length - 1] === 'person-modal') {
+            this.dialogStack.pop();
+        }
     },
 
     /**
@@ -1052,6 +1138,9 @@ export const personModalMethods = uiModule({
         const question = (document.getElementById('input-question') as HTMLInputElement)?.value || '';
         const occupation = (document.getElementById('input-occupation') as HTMLInputElement | null)?.value || '';
         const residence = (document.getElementById('input-residence') as HTMLInputElement | null)?.value || '';
+        const nameVariants = (document.getElementById('input-name-variants') as HTMLInputElement | null)?.value || '';
+        const deceased = (document.getElementById('input-is-deceased') as HTMLInputElement | null)?.checked ?? false;
+        const photo = (document.querySelector('#photo-preview img') as HTMLImageElement | null)?.getAttribute('src') || '';
 
         const story = this.storySnapshot();
 
@@ -1060,6 +1149,7 @@ export const personModalMethods = uiModule({
             || deathDate !== s.deathDate || deathPlace !== s.deathPlace
             || notes !== s.notes || refn !== s.refn || question !== s.question
             || occupation !== s.occupation || residence !== s.residence
+            || nameVariants !== s.nameVariants || deceased !== s.deceased || photo !== s.photo
             || story.storyTitle !== s.storyTitle || story.storyText !== s.storyText;
     },
 
@@ -1076,7 +1166,9 @@ export const personModalMethods = uiModule({
         if (!modal || !titleEl || !messageEl || !buttonsEl) return;
 
         modal.className = 'modal-overlay dialog-warning';
-        titleEl.innerHTML = `<span class="dialog-icon">⚠️</span>${strings.relationships.unsavedTitle}`;
+        // Not a promise dialog — drop any stale Escape handler of one.
+        this.confirmEscape = null;
+        titleEl.innerHTML = `<span class="dialog-dot"></span>${strings.relationships.unsavedTitle}`;
         messageEl.textContent = strings.personModal.unsavedMessage;
         if (optionsEl) optionsEl.innerHTML = '';
 
@@ -1092,6 +1184,36 @@ export const personModalMethods = uiModule({
         document.getElementById('confirm-discard-btn')!.onclick = () => { closeConfirm(); this.forceCloseModal(); };
         document.getElementById('confirm-save-btn')!.onclick = () => { closeConfirm(); this.savePerson(); };
 
+        modal.onclick = (e) => { if (e.target === modal) closeConfirm(); };
+        modal.classList.add('active');
+    },
+
+    /**
+     * The same Save & Close | Discard | Stay question for the smaller editors
+     * (event, source) opened on top of another dialog.
+     */
+    showUnsavedEditorDialog(message: string, onSave: () => void, onDiscard: () => void): void {
+        const modal = document.getElementById('confirmation-modal');
+        const titleEl = document.getElementById('confirm-title');
+        const messageEl = document.getElementById('confirm-message');
+        const buttonsEl = document.getElementById('confirm-buttons');
+        const optionsEl = document.getElementById('confirm-options');
+        if (!modal || !titleEl || !messageEl || !buttonsEl) return;
+
+        modal.className = 'modal-overlay dialog-warning';
+        this.confirmEscape = null;
+        titleEl.innerHTML = `<span class="dialog-dot"></span>${strings.relationships.unsavedTitle}`;
+        messageEl.textContent = message;
+        if (optionsEl) optionsEl.innerHTML = '';
+        buttonsEl.innerHTML = `
+            <button class="secondary" id="confirm-stay-btn">${strings.relationships.unsavedStay}</button>
+            <button class="secondary" id="confirm-discard-btn">${strings.relationships.unsavedDiscard}</button>
+            <button class="primary" id="confirm-save-btn">${strings.relationships.unsavedSave}</button>
+        `;
+        const closeConfirm = () => { modal.classList.remove('active'); };
+        document.getElementById('confirm-stay-btn')!.onclick = () => { closeConfirm(); };
+        document.getElementById('confirm-discard-btn')!.onclick = () => { closeConfirm(); onDiscard(); };
+        document.getElementById('confirm-save-btn')!.onclick = () => { closeConfirm(); onSave(); };
         modal.onclick = (e) => { if (e.target === modal) closeConfirm(); };
         modal.classList.add('active');
     },

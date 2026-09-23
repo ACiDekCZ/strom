@@ -182,6 +182,12 @@ export interface Person {
      */
     refn?: string;
     /**
+     * What kind of number `refn` is (GEDCOM REFN > TYPE) — typically which
+     * program or archive issued it. Never shown; kept so a program that wrote
+     * the number can recognise its own person when the tree comes back to it.
+     */
+    refnType?: string;
+    /**
      * An open question about this person ("does anyone know when she was
      * born?"). Travels with shared/exported files so a relative can answer it.
      */
@@ -537,7 +543,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.8.0';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.0.0';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -613,6 +619,10 @@ export interface AppSettings {
     geocoding?: boolean;   // default: undefined (never asked) - user allowed sending place names to the geocoder
     mapTiles?: boolean;    // default: undefined (not seen) - user saw that map tiles come from openstreetmap.org
     senderName?: string;   // collaboration: name shown to relatives in shared files
+    // Strom Research promotion (3.0) — per browser, never in tree data:
+    researchNewFirstSeen?: string;   // ISO date the "New" marker was first shown
+    researchNewDismissed?: boolean;  // the "New" marker went out for good
+    whatsNew30Shown?: boolean;       // the one-time "What's new in 3.0" card was shown
 }
 
 // ==================== MULTI-TREE STORAGE ====================
@@ -651,6 +661,24 @@ export interface TreeMetadata {
     receivedExportId?: string;
     /** Collaboration: sender name of the file this tree was saved from. */
     receivedFrom?: string;
+    /**
+     * The tree holds a research opened from Strom Research (GEDCOM header
+     * `1 _STROM_TREE <uuid>`). Lets the next open of the same research update
+     * this tree instead of creating a duplicate.
+     */
+    research?: ResearchLink;
+}
+
+/** Link between a local tree and the Strom Research tree it was opened from. */
+export interface ResearchLink {
+    /** The research tree's UUID (lower case). */
+    id: string;
+    /** Content fingerprint of the tree right after the last import/update. */
+    fingerprint: string;
+    /** ISO time of the last import/update. */
+    syncedAt: string;
+    /** Commit of the research at the last update (live bridge only). */
+    head?: string;
 }
 
 /** Index of all trees */

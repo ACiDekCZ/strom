@@ -19,6 +19,8 @@ const MIN_SCALE = 0.15;
 const MAX_SCALE = 4;
 const ZOOM_BUTTON_FACTOR = 1.3;
 const ZOOM_ANIMATION_DURATION = 200; // ms
+/** Views drawn in their own container over the (hidden) tree canvas. */
+const STANDALONE_VIEW_SELECTOR = '.timeline-container, .fan-container, .map-container';
 
 interface TouchState {
     startTime: number;
@@ -94,8 +96,9 @@ class ZoomPanClass {
     }
 
     private onWheel(e: WheelEvent): void {
-        // Timeline view scrolls natively — never hijack its wheel events.
-        if ((e.target as HTMLElement).closest?.('.timeline-container')) return;
+        // Timeline and fan scroll natively and the map zooms itself — never
+        // hijack their wheel events (it zoomed the hidden tree canvas).
+        if ((e.target as HTMLElement).closest?.(STANDALONE_VIEW_SELECTOR)) return;
         e.preventDefault();
 
         const container = document.getElementById('tree-container');
@@ -125,12 +128,12 @@ class ZoomPanClass {
         // cover most of the screen and pinch otherwise never engages).
         if (e.touches.length === 1
             && (target.closest('.person-card') || target.closest('.context-menu')
-                || target.closest('.timeline-container'))) {
+                || target.closest(STANDALONE_VIEW_SELECTOR))) {
             // Don't interfere with person card interactions
             return;
         }
-        if (e.touches.length > 1 && target.closest('.timeline-container')) {
-            return;   // timeline pinch stays native
+        if (e.touches.length > 1 && target.closest(STANDALONE_VIEW_SELECTOR)) {
+            return;   // timeline/fan/map pinch stays theirs
         }
 
         if (e.touches.length === 1) {
@@ -159,8 +162,8 @@ class ZoomPanClass {
     }
 
     private onTouchMove(e: TouchEvent): void {
-        // Timeline view scrolls/zooms natively.
-        if ((e.target as HTMLElement).closest?.('.timeline-container')) return;
+        // Timeline/fan scroll natively, the map pans itself.
+        if ((e.target as HTMLElement).closest?.(STANDALONE_VIEW_SELECTOR)) return;
         if (e.touches.length === 1 && this.touchState) {
             const touch = e.touches[0];
             const dx = touch.clientX - this.touchState.startX;
@@ -252,7 +255,7 @@ class ZoomPanClass {
 
     private isInteractiveElement(target: HTMLElement): boolean {
         return !!(
-            target.closest('.timeline-container') ||
+            target.closest(STANDALONE_VIEW_SELECTOR) ||
             target.closest('.person-card') ||
             target.closest('.context-menu') ||
             target.closest('.modal') ||
@@ -358,17 +361,29 @@ class ZoomPanClass {
 
     // ==================== PUBLIC CONTROLS ====================
 
+    /**
+     * True while a standalone view (timeline, fan, map) replaces the tree
+     * canvas: zoom keys/buttons would only move the hidden canvas then.
+     */
+    private isStandaloneViewActive(): boolean {
+        const canvas = document.getElementById('tree-canvas');
+        return !!canvas && canvas.style.display === 'none';
+    }
+
     zoomIn(): void {
+        if (this.isStandaloneViewActive()) return;
         const targetScale = Math.min(MAX_SCALE, this.scale * ZOOM_BUTTON_FACTOR);
         this.animateZoom(targetScale);
     }
 
     zoomOut(): void {
+        if (this.isStandaloneViewActive()) return;
         const targetScale = Math.max(MIN_SCALE, this.scale / ZOOM_BUTTON_FACTOR);
         this.animateZoom(targetScale);
     }
 
     reset(): void {
+        if (this.isStandaloneViewActive()) return;
         // A pending zoom animation would overwrite the reset on its next frame
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);

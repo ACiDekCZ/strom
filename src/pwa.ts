@@ -2,14 +2,30 @@
  * Progressive Web App wiring: register the service worker (only on the hosted
  * PWA), surface updates through a callback, and expose the registration gate as
  * a pure function for testing. The service worker itself lives in the WEB repo
- * (strom-app-info: /run/sw.js) — this file only registers it and drives the
+ * (strom-app-info: /run/sw.js, and /beta/sw.js for the test build) — this file only registers it and drives the
  * update handshake. Data (IndexedDB) is never touched by the SW.
  */
 
 import { AppMode } from './types.js';
 
-/** Where the hosted PWA serves its service worker (web repo, scope /run/). */
-const SW_URL = '/run/sw.js';
+/**
+ * The hosted app's base path: the public app lives at /run/, the pre-release
+ * test build at /beta/ (same origin, its own worker, cache and manifest).
+ * Pure for testing.
+ */
+export function pwaBasePath(pathname: string): '/run/' | '/beta/' {
+    return pathname === '/beta' || pathname.startsWith('/beta/') ? '/beta/' : '/run/';
+}
+
+/** True when this page is the pre-release test build (/beta/ on the hosted site). */
+export function isBetaBuild(mode: AppMode): boolean {
+    return mode === 'pwa' && typeof location !== 'undefined' && pwaBasePath(location.pathname) === '/beta/';
+}
+
+/** Where the hosted PWA serves its service worker (web repo, scope = base path). */
+function swUrl(): string {
+    return `${pwaBasePath(location.pathname)}sw.js`;
+}
 
 /**
  * Register the service worker only for the hosted PWA. In embedded (exported
@@ -40,7 +56,7 @@ export function registerServiceWorker(onUpdateReady: () => void): void {
         location.reload();
     });
 
-    navigator.serviceWorker.register(SW_URL).then((reg) => {
+    navigator.serviceWorker.register(swUrl()).then((reg) => {
         // If one is already waiting (installed between visits), prompt now.
         if (reg.waiting && navigator.serviceWorker.controller) onUpdateReady();
 
@@ -66,7 +82,7 @@ export function linkManifest(): void {
     if (typeof document === 'undefined' || document.querySelector('link[rel="manifest"]')) return;
     const link = document.createElement('link');
     link.rel = 'manifest';
-    link.href = '/run/manifest.json';
+    link.href = `${pwaBasePath(location.pathname)}manifest.json`;
     document.head.appendChild(link);
 }
 

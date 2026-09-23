@@ -36,7 +36,7 @@ test('photo: rotate buttons are available and the photo survives rotation + save
 
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);
-    // The photo editor lives in the collapsible "More Info" section.
+    // The photo editor lives in the collapsible "More info" section.
     await modal.locator('#input-photo').setInputFiles('e2e/fixtures/avatar.png');
     await expect(modal.locator('#photo-preview img')).toHaveCount(1);
 

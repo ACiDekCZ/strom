@@ -229,6 +229,44 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         </div>`;
     };
 
+    // Marriage line: "⚭ date, place" plus how the union ended (a divorce,
+    // a separation, a partnership's end); unmarried partners get no "⚭".
+    const marriageLine = (u: Partnership): string => {
+        const start = [u.startDate ? formatFlexDate(u.startDate, lang) : '', u.startPlace ?? '']
+            .filter(Boolean).join(', ');
+        let line = u.status === 'partners'
+            ? [B.partners, start].filter(Boolean).join(' ')
+            : (start ? `⚭ ${start}` : '');
+        const endDate = u.endDate ? formatFlexDate(u.endDate, lang) : '';
+        let endLabel = '';
+        if (u.status === 'divorced' || (u.status === 'married' && u.endDate)) endLabel = B.divorced;
+        else if (u.status === 'separated') endLabel = B.separated;
+        else if (u.status === 'partners' && u.endDate) endLabel = B.ended;
+        if (endLabel) {
+            const end = [endLabel, endDate].filter(Boolean).join(' ');
+            line = line ? `${line} · ${end}` : `⚭ · ${end}`;
+        }
+        return esc(line);
+    };
+
+    // Non-biological tie of a child to this couple (adopted, stepchild,
+    // foster), naming the parent when only one of the two holds it.
+    const childRelation = (c: Person, u: Partnership): string => {
+        const t1 = c.parentRelTypes?.[u.person1Id];
+        const t2 = c.parentRelTypes?.[u.person2Id];
+        const parts: string[] = [];
+        for (const type of ['adoptive', 'step', 'foster'] as const) {
+            const has1 = t1 === type, has2 = t2 === type;
+            if (!has1 && !has2) continue;
+            const label = B.childRel[type];
+            if (has1 && has2) { parts.push(label); continue; }
+            const parent = persons[has1 ? u.person1Id : u.person2Id];
+            const pn = parent ? `${parent.firstName} ${parent.lastName}`.trim() : '';
+            parts.push(pn ? B.childRelOf(label, pn) : label);
+        }
+        return parts.join(', ');
+    };
+
     const chapters = chapterUnions.map(u => {
         const p1 = persons[u.person1Id];
         const p2 = persons[u.person2Id];
@@ -243,15 +281,14 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
             return `<sup class="book-fn-ref">[${no}]</sup>`;
         };
 
-        const married = u.startDate
-            ? `⚭ ${esc(formatFlexDate(u.startDate, lang))}${u.startPlace ? `, ${esc(u.startPlace)}` : ''}`
-            : (u.startPlace ? `⚭ ${esc(u.startPlace)}` : '');
+        const married = marriageLine(u);
         const coupleHtml = `${p1 ? personBlock(p1, cite) : ''}${p2 ? personBlock(p2, cite) : ''}`;
         const children = u.childIds.map(cid => {
             const c = persons[cid];
             if (!c) return '';
             const ref = parentChapter.get(cid);
-            return `<li>${name(c)}${dates(c) ? ` <span class="book-muted">(${esc(dates(c))})</span>` : ''}${ref ? ` <span class="book-chapter-ref">→ ${B.chapterShort} ${ref}</span>` : ''}</li>`;
+            const rel = childRelation(c, u);
+            return `<li>${name(c)}${dates(c) ? ` <span class="book-muted">(${esc(dates(c))})</span>` : ''}${rel ? ` <span class="book-muted">— ${esc(rel)}</span>` : ''}${ref ? ` <span class="book-chapter-ref">→ ${B.chapterShort} ${ref}</span>` : ''}</li>`;
         }).join('');
 
         // Prose runs below the couple, in reading order: his, hers, theirs —
@@ -417,7 +454,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     <div class="book-title-sub">${esc(B.subtitle)}</div>
     <hr class="book-title-rule">
     <div class="book-title-meta">
-        ${personCount} ${esc(B.persons)} · ${generations} ${esc(B.generations)}${span ? ` · ${esc(span)}` : ''}${compiled ? `<br>${compiled}` : ''}
+        ${esc(B.persons(personCount))} · ${esc(B.generations(generations))}${span ? ` · ${esc(span)}` : ''}${compiled ? `<br>${compiled}` : ''}
     </div>
     <div class="book-title-ornament">❦</div>
 </div>

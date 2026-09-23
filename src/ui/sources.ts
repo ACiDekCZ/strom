@@ -11,8 +11,10 @@ import { DataManager } from '../data.js';
 import { PersonId, PartnershipId, Source } from '../types.js';
 import { strings } from '../strings.js';
 import { uiModule } from './module.js';
+import { emptyStateHtml } from './empty-state.js';
 import { autoGrowAll } from './autogrow.js';
 
+import { iconSvg } from '../icons.js';
 /** HTML-escape a user string for safe innerHTML insertion. */
 function esc(text: string): string {
     return text
@@ -43,8 +45,20 @@ export const sourcesMethods = uiModule({
         const container = document.getElementById('sources-list');
         if (!container) return;
         const sources = Object.values(DataManager.getData().sources ?? {});
+        // The empty state carries "Add source" itself; the footer copy hides
+        // meanwhile so the dialog keeps a single primary action.
+        const footer = document.querySelector<HTMLElement>('#sources-modal .sources-footer');
+        if (footer) footer.hidden = sources.length === 0;
         if (sources.length === 0) {
-            container.innerHTML = `<div class="sources-empty sources-empty-block"><div class="sources-empty-icon">📚</div>${esc(strings.sources.empty)}</div>`;
+            container.innerHTML = emptyStateHtml({
+                title: strings.emptyStates.sourcesTitle,
+                text: strings.emptyStates.sourcesText,
+                actionLabel: strings.sources.add,
+                actionId: 'sources-empty-add',
+                className: 'sources-empty',
+            });
+            document.getElementById('sources-empty-add')
+                ?.addEventListener('click', () => this.showAddSourceModal());
             return;
         }
         sources.sort((a, b) => a.title.localeCompare(b.title));
@@ -59,13 +73,21 @@ export const sourcesMethods = uiModule({
                         ${count > 0 ? `<span class="source-count">${esc(strings.sources.citations(count))}</span>` : ''}
                     </div>
                     <div class="source-actions">
-                        <button type="button" title="${esc(strings.sources.edit)}"
-                            onclick="window.Strom.UI.showEditSourceModal('${esc(src.id)}')">&#9998;</button>
-                        <button type="button" title="${esc(strings.sources.delete)}"
-                            onclick="window.Strom.UI.deleteSource('${esc(src.id)}')">&#128465;</button>
+                        <button type="button" class="source-edit-btn" title="${esc(strings.sources.edit)}" aria-label="${esc(strings.sources.edit)}"
+                            data-source-id="${esc(src.id)}">${iconSvg('pencil')}</button>
+                        <button type="button" class="source-delete-btn" title="${esc(strings.danger.deleteSource)}" aria-label="${esc(strings.danger.deleteSource)}"
+                            data-source-id="${esc(src.id)}">${iconSvg('trash')}</button>
                     </div>
                 </div>`;
         }).join('');
+        // Source ids come from data files: handlers via data attributes, never
+        // inline JS (&#39; is decoded back to a quote inside an attribute).
+        container.querySelectorAll<HTMLElement>('.source-edit-btn[data-source-id]').forEach(btn => {
+            btn.addEventListener('click', () => this.showEditSourceModal(btn.dataset.sourceId ?? ''));
+        });
+        container.querySelectorAll<HTMLElement>('.source-delete-btn[data-source-id]').forEach(btn => {
+            btn.addEventListener('click', () => { void this.deleteSource(btn.dataset.sourceId ?? ''); });
+        });
     },
 
     async deleteSource(sourceId: string): Promise<void> {
@@ -73,7 +95,10 @@ export const sourcesMethods = uiModule({
         // Name what is being deleted — several rows would otherwise get the
         // same sentence and the wrong one is one click away.
         const title = DataManager.getData().sources?.[sourceId]?.title ?? '';
-        const confirmed = await this.showConfirm(strings.sources.deleteConfirm(title, count), strings.sources.delete);
+        const d = strings.danger;
+        const message = [count > 0 ? d.sourceCited(count) : '', d.undoHint].filter(Boolean).join(' ');
+        const confirmed = await this.showConfirm(message, d.deleteSourceTitle(title),
+            { confirmLabel: d.deleteSource, variant: 'danger' });
         if (!confirmed) return;
         DataManager.removeSource(sourceId);
         this.renderSourcesList();
@@ -113,11 +138,37 @@ export const sourcesMethods = uiModule({
         modal.classList.add('active');
         // What a citation says about a record is prose too.
         autoGrowAll(modal, '#input-source-note');
+        // Baseline for the "unsaved changes" question on close.
+        this.sourceEditorSnapshot = this.sourceEditorState();
     },
 
+    /** The editor's form values as one comparable string. */
+    sourceEditorState(): string {
+        return JSON.stringify(['title', 'repository', 'reference', 'url', 'note'].map(f =>
+            (document.getElementById(`input-source-${f}`) as HTMLInputElement | null)?.value ?? ''));
+    },
+
+    hasSourceEditorChanges(): boolean {
+        if (this.sourceEditorSnapshot === null) return false;
+        if (!document.getElementById('source-editor-modal')?.classList.contains('active')) return false;
+        return this.sourceEditorState() !== this.sourceEditorSnapshot;
+    },
+
+    /** Cancel / Escape: ask before throwing away edits, like the person modal. */
     closeSourceEditor(): void {
+        if (this.hasSourceEditorChanges()) {
+            this.showUnsavedEditorDialog(strings.sources.unsavedMessage,
+                () => this.saveSourceFromModal(),
+                () => this.forceCloseSourceEditor());
+            return;
+        }
+        this.forceCloseSourceEditor();
+    },
+
+    forceCloseSourceEditor(): void {
         document.getElementById('source-editor-modal')?.classList.remove('active');
         this.editingSourceId = null;
+        this.sourceEditorSnapshot = null;
         // If this editor was opened from the picker, tear the picker down too.
         if (this.citeSourceAfterCreate) {
             this.citeSourceAfterCreate = false;
@@ -144,21 +195,34 @@ export const sourcesMethods = uiModule({
         if (url) payload.url = url;
         if (note) payload.note = note;
 
+        const citedPartnership = this.citeSourceAfterCreate && !!this.citationContext
+            && 'partnershipId' in this.citationContext;
         if (this.editingSourceId) {
+            // Emptied optional fields go as explicit undefined, or the old
+            // value would survive the save (updateSource drops these keys).
+            payload.repository = repository || undefined;
+            payload.reference = reference || undefined;
+            payload.url = url || undefined;
+            payload.note = note || undefined;
             DataManager.updateSource(this.editingSourceId, payload);
-        } else {
-            const created = DataManager.addSource(payload);
+        } else if (this.citeSourceAfterCreate) {
             // Created from the picker → immediately cite it to the context.
-            if (created && this.citeSourceAfterCreate) {
-                this.applyCitation(created.id);
-            }
+            // One user action, one undo step.
+            DataManager.runBatch(strings.undo.addSource(title), () => {
+                const created = DataManager.addSource(payload);
+                if (created) this.applyCitation(created.id);
+            });
+        } else {
+            DataManager.addSource(payload);
         }
 
         const citeAfterCreate = this.citeSourceAfterCreate;
-        // closeSourceEditor tears down the picker too when it was a create+cite.
-        this.closeSourceEditor();
+        // forceCloseSourceEditor tears down the picker too when it was a create+cite.
+        this.forceCloseSourceEditor();
         if (!citeAfterCreate) this.renderSourcesList();
         this.refreshCitationChips();
+        // A source cited on a partnership shows in the relationships panel.
+        if (citedPartnership) this.refreshRelationshipsPanel();
     },
 
     // ==================== CITATION CHIPS ====================
@@ -176,9 +240,16 @@ export const sourcesMethods = uiModule({
         container.innerHTML = ids.map(id => `
             <span class="source-chip">
                 <span class="source-chip-label" title="${esc(sourceMeta(sources[id]))}">${esc(sources[id].title)}</span>
-                <button type="button" class="source-chip-remove" title="${esc(strings.sources.remove)}"
-                    onclick="window.Strom.UI.${removeHandler}('${esc(id)}')">&times;</button>
+                <button type="button" class="source-chip-remove" title="${esc(strings.sources.remove)}" aria-label="${esc(strings.sources.remove)}"
+                    data-source-id="${esc(id)}">&times;</button>
             </span>`).join('');
+        // Source ids come from data files: no inline JS (see renderSourcesList).
+        const handler = (this as unknown as Record<string, unknown>)[removeHandler];
+        container.querySelectorAll<HTMLElement>('.source-chip-remove[data-source-id]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (typeof handler === 'function') handler.call(this, btn.dataset.sourceId ?? '');
+            });
+        });
     },
 
     /** Refresh whichever citation chip lists are currently on screen. */
@@ -272,11 +343,14 @@ export const sourcesMethods = uiModule({
         container.innerHTML = sources.map(s => {
             const meta = sourceMeta(s);
             return `
-                <button type="button" class="source-picker-item" onclick="window.Strom.UI.pickSource('${esc(s.id)}')">
+                <button type="button" class="source-picker-item" data-source-id="${esc(s.id)}">
                     <span class="source-title">${esc(s.title)}</span>
                     ${meta ? `<span class="source-meta"> — ${esc(meta)}</span>` : ''}
                 </button>`;
         }).join('');
+        container.querySelectorAll<HTMLElement>('.source-picker-item[data-source-id]').forEach(btn => {
+            btn.addEventListener('click', () => this.pickSource(btn.dataset.sourceId ?? ''));
+        });
     },
 
     /** Source ids already cited in the active citation context. */

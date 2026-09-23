@@ -110,11 +110,14 @@ npm test         # Run tests
 
 ## License
 
-This project uses a dual license model:
-- **Non-commercial use**: [Mozilla Public License 2.0](LICENSE)
-- **Commercial use**: Requires separate agreement. Contact: milan@stromapp.info
+Copyright © 2026 Milan Víšek.
 
-See the [LICENSE](LICENSE) file for details.
+This Source Code Form is subject to the terms of the Mozilla Public License,
+v. 2.0. If a copy of the MPL was not distributed with this file, You can
+obtain one at https://mozilla.org/MPL/2.0/. See [LICENSE](LICENSE).
+
+"Strom" is the name of the original project (https://stromapp.info);
+please give a modified version a name of its own.
 
 ## Author
 

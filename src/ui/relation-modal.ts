@@ -43,11 +43,12 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 
+import { chainLinkSvg } from '../icons.js';
 export const relationModalMethods = uiModule({
     // ---- RELATION MODAL ----
     addRelation(personId: PersonId, relationType: RelationType): void {
         const person = DataManager.getPerson(personId);
-        if (!person) return;
+        if (!person || DataManager.isReadOnly()) return;
 
         this.relationContext = { personId, relationType };
 
@@ -139,7 +140,7 @@ export const relationModalMethods = uiModule({
         // Reset form and link mode
         this.linkMode = false;
         linkBtn.classList.remove('active');
-        linkBtn.innerHTML = `&#128279; ${strings.relationModal.linkExisting}`;
+        linkBtn.innerHTML = `${chainLinkSvg({ size: 13 })} ${strings.relationModal.linkExisting}`;
         linkBtn.title = strings.relationModal.linkExistingTitle;
         submitBtn.textContent = strings.buttons.add;
         (document.getElementById('rel-firstname') as HTMLInputElement).value = '';
@@ -216,7 +217,7 @@ export const relationModalMethods = uiModule({
                 if (previewBtn) previewBtn.style.display = 'none';
             } else {
                 linkBtn.classList.remove('active');
-                linkBtn.innerHTML = `&#128279; ${strings.relationModal.linkExisting}`;
+                linkBtn.innerHTML = `${chainLinkSvg({ size: 13 })} ${strings.relationModal.linkExisting}`;
                 linkBtn.title = strings.relationModal.linkExistingTitle;
                 title.textContent = titles[this.relationContext!.relationType];
                 submitBtn.textContent = strings.buttons.add;
@@ -260,16 +261,9 @@ export const relationModalMethods = uiModule({
             if (p.id === personId) return false; // Exclude self
             if (p.isPlaceholder) return false; // Exclude placeholders
 
-            switch (relationType) {
-                case 'partner':
-                    return !currentPartnerIds.includes(p.id);
-                case 'parent':
-                    return !person.parentIds.includes(p.id);
-                case 'child':
-                    return !person.childIds.includes(p.id);
-                default:
-                    return true;
-            }
+            if (relationType === 'partner') return !currentPartnerIds.includes(p.id);
+            // Only people the link would accept: no third parent, no cycle.
+            return this.canLinkRelation(personId, p.id, relationType);
         });
 
         this.relationPicker = new PersonPicker({
@@ -312,6 +306,16 @@ export const relationModalMethods = uiModule({
     },
 
 
+    /**
+     * The "other parent" chosen in the combo when adding a child; undefined
+     * for "new unknown person" (createRelationship then makes a placeholder).
+     */
+    selectedOtherParent(): PersonId | undefined {
+        if (this.relationContext?.relationType !== 'child') return undefined;
+        const val = (document.getElementById('rel-other-parent-select') as HTMLSelectElement | null)?.value;
+        return val && val !== '__new_placeholder__' ? val as PersonId : undefined;
+    },
+
     saveRelation(): void {
         if (!this.relationContext) return;
 
@@ -320,20 +324,11 @@ export const relationModalMethods = uiModule({
         if (!person) return;
 
         // Read other parent from combo (for child relation type)
-        let includePartner: PersonId | undefined;
-        if (relationType === 'child') {
-            const otherParentSelect = document.getElementById('rel-other-parent-select') as HTMLSelectElement;
-            if (otherParentSelect) {
-                const val = otherParentSelect.value;
-                if (val === '__new_placeholder__') {
-                    // Leave includePartner undefined — createRelationship() will create placeholder
-                } else if (val) {
-                    includePartner = val as PersonId;
-                }
-            }
-        }
+        const includePartner = this.selectedOtherParent();
 
         let newPersonId: PersonId;
+        // Creating the new person and linking it is ONE undo step (review V12).
+        let batchOpen = false;
 
         if (this.linkMode) {
             // Link to existing person via PersonPicker
@@ -344,8 +339,17 @@ export const relationModalMethods = uiModule({
                 this.showAlert(strings.relationModal.selectPersonError, 'warning');
                 return;
             }
+            if (!this.canLinkRelation(personId, selectedId, relationType)) {
+                this.showLinkRefused();
+                return;
+            }
             newPersonId = selectedId;
         } else {
+            // A third parent is refused — before the new person exists.
+            if (relationType === 'parent' && person.parentIds.length >= 2) {
+                this.showLinkRefused();
+                return;
+            }
             // Create new person
             const firstName = (document.getElementById('rel-firstname') as HTMLInputElement)?.value.trim() || '';
             const lastName = (document.getElementById('rel-lastname') as HTMLInputElement)?.value.trim() || '';
@@ -367,6 +371,8 @@ export const relationModalMethods = uiModule({
 
             // Begin batch before person creation to suppress individual audit logs
             AuditLogManager.beginBatch();
+            DataManager.beginBatch();
+            batchOpen = true;
 
             const isPlaceholder = !firstName && !lastName;
             const newPerson = DataManager.createPerson(
@@ -377,7 +383,11 @@ export const relationModalMethods = uiModule({
         }
 
         // Create the relationship (endBatch is called inside)
-        this.createRelationship(personId, newPersonId, relationType, includePartner);
+        try {
+            this.createRelationship(personId, newPersonId, relationType, includePartner);
+        } finally {
+            if (batchOpen) DataManager.commitBatch(null, false);
+        }
 
         this.closeRelationModal();
         TreeRenderer.render();
@@ -389,10 +399,61 @@ export const relationModalMethods = uiModule({
         }
     },
 
-    createRelationship(personId: PersonId, newPersonId: PersonId, relationType: RelationType, includePartner?: PersonId): void {
+    /**
+     * Whether an EXISTING person `otherId` can be linked to `personId` as the
+     * given relation without a third parent or a cycle in the ancestry
+     * (review V10). The pickers offer only people this accepts, and the save
+     * paths refuse the rest with a toast instead of half-linking them.
+     */
+    canLinkRelation(personId: PersonId, otherId: PersonId, relationType: RelationType): boolean {
         const person = DataManager.getPerson(personId);
-        if (!person) return;
+        const other = DataManager.getPerson(otherId);
+        if (!person || !other || personId === otherId) return false;
+        switch (relationType) {
+            case 'partner':
+                return true;
+            case 'parent':
+                return !person.parentIds.includes(otherId) && DataManager.canAddParentChild(otherId, personId);
+            case 'child':
+                return !person.childIds.includes(otherId) && DataManager.canAddParentChild(personId, otherId);
+            case 'sibling': {
+                if (person.parentIds.length === 0) {
+                    // The person joins the sibling's parents (placeholders
+                    // are created for both only when neither has any).
+                    return other.parentIds.every(par => DataManager.canAddParentChild(par, personId));
+                }
+                const missing = person.parentIds.filter(par => !other.parentIds.includes(par));
+                if (other.parentIds.length + missing.length > 2) return false;
+                return missing.every(par => DataManager.canAddParentChild(par, otherId));
+            }
+        }
+        return false;
+    },
 
+    /** Toast for a relation link the data model refuses (third parent / cycle). */
+    showLinkRefused(): void {
+        this.showToast(strings.relationModal.linkRefused);
+    },
+
+    /**
+     * Link `newPersonId` to `personId` as `relationType`. One user action, so
+     * one undo step (review V12) — also when the caller already opened a
+     * batch (a new person created just before joins the same step). Returns
+     * false when the link was refused (nothing is changed then).
+     */
+    createRelationship(personId: PersonId, newPersonId: PersonId, relationType: RelationType, includePartner?: PersonId): boolean {
+        const person = DataManager.getPerson(personId);
+        if (!person) return false;
+        if (!this.canLinkRelation(personId, newPersonId, relationType)) {
+            if (AuditLogManager.isBatching()) AuditLogManager.cancelBatch();
+            this.showLinkRefused();
+            return false;
+        }
+        DataManager.runBatch(null, () => this.createRelationshipInner(person, personId, newPersonId, relationType, includePartner));
+        return true;
+    },
+
+    createRelationshipInner(person: Person, personId: PersonId, newPersonId: PersonId, relationType: RelationType, includePartner?: PersonId): void {
         const treeId = DataManager.getCurrentTreeId();
         // Begin batch if not already started (new person path starts it earlier)
         if (!AuditLogManager.isBatching()) {
@@ -409,15 +470,20 @@ export const relationModalMethods = uiModule({
 
             case 'child': {
                 const newChild = DataManager.getPerson(newPersonId);
+                DataManager.addParentChild(personId, newPersonId);
+                // The second parent only into a FREE slot: a linked child may
+                // already have its other parent (never make a third one).
+                const freeSlot = (newChild?.parentIds.length ?? 0) < 2;
                 if (includePartner) {
-                    DataManager.addParentChild(personId, newPersonId);
-                    DataManager.addParentChild(includePartner, newPersonId);
-                    const partnership = DataManager.getPartnerships(personId)
-                        .find(p => p.person1Id === includePartner || p.person2Id === includePartner);
-                    if (partnership) {
-                        DataManager.addParentChild(personId, newPersonId, partnership.id);
+                    if (DataManager.canAddParentChild(includePartner, newPersonId)
+                        && DataManager.addParentChild(includePartner, newPersonId)) {
+                        const partnership = DataManager.getPartnerships(personId)
+                            .find(p => p.person1Id === includePartner || p.person2Id === includePartner);
+                        if (partnership) {
+                            DataManager.addParentChild(personId, newPersonId, partnership.id);
+                        }
                     }
-                } else {
+                } else if (freeSlot) {
                     const placeholderGender: Gender = person.gender === 'male' ? 'female' : 'male';
                     const placeholder = DataManager.createPerson({
                         firstName: '?',
@@ -425,7 +491,6 @@ export const relationModalMethods = uiModule({
                         gender: placeholderGender
                     }, true);
                     const partnership = DataManager.createPartnership(personId, placeholder.id);
-                    DataManager.addParentChild(personId, newPersonId);
                     DataManager.addParentChild(placeholder.id, newPersonId);
                     if (partnership) {
                         DataManager.addParentChild(personId, newPersonId, partnership.id);
@@ -456,15 +521,21 @@ export const relationModalMethods = uiModule({
             }
 
             case 'sibling': {
-                if (person.parentIds.length > 0) {
-                    for (const parentId of person.parentIds) {
-                        DataManager.addParentChild(parentId, newPersonId);
+                const sibling = DataManager.getPerson(newPersonId);
+                // Share the parents of whichever side has them.
+                const [withParents, joining] = person.parentIds.length > 0 || !sibling?.parentIds.length
+                    ? [person, newPersonId]
+                    : [sibling, personId];
+                if (withParents.parentIds.length > 0) {
+                    const parents = [...withParents.parentIds];
+                    for (const parentId of parents) {
+                        DataManager.addParentChild(parentId, joining);
                     }
-                    if (person.parentIds.length === 2) {
-                        const partnership = DataManager.getPartnerships(person.parentIds[0])
-                            .find(p => p.person1Id === person.parentIds[1] || p.person2Id === person.parentIds[1]);
+                    if (parents.length === 2) {
+                        const partnership = DataManager.getPartnerships(parents[0])
+                            .find(p => p.person1Id === parents[1] || p.person2Id === parents[1]);
                         if (partnership) {
-                            DataManager.addParentChild(person.parentIds[0], newPersonId, partnership.id);
+                            DataManager.addParentChild(parents[0], joining, partnership.id);
                         }
                     }
                 } else {
@@ -546,6 +617,8 @@ export const relationModalMethods = uiModule({
         const person = DataManager.getPerson(personId);
         if (!person) return;
 
+        // Fresh Cancel / OK pair — not whatever the last confirm left there.
+        this.resetConfirmButtons();
         const modal = document.getElementById('confirmation-modal');
         const title = document.getElementById('confirm-title');
         const message = document.getElementById('confirm-message');
@@ -566,8 +639,8 @@ export const relationModalMethods = uiModule({
             const opt = document.createElement('div');
             opt.className = 'confirm-option';
             opt.innerHTML = `
-                <input type="radio" name="partner-select" value="${partner.id}">
-                <span>${this.escapeHtml(partner.firstName)} ${this.escapeHtml(partner.lastName)} ${birthYear ? `(${birthYear})` : ''}</span>
+                <input type="radio" name="partner-select" value="${this.escapeHtml(partner.id)}">
+                <span>${this.escapeHtml(partner.firstName)} ${this.escapeHtml(partner.lastName)} ${birthYear ? `(${this.escapeHtml(birthYear)})` : ''}</span>
             `;
             opt.onclick = () => {
                 options.querySelectorAll('.confirm-option').forEach(o => o.classList.remove('selected'));

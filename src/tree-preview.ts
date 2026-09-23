@@ -9,6 +9,13 @@ import { extractSubtree } from './subtree.js';
 import { bestRenderFocus } from './split-families.js';
 import { strings } from './strings.js';
 
+/** Escape text for HTML content and attribute values (titles and names come from foreign files). */
+function esc(text: string): string {
+    return (text || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // ==================== TYPES ====================
 
 export interface TreePreviewOptions {
@@ -259,10 +266,10 @@ class TreePreviewClass {
             <div class="tree-preview-panel">
                 <div class="tree-preview-header">
                     <div class="tree-preview-info">
-                        <div class="tree-preview-title">${this.options?.title || s?.title || 'Tree Preview'}</div>
-                        ${this.options?.subtitle ? `<div class="tree-preview-subtitle">${this.options.subtitle}</div>` : ''}
+                        <div class="tree-preview-title">${esc(this.options?.title || s?.title || 'Tree preview')}</div>
+                        ${this.options?.subtitle ? `<div class="tree-preview-subtitle">${esc(this.options.subtitle)}</div>` : ''}
                     </div>
-                    <button class="tree-preview-close" title="${s?.close || 'Close'}">×</button>
+                    <button class="tree-preview-close" title="${esc(s?.close || 'Close')}" aria-label="${esc(s?.close || 'Close')}">×</button>
                 </div>
                 <div class="tree-preview-container">
                     <div class="tree-preview-canvas"></div>
@@ -274,8 +281,8 @@ class TreePreviewClass {
                         <span class="tree-preview-focus-name"></span>
                     </div>
                     <div class="tree-preview-zoom-controls">
-                        <button class="tree-preview-zoom-btn" data-action="out">−</button>
-                        <button class="tree-preview-zoom-btn" data-action="in">+</button>
+                        <button class="tree-preview-zoom-btn" data-action="out" title="${esc(strings.zoomControls.zoomOut)}" aria-label="${esc(strings.zoomControls.zoomOut)}">−</button>
+                        <button class="tree-preview-zoom-btn" data-action="in" title="${esc(strings.zoomControls.zoomIn)}" aria-label="${esc(strings.zoomControls.zoomIn)}">+</button>
                     </div>
                 </div>
             </div>
@@ -451,9 +458,9 @@ class TreePreviewClass {
             }
 
             card.innerHTML = `
-                <div class="preview-card-name">${displayName}</div>
-                <div class="preview-card-surname">${displaySurname}</div>
-                ${birthYear ? `<div class="preview-card-year">${birthYear}</div>` : ''}
+                <div class="preview-card-name">${esc(displayName)}</div>
+                <div class="preview-card-surname">${esc(displaySurname)}</div>
+                ${birthYear ? `<div class="preview-card-year">${esc(birthYear)}</div>` : ''}
             `;
 
             // Click handler - refocus on this person or call external handler
@@ -747,21 +754,21 @@ class TreeCompareClass {
         }
 
         const s = strings.treePreview;
-        const leftTitle = this.compareOptions?.left.title || s?.title || 'Tree Preview';
-        const rightTitle = this.compareOptions?.right.title || s?.title || 'Tree Preview';
+        const leftTitle = this.compareOptions?.left.title || s?.title || 'Tree preview';
+        const rightTitle = this.compareOptions?.right.title || s?.title || 'Tree preview';
 
         const overlay = document.createElement('div');
         overlay.className = 'tree-compare-overlay';
         overlay.innerHTML = `
             <div class="tree-compare-header">
-                <div class="tree-compare-title">${s?.compare || 'Compare Trees'}</div>
-                <button class="tree-preview-close" title="${s?.close || 'Close'}">×</button>
+                <div class="tree-compare-title">${s?.compare || 'Compare trees'}</div>
+                <button class="tree-preview-close" title="${esc(s?.close || 'Close')}" aria-label="${esc(s?.close || 'Close')}">×</button>
             </div>
             <div class="tree-compare-content">
                 <div class="tree-compare-pane" data-pane="left">
                     <div class="tree-compare-pane-header">
-                        <span class="pane-title">${leftTitle}</span>
-                        ${this.compareOptions?.left.subtitle ? `<span class="pane-subtitle">${this.compareOptions.left.subtitle}</span>` : ''}
+                        <span class="pane-title">${esc(leftTitle)}</span>
+                        ${this.compareOptions?.left.subtitle ? `<span class="pane-subtitle">${esc(this.compareOptions.left.subtitle)}</span>` : ''}
                     </div>
                     <div class="tree-compare-pane-container">
                         <div class="tree-preview-canvas"></div>
@@ -770,16 +777,16 @@ class TreeCompareClass {
                     <div class="tree-compare-pane-footer">
                         <span class="tree-preview-focus-name"></span>
                         <div class="tree-preview-zoom-controls">
-                            <button class="tree-preview-zoom-btn" data-action="out">−</button>
-                            <button class="tree-preview-zoom-btn" data-action="in">+</button>
+                            <button class="tree-preview-zoom-btn" data-action="out" title="${esc(strings.zoomControls.zoomOut)}" aria-label="${esc(strings.zoomControls.zoomOut)}">−</button>
+                            <button class="tree-preview-zoom-btn" data-action="in" title="${esc(strings.zoomControls.zoomIn)}" aria-label="${esc(strings.zoomControls.zoomIn)}">+</button>
                         </div>
                     </div>
                 </div>
                 <div class="tree-compare-divider"></div>
                 <div class="tree-compare-pane" data-pane="right">
                     <div class="tree-compare-pane-header">
-                        <span class="pane-title">${rightTitle}</span>
-                        ${this.compareOptions?.right.subtitle ? `<span class="pane-subtitle">${this.compareOptions.right.subtitle}</span>` : ''}
+                        <span class="pane-title">${esc(rightTitle)}</span>
+                        ${this.compareOptions?.right.subtitle ? `<span class="pane-subtitle">${esc(this.compareOptions.right.subtitle)}</span>` : ''}
                     </div>
                     <div class="tree-compare-pane-container">
                         <div class="tree-preview-canvas"></div>
@@ -788,8 +795,8 @@ class TreeCompareClass {
                     <div class="tree-compare-pane-footer">
                         <span class="tree-preview-focus-name"></span>
                         <div class="tree-preview-zoom-controls">
-                            <button class="tree-preview-zoom-btn" data-action="out">−</button>
-                            <button class="tree-preview-zoom-btn" data-action="in">+</button>
+                            <button class="tree-preview-zoom-btn" data-action="out" title="${esc(strings.zoomControls.zoomOut)}" aria-label="${esc(strings.zoomControls.zoomOut)}">−</button>
+                            <button class="tree-preview-zoom-btn" data-action="in" title="${esc(strings.zoomControls.zoomIn)}" aria-label="${esc(strings.zoomControls.zoomIn)}">+</button>
                         </div>
                     </div>
                 </div>
@@ -988,8 +995,8 @@ class TreeCompareClass {
             const displaySurname = person.lastName || '';
 
             card.innerHTML = `
-                <div class="preview-card-name">${displayName}</div>
-                <div class="preview-card-surname">${displaySurname}</div>
+                <div class="preview-card-name">${esc(displayName)}</div>
+                <div class="preview-card-surname">${esc(displaySurname)}</div>
             `;
 
             card.addEventListener('click', (e) => {

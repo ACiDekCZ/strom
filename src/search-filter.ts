@@ -8,6 +8,7 @@ import { StromData, PersonId, Person, Gender } from './types.js';
 import { yearOf } from './dates.js';
 import { isLivingPerson, inferBirthUpperBounds } from './privacy.js';
 import { normalizeName } from './merge/matching.js';
+import { nameMatchesQuery, surnameMatchesQuery } from './name-search.js';
 
 export interface SearchCriteria {
     /** Free text matched against the full name. */
@@ -50,6 +51,7 @@ export function filterPersons(data: StromData, criteria: SearchCriteria, current
     const bounds = inferBirthUpperBounds(data);
     const q = criteria.query ? normalizeName(criteria.query) : '';
     const last = criteria.lastName ? normalizeName(criteria.lastName) : '';
+    // Names match under every form: other surname forms and name variants.
     const place = criteria.place ? normalizeName(criteria.place) : '';
     const wantYear = criteria.birthFrom !== undefined || criteria.birthTo !== undefined;
 
@@ -57,8 +59,8 @@ export function filterPersons(data: StromData, criteria: SearchCriteria, current
     for (const person of Object.values(data.persons)) {
         if (person.isPlaceholder) continue;
 
-        if (q && !normalizeName(`${person.firstName} ${person.lastName}`).includes(q)) continue;
-        if (last && !normalizeName(person.lastName).includes(last)) continue;
+        if (q && !nameMatchesQuery(person, q, data)) continue;
+        if (last && !surnameMatchesQuery(person, last, data)) continue;
         if (place && !personPlaces(person).some(pl => normalizeName(pl).includes(place))) continue;
         if (criteria.gender && person.gender !== criteria.gender) continue;
 

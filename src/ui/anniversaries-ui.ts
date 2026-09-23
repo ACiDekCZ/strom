@@ -16,6 +16,7 @@ import {
     upcomingAnniversaries, onThisDay, Anniversary, OnThisDayEvent,
 } from '../anniversaries.js';
 import { uiModule } from './module.js';
+import { emptyStateHtml } from './empty-state.js';
 
 function personName(p?: Person): string {
     return p ? `${p.firstName} ${p.lastName}`.trim() : '';
@@ -35,7 +36,11 @@ export const anniversariesUiMethods = uiModule({
         const a = strings.anniversaries;
 
         list.innerHTML = items.length === 0
-            ? `<div class="anniversaries-empty">${a.empty}</div>`
+            ? emptyStateHtml({
+                title: strings.emptyStates.anniversariesTitle,
+                text: strings.emptyStates.anniversariesText,
+                className: 'anniversaries-empty',
+            })
             : items.map(item => {
                 const names = item.personIds.map(id => personName(data.persons[id as PersonId]));
                 const label = this.anniversaryLabel(item, names);
@@ -43,13 +48,17 @@ export const anniversariesUiMethods = uiModule({
                     : item.daysUntil === 1 ? a.tomorrow : a.inDays(item.daysUntil);
                 // TODAY reads as a solid copper chip; other dates stay quiet.
                 const chipCls = item.daysUntil === 0 ? 'anniversary-when today' : 'anniversary-when';
-                // Person ids come from data files (JSON import) — escape them too.
-                const onclick = `window.Strom.UI.focusPersonFromAnniversary('${this.escapeHtml(item.personIds[0])}')`;
-                return `<div class="anniversary-row" onclick="${onclick}">
+                // Person ids come from data files (JSON import): never put them
+                // into inline JS — the browser decodes &#39; back to a quote
+                // inside an attribute. Data attribute + listener instead.
+                return `<div class="anniversary-row" data-person-id="${this.escapeHtml(item.personIds[0])}">
                     <span class="anniversary-text">${this.escapeHtml(label)}</span>
                     <span class="${chipCls}">${this.escapeHtml(when)}</span>
                 </div>`;
             }).join('');
+        list.querySelectorAll<HTMLElement>('.anniversary-row[data-person-id]').forEach(row => {
+            row.addEventListener('click', () => this.focusPersonFromAnniversary(row.dataset.personId as PersonId));
+        });
 
         modal.classList.add('active');
     },

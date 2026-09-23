@@ -85,3 +85,39 @@ export async function deleteBaselinesForTree(treeId: string): Promise<void> {
         await StorageManager.delete('shareBaselines', b.exportId);
     }
 }
+
+/**
+ * Re-write every baseline in the CURRENT encryption mode (called when
+ * encryption is switched on/off, with the session unlocked). Returns the
+ * number of baselines that could not be converted (left untouched).
+ */
+export async function reencodeAllBaselines(): Promise<number> {
+    const encryptionOn = SettingsManager.isEncryptionEnabled();
+    let failed = 0;
+    for (const b of await StorageManager.getAll<StoredBaseline>('shareBaselines')) {
+        if (!b?.exportId) continue;
+        if (!!b.encrypted === encryptionOn) continue;
+        try {
+            let json: string | undefined;
+            if (b.encrypted) {
+                if (!CryptoSession.isUnlocked()) { failed++; continue; }
+                json = await CryptoSession.decrypt(b.encrypted);
+            } else {
+                json = b.plain;
+            }
+            if (json === undefined) continue;
+            const next: StoredBaseline = { exportId: b.exportId, treeId: b.treeId, savedAt: b.savedAt };
+            if (encryptionOn) {
+                if (!CryptoSession.isUnlocked()) { failed++; continue; }
+                next.encrypted = await CryptoSession.encrypt(json);
+            } else {
+                next.plain = json;
+            }
+            await StorageManager.set('shareBaselines', b.exportId, next);
+        } catch (err) {
+            console.error('Baseline re-encoding failed', b.exportId, err);
+            failed++;
+        }
+    }
+    return failed;
+}

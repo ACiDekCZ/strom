@@ -99,71 +99,7 @@ export const encryptionUiMethods = uiModule({
      */
     async tryDisableEncryption(password: string): Promise<void> {
         const error = document.getElementById('password-prompt-error');
-
-        try {
-            // Get any encrypted tree data to verify password against
-            const trees = TreeManager.getTrees();
-            let verified = false;
-
-            for (const tree of trees) {
-                const encryptedData = await TreeManager.getEncryptedData(tree.id);
-                if (encryptedData) {
-                    // Try to decrypt to verify password
-                    await decrypt(encryptedData, password);
-                    verified = true;
-                    break;
-                }
-            }
-
-            // If no encrypted data found but session is unlocked, verify against session
-            if (!verified && CryptoSession.isUnlocked()) {
-                // Session is unlocked, assume password is correct
-                verified = true;
-            }
-
-            if (!verified) {
-                // No encrypted data to verify against - just disable
-                verified = true;
-            }
-
-            // Password verified - unlock session to decrypt data
-            // Find salt from any encrypted tree
-            let salt: Uint8Array | undefined;
-            for (const tree of trees) {
-                const encryptedData = await TreeManager.getEncryptedData(tree.id);
-                if (encryptedData) {
-                    salt = new Uint8Array(atob(encryptedData.salt).split('').map(c => c.charCodeAt(0)));
-                    break;
-                }
-            }
-            if (salt) {
-                await CryptoSession.unlock(password, salt);
-            }
-
-            // Disable encryption setting FIRST (so saves will be unencrypted)
-            SettingsManager.setEncryption(false);
-
-            // Re-save all trees to decrypt them
-            for (const tree of trees) {
-                const data = await TreeManager.getTreeData(tree.id as TreeId);
-                if (data) {
-                    await TreeManager.saveTreeData(tree.id as TreeId, data);
-                }
-            }
-
-            // Now lock the session
-            CryptoSession.lock();
-
-            // Close dialog and update UI
-            document.getElementById('password-prompt-modal')?.classList.remove('active');
-            this.passwordPromptCallback = null;
-            this.passwordPromptCallbackManagesDialog = false;
-
-            this.updateEncryptionStatus();
-            this.showToast(strings.encryption.encryptionDisabled);
-
-        } catch {
-            // Wrong password - show error and keep dialog open
+        const showWrongPassword = () => {
             if (error) {
                 error.textContent = strings.encryption.wrongPassword;
                 error.style.display = 'block';
@@ -174,10 +110,63 @@ export const encryptionUiMethods = uiModule({
                 input.value = '';
                 input.focus();
             }
-
             // Keep checkbox checked since disable failed
             const toggle = document.getElementById('encryption-toggle') as HTMLInputElement;
             if (toggle) toggle.checked = true;
+        };
+
+        // Verify against ANY encrypted record — trees first, then backups,
+        // share baselines and audit logs. Only when nothing at all is
+        // encrypted is there nothing to protect; an unlocked session alone
+        // used to let ANY password switch encryption off (review S13).
+        const { findAnyEncryptedRecord, reencodeSideStores } = await import('../encryption-migrate.js');
+        const probe = await findAnyEncryptedRecord();
+        if (probe) {
+            try {
+                await decrypt(probe, password);
+            } catch {
+                showWrongPassword();
+                return;
+            }
+            // Password verified - unlock session to decrypt data
+            const salt = new Uint8Array(atob(probe.salt).split('').map(c => c.charCodeAt(0)));
+            await CryptoSession.unlock(password, salt);
+        }
+
+        // Close dialog first: from here on failures are not a password issue.
+        document.getElementById('password-prompt-modal')?.classList.remove('active');
+        this.passwordPromptCallback = null;
+        this.passwordPromptCallbackManagesDialog = false;
+        this.passwordPromptOnCancel = null;
+
+        try {
+            // Disable encryption setting FIRST (so saves will be unencrypted)
+            SettingsManager.setEncryption(false);
+
+            // Re-save all trees to decrypt them
+            const trees = TreeManager.getTrees();
+            for (const tree of trees) {
+                const data = await TreeManager.getTreeData(tree.id as TreeId);
+                if (data) {
+                    TreeManager.saveTreeData(tree.id as TreeId, data);
+                }
+            }
+            await TreeManager.flush();
+
+            // Backups, share baselines and audit logs follow (review S23) —
+            // they used to stay encrypted and unreadable forever.
+            const failed = await reencodeSideStores();
+
+            this.updateEncryptionStatus();
+            this.showToast(strings.encryption.encryptionDisabled);
+            if (failed > 0) this.showToast(strings.storageSafety.reencodeFailed(failed), 6000);
+        } catch (err) {
+            console.error('Disabling encryption failed', err);
+            this.updateEncryptionStatus();
+            this.showToast(strings.errors.saveFailed, 6000);
+        } finally {
+            // Now lock the session
+            CryptoSession.lock();
         }
     },
 
@@ -286,14 +275,21 @@ export const encryptionUiMethods = uiModule({
             for (const tree of trees) {
                 const data = await TreeManager.getTreeData(tree.id as TreeId);
                 if (data) {
-                    await TreeManager.saveTreeData(tree.id as TreeId, data);
+                    TreeManager.saveTreeData(tree.id as TreeId, data);
                 }
             }
+            await TreeManager.flush();
+
+            // Backups, share baselines and audit logs are encrypted too
+            // (review S23) — they used to keep plaintext copies of the data.
+            const { reencodeSideStores } = await import('../encryption-migrate.js');
+            const failed = await reencodeSideStores();
 
             // Close dialog and update UI
             document.getElementById('password-setup-modal')?.classList.remove('active');
             this.updateEncryptionStatus();
             this.showToast(strings.encryption.encryptionEnabled);
+            if (failed > 0) this.showToast(strings.storageSafety.reencodeFailed(failed), 6000);
         } catch (err) {
             if (error) {
                 error.textContent = strings.encryption.decryptionFailed;
@@ -368,9 +364,11 @@ export const encryptionUiMethods = uiModule({
                 document.getElementById('password-prompt-modal')?.classList.remove('active');
 
                 // Call callback
-                this.passwordPromptCallback(password);
+                const callback = this.passwordPromptCallback;
                 this.passwordPromptCallback = null;
                 this.pendingEncryptedData = null;
+                this.passwordPromptOnCancel = null;
+                callback(password);
             } catch {
                 // Wrong password
                 if (error) {
@@ -387,6 +385,7 @@ export const encryptionUiMethods = uiModule({
             await this.passwordPromptCallback(password);
             if (!this.passwordPromptCallbackManagesDialog) {
                 this.passwordPromptCallback = null;
+                this.passwordPromptOnCancel = null;
             }
         } else {
             // No validation data - just pass password through
@@ -406,6 +405,9 @@ export const encryptionUiMethods = uiModule({
         this.passwordPromptCallbackManagesDialog = false;
         this.pendingEncryptedData = null;
         this.pendingEncryptedImport = null;
+        const onCancel = this.passwordPromptOnCancel;
+        this.passwordPromptOnCancel = null;
+        onCancel?.();
 
         // Reset encryption checkbox to checked (if it was being disabled)
         if (SettingsManager.isEncryptionEnabled()) {
@@ -419,6 +421,262 @@ export const encryptionUiMethods = uiModule({
      */
     setPendingEncryptedData(data: EncryptedData): void {
         this.pendingEncryptedData = data;
+    },
+
+    // ---- LOCKED STATE / UNLOCK ENTRY ----
+    /**
+     * Prompt for the LOCAL encryption password (validated against a stored
+     * encrypted tree; unlocks the session). Resolves true once unlocked and
+     * `onUnlocked` finished, false when cancelled — cancelling leaves an
+     * "Unlock" banner so the prompt can always be reopened (review V3).
+     */
+    async showLocalUnlockPrompt(onUnlocked?: () => Promise<void>): Promise<boolean> {
+        const probe = await TreeManager.getFirstEncryptedData();
+        if (!probe) return true;
+        return new Promise<boolean>((resolve) => {
+            this.setPendingEncryptedData(probe);
+            this.showPasswordPrompt(async () => {
+                // submitPasswordPrompt already verified + unlocked the session.
+                this.hideLockedBanner();
+                try {
+                    await onUnlocked?.();
+                } finally {
+                    resolve(true);
+                }
+            });
+            this.passwordPromptOnCancel = () => {
+                this.showLockedBanner();
+                resolve(false);
+            };
+        });
+    },
+
+    /**
+     * Encryption is on but the session is locked: ask for the password
+     * before an action that must write encrypted data. True when unlocked.
+     */
+    async ensureLocalUnlocked(): Promise<boolean> {
+        if (!SettingsManager.isEncryptionEnabled() || CryptoSession.isUnlocked()) return true;
+        if (!await TreeManager.hasEncryptedTrees()) return true;
+        this.showToast(strings.storageSafety.unlockToContinue, 5000);
+        return this.showLocalUnlockPrompt(async () => {
+            await this.onLocalDataUnlocked?.();
+        });
+    },
+
+    /**
+     * Prompt for the password of an encrypted EMBEDDED file. Decrypts with a
+     * key derived for that file only — never touches the local session
+     * (review K8). The prompt stays open on a wrong password.
+     */
+    showEmbeddedPasswordPrompt(onDecrypted: () => Promise<void>): void {
+        const modal = document.getElementById('password-prompt-modal');
+        const input = document.getElementById('password-prompt-input') as HTMLInputElement;
+        const error = document.getElementById('password-prompt-error');
+        if (!modal || !input) return;
+
+        input.value = '';
+        if (error) {
+            error.style.display = 'none';
+            error.textContent = '';
+        }
+        this.pendingEncryptedData = null;
+        this.passwordPromptCallback = async (password: string) => {
+            const ok = await DataManager.decryptEmbeddedData(password);
+            if (!ok) {
+                if (error) {
+                    error.textContent = strings.encryption.wrongPassword;
+                    error.style.display = 'block';
+                }
+                input.select();
+                return;
+            }
+            document.getElementById('password-prompt-modal')?.classList.remove('active');
+            this.passwordPromptCallbackManagesDialog = false;
+            this.hideLockedBanner();
+            await onDecrypted();
+        };
+        this.passwordPromptCallbackManagesDialog = true;
+        this.passwordPromptOnCancel = () => {
+            this.showLockedBanner(() => this.showEmbeddedPasswordPrompt(onDecrypted));
+        };
+
+        modal.classList.add('active');
+        input.focus();
+        input.onkeydown = (e: KeyboardEvent) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.submitPasswordPrompt();
+            }
+        };
+    },
+
+    /**
+     * Non-blocking notice bar with an optional action button (shared by the
+     * locked banner, the other-tab warning and storage errors).
+     */
+    showStorageNotice(id: string, message: string, action?: { label: string; run: () => void }): void {
+        document.getElementById(id)?.remove();
+        const el = document.createElement('div');
+        el.id = id;
+        el.className = 'storage-notice';
+        el.setAttribute('role', 'status');
+        const text = document.createElement('span');
+        text.textContent = message;
+        el.appendChild(text);
+        if (action) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'pwa-update-btn';
+            btn.textContent = action.label;
+            btn.addEventListener('click', () => action.run());
+            el.appendChild(btn);
+        }
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'pwa-update-close';
+        close.setAttribute('aria-label', strings.buttons.close);
+        close.textContent = '\u00d7';
+        close.addEventListener('click', () => el.remove());
+        el.appendChild(close);
+        document.body.appendChild(el);
+        requestAnimationFrame(() => el.classList.add('show'));
+    },
+
+    /** "Data is locked — Unlock" bar; the button reopens the right prompt. */
+    showLockedBanner(reopen?: () => void): void {
+        this.lockedDataReopen = reopen ?? null;
+        this.showStorageNotice('locked-data-notice', strings.storageSafety.lockedBanner, {
+            label: strings.storageSafety.unlock,
+            run: () => this.unlockLocalData(),
+        });
+        this.syncLockedState();
+    },
+
+    /**
+     * Reopen the prompt that unlocks the data (the banner's and the locked
+     * empty state's "Unlock"): the specific one the banner was raised with,
+     * else the tree's own password or the local session password.
+     */
+    unlockLocalData(): void {
+        if (this.lockedDataReopen) {
+            this.lockedDataReopen();
+            return;
+        }
+        // Session already unlocked, yet the open tree is unreadable: it
+        // carries another key, so its own password is needed.
+        const treeId = DataManager.getCurrentTreeId();
+        if (CryptoSession.isUnlocked() && treeId && TreeManager.isTreeUnreadable(treeId)) {
+            this.showTreeKeyPrompt(treeId);
+            return;
+        }
+        void this.showLocalUnlockPrompt(async () => { await this.onLocalDataUnlocked?.(); });
+    },
+
+    /**
+     * Locked data is read-only like view mode: the `data-locked` body class
+     * hides every edit entry point (the `.edit-only` elements and the add
+     * buttons) and swaps the empty state for the Unlock message. Called on
+     * every data change and whenever the Unlock banner comes or goes.
+     */
+    syncLockedState(): void {
+        const locked = DataManager.isLocked();
+        const was = document.body.classList.contains('data-locked');
+        document.body.classList.toggle('data-locked', locked);
+        if (locked && !was) {
+            // Close whatever edit surface was open on the stand-in tree.
+            this.hideContextMenu();
+            this.hideBottomSheet();
+        }
+        if (locked !== was) this.refreshUndoRedoToolbar();
+    },
+
+    /**
+     * A tree could not be read (strom:tree-unreadable). With a locked session
+     * the usual Unlock banner applies; with an unlocked one the tree was
+     * encrypted with a different key, so ask for THAT tree's password right away.
+     */
+    handleUnreadableTree(treeId?: TreeId): void {
+        const id = treeId ?? DataManager.getCurrentTreeId();
+        if (!CryptoSession.isUnlocked() || !id) {
+            this.showLockedBanner();
+            return;
+        }
+        this.showTreeKeyPrompt(id);
+    },
+
+    /**
+     * Ask for the password of ONE tree encrypted with a different key than
+     * the session. On success the tree is re-encrypted with the session key
+     * (all trees share one key afterwards) and, when it is the open tree,
+     * loaded. Cancel keeps it blocked behind the Unlock banner (K8).
+     */
+    showTreeKeyPrompt(treeId: TreeId): void {
+        const modal = document.getElementById('password-prompt-modal');
+        const input = document.getElementById('password-prompt-input') as HTMLInputElement;
+        const error = document.getElementById('password-prompt-error');
+        if (!modal || !input) {
+            this.showLockedBanner(() => this.showTreeKeyPrompt(treeId));
+            return;
+        }
+
+        // The shared prompt explains itself for this case; the generic text
+        // comes back when the prompt closes either way.
+        const description = modal.querySelector('.modal-description') as HTMLElement | null;
+        const originalDescription = description?.textContent ?? null;
+        if (description) description.textContent = strings.storageSafety.treeOtherKey;
+        const restoreDescription = () => {
+            if (description && originalDescription !== null) description.textContent = originalDescription;
+        };
+
+        input.value = '';
+        if (error) {
+            error.style.display = 'none';
+            error.textContent = '';
+        }
+        this.pendingEncryptedData = null;
+        this.passwordPromptCallback = async (password: string) => {
+            const result = await TreeManager.recoverTreeWithPassword(treeId, password);
+            if (result === 'wrong-password') {
+                if (error) {
+                    error.textContent = strings.encryption.wrongPassword;
+                    error.style.display = 'block';
+                }
+                input.select();
+                return;
+            }
+            modal.classList.remove('active');
+            this.passwordPromptCallbackManagesDialog = false;
+            restoreDescription();
+            if (result === 'locked') {
+                // The session itself got locked meanwhile: the normal unlock.
+                this.showLockedBanner();
+                return;
+            }
+            this.hideLockedBanner();
+            if (result === 'ok') this.showToast(strings.storageSafety.treeRecovered, 4000);
+            if (treeId === DataManager.getCurrentTreeId()) await this.onLocalDataUnlocked?.();
+        };
+        this.passwordPromptCallbackManagesDialog = true;
+        this.passwordPromptOnCancel = () => {
+            restoreDescription();
+            this.showLockedBanner(() => this.showTreeKeyPrompt(treeId));
+        };
+
+        modal.classList.add('active');
+        input.focus();
+        input.onkeydown = (e: KeyboardEvent) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.submitPasswordPrompt();
+            }
+        };
+    },
+
+    hideLockedBanner(): void {
+        document.getElementById('locked-data-notice')?.remove();
+        this.lockedDataReopen = null;
+        this.syncLockedState();
     },
 
     /**
@@ -597,9 +855,14 @@ export const encryptionUiMethods = uiModule({
         const auditLogToggle = document.getElementById('export-audit-log-toggle') as HTMLInputElement;
         if (auditLogSection && auditLogToggle) {
             if (includeAuditLogOption && SettingsManager.isAuditLogEnabled()) {
+                // hasEntries is async — testing the Promise itself was always
+                // truthy. Hide first, reveal once any tree has entries.
+                auditLogSection.style.display = 'none';
                 const trees = TreeManager.getTrees();
-                const hasAnyEntries = trees.some(t => AuditLogManager.hasEntries(t.id));
-                auditLogSection.style.display = hasAnyEntries ? 'block' : 'none';
+                void Promise.all(trees.map(t => AuditLogManager.hasEntries(t.id).catch(() => false)))
+                    .then(results => {
+                        auditLogSection.style.display = results.some(Boolean) ? 'block' : 'none';
+                    });
             } else {
                 auditLogSection.style.display = 'none';
             }

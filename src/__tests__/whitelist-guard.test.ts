@@ -289,7 +289,8 @@ type OwnedElsewhere =
     | 'events'              // addLifeEvent / updateLifeEvent / removeLifeEvent
     | 'sourceIds'           // citePerson / uncitePerson
     | 'attachments'         // addAttachment / removeAttachment
-    | 'photoOriginalName';  // set with the photo itself (import / upload)
+    | 'photoOriginalName'   // set with the photo itself (import / upload)
+    | 'refnType';           // GEDCOM import only; updatePerson drops it with a changed refn
 
 /**
  * Compile-time proof that the two lists together cover Person exactly. Add a

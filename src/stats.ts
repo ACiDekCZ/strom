@@ -145,11 +145,20 @@ export function computeFamilyStats(data: StromData): FamilyStats {
     for (const p of persons) genValues.add(gen.get(p.id) ?? 0);
     const generations = genValues.size;
 
-    // ---- longest marriage (both start and end documented) ----
+    // ---- longest marriage ----
+    // Ends at the first of: the recorded end (divorce), either partner's
+    // death. A marriage with neither documented has no known length.
     let longestMarriage: { names: string; years: number } | null = null;
     for (const u of Object.values(data.partnerships)) {
-        const span = ageBetween(u.startDate, u.endDate);
-        if (!span || !u.startDate || !u.endDate) continue;
+        if (!u.startDate) continue;
+        const ends = [u.endDate, data.persons[u.person1Id]?.deathDate, data.persons[u.person2Id]?.deathDate];
+        let span: { years: number } | null = null;
+        for (const end of ends) {
+            if (!end) continue;
+            const s = ageBetween(u.startDate, end);
+            if (s && (!span || s.years < span.years)) span = s;
+        }
+        if (!span) continue;
         if (!longestMarriage || span.years > longestMarriage.years) {
             const p1 = data.persons[u.person1Id], p2 = data.persons[u.person2Id];
             const names = [p1, p2].filter(Boolean).map(p => fullName(p!)).join(' & ');
