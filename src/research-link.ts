@@ -159,20 +159,63 @@ function fnv1a(text: string, seed: number): number {
     return h >>> 0;
 }
 
-/**
- * Fingerprint of what the user can change in a tree — people, couples,
- * sources, places, surname spellings. Leaves out bookkeeping that changes
- * without an edit (data version, last focused person, default person).
- */
-export function contentFingerprint(data: StromData): string {
-    const text = JSON.stringify([
+/** The parts of a tree the user can change (see contentFingerprint). */
+function fingerprintParts(data: StromData): unknown[] {
+    return [
         data.persons ?? {},
         data.partnerships ?? {},
         data.sources ?? null,
         data.places ?? null,
         data.surnameVariants ?? null,
-    ]);
+    ];
+}
+
+/** Prefix of the current fingerprint format. */
+const FINGERPRINT_V2 = 'v2-';
+
+/**
+ * Stands for an image in the fingerprint: its length and a hash of every
+ * 16th character plus the tail. Any real change of a picture (a new crop, a
+ * rotation, another scan) changes the length or the sample; hashing all of
+ * 80 MB of images took seconds on every research update.
+ */
+function imageToken(url: string): string {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < url.length; i += 16) {
+        h ^= url.charCodeAt(i);
+        h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    for (let i = Math.max(0, url.length - 64); i < url.length; i++) {
+        h ^= url.charCodeAt(i);
+        h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return `\u0000img:${url.length}:${(h >>> 0).toString(36)}`;
+}
+
+/**
+ * Fingerprint of what the user can change in a tree — people, couples,
+ * sources, places, surname spellings. Leaves out bookkeeping that changes
+ * without an edit (data version, last focused person, default person).
+ * Images count by length and a sample (imageToken).
+ */
+export function contentFingerprint(data: StromData): string {
+    const text = JSON.stringify(fingerprintParts(data), (_key, value) =>
+        typeof value === 'string' && value.length >= 1024 && value.startsWith('data:') ? imageToken(value) : value);
+    return `${FINGERPRINT_V2}${text.length.toString(36)}-${fnv1a(text, 0x811c9dc5).toString(36)}-${fnv1a(text, 0x01000193).toString(36)}`;
+}
+
+/** The fingerprint before images counted by sample (links synced by older versions). */
+function legacyFingerprint(data: StromData): string {
+    const text = JSON.stringify(fingerprintParts(data));
     return `${text.length.toString(36)}-${fnv1a(text, 0x811c9dc5).toString(36)}-${fnv1a(text, 0x01000193).toString(36)}`;
+}
+
+/**
+ * The tree's fingerprint in the same format as `stored` (a link synced by an
+ * older version keeps the old format until the next sync rewrites it).
+ */
+export function fingerprintLike(data: StromData, stored: string | undefined): string {
+    return stored !== undefined && !stored.startsWith(FINGERPRINT_V2) ? legacyFingerprint(data) : contentFingerprint(data);
 }
 
 /** What an open of a research does with the user's trees. */
@@ -276,15 +319,25 @@ export function stabilizeIds(next: StromData, previous: StromData): StromData {
         map.set(newId, oldId);
     }
 
-    const json = JSON.stringify(next);
-    if (map.size === 0) return JSON.parse(json) as StromData;
-    // Generated ids are unique random tokens: a JSON string equal to one IS
-    // that id (as a key or a reference), never text.
-    const rewritten = json.replace(/"((?:[^"\\]|\\.)*)"/g, (whole, inner: string) => {
-        const to = map.get(inner);
-        return to !== undefined ? JSON.stringify(to) : whole;
-    });
-    return JSON.parse(rewritten) as StromData;
+    return remapIds(next, map) as StromData;
+}
+
+/**
+ * A copy of `value` (shaped like a JSON round-trip, strings shared) with every
+ * key and string equal to a mapped id replaced. Generated ids are unique
+ * random tokens: a string equal to one IS that id (as a key or a reference),
+ * never text. Long strings (images, transcripts) are never ids.
+ */
+function remapIds(value: unknown, map: Map<string, string>): unknown {
+    if (typeof value === 'string') return value.length <= 256 ? map.get(value) ?? value : value;
+    if (value === null || typeof value !== 'object') return value;
+    if (Array.isArray(value)) return value.map(v => (v === undefined ? null : remapIds(v, map)));
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+        if (v === undefined || typeof v === 'function') continue;
+        out[map.get(k) ?? k] = remapIds(v, map);
+    }
+    return out;
 }
 
 // ==================== LIVE BRIDGE MESSAGES ====================

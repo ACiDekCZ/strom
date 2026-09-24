@@ -31,7 +31,7 @@ import { formatFlexDate } from '../dates.js';
 import { formatRelativeDateTime } from '../format.js';
 import { isMobile } from '../breakpoints.js';
 import {
-    readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint,
+    readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
     decideResearchOpen, stabilizeIds, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
@@ -418,7 +418,7 @@ export const researchUiMethods = uiModule({
         if (existing) {
             const unreadable = TreeManager.isTreeUnreadable(existing.id);
             previous = unreadable ? null : await readTree(existing.id);
-            action = decideResearchOpen(existing.research, previous ? contentFingerprint(previous) : null);
+            action = decideResearchOpen(existing.research, previous ? fingerprintLike(previous, existing.research?.fingerprint) : null);
             if (unreadable || !previous) {
                 // Cannot be read with this session's key: never overwrite it.
                 asCopy = true;

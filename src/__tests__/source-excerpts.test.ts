@@ -249,6 +249,13 @@ describe('DataManager', () => {
         UndoManager.setActiveTree(TREE);
     });
 
+    it('counts citations of all sources in one pass, like one by one', () => {
+        const counts = DataManager.sourceCitationCounts();
+        for (const id of Object.keys(DataManager.getData().sources ?? {})) {
+            expect(counts.get(id) ?? 0).toBe(DataManager.countSourceCitations(id));
+        }
+    });
+
     it('lists every place citing a source', () => {
         const a = DataManager.createPerson({ firstName: 'Jan', lastName: 'N', gender: 'male' });
         const b = DataManager.createPerson({ firstName: 'Anna', lastName: 'N', gender: 'female' });

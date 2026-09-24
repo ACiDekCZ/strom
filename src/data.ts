@@ -1850,6 +1850,20 @@ class DataManagerClass {
         return out;
     }
 
+    /** Citations per source id, counted in one pass (lists of many sources). */
+    sourceCitationCounts(): Map<string, number> {
+        const counts = new Map<string, number>();
+        const add = (ids: string[] | undefined) => {
+            for (const id of new Set(ids ?? [])) counts.set(id, (counts.get(id) ?? 0) + 1);
+        };
+        for (const person of Object.values(this.data.persons)) {
+            add(person.sourceIds);
+            for (const ev of person.events ?? []) add(ev.sourceIds);
+        }
+        for (const partnership of Object.values(this.data.partnerships)) add(partnership.sourceIds);
+        return counts;
+    }
+
     countSourceCitations(sourceId: string): number {
         let count = 0;
         for (const person of Object.values(this.data.persons)) {

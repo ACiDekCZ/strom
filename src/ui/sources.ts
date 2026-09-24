@@ -66,8 +66,40 @@ function qualityLabel(q: number | undefined): string {
 /** Thumbnail (or document icon) for a source, in one of the three sizes. */
 function sourceThumbHtml(src: Source, kind: 'chip' | 'row' | 'picker'): string {
     const first = src.excerpts?.[0];
-    if (first) return `<img class="source-${kind}-thumb" src="${esc(first.dataUrl)}" alt="">`;
+    if (first && kind === 'chip') return `<img class="source-${kind}-thumb" src="${esc(first.dataUrl)}" alt="">`;
+    // Lists: the image comes when the row scrolls into view (hydrateThumbs).
+    // Putting every excerpt into the markup parsed and escaped ~100 MB of
+    // text for a catalog of a few hundred scans.
+    if (first) return `<img class="source-${kind}-thumb" data-thumb-source="${esc(src.id)}" alt="">`;
     return `<span class="source-${kind}-icon" aria-hidden="true">${iconSvg('file', { size: kind === 'chip' ? 13 : 16 })}</span>`;
+}
+
+/** One observer per list, replaced on every render. */
+const thumbObservers = new WeakMap<HTMLElement, IntersectionObserver>();
+
+/** Give the list's thumbnails their image once they are (nearly) visible. */
+function hydrateThumbs(container: HTMLElement): void {
+    thumbObservers.get(container)?.disconnect();
+    const imgs = container.querySelectorAll<HTMLImageElement>('img[data-thumb-source]');
+    if (imgs.length === 0) return;
+    const fill = (img: HTMLImageElement) => {
+        const url = DataManager.getData().sources?.[img.dataset.thumbSource ?? '']?.excerpts?.[0]?.dataUrl;
+        if (url) img.src = url;
+        img.removeAttribute('data-thumb-source');
+    };
+    if (typeof IntersectionObserver === 'undefined') {
+        imgs.forEach(fill);
+        return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            observer.unobserve(entry.target);
+            fill(entry.target as HTMLImageElement);
+        }
+    }, { rootMargin: '200px 0px' });
+    imgs.forEach(img => observer.observe(img));
+    thumbObservers.set(container, observer);
 }
 
 /**
@@ -167,8 +199,9 @@ export const sourcesMethods = uiModule({
         }
         const query = search && !search.hidden ? search.value.trim().toLowerCase() : '';
         const sources = all.filter(s => this.sourceMatches(s, query)).sort((a, b) => a.title.localeCompare(b.title));
+        const counts = DataManager.sourceCitationCounts();
         container.innerHTML = sources.map(src => {
-            const count = DataManager.countSourceCitations(src.id);
+            const count = counts.get(src.id) ?? 0;
             const meta = sourceMeta(src);
             return `
                 <div class="source-row">
@@ -198,6 +231,7 @@ export const sourcesMethods = uiModule({
         container.querySelectorAll<HTMLElement>('.source-delete-btn[data-source-id]').forEach(btn => {
             btn.addEventListener('click', () => { void this.deleteSource(btn.dataset.sourceId ?? ''); });
         });
+        hydrateThumbs(container);
     },
 
     /** Search over title, archive, reference and transcript (case-insensitive). */
@@ -1058,6 +1092,7 @@ export const sourcesMethods = uiModule({
         container.querySelectorAll<HTMLElement>('.source-picker-item[data-source-id]').forEach(btn => {
             btn.addEventListener('click', () => this.pickSource(btn.dataset.sourceId ?? ''));
         });
+        hydrateThumbs(container);
     },
 
     /** Source ids already cited in the active citation context. */

@@ -230,3 +230,25 @@ describe('stored trees and the image pool', () => {
         expect(r.status === 'ok' ? r.data : null).toEqual(d);
     });
 });
+
+describe('base64 without the native typed-array methods', () => {
+    it('the fallback gives the same text and bytes', async () => {
+        const { bytesToBase64, base64ToBytes } = await import('../media-pool.js');
+        const bytes = new Uint8Array(100_003);
+        for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 131 + 7) & 0xff;
+        const expected = Buffer.from(bytes).toString('base64');
+        const proto = Uint8Array.prototype as unknown as { toBase64?: unknown };
+        const ctor = Uint8Array as unknown as { fromBase64?: unknown };
+        const saved = [proto.toBase64, ctor.fromBase64];
+        try {
+            delete proto.toBase64;
+            delete ctor.fromBase64;
+            expect(bytesToBase64(bytes)).toBe(expected);
+            expect(base64ToBytes(expected)).toEqual(bytes);
+        } finally {
+            if (saved[0]) proto.toBase64 = saved[0];
+            if (saved[1]) ctor.fromBase64 = saved[1];
+        }
+        expect(bytesToBase64(bytes)).toBe(expected);
+    });
+});

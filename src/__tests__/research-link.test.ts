@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint,
+    readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
     decideResearchOpen, stabilizeIds, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, extractChangedRefs, personsByRefs, humanizeChange,
     isGedcomFileName, normalizeResearchId, parseEventData, isSafariBrowser,
@@ -208,6 +208,32 @@ describe('create / update / ask', () => {
         touched.lastFocusPersonId = Object.keys(touched.persons)[0] as never;
         touched.lastFocusDepthUp = 7;
         expect(contentFingerprint(touched)).toBe(fp);
+    });
+
+    it('a changed image is an edit; the same image is not', () => {
+        const img = (fill: string) => 'data:image/jpeg;base64,' + fill.repeat(4000);
+        const data = importData(researchGed());
+        const first = Object.values(data.persons)[0];
+        first.photo = img('AAAA');
+        const fp = contentFingerprint(data);
+        const same = structuredClone(data);
+        expect(contentFingerprint(same)).toBe(fp);
+        const recropped = structuredClone(data);
+        Object.values(recropped.persons)[0].photo = img('AAAA').slice(0, -8);
+        expect(contentFingerprint(recropped)).not.toBe(fp);
+        const replaced = structuredClone(data);
+        Object.values(replaced.persons)[0].photo = img('BBBB');
+        expect(contentFingerprint(replaced)).not.toBe(fp);
+    });
+
+    it('a link synced by an older version is compared in its own format', () => {
+        const data = importData(researchGed());
+        const legacyText = JSON.stringify([data.persons, data.partnerships, data.sources ?? null, data.places ?? null, data.surnameVariants ?? null]);
+        const fnv = (t: string, seed: number) => { let h = seed >>> 0; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; };
+        const legacy = `${legacyText.length.toString(36)}-${fnv(legacyText, 0x811c9dc5).toString(36)}-${fnv(legacyText, 0x01000193).toString(36)}`;
+        expect(decideResearchOpen({ fingerprint: legacy }, fingerprintLike(data, legacy))).toBe('update');
+        expect(fingerprintLike(data, contentFingerprint(data))).toBe(contentFingerprint(data));
+        expect(contentFingerprint(data).startsWith('v2-')).toBe(true);
     });
 });
 
