@@ -425,7 +425,7 @@ export const researchUiMethods = uiModule({
             } else if (action === 'ask') {
                 // Excerpts the user cut in this tree go with the update — say so.
                 const ownExcerpts = Object.values(previous.sources ?? {}).some(src => src.excerpts?.length);
-                const message = [strings.research.editedMessage(existing.name),
+                const message = [strings.research.editedMessage(existing.name, TreeManager.isAutoBackupEnabled(existing.id)),
                     ownExcerpts ? strings.research.excerptsReplaced : ''].filter(Boolean).join('\n\n');
                 const choice = await this.showChoice(
                     message,

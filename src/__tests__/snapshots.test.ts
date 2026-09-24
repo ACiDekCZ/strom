@@ -27,6 +27,9 @@ vi.mock('../storage.js', () => ({
         async getAll<T>(_store: string): Promise<T[]> {
             return [...mem.values()] as T[];
         },
+        async keys(_store: string): Promise<string[]> {
+            return [...mem.keys()];
+        },
     },
 }));
 
@@ -41,7 +44,13 @@ import {
     getSnapshotJson,
     totalSnapshotBytes,
     hasAutoSnapshotOnDay,
+    deleteSnapshotsForTree,
+    planRetention,
     MAX_SNAPSHOTS_PER_TREE,
+    MIN_SNAPSHOTS_KEPT,
+    SNAPSHOT_TREE_BUDGET_BYTES,
+    SNAPSHOTS_TRIMMED_EVENT,
+    SnapshotMeta,
 } from '../snapshots.js';
 
 function data(names: string[]): StromData {
@@ -126,5 +135,54 @@ describe('snapshots', () => {
         mem.clear();
         await createSnapshot(TREE, data(['x']), 'manual', t0);
         expect(await hasAutoSnapshotOnDay(TREE, t0)).toBe(false);
+    });
+});
+
+describe('snapshot space budget', () => {
+    beforeEach(() => mem.clear());
+    const MB = 1024 * 1024;
+    const meta = (i: number, mb: number): SnapshotMeta =>
+        ({ id: `s${i}`, treeId: TREE, createdAt: 100 - i, personCount: 1, sizeBytes: mb * MB, reason: 'auto' });
+
+    it('keeps small snapshots up to the count cap', () => {
+        const plan = planRetention(Array.from({ length: 25 }, (_, i) => meta(i, 1)), SNAPSHOT_TREE_BUDGET_BYTES);
+        expect(plan.keep).toHaveLength(MAX_SNAPSHOTS_PER_TREE);
+        expect(plan.dropSpace).toBe(0);
+    });
+
+    it('drops old big snapshots past the budget, never below the minimum', () => {
+        const big = Array.from({ length: 10 }, (_, i) => meta(i, 60));
+        const plan = planRetention(big, SNAPSHOT_TREE_BUDGET_BYTES);
+        // 60 MB each against 150 MB: only the guaranteed newest ones stay.
+        expect(plan.keep.map(m => m.id)).toEqual(['s0', 's1', 's2']);
+        expect(plan.dropSpace).toBe(10 - plan.keep.length);
+        // Full storage: budget 0 → exactly the minimum.
+        expect(planRetention(big, 0).keep).toHaveLength(MIN_SNAPSHOTS_KEPT);
+    });
+
+    it('announces snapshots removed for space', async () => {
+        const events: unknown[] = [];
+        const target = new EventTarget();
+        vi.stubGlobal('window', target);
+        target.addEventListener(SNAPSHOTS_TRIMMED_EVENT, (e) => events.push((e as CustomEvent).detail));
+        // Pretend the browser storage is nearly full.
+        vi.stubGlobal('navigator', { storage: { estimate: async () => ({ usage: 95, quota: 100 }) } });
+        for (let i = 0; i < MIN_SNAPSHOTS_KEPT + 1; i++) {
+            await createSnapshot(TREE, data([`P${i}`]), 'manual', 1000 + i * DAY);
+        }
+        expect(await listSnapshots(TREE)).toHaveLength(MIN_SNAPSHOTS_KEPT);
+        expect(events).toEqual([{ treeId: TREE, removed: 1, kept: MIN_SNAPSHOTS_KEPT, storageFull: true }]);
+        vi.unstubAllGlobals();
+    });
+
+    it('lists without reading payloads, and upgrades old records once', async () => {
+        const created = await createSnapshot(TREE, data(['A']), 'manual', 1000);
+        // An old snapshot: payload only, no meta record.
+        mem.set('snap_old', { meta: { ...created, id: 'snap_old', createdAt: 500 }, plain: '{}' });
+        const list = await listSnapshots(TREE);
+        expect(list.map(m => m.id)).toEqual([created.id, 'snap_old']);
+        expect(mem.has('meta:snap_old')).toBe(true);
+        await deleteSnapshotsForTree(TREE);
+        expect([...mem.keys()]).toEqual([]);
     });
 });

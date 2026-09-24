@@ -10,7 +10,7 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { TreeId } from '../types.js';
-import { listSnapshots, totalSnapshotBytes, getSnapshotJson, SnapshotMeta } from '../snapshots.js';
+import { listSnapshots, totalSnapshotBytes, getSnapshotJson, deleteSnapshotsForTree, SnapshotMeta, SnapshotTrim, SNAPSHOT_TREE_BUDGET_BYTES, MAX_SNAPSHOTS_PER_TREE } from '../snapshots.js';
 import { uiModule } from './module.js';
 import { safeFileName } from '../filenames.js';
 import { formatRelativeDateTime, formatFileSize } from '../format.js';
@@ -24,6 +24,9 @@ function snapshotErrorMessage(err: unknown): string {
     const msg = err instanceof Error ? err.message : String(err);
     return /lock/i.test(msg) ? strings.storageSafety.snapshotLocked : strings.storageSafety.snapshotFailed;
 }
+
+/** Trees already told today that their backups were trimmed (treeId → day). */
+const trimNoticeShown = new Map<string, string>();
 
 /** "today 14:36" — backups are told apart by when they were taken. */
 function snapshotWhen(createdAt: number): string {
@@ -87,6 +90,59 @@ export const snapshotsUiMethods = uiModule({
         });
     },
 
+    /**
+     * Backups were removed to save space: a banner with the way to a lasting
+     * copy (export). Once per tree and day — trimming repeats with every new
+     * backup of a big tree, the message does not need to.
+     */
+    handleSnapshotsTrimmed(trim: SnapshotTrim): void {
+        const day = new Date().toISOString().slice(0, 10);
+        if (trimNoticeShown.get(trim.treeId) === day) return;
+        trimNoticeShown.set(trim.treeId, day);
+        const name = TreeManager.getTreeMetadata(trim.treeId as TreeId)?.name ?? '';
+        const s = strings.snapshots;
+        this.showStorageNotice('snapshots-trimmed-notice',
+            trim.storageFull ? s.trimmedFull(trim.kept) : s.trimmed(name, trim.kept), {
+                label: s.persistenceSave,
+                run: () => {
+                    document.getElementById('snapshots-trimmed-notice')?.remove();
+                    this.showExportDialog();
+                },
+            });
+        if (this.snapshotsTreeId === trim.treeId) void this.renderSnapshotsList();
+    },
+
+    /**
+     * The tree's automatic backups on/off. Turning them off asks whether the
+     * existing backups stay or go (that is where the space is).
+     */
+    async toggleTreeAutoBackups(enabled: boolean): Promise<void> {
+        const treeId = this.snapshotsTreeId;
+        if (!treeId) return;
+        if (enabled) {
+            TreeManager.setAutoBackups(treeId, true);
+            return;
+        }
+        const snaps = await listSnapshots(treeId);
+        if (snaps.length > 0) {
+            const s = strings.snapshots;
+            const bytes = snaps.reduce((n, m) => n + (m.sizeBytes || 0), 0);
+            const choice = await this.showChoice(s.autoOffMessage(snaps.length, snapshotSize(bytes)), s.autoOffTitle, [
+                { id: 'delete', label: s.autoOffDelete, variant: 'danger' },
+                { id: 'keep', label: s.autoOffKeep },
+            ]);
+            if (choice === null) {
+                // Cancelled: nothing changes, the switch goes back on.
+                const toggle = document.getElementById('snapshots-auto-toggle') as HTMLInputElement | null;
+                if (toggle) toggle.checked = true;
+                return;
+            }
+            if (choice === 'delete') await deleteSnapshotsForTree(treeId);
+        }
+        TreeManager.setAutoBackups(treeId, false);
+        await this.renderSnapshotsList();
+    },
+
     closeSnapshotsDialog(): void {
         document.getElementById('snapshots-modal')?.classList.remove('active');
         this.snapshotsTreeId = null;
@@ -97,6 +153,8 @@ export const snapshotsUiMethods = uiModule({
         const list = document.getElementById('snapshots-list');
         const totalEl = document.getElementById('snapshots-total');
         if (!treeId || !list) return;
+        const autoToggle = document.getElementById('snapshots-auto-toggle') as HTMLInputElement | null;
+        if (autoToggle) autoToggle.checked = TreeManager.isAutoBackupEnabled(treeId as TreeId);
 
         const [snaps, totalBytes] = await Promise.all([
             listSnapshots(treeId),
@@ -107,6 +165,15 @@ export const snapshotsUiMethods = uiModule({
             totalEl.textContent = snaps.length
                 ? strings.snapshots.total(snaps.length, snapshotSize(totalBytes))
                 : '';
+        }
+        // A tree whose backups cannot all fit the space budget keeps fewer:
+        // say so where the list is, not only in a banner that went away.
+        const budgetEl = document.getElementById('snapshots-budget-note');
+        if (budgetEl) {
+            const biggest = Math.max(0, ...snaps.map(m => m.sizeBytes || 0));
+            const limited = biggest * MAX_SNAPSHOTS_PER_TREE > SNAPSHOT_TREE_BUDGET_BYTES;
+            budgetEl.hidden = !limited;
+            budgetEl.textContent = limited ? strings.snapshots.budgetNote(snapshotSize(SNAPSHOT_TREE_BUDGET_BYTES)) : '';
         }
 
         // While the list is empty the empty state carries "Create backup now";

@@ -41,8 +41,11 @@ export async function findAnyEncryptedRecord(): Promise<EncryptedData | null> {
         const rec = await StorageManager.get<unknown>('audit', key);
         if (isEncrypted(rec)) return rec;
     }
-    for (const rec of await StorageManager.getAll<{ encrypted?: unknown }>('snapshots')) {
-        if (isEncrypted(rec?.encrypted)) return rec.encrypted;
+    // One snapshot at a time: payloads can be tens of MB each (meta records skipped).
+    for (const key of await StorageManager.keys('snapshots')) {
+        if (key.startsWith('meta:')) continue;
+        const rec = await StorageManager.get<{ encrypted?: unknown }>('snapshots', key);
+        if (isEncrypted(rec?.encrypted)) return rec!.encrypted as EncryptedData;
     }
     for (const rec of await StorageManager.getAll<{ encrypted?: unknown }>('shareBaselines')) {
         if (isEncrypted(rec?.encrypted)) return rec.encrypted;

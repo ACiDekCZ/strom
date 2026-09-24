@@ -87,3 +87,40 @@ test('Escape in the backups dialog returns to the tree manager (dialog stack)', 
     await expect(snapshots).toBeHidden();
     await expect(manager).toBeVisible();
 });
+
+test('automatic backups can be turned off per tree; the existing ones may go too', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    // A first edit of the day takes the automatic backup.
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        dm.updatePerson(dm.getAllPersons()[0].id, { birthDate: '1900' });
+    });
+    await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
+    const modal = page.locator('#snapshots-modal');
+    const toggle = modal.locator('#snapshots-auto-toggle');
+    await expect(toggle).toBeChecked();
+    await expect(modal.locator('.snapshot-row')).toHaveCount(1);
+
+    // Turning off asks about the existing backups; Cancel keeps everything.
+    await toggle.uncheck();
+    const ask = page.locator('#confirmation-modal');
+    await expect(ask).toContainText('Keep them, or delete them');
+    await ask.locator('#confirm-cancel-btn').click();
+    await expect(toggle).toBeChecked();
+
+    await toggle.uncheck();
+    await ask.getByRole('button', { name: 'Delete backups' }).click();
+    await expect(modal.locator('.snapshot-row')).toHaveCount(0);
+    await expect(toggle).not.toBeChecked();
+    const id = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
+    expect(await page.evaluate((id) => window.Strom.TreeManager.isAutoBackupEnabled(id), id)).toBe(false);
+
+    // No automatic backup any more (not even before an import); manual still works.
+    await page.evaluate(async () => { await window.Strom.DataManager.snapshotNow('pre-import'); });
+    await page.evaluate(() => window.Strom.UI.renderSnapshotsList());
+    await expect(modal.locator('.snapshot-row')).toHaveCount(0);
+    await page.evaluate(async () => { await window.Strom.DataManager.snapshotNow('manual'); });
+    await page.evaluate(() => window.Strom.UI.renderSnapshotsList());
+    await expect(modal.locator('.snapshot-row')).toHaveCount(1);
+});

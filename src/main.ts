@@ -21,6 +21,7 @@ import { strings } from './strings.js';
 import { onTreeSavedElsewhere } from './tab-sync.js';
 import { StorageManager } from './storage.js';
 import { PERSISTENCE_EVENT, PersistenceState, getRequestedPersistenceState } from './persistence.js';
+import { SNAPSHOTS_TRIMMED_EVENT, SnapshotTrim } from './snapshots.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild } from './pwa.js';
 
 // Make modules available globally for HTML event handlers
@@ -192,6 +193,11 @@ function registerAppListeners(): void {
     // they used to be swallowed rejections with memory/disk divergence.
     window.addEventListener('strom:save-failed', () => {
         UI.showToast(UI.getString('errors.saveFailed'), 6000);
+    });
+
+    // Backups removed for space: say so (once per tree and day).
+    window.addEventListener(SNAPSHOTS_TRIMMED_EVENT, (e) => {
+        UI.handleSnapshotsTrimmed((e as CustomEvent<SnapshotTrim>).detail);
     });
 
     // A tree that could not be decrypted is never saved over (K8).

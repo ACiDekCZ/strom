@@ -8867,6 +8867,9 @@
             color: var(--text-light);
         }
         .snapshot-delete { padding: 4px 8px; }
+        .snapshots-auto { margin: 0 0 12px; }
+        .snapshots-budget-note { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: var(--text-light); }
+        .snapshots-budget-note[hidden] { display: none; }
 
         /* Attachments */
         .attachments-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
@@ -10292,7 +10295,15 @@
                 <h2 data-i18n="snapshots.title"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeSnapshotsDialog()">&times;</button>
             </div>
+            <label class="settings-checkbox snapshots-auto">
+                <input type="checkbox" id="snapshots-auto-toggle" onchange="window.Strom.UI.toggleTreeAutoBackups(this.checked)">
+                <span class="settings-text">
+                    <span class="settings-name" data-i18n="snapshots.autoLabel"></span>
+                    <span class="settings-desc" data-i18n="snapshots.autoHint"></span>
+                </span>
+            </label>
             <div id="snapshots-total" class="snapshots-total"></div>
+            <p class="snapshots-budget-note" id="snapshots-budget-note" hidden></p>
             <div id="snapshots-list" class="snapshots-list"></div>
             <p class="snapshots-persistence" id="snapshots-persistence" hidden></p>
             <p class="snapshots-note" data-i18n="snapshots.inBrowser"></p>

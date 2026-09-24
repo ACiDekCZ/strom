@@ -722,6 +722,12 @@ export interface TreeMetadata {
      * this tree instead of creating a duplicate.
      */
     research?: ResearchLink;
+    /**
+     * Automatic backups (daily, before import / merge) for this tree. Missing =
+     * on. Off for a tree the user keeps elsewhere, or whose scans make every
+     * backup heavy; manual backups still work.
+     */
+    autoBackups?: boolean;
 }
 
 /** Link between a local tree and the Strom Research tree it was opened from. */

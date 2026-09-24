@@ -32,6 +32,39 @@ interface StoredSnapshot {
 /** Keep at most this many snapshots per tree (oldest dropped). */
 export const MAX_SNAPSHOTS_PER_TREE = 20;
 
+/**
+ * Space a tree's snapshots may take. Past it the oldest go early — a tree
+ * carrying tens of MB of scans would otherwise keep 20 copies of them. Plain
+ * text trees (a few MB compressed at most) never get near it.
+ */
+export const SNAPSHOT_TREE_BUDGET_BYTES = 150 * 1024 * 1024;
+
+/** The newest snapshots always kept, whatever the space (a safety net). */
+export const MIN_SNAPSHOTS_KEPT = 3;
+
+/** Browser storage this full (usage / quota) keeps only MIN_SNAPSHOTS_KEPT. */
+export const STORAGE_PRESSURE_RATIO = 0.8;
+
+/** Fired on window when retention dropped snapshots for space; detail: SnapshotTrim. */
+export const SNAPSHOTS_TRIMMED_EVENT = 'strom:snapshots-trimmed';
+
+export interface SnapshotTrim {
+    treeId: string;
+    /** How many snapshots the space rule removed. */
+    removed: number;
+    /** How many are left. */
+    kept: number;
+    /** The browser's storage is nearly full (not just this tree's budget). */
+    storageFull: boolean;
+}
+
+/**
+ * Snapshot records: the payload under the snapshot id, and a small copy of
+ * its meta under META_PREFIX + id — listing and retention read only these,
+ * never the payloads (tens of MB each for a tree with scans).
+ */
+const META_PREFIX = 'meta:';
+
 // ---- base64 <-> bytes ----
 function bytesToBase64(bytes: Uint8Array): string {
     let bin = '';
@@ -101,58 +134,122 @@ export async function createSnapshot(
     stored.meta.sizeBytes = sizeBytes;
 
     await StorageManager.set('snapshots', id, stored);
+    await StorageManager.set('snapshots', META_PREFIX + id, stored.meta);
     await enforceRetention(treeId);
     return stored.meta;
 }
 
-async function allForTree(treeId: string): Promise<StoredSnapshot[]> {
-    const all = await StorageManager.getAll<StoredSnapshot>('snapshots');
-    return all.filter(s => s?.meta?.treeId === treeId);
+/**
+ * Metas of every snapshot, read from the small meta records. A snapshot from
+ * before those records existed is read once in full and gets its meta record.
+ */
+async function allMetas(): Promise<SnapshotMeta[]> {
+    const keys = await StorageManager.keys('snapshots');
+    const metaKeys = new Set(keys.filter(k => k.startsWith(META_PREFIX)));
+    const out: SnapshotMeta[] = [];
+    for (const key of keys) {
+        if (key.startsWith(META_PREFIX)) continue;
+        if (metaKeys.has(META_PREFIX + key)) continue;
+        const legacy = await StorageManager.get<StoredSnapshot>('snapshots', key);
+        if (legacy?.meta?.id) {
+            await StorageManager.set('snapshots', META_PREFIX + key, legacy.meta);
+            metaKeys.add(META_PREFIX + key);
+        }
+    }
+    for (const key of metaKeys) {
+        const meta = await StorageManager.get<SnapshotMeta>('snapshots', key);
+        if (meta?.id && meta.treeId) out.push(meta);
+    }
+    return out;
+}
+
+/** A tree's snapshot metas, newest first. */
+async function metasForTree(treeId: string): Promise<SnapshotMeta[]> {
+    return (await allMetas()).filter(m => m.treeId === treeId).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/** usage / quota of the browser's storage, or null when unknown. */
+async function storageUsageRatio(): Promise<number | null> {
+    try {
+        const nav = typeof navigator !== 'undefined'
+            ? navigator as { storage?: { estimate?: () => Promise<{ usage?: number; quota?: number }> } }
+            : undefined;
+        const est = await nav?.storage?.estimate?.();
+        if (!est?.quota || est.usage === undefined) return null;
+        return est.usage / est.quota;
+    } catch {
+        return null;
+    }
 }
 
 /**
- * Retention: merge same-day auto snapshots (keep the newest per day) and cap the
- * total per tree at MAX_SNAPSHOTS_PER_TREE (oldest dropped).
+ * Which snapshots to keep (metas newest first, after the one-auto-per-day
+ * merge): at most MAX_SNAPSHOTS_PER_TREE, and — beyond the newest
+ * MIN_SNAPSHOTS_KEPT — only while their total fits `budget`. Pure, for tests.
+ */
+export function planRetention(metas: SnapshotMeta[], budget: number): { keep: SnapshotMeta[]; dropCount: number; dropSpace: number } {
+    const keep: SnapshotMeta[] = [];
+    let used = 0;
+    let dropCount = 0;
+    let dropSpace = 0;
+    for (const m of metas) {
+        if (keep.length >= MAX_SNAPSHOTS_PER_TREE) { dropCount++; continue; }
+        const size = m.sizeBytes || 0;
+        if (keep.length >= MIN_SNAPSHOTS_KEPT && used + size > budget) { dropSpace++; continue; }
+        keep.push(m);
+        used += size;
+    }
+    return { keep, dropCount, dropSpace };
+}
+
+/**
+ * Retention: merge same-day auto snapshots (keep the newest per day), cap the
+ * count at MAX_SNAPSHOTS_PER_TREE and the space at SNAPSHOT_TREE_BUDGET_BYTES
+ * (nearly full browser storage: only the newest MIN_SNAPSHOTS_KEPT). Snapshots
+ * removed for space are announced (SNAPSHOTS_TRIMMED_EVENT) — the user should
+ * know their safety net got shorter, and why.
  */
 async function enforceRetention(treeId: string): Promise<void> {
-    let list = await allForTree(treeId);
+    const list = await metasForTree(treeId);
 
     // Collapse auto snapshots to one per calendar day (keep the newest).
-    const autosByDay = new Map<string, StoredSnapshot>();
-    const toDelete = new Set<string>();
-    for (const s of list) {
-        if (s.meta.reason !== 'auto') continue;
-        const key = dayKey(s.meta.createdAt);
-        const kept = autosByDay.get(key);
-        if (!kept) { autosByDay.set(key, s); continue; }
-        // Keep the newer, delete the older.
-        const older = s.meta.createdAt < kept.meta.createdAt ? s : kept;
-        const newer = older === s ? kept : s;
-        toDelete.add(older.meta.id);
-        autosByDay.set(key, newer);
+    const seenAutoDays = new Set<string>();
+    const afterDaily: SnapshotMeta[] = [];
+    for (const m of list) {
+        if (m.reason === 'auto') {
+            const key = dayKey(m.createdAt);
+            if (seenAutoDays.has(key)) { await deleteSnapshot(m.id); continue; }
+            seenAutoDays.add(key);
+        }
+        afterDaily.push(m);
     }
-    for (const id of toDelete) await StorageManager.delete('snapshots', id);
 
-    // Cap total count.
-    list = (await allForTree(treeId)).sort((a, b) => b.meta.createdAt - a.meta.createdAt);
-    for (const s of list.slice(MAX_SNAPSHOTS_PER_TREE)) {
-        await StorageManager.delete('snapshots', s.meta.id);
+    const ratio = await storageUsageRatio();
+    const storageFull = ratio !== null && ratio > STORAGE_PRESSURE_RATIO;
+    const plan = planRetention(afterDaily, storageFull ? 0 : SNAPSHOT_TREE_BUDGET_BYTES);
+    const kept = new Set(plan.keep.map(m => m.id));
+    for (const m of afterDaily) {
+        if (!kept.has(m.id)) await deleteSnapshot(m.id);
+    }
+    if (plan.dropSpace > 0 && typeof window !== 'undefined') {
+        const detail: SnapshotTrim = { treeId, removed: plan.dropSpace, kept: plan.keep.length, storageFull };
+        window.dispatchEvent(new CustomEvent(SNAPSHOTS_TRIMMED_EVENT, { detail }));
     }
 }
 
 /** List a tree's snapshots, newest first. */
 export async function listSnapshots(treeId: string): Promise<SnapshotMeta[]> {
-    const list = await allForTree(treeId);
-    return list.map(s => s.meta).sort((a, b) => b.createdAt - a.createdAt);
+    return metasForTree(treeId);
 }
 
 /** Total bytes of a tree's snapshots. */
 export async function totalSnapshotBytes(treeId: string): Promise<number> {
-    return (await allForTree(treeId)).reduce((sum, s) => sum + (s.meta.sizeBytes || 0), 0);
+    return (await metasForTree(treeId)).reduce((sum, m) => sum + (m.sizeBytes || 0), 0);
 }
 
 export async function deleteSnapshot(id: string): Promise<void> {
     await StorageManager.delete('snapshots', id);
+    await StorageManager.delete('snapshots', META_PREFIX + id);
 }
 
 /** Decode a snapshot back to a raw JSON string (decrypt / gunzip / plain). */
@@ -170,15 +267,15 @@ export async function getSnapshotJson(id: string): Promise<string | null> {
 /** Whether an auto snapshot already exists for `treeId` on the given day. */
 export async function hasAutoSnapshotOnDay(treeId: string, now: number): Promise<boolean> {
     const key = dayKey(now);
-    return (await allForTree(treeId)).some(s => s.meta.reason === 'auto' && dayKey(s.meta.createdAt) === key);
+    return (await metasForTree(treeId)).some(m => m.reason === 'auto' && dayKey(m.createdAt) === key);
 }
 
 /** Remove every snapshot belonging to a deleted tree (cascade cleanup). */
 export async function deleteSnapshotsForTree(treeId: string): Promise<void> {
     // Records keep id/treeId under `meta` (reading them top-level matched
     // nothing, so a deleted tree's backups stayed forever — review V1).
-    for (const snap of await allForTree(treeId)) {
-        await StorageManager.delete('snapshots', snap.meta.id);
+    for (const meta of await metasForTree(treeId)) {
+        await deleteSnapshot(meta.id);
     }
 }
 
@@ -190,7 +287,9 @@ export async function deleteSnapshotsForTree(treeId: string): Promise<void> {
 export async function reencodeAllSnapshots(): Promise<number> {
     const encryptionOn = SettingsManager.isEncryptionEnabled();
     let failed = 0;
-    for (const s of await StorageManager.getAll<StoredSnapshot>('snapshots')) {
+    // One payload in memory at a time (they can be tens of MB each).
+    for (const meta of await allMetas()) {
+        const s = await StorageManager.get<StoredSnapshot>('snapshots', meta.id);
         if (!s?.meta?.id) continue;
         const isEnc = !!s.encrypted;
         if (isEnc === encryptionOn) continue;   // already in the right form
@@ -208,6 +307,7 @@ export async function reencodeAllSnapshots(): Promise<number> {
                 else { next.plain = json; next.meta.sizeBytes = json.length; }
             }
             await StorageManager.set('snapshots', s.meta.id, next);
+            await StorageManager.set('snapshots', META_PREFIX + s.meta.id, next.meta);
         } catch (err) {
             console.error('Snapshot re-encoding failed', s.meta.id, err);
             failed++;

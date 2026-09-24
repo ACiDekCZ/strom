@@ -1205,6 +1205,7 @@ class DataManagerClass {
         // (the first MEANINGFUL mutation of the day should still snapshot).
         if (!Object.values(before.persons).some(p => !p.isPlaceholder)) return;
         const treeId = this.currentTreeId;
+        if (!TreeManager.isAutoBackupEnabled(treeId)) return;
         const now = Date.now();
         const today = new Date(now).toISOString().slice(0, 10);
         if (this.lastAutoSnapshotDay.get(treeId) === today) return;
@@ -1218,9 +1219,13 @@ class DataManagerClass {
             .catch(() => {});
     }
 
-    /** Take a snapshot of the current tree now (manual / pre-import / pre-merge). */
+    /**
+     * Take a snapshot of the current tree now (manual / pre-import / pre-merge).
+     * The automatic ones are skipped when the tree has automatic backups off.
+     */
     async snapshotNow(reason: SnapshotReason): Promise<void> {
         if (this.viewMode || !this.currentTreeId) return;
+        if (reason !== 'manual' && !TreeManager.isAutoBackupEnabled(this.currentTreeId)) return;
         await createSnapshot(this.currentTreeId, this.data, reason, Date.now());
     }
 

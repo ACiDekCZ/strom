@@ -444,7 +444,10 @@ test('deleting a tree deletes its backups, other trees keep theirs', async ({ pa
         const req = indexedDB.open('strom-db');
         req.onsuccess = () => {
             const all = req.result.transaction('snapshots', 'readonly').objectStore('snapshots').getAll();
-            all.onsuccess = () => resolve(all.result.map((s: { meta: { treeId: string } }) => s.meta.treeId));
+            // Payload records carry { meta }; the small meta:<id> records are the meta itself.
+            all.onsuccess = () => resolve(all.result
+                .filter((s: { meta?: unknown }) => s.meta)
+                .map((s: { meta: { treeId: string } }) => s.meta.treeId));
             all.onerror = () => reject(all.error);
         };
         req.onerror = () => reject(req.error);

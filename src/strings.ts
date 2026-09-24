@@ -186,6 +186,15 @@ const stringsEN = {
         unsupported: 'This browser cannot promise to keep the data. Export the tree to a file regularly (Export → Save and back up).',
         persistenceWarning: (count: number) => `Your tree has ${nEn(count, 'person', 'people')}, and this browser may clear its data when it runs short of space. Keep a copy in a file as well.`,
         persistenceSave: 'Export',
+        autoLabel: 'Automatic backups of this tree',
+        autoHint: 'Daily and before an import or merge. Turn off for a tree you keep elsewhere or whose scans make backups heavy; "Create backup now" still works.',
+        autoOffTitle: 'Turn off automatic backups?',
+        autoOffMessage: (count: number, size: string) => `This tree has ${nEn(count, 'backup', 'backups')}${size ? ` (${size})` : ''}. Keep them, or delete them to free the space?`,
+        autoOffKeep: 'Keep backups',
+        autoOffDelete: 'Delete backups',
+        trimmed: (tree: string, kept: number) => `Backups of „${tree}“ take a lot of space (scans and photos), so older automatic backups are removed sooner — ${nEn(kept, 'backup is', 'backups are')} kept. For a lasting copy, export the tree to a file.`,
+        trimmedFull: (kept: number) => `This browser's storage is nearly full, so only the newest ${nEn(kept, 'backup is', 'backups are')} kept. Export your trees to files and free some space.`,
+        budgetNote: (size: string) => `Backups of this tree are large: the oldest are removed once they take more than ${size}; the newest three always stay.`,
         inBrowser: 'Backups live in this browser, not in your tree file — they never make it bigger, and they are gone if you clear the browser or move to another computer. Export the tree for a backup you can keep.',
         menu: 'Backups',
         title: 'Backup history',
@@ -613,15 +622,15 @@ const stringsEN = {
 
     // Opening a research from Strom Research (file handler, link, drag & drop, live bridge)
     research: {
-        excerptsReplaced: 'Excerpts you added to this tree will be replaced by the update. A backup is saved first.',
+        excerptsReplaced: 'Excerpts you added to this tree will be replaced by the update.',
         defaultName: 'Research',
         opened: (name: string, persons: number, families: number, date: string) =>
             `Opened the research ${name} from Strom Research — ${nEn(persons, 'person', 'people')}, ${nEn(families, 'family', 'families')} (as of ${date})`,
         updated: (name: string, persons: number, families: number, date: string) =>
             `Updated the research ${name} from Strom Research — ${nEn(persons, 'person', 'people')}, ${nEn(families, 'family', 'families')} (as of ${date})`,
         editedTitle: 'Changed in the app',
-        editedMessage: (name: string) =>
-            `The tree “${name}” was changed in this app since it last came from Strom Research. Updating it replaces those changes with the research (a backup is kept first). Or open the research as a new copy and leave this tree as it is.`,
+        editedMessage: (name: string, backup = true) =>
+            `The tree “${name}” was changed in this app since it last came from Strom Research. Updating it replaces those changes with the research${backup ? ' (a backup is kept first)' : ''}. Or open the research as a new copy and leave this tree as it is.`,
         update: 'Update',
         openCopy: 'Open as copy',
         changeWords: {
@@ -2330,6 +2339,15 @@ const stringsCZ: StringsType = {
         unsupported: 'Tento prohlížeč neumí slíbit, že data uchová. Ukládejte strom pravidelně do souboru (Export → Uložit a zálohovat).',
         persistenceWarning: (count: number) => `Váš strom má ${nCs(count, 'osobu', 'osoby', 'osob')} a tento prohlížeč může jeho data smazat, když mu dojde místo. Mějte ho uložený i v souboru.`,
         persistenceSave: 'Exportovat',
+        autoLabel: 'Automatické zálohy tohoto stromu',
+        autoHint: 'Denně a před importem nebo sloučením. Vypněte u stromu, který máte uložený jinde, nebo jehož skeny zálohy nafukují; „Vytvořit zálohu teď“ funguje dál.',
+        autoOffTitle: 'Vypnout automatické zálohy?',
+        autoOffMessage: (count: number, size: string) => `Strom má ${nCs(count, 'zálohu', 'zálohy', 'záloh')}${size ? ` (${size})` : ''}. Ponechat je, nebo je smazat a uvolnit místo?`,
+        autoOffKeep: 'Ponechat zálohy',
+        autoOffDelete: 'Smazat zálohy',
+        trimmed: (tree: string, kept: number) => `Zálohy stromu „${tree}“ zabírají hodně místa (skeny a fotky), proto se starší automatické zálohy mažou dřív — drží se ${nCs(kept, 'záloha', 'zálohy', 'záloh')}. Trvalou kopii si uložte exportem do souboru.`,
+        trimmedFull: (kept: number) => `Úložiště prohlížeče je téměř plné, proto se drží jen ${nCs(kept, 'nejnovější záloha', 'nejnovější zálohy', 'nejnovějších záloh')}. Exportujte stromy do souborů a uvolněte místo.`,
+        budgetNote: (size: string) => `Zálohy tohoto stromu jsou velké: nejstarší se mažou, jakmile zaberou víc než ${size}; tři nejnovější zůstávají vždy.`,
         inBrowser: 'Zálohy žijí v tomto prohlížeči, ne ve tvém souboru se stromem — nezvětšují ho, ale zmizí s vymazáním dat prohlížeče nebo na jiném počítači. Zálohu, kterou si opravdu odložíš, uděláš exportem stromu.',
         menu: 'Zálohy',
         title: 'Historie záloh',
@@ -2759,15 +2777,15 @@ const stringsCZ: StringsType = {
 
     // Otevření výzkumu ze Strom Research (obsluha souborů, odkaz, přetažení, živý most)
     research: {
-        excerptsReplaced: 'Výřezy, které jste do tohoto stromu přidali, se aktualizací nahradí. Předtím se uloží záloha.',
+        excerptsReplaced: 'Výřezy, které jste do tohoto stromu přidali, se aktualizací nahradí.',
         defaultName: 'Výzkum',
         opened: (name: string, persons: number, families: number, date: string) =>
             `Otevřen výzkum ${name} ze Strom Research — ${nCs(persons, 'osoba', 'osoby', 'osob')}, ${nCs(families, 'rodina', 'rodiny', 'rodin')} (stav k ${date})`,
         updated: (name: string, persons: number, families: number, date: string) =>
             `Aktualizován výzkum ${name} ze Strom Research — ${nCs(persons, 'osoba', 'osoby', 'osob')}, ${nCs(families, 'rodina', 'rodiny', 'rodin')} (stav k ${date})`,
         editedTitle: 'Změněno v aplikaci',
-        editedMessage: (name: string) =>
-            `Rodokmen „${name}“ jste od posledního otevření ze Strom Research v aplikaci změnili. Aktualizace vaše změny přepíše výzkumem (předtím se uloží záloha). Nebo výzkum otevřete jako novou kopii a tento rodokmen zůstane beze změny.`,
+        editedMessage: (name: string, backup = true) =>
+            `Rodokmen „${name}“ jste od posledního otevření ze Strom Research v aplikaci změnili. Aktualizace vaše změny přepíše výzkumem${backup ? ' (předtím se uloží záloha)' : ''}. Nebo výzkum otevřete jako novou kopii a tento rodokmen zůstane beze změny.`,
         update: 'Aktualizovat',
         openCopy: 'Otevřít jako kopii',
         changeWords: {
@@ -4478,6 +4496,15 @@ const stringsDE: StringsType = {
         unsupported: 'Dieser Browser kann nicht zusagen, die Daten zu behalten. Exportieren Sie den Stammbaum regelmäßig in eine Datei (Export → Speichern und sichern).',
         persistenceWarning: (count: number) => `Ihr Stammbaum hat ${nDe(count, 'Person', 'Personen')}, und dieser Browser kann seine Daten löschen, wenn ihm der Speicherplatz ausgeht. Bewahren Sie auch eine Kopie in einer Datei auf.`,
         persistenceSave: 'Exportieren',
+        autoLabel: 'Automatische Sicherungen dieses Stammbaums',
+        autoHint: 'Täglich und vor einem Import oder Zusammenführen. Ausschalten für einen Stammbaum, den Sie anderswo aufbewahren oder dessen Scans die Sicherungen groß machen; „Jetzt sichern“ funktioniert weiter.',
+        autoOffTitle: 'Automatische Sicherungen ausschalten?',
+        autoOffMessage: (count: number, size: string) => `Dieser Stammbaum hat ${nDe(count, 'Sicherung', 'Sicherungen')}${size ? ` (${size})` : ''}. Behalten oder löschen, um Platz freizugeben?`,
+        autoOffKeep: 'Sicherungen behalten',
+        autoOffDelete: 'Sicherungen löschen',
+        trimmed: (tree: string, kept: number) => `Die Sicherungen von „${tree}“ belegen viel Platz (Scans und Fotos), daher werden ältere automatische Sicherungen früher entfernt — ${nDe(kept, 'Sicherung bleibt', 'Sicherungen bleiben')}. Für eine dauerhafte Kopie exportieren Sie den Stammbaum in eine Datei.`,
+        trimmedFull: (kept: number) => `Der Speicher dieses Browsers ist fast voll, daher bleiben nur die neuesten ${nDe(kept, 'Sicherung', 'Sicherungen')}. Exportieren Sie Ihre Stammbäume in Dateien und geben Sie Platz frei.`,
+        budgetNote: (size: string) => `Die Sicherungen dieses Stammbaums sind groß: Die ältesten werden entfernt, sobald sie mehr als ${size} belegen; die drei neuesten bleiben immer.`,
         inBrowser: 'Sicherungen leben in diesem Browser, nicht in Ihrer Stammbaum-Datei — sie vergrößern sie nie und sind weg, wenn Sie die Browserdaten löschen oder an einen anderen Computer wechseln. Exportieren Sie den Stammbaum für eine Sicherung, die Sie behalten können.',
         menu: 'Sicherungen',
         title: 'Sicherungsverlauf',
@@ -4899,15 +4926,15 @@ const stringsDE: StringsType = {
 
     // Opening a research from Strom Research (file handler, link, drag & drop, live bridge)
     research: {
-        excerptsReplaced: 'Ausschnitte, die Sie diesem Stammbaum hinzugefügt haben, werden durch die Aktualisierung ersetzt. Vorher wird eine Sicherung gespeichert.',
+        excerptsReplaced: 'Ausschnitte, die Sie diesem Stammbaum hinzugefügt haben, werden durch die Aktualisierung ersetzt.',
         defaultName: 'Forschung',
         opened: (name: string, persons: number, families: number, date: string) =>
             `Forschung ${name} aus Strom Research geöffnet — ${nDe(persons, 'Person', 'Personen')}, ${nDe(families, 'Familie', 'Familien')} (Stand ${date})`,
         updated: (name: string, persons: number, families: number, date: string) =>
             `Forschung ${name} aus Strom Research aktualisiert — ${nDe(persons, 'Person', 'Personen')}, ${nDe(families, 'Familie', 'Familien')} (Stand ${date})`,
         editedTitle: 'In der App geändert',
-        editedMessage: (name: string) =>
-            `Sie haben den Stammbaum „${name}“ in dieser App geändert, seit er zuletzt aus Strom Research kam. Beim Aktualisieren werden diese Änderungen durch die Forschung ersetzt (vorher wird eine Sicherung angelegt). Oder öffnen Sie die Forschung als neue Kopie und lassen diesen Stammbaum unverändert.`,
+        editedMessage: (name: string, backup = true) =>
+            `Sie haben den Stammbaum „${name}“ in dieser App geändert, seit er zuletzt aus Strom Research kam. Beim Aktualisieren werden diese Änderungen durch die Forschung ersetzt${backup ? ' (vorher wird eine Sicherung angelegt)' : ''}. Oder öffnen Sie die Forschung als neue Kopie und lassen diesen Stammbaum unverändert.`,
         update: 'Aktualisieren',
         openCopy: 'Als Kopie öffnen',
         changeWords: {

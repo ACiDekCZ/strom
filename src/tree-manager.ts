@@ -204,6 +204,19 @@ class TreeManagerClass {
     /**
      * Set tree visibility
      */
+    /** Are automatic backups on for this tree (default yes)? */
+    isAutoBackupEnabled(id: TreeId): boolean {
+        return this.index.trees.find(t => t.id === id)?.autoBackups !== false;
+    }
+
+    setAutoBackups(id: TreeId, enabled: boolean): void {
+        const tree = this.index.trees.find(t => t.id === id);
+        if (!tree) return;
+        if (enabled) delete tree.autoBackups;
+        else tree.autoBackups = false;
+        this.saveIndex();
+    }
+
     setTreeVisibility(id: TreeId, isHidden: boolean): void {
         const tree = this.index.trees.find(t => t.id === id);
         if (tree) {
