@@ -464,6 +464,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
 
         // Citations of a source that was already in the tree now name the kept entry.
         remapSourceReferences(mergedData, sourceRemap);
+        unlinkOrphanExcerpts(mergedData);
 
         // Validate result
         const validationErrors = validateMergedData(mergedData);
@@ -574,21 +575,60 @@ function mergeSourceCatalogs(
     if (!incoming || Object.keys(incoming).length === 0) return remap;
     const catalog = (mergedData.sources ??= {});
     const byKey = new Map<string, string>();
+    // An external record id (research "S0042") is the strongest identity:
+    // same refn = same entry, even when its title was edited since.
+    const byRefn = new Map<string, string>();
     for (const src of Object.values(catalog)) {
         const key = sourceKey(src);
         if (key && !byKey.has(key)) byKey.set(key, src.id);
+        if (src.refn && !byRefn.has(src.refn)) byRefn.set(src.refn, src.id);
     }
     for (const [id, src] of Object.entries(incoming)) {
         const key = sourceKey(src);
-        const kept = key ? byKey.get(key) : undefined;
+        const kept = (src.refn ? byRefn.get(src.refn) : undefined) ?? (key ? byKey.get(key) : undefined);
         if (kept && kept !== id && !catalog[id]) {
             remap.set(id, kept);
+            absorbSourceDetails(catalog[kept], src);
             continue;
         }
         catalog[id] = structuredClone(src);
         if (key && !byKey.has(key)) byKey.set(key, id);
+        if (src.refn && !byRefn.has(src.refn)) byRefn.set(src.refn, id);
     }
     return remap;
+}
+
+/**
+ * A deduplicated incoming source still brings what the kept one lacks: its
+ * excerpts (same image = same excerpt) and any empty text field.
+ */
+function absorbSourceDetails(kept: Source, incoming: Source): void {
+    if (!kept.transcript && incoming.transcript) kept.transcript = incoming.transcript;
+    if (!kept.recordDate && incoming.recordDate) kept.recordDate = incoming.recordDate;
+    if (!kept.refn && incoming.refn) kept.refn = incoming.refn;
+    for (const exc of incoming.excerpts ?? []) {
+        if (kept.excerpts?.some(e => e.dataUrl === exc.dataUrl)) continue;
+        (kept.excerpts ??= []).push(structuredClone(exc));
+    }
+}
+
+/**
+ * Excerpts whose full-page attachment did not survive the merge (dropped as a
+ * duplicate of the same bytes under another id) lose only their re-crop link.
+ */
+function unlinkOrphanExcerpts(data: StromData): void {
+    const attachmentIds = new Set<string>();
+    for (const person of Object.values(data.persons)) {
+        for (const att of person.attachments ?? []) attachmentIds.add(att.id);
+    }
+    for (const src of Object.values(data.sources ?? {})) {
+        for (const exc of src.excerpts ?? []) {
+            if (exc.fromAttachmentId && !attachmentIds.has(exc.fromAttachmentId)) {
+                delete exc.fromAttachmentId;
+                delete exc.region;
+            }
+        }
+    }
 }
 
 /** Point every citation of a deduplicated source at the kept entry (no duplicates left in a list). */

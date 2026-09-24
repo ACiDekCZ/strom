@@ -66,10 +66,25 @@ function partnership(): Partnership {
 function fullTree(): Required<StromData> {
     return {
         version: STROM_DATA_VERSION,
-        persons: { [ALICE]: person(ALICE, 'Alice'), [BOB]: person(BOB, 'Bob') },
+        persons: {
+            // Alice holds the full page the source excerpt was cut from.
+            [ALICE]: { ...person(ALICE, 'Alice'), attachments: [{
+                id: 'att1', name: 'page-57.jpg', mimeType: 'image/jpeg',
+                dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1,
+            }] },
+            [BOB]: person(BOB, 'Bob'),
+        },
         partnerships: { [UNION]: partnership() },
         sources: {
-            s1: { id: 's1', title: 'Parish register, Kolín', quality: 3 },
+            s1: {
+                id: 's1', title: 'Parish register, Kolín', quality: 3,
+                transcript: 'Jan, syn Josefa', recordDate: '1865-03-12', refn: 'S0042',
+                excerpts: [{
+                    id: 'exc1', dataUrl: 'data:image/jpeg;base64,AA==', width: 10, height: 4,
+                    sizeBytes: 1, fromAttachmentId: 'att1', region: { x: 0.1, y: 0.2, w: 0.5, h: 0.1 },
+                    pageUrl: 'https://archive.example/page/57', caption: 'left page',
+                }],
+            },
         },
         places: {
             'kolin': { lat: 50.0281, lon: 15.2003, label: 'Kolín, Česko' },

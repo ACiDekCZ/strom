@@ -46,6 +46,11 @@ export function generateSourceId(): string {
     return `src_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** Generate unique SourceExcerpt id */
+export function generateExcerptId(): string {
+    return `exc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
 /** Generate unique Attachment id */
 export function generateAttachmentId(): string {
     return `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -123,9 +128,37 @@ export interface LifeEvent {
 }
 
 /**
- * A source/citation entry (parish register, archive, URL...). Sources are a
- * per-tree catalog (StromData.sources); persons and events reference them by id
- * via sourceIds, so one source can be cited many times.
+ * A cut-out of a scan showing the entry itself — one register row, a paragraph
+ * of a certificate. The crop is stored as its own small image so it displays
+ * without the full page and survives leaving attachments out of an export.
+ */
+export interface SourceExcerpt {
+    id: string;
+    /** The cropped image as a data URL (JPEG from the app, long side ≤ 1200 px). */
+    dataUrl: string;
+    width: number;
+    height: number;
+    sizeBytes: number;
+    /** Person attachment (full page) the crop was cut from — enables re-cropping. */
+    fromAttachmentId?: string;
+    /** Where the crop lies in that attachment, fractions 0–1 from the top left. */
+    region?: { x: number; y: number; w: number; h: number };
+    /** Permalink to the page in the online archive's image viewer. */
+    pageUrl?: string;
+    caption?: string;
+}
+
+/** The UI offers at most this many excerpts per source (an entry across a page break). */
+export const MAX_EXCERPTS_UI = 2;
+
+/**
+ * A source/citation entry. Sources are a per-tree catalog (StromData.sources);
+ * persons, events and partnerships reference them by id via sourceIds, so one
+ * source can be cited many times.
+ *
+ * The UI treats a source as ONE ENTRY (a baptism, a marriage record): the page,
+ * the transcript and the excerpt belong to the entry, and every fact that entry
+ * proves cites it. A whole register book as a source still works (older data).
  */
 export interface Source {
     id: string;
@@ -141,6 +174,21 @@ export interface Source {
      * (first citation wins, like `reference`) and re-exported on citations.
      */
     quality?: number;
+    /** Verbatim transcript of the entry (GEDCOM SOUR.TEXT). */
+    transcript?: string;
+    /**
+     * When the entry was written — a flex date (see src/dates.ts). Differs from
+     * the event's date: a baptism is recorded days after the birth.
+     * GEDCOM: citation DATA.DATE (entry recording date).
+     */
+    recordDate?: string;
+    /** Crops of the entry from its scan (see SourceExcerpt). */
+    excerpts?: SourceExcerpt[];
+    /**
+     * The record's id in the program it came from (GEDCOM SOUR.REFN), e.g. a
+     * Strom Research "S0042". Keeps the entry's identity across re-imports.
+     */
+    refn?: string;
 }
 
 /**
@@ -324,6 +372,10 @@ export type LastFocusedMarker = typeof LAST_FOCUSED;
  * v5 (2026-07): added Person.parentRelTypes (adoptive/step/foster links).
  * v6 (2026-08): added Partnership.participants (wedding witnesses) and
  *   Person.story / Partnership.story (narratives, GEDCOM _STORY).
+ * Source.transcript / recordDate / excerpts / refn (2026-09) are additive and
+ *   pass through older apps untouched (the source catalog is copied whole), so
+ *   they ship without a bump while they live on the shared-origin beta; the
+ *   bump to 7 comes with the public release.
  * All additive/backward-compatible for reading; the bump makes an older app
  * warn ("newer version") before it silently drops the new fields on re-save.
  */
@@ -624,6 +676,8 @@ export interface AppSettings {
     researchNewDismissed?: boolean;  // the "New" marker went out for good
     whatsNew30Shown?: boolean;       // the one-time "What's new in 3.0" card was shown
     persistenceWarningShown?: boolean; // the one-time "browser may clear this data" notice was shown
+    importImages?: boolean;          // default: true - imports bring photos, attachments and source excerpts
+    recentSourceIds?: Record<string, string[]>;  // per tree id: last cited sources, newest first (source picker)
 }
 
 // ==================== MULTI-TREE STORAGE ====================

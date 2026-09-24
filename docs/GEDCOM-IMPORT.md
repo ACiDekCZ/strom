@@ -266,37 +266,69 @@ not its label, and is kept in the event's note:
 
 ## Sources
 
+A source in Strom is best **one register entry** — a baptism, a marriage
+record — rather than a whole book: the page, the wording and the image crop
+all belong to that entry, and every fact it proves cites it.
+
 ```
 0 @S4@ SOUR
-1 TITL Lučice, kniha narozených 1858–1870
+1 TITL Křest: Jan Novák, Lučice 1865
+1 REFN S0042
 1 REPO SOA Zámrsk
-1 PAGE sign. 1702
+1 PAGE sign. 1702, fol. 45, č. 12
+1 TEXT Jan, syn Josefa Nováka,
+2 CONT sedláka č. 12
+1 WWW https://archive.example/book/1702
+1 OBJE
+2 FORM jpg
+2 TITL left page
+2 _STROM_KIND excerpt
+2 _URL https://archive.example/book/1702/image/57
+2 FILE data:image/jpeg;base64,/9j/4AAQ…
 ```
+
+- `TEXT` (with `CONT` / `CONC`) is the entry's **transcript**, kept verbatim.
+- `REFN` is the record's id in the program that wrote the file. Strom keeps it
+  and uses it to recognise the same entry again: merging two trees treats two
+  sources with the same `REFN` as one, and re-opening an updated research keeps
+  the source's identity.
+- `OBJE` with a `FILE` that is a `data:image/jpeg|png|webp|gif;base64,` URL is
+  an **excerpt** — a crop of the entry from its scan. `2 TITL` is its caption,
+  `2 _URL` the page in the archive's image viewer. `2 _STROM_KIND excerpt` marks
+  it but is not required: every image on a source record is read as its
+  excerpt. A path, a URL or any other payload in `FILE` is skipped and reported
+  (`OBJE`). `FORM` and a `_REGION` line are not read.
 
 A source given inline, as text instead of a pointer (`1 SOUR Vzpomínky
 babičky`, `2 SOUR Farní kniha`), becomes a source record of its own with that
 text as its title, cited where it stood; the same text twice is one source.
 `ABBR` is the title of a record that has no `TITL`. Any other line directly on
-a source record (`DATA`, `OBJE`, `REFN` …) is reported as unsupported.
+a source record (`DATA`, …) is reported as unsupported.
 
 Cite them from the fact they prove — `2 SOUR @S4@` with `3 PAGE` for the exact
-place in the book, and `3 QUAY 0..3` for how good the reading is. A citation on
-the entry is worth more than a source listed once on the person.
+place in the book, `3 QUAY 0..3` for how good the reading is, and
+`3 DATA` / `4 DATE` for the day the entry was written (a baptism is recorded
+after the birth). A citation on the entry is worth more than a source listed
+once on the person.
 
-The source record's own lines all reach the source's note: every `NOTE`
-(separated by a blank line), the transcript `TEXT` and the publication `PUBL`
-with their `CONT` / `CONC` lines, the author `AUTH`, and the call number
-`CALN` under `REPO` — each labelled ("Transcript: …", "Call number: …").
+The rest of the source record's lines reach the source's note: every `NOTE`
+(separated by a blank line), the publication `PUBL` with its `CONT` / `CONC`
+lines, the author `AUTH`, and the call number `CALN` under `REPO` — each
+labelled ("Author: …", "Call number: …").
 
 Two limits of the model to plan around:
 
-- **`PAGE` and `QUAY` belong to the source, not to each citation.** The first
-  citation read decides them. If one book is cited at different pages for
-  different facts, give each entry a source of its own.
+- **`PAGE`, `QUAY` and the entry date belong to the source, not to each
+  citation.** The first citation read decides them. If one book is cited at
+  different pages for different facts, give each entry a source of its own —
+  which is what a source is meant to be anyway.
 - **The words of the entry go on the source, as `1 TEXT`.** `DATA` / `TEXT`
   under a citation is not read: other programs put machine-made summaries of
-  matched records there, which would flood the notes. One source per register
-  entry, with its transcript in `1 TEXT`, says the same thing.
+  matched records there, which would flood the notes.
+
+Strom writes all of the above back on export: `TEXT`, `REFN`, the excerpts as
+`OBJE` (unless the export leaves attachments out) and `DATA` / `DATE` on every
+citation of a source with an entry date.
 
 ## Narratives (`_STORY`)
 

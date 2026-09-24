@@ -44,6 +44,7 @@ import { placeKey } from './places';
 import { eventValueIsOnTag } from './events';
 import { strings, getStringsForLang } from './strings';
 import { SURNAME_GROUPS_MARKER, SURNAME_GROUP_SEP } from './ged-exporter';
+import { excerptFromDataUrl } from './excerpts';
 
 /**
  * Words that name a role in RELA, in the languages registers and genealogy
@@ -345,6 +346,22 @@ interface RawSource {
     quality?: number;
     /** ABBR: the short title, used when the record has no TITL. */
     abbr?: string;
+    /** TEXT: the entry's wording, verbatim. */
+    transcript?: string;
+    /** REFN: the record's id in the program that wrote the file. */
+    refn?: string;
+    /** Record date from a citation's DATA > DATE (first wins). */
+    recordDate?: string;
+    /** OBJE on the record: crops of the entry (Strom: _STROM_KIND excerpt). */
+    media: RawSourceMedia[];
+}
+
+/** Raw OBJE under a source record. */
+interface RawSourceMedia {
+    title: string;
+    file: string;
+    /** _URL: the page in the archive's image viewer. */
+    pageUrl?: string;
 }
 
 // ==================== TYPES ====================
@@ -1037,6 +1054,11 @@ export function parseGedcom(content: string): ParsedGedcom {
     };
     const droppedTags = new Map<string, number>();
     const drop = (tag: string) => droppedTags.set(tag, (droppedTags.get(tag) ?? 0) + 1);
+    /** Citation DATA > DATE -> the source's record date (first wins, like PAGE). */
+    const citationDates = new Map<string, string>();
+    let citeLevel: number | null = null;
+    let citeRef: string | null = null;
+    let inCiteData = false;
 
     let currentRecord: GedcomIndividual | GedcomFamily | null = null;
     let currentType: 'INDI' | 'FAM' | 'SOUR' | null = null;
@@ -1061,6 +1083,8 @@ export function parseGedcom(content: string): ParsedGedcom {
     let currentMedia: RawMedia | null = null;
     /** Level-2 tag inside the current OBJE (for level-3 FILE continuations). */
     let currentMediaSubTag: string | null = null;
+    /** Level-2 tag inside an OBJE on a source record (FILE continuations). */
+    let sourceMediaSubTag: string | null = null;
     /** @Sx@ of the most recent citation (PAGE lines attach to it). */
     let currentCitationId: string | null = null;
     /** 0 @Rx@ REPO record currently open. */
@@ -1124,6 +1148,20 @@ export function parseGedcom(content: string): ParsedGedcom {
         // file never defines says nothing and is read as an empty note.
         if (tag === 'NOTE' && level > 0 && GED_POINTER.test(value)) {
             value = noteRecords.get(value) ?? '';
+        }
+
+        // Citation DATA > DATE (the entry recording date) may sit under a
+        // citation at any depth — on the person, a name, an event, a family —
+        // so it is tracked here by level, apart from the per-record dispatch.
+        if (citeLevel !== null && level <= citeLevel) { citeLevel = null; citeRef = null; inCiteData = false; }
+        if (tag === 'SOUR' && level > 0 && currentType !== 'SOUR' && GED_POINTER.test(value)) {
+            citeLevel = level; citeRef = value; inCiteData = false;
+        } else if (citeLevel !== null && citeRef) {
+            if (level === citeLevel + 1) inCiteData = tag === 'DATA';
+            else if (level === citeLevel + 2 && inCiteData && tag === 'DATE' && value
+                && !citationDates.has(citeRef)) {
+                citationDates.set(citeRef, parseGedcomDate(value));
+            }
         }
 
         // Place coordinates ride under a PLAC as MAP > LATI/LONG. They can hang
@@ -1236,7 +1274,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 individuals.set(recordId, currentRecord as GedcomIndividual);
             } else if (recordType === 'SOUR') {
                 currentSource = {
-                    id: recordId, title: '', repository: '', reference: '', url: '', note: ''
+                    id: recordId, title: '', repository: '', reference: '', url: '', note: '', media: []
                 };
                 currentRecord = null;
                 currentType = 'SOUR';
@@ -1301,15 +1339,14 @@ export function parseGedcom(content: string): ParsedGedcom {
         } else if (currentRepoId !== null && level === 1 && tag === 'NAME') {
             repositories.set(currentRepoId, value);
         } else if (currentType === 'SOUR' && currentSource) {
-            // Source record sub-lines. reference <- PAGE (spec mapping).
+            // Source record sub-lines. reference <- PAGE (spec mapping), the
+            // transcript <- TEXT, refn <- REFN, excerpts <- OBJE.
             //
-            // The source has one note, and everything the record says that has
-            // no field of its own lands there: every NOTE (a second one used to
-            // overwrite the first), the transcript (TEXT), the publication
-            // (PUBL), the author (AUTH) and the call number the repository
-            // files it under (REPO > CALN) — each labelled, each with its
-            // continuation lines. Writing the tail of a TEXT nowhere kept the
-            // first line of a transcript and lost the rest.
+            // The source has one note, and everything else the record says that
+            // has no field of its own lands there: every NOTE (a second one used
+            // to overwrite the first), the publication (PUBL), the author (AUTH)
+            // and the call number the repository files it under (REPO > CALN)
+            // — each labelled, each with its continuation lines.
             const src = currentSource;
             const addLine = (line: string, sep: string): void => {
                 src.note = src.note ? `${src.note}${sep}${line}` : line;
@@ -1321,13 +1358,17 @@ export function parseGedcom(content: string): ParsedGedcom {
                 if (tag === 'TITL') src.title = value;
                 else if (tag === 'REPO') src.repository = value;
                 else if (tag === 'PAGE') src.reference = value;
-                else if (tag === 'PUBL' || tag === 'TEXT' || tag === 'AUTH') {
-                    const label = tag === 'TEXT' ? strings.gedcomNotes.sourceText
-                        : tag === 'PUBL' ? strings.gedcomNotes.sourcePublication
-                        : strings.gedcomNotes.sourceAuthor;
-                    // A transcript is a block of its own, set apart like a NOTE.
-                    addLine(label(plain(value).trim()).trimEnd(), tag === 'TEXT' ? '\n\n' : '\n');
+                else if (tag === 'TEXT') {
+                    // The entry's wording has a field of its own: the transcript.
+                    src.transcript = src.transcript ? `${src.transcript}\n\n${plain(value)}` : plain(value);
                 }
+                else if (tag === 'PUBL' || tag === 'AUTH') {
+                    const label = tag === 'PUBL' ? strings.gedcomNotes.sourcePublication
+                        : strings.gedcomNotes.sourceAuthor;
+                    addLine(label(plain(value).trim()).trimEnd(), '\n');
+                }
+                else if (tag === 'REFN') { if (value) src.refn = value; }
+                else if (tag === 'OBJE') src.media.push({ title: '', file: '' });
                 else if (tag === 'QUAY') { const q = parseInt(value, 10); if (q >= 0 && q <= 3) src.quality = q; }
                 else if (tag === 'WWW' || tag === 'URL') src.url = value;
                 // Separate notes stay separate: a blank line between them. A
@@ -1345,13 +1386,27 @@ export function parseGedcom(content: string): ParsedGedcom {
                 if (currentSubTag === 'TITL') {
                     if (tag === 'CONT') src.title += '\n' + value;
                     else if (tag === 'CONC') src.title += value;
-                } else if (currentSubTag === 'NOTE' || currentSubTag === 'TEXT'
+                } else if (currentSubTag === 'TEXT') {
+                    if (tag === 'CONT') src.transcript = (src.transcript ?? '') + '\n' + plain(value);
+                    else if (tag === 'CONC') src.transcript = (src.transcript ?? '') + plain(value);
+                } else if (currentSubTag === 'NOTE'
                     || currentSubTag === 'PUBL' || currentSubTag === 'AUTH') {
                     if (tag === 'CONT') src.note += (src.note ? '\n' : '') + plain(value);
                     else if (tag === 'CONC') src.note += plain(value);
                 } else if (currentSubTag === 'REPO' && tag === 'CALN' && value) {
                     addLine(strings.gedcomNotes.sourceCallNumber(value), '\n');
+                } else if (currentSubTag === 'OBJE' && src.media.length > 0) {
+                    const media = src.media[src.media.length - 1];
+                    sourceMediaSubTag = tag;
+                    if (tag === 'FILE') media.file = value;
+                    else if (tag === 'TITL') media.title = value;
+                    else if (tag === '_URL') media.pageUrl = value;
+                    // FORM, _STROM_KIND, _REGION: nothing to keep — the data URL
+                    // says the format, and every image on a source is its excerpt.
                 }
+            } else if (level === 3 && currentSubTag === 'OBJE' && sourceMediaSubTag === 'FILE'
+                && tag === 'CONC' && src.media.length > 0) {
+                src.media[src.media.length - 1].file += value;
             }
         } else if (currentRecord) {
             if (level === 1) {
@@ -1860,7 +1915,7 @@ export function parseGedcom(content: string): ParsedGedcom {
     // Inline sources (`1 SOUR free text`): a source record of their own, so
     // the words the file gave as evidence are kept, and cited where they stood.
     for (const [id, text] of inlineSources) {
-        sources.set(id, { id, title: text, repository: '', reference: '', url: '', note: '' });
+        sources.set(id, { id, title: text, repository: '', reference: '', url: '', note: '', media: [] });
     }
 
     // Resolve repository pointers (1 REPO @Rx@) to names, and citation PAGEs
@@ -1873,6 +1928,9 @@ export function parseGedcom(content: string): ParsedGedcom {
         }
         if (src.quality === undefined && citationQuality.has(src.id)) {
             src.quality = citationQuality.get(src.id);
+        }
+        if (!src.recordDate && citationDates.has(src.id)) {
+            src.recordDate = citationDates.get(src.id);
         }
     }
 
@@ -1918,6 +1976,23 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (raw.url) src.url = raw.url;
         if (raw.note) src.note = raw.note;
         if (raw.quality !== undefined) src.quality = raw.quality;
+        if (raw.transcript?.trim()) src.transcript = raw.transcript.trim();
+        if (raw.refn) src.refn = raw.refn;
+        if (raw.recordDate) src.recordDate = raw.recordDate;
+        // Images on a source record are crops of its entry. Only embedded
+        // raster images come in; a path or URL (another program's media
+        // folder) or any other payload is skipped and counted.
+        for (const media of raw.media) {
+            const exc = media.file.startsWith('data:')
+                ? excerptFromDataUrl(media.file, { caption: media.title, pageUrl: media.pageUrl })
+                : null;
+            if (!exc) {
+                skippedMedia++;
+                droppedTags.set('OBJE', (droppedTags.get('OBJE') ?? 0) + 1);
+                continue;
+            }
+            (src.excerpts ??= []).push(exc);
+        }
         sources[newId] = src;
     }
     /** Map raw @Sx@ refs to catalog ids, dropping any that don't resolve. */

@@ -92,6 +92,27 @@ export function createEmptyData(): StromData {
     };
 }
 
+/** One place that cites a source (see DataManager.listSourceCitations). */
+export type SourceCitationRef =
+    | { kind: 'person'; personId: PersonId }
+    | { kind: 'event'; personId: PersonId; eventId: string }
+    | { kind: 'partnership'; partnershipId: PartnershipId };
+
+/**
+ * Drop the re-crop link (fromAttachmentId + region) of every excerpt cut from
+ * `attachmentId`. The excerpt image itself stays. Mutates `data`.
+ */
+export function unlinkExcerptsFromAttachment(data: StromData, attachmentId: string): void {
+    for (const src of Object.values(data.sources ?? {})) {
+        for (const exc of src.excerpts ?? []) {
+            if (exc.fromAttachmentId === attachmentId) {
+                delete exc.fromAttachmentId;
+                delete exc.region;
+            }
+        }
+    }
+}
+
 /**
  * Bring loaded data to the current shape. EVERY load goes through here — tree
  * switch, app restart, import, snapshot restore, opening a shared file.
@@ -1802,6 +1823,26 @@ class DataManagerClass {
     }
 
     /** How many persons + events currently cite a source. */
+    /**
+     * Every place citing `sourceId`, in tree order: person citations, then
+     * their events, then partnerships. Feeds the source viewer's "Supports" list.
+     */
+    listSourceCitations(sourceId: string): SourceCitationRef[] {
+        const out: SourceCitationRef[] = [];
+        for (const person of Object.values(this.data.persons)) {
+            if (person.sourceIds?.includes(sourceId)) out.push({ kind: 'person', personId: person.id });
+            for (const ev of person.events ?? []) {
+                if (ev.sourceIds?.includes(sourceId)) out.push({ kind: 'event', personId: person.id, eventId: ev.id });
+            }
+        }
+        for (const partnership of Object.values(this.data.partnerships)) {
+            if (partnership.sourceIds?.includes(sourceId)) {
+                out.push({ kind: 'partnership', partnershipId: partnership.id });
+            }
+        }
+        return out;
+    }
+
     countSourceCitations(sourceId: string): number {
         let count = 0;
         for (const person of Object.values(this.data.persons)) {
@@ -1986,6 +2027,9 @@ class DataManagerClass {
         this.beginMutation();
         person.attachments = person.attachments.filter(a => a.id !== attachmentId);
         if (person.attachments.length === 0) delete person.attachments;
+        // Excerpts cut from this page keep their image; they just can no
+        // longer be re-cropped.
+        unlinkExcerptsFromAttachment(this.data, attachmentId);
         this.commitMutation(strings.undo.removeAttachment(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'attachment.remove', strings.auditLog.removedAttachment(auditPersonName(person)));
         return true;

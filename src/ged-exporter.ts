@@ -344,6 +344,12 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         lines.push(`${level} SOUR ${ref}`);
         const src = data.sources?.[srcId];
         if (src?.reference) pushLongValue(lines, level + 1, 'PAGE', src.reference);
+        // The entry recording date lives on the citation in 5.5.1 (DATA > DATE).
+        const recorded = formatGedcomDate(src?.recordDate);
+        if (recorded) {
+            lines.push(`${level + 1} DATA`);
+            lines.push(`${level + 2} DATE ${recorded}`);
+        }
         if (src?.quality !== undefined) lines.push(`${level + 1} QUAY ${src.quality}`);
     };
 
@@ -691,8 +697,21 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (repoRef) lines.push(`1 REPO ${repoRef}`);
         }
         if (source.reference) pushLongValue(lines, 1, 'PAGE', source.reference);
+        if (source.refn) pushWrapped(lines, 1, 'REFN', source.refn);
+        if (source.transcript) pushLongValue(lines, 1, 'TEXT', source.transcript);
         if (source.url) pushWrapped(lines, 1, 'WWW', source.url);
         if (source.note) pushNote(lines, 1, source.note);
+        // Crops of the entry, embedded like person media (other programs
+        // cannot read data URLs — the content options can leave them out).
+        for (const exc of source.excerpts ?? []) {
+            const mime = exc.dataUrl.slice(5, exc.dataUrl.indexOf(';'));
+            lines.push('1 OBJE');
+            lines.push(`2 FORM ${mime.includes('/') ? mime.split('/')[1] : 'jpeg'}`);
+            if (exc.caption) pushWrapped(lines, 2, 'TITL', exc.caption);
+            lines.push('2 _STROM_KIND excerpt');
+            if (exc.pageUrl) pushWrapped(lines, 2, '_URL', exc.pageUrl);
+            pushWrapped(lines, 2, 'FILE', exc.dataUrl);
+        }
     }
 
     // ==================== REPOSITORIES ====================

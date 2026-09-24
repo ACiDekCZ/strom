@@ -3,7 +3,7 @@
  * Smart heuristics to detect genealogical inconsistencies and data errors
  */
 
-import { StromData, Person, Partnership, PersonId, PartnershipId } from './types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, Source } from './types.js';
 import { parseFlexDate, FlexDate } from './dates.js';
 import { collectPlaces } from './places.js';
 import { godparentLeads } from './godparents.js';
@@ -691,6 +691,28 @@ export function isSafeAttachmentDataUrl(url: string): boolean {
     return SAFE_IMAGE_DATA_URL.test(url) || SAFE_PDF_DATA_URL.test(url);
 }
 
+/** A source excerpt is a crop — a raster image only. */
+export function isSafeExcerptDataUrl(url: string): boolean {
+    return SAFE_IMAGE_DATA_URL.test(url);
+}
+
+/**
+ * A link a user or an imported file put on a source, made safe to render as
+ * an href: only absolute http(s) URLs pass. Anything else — javascript:,
+ * data:, a relative path — returns null and is shown as plain text, if at all.
+ */
+export function safeHttpUrl(url: string | undefined | null): string | null {
+    if (!url) return null;
+    const trimmed = url.trim();
+    if (!/^https?:\/\//i.test(trimmed)) return null;
+    try {
+        const parsed = new URL(trimmed);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : null;
+    } catch {
+        return null;
+    }
+}
+
 /**
  * Drop photos and attachments whose payload is not an allowed data URL
  * (e.g. data:text/html from a crafted file — it would open with the app's
@@ -713,7 +735,29 @@ export function stripUnsafeMediaDataUrls(data: StromData): number {
             else delete person.attachments;
         }
     }
+    // Source excerpts: raster crops only. A region outside the image is
+    // meaningless (and would break re-cropping), so it goes too.
+    for (const src of Object.values(data.sources ?? {}) as Source[]) {
+        if (!src || typeof src !== 'object' || !Array.isArray(src.excerpts)) continue;
+        const kept = src.excerpts.filter(exc =>
+            exc && typeof exc.dataUrl === 'string' && isSafeExcerptDataUrl(exc.dataUrl));
+        dropped += src.excerpts.length - kept.length;
+        for (const exc of kept) {
+            if (exc.region !== undefined && !isValidRegion(exc.region)) delete exc.region;
+        }
+        if (kept.length > 0) src.excerpts = kept;
+        else delete src.excerpts;
+    }
     return dropped;
+}
+
+/** A crop region in fractions of the image: inside 0–1 with a positive size. */
+function isValidRegion(r: unknown): boolean {
+    if (!r || typeof r !== 'object') return false;
+    const { x, y, w, h } = r as Record<string, unknown>;
+    if (![x, y, w, h].every(v => typeof v === 'number' && Number.isFinite(v))) return false;
+    const [nx, ny, nw, nh] = [x, y, w, h] as number[];
+    return nx >= 0 && ny >= 0 && nw > 0 && nh > 0 && nx + nw <= 1.0001 && ny + nh <= 1.0001;
 }
 
 /** Warn about photos whose payload is not an allowed image data URL. */

@@ -6,6 +6,9 @@
 import { AppSettings, ThemeMode, LanguageSetting, CardDensity, SETTINGS_KEY, StromData } from './types.js';
 import { initLanguage, Language } from './strings.js';
 
+/** How many recently cited sources the picker remembers per tree. */
+export const RECENT_SOURCES_MAX = 5;
+
 class SettingsManagerClass {
     private settings: AppSettings = { theme: 'system', language: 'system', encryption: false, auditLog: false };
 
@@ -144,6 +147,39 @@ class SettingsManagerClass {
 
     setAdvancedFields(enabled: boolean): void {
         this.settings.advancedFields = enabled;
+        this.save();
+    }
+
+    /**
+     * Do imports bring images (photos, attachments, source excerpts)? Default
+     * yes. Pre-fills the checkbox of the import dialogs and decides silent
+     * opens (a research opened straight into a new tree, live following).
+     */
+    isImportImages(): boolean {
+        return this.settings.importImages !== false;
+    }
+
+    setImportImages(enabled: boolean): void {
+        this.settings.importImages = enabled;
+        this.save();
+    }
+
+    /** Sources last cited in a tree, newest first (the picker's "Recently used"). */
+    getRecentSourceIds(treeId: string): string[] {
+        return this.settings.recentSourceIds?.[treeId] ?? [];
+    }
+
+    /** Remember a citation of `sourceId` in `treeId` (keeps the newest five). */
+    noteRecentSource(treeId: string, sourceId: string): void {
+        const all = (this.settings.recentSourceIds ??= {});
+        all[treeId] = [sourceId, ...(all[treeId] ?? []).filter(id => id !== sourceId)].slice(0, RECENT_SOURCES_MAX);
+        this.save();
+    }
+
+    /** Forget a tree's recent sources (the tree was deleted). */
+    forgetRecentSources(treeId: string): void {
+        if (!this.settings.recentSourceIds?.[treeId]) return;
+        delete this.settings.recentSourceIds[treeId];
         this.save();
     }
 

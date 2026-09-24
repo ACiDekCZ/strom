@@ -1373,7 +1373,6 @@ const stringsEN = {
         calendarDate: (calendar: string, date: string) => `Date in the ${calendar} calendar: ${date}`,
         calendars: { JULIAN: 'Julian', HEBREW: 'Hebrew', 'FRENCH R': 'French Republican', ROMAN: 'Roman' } as Record<string, string>,
         /** Source record lines with no field of their own (TEXT, PUBL, AUTH, REPO > CALN). */
-        sourceText: (text: string) => `Transcript: ${text}`,
         sourcePublication: (text: string) => `Publication: ${text}`,
         sourceAuthor: (text: string) => `Author: ${text}`,
         sourceCallNumber: (text: string) => `Call number: ${text}`,
@@ -3465,7 +3464,6 @@ const stringsCZ: StringsType = {
         calendarDate: (calendar: string, date: string) => `Datum v ${calendar} kalendáři: ${date}`,
         calendars: { JULIAN: 'juliánském', HEBREW: 'židovském', 'FRENCH R': 'francouzském revolučním', ROMAN: 'římském' } as Record<string, string>,
         /** Source record lines with no field of their own (TEXT, PUBL, AUTH, REPO > CALN). */
-        sourceText: (text: string) => `Přepis: ${text}`,
         sourcePublication: (text: string) => `Vydání: ${text}`,
         sourceAuthor: (text: string) => `Autor: ${text}`,
         sourceCallNumber: (text: string) => `Signatura: ${text}`,
@@ -5511,7 +5509,6 @@ const stringsDE: StringsType = {
         calendarDate: (calendar: string, date: string) => `Datum im ${calendar}: ${date}`,
         calendars: { JULIAN: 'julianischen Kalender', HEBREW: 'jüdischen Kalender', 'FRENCH R': 'französischen Revolutionskalender', ROMAN: 'römischen Kalender' } as Record<string, string>,
         /** Source record lines with no field of their own (TEXT, PUBL, AUTH, REPO > CALN). */
-        sourceText: (text: string) => `Abschrift: ${text}`,
         sourcePublication: (text: string) => `Veröffentlichung: ${text}`,
         sourceAuthor: (text: string) => `Autor: ${text}`,
         sourceCallNumber: (text: string) => `Signatur: ${text}`,

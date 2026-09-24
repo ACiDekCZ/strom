@@ -76,29 +76,89 @@ export function pdfBlobFromDataUrl(dataUrl: string, mimeType: string): Blob | nu
     }
 }
 
-/** Total bytes of all attachment payloads in a tree. */
-export function totalAttachmentBytes(data: StromData): number {
+/** Total bytes of all source excerpts (register-entry crops) in a tree. */
+export function totalExcerptBytes(data: StromData): number {
     let total = 0;
+    for (const src of Object.values(data.sources ?? {})) {
+        for (const exc of src.excerpts ?? []) total += exc.sizeBytes || dataUrlByteSize(exc.dataUrl);
+    }
+    return total;
+}
+
+/**
+ * Total bytes of all documents in a tree: attachments plus source excerpts.
+ * Both are scans the user added, and both count against the same size warning.
+ */
+export function totalAttachmentBytes(data: StromData): number {
+    let total = totalExcerptBytes(data);
     for (const person of Object.values(data.persons)) {
         for (const att of person.attachments ?? []) total += att.sizeBytes || dataUrlByteSize(att.dataUrl);
     }
     return total;
 }
 
-/** Deep copy of `data` with every attachment removed. Does not mutate original. */
+/** Remove every source excerpt from `data` in place (the text of the source stays). */
+function dropExcerptsInPlace(data: StromData): void {
+    for (const src of Object.values(data.sources ?? {})) delete src.excerpts;
+}
+
+/** Deep copy with every source excerpt removed. Does not mutate original. */
+export function stripExcerpts(data: StromData): StromData {
+    const copy = structuredClone(data);
+    dropExcerptsInPlace(copy);
+    return copy;
+}
+
+/**
+ * Deep copy of `data` with every attachment removed — and the source excerpts
+ * with them: both are scans, and a lean file should lose both. Does not mutate
+ * the original.
+ */
 export function stripAttachments(data: StromData): StromData {
     const copy = structuredClone(data);
     for (const person of Object.values(copy.persons)) {
         delete person.attachments;
     }
+    dropExcerptsInPlace(copy);
     return copy;
 }
 
-/** Deep copy with all media (photos AND attachments) removed, for lean exports. */
+/** Deep copy with all images (photos, attachments, excerpts) removed, for lean files. */
 export function stripMedia(data: StromData): StromData {
     const copy = stripPhotos(data);
     for (const person of Object.values(copy.persons)) {
         delete person.attachments;
     }
+    dropExcerptsInPlace(copy);
     return copy;
+}
+
+/** How many images a tree carries and how heavy they are — for the import filter. */
+export interface ImageCount {
+    photos: number;
+    attachments: number;
+    excerpts: number;
+    bytes: number;
+}
+
+/** Count photos, attachments and source excerpts with their total payload size. */
+export function countImages(data: StromData): ImageCount {
+    const out: ImageCount = { photos: 0, attachments: 0, excerpts: 0, bytes: 0 };
+    for (const person of Object.values(data.persons)) {
+        if (person.photo) {
+            out.photos++;
+            out.bytes += dataUrlByteSize(person.photo);
+        }
+        for (const att of person.attachments ?? []) {
+            out.attachments++;
+            out.bytes += att.sizeBytes || dataUrlByteSize(att.dataUrl);
+        }
+    }
+    for (const src of Object.values(data.sources ?? {})) {
+        for (const exc of src.excerpts ?? []) {
+            out.excerpts++;
+            out.bytes += exc.sizeBytes || dataUrlByteSize(exc.dataUrl);
+        }
+    }
+    return out;
 }

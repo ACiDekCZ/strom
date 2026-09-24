@@ -83,8 +83,20 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
     };
     if (data.sources) {
         const sources: StromData['sources'] = {};
+        const keptAttachments = new Set<string>();
+        for (const p of Object.values(persons)) p.attachments?.forEach(a => keptAttachments.add(a.id));
         for (const [sid, src] of Object.entries(data.sources)) {
-            if (usedSources.has(sid)) sources[sid] = structuredClone(src);
+            if (!usedSources.has(sid)) continue;
+            const copy = structuredClone(src);
+            // The page an excerpt was cut from may belong to someone left
+            // behind: the excerpt stays, only its re-crop link goes.
+            for (const exc of copy.excerpts ?? []) {
+                if (exc.fromAttachmentId && !keptAttachments.has(exc.fromAttachmentId)) {
+                    delete exc.fromAttachmentId;
+                    delete exc.region;
+                }
+            }
+            sources[sid] = copy;
         }
         if (Object.keys(sources).length > 0) result.sources = sources;
     }

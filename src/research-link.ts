@@ -212,7 +212,8 @@ function uniqueRefns(data: StromData): Map<string, PersonId> {
  * The importer gives every person a new id on each import. Carry over the ids
  * of the previous state, matched by the research's own person numbers (REFN),
  * so the focus, the last-viewed person and the highlight survive an update.
- * Couples follow their two people. Returns a new object; the input is kept.
+ * Couples follow their two people, sources their SOUR REFN. Returns a new
+ * object; the input is kept.
  */
 export function stabilizeIds(next: StromData, previous: StromData): StromData {
     const map = new Map<string, string>();
@@ -221,6 +222,7 @@ export function stabilizeIds(next: StromData, previous: StromData): StromData {
     const nextIds = new Set<string>([
         ...Object.keys(next.persons ?? {}),
         ...Object.keys(next.partnerships ?? {}),
+        ...Object.keys(next.sources ?? {}),
     ]);
 
     for (const [refn, newId] of nextByRefn) {
@@ -248,6 +250,25 @@ export function stabilizeIds(next: StromData, previous: StromData): StromData {
         for (const [k, id] of seen) if (id) out.set(k, id);
         return out;
     };
+    // Sources (register entries) follow the research's own record numbers too,
+    // so citations and an open source viewer keep pointing at the same entry.
+    const sourceRefns = (data: StromData): Map<string, string> => {
+        const seen = new Map<string, string | null>();
+        for (const [id, src] of Object.entries(data.sources ?? {})) {
+            if (!src?.refn) continue;
+            seen.set(src.refn, seen.has(src.refn) ? null : id);
+        }
+        const out = new Map<string, string>();
+        for (const [refn, id] of seen) if (id) out.set(refn, id);
+        return out;
+    };
+    const prevSources = sourceRefns(previous);
+    for (const [refn, newId] of sourceRefns(next)) {
+        const oldId = prevSources.get(refn);
+        if (!oldId || oldId === newId || nextIds.has(oldId)) continue;
+        map.set(newId, oldId);
+    }
+
     const prevPairs = uniquePairs(previous, false);
     for (const [key, newId] of uniquePairs(next, true)) {
         const oldId = prevPairs.get(key);
