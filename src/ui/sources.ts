@@ -889,8 +889,9 @@ export const sourcesMethods = uiModule({
         if (!base) return;
         const go = (): void => {
             const ctx = this.sourceViewerContext ?? this.sourceEditorContext;
-            if (editorOpen) this.forceCloseSourceEditor();
+            // The new entry replaces the viewer: do not bring it back on close.
             this.reopenViewerAfterEditor = null;
+            if (editorOpen) this.forceCloseSourceEditor();
             this.closeSourceViewer();
             if (ctx) {
                 this.citationContext = ctx;
