@@ -81,6 +81,37 @@ const MAX_FAILURES = 2;
 /** Most change lines kept in the panel. */
 const MAX_CHANGES = 30;
 
+/**
+ * The followed bridge, kept for a reload of this tab (sessionStorage: survives
+ * F5 in the same window, never reaches another window or the next start of
+ * the app — the bridge address carries a secret token).
+ */
+const LIVE_RESUME_KEY = 'strom.live';
+
+function rememberLiveBridge(base: string, treeId: string): void {
+    try {
+        sessionStorage.setItem(LIVE_RESUME_KEY, JSON.stringify({ bridge: base, treeId }));
+    } catch { /* no storage: a reload just ends following */ }
+}
+
+function forgetLiveBridge(): void {
+    try {
+        sessionStorage.removeItem(LIVE_RESUME_KEY);
+    } catch { /* nothing stored */ }
+}
+
+/** The bridge to follow again after a reload, or null. */
+export function rememberedLiveBridge(): string | null {
+    try {
+        const raw = sessionStorage.getItem(LIVE_RESUME_KEY);
+        if (!raw) return null;
+        const bridge = (JSON.parse(raw) as { bridge?: unknown }).bridge;
+        return typeof bridge === 'string' && parseLiveBridge(bridge) ? bridge : null;
+    } catch {
+        return null;
+    }
+}
+
 let externalReady = false;
 let live: LiveSession | null = null;
 /** One open at a time: a second file waits for the first dialog. */
@@ -208,8 +239,14 @@ export const researchUiMethods = uiModule({
             window.addEventListener('strom:data-changed', () => this.syncLivePanelVisibility());
             this.initLaunchQueue();
             const reveal = (): void => document.documentElement.classList.remove('external-opening');
+            const explicit = liveUrl !== null || importUrl !== null || params.has('open');
+            // Something else was asked for in this tab: the old bridge is over.
+            if (explicit) forgetLiveBridge();
+            const resume = explicit ? null : rememberedLiveBridge();
             if (liveUrl !== null) void this.startLiveFollow(liveUrl).finally(reveal);
             else if (importUrl !== null) void this.importResearchFromUrl(importUrl).finally(reveal);
+            // A reload while following: follow the same bridge again, quietly.
+            else if (resume !== null) void this.startLiveFollow(resume, { resume: true }).finally(reveal);
             else reveal();
         } catch (err) {
             document.documentElement.classList.remove('external-opening');
@@ -406,7 +443,7 @@ export const researchUiMethods = uiModule({
      * afterwards (asking when the user changed it in the app), switch to it.
      * Returns the tree, or null when the user cancelled.
      */
-    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string }): Promise<TreeId | null> {
+    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean }): Promise<TreeId | null> {
         const name = source.name || strings.research.defaultName;
         const dateLabel = researchDateLabel(source.date);
         const existing = source.treeId ? TreeManager.findTreeByResearchId(source.treeId) : null;
@@ -496,27 +533,34 @@ export const researchUiMethods = uiModule({
         // part of the research and would inflate the summary.
         const persons = Object.values(stored.persons).filter(p => !p.isPlaceholder).length;
         const families = Object.keys(stored.partnerships).length;
-        this.showToast(created
-            ? strings.research.opened(name, persons, families, dateLabel)
-            : strings.research.updated(name, persons, families, dateLabel), 6000);
+        if (!opts.quiet) {
+            this.showToast(created
+                ? strings.research.opened(name, persons, families, dateLabel)
+                : strings.research.updated(name, persons, families, dateLabel), 6000);
+        }
         return treeId;
     },
 
     // ==================== D. LIVE BRIDGE ====================
 
     /** ?live=: follow a running research through its bridge on this computer. */
-    async startLiveFollow(raw: string): Promise<void> {
+    async startLiveFollow(raw: string, opts: { resume?: boolean } = {}): Promise<void> {
         const bridge = parseLiveBridge(raw);
         if (!bridge) {
-            this.showToast(strings.research.notLocal, 6000);
+            if (opts.resume) forgetLiveBridge();
+            else this.showToast(strings.research.notLocal, 6000);
             return;
         }
         if (DataManager.isViewMode()) {
-            this.showToast(strings.research.notInViewMode, 5000);
+            if (opts.resume) forgetLiveBridge();
+            else this.showToast(strings.research.notInViewMode, 5000);
             return;
         }
         await enqueueOpen(async () => {
-            if (!await this.ensureLocalUnlocked()) return;
+            if (!await this.ensureLocalUnlocked()) {
+                if (opts.resume) forgetLiveBridge();
+                return;
+            }
             this.stopLiveFollow(true);
 
             let status: LiveStatus | null;
@@ -531,6 +575,13 @@ export const researchUiMethods = uiModule({
                 text = await fetchGedcomText(bridge.ged);
             } catch (err) {
                 console.warn('Connecting to the research bridge failed', err);
+                if (opts.resume) {
+                    // The bridge stopped while the page reloaded (strom ends it
+                    // after 2 h idle): nothing to import, just say so briefly.
+                    forgetLiveBridge();
+                    this.showToast(strings.research.ended, 4000);
+                    return;
+                }
                 await this.offerManualImport(strings.research.liveFailed);
                 return;
             }
@@ -550,9 +601,13 @@ export const researchUiMethods = uiModule({
             const treeId = await this.applyResearch(
                 data,
                 { treeId: status.treeId, name, date: header.date },
-                { head: status.head }
+                { head: status.head, quiet: opts.resume }
             );
-            if (!treeId) return;
+            if (!treeId) {
+                if (opts.resume) forgetLiveBridge();
+                return;
+            }
+            rememberLiveBridge(bridge.base, treeId);
 
             live = {
                 bridge,
@@ -745,6 +800,7 @@ export const researchUiMethods = uiModule({
     /** End a session: close the stream, lift read-only, keep the last state. */
     endLiveFollow(s: LiveSession, reason: 'ended' | 'other' | 'stopped'): void {
         if (live !== s) return;
+        forgetLiveBridge();
         const wasEnded = s.ended;
         s.ended = true;
         if (s.timer) clearTimeout(s.timer);

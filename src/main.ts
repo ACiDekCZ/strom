@@ -243,7 +243,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Cleared by UI.initExternalOpen when the open settles (with a safety net).
     try {
         const params = new URLSearchParams(window.location.search);
-        if (params.has('import-url') || params.has('live')) {
+        let resumingLive = false;
+        try {
+            resumingLive = !!sessionStorage.getItem('strom.live');
+        } catch { /* no storage */ }
+        if (params.has('import-url') || params.has('live') || resumingLive) {
             document.documentElement.classList.add('external-opening');
             setTimeout(() => document.documentElement.classList.remove('external-opening'), 20000);
         }

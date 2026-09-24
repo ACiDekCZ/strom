@@ -336,6 +336,73 @@ test.describe('live research (?live=)', () => {
     });
 });
 
+test.describe('live research survives a reload', () => {
+    /** A bridge that answers while `up.value` is true; the event stream stays open. */
+    async function routeBridge(page: Page, up: { value: boolean }): Promise<void> {
+        await page.route(`${BRIDGE}/**`, async (route) => {
+            if (!up.value) return route.abort('connectionrefused');
+            const path = new URL(route.request().url()).pathname;
+            if (path.endsWith('/status')) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
+                    body: JSON.stringify({ tree: { id: UUID, name: 'Víškovi' }, head: 'h1', working: [], waiting: [] }) });
+            }
+            if (path.endsWith('/tree.ged')) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain' }, body: researchGed() });
+            }
+            return new Promise(() => {});
+        });
+    }
+
+    test('a reload keeps following the same bridge, into the same tree', async ({ page }) => {
+        await routeBridge(page, { value: true });
+        await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
+        const panel = page.locator('#live-panel');
+        await expect(panel).toBeVisible();
+        expect(page.url()).not.toContain('live=');
+        // The token stays out of the address and of anything lasting.
+        expect(await page.evaluate(() => localStorage.getItem('strom.live'))).toBeNull();
+
+        await page.reload();
+        await expect(panel).toBeVisible();
+        await expect(page.locator('body')).toHaveClass(/tree-locked/);
+        await expect(card(page, 'Jan')).toBeVisible();
+        expect(page.url()).not.toContain('live=');
+        expect((await treeNames(page)).filter(n => n === 'Víškovi')).toHaveLength(1);
+    });
+
+    test('after "Stop following" a reload does not follow again', async ({ page }) => {
+        const requests: string[] = [];
+        page.on('request', r => { if (r.url().startsWith(BRIDGE)) requests.push(r.url()); });
+        await routeBridge(page, { value: true });
+        await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
+        const panel = page.locator('#live-panel');
+        await expect(panel).toBeVisible();
+        await panel.getByRole('button', { name: 'Stop following' }).click();
+        await expect(panel).toHaveCount(0);
+
+        requests.length = 0;
+        await page.reload();
+        await expect(card(page, 'Jan')).toBeVisible();
+        await expect(panel).toHaveCount(0);
+        expect(requests).toEqual([]);
+    });
+
+    test('a bridge gone meanwhile: a short note, no error, no import offer', async ({ page }) => {
+        const up = { value: true };
+        await routeBridge(page, up);
+        await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
+        await expect(page.locator('#live-panel')).toBeVisible();
+
+        up.value = false;
+        await page.reload();
+        await expect(page.locator('.toast')).toContainText('Following ended');
+        await expect(page.locator('#confirmation-modal')).not.toBeVisible();
+        await expect(page.locator('#live-panel')).toHaveCount(0);
+        await expect(page.locator('body')).not.toHaveClass(/tree-locked/);
+        expect(await page.evaluate(() => sessionStorage.getItem('strom.live'))).toBeNull();
+    });
+});
+
 test.describe('without the APIs (mobile, other browsers)', () => {
     test('no launchQueue / EventSource, phone viewport, bogus ?live= and ?import-url=: app starts cleanly', async ({ browser }) => {
         const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
