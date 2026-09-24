@@ -72,6 +72,12 @@ export const treeManagementMethods = uiModule({
             }
         });
 
+        // The flyout opens on hover too (CSS): fit it into the window then.
+        document.getElementById('actions-tree-wrap')?.addEventListener('mouseenter', () => {
+            this.positionActionsTreeSubmenu();
+            requestAnimationFrame(() => this.positionActionsTreeSubmenu());
+        });
+
         // Keyboard for the "Tree:" submenu row: → opens, ← / Esc closes.
         // (Esc still bubbles to the global handler that closes the whole menu.)
         document.getElementById('actions-tree-row')?.addEventListener('keydown', (e) => {
@@ -321,6 +327,30 @@ export const treeManagementMethods = uiModule({
         if (!wrap) return;
         wrap.classList.add('submenu-open');
         document.getElementById('actions-tree-row')?.setAttribute('aria-expanded', 'true');
+        this.positionActionsTreeSubmenu();
+    },
+
+    /**
+     * Keep the "Tree:" flyout inside the window. It starts level with its row
+     * at the bottom of the ⋯ menu, so on a short window (or a zoomed page) it
+     * used to run off the bottom with its last items unreachable: shift it up
+     * as far as needed, and let it scroll when even the whole window height
+     * is not enough.
+     */
+    positionActionsTreeSubmenu(): void {
+        const sub = document.getElementById('actions-tree-submenu');
+        if (!sub) return;
+        sub.style.top = '';
+        const margin = 8;
+        const viewport = window.innerHeight;
+        sub.style.maxHeight = `${Math.max(120, viewport - 2 * margin)}px`;
+        const rect = sub.getBoundingClientRect();
+        if (rect.height === 0) return;   // not shown (hover already left)
+        const overflow = rect.bottom - (viewport - margin);
+        if (overflow <= 0) return;
+        const shift = Math.min(overflow, Math.max(0, rect.top - margin));
+        const baseTop = parseFloat(getComputedStyle(sub).top) || 0;
+        sub.style.top = `${baseTop - shift}px`;
     },
 
     closeActionsTreeSubmenu(): void {

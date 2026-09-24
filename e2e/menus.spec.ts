@@ -163,6 +163,45 @@ test.describe('tree manager row menu: Escape', () => {
         await expect(manager).not.toHaveClass(/active/);
     });
 
+    test('the actions menu stays inside the window at every desktop width', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        for (const width of [1025, 1100, 1280, 1440, 1920]) {
+            await page.setViewportSize({ width, height: 800 });
+            await page.locator('.actions-menu-btn').click();
+            const box = (await page.locator('#actions-menu-dropdown').boundingBox())!;
+            expect(box.x).toBeGreaterThanOrEqual(0);
+            expect(box.x + box.width).toBeLessThanOrEqual(width);
+            await page.keyboard.press('Escape');
+        }
+    });
+
+    test('on a short window the flyout stays inside it; every item is reachable', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 560 });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+
+        await page.locator('.actions-menu-btn').click();
+        const submenu = page.locator('#actions-tree-submenu');
+        for (const open of ['hover', 'keyboard'] as const) {
+            if (open === 'hover') {
+                await page.locator('#actions-tree-row').hover();
+            } else {
+                await page.mouse.move(5, 300);
+                await page.locator('#actions-tree-row').focus();
+                await page.locator('#actions-tree-row').press('ArrowRight');
+            }
+            await expect(submenu).toBeVisible();
+            const box = (await submenu.boundingBox())!;
+            expect(box.y).toBeGreaterThanOrEqual(0);
+            expect(box.y + box.height).toBeLessThanOrEqual(560);
+            const last = submenu.locator('.tree-switcher-action').last();
+            await last.scrollIntoViewIfNeeded();
+            const lastBox = (await last.boundingBox())!;
+            expect(lastBox.y + lastBox.height).toBeLessThanOrEqual(560);
+        }
+    });
+
     test('Statistics acts on the active tree and closes the whole menu', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
