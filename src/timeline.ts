@@ -255,6 +255,20 @@ export function yearToFraction(year: number, axis: TimelineAxis): number {
 }
 
 /** Decade tick years across the axis (inclusive of both ends). */
+/** Year steps for axis labels, finest first (all multiples of the decade grid). */
+const LABEL_STEPS = [10, 20, 50, 100, 200, 500, 1000];
+
+/**
+ * The finest label step whose labels stay `minPx` apart on a plot `plotW`
+ * pixels wide — a narrow phone fits one label per 50 or 100 years, not per
+ * decade (four-digit years ran into each other).
+ */
+export function axisLabelStep(axis: TimelineAxis, plotW: number, minPx = 40): number {
+    const span = Math.max(1, axis.maxYear - axis.minYear);
+    const pxPerYear = plotW / span;
+    return LABEL_STEPS.find(step => step * pxPerYear >= minPx) ?? LABEL_STEPS[LABEL_STEPS.length - 1];
+}
+
 export function axisTicks(axis: TimelineAxis, step = 10): number[] {
     const ticks: number[] = [];
     for (let y = axis.minYear; y <= axis.maxYear; y += step) ticks.push(y);

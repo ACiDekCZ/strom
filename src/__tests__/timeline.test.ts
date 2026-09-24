@@ -3,7 +3,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { computeTimelineModel, yearToFraction, axisTicks } from '../timeline.js';
+import { computeTimelineModel, yearToFraction, axisTicks, axisLabelStep } from '../timeline.js';
+import { buildTimelineSvg } from '../timeline-chart.js';
 import { StromData, PersonId, PartnershipId, Person, Partnership, Gender, LifeEvent } from '../types.js';
 
 interface POpts {
@@ -225,5 +226,23 @@ describe('computePersonLifeline', () => {
         // Only a birth date → a single point (caller hides the section under 2).
         const solo = lp('q', 'Solo', 'male', { birthDate: '1900' });
         expect(computePersonLifeline(data([solo]), 'q')).toHaveLength(1);
+    });
+});
+
+describe('axis labels fit the width', () => {
+    const axis = { minYear: 860, maxYear: 1340 };
+    it('a phone gets a coarser label step than a desktop', () => {
+        expect(axisLabelStep(axis, 5000)).toBe(10);
+        expect(axisLabelStep(axis, 700)).toBe(50);
+        expect(axisLabelStep(axis, 250)).toBe(100);
+    });
+
+    it('labels sit on round years and never closer than 40 px', () => {
+        const model = { axis, rows: [] } as unknown as Parameters<typeof buildTimelineSvg>[0];
+        const svg = buildTimelineSvg(model, { width: 460, rowH: 30, labelW: 190, mode: 'screen' } as Parameters<typeof buildTimelineSvg>[1]);
+        const labels = [...svg.matchAll(/<text x="([\d.]+)"[^>]*class="tl-tick">(\d+)</g)].map(m => ({ x: +m[1], year: +m[2] }));
+        expect(labels.length).toBeGreaterThan(2);
+        expect(labels.every(l => l.year % 50 === 0 || l.year % 100 === 0)).toBe(true);
+        for (let i = 1; i < labels.length; i++) expect(labels[i].x - labels[i - 1].x).toBeGreaterThanOrEqual(40);
     });
 });

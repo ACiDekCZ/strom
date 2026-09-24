@@ -13,7 +13,7 @@
  * poster footer. Pure: no DOM access, the renderer wires the container.
  */
 
-import { TimelineModel, TimelineRow, TimelineEvent, yearToFraction, axisTicks } from './timeline.js';
+import { TimelineModel, TimelineRow, TimelineEvent, yearToFraction, axisTicks, axisLabelStep } from './timeline.js';
 import { strings } from './strings.js';
 import {
     posterFooterSvg, PosterFooterMeta, FOOTER_HEIGHT, POSTER_PADDING, POSTER_FONT, POSTER_BG,
@@ -160,10 +160,17 @@ export function buildTimelineSvg(model: TimelineModel, opts: TimelineSvgOptions)
     const H = TOP + model.rows.length * ROW_H + 12;
     const xOf = (year: number) => plotX0 + yearToFraction(year, model.axis) * plotW;
 
-    const grid = axisTicks(model.axis).map(yr => {
+    // Labels only as dense as they fit; decade lines unless they would merge
+    // into a solid band, then only at the labels.
+    const labelStep = axisLabelStep(model.axis, plotW);
+    const decadePx = 10 * plotW / Math.max(1, model.axis.maxYear - model.axis.minYear);
+    const gridStep = decadePx >= 8 ? 10 : labelStep;
+    // Round years (1900, 1950), not steps from the first decade (860, 910).
+    const grid = axisTicks(model.axis).filter(yr => yr % gridStep === 0).map(yr => {
         const x = xOf(yr).toFixed(1);
         return `<line x1="${x}" y1="${TOP - 6}" x2="${x}" y2="${H}" class="tl-grid"/>`
-            + `<text x="${x}" y="${TOP - 14}" text-anchor="middle" class="tl-tick">${yr}</text>`;
+            + (yr % labelStep === 0
+                ? `<text x="${x}" y="${TOP - 14}" text-anchor="middle" class="tl-tick">${yr}</text>` : '');
     }).join('');
 
     const rows = model.rows.map((r, i) => rowSvg(r, i, opts, xOf)).join('');
