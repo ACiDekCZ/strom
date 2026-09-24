@@ -1045,9 +1045,9 @@ describe('register entries: what hangs under BIRT, DEAT and MARR', () => {
     it('keeps the citation of the birth and death entry on the person', () => {
         const data = importGed(GED);
         const jan = Object.values(data.persons).find(p => p.firstName === 'Jan')!;
-        expect(jan.sourceIds).toHaveLength(2);
-        const titles = jan.sourceIds!.map(id => data.sources![id].title);
-        expect(titles).toEqual(['Matrika narozených Lipany 1840-1870', 'Matrika narozených Lipany 1840-1870']);
+        // BIRT and DEAT cite the same entry: one citation, not two.
+        expect(jan.sourceIds).toHaveLength(1);
+        expect(data.sources![jan.sourceIds![0]].title).toBe('Matrika narozených Lipany 1840-1870');
         // The PAGE under the citation becomes the source reference.
         expect(data.sources![jan.sourceIds![0]].reference).toBe('sign. LIP-N5, fol. 123');
     });

@@ -925,7 +925,8 @@ export const sourcesMethods = uiModule({
         const container = document.getElementById(containerId);
         if (!container) return;
         const sources = DataManager.getData().sources ?? {};
-        const ids = (sourceIds ?? []).filter(id => sources[id]);
+        // Set: trees imported before the parser deduped may repeat an id.
+        const ids = [...new Set(sourceIds ?? [])].filter(id => sources[id]);
         if (ids.length === 0) {
             container.innerHTML = `<span class="sources-empty">${esc(strings.sources.empty)}</span>`;
             return;

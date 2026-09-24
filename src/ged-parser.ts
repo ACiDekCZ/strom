@@ -1995,9 +1995,12 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         }
         sources[newId] = src;
     }
-    /** Map raw @Sx@ refs to catalog ids, dropping any that don't resolve. */
+    /**
+     * Map raw @Sx@ refs to catalog ids, dropping any that don't resolve and
+     * repeats (one entry cited by both BIRT and DEAT lands on the person twice).
+     */
     const mapRefs = (refs?: string[]): string[] =>
-        (refs ?? []).map(r => sourceIdMap.get(r)).filter((id): id is string => !!id);
+        [...new Set((refs ?? []).map(r => sourceIdMap.get(r)).filter((id): id is string => !!id))];
 
     // Keep ALL individuals. Nameless ones (unknown ancestors) become
     // placeholders instead of being dropped, so relationships stay intact.

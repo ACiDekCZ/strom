@@ -343,7 +343,7 @@ export const personModalMethods = uiModule({
         set('pm-sum-deathevents', deathParts);
 
         const sourceParts: string[] = [];
-        const citeCount = person.sourceIds?.length || 0;
+        const citeCount = new Set(person.sourceIds ?? []).size;
         const scanCount = person.attachments?.length || 0;
         if (citeCount) sourceParts.push(S.sumCitations(citeCount));
         if (scanCount) sourceParts.push(S.sumScans(scanCount));

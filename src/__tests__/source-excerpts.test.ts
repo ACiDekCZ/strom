@@ -168,6 +168,17 @@ describe('GEDCOM: a register entry as a source', () => {
         expect(byTitle('Sňatek').recordDate).toBe('1900-05-01');
     });
 
+    it('cites one entry once when it backs both birth and death', () => {
+        const r = conv(GED([
+            '0 @I1@ INDI', '1 NAME Anna /Nová/', '1 SEX F',
+            '1 BIRT', '2 DATE 3 JAN 1880', '2 SOUR @S1@',
+            '1 DEAT', '2 DATE 9 JAN 1880', '2 SOUR @S1@',
+            '0 @S1@ SOUR', '1 TITL Narození: Anna Nová, Týnec 1880',
+        ]));
+        const person = Object.values(r.data.persons).find(p => p.firstName === 'Anna')!;
+        expect(person.sourceIds).toEqual([onlySource(r.data).id]);
+    });
+
     it('skips a source image that is not an embedded raster image', () => {
         const r = conv(GED([
             '0 @S1@ SOUR', '1 TITL Křest',
