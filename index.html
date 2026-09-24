@@ -503,6 +503,11 @@
         }
         .actions-menu-dropdown {
             padding: 4px 0;
+            /* The ⋯ button sits at the toolbar's RIGHT end: anchor the menu to
+               the button's right edge (the tree switcher's left anchor made it
+               run off screen on 1025-1300px windows, cutting the shortcuts). */
+            left: auto;
+            right: 0;
         }
         /* Non-interactive section labels in the desktop ⋯ actions menu. */
         .menu-section-header {
@@ -538,8 +543,9 @@
             background: var(--surface); border: 1px solid var(--border);
             border-radius: 10px; box-shadow: var(--shadow-lg);
             padding: 4px 0; z-index: 210; display: none;
-            /* The submenu now carries every whole-tree action — keep it on-screen. */
-            max-height: calc(100vh - 90px); overflow-y: auto;
+            /* The submenu carries every whole-tree action — kept on-screen by
+               positionActionsTreeSubmenu() (shifted up, scrolls when needed). */
+            max-height: calc(100vh - 16px); overflow-y: auto;
         }
         .actions-tree-wrap:hover > .actions-tree-submenu,
         .actions-tree-wrap.submenu-open > .actions-tree-submenu { display: block; }
