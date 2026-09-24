@@ -116,6 +116,12 @@ export const snapshotsUiMethods = uiModule({
         if (this.snapshotsTreeId === trim.treeId) void this.renderSnapshotsList();
     },
 
+    /** A backup finished (often an automatic one, in the background): refresh an open list. */
+    handleSnapshotCreated(treeId: string): void {
+        if (this.snapshotsTreeId !== treeId) return;
+        if (document.getElementById('snapshots-modal')?.classList.contains('active')) void this.renderSnapshotsList();
+    },
+
     /**
      * Even one backup of the tree does not fit what this device gives backups
      * (a phone with scans): advise turning them off — once per tree; the

@@ -64,6 +64,9 @@ export const MIN_SNAPSHOTS_KEPT = 3;
 /** Browser storage this full (usage / quota) keeps only MIN_SNAPSHOTS_KEPT. */
 export const STORAGE_PRESSURE_RATIO = 0.8;
 
+/** Fired on window after a snapshot was created; detail: { treeId }. */
+export const SNAPSHOT_CREATED_EVENT = 'strom:snapshot-created';
+
 /** Fired on window when retention dropped snapshots for space; detail: SnapshotTrim. */
 export const SNAPSHOTS_TRIMMED_EVENT = 'strom:snapshots-trimmed';
 
@@ -150,6 +153,11 @@ export function createSnapshot(
         const meta = await writeSnapshot(data, { id, treeId, createdAt: now, personCount, sizeBytes: 0, reason });
         await enforceRetention(treeId);
         await collectPoolGarbageLocked();
+        // Automatic backups finish in the background: an open backups list
+        // must learn about them.
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent(SNAPSHOT_CREATED_EVENT, { detail: { treeId } }));
+        }
         return meta;
     });
 }

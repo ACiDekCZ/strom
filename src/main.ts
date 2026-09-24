@@ -21,7 +21,7 @@ import { strings } from './strings.js';
 import { onTreeSavedElsewhere } from './tab-sync.js';
 import { StorageManager } from './storage.js';
 import { PERSISTENCE_EVENT, PersistenceState, getRequestedPersistenceState } from './persistence.js';
-import { SNAPSHOTS_TRIMMED_EVENT, SnapshotTrim } from './snapshots.js';
+import { SNAPSHOTS_TRIMMED_EVENT, SNAPSHOT_CREATED_EVENT, SnapshotTrim } from './snapshots.js';
 import { collectPoolGarbage } from './media-pool.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild } from './pwa.js';
 
@@ -199,6 +199,9 @@ function registerAppListeners(): void {
     // Backups removed for space: say so (once per tree and day).
     window.addEventListener(SNAPSHOTS_TRIMMED_EVENT, (e) => {
         UI.handleSnapshotsTrimmed((e as CustomEvent<SnapshotTrim>).detail);
+    });
+    window.addEventListener(SNAPSHOT_CREATED_EVENT, (e) => {
+        UI.handleSnapshotCreated((e as CustomEvent<{ treeId: string }>).detail.treeId);
     });
 
     // A tree that could not be decrypted is never saved over (K8).
