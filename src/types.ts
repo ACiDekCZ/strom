@@ -488,6 +488,9 @@ export type AppMode = 'pwa' | 'embedded' | 'dev';
 /** PWA hostname for mode detection */
 export const PWA_HOSTNAME = 'stromapp.info';
 
+/** Pre-release test site: the beta PWA on its own origin (own storage) */
+export const BETA_HOSTNAME = 'beta.stromapp.info';
+
 // ==================== CONFIGURATION ====================
 
 export interface LayoutConfig {

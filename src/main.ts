@@ -16,7 +16,7 @@ import { TreePreview, TreeCompare } from './tree-preview.js';
 import { initModalSkeleton } from './ui/modal-skeleton.js';
 import { DebugOptions, DebugStep, DebugPhase } from './layout/pipeline/debug-types.js';
 import { CryptoSession } from './crypto.js';
-import { AppMode, PWA_HOSTNAME, APP_VERSION, TreeId } from './types.js';
+import { AppMode, PWA_HOSTNAME, BETA_HOSTNAME, APP_VERSION, TreeId } from './types.js';
 import { strings } from './strings.js';
 import { onTreeSavedElsewhere } from './tab-sync.js';
 import { StorageManager } from './storage.js';
@@ -54,8 +54,8 @@ function detectAppMode(): AppMode {
         return 'dev';
     }
 
-    // PWA on stromapp.info (or stromapp.local for testing)
-    if (hostname === PWA_HOSTNAME || hostname === 'stromapp.local') {
+    // PWA on stromapp.info, the beta on beta.stromapp.info (or stromapp.local for testing)
+    if (hostname === PWA_HOSTNAME || hostname === BETA_HOSTNAME || hostname === 'stromapp.local') {
         return 'pwa';
     }
 

@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { shouldRegisterServiceWorker, pwaBasePath } from '../pwa.js';
+import { shouldRegisterServiceWorker, pwaBasePath, isBetaLocation } from '../pwa.js';
 
 describe('shouldRegisterServiceWorker', () => {
     it('registers only on the hosted PWA', () => {
@@ -30,5 +30,18 @@ describe('pwaBasePath', () => {
     it('does not mistake look-alike paths for the beta', () => {
         expect(pwaBasePath('/betamax/')).toBe('/run/');
         expect(pwaBasePath('/run/beta/')).toBe('/run/');
+    });
+});
+
+describe('isBetaLocation', () => {
+    it('knows the beta site by its host', () => {
+        expect(isBetaLocation('beta.stromapp.info', '/run/')).toBe(true);
+    });
+    it('knows the beta build by its path on the hosted site', () => {
+        expect(isBetaLocation('stromapp.info', '/beta/')).toBe(true);
+    });
+    it('leaves the public app alone', () => {
+        expect(isBetaLocation('stromapp.info', '/run/')).toBe(false);
+        expect(isBetaLocation('www.stromapp.info', '/run/')).toBe(false);
     });
 });

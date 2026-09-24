@@ -6,7 +6,7 @@
  * update handshake. Data (IndexedDB) is never touched by the SW.
  */
 
-import { AppMode } from './types.js';
+import { AppMode, BETA_HOSTNAME } from './types.js';
 
 /**
  * The hosted app's base path: the public app lives at /run/, the pre-release
@@ -17,9 +17,17 @@ export function pwaBasePath(pathname: string): '/run/' | '/beta/' {
     return pathname === '/beta' || pathname.startsWith('/beta/') ? '/beta/' : '/run/';
 }
 
-/** True when this page is the pre-release test build (/beta/ on the hosted site). */
+/**
+ * True for the pre-release test build: the beta site (beta.stromapp.info) or
+ * /beta/ on the hosted site. Pure for testing.
+ */
+export function isBetaLocation(hostname: string, pathname: string): boolean {
+    return hostname === BETA_HOSTNAME || pwaBasePath(pathname) === '/beta/';
+}
+
+/** True when this page is the pre-release test build. */
 export function isBetaBuild(mode: AppMode): boolean {
-    return mode === 'pwa' && typeof location !== 'undefined' && pwaBasePath(location.pathname) === '/beta/';
+    return mode === 'pwa' && typeof location !== 'undefined' && isBetaLocation(location.hostname, location.pathname);
 }
 
 /** Where the hosted PWA serves its service worker (web repo, scope = base path). */
