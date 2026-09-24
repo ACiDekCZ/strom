@@ -22,6 +22,7 @@ import { onTreeSavedElsewhere } from './tab-sync.js';
 import { StorageManager } from './storage.js';
 import { PERSISTENCE_EVENT, PersistenceState, getRequestedPersistenceState } from './persistence.js';
 import { SNAPSHOTS_TRIMMED_EVENT, SnapshotTrim } from './snapshots.js';
+import { collectPoolGarbage } from './media-pool.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild } from './pwa.js';
 
 // Make modules available globally for HTML event handlers
@@ -504,6 +505,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Cancelling leaves an "Unlock" banner (V3). A plain embedded file is
     // shown right away — the local password is asked for only when the
     // file is saved into local storage (ensureLocalUnlocked).
+    // Pooled images no stored tree or backup names any more (an image removed
+    // from a tree stays in the pool until a cleanup). Off the startup path.
+    setTimeout(() => { void collectPoolGarbage(); }, 30_000);
+
     const showingEmbedded = DataManager.isViewMode() || DataManager.hasNewerVersionData();
     if (!showingEmbedded && SettingsManager.isEncryptionEnabled() && !CryptoSession.isUnlocked()
         && await TreeManager.hasEncryptedTrees()) {

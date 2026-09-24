@@ -10,12 +10,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { StromData } from '../types.js';
 import { CryptoSession } from '../crypto.js';
+import { registerPoolReferences } from '../media-pool.js';
+
+// No stored trees here: they name no images (the cleanup needs every kind).
+registerPoolReferences('trees', async () => []);
 
 // In-memory stand-in for the IndexedDB-backed StorageManager, one Map per
 // store (`mem` is the snapshots store, `media` the image pool).
 const mem = new Map<string, unknown>();
 const media = new Map<string, unknown>();
-const storeOf = (store: string) => (store === 'snapshotMedia' ? media : mem);
+const storeOf = (store: string) => (store === 'media' ? media : mem);
 vi.mock('../storage.js', () => ({
     StorageManager: {
         async get<T>(store: string, key: string): Promise<T | null> {
@@ -33,6 +37,9 @@ vi.mock('../storage.js', () => ({
         },
         async keys(store: string): Promise<string[]> {
             return [...storeOf(store).keys()];
+        },
+        async getMany<T>(store: string, keys: string[]): Promise<Map<string, T | null>> {
+            return new Map(keys.map(k => [k, (storeOf(store).get(k) as T) ?? null]));
         },
     },
 }));

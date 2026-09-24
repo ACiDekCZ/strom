@@ -13,7 +13,7 @@ const DB_NAME = 'strom-db';
 // v2: added the 'snapshots' store (versioned backups).
 // v3: added the 'fileHandles' store (File System Access handles per tree).
 // v4: added the 'shareBaselines' store (change-packet baselines per exportId).
-// v5: added the 'snapshotMedia' store (images shared by backups).
+// v5: added the 'media' store (images shared by stored trees and backups).
 // onupgradeneeded creates any missing store, so existing databases gain it on
 // the next open.
 const DB_VERSION = 5;
@@ -23,7 +23,7 @@ function dispatchStorageEvent(name: string): void {
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name));
 }
 
-const STORES = ['trees', 'audit', 'merge', 'snapshots', 'snapshotMedia', 'fileHandles', 'shareBaselines'] as const;
+const STORES = ['trees', 'audit', 'merge', 'snapshots', 'media', 'fileHandles', 'shareBaselines'] as const;
 export type StoreName = typeof STORES[number];
 
 class StorageManagerClass {
@@ -132,6 +132,27 @@ class StorageManagerClass {
             const tx = this.db!.transaction(store, 'readwrite');
             tx.objectStore(store).delete(key);
             tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+        });
+    }
+
+    /**
+     * Read several keys in one transaction (null for a missing one).
+     */
+    async getMany<T>(store: StoreName, keys: string[]): Promise<Map<string, T | null>> {
+        if (!this.db) throw new Error('StorageManager not initialized');
+        const out = new Map<string, T | null>();
+        if (keys.length === 0) return out;
+
+        return new Promise<Map<string, T | null>>((resolve, reject) => {
+            const tx = this.db!.transaction(store, 'readonly');
+            const os = tx.objectStore(store);
+            for (const key of keys) {
+                const req = os.get(key);
+                req.onsuccess = () => { out.set(key, (req.result as T) ?? null); };
+            }
+            tx.oncomplete = () => resolve(out);
             tx.onerror = () => reject(tx.error);
             tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
         });

@@ -10,7 +10,7 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { TreeId } from '../types.js';
-import { listSnapshots, totalSnapshotBytes, getSnapshotJson, deleteSnapshotsForTree, SnapshotMeta, SnapshotTrim, MAX_SNAPSHOTS_PER_TREE, snapshotCosts, snapshotBudgetBytes } from '../snapshots.js';
+import { listSnapshots, totalSnapshotBytes, getSnapshotJson, deleteSnapshotsForTree, SnapshotMeta, SnapshotTrim, MAX_SNAPSHOTS_PER_TREE, snapshotCosts, snapshotBudgetBytes, treeImageIds } from '../snapshots.js';
 import { uiModule } from './module.js';
 import { safeFileName } from '../filenames.js';
 import { formatRelativeDateTime, formatFileSize } from '../format.js';
@@ -180,13 +180,15 @@ export const snapshotsUiMethods = uiModule({
         const autoToggle = document.getElementById('snapshots-auto-toggle') as HTMLInputElement | null;
         if (autoToggle) autoToggle.checked = TreeManager.isAutoBackupEnabled(treeId as TreeId);
 
-        const [snaps, totalBytes, budget] = await Promise.all([
+        const [snaps, totalBytes, budget, free] = await Promise.all([
             listSnapshots(treeId),
             totalSnapshotBytes(treeId),
             snapshotBudgetBytes(),
+            treeImageIds(treeId),
         ]);
-        // What each backup adds: images shared with a newer one are counted there.
-        const costs = snapshotCosts(snaps);
+        // What each backup adds: images the tree or a newer backup has are
+        // counted there.
+        const costs = snapshotCosts(snaps, free);
 
         if (totalEl) {
             totalEl.textContent = snaps.length

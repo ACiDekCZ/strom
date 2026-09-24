@@ -27,6 +27,10 @@ import { requestPersistentStorage } from './persistence.js';
 import { asciiSlug } from './filenames.js';
 import { announceTreeSaved } from './tab-sync.js';
 import { cloneTreeDataAsJson, estimateJsonBytes } from './clone.js';
+import {
+    withPoolLock, collectPoolable, storeImages, stringifyPooled, replacePooled,
+    unpoolJson, unpoolObject, registerPoolReferences, forgetPoolScope, seedPoolScope, notePoolSizes,
+} from './media-pool.js';
 
 /**
  * Outcome of reading a tree record. `locked` / `undecryptable` are NOT the
@@ -48,6 +52,30 @@ const TREE_INDEX_VERSION = 1;
 
 /** IDB key for the tree index inside 'trees' store */
 const INDEX_KEY = '_index';
+
+/**
+ * A stored tree that has images: the tree with its images as references into
+ * the image pool (plain), or the encrypted JSON of that; `media` lists the
+ * pooled images it names (kept outside the encryption for the pool cleanup —
+ * ids only, nothing of the content). A tree without images is stored as
+ * before: StromData, or EncryptedData.
+ */
+interface PooledTreeRecord {
+    pooled: 1;
+    data?: StromData;
+    encrypted?: EncryptedData;
+    media: Record<string, number>;
+}
+
+function isPooledTree(raw: unknown): raw is PooledTreeRecord {
+    return !!raw && typeof raw === 'object' && (raw as { pooled?: unknown }).pooled === 1;
+}
+
+/** The encrypted payload of a stored tree record, if it is encrypted. */
+function encryptedPart(raw: unknown): EncryptedData | null {
+    if (isPooledTree(raw)) return raw.encrypted && isEncrypted(raw.encrypted) ? raw.encrypted : null;
+    return isEncrypted(raw) ? raw as EncryptedData : null;
+}
 
 /**
  * Convert string to URL-friendly slug
@@ -303,6 +331,7 @@ class TreeManagerClass {
 
         // Remove tree data from IDB
         await StorageManager.delete('trees', id);
+        forgetPoolScope(id);
 
         // Remove audit log for this tree
         await AuditLogManager.deleteForTree(id);
@@ -393,11 +422,13 @@ class TreeManagerClass {
         // Ensure this tree's queued saves (and any other pending writes) have
         // landed before reading (review S20).
         await this.flush(id);
-        const raw = await StorageManager.get<StromData | EncryptedData>('trees', id);
+        const raw = await StorageManager.get<StromData | EncryptedData | PooledTreeRecord>('trees', id);
         if (!raw) {
             this.unreadableTrees.delete(id);
             return { status: 'missing' };
         }
+
+        if (isPooledTree(raw)) return this.readPooledTree(id, raw);
 
         if (isEncrypted(raw)) {
             if (!CryptoSession.isUnlocked()) {
@@ -420,6 +451,44 @@ class TreeManagerClass {
         return { status: 'ok', data: raw as StromData };
     }
 
+    /** readTreeData for a tree stored with its images in the pool. */
+    private async readPooledTree(id: TreeId, raw: PooledTreeRecord): Promise<TreeReadResult> {
+        let data: StromData;
+        let missing: number;
+        let urls: Map<string, string>;
+        if (raw.encrypted) {
+            if (!CryptoSession.isUnlocked()) {
+                this.unreadableTrees.add(id);
+                return { status: 'locked' };
+            }
+            try {
+                const text = await CryptoSession.decrypt(raw.encrypted);
+                const out = await unpoolJson(text);
+                data = JSON.parse(out.json) as StromData;
+                missing = out.missing;
+                urls = out.urls;
+            } catch (err) {
+                console.error('Failed to decrypt tree data:', id, err);
+                this.unreadableTrees.add(id);
+                return { status: 'undecryptable' };
+            }
+        } else {
+            const out = await unpoolObject(raw.data as StromData);
+            data = out.data;
+            missing = out.missing;
+            urls = out.urls;
+        }
+        // The ids and sizes came with the images: the next save need not
+        // hash them or read them back.
+        await seedPoolScope(id, urls, !!raw.encrypted).catch(() => {});
+        notePoolSizes(raw.media);
+        // Never expected (the cleanup keeps what a tree names); the rest of
+        // the tree still loads, the load sanitiser drops the empty images.
+        if (missing > 0) console.error('Tree images missing from the pool:', id, missing);
+        this.unreadableTrees.delete(id);
+        return { status: 'ok', data };
+    }
+
     /**
      * Rescue a tree encrypted with a DIFFERENT key than the session (created
      * under another password before a password change, or imported): decrypt
@@ -438,6 +507,23 @@ class TreeManagerClass {
         if (current.status === 'locked' || !CryptoSession.isUnlocked()) return 'locked';
 
         const raw = await StorageManager.get<unknown>('trees', id);
+        if (isPooledTree(raw)) {
+            if (!raw.encrypted) return 'missing';
+            let pooled: StromData;
+            try {
+                const text = await decrypt(raw.encrypted, password);
+                const out = await unpoolJson(text, enc => decrypt(enc, password));
+                pooled = JSON.parse(out.json) as StromData;
+            } catch {
+                return 'wrong-password';
+            }
+            // Re-saved under the session key: images get ids and encryption
+            // of that key, the old ones go with the next pool cleanup.
+            this.unreadableTrees.delete(id);
+            this.saveTreeData(id, pooled);
+            await this.flush(id);
+            return 'ok';
+        }
         if (!isEncrypted(raw)) return 'missing';
         let plainText: string;
         let data: StromData;
@@ -476,7 +562,7 @@ class TreeManagerClass {
     async isTreeDataEncrypted(id: TreeId): Promise<boolean> {
         const raw = await StorageManager.get<unknown>('trees', id);
         if (!raw) return false;
-        return isEncrypted(raw);
+        return encryptedPart(raw) !== null;
     }
 
     /**
@@ -485,8 +571,7 @@ class TreeManagerClass {
     async getEncryptedData(id: TreeId): Promise<EncryptedData | null> {
         const raw = await StorageManager.get<unknown>('trees', id);
         if (!raw) return null;
-        if (isEncrypted(raw)) return raw as EncryptedData;
-        return null;
+        return encryptedPart(raw);
     }
 
     /**
@@ -558,7 +643,10 @@ class TreeManagerClass {
             if (!latest) return;
             // Deleted meanwhile: never resurrect the record (review S20).
             if (!this.index.trees.some(t => t.id === id)) return;
-            if (SettingsManager.isEncryptionEnabled()) {
+            const images = collectPoolable(latest);
+            if (images.size > 0) {
+                await this.writePooledTree(id, latest, images);
+            } else if (SettingsManager.isEncryptionEnabled()) {
                 if (!CryptoSession.isUnlocked()) throw new Error('locked');
                 const encrypted = await CryptoSession.encrypt(JSON.stringify(latest));
                 const sizeBytes = new Blob([JSON.stringify(encrypted)]).size;
@@ -578,6 +666,32 @@ class TreeManagerClass {
             dispatchSaveFailed(id, err);
         });
         this.saveQueues.set(id, next);
+    }
+
+    /**
+     * Write a tree with images: new images into the pool, the tree with
+     * references to them. Under the pool lock, so a cleanup cannot remove an
+     * image between finding it stored and this record naming it.
+     */
+    private writePooledTree(id: TreeId, data: StromData, images: Set<string>): Promise<void> {
+        return withPoolLock(async () => {
+            if (!this.index.trees.some(t => t.id === id)) return;
+            const encrypted = SettingsManager.isEncryptionEnabled();
+            if (encrypted && !CryptoSession.isUnlocked()) throw new Error('locked');
+            const { ids, media } = await storeImages(images, encrypted, id);
+            let record: PooledTreeRecord;
+            let sizeBytes: number;
+            if (encrypted) {
+                const enc = await CryptoSession.encrypt(stringifyPooled(data, ids));
+                record = { pooled: 1, encrypted: enc, media };
+                sizeBytes = JSON.stringify(enc).length + Object.values(media).reduce((a, b) => a + b, 0);
+            } else {
+                record = { pooled: 1, data: replacePooled(data, ids), media };
+                sizeBytes = estimateJsonBytes(data);
+            }
+            await StorageManager.set('trees', id, record);
+            this.updateMetadata(id, data, sizeBytes);
+        });
     }
 
     /** Update in-memory metadata after save */
@@ -879,3 +993,15 @@ function dispatchSaveFailed(treeId: TreeId | null, err: unknown): void {
 
 // Export singleton instance
 export const TreeManager = new TreeManagerClass();
+
+// The pool keeps every image a stored tree names (every record in the store,
+// not only the indexed ones: a record is never dropped from under its images).
+registerPoolReferences('trees', async () => {
+    const ids: string[] = [];
+    for (const key of await StorageManager.keys('trees')) {
+        if (key === INDEX_KEY) continue;
+        const raw = await StorageManager.get<unknown>('trees', key);
+        if (isPooledTree(raw)) ids.push(...Object.keys(raw.media ?? {}));
+    }
+    return ids;
+});
