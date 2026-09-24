@@ -30,6 +30,21 @@ const matchCache = new Map<string, CrossTreeMatch[]>();
 const treeDataCache = new Map<string, { stamp: string; name: string; data: import('./types.js').StromData }>();
 
 /**
+ * What matching needs of a tree: persons and partnerships, without the heavy
+ * parts — photos, attachments, narratives and the source catalog with its
+ * excerpts. The cache holds every visible tree; with image-rich trees full
+ * copies cost hundreds of MB for data matching never reads.
+ */
+function leanForMatching(data: import('./types.js').StromData): import('./types.js').StromData {
+    const persons: import('./types.js').StromData['persons'] = {};
+    for (const [id, p] of Object.entries(data.persons ?? {})) {
+        const { photo, photoOriginalName, attachments, story, ...rest } = p;
+        persons[id as keyof typeof persons] = rest;
+    }
+    return { persons, partnerships: data.partnerships ?? {} };
+}
+
+/**
  * Invalidate entire cache
  * Call when any tree data changes
  */
@@ -146,8 +161,9 @@ export async function getTreesDataForMatching(
             result.set(meta.id, { name: cached.name, data: cached.data });
             continue;
         }
-        const data = await treeManager.getTreeData(meta.id);
-        if (!data) continue;
+        const full = await treeManager.getTreeData(meta.id);
+        if (!full) continue;
+        const data = leanForMatching(full);
         treeDataCache.set(meta.id, { stamp: meta.lastModifiedAt, name: meta.name, data });
         result.set(meta.id, { name: meta.name, data });
     }

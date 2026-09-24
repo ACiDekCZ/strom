@@ -236,6 +236,36 @@ describe('V4 new trees are encrypted when encryption is on', () => {
     });
 });
 
+// ---------- coalesced saves (big image sets) ----------
+describe('rapid saves of one tree are coalesced', () => {
+    it('writes only the newest waiting state, and nothing else is lost', async () => {
+        encryptionOn = false;
+        resetTreeManager([meta('t1', 'One'), meta('t2', 'Two')]);
+        const setSpy = vi.spyOn((await import('../storage.js')).StorageManager, 'set');
+        TreeManager.saveTreeData('t1' as TreeId, tree(['A']));
+        TreeManager.saveTreeData('t1' as TreeId, tree(['B']));
+        TreeManager.saveTreeData('t1' as TreeId, tree(['C']));
+        TreeManager.saveTreeData('t2' as TreeId, tree(['Other']));
+        await TreeManager.flush();
+        const treeWrites = setSpy.mock.calls.filter(c => c[0] === 'trees' && c[1] !== '_index');
+        // One write per tree: the three t1 saves became one (the newest).
+        expect(treeWrites.map(c => c[1])).toEqual(['t1', 't2']);
+        expect(Object.values((st('trees').get('t1') as StromData).persons)[0].firstName).toBe('C');
+        expect(Object.values((st('trees').get('t2') as StromData).persons)[0].firstName).toBe('Other');
+        setSpy.mockRestore();
+    });
+
+    it('the saved state does not follow later changes of the live object', async () => {
+        encryptionOn = false;
+        resetTreeManager([meta('t1', 'One')]);
+        const live = tree(['Before']);
+        TreeManager.saveTreeData('t1' as TreeId, live);
+        Object.values(live.persons)[0].firstName = 'Changed later';
+        await TreeManager.flush();
+        expect(Object.values((st('trees').get('t1') as StromData).persons)[0].firstName).toBe('Before');
+    });
+});
+
 // ---------- S20 ----------
 describe('S20 flush waits for the save queue; delete does not resurrect', () => {
     it('getTreeData sees the latest queued save', async () => {

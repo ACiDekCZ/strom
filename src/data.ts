@@ -44,6 +44,7 @@ import { surnameForms, addSurnameGroup, removeSurnameGroup } from './surnames.js
 import { ChangePacket, applyPacketOntoData } from './share-diff.js';
 import { createSnapshot, getSnapshotJson, SnapshotReason, hasAutoSnapshotOnDay } from './snapshots.js';
 import { ValidationIssue, stripUnsafeMediaDataUrls, translateValidationType } from './validation.js';
+import { cloneTreeData } from './clone.js';
 import { UndoManager } from './undo.js';
 import { applyLivingPrivacy, applyContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
 import { safeFileName } from './filenames.js';
@@ -1014,7 +1015,7 @@ class DataManagerClass {
         // Inside a batch the pre-state was captured once by beginBatch; the inner
         // mutations must not re-snapshot (that would split the batch into steps).
         if (this.batchActive) return;
-        this.pendingBefore = structuredClone(this.data);
+        this.pendingBefore = cloneTreeData(this.data);
     }
 
     /**
@@ -1127,7 +1128,7 @@ class DataManagerClass {
     /** Start a session. Returns false (and does nothing) when one cannot start. */
     beginEditSession(): boolean {
         if (this.isReadOnly() || this.editSession || this.batchActive) return false;
-        this.editSession = { treeId: this.currentTreeId, before: structuredClone(this.data) };
+        this.editSession = { treeId: this.currentTreeId, before: cloneTreeData(this.data) };
         this.beginBatch();
         AuditLogManager.beginHold();
         return true;
@@ -1266,7 +1267,7 @@ class DataManagerClass {
         // A locked tree is read-only — undo would rewrite it (review S21).
         if (this.isTreeLocked()) return null;
         UndoManager.setActiveTree(this.currentTreeId);
-        const restored = UndoManager.undo(structuredClone(this.data));
+        const restored = UndoManager.undo(cloneTreeData(this.data));
         if (!restored) return null;
         this.applyRestoredData(restored.data);
         AuditLogManager.log(this.currentTreeId, 'undo', strings.auditLog.undoAction(restored.description));
@@ -1280,7 +1281,7 @@ class DataManagerClass {
         if (this.editSession) return null;
         if (this.isTreeLocked()) return null;
         UndoManager.setActiveTree(this.currentTreeId);
-        const restored = UndoManager.redo(structuredClone(this.data));
+        const restored = UndoManager.redo(cloneTreeData(this.data));
         if (!restored) return null;
         this.applyRestoredData(restored.data);
         AuditLogManager.log(this.currentTreeId, 'redo', strings.auditLog.redoAction(restored.description));
@@ -1289,7 +1290,7 @@ class DataManagerClass {
 
     /** Swap in restored data and persist it, without recording a new undo step. */
     private applyRestoredData(data: StromData): void {
-        this.data = structuredClone(data);
+        this.data = cloneTreeData(data);
         this.pendingBefore = null;
         if (!this.viewMode && this.currentTreeId) {
             TreeManager.saveTreeData(this.currentTreeId, this.data);

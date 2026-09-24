@@ -26,6 +26,7 @@ import { StorageManager } from './storage.js';
 import { requestPersistentStorage } from './persistence.js';
 import { asciiSlug } from './filenames.js';
 import { announceTreeSaved } from './tab-sync.js';
+import { cloneTreeDataAsJson, estimateJsonBytes } from './clone.js';
 
 /**
  * Outcome of reading a tree record. `locked` / `undecryptable` are NOT the
@@ -488,6 +489,8 @@ class TreeManagerClass {
 
     /** Per-tree write queue: keeps saves ordered (see saveTreeData). */
     private saveQueues = new Map<TreeId, Promise<void>>();
+    /** The newest state waiting to be written per tree (coalesced saves). */
+    private pendingSaves = new Map<TreeId, StromData>();
 
     /** Trees whose stored data could not be read (see readTreeData). */
     private unreadableTrees = new Set<TreeId>();
@@ -513,23 +516,36 @@ class TreeManagerClass {
         data.version = STROM_DATA_VERSION;
         // A tree with people is worth protecting from browser eviction.
         if (Object.keys(data.persons ?? {}).length > 0) void requestPersistentStorage();
-        // Snapshot NOW: the caller keeps mutating the live object.
-        const plainText = JSON.stringify(data);
+        // Snapshot NOW: the caller keeps mutating the live object. The copy
+        // shares strings (photos, scans) with the live data, so it is cheap
+        // even for a tree carrying tens of MB of images.
+        const snapshot = cloneTreeDataAsJson(data);
+
+        // A write for this tree still waiting in the queue takes this newer
+        // state instead of queueing another full copy: rapid edits used to
+        // stack one whole serialized tree per edit (out of memory with big
+        // image sets). Only the latest state matters, order is unchanged.
+        const waiting = this.pendingSaves.has(id);
+        this.pendingSaves.set(id, snapshot);
+        if (waiting) return;
 
         const prev = this.saveQueues.get(id) ?? Promise.resolve();
         const next = prev.then(async () => {
+            const latest = this.pendingSaves.get(id);
+            this.pendingSaves.delete(id);
+            if (!latest) return;
             // Deleted meanwhile: never resurrect the record (review S20).
             if (!this.index.trees.some(t => t.id === id)) return;
             if (SettingsManager.isEncryptionEnabled()) {
                 if (!CryptoSession.isUnlocked()) throw new Error('locked');
-                const encrypted = await CryptoSession.encrypt(plainText);
+                const encrypted = await CryptoSession.encrypt(JSON.stringify(latest));
                 const sizeBytes = new Blob([JSON.stringify(encrypted)]).size;
                 await StorageManager.set('trees', id, encrypted);
-                this.updateMetadata(id, data, sizeBytes);
+                this.updateMetadata(id, latest, sizeBytes);
             } else {
-                const sizeBytes = new Blob([plainText]).size;
-                await StorageManager.set('trees', id, JSON.parse(plainText) as StromData);
-                this.updateMetadata(id, data, sizeBytes);
+                const sizeBytes = estimateJsonBytes(latest);
+                await StorageManager.set('trees', id, latest);
+                this.updateMetadata(id, latest, sizeBytes);
             }
             // Other tabs with this tree open must learn their copy is stale.
             announceTreeSaved(id);
