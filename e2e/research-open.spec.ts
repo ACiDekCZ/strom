@@ -346,7 +346,7 @@ test.describe('without the APIs (mobile, other browsers)', () => {
             Object.defineProperty(window, 'EventSource', { value: undefined, configurable: true, writable: true });
             Object.defineProperty(window, 'launchQueue', { value: undefined, configurable: true, writable: true });
         });
-        await page.goto('http://localhost:8199/strom.html?live=' + encodeURIComponent('http://evil.com/tok')
+        await page.goto(`${test.info().project.use.baseURL}?live=` + encodeURIComponent('http://evil.com/tok')
             + '&import-url=' + encodeURIComponent('http://localhost@evil.com/x.ged'));
         await expect(page.locator('.toolbar')).toBeVisible();
         await expect(page.locator('.toast')).toContainText('not on this computer');
