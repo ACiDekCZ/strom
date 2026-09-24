@@ -231,6 +231,9 @@ export const bottomSheetMethods = uiModule({
             { label: s.menu.splitFamilies, run: () => this.showSplitFamiliesDialog() },
             { label: s.treeManager.stats, run: () => this.showActiveTreeStats() },
             { label: s.treeHealth.menu, run: () => void this.showTreeHealthDialog(id) },
+            ...(this.isSourcesMenuOffered()
+                ? [{ label: s.sources.menu, run: () => this.showSourcesDialog() }]
+                : []),
             { label: s.book.menu, run: () => this.showBookDialog() },
             { label: s.menu.export, run: () => this.showExportDialog() },
         ];

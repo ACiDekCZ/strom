@@ -163,6 +163,36 @@ test.describe('tree manager row menu: Escape', () => {
         await expect(manager).not.toHaveClass(/active/);
     });
 
+    test('Sources: hidden in the plain mode, offered with research fields, opens the catalog', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+
+        const sourcesRow = page.locator('#actions-tree-sources-row');
+        await page.locator('.actions-menu-btn').click();
+        await page.locator('#actions-tree-row').hover();
+        await expect(sourcesRow).toBeHidden();
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Escape');
+
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+        await page.locator('.actions-menu-btn').click();
+        await page.locator('#actions-tree-row').hover();
+        await expect(sourcesRow).toBeVisible();
+        await sourcesRow.click();
+        await expect(page.locator('#sources-modal')).toHaveClass(/active/);
+        await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
+    });
+
+    test('Sources: offered without research fields once the tree has a source', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.evaluate(() => window.Strom.DataManager.addSource({ title: 'Matrika N 1861' }));
+
+        await page.locator('.actions-menu-btn').click();
+        await page.locator('#actions-tree-row').hover();
+        await expect(page.locator('#actions-tree-sources-row')).toBeVisible();
+    });
+
     test('Statistics acts on the active tree and closes the whole menu', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');

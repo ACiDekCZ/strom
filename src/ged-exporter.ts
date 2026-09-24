@@ -526,20 +526,25 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
         // Media: portrait first (marked), then attachments. Data URLs are
         // CONC-wrapped to keep physical lines within the spec limit.
-        const pushMedia = (file: string, title: string, kind: 'photo' | ''): void => {
+        const pushMedia = (file: string, title: string, kind: 'photo' | '', note?: string, srcId?: string): void => {
             const mime = file.startsWith('data:') ? file.slice(5, file.indexOf(';')) : '';
             const form = mime.includes('/') ? mime.split('/')[1] : 'jpeg';
             lines.push('1 OBJE');
             lines.push(`2 FORM ${form}`);
             if (title) pushWrapped(lines, 2, 'TITL', title);
             if (kind) lines.push(`2 _STROM_KIND ${kind}`);
+            if (note) pushLongValue(lines, 2, 'NOTE', note);
+            // The source this scan belongs to. 5.5.1 has no SOUR under a
+            // multimedia link, hence the underscore tag.
+            const srcRef = srcId ? sourceIdMap.get(srcId) : undefined;
+            if (srcRef) lines.push(`2 _SOUR ${srcRef}`);
             pushWrapped(lines, 2, 'FILE', file);
         };
         if (person.photo) {
             pushMedia(person.photo, person.photoOriginalName ?? '', 'photo');
         }
         for (const att of person.attachments ?? []) {
-            pushMedia(att.dataUrl, att.name, '');
+            pushMedia(att.dataUrl, att.name, '', att.note, att.sourceId);
         }
 
         // Family as spouse (FAMS) - partnerships where this person is a partner

@@ -337,6 +337,11 @@ plus `data:application/pdf;base64,` for a document; any other embedded type is
 skipped and reported (`OBJE` in the summary). A `FILE` that is a path or a URL
 is offered for matching against files the user picks.
 
+Two sub-lines of a document's `OBJE` are read as well: `2 NOTE` (with `CONT` /
+`CONC`) becomes the document's note, and `2 _SOUR @Sx@` links the document to
+that source record (5.5.1 has no `SOUR` under a multimedia link; a plain
+`2 SOUR @Sx@` is accepted too). Strom writes both on export.
+
 Strom's export embeds photos and documents this way unless the export dialog's
 content options leave them out — other programs cannot read data URLs, so a
 file meant for them is best exported without.

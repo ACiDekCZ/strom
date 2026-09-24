@@ -387,6 +387,27 @@ describe('GEDCOM media (OBJE) and standard sources', () => {
         expect(p2.attachments![0].dataUrl).toBe(person.attachments[0].dataUrl);
     });
 
+    it('attachment note and source link survive a round-trip', () => {
+        const ged = GED([
+            '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M', '1 SOUR @S1@',
+            '0 @S1@ SOUR', '1 TITL Matrika oddaných',
+        ].join('\n'));
+        const r = conv(ged);
+        const person = Object.values(r.data.persons)[0];
+        const srcId = Object.keys(r.data.sources!)[0];
+        person.attachments = [{
+            id: 'att1', name: 'strana-57.jpg', mimeType: 'image/png', dataUrl: PNG, sizeBytes: 60,
+            note: 'Levá strana, zápis č. 12\nkmotr soused', sourceId: srcId,
+        }];
+        const out = exportToGedcom(r.data).content;
+        expect(out).toContain('2 _SOUR @S1@');
+
+        const again = conv(out);
+        const att = Object.values(again.data.persons)[0].attachments![0];
+        expect(att.note).toBe('Levá strana, zápis č. 12\nkmotr soused');
+        expect(att.sourceId).toBe(Object.keys(again.data.sources!)[0]);
+    });
+
     it('external OBJE file paths are collected for bulk media attachment', () => {
         const ged = GED([
             '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M',

@@ -124,6 +124,23 @@ describe('removing a source cascades to citations', () => {
     });
 });
 
+describe('removing a source clears attachment links', () => {
+    it('drops Attachment.sourceId pointing at the removed source', () => {
+        const a = DataManager.createPerson(personData('A'));
+        const src = DataManager.addSource({ title: 'Scan source' })!;
+        const keep = DataManager.addSource({ title: 'Other' })!;
+        const p = DataManager.getPerson(a.id)!;
+        p.attachments = [
+            { id: 'x1', name: 'a.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1, sourceId: src.id },
+            { id: 'x2', name: 'b.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1, sourceId: keep.id },
+        ];
+        expect(DataManager.removeSource(src.id)).toBe(true);
+        const atts = DataManager.getPerson(a.id)!.attachments!;
+        expect(atts[0].sourceId).toBeUndefined();
+        expect(atts[1].sourceId).toBe(keep.id);
+    });
+});
+
 /** Build a tree with one person + one source + citation for privacy tests. */
 function treeWithCitation(living: boolean): StromData {
     const source: Source = { id: 's1', title: 'Sensitive register', reference: 'sign. 12/3' };

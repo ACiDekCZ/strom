@@ -211,6 +211,8 @@ export const treeManagementMethods = uiModule({
         // "Change history" row is only offered when the audit log is enabled.
         const auditRow = document.getElementById('actions-tree-audit-row');
         if (auditRow) auditRow.style.display = SettingsManager.isAuditLogEnabled() ? '' : 'none';
+        const sourcesRow = document.getElementById('actions-tree-sources-row');
+        if (sourcesRow) sourcesRow.style.display = this.isSourcesMenuOffered() ? '' : 'none';
         // Strom Research "New" marker (its dot yields to the anniversaries dot).
         this.refreshResearchNewMarker(count);
         this.refreshActionsUndoRedo();
@@ -355,6 +357,20 @@ export const treeManagementMethods = uiModule({
         const id = TreeManager.getActiveTreeId();
         this.closeActionsMenu();
         if (id) void this.showTreeHealthDialog(id);
+    },
+    /**
+     * The source catalog is a research tool: offered when advanced fields are on,
+     * or as soon as the tree has a source (imported or cited), so nobody is left
+     * without a way to manage sources they already have.
+     */
+    isSourcesMenuOffered(): boolean {
+        if (DataManager.isReadOnly() || DataManager.isTreeLocked()) return false;
+        return SettingsManager.isAdvancedFields()
+            || Object.keys(DataManager.getData().sources ?? {}).length > 0;
+    },
+    treeActionSources(): void {
+        this.closeActionsMenu();
+        this.showSourcesDialog();
     },
     treeActionBook(): void {
         this.closeActionsMenu();

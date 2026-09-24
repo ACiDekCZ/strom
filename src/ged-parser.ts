@@ -282,6 +282,10 @@ interface RawMedia {
     file: string;
     /** Custom marker: 'photo' = the person's portrait (Strom extension). */
     stromKind: string;
+    /** NOTE on the media link (attachment note). */
+    note?: string;
+    /** _SOUR @Sx@ — the source the scan belongs to (Strom extension). */
+    sourceXref?: string;
 }
 
 interface RawEvent {
@@ -1658,6 +1662,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                         else if (tag === 'FORM') currentMedia.form = value;
                         else if (tag === 'FILE') currentMedia.file = value;
                         else if (tag === '_STROM_KIND') currentMedia.stromKind = value;
+                        else if (tag === 'NOTE') currentMedia.note = value;
+                        else if (tag === '_SOUR' || tag === 'SOUR') currentMedia.sourceXref = value;
                         else if ((tag === '_PRIM' || tag === '_PERSONALPHOTO') && value === 'Y') currentMedia.primary = true;
                     } else if (NOTED_INDI_TAGS.has(currentSubTag ?? '') && indi.noteFacts.length > 0) {
                         attachToFact(indi.noteFacts[indi.noteFacts.length - 1], tag, value);
@@ -1808,6 +1814,9 @@ export function parseGedcom(content: string): ParsedGedcom {
             } else if (level === 3 && currentMedia && currentMediaSubTag === 'FILE' && tag === 'CONC') {
                 // Data-URL payloads are CONC-wrapped (255-char physical lines).
                 currentMedia.file += value;
+            } else if (level === 3 && currentMedia && currentMediaSubTag === 'NOTE'
+                && (tag === 'CONT' || tag === 'CONC')) {
+                currentMedia.note = (currentMedia.note ?? '') + (tag === 'CONT' ? '\n' : '') + value;
             } else if (level === 3 && currentType === 'INDI' && currentEvent
                 && currentEventSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
                 if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
@@ -2117,6 +2126,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                         dataUrl: media.file,
                         sizeBytes: Math.round((media.file.length - media.file.indexOf(',') - 1) * 0.75),
                     };
+                    if (media.note) att.note = media.note;
+                    const attSource = media.sourceXref ? sourceIdMap.get(media.sourceXref) : undefined;
+                    if (attSource) att.sourceId = attSource;
                     (person.attachments ??= []).push(att);
                 }
             } else if (media.file) {

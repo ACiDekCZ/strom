@@ -1786,6 +1786,9 @@ class DataManagerClass {
                     if (ev.sourceIds.length === 0) delete ev.sourceIds;
                 }
             }
+            for (const att of person.attachments ?? []) {
+                if (att.sourceId === sourceId) delete att.sourceId;
+            }
         }
         for (const partnership of Object.values(this.data.partnerships)) {
             if (partnership.sourceIds) {
