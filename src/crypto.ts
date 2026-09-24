@@ -283,6 +283,24 @@ class CryptoSessionClass {
     }
 
     /**
+     * A secret, stable-per-key value for keyed content ids (backup image pool):
+     * the AES-GCM encryption of a constant under a fixed IV. Reusing the IV
+     * with the same plaintext reveals nothing new, and without the key the
+     * value — and so which content two ids stand for — cannot be derived.
+     */
+    async contentPepper(): Promise<Uint8Array> {
+        if (!this.derivedKey) {
+            throw new Error('Session is locked - unlock first');
+        }
+        const out = await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv: new Uint8Array(IV_LENGTH) as BufferSource },
+            this.derivedKey,
+            new TextEncoder().encode('strom-content-id')
+        );
+        return new Uint8Array(out);
+    }
+
+    /**
      * Get current salt (for consistent encryption across all trees)
      */
     getSalt(): Uint8Array | null {

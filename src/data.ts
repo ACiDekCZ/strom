@@ -42,7 +42,7 @@ import { collectPlaces, renamePlace, placeKey, orphanedPlaceKeys } from './place
 import { StorageManager } from './storage.js';
 import { surnameForms, addSurnameGroup, removeSurnameGroup } from './surnames.js';
 import { ChangePacket, applyPacketOntoData } from './share-diff.js';
-import { createSnapshot, getSnapshotJson, SnapshotReason, hasAutoSnapshotOnDay } from './snapshots.js';
+import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDay } from './snapshots.js';
 import { ValidationIssue, stripUnsafeMediaDataUrls, translateValidationType } from './validation.js';
 import { cloneTreeData } from './clone.js';
 import { UndoManager } from './undo.js';
@@ -151,15 +151,15 @@ export function migrateData(data: unknown): StromData {
         persons: (d.persons || {}) as Record<PersonId, Person>,
         partnerships
     };
-    // Photos/attachments must be image (or PDF) data URLs — anything else
-    // (data:text/html…) from a crafted file is dropped before it can be
-    // stored or rendered.
-    stripUnsafeMediaDataUrls(result);
-
     // Preserve the source catalog if present.
     if (d.sources && typeof d.sources === 'object') {
         result.sources = d.sources as StromData['sources'];
     }
+
+    // Photos/attachments/excerpts must be image (or PDF) data URLs — anything
+    // else (data:text/html…) from a crafted file is dropped before it can be
+    // stored or rendered. After the sources are in: excerpts live there.
+    stripUnsafeMediaDataUrls(result);
 
     // Preserve place coordinates. This object is rebuilt field by field, so
     // anything not named here is dropped on EVERY load — tree switch, app
@@ -1232,21 +1232,22 @@ class DataManagerClass {
     /**
      * Restore a snapshot into the current tree. Goes through migrateData (a
      * snapshot may be from an older data version) and the undo path, so Ctrl+Z
-     * reverts the restore. Returns true on success.
+     * reverts the restore. Returns null on failure, else how many of the
+     * backup's images were no longer stored.
      */
-    async restoreSnapshot(snapshotId: string): Promise<boolean> {
+    async restoreSnapshot(snapshotId: string): Promise<{ missingImages: number } | null> {
         this.rollbackEditSession();   // whole-data replacement ends a staged dialog
-        if (this.isReadOnly() || !this.currentTreeId) return false;
-        const json = await getSnapshotJson(snapshotId);
-        if (!json) return false;
-        const migrated = migrateData(JSON.parse(json));
+        if (this.isReadOnly() || !this.currentTreeId) return null;
+        const payload = await getSnapshotPayload(snapshotId);
+        if (!payload) return null;
+        const migrated = migrateData(JSON.parse(payload.json));
 
         this.beginMutation();
         this.data = migrated;
         this.commitMutation(strings.undo.restoreBackup, true);
         AuditLogManager.log(this.currentTreeId, 'data.load', strings.auditLog.restoredBackup);
         if (this.currentTreeId) CrossTree.invalidateCacheForTree(this.currentTreeId);
-        return true;
+        return { missingImages: payload.missingImages };
     }
 
     canUndo(): boolean {

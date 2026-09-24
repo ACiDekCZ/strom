@@ -10,7 +10,7 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { TreeId } from '../types.js';
-import { listSnapshots, totalSnapshotBytes, getSnapshotJson, deleteSnapshotsForTree, SnapshotMeta, SnapshotTrim, SNAPSHOT_TREE_BUDGET_BYTES, MAX_SNAPSHOTS_PER_TREE } from '../snapshots.js';
+import { listSnapshots, totalSnapshotBytes, getSnapshotJson, deleteSnapshotsForTree, SnapshotMeta, SnapshotTrim, MAX_SNAPSHOTS_PER_TREE, snapshotCosts, snapshotBudgetBytes } from '../snapshots.js';
 import { uiModule } from './module.js';
 import { safeFileName } from '../filenames.js';
 import { formatRelativeDateTime, formatFileSize } from '../format.js';
@@ -96,6 +96,10 @@ export const snapshotsUiMethods = uiModule({
      * backup of a big tree, the message does not need to.
      */
     handleSnapshotsTrimmed(trim: SnapshotTrim): void {
+        if (trim.tooBig) {
+            this.handleSnapshotsTooBig(trim);
+            return;
+        }
         const day = new Date().toISOString().slice(0, 10);
         if (trimNoticeShown.get(trim.treeId) === day) return;
         trimNoticeShown.set(trim.treeId, day);
@@ -109,6 +113,26 @@ export const snapshotsUiMethods = uiModule({
                     this.showExportDialog();
                 },
             });
+        if (this.snapshotsTreeId === trim.treeId) void this.renderSnapshotsList();
+    },
+
+    /**
+     * Even one backup of the tree does not fit what this device gives backups
+     * (a phone with scans): advise turning them off — once per tree; the
+     * button opens the backups dialog, where the switch is.
+     */
+    handleSnapshotsTooBig(trim: SnapshotTrim): void {
+        if (!TreeManager.takeBackupsTooBigNotice(trim.treeId as TreeId)) return;
+        const name = TreeManager.getTreeMetadata(trim.treeId as TreeId)?.name ?? '';
+        void snapshotBudgetBytes().then(budget => {
+            this.showStorageNotice('snapshots-trimmed-notice', strings.snapshots.tooBig(name, snapshotSize(budget)), {
+                label: strings.snapshots.tooBigAction,
+                run: () => {
+                    document.getElementById('snapshots-trimmed-notice')?.remove();
+                    void this.showSnapshotsDialog(trim.treeId);
+                },
+            });
+        });
         if (this.snapshotsTreeId === trim.treeId) void this.renderSnapshotsList();
     },
 
@@ -156,10 +180,13 @@ export const snapshotsUiMethods = uiModule({
         const autoToggle = document.getElementById('snapshots-auto-toggle') as HTMLInputElement | null;
         if (autoToggle) autoToggle.checked = TreeManager.isAutoBackupEnabled(treeId as TreeId);
 
-        const [snaps, totalBytes] = await Promise.all([
+        const [snaps, totalBytes, budget] = await Promise.all([
             listSnapshots(treeId),
             totalSnapshotBytes(treeId),
+            snapshotBudgetBytes(),
         ]);
+        // What each backup adds: images shared with a newer one are counted there.
+        const costs = snapshotCosts(snaps);
 
         if (totalEl) {
             totalEl.textContent = snaps.length
@@ -170,10 +197,12 @@ export const snapshotsUiMethods = uiModule({
         // say so where the list is, not only in a banner that went away.
         const budgetEl = document.getElementById('snapshots-budget-note');
         if (budgetEl) {
-            const biggest = Math.max(0, ...snaps.map(m => m.sizeBytes || 0));
-            const limited = biggest * MAX_SNAPSHOTS_PER_TREE > SNAPSHOT_TREE_BUDGET_BYTES;
+            // Full set estimate: the newest with its images, the rest text only.
+            const newest = snaps.length ? costs.get(snaps[0].id) ?? 0 : 0;
+            const text = Math.max(0, ...snaps.map(m => m.sizeBytes || 0));
+            const limited = newest + text * (MAX_SNAPSHOTS_PER_TREE - 1) > budget;
             budgetEl.hidden = !limited;
-            budgetEl.textContent = limited ? strings.snapshots.budgetNote(snapshotSize(SNAPSHOT_TREE_BUDGET_BYTES)) : '';
+            budgetEl.textContent = limited ? strings.snapshots.budgetNote(snapshotSize(budget)) : '';
         }
 
         // While the list is empty the empty state carries "Create backup now";
@@ -200,7 +229,7 @@ export const snapshotsUiMethods = uiModule({
             const date = snapshotWhen(s.createdAt);
             const reason = strings.snapshots.reasons[s.reason] || s.reason;
             // The column header is a heading, not a count — reusing it gave "1 people".
-            const meta = [reason, strings.snapshots.persons(s.personCount), snapshotSize(s.sizeBytes)]
+            const meta = [reason, strings.snapshots.persons(s.personCount), snapshotSize(costs.get(s.id) ?? s.sizeBytes)]
                 .filter(Boolean).join(' · ');
             return `<div class="snapshot-row">
                 <div class="snapshot-main">
@@ -272,11 +301,13 @@ export const snapshotsUiMethods = uiModule({
             if (treeId !== DataManager.getCurrentTreeId()) {
                 await DataManager.switchTree(treeId);
             }
-            const ok = await DataManager.restoreSnapshot(snapshotId);
-            if (ok) {
+            const restored = await DataManager.restoreSnapshot(snapshotId);
+            if (restored) {
                 this.closeSnapshotsDialog();
                 TreeRenderer.render();
-                this.showToast(strings.snapshots.restored);
+                this.showToast(restored.missingImages
+                    ? strings.snapshots.restoredMissingImages(restored.missingImages)
+                    : strings.snapshots.restored, restored.missingImages ? 8000 : undefined);
             } else {
                 this.showToast(strings.storageSafety.snapshotFailed, 5000);
             }

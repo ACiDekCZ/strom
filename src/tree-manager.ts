@@ -217,6 +217,15 @@ class TreeManagerClass {
         this.saveIndex();
     }
 
+    /** Whether the "backups too big" advice still needs showing; marks it shown. */
+    takeBackupsTooBigNotice(id: TreeId): boolean {
+        const tree = this.index.trees.find(t => t.id === id);
+        if (!tree || tree.backupsTooBigNoticed || tree.autoBackups === false) return false;
+        tree.backupsTooBigNoticed = true;
+        this.saveIndex();
+        return true;
+    }
+
     setTreeVisibility(id: TreeId, isHidden: boolean): void {
         const tree = this.index.trees.find(t => t.id === id);
         if (tree) {

@@ -731,6 +731,8 @@ export interface TreeMetadata {
      * backup heavy; manual backups still work.
      */
     autoBackups?: boolean;
+    /** The "backups too big for this device" advice was shown (it is shown once). */
+    backupsTooBigNoticed?: boolean;
 }
 
 /** Link between a local tree and the Strom Research tree it was opened from. */
