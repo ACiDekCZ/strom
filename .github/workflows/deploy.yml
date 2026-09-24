@@ -110,7 +110,12 @@ jobs:
           sed -i "s/const CACHE_NAME = 'strom-[^']*'/const CACHE_NAME = 'strom-${HASH}'/" run/sw.js
           VERSION=$(grep -o 'id="about-version">[^<]*' run/index.html | cut -d'>' -f2)
           sed -i "s/const APP_VERSION = '[^']*'/const APP_VERSION = '${VERSION}'/" run/sw.js
-          git add run/index.html run/sw.js
+          # Installed next to the public app, the beta must not look like it:
+          # its own name on the device. Stamped here, so the web repo's files
+          # (and a later beta -> main merge there) keep the public name.
+          sed -i -E 's/^(  "name": )"[^"]*"/\1"Strom Beta"/; s/^(  "short_name": )"[^"]*"/\1"Strom Beta"/' run/manifest.json
+          grep -q '"short_name": "Strom Beta"' run/manifest.json || { echo "manifest name not stamped"; exit 1; }
+          git add run/index.html run/sw.js run/manifest.json
           git diff --staged --quiet || git commit -m "Update beta PWA from GitHub build"
           git push origin beta
 
