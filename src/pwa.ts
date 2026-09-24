@@ -92,6 +92,11 @@ export function linkManifest(): void {
     link.rel = 'manifest';
     link.href = `${pwaBasePath(location.pathname)}manifest.json`;
     document.head.appendChild(link);
+    // iOS takes the home-screen icon from here, not from the manifest.
+    const touch = document.createElement('link');
+    touch.rel = 'apple-touch-icon';
+    touch.href = `${pwaBasePath(location.pathname)}icons/apple-touch-icon.png`;
+    document.head.appendChild(touch);
 }
 
 /** Tell the waiting worker to activate; controllerchange then reloads the page. */
