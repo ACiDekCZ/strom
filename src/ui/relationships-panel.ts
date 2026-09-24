@@ -47,6 +47,7 @@ import { autoGrowAll } from './autogrow.js';
 import { onAllDialogsClosed } from './dialog-focus.js';
 
 import { iconSvg } from '../icons.js';
+import { sourceChipOpenHtml } from './sources.js';
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
         // Setup dialog stack for standalone mode (when opened directly from card, not from edit dialog)
@@ -161,6 +162,13 @@ export const relationshipsPanelMethods = uiModule({
             btn.addEventListener('click', (e) => {
                 const partnershipId = (e.currentTarget as HTMLElement).dataset.partnershipId as PartnershipId;
                 this.showSourcePickerForPartnership(partnershipId);
+            });
+        });
+        content.querySelectorAll<HTMLElement>('.partnership-citations .source-chip-open[data-source-open]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const partnershipId = btn.closest<HTMLElement>('.source-chip')
+                    ?.querySelector<HTMLElement>('.partnership-uncite')?.dataset.partnershipId as PartnershipId | undefined;
+                this.showSourceViewer(btn.dataset.sourceOpen ?? '', partnershipId ? { partnershipId } : null);
             });
         });
         content.querySelectorAll('.partnership-uncite').forEach(btn => {
@@ -388,7 +396,7 @@ export const relationshipsPanelMethods = uiModule({
                                 ? '' : ' style="display:none"'}>
                             ${(partnership.sourceIds ?? []).map(sid => {
                                 const src = DataManager.getData().sources?.[sid];
-                                return src ? `<span class="source-chip"><span class="source-chip-label" title="${this.escapeHtml(src.title)}">${this.escapeHtml(src.title)}</span><button type="button" class="source-chip-remove partnership-uncite" title="${this.escapeHtml(strings.sources.remove)}" aria-label="${this.escapeHtml(strings.sources.remove)}" data-partnership-id="${this.escapeHtml(partnership.id)}" data-source-id="${this.escapeHtml(sid)}">&times;</button></span>` : '';
+                                return src ? `<span class="source-chip ${src.excerpts?.length ? 'has-thumb' : 'has-icon'}">${sourceChipOpenHtml(src)}<button type="button" class="source-chip-remove partnership-uncite" title="${this.escapeHtml(strings.sources.remove)}" aria-label="${this.escapeHtml(strings.sources.remove)}" data-partnership-id="${this.escapeHtml(partnership.id)}" data-source-id="${this.escapeHtml(sid)}">&times;</button></span>` : '';
                             }).join('')}
                             <button type="button" class="partnership-cite-btn" data-partnership-id="${this.escapeHtml(partnership.id)}">${iconSvg('book', { size: 13 })} ${strings.sources.citePartnership}</button>
                         </div>

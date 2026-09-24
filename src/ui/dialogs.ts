@@ -202,7 +202,8 @@ export const dialogsMethods = uiModule({
     showChoice(
         message: string,
         title: string,
-        choices: { id: string; label: string; variant?: 'default' | 'danger' }[]
+        choices: { id: string; label: string; variant?: 'default' | 'danger' }[],
+        checkbox?: { label: string; checked: boolean; detail?: string }
     ): Promise<string | null> {
         return new Promise((resolve) => {
             const modal = document.getElementById('confirmation-modal');
@@ -218,6 +219,16 @@ export const dialogsMethods = uiModule({
             titleEl.textContent = title;
             messageEl.textContent = message;
             if (optionsEl) optionsEl.innerHTML = '';
+            // Optional checkbox under the message; its state is read back
+            // through choiceCheckboxChecked once the dialog settles.
+            let checkEl: HTMLInputElement | null = null;
+            if (checkbox && optionsEl) {
+                optionsEl.innerHTML = `<label class="confirm-check"><input type="checkbox" id="confirm-choice-check"${checkbox.checked ? ' checked' : ''}>
+                    <span>${this.escapeHtml(checkbox.label)}</span>${checkbox.detail
+                        ? ` <span class="confirm-check-detail">${this.escapeHtml(checkbox.detail)}</span>` : ''}</label>`;
+                checkEl = optionsEl.querySelector('input');
+            }
+            this.choiceCheckboxChecked = checkbox?.checked ?? false;
 
             buttonsEl.innerHTML = '';
             const closeAndReturn = () => {
@@ -226,6 +237,7 @@ export const dialogsMethods = uiModule({
                 this.returnToParentDialog();
             };
             const settle = (value: string | null) => {
+                if (checkEl) this.choiceCheckboxChecked = checkEl.checked;
                 closeAndReturn();
                 resolve(value);
             };

@@ -369,7 +369,7 @@ const stringsEN = {
         cite: 'Cite a source',
         citePartnership: 'Cite source (marriage record…)',
         pickTitle: 'Cite a source',
-        searchPlaceholder: 'Search sources…',
+        searchPlaceholder: 'Search title, archive, reference, transcript…',
         createNew: 'New source…',
         emptyPicker: 'No sources — create one',
         edit: 'Edit',
@@ -382,11 +382,75 @@ const stringsEN = {
         fieldNote: 'Note',
         titleRequired: 'Enter a source title',
         unsavedMessage: 'You have unsaved changes in this source.',
+        // Register entries: excerpt, transcript, viewer, picker (plan "citace a výřezy")
+        chipOpen: (title: string) => `Show source: ${title}`,
+        titleHint: 'One specific entry — a baptism, marriage or burial.',
+        excerptLabel: 'Excerpt of the entry',
+        excerptEmpty: "Paste a screenshot from the archive's image viewer, or upload a scan.",
+        excerptPaste: 'Paste from clipboard',
+        excerptPasteHint: 'Press Ctrl+V (⌘V on a Mac).',
+        excerptNotImage: 'The clipboard contains no image.',
+        excerptUpload: 'Upload image',
+        excerptFromAttachment: 'Crop from attachment',
+        excerptPickPage: 'Choose a page',
+        excerptCrop: 'Crop',
+        excerptReplace: 'Replace',
+        excerptRemove: 'Remove excerpt',
+        excerptCaption: 'Caption (optional)',
+        excerptAddSecond: 'Add continuation from the next page',
+        excerptMax: 'An entry can have at most two excerpts.',
+        excerptReadError: 'The image could not be read.',
+        excerptAlt: (title: string) => `Excerpt: ${title}`,
+        excerptsTotal: (size: string) => `Excerpts: ${size}`,
+        more: 'More: transcript, record date, reliability',
+        fieldTranscript: 'Transcript of the entry',
+        fieldRecordDate: 'Record date',
+        recordDateHint: 'When the entry was written — may differ from the event date.',
+        fieldQuality: 'Reliability',
+        quality3: 'Original',
+        quality2: 'Copy / index',
+        quality1: 'Uncertain',
+        sameBook: 'Another entry from the same register',
+        viewerOpenPage: 'Open the page in the archive',
+        viewerTranscript: 'Transcript',
+        viewerCites: 'Supports',
+        viewerZoom: 'Zoom',
+        addExcerpt: 'Add excerpt',
+        recordedOn: (date: string) => `recorded ${date}`,
+        citedPartnership: (a: string, b: string) => `Marriage: ${a} and ${b}`,
+        newTitleMarriage: (a: string, b: string) => `Marriage – ${a} and ${b}`,
+        recent: 'Recently used',
+        all: 'All',
+        manage: 'Manage sources',
         citations: (n: number) => `${n}×`,
         deleteConfirm: (title: string, n: number) =>
             n > 0
                 ? `Delete this source? It is cited in ${nEn(n, 'place', 'places')}; those citations will be removed.\n\n${title}`
                 : `Delete this source?\n\n${title}`,
+    },
+
+    // Crop editor (source excerpts; shared with the photo crop)
+    crop: {
+        title: 'Crop the entry',
+        rotateLeft: 'Rotate left',
+        rotateRight: 'Rotate right',
+        zoomIn: 'Zoom in',
+        zoomOut: 'Zoom out',
+        fit: 'Fit',
+        keepPage: 'Also save the whole page as an attachment',
+        apply: 'Use excerpt',
+        applyShort: 'Use',
+        size: (w: number, h: number, kb: number) => `${w} × ${h} px · ≈ ${kb} kB`,
+        aria: 'Crop area. Arrows move, Alt+arrows resize, Enter confirms.',
+    },
+
+    // Import filter: leave images out
+    importImages: {
+        label: 'Import images (excerpts, attachments, photos)',
+        size: (mb: string) => `≈ ${mb} MB`,
+        hint: 'Without images, transcripts, archives and page links are kept; excerpts can be added later.',
+        setting: 'Load images when importing',
+        settingHint: 'Photos, attachments and source excerpts come in with imported files and opened research. Turn off to keep trees small; the text of sources is always kept.',
     },
 
     // Attachments
@@ -549,6 +613,7 @@ const stringsEN = {
 
     // Opening a research from Strom Research (file handler, link, drag & drop, live bridge)
     research: {
+        excerptsReplaced: 'Excerpts you added to this tree will be replaced by the update. A backup is saved first.',
         defaultName: 'Research',
         opened: (name: string, persons: number, families: number, date: string) =>
             `Opened the research ${name} from Strom Research — ${nEn(persons, 'person', 'people')}, ${nEn(families, 'family', 'families')} (as of ${date})`,
@@ -1293,6 +1358,7 @@ const stringsEN = {
             + `(e.g. adopted); shown with the birth family, the rest noted on the person`,
         photos: 'Photos',
         documents: 'Documents',
+        excerpts: 'Excerpts',
         sources: 'Sources',
         events: 'Events',
         notes: 'Notes',
@@ -2093,7 +2159,7 @@ const stringsEN = {
         presetSmall: 'Small file to send',
         presetSkeleton: 'Bare skeleton',
         contentPhotos: 'Photos',
-        contentAttachments: 'Attachments & documents',
+        contentAttachments: 'Attachments, documents & source excerpts',
         contentNotes: 'Notes',
         contentSources: 'Sources & citations'
     },
@@ -2449,7 +2515,7 @@ const stringsCZ: StringsType = {
         cite: 'Citovat pramen',
         citePartnership: 'Citovat pramen (oddací matrika…)',
         pickTitle: 'Citovat pramen',
-        searchPlaceholder: 'Hledat prameny…',
+        searchPlaceholder: 'Hledat název, archiv, signaturu, přepis…',
         createNew: 'Nový pramen…',
         emptyPicker: 'Žádné prameny — vytvořte pramen',
         edit: 'Upravit',
@@ -2462,11 +2528,75 @@ const stringsCZ: StringsType = {
         fieldNote: 'Poznámka',
         titleRequired: 'Zadejte název pramene',
         unsavedMessage: 'Máte neuložené změny v tomto prameni.',
+        // Zápisy: výřez, přepis, prohlížeč, výběr (plán „citace a výřezy“)
+        chipOpen: (title: string) => `Zobrazit pramen: ${title}`,
+        titleHint: 'Jeden konkrétní zápis — křest, sňatek, úmrtí.',
+        excerptLabel: 'Výřez zápisu',
+        excerptEmpty: 'Vložte výstřižek obrazovky z prohlížeče archivu, nebo nahrajte sken.',
+        excerptPaste: 'Vložit ze schránky',
+        excerptPasteHint: 'Stiskněte Ctrl+V (na Macu ⌘V).',
+        excerptNotImage: 'Ve schránce není obrázek.',
+        excerptUpload: 'Nahrát obrázek',
+        excerptFromAttachment: 'Vyříznout z přílohy',
+        excerptPickPage: 'Vyberte stranu',
+        excerptCrop: 'Oříznout',
+        excerptReplace: 'Nahradit',
+        excerptRemove: 'Odebrat výřez',
+        excerptCaption: 'Popisek (volitelné)',
+        excerptAddSecond: 'Přidat pokračování z další strany',
+        excerptMax: 'Zápis může mít nejvýše dva výřezy.',
+        excerptReadError: 'Obrázek se nepodařilo načíst.',
+        excerptAlt: (title: string) => `Výřez zápisu: ${title}`,
+        excerptsTotal: (size: string) => `Výřezy: ${size}`,
+        more: 'Více: přepis, datum zápisu, spolehlivost',
+        fieldTranscript: 'Přepis zápisu',
+        fieldRecordDate: 'Datum zápisu',
+        recordDateHint: 'Kdy byl zápis pořízen — může se lišit od data události.',
+        fieldQuality: 'Spolehlivost',
+        quality3: 'Originál',
+        quality2: 'Opis / index',
+        quality1: 'Nejisté',
+        sameBook: 'Další zápis ze stejné knihy',
+        viewerOpenPage: 'Otevřít stranu v archivu',
+        viewerTranscript: 'Přepis',
+        viewerCites: 'Dokládá',
+        viewerZoom: 'Zvětšit',
+        addExcerpt: 'Přidat výřez',
+        recordedOn: (date: string) => `zapsáno ${date}`,
+        citedPartnership: (a: string, b: string) => `Sňatek: ${a} a ${b}`,
+        newTitleMarriage: (a: string, b: string) => `Sňatek – ${a} a ${b}`,
+        recent: 'Naposledy použité',
+        all: 'Všechny',
+        manage: 'Spravovat prameny',
         citations: (n: number) => `${n}×`,
         deleteConfirm: (title: string, n: number) =>
             n > 0
                 ? `Smazat tento pramen? Je citován na ${nCs(n, 'místě', 'místech', 'místech')}; citace budou odebrány.\n\n${title}`
                 : `Smazat tento pramen?\n\n${title}`,
+    },
+
+    // Ořezávač (výřezy pramenů; sdílený s ořezem fotky)
+    crop: {
+        title: 'Vyříznout zápis',
+        rotateLeft: 'Otočit doleva',
+        rotateRight: 'Otočit doprava',
+        zoomIn: 'Přiblížit',
+        zoomOut: 'Oddálit',
+        fit: 'Přizpůsobit',
+        keepPage: 'Uložit i celou stranu jako přílohu osoby',
+        apply: 'Použít výřez',
+        applyShort: 'Použít',
+        size: (w: number, h: number, kb: number) => `${w} × ${h} px · ≈ ${kb} kB`,
+        aria: 'Oblast výřezu. Šipky posouvají, Alt+šipky mění velikost, Enter potvrdí.',
+    },
+
+    // Filtr importu: bez obrázků
+    importImages: {
+        label: 'Importovat obrázky (výřezy, přílohy, fotky)',
+        size: (mb: string) => `≈ ${mb} MB`,
+        hint: 'Bez obrázků zůstanou přepisy, archivy a odkazy na strany; výřezy jde doplnit později.',
+        setting: 'Při importu načítat obrázky',
+        settingHint: 'Fotky, přílohy a výřezy pramenů se načtou s importovaným souborem i s otevřeným výzkumem. Vypnutím zůstanou stromy malé; text pramenů se zachová vždy.',
     },
 
     // Attachments
@@ -2629,6 +2759,7 @@ const stringsCZ: StringsType = {
 
     // Otevření výzkumu ze Strom Research (obsluha souborů, odkaz, přetažení, živý most)
     research: {
+        excerptsReplaced: 'Výřezy, které jste do tohoto stromu přidali, se aktualizací nahradí. Předtím se uloží záloha.',
         defaultName: 'Výzkum',
         opened: (name: string, persons: number, families: number, date: string) =>
             `Otevřen výzkum ${name} ze Strom Research — ${nCs(persons, 'osoba', 'osoby', 'osob')}, ${nCs(families, 'rodina', 'rodiny', 'rodin')} (stav k ${date})`,
@@ -3377,6 +3508,7 @@ const stringsCZ: StringsType = {
             + `(např. adopce); zobrazeno u rodné rodiny, zbytek zapsán v poznámce osoby`,
         photos: 'Fotografie',
         documents: 'Dokumenty',
+        excerpts: 'Výřezy',
         sources: 'Prameny',
         events: 'Události',
         notes: 'Poznámky',
@@ -4183,7 +4315,7 @@ const stringsCZ: StringsType = {
         presetSmall: 'Malý soubor k odeslání',
         presetSkeleton: 'Jen kostra',
         contentPhotos: 'Fotky',
-        contentAttachments: 'Přílohy a dokumenty',
+        contentAttachments: 'Přílohy, dokumenty a výřezy pramenů',
         contentNotes: 'Poznámky',
         contentSources: 'Zdroje a citace'
     },
@@ -4523,7 +4655,7 @@ const stringsDE: StringsType = {
         cite: 'Quelle zitieren',
         citePartnership: 'Quelle zitieren (Trauungseintrag…)',
         pickTitle: 'Quelle zitieren',
-        searchPlaceholder: 'Quellen durchsuchen…',
+        searchPlaceholder: 'Titel, Archiv, Signatur, Transkription suchen…',
         createNew: 'Neue Quelle…',
         emptyPicker: 'Keine Quellen — legen Sie eine an',
         edit: 'Bearbeiten',
@@ -4536,11 +4668,75 @@ const stringsDE: StringsType = {
         fieldNote: 'Notiz',
         titleRequired: 'Geben Sie einen Quellentitel ein',
         unsavedMessage: 'Sie haben ungespeicherte Änderungen an dieser Quelle.',
+        // Einträge: Ausschnitt, Transkription, Ansicht, Auswahl
+        chipOpen: (title: string) => `Quelle anzeigen: ${title}`,
+        titleHint: 'Ein bestimmter Eintrag — Taufe, Trauung oder Sterbefall.',
+        excerptLabel: 'Ausschnitt des Eintrags',
+        excerptEmpty: 'Fügen Sie einen Bildschirmausschnitt aus dem Archiv-Viewer ein oder laden Sie einen Scan hoch.',
+        excerptPaste: 'Aus Zwischenablage einfügen',
+        excerptPasteHint: 'Drücken Sie Strg+V (auf dem Mac ⌘V).',
+        excerptNotImage: 'Die Zwischenablage enthält kein Bild.',
+        excerptUpload: 'Bild hochladen',
+        excerptFromAttachment: 'Aus Anhang ausschneiden',
+        excerptPickPage: 'Seite wählen',
+        excerptCrop: 'Zuschneiden',
+        excerptReplace: 'Ersetzen',
+        excerptRemove: 'Ausschnitt entfernen',
+        excerptCaption: 'Beschriftung (optional)',
+        excerptAddSecond: 'Fortsetzung von der nächsten Seite hinzufügen',
+        excerptMax: 'Ein Eintrag kann höchstens zwei Ausschnitte haben.',
+        excerptReadError: 'Das Bild konnte nicht gelesen werden.',
+        excerptAlt: (title: string) => `Ausschnitt: ${title}`,
+        excerptsTotal: (size: string) => `Ausschnitte: ${size}`,
+        more: 'Mehr: Transkription, Eintragsdatum, Verlässlichkeit',
+        fieldTranscript: 'Transkription des Eintrags',
+        fieldRecordDate: 'Eintragsdatum',
+        recordDateHint: 'Wann der Eintrag geschrieben wurde — kann vom Ereignisdatum abweichen.',
+        fieldQuality: 'Verlässlichkeit',
+        quality3: 'Original',
+        quality2: 'Abschrift / Index',
+        quality1: 'Unsicher',
+        sameBook: 'Weiterer Eintrag aus demselben Buch',
+        viewerOpenPage: 'Seite im Archiv öffnen',
+        viewerTranscript: 'Transkription',
+        viewerCites: 'Belegt',
+        viewerZoom: 'Vergrößern',
+        addExcerpt: 'Ausschnitt hinzufügen',
+        recordedOn: (date: string) => `eingetragen am ${date}`,
+        citedPartnership: (a: string, b: string) => `Ehe: ${a} und ${b}`,
+        newTitleMarriage: (a: string, b: string) => `Trauung – ${a} und ${b}`,
+        recent: 'Zuletzt verwendet',
+        all: 'Alle',
+        manage: 'Quellen verwalten',
         citations: (n: number) => `${n}×`,
         deleteConfirm: (title: string, n: number) =>
             n > 0
                 ? `Diese Quelle löschen? Sie ist an ${n} Stelle(n) zitiert; diese Zitate werden entfernt.\n\n${title}`
                 : `Diese Quelle löschen?\n\n${title}`,
+    },
+
+    // Zuschneiden (Quellenausschnitte; auch für das Foto)
+    crop: {
+        title: 'Eintrag ausschneiden',
+        rotateLeft: 'Nach links drehen',
+        rotateRight: 'Nach rechts drehen',
+        zoomIn: 'Vergrößern',
+        zoomOut: 'Verkleinern',
+        fit: 'Einpassen',
+        keepPage: 'Auch die ganze Seite als Anhang speichern',
+        apply: 'Ausschnitt übernehmen',
+        applyShort: 'Übernehmen',
+        size: (w: number, h: number, kb: number) => `${w} × ${h} px · ≈ ${kb} kB`,
+        aria: 'Ausschnittbereich. Pfeiltasten verschieben, Alt+Pfeiltasten ändern die Größe, Eingabe bestätigt.',
+    },
+
+    // Importfilter: ohne Bilder
+    importImages: {
+        label: 'Bilder importieren (Ausschnitte, Anhänge, Fotos)',
+        size: (mb: string) => `≈ ${mb} MB`,
+        hint: 'Ohne Bilder bleiben Transkriptionen, Archive und Seitenlinks erhalten; Ausschnitte lassen sich später ergänzen.',
+        setting: 'Bilder beim Import laden',
+        settingHint: 'Fotos, Anhänge und Quellenausschnitte kommen mit importierten Dateien und geöffneten Recherchen. Ausschalten hält Stammbäume klein; der Text der Quellen bleibt immer erhalten.',
     },
 
     // Attachments
@@ -4703,6 +4899,7 @@ const stringsDE: StringsType = {
 
     // Opening a research from Strom Research (file handler, link, drag & drop, live bridge)
     research: {
+        excerptsReplaced: 'Ausschnitte, die Sie diesem Stammbaum hinzugefügt haben, werden durch die Aktualisierung ersetzt. Vorher wird eine Sicherung gespeichert.',
         defaultName: 'Forschung',
         opened: (name: string, persons: number, families: number, date: string) =>
             `Forschung ${name} aus Strom Research geöffnet — ${nDe(persons, 'Person', 'Personen')}, ${nDe(families, 'Familie', 'Familien')} (Stand ${date})`,
@@ -5430,6 +5627,7 @@ const stringsDE: StringsType = {
             + `(z. B. adoptiert); mit der Geburtsfamilie angezeigt, der Rest bei der Person vermerkt`,
         photos: 'Fotos',
         documents: 'Dokumente',
+        excerpts: 'Ausschnitte',
         sources: 'Quellen',
         events: 'Ereignisse',
         notes: 'Notizen',
@@ -6193,7 +6391,7 @@ const stringsDE: StringsType = {
         presetSmall: 'Kleine Datei zum Senden',
         presetSkeleton: 'Nacktes Gerüst',
         contentPhotos: 'Fotos',
-        contentAttachments: 'Anhänge & Dokumente',
+        contentAttachments: 'Anhänge, Dokumente & Quellenausschnitte',
         contentNotes: 'Notizen',
         contentSources: 'Quellen & Zitate'
     },

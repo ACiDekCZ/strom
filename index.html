@@ -5067,6 +5067,11 @@
             color: var(--text);
             white-space: pre-wrap;
         }
+        #confirmation-modal label.confirm-check {
+            display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); margin: 8px 0 0;
+        }
+        #confirmation-modal label.confirm-check input { width: auto; margin: 0; }
+        .confirm-check-detail { color: var(--text-faint); font-variant-numeric: tabular-nums; }
         #confirmation-modal .confirm-options {
             display: flex;
             flex-direction: column;
@@ -5605,6 +5610,14 @@
             padding: 10px 12px; margin-bottom: 14px; font-size: 13px;
         }
         .gedcom-media-row button { margin: 0; }
+        .import-images-row { margin: 4px 0 12px; }
+        .modal label.import-images-check {
+            display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); margin: 0;
+        }
+        .modal label.import-images-check input { width: auto; margin: 0; }
+        .import-images-size { color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .import-images-row .field-hint { margin: 4px 0 0 26px; }
+        .gedcom-stats .stat-item.muted { opacity: 0.45; }
         .gedcom-stat-detail {
             font-size: 12px;
             color: var(--text-light);
@@ -8593,6 +8606,239 @@
         }
         .source-picker-item:hover { background: var(--accent-soft, #e8f0fe); }
 
+        /* Source entries: excerpt thumbnails on chips, picker and catalog rows */
+        .source-chip { padding: 3px 6px 3px 10px; }
+        .source-chip.has-thumb, .source-chip.has-icon { padding: 3px 6px 3px 3px; }
+        .source-chip-open {
+            display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+            border: none; background: none; padding: 0; cursor: pointer;
+            font: inherit; color: inherit; text-align: left;
+        }
+        .source-chip-open:hover .source-chip-label { text-decoration: underline; }
+        .source-chip-thumb {
+            width: 40px; height: 24px; flex-shrink: 0; border-radius: 12px;
+            object-fit: cover; object-position: top; border: 1px solid var(--border);
+            background: var(--surface-2);
+        }
+        .source-chip-icon {
+            width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: var(--surface-2); color: var(--text-faint);
+        }
+        .source-row-thumb, .source-picker-thumb {
+            width: 48px; height: 30px; flex-shrink: 0; border-radius: 4px;
+            object-fit: cover; object-position: top; border: 1px solid var(--border);
+            background: var(--surface-2);
+        }
+        .source-row-icon, .source-picker-icon {
+            width: 48px; height: 30px; flex-shrink: 0; border-radius: 4px;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: var(--surface-2); color: var(--text-faint);
+        }
+        .source-row-open {
+            border: none; background: none; padding: 0; cursor: pointer; font: inherit;
+            color: inherit; text-align: left; min-width: 0;
+        }
+        .source-row-open:hover .source-title { text-decoration: underline; }
+        .source-picker-item { display: flex; align-items: center; gap: 10px; }
+        .source-picker-text { min-width: 0; flex: 1; }
+        .source-picker-section {
+            font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+            color: var(--text-faint); padding: 6px 2px 2px;
+        }
+        .sources-total { color: var(--text-secondary, #777); font-size: 12px; margin: 0 0 8px; }
+        .link-button {
+            border: none; background: none; padding: 6px 0; cursor: pointer; font: inherit;
+            font-size: 14px; color: var(--primary); text-decoration: underline; text-underline-offset: 2px;
+        }
+        .source-picker-footer, .source-editor-buttons, .source-viewer-footer { flex-wrap: wrap; }
+        .source-picker-footer .link-button,
+        .source-editor-buttons .link-button,
+        .source-viewer-footer .link-button { margin-right: auto; }
+        .link-button[hidden], .sources-total[hidden], #sources-search[hidden],
+        .source-excerpt-group [hidden] { display: none !important; }
+        .form-label { display: block; margin-bottom: 6px; color: var(--text-light); font-size: 12px; font-weight: 500; }
+
+        /* Source editor: the excerpt block */
+        .source-excerpts { display: flex; flex-direction: column; gap: 10px; }
+        .excerpt-empty {
+            border: 1.5px dashed var(--border); background: var(--surface-2);
+            border-radius: var(--r-md); padding: 16px;
+        }
+        .excerpt-empty.dragover { border-color: var(--primary); }
+        .excerpt-empty p { margin: 0 0 10px; font-size: 13px; color: var(--text-light); }
+        .excerpt-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .excerpt-actions button { display: inline-flex; align-items: center; gap: 6px; }
+        .excerpt-actions kbd {
+            font: 11px/1.4 ui-monospace, monospace; padding: 0 4px; border-radius: 4px;
+            border: 1px solid var(--border); color: var(--text-faint);
+        }
+        .excerpt-item { display: flex; flex-direction: column; gap: 6px; }
+        .excerpt-img {
+            display: block; width: 100%; max-height: 160px; object-fit: contain;
+            border-radius: 8px; background: var(--surface-2); cursor: zoom-in;
+        }
+        .excerpt-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .excerpt-bar .excerpt-caption { flex: 1 1 160px; min-width: 0; }
+        .excerpt-bar .excerpt-size { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .excerpt-bar button { padding: 6px 10px; }
+        .excerpt-bar .excerpt-remove { border: none; background: none; color: var(--text-light); cursor: pointer; }
+        .excerpt-bar .excerpt-remove:hover { color: var(--danger); }
+        .excerpt-add-second { align-self: flex-start; }
+        .excerpt-adder-menu { padding: 8px 0 0; }
+        .excerpt-page-picker {
+            display: grid; grid-template-columns: repeat(auto-fill, 64px); gap: 8px;
+            padding: 8px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
+        }
+        .excerpt-page-picker button {
+            width: 64px; height: 64px; padding: 0; border: 1px solid var(--border); border-radius: 6px;
+            overflow: hidden; cursor: pointer; background: var(--surface-2);
+        }
+        .excerpt-page-picker img { width: 100%; height: 100%; object-fit: cover; }
+        .source-more { margin: 4px 0 12px; }
+        .source-more > summary {
+            cursor: pointer; font-size: 14px; color: var(--primary); padding: 6px 0; list-style-position: inside;
+        }
+        .source-more[open] > summary { margin-bottom: 8px; }
+        .source-transcript-input { font-family: var(--font-serif); font-size: 14px; }
+        .source-quality { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+        .source-quality button {
+            border: none; background: var(--surface); padding: 8px 14px; cursor: pointer; font: inherit;
+            font-size: 13px; color: var(--text); border-right: 1px solid var(--border);
+        }
+        .source-quality button:last-child { border-right: none; }
+        .source-quality button[aria-checked="true"] { background: var(--primary); color: #fff; }
+
+        /* Source viewer */
+        #source-viewer-modal { z-index: 250; }
+        .source-viewer { max-width: 720px; }
+        .source-viewer-header { align-items: flex-start; }
+        .source-viewer-heading { min-width: 0; }
+        .source-viewer-heading h2 { font-family: var(--font-serif); font-size: 19px; font-weight: 600; margin: 0; }
+        .source-viewer-meta { font-size: 13px; color: var(--text-light); margin-top: 4px; }
+        .source-quality-tag {
+            display: inline-block; padding: 0 6px; border-radius: 999px; font-size: 12px;
+            background: var(--surface-2); color: var(--text-light);
+        }
+        .source-viewer-body { display: flex; flex-direction: column; gap: 14px; margin: 12px 0; }
+        .viewer-excerpt { position: relative; margin: 0; }
+        .viewer-excerpt img {
+            display: block; width: 100%; max-height: 240px; object-fit: contain; border-radius: 8px;
+            background: var(--surface-2); cursor: zoom-in;
+        }
+        .viewer-excerpt figcaption { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
+        .viewer-zoom {
+            position: absolute; right: 8px; bottom: 8px; width: 32px; height: 32px; border-radius: 50%;
+            border: none; background: rgba(0,0,0,0.55); color: #fff; cursor: pointer; font-size: 16px;
+        }
+        .viewer-open-page { align-self: flex-start; color: var(--primary); font-size: 14px; }
+        .viewer-section-title {
+            font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+            color: var(--text-faint); margin: 0 0 4px;
+        }
+        .viewer-transcript { font-family: var(--font-serif); font-size: 15px; line-height: 1.55; white-space: pre-wrap; margin: 0; }
+        .viewer-cites { margin: 0; padding-left: 18px; font-size: 14px; }
+
+        /* Crop editor (built per open) */
+        .crop-overlay {
+            position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,0.6);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .crop-dialog {
+            width: min(960px, 94vw); height: min(90vh, 760px); display: flex; flex-direction: column;
+            background: var(--surface); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-lg);
+        }
+        .crop-toolbar {
+            display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+            border-bottom: 1px solid var(--border); flex-wrap: wrap;
+        }
+        .crop-toolbar h2 { font-size: 16px; margin: 0; flex: 1; min-width: 0; }
+        .crop-tools { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+        .crop-tools button, .crop-footer-tools button {
+            min-width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 6px;
+            background: var(--surface); color: var(--text); cursor: pointer; font-size: 16px;
+        }
+        .crop-tools .crop-close { border: none; font-size: 22px; }
+        .crop-zoom-pct { min-width: 52px; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; }
+        /* The stage stays dark in both themes: a page reads best on it. */
+        .crop-stage { flex: 1; overflow: auto; background: #24221d; position: relative; touch-action: none; }
+        .crop-wrap { position: relative; margin: 16px auto; overflow: hidden; user-select: none; }
+        .crop-wrap canvas { display: block; }
+        .crop-frame {
+            position: absolute; border: 2px solid #fff; box-sizing: border-box; cursor: move;
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.55); outline: none;
+        }
+        .crop-frame:focus-visible { border-color: #9fd3ae; }
+        .crop-handle {
+            position: absolute; width: 12px; height: 12px; background: #fff; border-radius: 2px;
+            transform: translate(-50%, -50%);
+        }
+        .crop-h-nw { left: 0; top: 0; cursor: nwse-resize; }
+        .crop-h-n { left: 50%; top: 0; cursor: ns-resize; }
+        .crop-h-ne { left: 100%; top: 0; cursor: nesw-resize; }
+        .crop-h-e { left: 100%; top: 50%; cursor: ew-resize; }
+        .crop-h-se { left: 100%; top: 100%; cursor: nwse-resize; }
+        .crop-h-s { left: 50%; top: 100%; cursor: ns-resize; }
+        .crop-h-sw { left: 0; top: 100%; cursor: nesw-resize; }
+        .crop-h-w { left: 0; top: 50%; cursor: ew-resize; }
+        .crop-footer {
+            display: flex; align-items: center; gap: 12px; padding: 10px 12px; flex-wrap: wrap;
+            border-top: 1px solid var(--border);
+        }
+        .crop-size { font-size: 13px; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .crop-keep { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+        .crop-buttons { margin-left: auto; display: flex; gap: 8px; }
+        .crop-narrow-only { display: none !important; }
+        @media (max-width: 900px) {
+            .crop-dialog { width: 90vw; }
+        }
+        @media (max-width: 499px) {
+            .crop-overlay { background: #24221d; }
+            .crop-dialog { width: 100vw; height: 100dvh; border-radius: 0; background: #24221d; color: #fff; }
+            .crop-toolbar, .crop-footer { border-color: rgba(255,255,255,0.15); }
+            .crop-toolbar h2 { text-align: center; }
+            .crop-toolbar button { min-height: 44px; }
+            .crop-wide-only { display: none !important; }
+            .crop-narrow-only { display: inline-flex !important; }
+            .crop-cancel.crop-narrow-only { background: none; border: none; color: #fff; font-size: 15px; }
+            .crop-footer-tools { gap: 8px; }
+            .crop-footer-tools button { min-width: 48px; height: 48px; background: transparent; color: #fff; }
+            .crop-keep { min-height: 44px; }
+            .crop-size { color: rgba(255,255,255,0.8); }
+            .crop-handle:not(.crop-h-nw):not(.crop-h-ne):not(.crop-h-se):not(.crop-h-sw) {
+                /* Edges drag along their whole length on a phone. */
+                background: transparent; border-radius: 0;
+            }
+            .crop-h-n, .crop-h-s { width: 100%; height: 24px; }
+            .crop-h-e, .crop-h-w { width: 24px; height: 100%; }
+            .crop-h-nw, .crop-h-ne, .crop-h-se, .crop-h-sw { width: 16px; height: 16px; }
+            .crop-h-nw::after, .crop-h-ne::after, .crop-h-se::after, .crop-h-sw::after {
+                content: ''; position: absolute; inset: -14px;
+            }
+        }
+
+        /* Source viewer / editor on small screens */
+        @media (max-width: 499px) {
+            #source-viewer-modal .modal {
+                width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0;
+                border-radius: 0; display: flex; flex-direction: column; padding: 0;
+            }
+            #source-viewer-modal .source-viewer-header { min-height: 56px; padding: 8px 12px 8px 16px; }
+            #source-viewer-modal .close-btn { min-width: 44px; min-height: 44px; }
+            #source-viewer-modal .source-viewer-body { flex: 1; overflow: auto; padding: 0 16px; margin: 0; }
+            #source-viewer-modal .viewer-excerpt { margin: 0 -16px; }
+            #source-viewer-modal .viewer-excerpt img { border-radius: 0; }
+            #source-viewer-modal .source-viewer-footer {
+                position: sticky; bottom: 0; padding: 10px 12px; background: var(--surface);
+                border-top: 1px solid var(--border); margin: 0;
+            }
+            #source-viewer-modal .source-viewer-footer button:not(.link-button) { flex: 1; min-height: 48px; }
+            #source-viewer-modal .source-viewer-footer .source-same-book { display: none; }
+        }
+        @media (min-width: 500px) and (max-width: 900px) {
+            #source-viewer-modal .modal { width: 90vw; }
+        }
+
         /* Backups / snapshots */
         .snapshots-total { color: var(--text-secondary, #777); font-size: 12px; margin-bottom: 8px; }
         .snapshots-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
@@ -9575,7 +9821,9 @@
                 <h2 data-i18n="sources.title"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeSourcesDialog()">&times;</button>
             </div>
+            <input type="text" id="sources-search" class="source-picker-search" data-i18n-placeholder="sources.searchPlaceholder" autocomplete="off" hidden>
             <div id="sources-list" class="sources-list"></div>
+            <p class="sources-total" id="sources-total" hidden></p>
             <div class="buttons sources-footer">
                 <button class="primary" onclick="window.Strom.UI.showAddSourceModal()" data-i18n="sources.add"></button>
             </div>
@@ -9589,6 +9837,14 @@
             <div class="form-group">
                 <label for="input-source-title" data-i18n="sources.fieldTitle"></label>
                 <input type="text" id="input-source-title" autocomplete="off">
+                <p class="field-hint" data-i18n="sources.titleHint"></p>
+            </div>
+            <!-- The entry's crop(s): staged here, saved with the form (one undo step). -->
+            <div class="form-group source-excerpt-group">
+                <span class="form-label" id="source-excerpt-label" data-i18n="sources.excerptLabel"></span>
+                <div id="source-excerpts" class="source-excerpts" role="group" aria-labelledby="source-excerpt-label"></div>
+                <input type="file" id="source-excerpt-file" accept="image/jpeg,image/png,image/webp" hidden
+                    onchange="window.Strom.UI.handleExcerptFile(this)">
             </div>
             <div class="form-row">
                 <div class="form-group half">
@@ -9604,13 +9860,55 @@
                 <label for="input-source-url" data-i18n="sources.fieldUrl"></label>
                 <input type="text" id="input-source-url" autocomplete="off" inputmode="url">
             </div>
+            <details class="source-more" id="source-more">
+                <summary data-i18n="sources.more"></summary>
+                <div class="form-group">
+                    <label for="input-source-transcript" data-i18n="sources.fieldTranscript"></label>
+                    <textarea id="input-source-transcript" class="source-transcript-input" rows="3" autocomplete="off"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="input-source-recorddate" data-i18n="sources.fieldRecordDate"></label>
+                    <input type="text" class="flex-date" id="input-source-recorddate" autocomplete="off"
+                        data-i18n-placeholder="placeholders.flexDate" inputmode="text" aria-describedby="source-recorddate-hint">
+                    <p class="field-hint" id="source-recorddate-hint" data-i18n="sources.recordDateHint"></p>
+                </div>
+                <div class="form-group">
+                    <span class="form-label" id="source-quality-label" data-i18n="sources.fieldQuality"></span>
+                    <div class="source-quality" id="source-quality" role="radiogroup" aria-labelledby="source-quality-label">
+                        <button type="button" role="radio" aria-checked="false" data-quality="3" data-i18n="sources.quality3"></button>
+                        <button type="button" role="radio" aria-checked="false" data-quality="2" data-i18n="sources.quality2"></button>
+                        <button type="button" role="radio" aria-checked="false" data-quality="1" data-i18n="sources.quality1"></button>
+                    </div>
+                </div>
+            </details>
             <div class="form-group">
                 <label for="input-source-note" data-i18n="sources.fieldNote"></label>
                 <textarea id="input-source-note" rows="2" autocomplete="off"></textarea>
             </div>
-            <div class="buttons">
+            <div class="buttons source-editor-buttons">
+                <button type="button" class="link-button source-same-book" id="source-editor-same-book" hidden
+                    onclick="window.Strom.UI.startSameBookEntry()" data-i18n="sources.sameBook"></button>
                 <button class="secondary" onclick="window.Strom.UI.closeSourceEditor()" data-i18n="buttons.cancel"></button>
                 <button class="primary" onclick="window.Strom.UI.saveSourceFromModal()" data-i18n="buttons.save"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Source viewer: one entry at a glance (excerpt, transcript, what it supports) -->
+    <div class="modal-overlay" id="source-viewer-modal">
+        <div class="modal modal--lg source-viewer" role="dialog" aria-modal="true" aria-labelledby="source-viewer-title">
+            <div class="modal-header source-viewer-header">
+                <div class="source-viewer-heading">
+                    <h2 id="source-viewer-title"></h2>
+                    <div class="source-viewer-meta" id="source-viewer-meta"></div>
+                </div>
+                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeSourceViewer()">&times;</button>
+            </div>
+            <div class="source-viewer-body" id="source-viewer-body"></div>
+            <div class="buttons source-viewer-footer">
+                <button type="button" class="link-button source-same-book" id="source-viewer-same-book"
+                    onclick="window.Strom.UI.startSameBookEntry()" data-i18n="sources.sameBook"></button>
+                <button type="button" class="primary" id="source-viewer-edit" onclick="window.Strom.UI.editFromSourceViewer()" data-i18n="sources.edit"></button>
             </div>
         </div>
     </div>
@@ -9638,7 +9936,8 @@
             </div>
             <input type="text" id="source-picker-search" class="source-picker-search" data-i18n-placeholder="sources.searchPlaceholder" autocomplete="off">
             <div id="source-picker-list" class="source-picker-list"></div>
-            <div class="buttons">
+            <div class="buttons source-picker-footer">
+                <button type="button" class="link-button" onclick="window.Strom.UI.manageSourcesFromPicker()" data-i18n="sources.manage"></button>
                 <button class="secondary" onclick="window.Strom.UI.closeSourcePicker()" data-i18n="buttons.cancel"></button>
                 <button class="primary" onclick="window.Strom.UI.createSourceFromPicker()" data-i18n="sources.createNew"></button>
             </div>
@@ -9891,6 +10190,13 @@
             <section class="settings-group" aria-labelledby="settings-group-data">
                 <h3 class="settings-group-title" id="settings-group-data" data-i18n="settings.groupData"></h3>
                 <div class="settings-group-body">
+                    <label class="settings-checkbox settings-row">
+                        <input type="checkbox" id="import-images-toggle" onchange="window.Strom.UI.toggleImportImages(this.checked)">
+                        <span class="settings-text">
+                            <span class="settings-name" data-i18n="importImages.setting"></span>
+                            <span class="settings-desc" data-i18n="importImages.settingHint"></span>
+                        </span>
+                    </label>
                     <label class="settings-checkbox settings-row">
                         <input type="checkbox" id="geocoding-toggle" onchange="window.Strom.UI.toggleGeocoding(this.checked)">
                         <span class="settings-text">
@@ -10319,6 +10625,10 @@
                     <div class="number" id="gedcom-stat-documents">0</div>
                     <div class="label" data-i18n="gedcom.documents"></div>
                 </div>
+                <div class="stat-item" id="gedcom-stat-excerpts-item">
+                    <div class="number" id="gedcom-stat-excerpts">0</div>
+                    <div class="label" data-i18n="gedcom.excerpts"></div>
+                </div>
                 <div class="stat-item" id="gedcom-stat-sources-item">
                     <div class="number" id="gedcom-stat-sources">0</div>
                     <div class="label" data-i18n="gedcom.sources"></div>
@@ -10333,6 +10643,15 @@
                 </div>
             </div>
             <p id="gedcom-stat-detail" class="gedcom-stat-detail" style="display:none;"></p>
+            <!-- Leave images out of this import (text of sources always stays). -->
+            <div id="gedcom-images-row" class="import-images-row" style="display:none;">
+                <label class="import-images-check">
+                    <input type="checkbox" id="gedcom-import-images" onchange="window.Strom.UI.setGedcomImportImages(this.checked)">
+                    <span data-i18n="importImages.label"></span>
+                    <span id="gedcom-images-size" class="import-images-size"></span>
+                </label>
+                <p class="field-hint" data-i18n="importImages.hint"></p>
+            </div>
             <div id="gedcom-media-row" class="gedcom-media-row" style="display:none;">
                 <span id="gedcom-media-text"></span>
                 <button type="button" id="gedcom-media-download" onclick="window.Strom.UI.downloadGedcomMedia()" data-i18n="gedcom.downloadMedia" style="display:none;"></button>

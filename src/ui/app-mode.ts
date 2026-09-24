@@ -726,6 +726,10 @@ export const appModeMethods = uiModule({
         SettingsManager.setAdvancedFields(enabled);
     },
 
+    toggleImportImages(enabled: boolean): void {
+        SettingsManager.setImportImages(enabled);
+    },
+
     toggleFamilyButton(enabled: boolean): void {
         SettingsManager.setFamilyButton(enabled);
         this.updateViewModeUI(); // owns the toolbar family-button visibility

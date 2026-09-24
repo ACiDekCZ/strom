@@ -39,7 +39,7 @@ function eventOwnSubject(event: LifeEvent): string | undefined {
 }
 
 /** Display label for an event (custom label when present, else the type name). */
-function eventTypeLabel(event: LifeEvent): string {
+export function eventTypeLabel(event: LifeEvent): string {
     if (event.type === 'custom' && event.customLabel) return event.customLabel;
     return strings.events.types[event.type];
 }

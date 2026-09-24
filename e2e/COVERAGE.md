@@ -51,6 +51,13 @@ the table honest.
 | Sources manager + citation count | `sources.spec.ts` | covered | add via manager, cite, count shown |
 | Attachments: add image + reload + delete | `attachments.spec.ts` | covered | compressed in-browser, note persists, delete |
 | Attachments: oversized PDF rejected | `attachments.spec.ts` | covered | >2 MB PDF warned, not attached |
+| Source excerpts: chips (thumbnail / icon), viewer, zoom, uncite | `source-excerpts.spec.ts` | covered | page link before book link; `javascript:` never linked; missing parts not rendered |
+| Source excerpts: paste, upload + crop, "keep the whole page" | `source-excerpts.spec.ts` | covered | JPEG ≤ 1200 px; page attachment + `fromAttachmentId`/`region`; re-crop opens on the page |
+| Source excerpts: limit of two, reliability, unsaved changes, one undo step | `source-excerpts.spec.ts` | covered | third excerpt refused with a toast |
+| Another entry from the same register; picker recents + transcript search; catalog from picker | `source-excerpts.spec.ts` | covered | cited in the chip's context, never from the catalog |
+| Crop editor keyboard; phone layout (360 px, DE) | `source-excerpts.spec.ts` | covered | arrows / Alt+arrows / Enter; no horizontal overflow |
+| Import without images: GEDCOM result, research update dialog | `source-excerpts.spec.ts` | covered | text of sources kept; the choice does not change the setting. JSON import checkbox only when the validation dialog is shown anyway |
+| Sources catalog in the tree actions menu | `menus.spec.ts` | covered | hidden in plain mode, shown with research fields or once a source exists |
 | Parent relationship type (adoptive) | `parent-rel-type.spec.ts` | covered | select sets adoptive, child drop dashed, persists |
 | Duplicate suggestion in new-person modal | `duplicate-suggest.spec.ts` | covered | hint appears, "Go to person" focuses existing |
 | Duplicate "use existing" in add-relation | `duplicate-suggest.spec.ts` | covered | links existing person, no duplicate created |

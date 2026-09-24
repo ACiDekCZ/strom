@@ -285,6 +285,8 @@ export const miscMethods = uiModule({
         const geocodingToggle = document.getElementById('geocoding-toggle') as HTMLInputElement | null;
         if (geocodingToggle) geocodingToggle.checked = SettingsManager.isGeocodingAllowed();
 
+        const importImagesToggle = document.getElementById('import-images-toggle') as HTMLInputElement | null;
+        if (importImagesToggle) importImagesToggle.checked = SettingsManager.isImportImages();
         const advancedToggle = document.getElementById('advanced-fields-toggle') as HTMLInputElement | null;
         if (advancedToggle) advancedToggle.checked = SettingsManager.isAdvancedFields();
 
@@ -624,6 +626,12 @@ export const miscMethods = uiModule({
                     this.closeSourceEditor();
                     return;
                 }
+                // The source viewer sits above the dialog it was opened from
+                // (person modal, catalog) and closes on its own.
+                if (document.getElementById('source-viewer-modal')?.classList.contains('active')) {
+                    this.closeSourceViewer();
+                    return;
+                }
 
                 // Handle dialog stack - return to parent dialog
                 if (this.dialogStack.length > 0) {
@@ -905,7 +913,11 @@ export const miscMethods = uiModule({
     /**
      * Show validation errors/warnings dialog
      */
-    showValidationDialog(result: ValidationResult, onContinue?: () => void): void {
+    /**
+     * @param imageBytes when the file carries images: offer to leave them out
+     *   (checkbox pre-set from the setting); onContinue gets the choice.
+     */
+    showValidationDialog(result: ValidationResult, onContinue?: (includeImages: boolean) => void, imageBytes?: number): void {
         const modal = document.getElementById('validation-modal');
         const content = document.getElementById('validation-content');
         const continueBtn = document.getElementById('validation-continue-btn');
@@ -942,14 +954,30 @@ export const miscMethods = uiModule({
             `;
         }
 
+        const offerImages = imageBytes !== undefined && result.errors.length === 0 && !!onContinue;
+        if (offerImages) {
+            html += `
+                <div class="import-images-row">
+                    <label class="import-images-check">
+                        <input type="checkbox" id="validation-import-images"${SettingsManager.isImportImages() ? ' checked' : ''}>
+                        <span>${this.escapeHtml(strings.importImages.label)}</span>
+                        <span class="import-images-size">${this.escapeHtml(strings.importImages.size((imageBytes / (1024 * 1024)).toFixed(1)))}</span>
+                    </label>
+                    <p class="field-hint">${this.escapeHtml(strings.importImages.hint)}</p>
+                </div>`;
+        }
+
         content.innerHTML = html;
 
         // Show continue button only if there are no errors (only warnings)
         if (result.errors.length === 0 && onContinue) {
             continueBtn.style.display = 'block';
             continueBtn.onclick = () => {
+                const include = offerImages
+                    ? (document.getElementById('validation-import-images') as HTMLInputElement | null)?.checked ?? true
+                    : SettingsManager.isImportImages();
                 this.closeValidationDialog();
-                onContinue();
+                onContinue(include);
             };
         } else {
             continueBtn.style.display = 'none';

@@ -50,7 +50,7 @@ import { bottomSheetMethods } from './bottom-sheet.js';
 
 import { personModalMethods } from './person-modal.js';
 import { personEventsMethods } from './person-events.js';
-import { sourcesMethods } from './sources.js';
+import { sourcesMethods, CitationContext, ExcerptDraft } from './sources.js';
 import { attachmentsMethods } from './attachments-ui.js';
 import { duplicateSuggestMethods } from './duplicate-suggest.js';
 import { relationModalMethods } from './relation-modal.js';
@@ -95,6 +95,10 @@ export class UIClass {
     bottomSheet: HTMLElement | null = null;
     linkMode = false;
     gedcomResult: GedcomConversionResult | null = null;
+    /** This GEDCOM import brings images (null until the result dialog decides). */
+    gedcomImportImages: boolean | null = null;
+    /** State of the optional checkbox of the last showChoice() dialog. */
+    choiceCheckboxChecked = false;
     saveCurrentCallback: (() => void) | null = null;
     relationPicker: PersonPicker | null = null;
     toolbarSearchPicker: PersonPicker | null = null;
@@ -196,7 +200,22 @@ export class UIClass {
     // Sources/citations state.
     editingSourceId: string | null = null;
     /** What a citation applies to (person, or a specific event on that person). */
-    citationContext: { personId: PersonId; eventId?: string } | { partnershipId: PartnershipId } | null = null;
+    citationContext: CitationContext | null = null;
+    /** Excerpts staged in the source editor (saved with the form, one undo step). */
+    excerptDrafts: ExcerptDraft[] = [];
+    /** Reliability picked in the source editor (QUAY 1–3, 0 kept from import). */
+    sourceQualityDraft: number | undefined = undefined;
+    /** Where the open source editor was reached from (for page crops and citing). */
+    sourceEditorContext: CitationContext | null = null;
+    /** The source shown in the viewer, and the citation chip it was opened from. */
+    sourceViewerId: string | null = null;
+    sourceViewerContext: CitationContext | null = null;
+    /** "Edit" in the viewer: reopen the viewer once the editor closes. */
+    reopenViewerAfterEditor: string | null = null;
+    /** The catalog was opened from the picker: go back to it on close. */
+    returnToPickerAfterManager = false;
+    /** One-time wiring of the source editor's paste / drop / quality handlers. */
+    sourceEditorWired = false;
     // Slideshow / TV mode
     slideshowActive = false;
     slideshowPaused = false;

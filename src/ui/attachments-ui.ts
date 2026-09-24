@@ -164,23 +164,7 @@ export const attachmentsMethods = uiModule({
         const att = DataManager.getPerson(this.currentId)?.attachments?.find(a => a.id === attachmentId);
         if (!att) return;
         if (isImage(att)) {
-            const img = document.getElementById('attachment-overlay-img') as HTMLImageElement | null;
-            const overlay = document.getElementById('attachment-overlay');
-            if (img) img.src = att.dataUrl;
-            overlay?.classList.add('active');
-            // Escape closes only the preview — capture-phase + stopPropagation so
-            // it never reaches the global handler that would close the edit modal.
-            if (!attachmentOverlayEscHandler) {
-                attachmentOverlayEscHandler = (e: KeyboardEvent) => {
-                    if (e.key !== 'Escape') return;
-                    if (!document.getElementById('attachment-overlay')?.classList.contains('active')) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    this.closeAttachmentOverlay();
-                };
-                document.addEventListener('keydown', attachmentOverlayEscHandler, true);
-            }
+            this.showAttachmentImage(att.dataUrl);
         } else {
             // Only a PDF is ever opened, and always as application/pdf.
             const blob = pdfBlobFromDataUrl(att.dataUrl, att.mimeType);
@@ -192,6 +176,27 @@ export const attachmentsMethods = uiModule({
             window.open(url, '_blank');
             // The tab keeps its own reference; revoke shortly after.
             setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        }
+    },
+
+    /** Fullscreen preview of an image (attachment, source excerpt). */
+    showAttachmentImage(dataUrl: string): void {
+        const img = document.getElementById('attachment-overlay-img') as HTMLImageElement | null;
+        const overlay = document.getElementById('attachment-overlay');
+        if (img) img.src = dataUrl;
+        overlay?.classList.add('active');
+        // Escape closes only the preview — capture-phase + stopPropagation so
+        // it never reaches the global handler that would close the edit modal.
+        if (!attachmentOverlayEscHandler) {
+            attachmentOverlayEscHandler = (e: KeyboardEvent) => {
+                if (e.key !== 'Escape') return;
+                if (!document.getElementById('attachment-overlay')?.classList.contains('active')) return;
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                this.closeAttachmentOverlay();
+            };
+            document.addEventListener('keydown', attachmentOverlayEscHandler, true);
         }
     },
 

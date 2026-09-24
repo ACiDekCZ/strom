@@ -38,6 +38,8 @@ import {
     LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
 } from '../research-link.js';
 import { uiModule } from './module.js';
+import { SettingsManager } from '../settings.js';
+import { countImages, stripMedia } from '../attachments.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -143,6 +145,11 @@ async function readTree(treeId: TreeId): Promise<StromData | null> {
     } catch {
         return null;
     }
+}
+
+/** Bytes of photos, attachments and excerpts a research brings (0 = none). */
+function incomingImageBytes(data: StromData): number {
+    return countImages(data).bytes;
 }
 
 function todayIso(): string {
@@ -386,6 +393,7 @@ export const researchUiMethods = uiModule({
             this.importFromTreeManager = false;
             this.importToCurrentTree = false;
             this.gedcomResult = result;
+            this.gedcomImportImages = null;
             this.showGedcomResultDialog();
             return;
         }
@@ -404,6 +412,7 @@ export const researchUiMethods = uiModule({
         const existing = source.treeId ? TreeManager.findTreeByResearchId(source.treeId) : null;
 
         let previous: StromData | null = null;
+        let includeImages = SettingsManager.isImportImages();
         let action = decideResearchOpen(null, null);
         let asCopy = false;
         if (existing) {
@@ -414,18 +423,29 @@ export const researchUiMethods = uiModule({
                 // Cannot be read with this session's key: never overwrite it.
                 asCopy = true;
             } else if (action === 'ask') {
+                // Excerpts the user cut in this tree go with the update — say so.
+                const ownExcerpts = Object.values(previous.sources ?? {}).some(src => src.excerpts?.length);
+                const message = [strings.research.editedMessage(existing.name),
+                    ownExcerpts ? strings.research.excerptsReplaced : ''].filter(Boolean).join('\n\n');
                 const choice = await this.showChoice(
-                    strings.research.editedMessage(existing.name),
+                    message,
                     strings.research.editedTitle,
                     [
                         { id: 'update', label: strings.research.update, variant: 'danger' },
                         { id: 'copy', label: strings.research.openCopy },
-                    ]
+                    ],
+                    incomingImageBytes(data) > 0
+                        ? { label: strings.importImages.label, checked: includeImages,
+                            detail: strings.importImages.size((incomingImageBytes(data) / (1024 * 1024)).toFixed(1)) }
+                        : undefined
                 );
                 if (choice === null) return null;
                 asCopy = choice === 'copy';
+                if (incomingImageBytes(data) > 0) includeImages = this.choiceCheckboxChecked;
             }
         }
+        // Images stay out when the user said so (the setting, or the checkbox).
+        if (!includeImages) data = stripMedia(data);
 
         const previousTreeId = DataManager.getCurrentTreeId();
         let treeId: TreeId;
@@ -688,6 +708,8 @@ export const researchUiMethods = uiModule({
         } catch {
             return null;
         }
+        // Following live asks nothing: the setting decides about images.
+        if (!SettingsManager.isImportImages()) data = stripMedia(data);
         if (!TreeManager.getTreeMetadata(s.treeId)) {
             // The user deleted the followed tree: stop, never recreate it.
             this.endLiveFollow(s, 'ended');

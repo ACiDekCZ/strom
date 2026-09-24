@@ -26,7 +26,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { extractSubtree } from '../subtree.js';
 import { findComponents } from '../components.js';
 import { compressPhoto, dataUrlByteSize } from '../photo.js';
-import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES } from '../attachments.js';
+import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES, countImages, stripMedia } from '../attachments.js';
 import { getDemoTree, getDemoFocus } from '../demo-trees.js';
 import { parseGedcom, convertToStrom, decodeGedcomFile, GedcomConversionResult } from '../ged-parser.js';
 import {
@@ -306,6 +306,7 @@ export const importExportMethods = uiModule({
                 const content = decodeGedcomFile(e.target?.result as ArrayBuffer);
                 const gedcom = parseGedcom(content);
                 this.gedcomResult = convertToStrom(gedcom);
+                this.gedcomImportImages = null;
                 this.importFromTreeManager = fromManager;
                 this.importToCurrentTree = toCurrent;
                 this.showGedcomResultDialog();
@@ -349,9 +350,11 @@ export const importExportMethods = uiModule({
         // Trust-building breakdown: the migrating user must see at a glance
         // that photos/documents/sources/events survived. Zero tiles hide.
         const persons = Object.values(this.gedcomResult.data.persons);
+        const images = countImages(this.gedcomResult.data);
         const richStats: Array<[string, number]> = [
-            ['photos', persons.filter(p => p.photo).length],
-            ['documents', persons.reduce((n, p) => n + (p.attachments?.length ?? 0), 0)],
+            ['photos', images.photos],
+            ['documents', images.attachments],
+            ['excerpts', images.excerpts],
             ['sources', Object.keys(this.gedcomResult.data.sources ?? {}).length],
             ['events', persons.reduce((n, p) => n + (p.events?.length ?? 0), 0)],
         ];
@@ -361,6 +364,20 @@ export const importExportMethods = uiModule({
             if (el) el.textContent = String(count);
             if (item) item.style.display = count > 0 ? '' : 'none';
         }
+
+        // Images in the file: offer to leave them out (pre-set from the
+        // setting; the choice applies to this import only). The re-render
+        // after a media attach keeps the choice already made.
+        if (this.gedcomImportImages === null) this.gedcomImportImages = SettingsManager.isImportImages();
+        const imagesRow = document.getElementById('gedcom-images-row');
+        const hasImages = images.photos + images.attachments + images.excerpts > 0
+            || this.gedcomResult.externalMedia.length > 0;
+        if (imagesRow) imagesRow.style.display = hasImages ? '' : 'none';
+        const imagesCheck = document.getElementById('gedcom-import-images') as HTMLInputElement | null;
+        if (imagesCheck) imagesCheck.checked = this.gedcomImportImages;
+        const sizeEl = document.getElementById('gedcom-images-size');
+        if (sizeEl) sizeEl.textContent = strings.importImages.size((images.bytes / (1024 * 1024)).toFixed(1));
+        this.applyGedcomImagesChoice();
 
         // What exactly was skipped (previously a dead counter — always 0).
         const detailEl = document.getElementById('gedcom-stat-detail');
@@ -388,7 +405,7 @@ export const importExportMethods = uiModule({
         const mediaRow = document.getElementById('gedcom-media-row');
         const mediaText = document.getElementById('gedcom-media-text');
         const pending = this.gedcomResult.externalMedia.length;
-        if (mediaRow) mediaRow.style.display = pending > 0 ? '' : 'none';
+        if (mediaRow) mediaRow.style.display = pending > 0 && this.gedcomImportImages !== false ? '' : 'none';
         if (mediaText && pending > 0) mediaText.textContent = strings.gedcom.externalMedia(pending);
         // Platform exports (MyHeritage) reference photos by URL — offer a
         // direct download (their CDN allows cross-origin GET).
@@ -546,10 +563,34 @@ export const importExportMethods = uiModule({
         }
     },
 
+    /** The images checkbox of the GEDCOM result: this import only, not the setting. */
+    setGedcomImportImages(checked: boolean): void {
+        this.gedcomImportImages = checked;
+        this.applyGedcomImagesChoice();
+    },
+
+    /** Dim the image tiles and hide the external-media offer when images stay out. */
+    applyGedcomImagesChoice(): void {
+        const off = this.gedcomImportImages === false;
+        for (const key of ['photos', 'documents', 'excerpts']) {
+            document.getElementById(`gedcom-stat-${key}-item`)?.classList.toggle('muted', off);
+        }
+        const mediaRow = document.getElementById('gedcom-media-row');
+        if (mediaRow && this.gedcomResult) {
+            mediaRow.style.display = !off && this.gedcomResult.externalMedia.length > 0 ? '' : 'none';
+        }
+    },
+
+    /** The converted data as it should be imported (images stripped when unchecked). */
+    gedcomDataForImport(): StromData {
+        const data = this.gedcomResult!.data;
+        return this.gedcomImportImages === false ? stripMedia(data) : data;
+    },
+
     downloadGedcomAsJson(): void {
         if (!this.gedcomResult) return;
 
-        const dataStr = JSON.stringify(this.gedcomResult.data, null, 2);
+        const dataStr = JSON.stringify(this.gedcomDataForImport(), null, 2);
         const blob = new Blob([dataStr], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -570,7 +611,7 @@ export const importExportMethods = uiModule({
             document.getElementById('gedcom-result-modal')?.classList.remove('active');
             this.clearDialogStack();
             // Load data directly into current tree
-            DataManager.loadStromData(this.gedcomResult.data);
+            DataManager.loadStromData(this.gedcomDataForImport());
             TreeRenderer.render();
             this.showToast(strings.buttons.importComplete);
             this.gedcomResult = null;
@@ -585,7 +626,7 @@ export const importExportMethods = uiModule({
         this.dialogStack.pop(); // Remove gedcom-result-modal
 
         // Show import tree dialog with parent preserved
-        this.showImportTreeDialog(this.gedcomResult.data, strings.treeManager.importTreeName, fromManager);
+        this.showImportTreeDialog(this.gedcomDataForImport(), strings.treeManager.importTreeName, fromManager);
         this.gedcomResult = null;
     },
 
@@ -596,7 +637,7 @@ export const importExportMethods = uiModule({
         if (!this.gedcomResult) return;
 
         // Start merge process
-        MergerUI.startMerge(this.gedcomResult.data);
+        MergerUI.startMerge(this.gedcomDataForImport());
         this.gedcomResult = null;
         this.closeGedcomResultDialog();
     },
@@ -664,10 +705,15 @@ export const importExportMethods = uiModule({
             this.showValidationDialog(result);
             return;
         }
+        const data = result.data!;
+        const images = countImages(data);
+        const withImages = (include: boolean) => this.processJsonImport(include ? data : stripMedia(data));
         if (result.warnings.length > 0) {
-            this.showValidationDialog(result, () => this.processJsonImport(result.data!));
+            // The dialog is shown anyway: it carries the images checkbox too.
+            this.showValidationDialog(result, withImages,
+                images.photos + images.attachments + images.excerpts > 0 ? images.bytes : undefined);
         } else {
-            this.processJsonImport(result.data!);
+            withImages(SettingsManager.isImportImages());
         }
     },
 
