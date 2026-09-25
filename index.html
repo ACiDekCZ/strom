@@ -66,6 +66,7 @@
             --primary-soft: #e6efe8;  /* chip/avatar focus background */
             --on-primary: #ffffff;    /* text/glyphs on a --primary fill */
             --accent: #b0703c;        /* copper — active tab, sections, TODAY, minimap viewport */
+            --accent-text: #8a5528;   /* copper for small text (section titles): 5.1:1 on --surface-2 */
             --danger: #a8574a;
             --warning: #d0a23c;       /* pending merge */
             --danger-soft: #f5e6e2;   /* error/destructive tint backgrounds */
@@ -143,6 +144,7 @@
             --primary-soft: #33403a;
             --on-primary: #1c1a15;    /* dark ink on the lighter dark-mode green */
             --accent: #c98d59;
+            --accent-text: #c98d59;   /* already 5.3:1 on the dark surfaces */
             --danger: #c97b6e;
             --warning: #d8b25e;
             --pending: #d8b25e;
@@ -1388,7 +1390,7 @@
             font-weight: 600;
             letter-spacing: 0.12em;
             text-transform: uppercase;
-            color: var(--accent);
+            color: var(--accent-text);
             margin: 0 0 6px 2px;
         }
         .settings-group-body {
@@ -1626,7 +1628,7 @@
         /* Day group header: copper small-caps (like the person modal sections). */
         .audit-log-day {
             font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
-            text-transform: uppercase; color: var(--accent);
+            text-transform: uppercase; color: var(--accent-text);
             padding: 16px 2px 6px;
         }
         .audit-log-day:first-child { padding-top: 4px; }
@@ -1732,7 +1734,7 @@
         }
         .bottom-sheet-section {
             font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
-            text-transform: uppercase; color: var(--accent);
+            text-transform: uppercase; color: var(--accent-text);
             padding: 12px 16px 4px;
         }
         .bottom-sheet-menu .bottom-sheet-item {
@@ -2184,7 +2186,7 @@
             letter-spacing: 0.12em;
             text-transform: uppercase;
             margin-bottom: 6px;
-            color: var(--accent);
+            color: var(--accent-text);
         }
         .badge-tooltip-item {
             padding: 4px 0;
@@ -2270,7 +2272,7 @@
             letter-spacing: 0.12em;
             text-transform: uppercase;
             margin-bottom: 6px;
-            color: var(--accent);
+            color: var(--accent-text);
         }
         .cross-tree-tooltip-item {
             padding: 4px 0;
@@ -3076,7 +3078,7 @@
             font-weight: 600;
             letter-spacing: 0.12em;
             text-transform: uppercase;
-            color: var(--accent);
+            color: var(--accent-text);
         }
         .pm-expand-desc {
             min-width: 0;
@@ -3097,7 +3099,7 @@
             font-weight: 600;
             letter-spacing: 0.12em;
             text-transform: uppercase;
-            color: var(--accent);
+            color: var(--accent-text);
         }
         .pm-section-summary {
             font-size: 12px;
@@ -3427,7 +3429,13 @@
         }
         .research-info-point-title { font-size: 14px; font-weight: 600; color: var(--text); }
         .research-info-point-text { margin-top: 2px; font-size: 13px; line-height: 1.45; color: var(--text-light); }
-        .research-info-need { background: var(--info-soft); border-radius: var(--r-md); padding: 12px 14px; }
+        /* Warm like the rest of the palette (the cool --info-soft was the only
+           blue-grey area of the dialog in dark mode). */
+        .research-info-need {
+            background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+            border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+            border-radius: var(--r-md); padding: 12px 14px;
+        }
         .research-info-need-title { margin-bottom: 4px; font-size: 13px; font-weight: 600; color: var(--text); }
         .research-info-need-text { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
         .research-ext-arrow { font-size: 0.95em; }
@@ -3453,14 +3461,15 @@
             transform: rotate(45deg);
         }
         .whats-new-body { padding: 18px 20px 16px; }
+        /* The wordmark is the eyebrow; the title below carries the card. */
         .whats-new-wordmark {
             display: inline-flex; align-items: baseline;
-            font-family: var(--font-serif); font-size: 20px; font-weight: 600; color: var(--text);
+            font-family: var(--font-serif); font-size: 14px; font-weight: 600; color: var(--text-light);
             letter-spacing: 0.01em;
         }
         .whats-new-wordmark-dot {
-            width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
-            margin-left: 3px; align-self: flex-end; margin-bottom: 4px;
+            width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
+            margin-left: 2px; align-self: flex-end; margin-bottom: 3px;
         }
         .whats-new-title {
             margin: 8px 0 6px; font-family: var(--font-serif);
@@ -5565,7 +5574,7 @@
             font-weight: 600;
             letter-spacing: 0.12em;
             text-transform: uppercase;
-            color: var(--accent);
+            color: var(--accent-text);
             padding: 0 12px 4px;
         }
         /* View-scoped actions: set apart by a rule, quieter heading. */
@@ -6626,7 +6635,7 @@
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            color: var(--accent);
+            color: var(--accent-text);
             margin-bottom: 6px;
             padding-bottom: 4px;
             border-bottom: 1px solid var(--divider);
@@ -6820,7 +6829,7 @@
             font-weight: 600;
             letter-spacing: 0.12em;
             text-transform: uppercase;
-            color: var(--accent);
+            color: var(--accent-text);
             margin-bottom: 10px;
         }
         .health-block-hint { font-size: 12px; color: var(--text-light); margin: 6px 0; }
@@ -7569,6 +7578,9 @@
         .live-panel-toggle {
             flex: 1;
             min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
             text-align: left;
             background: none;
             border: 0;
@@ -7577,10 +7589,31 @@
             font-weight: 600;
             color: var(--text);
             cursor: pointer;
-            overflow: hidden;
-            text-overflow: ellipsis;
+        }
+        .live-panel-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* Collapsed: new changes and "read-only" stay visible in the head. */
+        .live-panel-chip {
+            flex: none;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-light);
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--r-pill);
+            padding: 1px 7px;
             white-space: nowrap;
         }
+        .live-panel-summary { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 8px 27px; }
+        .live-panel-chip.live-panel-new { color: var(--on-primary); background: var(--primary); border-color: var(--primary); }
+        .live-panel-chevron {
+            flex: none;
+            display: inline-flex;
+            margin-left: auto;
+            color: var(--text-light);
+            transition: transform 0.15s;
+        }
+        .live-panel-toggle[aria-expanded="true"] .live-panel-chevron { transform: rotate(180deg); }
+        @media (prefers-reduced-motion: reduce) { .live-panel-chevron { transition: none; } }
         .live-panel-action {
             flex: none;
             border: 1px solid var(--border);
@@ -7607,7 +7640,7 @@
             font-weight: 600;
             letter-spacing: 0.04em;
             text-transform: uppercase;
-            color: var(--accent);
+            color: var(--accent-text);
         }
         .live-panel-list { list-style: none; margin: 0; padding: 0; }
         .live-panel-list li {
@@ -7619,17 +7652,26 @@
         .live-panel-list .live-empty { color: var(--text-faint); }
         .live-panel-list .live-time { display: block; color: var(--text-faint); font-size: 11px; }
         .live-panel-list .live-task { color: var(--text-light); }
-        .live-change-link {
+        /* Every change row looks the same; one that shows a person is a
+           button with a hover background, not an underlined link. */
+        .live-change {
+            display: block;
+            width: 100%;
+            margin: 0 -6px;
+            padding: 3px 6px;
+            box-sizing: content-box;
             background: none;
             border: 0;
-            padding: 0;
+            border-radius: var(--r-sm, 6px);
             font: inherit;
-            color: var(--primary);
+            color: var(--text);
             text-align: left;
-            cursor: pointer;
-            text-decoration: underline;
-            text-underline-offset: 2px;
         }
+        .live-change-link { cursor: pointer; }
+        .live-change-link:hover, .live-change-link:focus-visible { background: var(--hover-bg); }
+        .live-change-link:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .live-panel-list li:has(> .live-change) { padding: 1px 0; }
+        .live-panel-hint { margin: 6px 0 0; font-size: 12px; color: var(--text-light); }
         /* Tablet: narrower card, same place. */
         @media (min-width: 500px) and (max-width: 900px) {
             .live-panel { width: 260px; right: 12px; max-height: 50vh; }

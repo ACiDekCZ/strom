@@ -59,7 +59,7 @@ export function twoFiguresSvg(options: TwoFiguresOptions = {}): string {
 /** Names of the generic UI glyphs rendered by {@link iconSvg}. */
 export type IconName =
     | 'trash' | 'pencil' | 'book' | 'file' | 'folder' | 'info' | 'check'
-    | 'star' | 'pin' | 'timer' | 'play' | 'pause' | 'user' | 'lock';
+    | 'star' | 'pin' | 'timer' | 'play' | 'pause' | 'user' | 'lock' | 'chevron-down';
 
 /** Stroked 24×24 drawings (same stroke language as the chain/figures glyphs). */
 const ICON_PATHS: Record<IconName, string> = {
@@ -79,6 +79,7 @@ const ICON_PATHS: Record<IconName, string> = {
         + '<rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M5 21v-1a7 7 0 0 1 14 0v1"/>',
     lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+    'chevron-down': '<path d="m6 9 6 6 6-6"/>',
 };
 
 interface IconOptions {

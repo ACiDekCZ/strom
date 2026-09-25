@@ -28,7 +28,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { StromData, TreeId, PersonId } from '../types.js';
 import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate } from '../ged-parser.js';
 import { formatFlexDate } from '../dates.js';
-import { formatRelativeDateTime } from '../format.js';
+import { formatLiveTime, formatLiveClock } from '../live-time.js';
 import { isMobile } from '../breakpoints.js';
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
@@ -38,6 +38,7 @@ import {
     LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
 } from '../research-link.js';
 import { uiModule } from './module.js';
+import { iconSvg } from '../icons.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
 
@@ -65,6 +66,8 @@ export interface LiveSession {
     changes: LiveChangeItem[];
     ended: boolean;
     collapsed: boolean;
+    /** Changes already seen when the panel was collapsed (for "N new"). */
+    seenChanges: number;
     es: EventSource | null;
     timer: ReturnType<typeof setTimeout> | null;
     failures: number;
@@ -200,10 +203,81 @@ function researchDateLabel(gedDate: string | null): string {
     return formatFlexDate(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : todayIso());
 }
 
-function relativeTime(value: string): string {
+/** Changed cards stay highlighted this long, then the highlight goes. */
+const HIGHLIGHT_MS = 30_000;
+/** Panel times ("5 min ago") are refreshed this often. */
+const TIME_TICK_MS = 30_000;
+
+let highlightTimer: ReturnType<typeof setTimeout> | null = null;
+let timeTicker: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * A time element of the panel: `ago` = "just now / N min ago / 14:36",
+ * `since` = "since 14:36". Refreshed by the ticker from its data-ts.
+ */
+function timeEl(value: string, kind: 'ago' | 'since'): HTMLElement | null {
     const ts = Date.parse(value);
-    if (!Number.isFinite(ts)) return '';
-    return formatRelativeDateTime(ts, getCurrentLanguage());
+    if (!Number.isFinite(ts)) return null;
+    const node = el('small', 'live-time');
+    node.dataset.ts = String(ts);
+    node.dataset.kind = kind;
+    node.textContent = liveTimeText(ts, kind);
+    return node;
+}
+
+function liveTimeText(ts: number, kind: 'ago' | 'since'): string {
+    const lang = getCurrentLanguage();
+    return kind === 'since'
+        ? strings.research.since(formatLiveClock(ts, Date.now(), lang))
+        : formatLiveTime(ts, Date.now(), lang, strings.research.justNow);
+}
+
+/** Keep the panel's times fresh while it is shown. */
+function tickLiveTimes(): void {
+    const panel = document.getElementById('live-panel');
+    if (!panel) {
+        if (timeTicker) clearInterval(timeTicker);
+        timeTicker = null;
+        return;
+    }
+    panel.querySelectorAll<HTMLElement>('.live-time[data-ts]').forEach((node) => {
+        node.textContent = liveTimeText(Number(node.dataset.ts), node.dataset.kind === 'since' ? 'since' : 'ago');
+    });
+}
+
+/** "user" (or nothing) is who the section heading already names. */
+function waitsOnUser(on: string | undefined): boolean {
+    return !on || /^\s*user\s*$/i.test(on);
+}
+
+/**
+ * Where the panel may be: below whatever sits at the top on its side (the
+ * standalone-file banner, the collaboration bar or badge), above whatever
+ * sits at the bottom (zoom controls, bottom bar). Top-anchored layouts only;
+ * the phone strip is placed by CSS.
+ */
+function placeLivePanel(panel: HTMLElement): void {
+    panel.style.top = '';
+    panel.style.maxHeight = '';
+    if (panel.hidden || window.matchMedia('(max-width: 640px)').matches) return;
+    const base = panel.getBoundingClientRect();
+    const overlaps = (r: DOMRect) => r.width > 0 && r.height > 0 && r.left < base.right && r.right > base.left;
+    let top = base.top;
+    for (const sel of ['#embedded-mode-banner.visible', '#collab-bar', '#collab-badge']) {
+        const node = document.querySelector<HTMLElement>(sel);
+        if (!node || getComputedStyle(node).display === 'none') continue;
+        const r = node.getBoundingClientRect();
+        if (overlaps(r) && r.top < window.innerHeight / 3) top = Math.max(top, r.bottom + 8);
+    }
+    let bottom = window.innerHeight - 12;
+    for (const sel of ['.control-block', '.zoom-controls', '.bottom-bar', '#view-mode-banner.visible']) {
+        const node = document.querySelector<HTMLElement>(sel);
+        if (!node) continue;
+        const r = node.getBoundingClientRect();
+        if (overlaps(r) && r.top > top) bottom = Math.min(bottom, r.top - 8);
+    }
+    if (top !== base.top) panel.style.top = `${Math.round(top)}px`;
+    panel.style.maxHeight = `min(60vh, 520px, ${Math.max(120, Math.round(bottom - top))}px)`;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -237,6 +311,7 @@ export const researchUiMethods = uiModule({
                 } catch { /* keep the address as it is */ }
             }
             window.addEventListener('strom:data-changed', () => this.syncLivePanelVisibility());
+            window.addEventListener('resize', () => this.placeLivePanel());
             this.initLaunchQueue();
             const reveal = (): void => document.documentElement.classList.remove('external-opening');
             const explicit = liveUrl !== null || importUrl !== null || params.has('open');
@@ -620,6 +695,7 @@ export const researchUiMethods = uiModule({
                 changes: [],
                 ended: false,
                 collapsed: isMobile(),
+                seenChanges: 0,
                 es: null,
                 timer: null,
                 failures: 0,
@@ -738,6 +814,12 @@ export const researchUiMethods = uiModule({
         s.changes = [...items.reverse(), ...s.changes].slice(0, MAX_CHANGES);
         if (DataManager.getCurrentTreeId() === s.treeId) {
             TreeRenderer.setChangedIds(new Set(changedIds));
+            // The highlight marks what just came; it goes after a while.
+            if (highlightTimer) clearTimeout(highlightTimer);
+            highlightTimer = setTimeout(() => {
+                highlightTimer = null;
+                if (live === s) TreeRenderer.setChangedIds(null);
+            }, HIGHLIGHT_MS);
         }
         this.renderLivePanel();
     },
@@ -831,6 +913,7 @@ export const researchUiMethods = uiModule({
     toggleLivePanel(): void {
         if (!live) return;
         live.collapsed = !live.collapsed;
+        if (live.collapsed) live.seenChanges = live.changes.length;
         this.renderLivePanel();
     },
 
@@ -863,17 +946,31 @@ export const researchUiMethods = uiModule({
 
         const head = el('div', 'live-panel-head');
         head.appendChild(el('span', 'live-dot'));
-        const toggle = el('button', 'live-panel-toggle', s.ended ? r.ended : r.panelTitle);
+        const toggle = el('button', 'live-panel-toggle');
         toggle.type = 'button';
         toggle.setAttribute('aria-expanded', String(!s.collapsed));
         toggle.title = s.collapsed ? r.show : r.hide;
         toggle.onclick = () => this.toggleLivePanel();
+        toggle.appendChild(el('span', 'live-panel-title', s.ended ? r.ended : r.panelTitle));
+        const chevron = el('span', 'live-panel-chevron');
+        chevron.setAttribute('aria-hidden', 'true');
+        chevron.innerHTML = iconSvg('chevron-down', { size: 14 });
+        toggle.appendChild(chevron);
         head.appendChild(toggle);
         const action = el('button', 'live-panel-action', s.ended ? r.close : r.stop);
         action.type = 'button';
         action.onclick = () => (s.ended ? this.closeLivePanel() : this.stopLiveFollow());
         head.appendChild(action);
         panel.appendChild(head);
+        // Collapsed: what the hidden body would say first — new changes, and
+        // that the tree cannot be edited meanwhile.
+        if (s.collapsed) {
+            const fresh = s.changes.length - s.seenChanges;
+            const summary = el('div', 'live-panel-summary');
+            if (fresh > 0) summary.appendChild(el('span', 'live-panel-chip live-panel-new', r.newChanges(fresh)));
+            if (!s.ended) summary.appendChild(el('span', 'live-panel-chip', r.readOnly));
+            if (summary.childElementCount > 0) panel.appendChild(summary);
+        }
 
         const body = el('div', 'live-panel-body');
         body.appendChild(el('p', 'live-panel-state', s.ended ? r.endedText : r.following(s.name)));
@@ -893,30 +990,32 @@ export const researchUiMethods = uiModule({
             const li = el('li');
             li.appendChild(el('strong', undefined, w.who));
             if (w.task) li.appendChild(el('span', 'live-task', ` — ${w.task}`));
-            const since = relativeTime(w.since);
-            if (since) li.appendChild(el('small', 'live-time', r.since(since)));
+            const since = timeEl(w.since, 'since');
+            if (since) li.appendChild(since);
             working.appendChild(li);
         }
 
+        // Every change row looks the same; one that names a person in the
+        // tree is a button (hover background) that shows that person.
         const changes = section(r.changes, 'live-changes');
         if (s.changes.length === 0) changes.appendChild(el('li', 'live-empty', r.noChanges));
         for (const c of s.changes) {
             const li = el('li');
             const target = c.personIds[0];
-            if (target) {
-                const btn = el('button', 'live-change-link', c.text);
-                btn.type = 'button';
-                btn.onclick = () => {
+            const row = target ? el('button', 'live-change live-change-link') : el('div', 'live-change');
+            row.appendChild(el('span', 'live-change-text', c.text));
+            const at = timeEl(c.at, 'ago');
+            if (at) row.appendChild(at);
+            if (target && row instanceof HTMLButtonElement) {
+                row.type = 'button';
+                row.title = r.showInTree;
+                row.onclick = () => {
                     if (!DataManager.getPerson(target)) return;
                     TreeRenderer.setFocus(target);
                     void TreeRenderer.renderAsync().then(() => ZoomPan.centerOnFocusWithContext());
                 };
-                li.appendChild(btn);
-            } else {
-                li.appendChild(el('span', undefined, c.text));
             }
-            const at = relativeTime(c.at);
-            if (at) li.appendChild(el('small', 'live-time', at));
+            li.appendChild(row);
             changes.appendChild(li);
         }
 
@@ -924,10 +1023,20 @@ export const researchUiMethods = uiModule({
             const waiting = section(r.waiting, 'live-waiting');
             for (const w of s.waiting) {
                 const li = el('li', undefined, w.what);
-                if (w.on) li.appendChild(el('small', 'live-time', r.waitingOn(w.on)));
+                // "on" is the agent's free text; "user" only repeats the heading.
+                if (!waitsOnUser(w.on)) li.appendChild(el('small', 'live-time', r.waitingOn(w.on!)));
                 waiting.appendChild(li);
             }
+            if (!s.ended) body.appendChild(el('p', 'live-panel-hint', r.waitingHint));
         }
         panel.appendChild(body);
+        placeLivePanel(panel);
+        if (!timeTicker) timeTicker = setInterval(tickLiveTimes, TIME_TICK_MS);
+    },
+
+    /** Re-place the panel (window resized, a bar appeared). */
+    placeLivePanel(): void {
+        const panel = document.getElementById('live-panel');
+        if (panel) placeLivePanel(panel);
     },
 });

@@ -293,7 +293,12 @@ test.describe('live research (?live=)', () => {
         await expect(panel.locator('.live-changes')).toContainText('New person: Ludmila Víšková');
         await expect(panel.locator('.live-working')).toContainText('agent-2');
         await expect(panel.locator('.live-working')).toContainText('Sčítání 1921');
-        await expect(panel.locator('.live-waiting')).toContainText('waiting on: user');
+        // "on: user" only repeats the heading — not shown; where to answer is.
+        await expect(panel.locator('.live-waiting')).not.toContainText('waiting on');
+        await expect(panel).toContainText('Answer the agent where it runs');
+        // Fresh times read as such, not as a date.
+        await expect(panel.locator('.live-changes .live-time').first()).toHaveText(/just now|min/);
+        await expect(panel.locator('.live-working .live-time').first()).toHaveText(/^since \d{1,2}:\d{2}/);
 
         // Read-only while following.
         await expect(page.locator('body')).toHaveClass(/tree-locked/);
@@ -333,6 +338,68 @@ test.describe('live research (?live=)', () => {
         await panel.getByRole('button', { name: 'Stop following' }).click();
         await expect(panel).toHaveCount(0);
         await expect(page.locator('body')).not.toHaveClass(/tree-locked/);
+    });
+});
+
+test.describe('live panel layout', () => {
+    async function followQuietBridge(page: Page): Promise<void> {
+        await page.route(`${BRIDGE}/**`, async (route) => {
+            const path = new URL(route.request().url()).pathname;
+            if (path.endsWith('/status')) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
+                    body: JSON.stringify({ tree: { id: UUID, name: 'Víškovi' }, head: 'h1', working: [],
+                        waiting: [{ id: 'T1', what: 'Confirm the father of Jan', on: 'archive answer' }] }) });
+            }
+            if (path.endsWith('/tree.ged')) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain' }, body: researchGed() });
+            }
+            return new Promise(() => {});
+        });
+        await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
+        await expect(page.locator('#live-panel')).toBeVisible();
+    }
+    const rect = (page: Page, sel: string) => page.locator(sel).first().evaluate(e => {
+        const r = e.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+    });
+    const apart = (a: { top: number; bottom: number; left: number; right: number }, b: typeof a) =>
+        a.bottom <= b.top || b.bottom <= a.top || a.right <= b.left || b.right <= a.left;
+
+    test('the head stays visible below the standalone-file banner and the collaboration badge', async ({ page }) => {
+        await page.setViewportSize({ width: 924, height: 700 });
+        await followQuietBridge(page);
+        // Other "waiting on" text than "user" is kept.
+        await expect(page.locator('#live-panel .live-waiting')).toContainText('waiting on: archive answer');
+        await page.evaluate(() => {
+            document.getElementById('embedded-mode-banner')!.classList.add('visible');
+            (document.getElementById('collab-badge') as HTMLElement).style.display = '';
+            window.Strom.UI.placeLivePanel();
+        });
+        const head = await rect(page, '#live-panel .live-panel-head');
+        expect(apart(head, await rect(page, '#embedded-mode-banner'))).toBe(true);
+        expect(apart(head, await rect(page, '#collab-badge'))).toBe(true);
+        await page.locator('#live-panel').getByRole('button', { name: 'Stop following' }).click();
+        await expect(page.locator('#live-panel')).toHaveCount(0);
+    });
+
+    test('960 × 600: the panel clears the zoom controls and the bottom bar', async ({ page }) => {
+        await page.setViewportSize({ width: 960, height: 600 });
+        await followQuietBridge(page);
+        const panel = await rect(page, '#live-panel');
+        expect(apart(panel, await rect(page, '.zoom-controls'))).toBe(true);
+        expect(apart(panel, await rect(page, '.bottom-bar'))).toBe(true);
+    });
+
+    test('collapsed: a chevron, "read-only", and the count of new changes', async ({ page }) => {
+        await followQuietBridge(page);
+        const panel = page.locator('#live-panel');
+        const toggle = panel.locator('.live-panel-toggle');
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        await expect(toggle.locator('.live-panel-chevron svg')).toHaveCount(1);
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await expect(panel.locator('.live-panel-summary')).toContainText('read-only');
+        await expect(toggle).toContainText('Live research');
     });
 });
 

@@ -190,7 +190,7 @@ test.describe('existing tree on desktop', () => {
         const cardEl = whatsNew(page);
         await expect(cardEl).toBeVisible();
         await expect(cardEl).toHaveAttribute('aria-modal', 'false');
-        await expect(cardEl).toContainText('New in Strom 3.0: research with an AI agent');
+        await expect(cardEl).toContainText('Ancestor research with an AI agent');
         await expect(cardEl).toContainText('Also in 3.0');
         // Focus moves onto the card.
         expect(await page.evaluate(() => document.activeElement?.classList.contains('whats-new'))).toBe(true);
@@ -396,7 +396,10 @@ test.describe('existing tree on desktop', () => {
         await page.evaluate(() => window.Strom.UI.showResearchInfoDialog());
         await expect(infoDialog(page)).toBeVisible();
         const needBg = await infoDialog(page).locator('.research-info-need').evaluate(el => getComputedStyle(el).backgroundColor);
-        expect(needBg).toBe('rgb(42, 49, 57)'); // --info-soft (dark)
+        // Warm like the palette (copper mixed into the surface), not the cold --info-soft.
+        const [r, , b] = (needBg.match(/[\d.]+/g) ?? []).map(Number);
+        expect(needBg).not.toBe('rgb(42, 49, 57)');
+        expect(r).toBeGreaterThan(b);
         await shot(page, 'research-dialog-desktop-dark.png', testInfo);
     });
 });
@@ -620,7 +623,7 @@ test.describe('layout-overflow at 360 × 780 (DE)', () => {
         await setPromoSettings(page, {});
         await page.reload();
         await expect(whatsNew(page)).toBeVisible();
-        await expect(whatsNew(page)).toContainText('Neu in Strom 3.0');
+        await expect(whatsNew(page)).toContainText('Ahnenforschung mit einem KI-Agenten');
         await expectNoOverflow(page, '.whats-new-sheet');
         const sheetBox = await whatsNew(page).boundingBox();
         expect(sheetBox!.y).toBeGreaterThanOrEqual(0);
