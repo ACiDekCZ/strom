@@ -372,14 +372,13 @@ export type LastFocusedMarker = typeof LAST_FOCUSED;
  * v5 (2026-07): added Person.parentRelTypes (adoptive/step/foster links).
  * v6 (2026-08): added Partnership.participants (wedding witnesses) and
  *   Person.story / Partnership.story (narratives, GEDCOM _STORY).
- * Source.transcript / recordDate / excerpts / refn (2026-09) are additive and
- *   pass through older apps untouched (the source catalog is copied whole), so
- *   they ship without a bump while they live on the shared-origin beta; the
- *   bump to 7 comes with the public release.
+ * v7 (2026-09): register entries on sources — Source.transcript / recordDate /
+ *   excerpts / refn; Attachment.note / sourceId. An older app keeps them when
+ *   it only reads, but its source editor would rebuild a source without them.
  * All additive/backward-compatible for reading; the bump makes an older app
  * warn ("newer version") before it silently drops the new fields on re-save.
  */
-export const STROM_DATA_VERSION = 6;
+export const STROM_DATA_VERSION = 7;
 
 /**
  * Coordinates of one place, kept in the tree's own file so a place is looked up

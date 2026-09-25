@@ -47,7 +47,7 @@ import { SettingsManager } from '../settings.js';
 import { CryptoSession } from '../crypto.js';
 import { createSnapshot, deleteSnapshotsForTree, getSnapshotJson, totalSnapshotBytes } from '../snapshots.js';
 import { collectPoolGarbage } from '../media-pool.js';
-import { StromData, TreeId, TreeMetadata } from '../types.js';
+import { StromData, TreeId, TreeMetadata, STROM_DATA_VERSION } from '../types.js';
 
 let encryptionOn = false;
 
@@ -61,7 +61,7 @@ function image(seed: number, n = 3000): string {
 
 function tree(name: string, images: string[] = []): StromData {
     const d = {
-        version: 6,
+        version: STROM_DATA_VERSION,
         persons: { p0: { id: 'p0', firstName: name, lastName: 'Example', gender: 'female', partnerships: [], parentIds: [], childIds: [] } },
         partnerships: {},
     } as unknown as StromData;

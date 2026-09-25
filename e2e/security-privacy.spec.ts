@@ -32,7 +32,7 @@ function birthdayInDays(year: number, days: number): string {
 /** A tree whose every text field (and one id) carries an injection payload. */
 function xssTree(): object {
     return {
-        version: 6,
+        version: 7,
         persons: {
             [EVIL_ID]: {
                 id: EVIL_ID,
@@ -405,7 +405,7 @@ test('HTML export: a </script> note cannot break out of the embedded data', asyn
 /** A living grandchild generation under a deceased couple, all detail-rich. */
 function privacyTree(): object {
     return {
-        version: 6,
+        version: 7,
         persons: {
             p_old: {
                 id: 'p_old', firstName: 'Ambrose', lastName: 'Oakridge', gender: 'male',

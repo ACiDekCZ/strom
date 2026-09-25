@@ -374,7 +374,7 @@ test('post-import health check offers a review when the data has issues (M6)', a
     await openApp(page);
     await createFirstPerson(page, 'Seed', 'Person');
     const bad = {
-        version: 6,
+        version: 7,
         persons: { p1: { id: 'p1', firstName: 'Jan', lastName: 'Novak', gender: 'male',
             isPlaceholder: false, parentIds: [], childIds: [], partnerships: [],
             birthDate: '1950', deathDate: '1940' } },
