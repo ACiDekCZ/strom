@@ -665,6 +665,7 @@ export interface AppSettings {
     branchColors?: boolean;  // default: true - colour cards by branch vs focus
     branchLegend?: boolean;  // default: false - show the branch-colour legend box
     deathAnniversaries?: boolean;  // default: false - include yearly death anniversaries
+    onThisDayAllTrees?: boolean;   // default: false - "on this day" also from the other visible trees
     crossTreeBadges?: boolean;  // default: true - show cross-tree connection badges
     fanKekule?: boolean;  // default: false - show Kekule (ahnentafel) numbers in the fan chart
     cardDensity?: CardDensity;  // default: 'normal' - how much detail a card shows

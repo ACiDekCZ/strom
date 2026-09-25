@@ -190,7 +190,7 @@ function registerAppListeners(): void {
         document.getElementById('other-tab-notice')?.remove();
         // So does "on this day": the new tree gets its own (once a day).
         UI.dismissOnThisDay();
-        UI.maybeShowOnThisDay();
+        void UI.maybeShowOnThisDay();
     });
 
     // Persistence failures (quota, locked session) must reach the user —
@@ -416,7 +416,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         // "On this day" reminder — after the first render, off the critical path.
-        const showOtd = () => UI.maybeShowOnThisDay();
+        const showOtd = () => { void UI.maybeShowOnThisDay(); };
         if ('requestIdleCallback' in window) {
             (window as unknown as { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback(showOtd);
         } else {

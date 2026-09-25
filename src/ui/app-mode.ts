@@ -780,6 +780,12 @@ export const appModeMethods = uiModule({
         if (!enabled) this.dismissOnThisDay();
     },
 
+    toggleOnThisDayAllTrees(enabled: boolean): void {
+        SettingsManager.setOnThisDayAllTrees(enabled);
+        // A card from another tree must not stay when that is switched off.
+        if (!enabled && document.getElementById('otd-card')?.dataset.treeId) this.dismissOnThisDay();
+    },
+
     toggleDeathAnniversaries(enabled: boolean): void {
         SettingsManager.setDeathAnniversaries(enabled);
         this.updateTreeSwitcher();   // badge count may change

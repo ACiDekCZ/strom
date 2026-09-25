@@ -264,6 +264,8 @@ export const miscMethods = uiModule({
         if (otdToggle) otdToggle.checked = SettingsManager.isOnThisDayEnabled();
         const deathAnnToggle = document.getElementById('death-anniversaries-toggle') as HTMLInputElement | null;
         if (deathAnnToggle) deathAnnToggle.checked = SettingsManager.isDeathAnniversariesEnabled();
+        const otdAllToggle = document.getElementById('on-this-day-all-trees-toggle') as HTMLInputElement | null;
+        if (otdAllToggle) otdAllToggle.checked = SettingsManager.isOnThisDayAllTrees();
 
         const densitySelect = document.getElementById('card-density-select') as HTMLSelectElement | null;
         if (densitySelect) densitySelect.value = SettingsManager.getCardDensity();
@@ -296,15 +298,18 @@ export const miscMethods = uiModule({
 
     /**
      * Dependent settings rows only apply while their parent option is on:
-     * "death anniversaries" belongs to "On this day". The child keeps its
-     * stored value but is disabled while the parent is off.
+     * "death anniversaries" and "from all trees" belong to "On this day". A
+     * child keeps its stored value but is disabled while the parent is off.
      */
     syncSettingsDependents(): void {
         const parent = document.getElementById('on-this-day-toggle') as HTMLInputElement | null;
-        const child = document.getElementById('death-anniversaries-toggle') as HTMLInputElement | null;
-        if (!parent || !child) return;
-        child.disabled = !parent.checked;
-        child.closest('.settings-row')?.classList.toggle('is-disabled', !parent.checked);
+        if (!parent) return;
+        for (const id of ['death-anniversaries-toggle', 'on-this-day-all-trees-toggle']) {
+            const child = document.getElementById(id) as HTMLInputElement | null;
+            if (!child) continue;
+            child.disabled = !parent.checked;
+            child.closest('.settings-row')?.classList.toggle('is-disabled', !parent.checked);
+        }
     },
 
     closeSettingsDialog(): void {

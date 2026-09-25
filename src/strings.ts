@@ -554,6 +554,8 @@ const stringsEN = {
     // Anniversaries + "on this day"
     anniversaries: {
         deathHint: 'Also show yearly death anniversaries',
+        allTreesHint: 'Also from my other visible trees',
+        fromTree: (tree: string) => ` (tree “${tree}”)`,
         menu: 'Anniversaries',
         title: 'Upcoming anniversaries',
         empty: 'No anniversaries in the next 30 days',
@@ -2712,6 +2714,8 @@ const stringsCZ: StringsType = {
     // Anniversaries + "on this day"
     anniversaries: {
         deathHint: 'Zobrazovat i výroční dny úmrtí',
+        allTreesHint: 'I z ostatních viditelných stromů',
+        fromTree: (tree: string) => ` (strom „${tree}“)`,
         menu: 'Výročí',
         title: 'Nadcházející výročí',
         empty: 'Žádná výročí v příštích 30 dnech',
@@ -4864,6 +4868,8 @@ const stringsDE: StringsType = {
     // Anniversaries + "on this day"
     anniversaries: {
         deathHint: 'Auch jährliche Todestage anzeigen',
+        allTreesHint: 'Auch aus meinen anderen sichtbaren Stammbäumen',
+        fromTree: (tree: string) => ` (Stammbaum „${tree}“)`,
         menu: 'Jahrestage',
         title: 'Bevorstehende Jahrestage',
         empty: 'Keine Jahrestage in den nächsten 30 Tagen',

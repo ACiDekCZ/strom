@@ -64,3 +64,45 @@ test('the on-this-day card belongs to the open tree and goes when switching tree
     await expect(page.locator('.person-card', { hasText: 'Vera' })).toBeVisible();
     await expect(card).toBeHidden();
 });
+
+test('"also from my other visible trees": off by default; on, it names the tree and a click opens it', async ({ page }) => {
+    const now = new Date();
+    const today = `1950-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    await openApp(page);
+    await createFirstPerson(page, 'Vera', 'Old', { gender: 'female', birthDate: today });
+    await waitForPersist(page, 'Vera');
+    const first = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId());
+    await page.evaluate((id) => window.Strom.TreeManager.renameTree(id, 'Old family'), first);
+    // A second tree with nobody born today; its daily check has not run yet.
+    await page.evaluate(() => {
+        window.Strom.DataManager.createNewTree('New family');
+        const id = window.Strom.DataManager.getCurrentTreeId();
+        localStorage.removeItem(`strom-otd-${id}-${new Date().toISOString().slice(0, 10)}`);
+    });
+    const card = page.locator('#otd-card');
+    const second = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId());
+    const resetDay = (id: string) => page.evaluate((id) => localStorage.removeItem(`strom-otd-${id}-${new Date().toISOString().slice(0, 10)}`), id);
+
+    // Default: only the open tree — nothing here.
+    await resetDay(second);
+    await page.evaluate(() => window.Strom.UI.maybeShowOnThisDay());
+    await expect(card).toBeHidden();
+
+    // The setting sits under "On this day" in Settings.
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    const toggle = page.locator('#on-this-day-all-trees-toggle');
+    await expect(toggle).not.toBeChecked();
+    await toggle.check();
+    await page.keyboard.press('Escape');
+
+    await resetDay(second);
+    await page.evaluate(() => window.Strom.UI.maybeShowOnThisDay());
+    await expect(card).toBeVisible();
+    await expect(card).toContainText('Vera');
+    await expect(card).toContainText('(tree “Old family”)');
+
+    await card.locator('#otd-text').click();
+    await expect.poll(() => page.evaluate(() => window.Strom.DataManager.getCurrentTreeId())).toBe(first);
+    await expect(page.locator('.person-card.focused', { hasText: 'Vera' })).toBeVisible();
+    await expect(card).toBeHidden();
+});

@@ -11,7 +11,9 @@ import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { SettingsManager } from '../settings.js';
 import { strings } from '../strings.js';
-import { PersonId, Person } from '../types.js';
+import { PersonId, Person, StromData, TreeId } from '../types.js';
+import { TreeManager } from '../tree-manager.js';
+import { getTreesDataForMatching } from '../cross-tree.js';
 import {
     upcomingAnniversaries, onThisDay, Anniversary, OnThisDayEvent,
 } from '../anniversaries.js';
@@ -89,7 +91,7 @@ export const anniversariesUiMethods = uiModule({
      * Show the "on this day" card once per tree per calendar day. Called after
      * the first render (idle) so it never delays startup.
      */
-    maybeShowOnThisDay(): void {
+    async maybeShowOnThisDay(): Promise<void> {
         if (!SettingsManager.isOnThisDayEnabled()) return;
         const treeId = DataManager.getCurrentTreeId();
         if (!treeId || DataManager.isViewMode()) return;
@@ -98,18 +100,36 @@ export const anniversariesUiMethods = uiModule({
         const key = `strom-otd-${treeId}-${today.toISOString().slice(0, 10)}`;
         if (localStorage.getItem(key) === '1') return;
 
-        const events = onThisDay(DataManager.getData(), today);
-        if (events.length === 0) return;
+        // The open tree first; the other visible trees only when asked for
+        // (read from the cross-tree cache: people without their images).
+        let found: { ev: OnThisDayEvent; data: StromData; otherTree?: { id: TreeId; name: string } } | null = null;
+        const own = onThisDay(DataManager.getData(), today);
+        if (own.length > 0) found = { ev: own[0], data: DataManager.getData() };
+        else if (SettingsManager.isOnThisDayAllTrees()) {
+            const trees = await getTreesDataForMatching(TreeManager).catch(() => null);
+            for (const [id, tree] of trees ?? []) {
+                if (id === treeId) continue;
+                const events = onThisDay(tree.data, today);
+                if (events.length > 0 && (!found || events[0].years > found.ev.years)) {
+                    found = { ev: events[0], data: tree.data, otherTree: { id, name: tree.name } };
+                }
+            }
+            // The user may have switched trees while the others were read.
+            if (DataManager.getCurrentTreeId() !== treeId) return;
+        }
+        if (!found) return;
 
         const card = document.getElementById('otd-card');
         const textEl = document.getElementById('otd-text');
         if (!card || !textEl) return;
 
-        const ev = events[0];
-        const data = DataManager.getData();
+        const { ev, data, otherTree } = found;
         const persons = ev.personIds.map(id => data.persons[id as PersonId]);
-        textEl.textContent = this.onThisDayText(ev, persons);
+        textEl.textContent = this.onThisDayText(ev, persons)
+            + (otherTree ? strings.anniversaries.fromTree(otherTree.name) : '');
         card.dataset.personId = ev.personIds[0];
+        if (otherTree) card.dataset.treeId = otherTree.id;
+        else delete card.dataset.treeId;
         card.classList.add('active');
         // Mark shown for today regardless of whether the user interacts.
         localStorage.setItem(key, '1');
@@ -128,11 +148,21 @@ export const anniversariesUiMethods = uiModule({
         }
     },
 
-    focusOnThisDay(): void {
+    async focusOnThisDay(): Promise<void> {
         const card = document.getElementById('otd-card');
         const personId = card?.dataset.personId;
+        const treeId = card?.dataset.treeId;
         this.dismissOnThisDay();
-        if (personId) TreeRenderer.setFocus(personId as PersonId);
+        if (!personId) return;
+        // An anniversary from another tree: open that tree first (its own card
+        // would only repeat this one, so it counts as shown today).
+        if (treeId && treeId !== DataManager.getCurrentTreeId()) {
+            try {
+                localStorage.setItem(`strom-otd-${treeId}-${new Date().toISOString().slice(0, 10)}`, '1');
+            } catch { /* no storage */ }
+            await this.switchToTree(treeId);
+        }
+        if (DataManager.getPerson(personId as PersonId)) TreeRenderer.setFocus(personId as PersonId);
     },
 
     dismissOnThisDay(): void {

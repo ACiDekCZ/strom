@@ -221,6 +221,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** "On this day" also from the other visible trees (default: the open tree only). */
+    isOnThisDayAllTrees(): boolean {
+        return this.settings.onThisDayAllTrees === true;
+    }
+
+    setOnThisDayAllTrees(enabled: boolean): void {
+        this.settings.onThisDayAllTrees = enabled;
+        this.save();
+    }
+
     /** Branch colour coding default ON (undefined = enabled). */
     isBranchColorsEnabled(): boolean {
         return this.settings.branchColors !== false;
