@@ -188,6 +188,9 @@ function registerAppListeners(): void {
         void UI.updateFileIndicator();
         // A warning about another tab belongs to the tree it was raised for.
         document.getElementById('other-tab-notice')?.remove();
+        // So does "on this day": the new tree gets its own (once a day).
+        UI.dismissOnThisDay();
+        UI.maybeShowOnThisDay();
     });
 
     // Persistence failures (quota, locked session) must reach the user —

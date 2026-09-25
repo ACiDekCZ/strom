@@ -40,3 +40,27 @@ test('on-this-day card shows once and the anniversaries panel lists today\'s bir
     await expect(modal.locator('.anniversary-row')).toHaveCount(1);
     await expect(modal.locator('.anniversary-row')).toContainText('Marie');
 });
+
+test('the on-this-day card belongs to the open tree and goes when switching trees', async ({ page }) => {
+    const now = new Date();
+    const today = `1950-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    await openApp(page);
+    await createFirstPerson(page, 'Vera', 'Old', { gender: 'female', birthDate: today });
+    await waitForPersist(page, 'Vera');
+    const first = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId());
+    await page.evaluate(() => window.Strom.UI.maybeShowOnThisDay());
+    const card = page.locator('#otd-card');
+    await expect(card).toContainText('Vera');
+
+    // Another tree without an anniversary today: the card is not left behind.
+    await page.evaluate(() => {
+        window.Strom.DataManager.createNewTree('Other');
+        window.dispatchEvent(new CustomEvent('strom:tree-switched'));
+    });
+    await expect(card).toBeHidden();
+
+    // Back in the first tree: already shown today, so it stays away.
+    await page.evaluate((id) => window.Strom.UI.switchToTree(id), first);
+    await expect(page.locator('.person-card', { hasText: 'Vera' })).toBeVisible();
+    await expect(card).toBeHidden();
+});
