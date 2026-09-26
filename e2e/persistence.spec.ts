@@ -248,13 +248,27 @@ for (const width of [360, 768]) {
     });
 }
 
-test('1100px: the icon pill leaves the tree switcher its full name', async ({ page }) => {
-    await stubPersistence(page, false);
-    await page.setViewportSize({ width: 1100, height: 800 });
-    await openApp(page);
-    await importBigTree(page, 'Novákovi');
-    await addPerson(page, 'A');
-    await expect(page.locator('#unsaved-copy-indicator')).toBeVisible();
-    const fits = await page.locator('.tree-switcher-btn .tree-name').evaluate(el => el.scrollWidth <= el.clientWidth);
-    expect(fits).toBe(true);
-});
+for (const width of [1100, 1200]) {
+    test(`${width}px: the state never takes room from the tree switcher's name`, async ({ page }) => {
+        await stubPersistence(page, false);
+        await page.setViewportSize({ width, height: 800 });
+        await openApp(page);
+        await importBigTree(page, 'Novákovi');
+        const nameWidth = () => page.locator('.tree-switcher-btn .tree-name').evaluate(el => el.clientWidth);
+        const before = await nameWidth();
+        await addPerson(page, 'A');
+        await expect(page.locator('body')).toHaveClass(/storage-unsaved/);
+        expect(await nameWidth()).toBe(before);
+        if (width < 1180) {
+            // No pill here: the Actions ⋯ has the dot, its menu the state row.
+            await expect(page.locator('#unsaved-copy-indicator')).toBeHidden();
+            await expect(page.locator('.actions-menu-storage-dot')).toBeVisible();
+            await page.locator('.actions-menu-btn').click();
+            await page.locator('#actions-storage-row').click();
+            await expect(page.locator('#storage-status-modal')).toBeVisible();
+        } else {
+            await expect(page.locator('#unsaved-copy-indicator')).toBeVisible();
+            await expect(page.locator('.actions-menu-storage-dot')).toBeHidden();
+        }
+    });
+}

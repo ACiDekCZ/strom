@@ -147,6 +147,8 @@ export const fileCopyMethods = uiModule({
             }
         }
         document.body.classList.toggle('storage-unsaved', show);
+        const rowIcon = document.querySelector<HTMLElement>('.actions-storage-icon');
+        if (rowIcon && !rowIcon.firstChild) rowIcon.innerHTML = iconSvg('file-unsaved');
         const more = document.getElementById('bb-view-more');
         if (more) {
             more.dataset.storage = show ? '1' : '';
@@ -235,6 +237,7 @@ export const fileCopyMethods = uiModule({
         pulse(document.getElementById('unsaved-copy-indicator'));
         pulse(document.getElementById('bottom-bar-more-storage-dot'));
         pulse(document.querySelector<HTMLElement>('.mobile-more-storage-dot'));
+        pulse(document.querySelector<HTMLElement>('.actions-menu-storage-dot'));
     },
 
     /**

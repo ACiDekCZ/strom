@@ -4092,6 +4092,29 @@
             /* Every pixel here comes out of the tree switcher's name. */
             .toolbar .storage-pill { width: 26px; height: 26px; padding: 0; justify-content: center; margin-left: 2px; }
             body.storage-unsaved .toolbar h1.app-wordmark { margin-right: 4px; }
+        }
+        /* 1025–1179px: no room even for the icon (the switcher's name would
+           shrink): the Actions ⋯ carries a dot and its menu a state row. */
+        @media (max-width: 1179px) {
+            .toolbar .storage-pill { display: none !important; }
+            body.storage-unsaved .toolbar h1.app-wordmark { margin-right: 8px; }
+        }
+        @media (min-width: 1180px) {
+            .actions-menu-storage-dot, .actions-storage-row { display: none !important; }
+        }
+        .actions-menu-storage-dot.storage-dot { background: var(--warning); }
+        body.storage-unsaved .actions-storage-row { display: flex; }
+        .actions-storage-row {
+            align-items: center; gap: 10px; margin: 2px 6px 4px; padding: 8px 10px;
+            border-radius: var(--r-md); color: var(--accent-text); background: var(--warning-soft);
+            border: 1px solid color-mix(in srgb, var(--warning) 60%, transparent);
+        }
+        .actions-storage-row:hover { background: color-mix(in srgb, var(--warning) 22%, var(--warning-soft)); }
+        .actions-storage-icon svg { width: 16px; height: 16px; display: block; }
+        .actions-storage-text { display: flex; flex-direction: column; gap: 1px; }
+        .actions-storage-title { font-size: 13px; font-weight: 600; }
+        .actions-storage-sub { font-size: 12px; color: var(--text-secondary); }
+        @media (max-width: 1280px) {
             .toolbar .storage-pill .storage-pill-label { display: none; }
         }
         @media (max-width: 1024px) {
@@ -9384,8 +9407,12 @@
 
         <!-- Actions menu (⋯) — desktop only; the mobile ⋯ + "More" sheet cover smaller screens -->
         <div class="actions-menu desktop-only">
-            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><svg class="actions-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span><span id="actions-menu-new-dot" class="actions-menu-dot actions-menu-new-dot" style="display:none;" aria-hidden="true"></span></button>
+            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><svg class="actions-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span><span id="actions-menu-new-dot" class="actions-menu-dot actions-menu-new-dot" style="display:none;" aria-hidden="true"></span><span class="actions-menu-dot actions-menu-storage-dot is-storage storage-dot" aria-hidden="true"></span></button>
             <div id="actions-menu-dropdown" class="tree-switcher-dropdown actions-menu-dropdown" role="menu">
+                <div id="actions-storage-row" class="tree-switcher-action actions-storage-row storage-dot" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showStorageStatusDialog()" tabindex="0" role="menuitem">
+                    <span class="actions-storage-icon" aria-hidden="true"></span>
+                    <span class="actions-storage-text"><span class="actions-storage-title" data-i18n="fileCopy.indicatorShort"></span><span class="actions-storage-sub" data-i18n="fileCopy.moreRowSub"></span></span>
+                </div>
                 <div id="actions-undo-row" class="tree-switcher-action edit-only actions-undo-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.performUndo()" tabindex="0" role="menuitem">
                     <span id="actions-undo-label"></span>
                     <span id="actions-undo-hint" class="menu-shortcut-hint" aria-hidden="true"></span>
