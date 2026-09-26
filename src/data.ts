@@ -3010,9 +3010,10 @@ class DataManagerClass {
         return json;
     }
 
-    async exportTreeJSON(treeId: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): Promise<void> {
+    /** Download a tree as JSON; returns the file name (null when there is no tree). */
+    async exportTreeJSON(treeId: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): Promise<string | null> {
         const rawTreeData = await TreeManager.getTreeData(treeId);
-        if (!rawTreeData) return;
+        if (!rawTreeData) return null;
 
         const treeData = applyContentOptions(applyLivingPrivacy(rawTreeData, privacyMode), content);
         // Ensure version is set
@@ -3038,6 +3039,7 @@ class DataManagerClass {
         a.click();
         URL.revokeObjectURL(a.href);
         if (privacyMode === 'full') TreeManager.noteFileCopy([treeId]);
+        return a.download;
     }
 
     async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): Promise<void> {

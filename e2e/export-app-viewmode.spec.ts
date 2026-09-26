@@ -14,6 +14,7 @@ async function openAppExportDialog(page: Page, password?: string): Promise<void>
     await expect(pwd).toBeVisible();
     await pwd.locator('#export-privacy-mode').selectOption('full');
     if (password) {
+        await pwd.locator('#export-encrypt-toggle').check();
         await pwd.locator('#export-password-input').fill(password);
         await pwd.locator('#export-password-confirm').fill(password);
     }
@@ -36,7 +37,7 @@ test('exported standalone HTML opens in read-only view mode', async ({ page }, t
     await saveAndOpen(page, testInfo, (async () => {
         const [d] = await Promise.all([
             page.waitForEvent('download'),
-            page.locator('#export-password-modal').getByRole('button', { name: 'Export without encryption' }).click(),
+            page.locator('#export-password-modal').locator('#export-submit-btn').click(),
         ]);
         return d;
     })());
@@ -61,7 +62,7 @@ test('encrypted exported HTML requires the correct password to reveal the tree',
     await saveAndOpen(page, testInfo, (async () => {
         const [d] = await Promise.all([
             page.waitForEvent('download'),
-            page.locator('#export-password-modal').locator('#export-with-password-btn').click(),
+            page.locator('#export-password-modal').locator('#export-submit-btn').click(),
         ]);
         return d;
     })());

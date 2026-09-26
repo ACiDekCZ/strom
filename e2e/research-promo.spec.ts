@@ -502,7 +502,7 @@ test.describe('hidden', () => {
         await pwd.locator('#export-privacy-mode').selectOption('full');
         const [download] = await Promise.all([
             page.waitForEvent('download'),
-            pwd.getByRole('button', { name: 'Export without encryption' }).click(),
+            pwd.locator('#export-submit-btn').click(),
         ]);
         const out = testInfo.outputPath('exported.html');
         await download.saveAs(out);

@@ -3,6 +3,7 @@
  * see src/ui/module.ts for the composition pattern.
  */
 
+import type { PrivacyMode, ContentOptions } from '../privacy.js';
 import { DataManager, auditPersonName } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -110,7 +111,7 @@ export const importExportMethods = uiModule({
      * Export target tree as JSON
      * Shows password dialog for optional encryption
      */
-    async exportTargetTreeJSON(): Promise<void> {
+    async exportTargetTreeJSON(quick = false): Promise<void> {
         const treeId = this.getExportTargetTreeId();
         if (!treeId) {
             this.closeExportDialog();
@@ -119,9 +120,10 @@ export const importExportMethods = uiModule({
 
         this.closeExportDialog();
 
+        const name = TreeManager.getTreeMetadata(treeId)?.name ?? '';
         this.showExportPasswordDialog(async (password: string | null) => {
             await DataManager.exportTreeJSON(treeId, password, this.readExportPrivacyMode(), this.readExportContentOptions());
-        });
+        }, false, quick ? { quick: { hint: strings.fileCopy.quickHint(name) } } : { format: 'json' });
     },
 
     /**
@@ -141,7 +143,7 @@ export const importExportMethods = uiModule({
         this.showExportPasswordDialog(async (password: string | null) => {
             const { AppExporter } = await import('../export.js');
             await AppExporter.exportApp(treeId, password, this.readExportPrivacyMode(), this.readExportContentOptions());
-        }, false, { defaultPrivacy: 'initials' });
+        }, false, { defaultPrivacy: 'initials', format: 'html' });
     },
 
     /**
@@ -177,7 +179,7 @@ export const importExportMethods = uiModule({
             a.click();
             URL.revokeObjectURL(url);
             if (this.readExportPrivacyMode() === 'full') TreeManager.noteFileCopy([treeId]);
-        }, false, { defaultPrivacy: 'initials', passwordless: true, content: true });
+        }, false, { defaultPrivacy: 'initials', passwordless: true, content: true, format: 'gedcom' });
     },
 
     /**
@@ -208,7 +210,7 @@ export const importExportMethods = uiModule({
             a.download = `${safeFileName(metadata?.name, 'family-tree')}.csv`;
             a.click();
             URL.revokeObjectURL(url);
-        }, false, { defaultPrivacy: 'full', passwordless: true });
+        }, false, { defaultPrivacy: 'full', passwordless: true, format: 'csv' });
     },
 
     /**
@@ -221,7 +223,7 @@ export const importExportMethods = uiModule({
         this.showExportPasswordDialog(async (password: string | null) => {
             const { AppExporter } = await import('../export.js');
             await AppExporter.exportApp(undefined, password, this.readExportPrivacyMode(), this.readExportContentOptions());
-        }, false, { defaultPrivacy: 'initials' });
+        }, false, { defaultPrivacy: 'initials', format: 'html' });
     },
 
     /**
@@ -236,7 +238,7 @@ export const importExportMethods = uiModule({
             const { AppExporter } = await import('../export.js');
             await AppExporter.exportAllAsApp(password, includeAuditLog, this.readExportPrivacyMode(), this.readExportContentOptions());
         // A full backup: every tree, unfiltered (like the JSON "Export all").
-        }, true, { defaultPrivacy: 'full' });
+        }, true, { defaultPrivacy: 'full', format: 'html' });
     },
 
     /**
@@ -248,7 +250,7 @@ export const importExportMethods = uiModule({
         this.showExportPasswordDialog(async (password: string | null) => {
             const visibleIds = TreeRenderer.getVisiblePersonIds();
             await DataManager.exportFocusedJSON(visibleIds, password, this.readExportPrivacyMode(), this.readExportContentOptions());
-        });
+        }, false, { format: 'json' });
     },
 
     /**
@@ -1292,50 +1294,57 @@ export const importExportMethods = uiModule({
      * Export all trees as single JSON file
      * Shows password dialog for optional encryption
      */
-    async exportAllAsJson(): Promise<void> {
+    async exportAllAsJson(quick = false): Promise<void> {
         this.closeExportAllDialog();
 
         this.showExportPasswordDialog(async (password: string | null) => {
             const includeAuditLog = (document.getElementById('export-audit-log-toggle') as HTMLInputElement)?.checked || false;
-            const privacyMode = this.readExportPrivacyMode();
-            const content = this.readExportContentOptions();
-            const { applyLivingPrivacy, applyContentOptions } = await import('../privacy.js');
-            const trees = TreeManager.getTrees();
-            const allData: Record<string, { name: string; data: StromData; auditLog?: AuditLog }> = {};
+            await this.downloadAllTreesJson(password, includeAuditLog, this.readExportPrivacyMode(), this.readExportContentOptions());
+        }, !quick, quick
+            ? { quick: { hint: strings.fileCopy.quickHintAll(TreeManager.getTrees().length) } }
+            : { format: 'all' });
+    },
 
-            for (const tree of trees) {
-                const data = await TreeManager.getTreeData(tree.id);
-                if (data) {
-                    let treeExport = applyLivingPrivacy(data, privacyMode);
-                    treeExport = applyContentOptions(treeExport, content);
-                    const entry: { name: string; data: StromData; auditLog?: AuditLog } = {
-                        name: tree.name,
-                        data: treeExport
-                    };
-                    if (includeAuditLog) {
-                        const log = await AuditLogManager.exportForTree(tree.id);
-                        if (log) entry.auditLog = log;
-                    }
-                    allData[tree.id] = entry;
+    /** Every tree into one JSON file (the "Export all" backup). Returns the file name. */
+    async downloadAllTreesJson(password: string | null, includeAuditLog: boolean, privacyMode: PrivacyMode, content: ContentOptions): Promise<string> {
+        const { applyLivingPrivacy, applyContentOptions } = await import('../privacy.js');
+        const trees = TreeManager.getTrees();
+        const allData: Record<string, { name: string; data: StromData; auditLog?: AuditLog }> = {};
+
+        for (const tree of trees) {
+            const data = await TreeManager.getTreeData(tree.id);
+            if (data) {
+                let treeExport = applyLivingPrivacy(data, privacyMode);
+                treeExport = applyContentOptions(treeExport, content);
+                const entry: { name: string; data: StromData; auditLog?: AuditLog } = {
+                    name: tree.name,
+                    data: treeExport
+                };
+                if (includeAuditLog) {
+                    const log = await AuditLogManager.exportForTree(tree.id);
+                    if (log) entry.auditLog = log;
                 }
+                allData[tree.id] = entry;
             }
+        }
 
-            let dataStr: string;
-            if (password) {
-                const { encrypt } = await import('../crypto.js');
-                const encrypted = await encrypt(JSON.stringify(allData), password);
-                dataStr = JSON.stringify(encrypted, null, 2);
-            } else {
-                dataStr = JSON.stringify(allData, null, 2);
-            }
+        let dataStr: string;
+        if (password) {
+            const { encrypt } = await import('../crypto.js');
+            const encrypted = await encrypt(JSON.stringify(allData), password);
+            dataStr = JSON.stringify(encrypted, null, 2);
+        } else {
+            dataStr = JSON.stringify(allData, null, 2);
+        }
 
-            const blob = new Blob([dataStr], { type: 'application/json' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'strom-all-trees.json';
-            a.click();
-            URL.revokeObjectURL(a.href);
-            if (privacyMode === 'full') TreeManager.noteFileCopy(Object.keys(allData) as TreeId[]);
-        }, true);
+        const fileName = 'strom-all-trees.json';
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        if (privacyMode === 'full') TreeManager.noteFileCopy(Object.keys(allData) as TreeId[]);
+        return fileName;
     },
 });

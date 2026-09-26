@@ -46,7 +46,15 @@ import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 
 /** A button on a storage notice. */
-interface NoticeAction { label: string; run: () => void }
+interface NoticeAction { label: string; run: () => void; /** A quiet text link instead of a button. */ link?: boolean }
+
+/** Which export the dialog is for (title and lead sentence). */
+export type ExportFormat = 'json' | 'html' | 'gedcom' | 'csv' | 'all';
+
+/** The dialog is the narrowed full backup (button says "Save to file"). */
+let exportQuick = false;
+/** The encryption block while taken out of the dialog (GEDCOM, CSV). */
+let detachedEncryptBlock: HTMLElement | null = null;
 
 export const encryptionUiMethods = uiModule({
     // ---- ENCRYPTION ----
@@ -530,7 +538,7 @@ export const encryptionUiMethods = uiModule({
         for (const a of action ? [action].flat() : []) {
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'pwa-update-btn';
+            btn.className = a.link ? 'link-button notice-link' : 'pwa-update-btn';
             btn.textContent = a.label;
             btn.addEventListener('click', () => a.run());
             el.appendChild(btn);
@@ -773,6 +781,13 @@ export const encryptionUiMethods = uiModule({
         document.querySelectorAll('#export-content-presets .content-preset').forEach(btn => {
             btn.classList.toggle('active', (btn as HTMLElement).dataset.preset === active);
         });
+        const summary = document.getElementById('export-content-summary-value');
+        if (summary) {
+            const p = strings.privacy;
+            summary.textContent = active === 'complete' ? p.presetComplete
+                : active === 'small' ? p.presetSmall
+                : active === 'skeleton' ? p.presetSkeleton : strings.encryption.contentCustom;
+        }
     },
 
     /** Apply a named preset to the four checkboxes, then refresh estimate + highlight. */
@@ -799,35 +814,65 @@ export const encryptionUiMethods = uiModule({
     showExportPasswordDialog(
         callback: (password: string | null) => void,
         includeAuditLogOption = false,
-        options: { defaultPrivacy?: PrivacyMode; passwordless?: boolean; content?: boolean } = {}
+        options: {
+            defaultPrivacy?: PrivacyMode; passwordless?: boolean; content?: boolean;
+            /** Which export: sets the title and the lead sentence. */
+            format?: ExportFormat;
+            /**
+             * The narrowed full backup (storage notice/dialog, asked to encrypt or
+             * app data encrypted): one sentence, the switch already on, no
+             * privacy or content choices.
+             */
+            quick?: { hint: string };
+        } = {}
     ): void {
         this.exportPasswordCallback = callback;
+        const quick = options.quick;
+        exportQuick = !!quick;
+        const format = options.format ?? 'json';
+        const e = strings.encryption;
+
+        const title = document.getElementById('export-dialog-title');
+        if (title) title.textContent = quick ? strings.fileCopy.save : e.exportTitle[format];
+        const hint = document.getElementById('export-dialog-hint');
+        if (hint) hint.textContent = quick ? quick.hint : e.exportLead[format];
+        const privacySection = document.getElementById('export-privacy-section');
+        if (privacySection) privacySection.style.display = quick ? 'none' : '';
 
         // Privacy mode selector: default per caller (share exports -> initials).
         const privacySelect = document.getElementById('export-privacy-mode') as HTMLSelectElement | null;
         if (privacySelect) privacySelect.value = options.defaultPrivacy ?? 'full';
 
-        // Passwordless mode (e.g. GEDCOM, which cannot be encrypted): hide the
-        // password inputs and the "export encrypted" button; only privacy applies.
+        // Encryption is an option, off by default; formats that cannot be
+        // encrypted (GEDCOM, CSV) do not render it at all.
         const passwordless = options.passwordless ?? false;
-        const pwGroup = document.getElementById('export-password-group');
-        const pwConfirmGroup = document.getElementById('export-password-confirm-group');
-        const encryptedBtn = document.getElementById('export-with-password-btn');
-        if (pwGroup) pwGroup.style.display = passwordless ? 'none' : '';
-        if (pwConfirmGroup) pwConfirmGroup.style.display = passwordless ? 'none' : '';
-        if (encryptedBtn) encryptedBtn.style.display = passwordless ? 'none' : '';
+        const block = this.exportEncryptBlock(!passwordless);
+        const appEncrypted = SettingsManager.isEncryptionEnabled();
+        const appHint = document.getElementById('export-app-encrypted-hint');
+        if (appHint) appHint.hidden = !(quick && appEncrypted);
+        const encryptToggle = document.getElementById('export-encrypt-toggle') as HTMLInputElement | null;
+        if (encryptToggle) encryptToggle.checked = !!quick;
+        this.toggleExportEncryption(!!quick, false);
 
         // Granular "Content" section (photos / attachments / notes / sources).
         // Formats that ignore content options (GEDCOM, CSV — passwordless) hide
-        // it; every archive/JSON/HTML export shows it, defaulting to all-on.
+        // it; every archive/JSON/HTML export shows it, defaulting to all-on. On
+        // phones it starts folded to one summary line.
         const contentSection = document.getElementById('export-content-section');
-        const showContent = options.content ?? !passwordless;
-        if (contentSection) contentSection.style.display = showContent ? 'block' : 'none';
-        if (showContent) {
+        const showContent = !quick && (options.content ?? !passwordless);
+        if (contentSection) {
+            contentSection.style.display = showContent ? 'block' : 'none';
+            contentSection.classList.remove('is-expanded');
+        }
+        document.getElementById('export-content-edit')?.setAttribute('aria-expanded', 'false');
+        // A quick backup takes everything; so does an export that shows the section.
+        if (showContent || quick) {
             for (const id of ['export-content-photos', 'export-content-attachments', 'export-content-notes', 'export-content-sources']) {
                 const el = document.getElementById(id) as HTMLInputElement | null;
                 if (el) el.checked = true;
             }
+        }
+        if (showContent) {
             // Per-category sizes computed once here; toggling never re-stringifies.
             this.readExportContentSizes(DataManager.getData());
             this.updateExportSizeEstimate();
@@ -835,9 +880,9 @@ export const encryptionUiMethods = uiModule({
         }
 
         const modal = document.getElementById('export-password-modal');
-        const input = document.getElementById('export-password-input') as HTMLInputElement;
-        const confirm = document.getElementById('export-password-confirm') as HTMLInputElement;
-        const error = document.getElementById('export-password-error');
+        const input = block.querySelector<HTMLInputElement>('#export-password-input');
+        const confirm = block.querySelector<HTMLInputElement>('#export-password-confirm');
+        const error = block.querySelector<HTMLElement>('#export-password-error');
 
         if (!modal || !input || !confirm) return;
 
@@ -873,7 +918,9 @@ export const encryptionUiMethods = uiModule({
         }
 
         modal.classList.add('active');
-        input.focus();
+        // The action has the focus — the password only when encrypting was asked for.
+        if (quick) input.focus();
+        else (document.getElementById('export-submit-btn') as HTMLButtonElement | null)?.focus();
 
         // Handle Enter key - first input focuses second, second confirms
         input.onkeydown = (e: KeyboardEvent) => {
@@ -904,6 +951,62 @@ export const encryptionUiMethods = uiModule({
     /**
      * Export without password (no encryption)
      */
+    /**
+     * The encryption block (switch + password fields), in the dialog or taken
+     * out of it for formats that cannot be encrypted. Returns it either way.
+     */
+    exportEncryptBlock(present: boolean): HTMLElement {
+        const block = document.getElementById('export-encrypt-block') ?? detachedEncryptBlock!;
+        const buttons = document.querySelector('#export-password-modal .export-buttons');
+        if (present && !block.isConnected && buttons) buttons.before(block);
+        if (!present && block.isConnected) {
+            block.remove();
+            detachedEncryptBlock = block;
+        }
+        return block;
+    },
+
+    /**
+     * Show the password fields only while "Encrypt with a password" is on.
+     * Turning it off empties them; the button says what it will do.
+     */
+    toggleExportEncryption(on: boolean, fromUser = true): void {
+        const toggle = document.getElementById('export-encrypt-toggle') as HTMLInputElement | null;
+        toggle?.setAttribute('aria-checked', String(on));
+        for (const id of ['export-password-group', 'export-password-confirm-group']) {
+            const el = document.getElementById(id);
+            if (el) el.hidden = !on;
+        }
+        const input = document.getElementById('export-password-input') as HTMLInputElement | null;
+        const confirm = document.getElementById('export-password-confirm') as HTMLInputElement | null;
+        const error = document.getElementById('export-password-error');
+        if (!on) {
+            if (input) input.value = '';
+            if (confirm) confirm.value = '';
+            if (error) error.style.display = 'none';
+        }
+        const btn = document.getElementById('export-submit-btn');
+        if (btn) {
+            const f = strings.fileCopy;
+            const en = strings.encryption;
+            btn.textContent = exportQuick ? (on ? f.saveEncryptedBtn : f.save) : (on ? en.exportEncryptedBtn : en.exportBtn);
+        }
+        if (fromUser) (on ? input : toggle)?.focus();
+    },
+
+    /** Phones: unfold the content choices from their one-line summary. */
+    expandExportContent(): void {
+        document.getElementById('export-content-section')?.classList.add('is-expanded');
+        document.getElementById('export-content-edit')?.setAttribute('aria-expanded', 'true');
+    },
+
+    /** The dialog's one button: encrypted when ticked, else a plain file. */
+    confirmExport(): void {
+        const encrypt = (document.getElementById('export-encrypt-toggle') as HTMLInputElement | null)?.checked;
+        if (encrypt) this.confirmExportPassword();
+        else this.exportWithoutPassword();
+    },
+
     exportWithoutPassword(): void {
         if (!this.exportPasswordCallback) return;
 

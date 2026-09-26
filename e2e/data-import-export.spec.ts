@@ -94,7 +94,7 @@ test('GEDCOM export and re-import through the UI preserves names and relations',
     await pwd.locator('#export-privacy-mode').selectOption('full');
     const [gedDownload] = await Promise.all([
         page.waitForEvent('download'),
-        pwd.getByRole('button', { name: 'Export without encryption' }).click(),
+        pwd.locator('#export-submit-btn').click(),
     ]);
     const gedPath = await gedDownload.path();
     const ged = readFileSync(gedPath, 'utf-8');
@@ -135,7 +135,7 @@ test('focus export writes only the focused branch, not other families', async ({
     await pwd.locator('#export-privacy-mode').selectOption('full');
     const [download] = await Promise.all([
         page.waitForEvent('download'),
-        pwd.getByRole('button', { name: 'Export without encryption' }).click(),
+        pwd.locator('#export-submit-btn').click(),
     ]);
     const data = JSON.parse(readFileSync(await download.path(), 'utf-8'));
     const names = Object.values(data.persons).map((p: { firstName: string }) => p.firstName);
@@ -195,11 +195,12 @@ test('encrypted JSON import: wrong password shows an error, retry with the right
     await page.evaluate(() => window.Strom.UI.exportTargetTreeJSON());
     const pwd = page.locator('#export-password-modal');
     await expect(pwd).toBeVisible();
+    await pwd.locator('#export-encrypt-toggle').check();
     await pwd.locator('#export-password-input').fill('correct-horse');
     await pwd.locator('#export-password-confirm').fill('correct-horse');
     const [download] = await Promise.all([
         page.waitForEvent('download'),
-        pwd.locator('#export-with-password-btn').click(),
+        pwd.locator('#export-submit-btn').click(),
     ]);
     const filePath = await download.path();
 
@@ -235,7 +236,7 @@ test('CSV export downloads a localized person table', async ({ page }) => {
     await pwd.locator('#export-privacy-mode').selectOption('full');
     const [download] = await Promise.all([
         page.waitForEvent('download'),
-        pwd.getByRole('button', { name: 'Export without encryption' }).click(),
+        pwd.locator('#export-submit-btn').click(),
     ]);
     expect(download.suggestedFilename()).toMatch(/\.csv$/);
     const path = await download.path();

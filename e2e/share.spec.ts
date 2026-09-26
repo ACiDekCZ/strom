@@ -83,7 +83,7 @@ test('a plain (non-shared) export shows no welcome screen', async ({ page, brows
     await expect(pwd).toBeVisible();
     const [download] = await Promise.all([
         page.waitForEvent('download'),
-        pwd.getByRole('button', { name: 'Export without encryption' }).click(),
+        pwd.locator('#export-submit-btn').click(),
     ]);
     const out = testInfo.outputPath('plain.html');
     await download.saveAs(out);

@@ -118,7 +118,7 @@ async function confirmPlainExport(page: Page, privacy: 'full' | 'initials' | 'mi
     const pwd = page.locator('#export-password-modal');
     await expect(pwd).toBeVisible();
     await pwd.locator('#export-privacy-mode').selectOption(privacy);
-    return downloadFrom(page, () => pwd.getByRole('button', { name: 'Export without encryption' }).click());
+    return downloadFrom(page, () => pwd.locator('#export-submit-btn').click());
 }
 
 // ---------------------------------------------------------------------------

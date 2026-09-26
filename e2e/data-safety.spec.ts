@@ -295,7 +295,7 @@ test.describe('"Export all" backups restore every tree', () => {
         await pwd.locator('#export-privacy-mode').selectOption('full');
         const [download] = await Promise.all([
             page.waitForEvent('download'),
-            pwd.getByRole('button', { name: 'Export without encryption' }).click(),
+            pwd.locator('#export-submit-btn').click(),
         ]);
         return download;
     }
@@ -366,7 +366,7 @@ test('reopening an exported HTML file offers the stored tree instead of adding a
     await pwd.locator('#export-privacy-mode').selectOption('full');
     const [download] = await Promise.all([
         page.waitForEvent('download'),
-        pwd.getByRole('button', { name: 'Export without encryption' }).click(),
+        pwd.locator('#export-submit-btn').click(),
     ]);
     const file = testInfo.outputPath('family.html');
     await download.saveAs(file);

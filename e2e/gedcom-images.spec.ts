@@ -82,7 +82,7 @@ async function exportGedcom(page: Page): Promise<string> {
     }
     const [download] = await Promise.all([
         page.waitForEvent('download'),
-        pwd.getByRole('button', { name: 'Export without encryption' }).click(),
+        pwd.locator('#export-submit-btn').click(),
     ]);
     return download.path();
 }

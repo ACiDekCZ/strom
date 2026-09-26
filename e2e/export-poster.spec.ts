@@ -20,7 +20,7 @@ test('export dialog: privacy select applies; JSON download hides living names wi
 
     const [download] = await Promise.all([
         page.waitForEvent('download'),
-        pwd.getByRole('button', { name: 'Export without encryption' }).click(),
+        pwd.locator('#export-submit-btn').click(),
     ]);
     const content = readFileSync(await download.path(), 'utf-8');
     const data = JSON.parse(content);

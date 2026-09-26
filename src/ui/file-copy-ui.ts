@@ -57,6 +57,12 @@ function unsavedTreeList(): TreeMetadata[] {
 
 type PillState = 'unsaved' | 'saved' | 'persistent';
 
+/** A complete backup: every kind of content (the quick save never filters). */
+const ALL_CONTENT = { photos: true, attachments: true, notes: true, sources: true };
+
+/** When the quick save last showed its own "Saved to file x" toast. */
+let quickSaveAnnouncedAt = 0;
+
 /** Whether the "only in browser" state was showing at the last render. */
 let unsavedShown = false;
 /** The toolbar pill's brief "Saved to file" after an export. */
@@ -163,7 +169,8 @@ export const fileCopyMethods = uiModule({
      */
     flashSavedToFile(): void {
         if (isBottomBarRegime()) {
-            if (!this.activeFileHandleName) this.showToast(strings.fileCopy.savedShort);
+            const announced = Date.now() - quickSaveAnnouncedAt < 3000;
+            if (!this.activeFileHandleName && !announced) this.showToast(strings.fileCopy.savedShort);
             return;
         }
         const el = document.getElementById('unsaved-copy-indicator');
@@ -227,11 +234,18 @@ export const fileCopyMethods = uiModule({
             : advice === 'ios-safari' ? s.noticeIosSafari(treeName)
             : s.notice(treeName);
         const close = () => document.getElementById('file-copy-notice')?.remove();
-        const actions = [{ label: s.save, run: () => { close(); this.saveTreeCopy(); } }];
+        const actions: { label: string; run: () => void; link?: boolean }[] = [
+            { label: s.save, run: () => { close(); this.saveTreeCopy(); } },
+        ];
         if (advice === 'install') {
             actions.push({ label: s.install, run: () => { close(); void this.installApp(); } });
         } else {
             actions.push({ label: s.details, run: () => { close(); void this.showStorageStatusDialog(); } });
+        }
+        // Encrypting is an option, never the default (with the app's data
+        // encrypted, "Save" itself opens the encrypted dialog).
+        if (!SettingsManager.isEncryptionEnabled() && !this.activeFileHandleName) {
+            actions.push({ label: s.encryptLink, link: true, run: () => { close(); this.saveTreeCopyEncrypted(); } });
         }
         this.showStorageNotice('file-copy-notice', message, actions);
         pulse(document.getElementById('unsaved-copy-indicator'));
@@ -241,10 +255,10 @@ export const fileCopyMethods = uiModule({
     },
 
     /**
-     * Save the open tree where it counts as a copy: into its attached working
-     * file, else a full JSON backup (all data, all content; encryption optional)
-     * — not the export menu, whose share formats default to reduced privacy
-     * and would not count.
+     * One click to a copy that counts: into the attached working file, else a
+     * complete JSON download (all data, all content) with no dialog. With the
+     * app's data encrypted the narrowed dialog opens instead, encryption on —
+     * a plain file would bypass the protection the user turned on.
      */
     saveTreeCopy(): void {
         if (this.activeFileHandleName) {
@@ -253,13 +267,40 @@ export const fileCopyMethods = uiModule({
         }
         const treeId = DataManager.getCurrentTreeId();
         if (!treeId || DataManager.isViewMode()) return;
-        this.exportTargetTreeId = treeId;
-        void this.exportTargetTreeJSON();
+        if (SettingsManager.isEncryptionEnabled()) {
+            this.saveTreeCopyEncrypted();
+            return;
+        }
+        void DataManager.exportTreeJSON(treeId, null, 'full', ALL_CONTENT).then(file => {
+            if (file) this.announceQuickSave(file);
+        });
     },
 
-    /** Every tree into one backup file (the "Export all" JSON, full data). */
+    /** The narrowed dialog for the open tree, "Encrypt with a password" on. */
+    saveTreeCopyEncrypted(): void {
+        const treeId = DataManager.getCurrentTreeId();
+        if (!treeId || DataManager.isViewMode()) return;
+        this.exportTargetTreeId = treeId;
+        void this.exportTargetTreeJSON(true);
+    },
+
+    /** Every tree into one complete JSON file, one click (see saveTreeCopy). */
     saveAllTreesCopy(): void {
-        void this.exportAllAsJson();
+        if (SettingsManager.isEncryptionEnabled()) {
+            this.saveAllTreesCopyEncrypted();
+            return;
+        }
+        void this.downloadAllTreesJson(null, false, 'full', ALL_CONTENT).then(file => this.announceQuickSave(file));
+    },
+
+    saveAllTreesCopyEncrypted(): void {
+        void this.exportAllAsJson(true);
+    },
+
+    /** "Saved to file x.json" (the brief "Saved" toast of the indicator yields to it). */
+    announceQuickSave(file: string): void {
+        quickSaveAnnouncedAt = Date.now();
+        this.showToast(strings.fileCopy.savedToast(file), 4000);
     },
 
     async installApp(): Promise<void> {
@@ -361,6 +402,11 @@ export const fileCopyMethods = uiModule({
             saveAll.hidden = !(allPrimary || unsaved.length >= 2);
             saveAll.classList.toggle('primary', allPrimary);
             saveAll.classList.toggle('secondary', !allPrimary);
+        }
+        const encrypt = document.getElementById('storage-status-encrypt');
+        if (encrypt) {
+            encrypt.hidden = viewMode || SettingsManager.isEncryptionEnabled() || (!tree && !allPrimary);
+            encrypt.dataset.target = allPrimary ? 'all' : 'tree';
         }
         this.renderUnsavedIndicator();
     },

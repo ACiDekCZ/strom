@@ -46,18 +46,13 @@ test('edits no file holds: a notice at once, the toolbar icon until the next exp
     await expect(notice).toHaveCount(0);
     await expect(indicator).toBeHidden();
 
-    // The first edit: notice + icon; "Save to file" goes straight to a full
-    // JSON backup of this tree (the encryption step, privacy "all data").
+    // The first edit: notice + icon (its one-click save: export-dialog.spec).
     await addPerson(page, 'First');
     await expect(notice).toBeVisible();
     await expect(notice).toContainText('Persistence');
     await expect(indicator).toBeVisible();
-    await notice.getByRole('button', { name: 'Save to file' }).click();
+    await notice.locator('.pwa-update-close').click();
     await expect(notice).toHaveCount(0);
-    const pwd = page.locator('#export-password-modal');
-    await expect(pwd).toBeVisible();
-    await expect(pwd.locator('#export-privacy-mode')).toHaveValue('full');
-    await pwd.locator('.close-btn').first().click();
 
     // More edits in the same stretch stay quiet (the icon stays).
     await addPerson(page, 'Second');
@@ -191,14 +186,13 @@ test('the indicator covers every tree; the dialog names them and saves all', asy
     await expect(dialog.locator('.storage-status-trees')).toContainText('First tree');
     await expect(dialog.locator('#storage-status-save')).toBeHidden();
     await expect(dialog.locator('#storage-status-save-all')).toHaveClass(/primary/);
+    // One click, no dialog.
     const [download] = await Promise.all([
         page.waitForEvent('download'),
-        (async () => {
-            await dialog.getByRole('button', { name: 'Save all trees' }).click();
-            await page.locator('#export-password-modal').getByRole('button', { name: 'Export without encryption' }).click();
-        })(),
+        dialog.getByRole('button', { name: 'Save all trees' }).click(),
     ]);
     expect(download.suggestedFilename()).toBe('strom-all-trees.json');
+    await expect(page.locator('#export-password-modal')).not.toHaveClass(/active/);
     await expect(indicator).toHaveClass(/is-saved/);
 });
 

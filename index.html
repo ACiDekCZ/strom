@@ -2430,7 +2430,9 @@
             margin-bottom: 6px;
             font-weight: 500;
         }
-        .modal input, .modal select, .modal textarea {
+        /* Text fields fill the row; checkboxes and radios keep their own size
+           (a full-width checkbox pushed the export content labels out). */
+        .modal input:not([type="checkbox"]):not([type="radio"]), .modal select, .modal textarea {
             width: 100%;
             box-sizing: border-box;
             padding: 10px 12px;
@@ -4223,6 +4225,11 @@
         }
         .storage-notice.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         .storage-notice .pwa-update-btn { flex-shrink: 0; }
+        .storage-notice .notice-link { flex-shrink: 0; font-size: 13px; color: var(--text-light); text-decoration: none; padding: 6px 2px; }
+        .storage-notice .notice-link:hover { text-decoration: underline; }
+        .storage-status-encrypt { margin-right: auto; font-size: 13px; color: var(--text-light); text-decoration: none; }
+        .storage-status-encrypt:hover { text-decoration: underline; }
+        .storage-status-encrypt[hidden] { display: none; }
         @media (min-width: 500px) and (max-width: 900px) {
             .storage-notice { top: 60px; }
         }
@@ -4233,7 +4240,8 @@
             .storage-notice:has(.pwa-update-btn + .pwa-update-btn) { flex-wrap: wrap; }
             .storage-notice:has(.pwa-update-btn + .pwa-update-btn) > span { flex: 1 1 calc(100% - 64px); }
             .storage-notice:has(.pwa-update-btn + .pwa-update-btn) > .pwa-update-close { order: 1; }
-            .storage-notice:has(.pwa-update-btn + .pwa-update-btn) > .pwa-update-btn { order: 2; }
+            .storage-notice:has(.pwa-update-btn + .pwa-update-btn) > .pwa-update-btn,
+            .storage-notice:has(.pwa-update-btn + .pwa-update-btn) > .notice-link { order: 2; }
         }
 
         /* Family wizard offer (non-blocking action toast) */
@@ -5155,6 +5163,10 @@
         .content-check input {
             flex-shrink: 0;
         }
+        .form-group label.content-check {
+            display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; margin: 0;
+        }
+        .form-group .content-check input[type="checkbox"] { margin: 2px 0 0; }
         /* Mobile (<500px): presets and checkboxes each stack full width. */
         @media (max-width: 499px) {
             .content-presets { flex-direction: column; }
@@ -9039,6 +9051,25 @@
             line-height: 1.5;
             color: var(--text-light);
         }
+        .export-encrypt-block { margin: 4px 0 0; padding-top: 8px; border-top: 1px solid var(--divider); }
+        .modal label.export-encrypt-row {
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+            min-height: 44px; margin: 0 0 8px; cursor: pointer;
+        }
+        .export-encrypt-row .settings-name { font-size: 14px; color: var(--text); font-weight: 500; }
+        .export-app-encrypted-hint { margin: -4px 0 10px; font-size: 12px; line-height: 1.45; color: var(--text-light); }
+        .export-app-encrypted-hint[hidden], #export-password-group[hidden], #export-password-confirm-group[hidden] { display: none; }
+        /* Content: one summary line on phones until "Edit" expands it. */
+        .export-content-summary { display: none; }
+        @media (max-width: 499px) {
+            #export-content-section:not(.is-expanded) .export-content-summary {
+                display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px;
+            }
+            #export-content-section:not(.is-expanded) .content-presets,
+            #export-content-section:not(.is-expanded) .content-checks,
+            #export-content-section:not(.is-expanded) .content-header { display: none; }
+            #export-content-section .export-content-summary .link-button { padding: 10px 0; }
+        }
         .snapshots-persistence .link-button { font-size: inherit; padding: 0; }
         .snapshot-delete { padding: 4px 8px; }
         .snapshots-auto { margin: 0 0 12px; }
@@ -10512,6 +10543,7 @@
             </div>
             <div id="storage-status-body" class="storage-status-body"></div>
             <div class="buttons">
+                <button type="button" class="link-button storage-status-encrypt" id="storage-status-encrypt" hidden onclick="window.Strom.UI.closeStorageStatusDialog(); if (this.dataset.target === 'all') window.Strom.UI.saveAllTreesCopyEncrypted(); else window.Strom.UI.saveTreeCopyEncrypted()" data-i18n="fileCopy.encryptLink"></button>
                 <button class="secondary" id="storage-status-install" hidden onclick="window.Strom.UI.installApp()" data-i18n="fileCopy.install"></button>
                 <button class="secondary" id="storage-status-save-all" hidden onclick="window.Strom.UI.closeStorageStatusDialog(); window.Strom.UI.saveAllTreesCopy()" data-i18n="fileCopy.saveAll"></button>
                 <button class="primary" id="storage-status-save" onclick="window.Strom.UI.closeStorageStatusDialog(); window.Strom.UI.saveTreeCopy()" data-i18n="fileCopy.save"></button>
@@ -11537,10 +11569,10 @@
     <div class="modal-overlay" id="export-password-modal">
         <div class="modal modal--md" role="dialog" aria-modal="true">
             <div class="modal-header">
-                <h2 data-i18n="encryption.exportPassword">Export encryption</h2>
+                <h2 id="export-dialog-title">Export</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeExportPasswordDialog()">&times;</button>
             </div>
-            <p class="modal-description" data-i18n="encryption.exportPasswordHint">Set a password to encrypt the file, or export without encryption.</p>
+            <p class="modal-description" id="export-dialog-hint"></p>
             <div id="export-privacy-section" class="form-group">
                 <label for="export-privacy-mode" data-i18n="privacy.label" data-i18n-title="privacy.tooltip">Privacy of living people</label>
                 <select id="export-privacy-mode">
@@ -11550,15 +11582,6 @@
                     <option value="anonymous" data-i18n="privacy.modeAnonymous"></option>
                 </select>
             </div>
-            <div class="form-group" id="export-password-group">
-                <label for="export-password-input" data-i18n="encryption.setPassword">Set password</label>
-                <input type="password" id="export-password-input" autocomplete="off" placeholder="">
-            </div>
-            <div class="form-group" id="export-password-confirm-group">
-                <label for="export-password-confirm" data-i18n="encryption.confirmPassword">Confirm password</label>
-                <input type="password" id="export-password-confirm" autocomplete="off" placeholder="">
-            </div>
-            <div id="export-password-error" class="form-error" style="display: none;"></div>
             <div id="export-audit-log-section" class="form-group" style="display: none;">
                 <label class="settings-checkbox" style="margin-top: 8px;">
                     <input type="checkbox" id="export-audit-log-toggle">
@@ -11569,6 +11592,10 @@
                 <div class="content-header">
                     <label data-i18n="privacy.contentLabel" data-i18n-title="privacy.contentTooltip">Content</label>
                     <span class="content-size" id="export-content-size"></span>
+                </div>
+                <div class="export-content-summary" id="export-content-summary">
+                    <span><span data-i18n="privacy.contentLabel">Content</span>: <strong id="export-content-summary-value"></strong></span>
+                    <button type="button" class="link-button" id="export-content-edit" aria-expanded="false" aria-controls="export-content-presets" onclick="window.Strom.UI.expandExportContent()" data-i18n="encryption.contentEdit">Edit</button>
                 </div>
                 <div class="content-presets" id="export-content-presets">
                     <button type="button" class="content-preset" data-preset="complete" onclick="window.Strom.UI.applyExportPreset('complete')" data-i18n="privacy.presetComplete">Complete archive</button>
@@ -11594,9 +11621,24 @@
                     </label>
                 </div>
             </div>
+            <div id="export-encrypt-block" class="export-encrypt-block">
+                <label class="settings-checkbox export-encrypt-row" id="export-encrypt-row">
+                    <span class="settings-text"><span class="settings-name" data-i18n="encryption.encryptToggle">Encrypt with a password</span></span>
+                    <input type="checkbox" role="switch" aria-checked="false" id="export-encrypt-toggle" onchange="window.Strom.UI.toggleExportEncryption(this.checked)">
+                </label>
+                <p class="export-app-encrypted-hint" id="export-app-encrypted-hint" data-i18n="fileCopy.appEncryptedHint" hidden></p>
+                <div class="form-group" id="export-password-group" hidden>
+                    <label for="export-password-input" data-i18n="encryption.setPassword">Set password</label>
+                    <input type="password" id="export-password-input" autocomplete="new-password" placeholder="">
+                </div>
+                <div class="form-group" id="export-password-confirm-group" hidden>
+                    <label for="export-password-confirm" data-i18n="encryption.confirmPassword">Confirm password</label>
+                    <input type="password" id="export-password-confirm" autocomplete="new-password" placeholder="">
+                </div>
+                <div id="export-password-error" class="form-error" style="display: none;"></div>
+            </div>
             <div class="buttons export-buttons">
-                <button class="secondary" onclick="window.Strom.UI.exportWithoutPassword()" data-i18n="encryption.exportWithoutPassword">Export without encryption</button>
-                <button class="primary" id="export-with-password-btn" onclick="window.Strom.UI.confirmExportPassword()" data-i18n="encryption.exportWithPassword">Export encrypted</button>
+                <button class="primary" id="export-submit-btn" onclick="window.Strom.UI.confirmExport()" data-i18n="encryption.exportBtn">Export</button>
             </div>
         </div>
     </div>
