@@ -817,13 +817,15 @@ export const miscMethods = uiModule({
                 return;
             }
 
-            // Ctrl/Cmd+S: save into the attached file (only when the tree is
-            // linked to one — otherwise leave the browser default).
-            if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
-                if (this.activeFileHandleName) {
-                    e.preventDefault();
-                    void this.saveActiveTreeToFile();
-                }
+            // Cmd+S (Mac) / Ctrl+S (elsewhere): "Save to file" — into the
+            // attached working file, else a complete JSON of the open tree
+            // (the browser's "Save page as" would not save the tree). A shared
+            // view copy keeps the browser default.
+            const saveMod = this.isMacPlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+            if (saveMod && !e.altKey && !e.shiftKey && (e.key === 's' || e.key === 'S')) {
+                if (DataManager.isViewMode() || DataManager.isLocked() || !DataManager.getCurrentTreeId()) return;
+                e.preventDefault();
+                this.saveTreeCopy();
                 return;
             }
 
@@ -1195,7 +1197,8 @@ export const miscMethods = uiModule({
     },
 
     /** Keyboard hint chip text for undo / redo, per platform. */
-    shortcutHint(action: 'undo' | 'redo'): string {
+    shortcutHint(action: 'undo' | 'redo' | 'save'): string {
+        if (action === 'save') return this.isMacPlatform() ? '⌘S' : 'Ctrl+S';
         if (this.isMacPlatform()) return action === 'undo' ? '⌘Z' : '⇧⌘Z';
         return action === 'undo' ? 'Ctrl+Z' : 'Ctrl+Y';
     },

@@ -93,6 +93,26 @@ for (const [format, method, title] of [
     });
 }
 
+test('Cmd+S / Ctrl+S saves the open tree to a file, not the page', async ({ page }) => {
+    await refusePersistence(page);
+    await openApp(page);
+    await importBigTree(page, 'Keys');
+    await addPerson(page, 'First');
+    await expect(page.locator('#unsaved-copy-indicator')).toBeVisible();
+    // The app picks the modifier by platform (⌘ on a Mac, Ctrl elsewhere).
+    const mod = await page.evaluate(() => window.Strom.UI.isMacPlatform() ? 'Meta' : 'Control');
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.keyboard.press(`${mod}+s`),
+    ]);
+    expect(download.suggestedFilename()).toBe('keys.json');
+    const saved = JSON.parse(readFileSync(await download.path(), 'utf-8'));
+    expect(Object.values(saved.persons).some((p: unknown) => (p as { firstName: string }).firstName === 'First')).toBe(true);
+    await expect(page.locator('.toast').last()).toContainText('Saved to file keys.json');
+    await expect(page.locator('#unsaved-copy-indicator')).toHaveClass(/is-saved/);
+    await expect(page.locator('#export-password-modal')).not.toHaveClass(/active/);
+});
+
 test('"Where your data is" saves with one click: a complete JSON, a toast, "Saved"', async ({ page }) => {
     await refusePersistence(page);
     await openApp(page);

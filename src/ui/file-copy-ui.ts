@@ -166,7 +166,7 @@ export const fileCopyMethods = uiModule({
                 if (savedFlashTimer) { clearTimeout(savedFlashTimer); savedFlashTimer = null; }
                 el.classList.remove('is-fading');
                 setPillState(el, 'unsaved');
-                el.title = strings.fileCopy.indicatorTitle;
+                el.title = `${strings.fileCopy.indicatorTitle} (${this.shortcutHint('save')})`;
                 el.setAttribute('aria-label', strings.fileCopy.indicatorTitle);
                 el.style.display = 'inline-flex';
             } else if (!savedFlashTimer) {
@@ -275,7 +275,14 @@ export const fileCopyMethods = uiModule({
         link.className = 'link-button file-copy-notice-link';
         link.textContent = strings.fileCopy.details;
         link.addEventListener('click', () => { void this.showStorageStatusDialog(); });
-        body.append(text, link);
+        // The keyboard way to save, where there is a keyboard (CSS hides it on touch).
+        const kbd = document.createElement('span');
+        kbd.className = 'file-copy-notice-kbd';
+        kbd.textContent = strings.fileCopy.saveShortcut(this.shortcutHint('save'));
+        const links = document.createElement('div');
+        links.className = 'file-copy-notice-links';
+        links.append(link, kbd);
+        body.append(text, links);
         const close = document.createElement('button');
         close.type = 'button';
         close.className = 'file-copy-notice-close';
@@ -437,6 +444,7 @@ export const fileCopyMethods = uiModule({
         if (save) {
             save.textContent = this.activeFileHandleName ? strings.fileAccess.saveToFile : s.save;
             save.hidden = !tree || viewMode || allPrimary;
+            save.title = this.shortcutHint('save');
         }
         const saveAll = document.getElementById('storage-status-save-all');
         if (saveAll) {
