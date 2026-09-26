@@ -185,7 +185,12 @@ test('the indicator covers every tree; the dialog names them and saves all', asy
     await expect(indicator).toBeVisible();
     await indicator.click();
     const dialog = page.locator('#storage-status-modal');
-    await expect(dialog).toContainText('These trees also have changes that are only in the browser: “First tree”');
+    // Only another tree is unsaved: a list, and "Save all trees" is the primary action.
+    await expect(dialog.locator('.storage-status-list-title')).toHaveText('Not saved to a file yet');
+    await expect(dialog.locator('.storage-status-trees li')).toHaveCount(1);
+    await expect(dialog.locator('.storage-status-trees')).toContainText('First tree');
+    await expect(dialog.locator('#storage-status-save')).toBeHidden();
+    await expect(dialog.locator('#storage-status-save-all')).toHaveClass(/primary/);
     const [download] = await Promise.all([
         page.waitForEvent('download'),
         (async () => {
@@ -195,4 +200,61 @@ test('the indicator covers every tree; the dialog names them and saves all', asy
     ]);
     expect(download.suggestedFilename()).toBe('strom-all-trees.json');
     await expect(indicator).toHaveClass(/is-saved/);
+});
+
+test('"Save all trees" only when two or more trees are unsaved; the open one first', async ({ page }) => {
+    await stubPersistence(page, false);
+    await openApp(page);
+    await importBigTree(page, 'One');
+    await addPerson(page, 'A');
+    await page.locator('#unsaved-copy-indicator').click();
+    const dialog = page.locator('#storage-status-modal');
+    await expect(dialog.locator('#storage-status-save')).toBeVisible();
+    await expect(dialog.locator('#storage-status-save-all')).toBeHidden();
+    await expect(dialog.locator('.storage-status-trees')).toHaveCount(0);
+    await page.evaluate(() => window.Strom.UI.closeStorageStatusDialog());
+
+    await importBigTree(page, 'Two');
+    await addPerson(page, 'B');
+    await page.locator('#unsaved-copy-indicator').click();
+    await expect(dialog.locator('#storage-status-save')).toBeVisible();
+    await expect(dialog.locator('#storage-status-save-all')).toBeVisible();
+    await expect(dialog.locator('#storage-status-save-all')).not.toHaveClass(/primary/);
+    const rows = dialog.locator('.storage-status-trees li');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toContainText('Two');
+    await expect(rows.first().locator('.tree-badge')).toHaveText('open');
+});
+
+for (const width of [360, 768]) {
+    test(`the "More" dots sit on the icon's corner at ${width}px, safe area or not`, async ({ page }) => {
+        await stubPersistence(page, false);
+        await page.setViewportSize({ width, height: 800 });
+        await openApp(page);
+        await importBigTree(page, 'Dots');
+        await addPerson(page, 'A');
+        for (const pad of [0, 34]) {
+            await page.evaluate((p) => { (document.querySelector('.bottom-bar') as HTMLElement).style.paddingBottom = `${p}px`; }, pad);
+            const gap = await page.evaluate(() => {
+                const icon = document.querySelector('#bb-view-more .bottom-bar-icon')!.getBoundingClientRect();
+                const dot = document.getElementById('bottom-bar-more-storage-dot')!.getBoundingClientRect();
+                return { dx: Math.abs(dot.right - (icon.right + 4)), dy: Math.abs(dot.top - (icon.top - 2)) };
+            });
+            expect(gap.dx, `pad ${pad}: dot x`).toBeLessThanOrEqual(6);
+            expect(gap.dy, `pad ${pad}: dot y`).toBeLessThanOrEqual(6);
+        }
+        // The top ⋯ carries the state too (the bottom bar may be off screen).
+        await expect(page.locator('.mobile-more-btn .mobile-more-storage-dot')).toBeVisible();
+    });
+}
+
+test('1100px: the icon pill leaves the tree switcher its full name', async ({ page }) => {
+    await stubPersistence(page, false);
+    await page.setViewportSize({ width: 1100, height: 800 });
+    await openApp(page);
+    await importBigTree(page, 'Novákovi');
+    await addPerson(page, 'A');
+    await expect(page.locator('#unsaved-copy-indicator')).toBeVisible();
+    const fits = await page.locator('.tree-switcher-btn .tree-name').evaluate(el => el.scrollWidth <= el.clientWidth);
+    expect(fits).toBe(true);
 });

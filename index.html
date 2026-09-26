@@ -4089,7 +4089,9 @@
         .toolbar .storage-pill:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .toolbar .storage-pill.is-fading { opacity: 0; transition: opacity 0.3s; }
         @media (max-width: 1280px) {
-            .toolbar .storage-pill { width: 28px; padding: 0; justify-content: center; }
+            /* Every pixel here comes out of the tree switcher's name. */
+            .toolbar .storage-pill { width: 26px; height: 26px; padding: 0; justify-content: center; margin-left: 2px; }
+            body.storage-unsaved .toolbar h1.app-wordmark { margin-right: 4px; }
             .toolbar .storage-pill .storage-pill-label { display: none; }
         }
         @media (max-width: 1024px) {
@@ -4105,6 +4107,10 @@
         @media (prefers-reduced-motion: reduce) {
             .storage-pulse { animation: none; }
         }
+        /* Edits only in the browser: the dots on "More" (bottom bar and the top
+           ⋯) follow one body class, set with the toolbar pill. */
+        .storage-dot { display: none; }
+        body.storage-unsaved .storage-dot { display: block; }
         /* The "More" tab's dot for this state outranks the anniversaries dot. */
         .bottom-bar-more-dot.is-storage {
             width: 8px; height: 8px; background: var(--warning);
@@ -4126,10 +4132,18 @@
         .bottom-sheet-storage-chevron { font-size: 20px; line-height: 1; }
         .storage-status-state { margin: 0 0 12px; }
         .storage-status-body p { margin: 0 0 10px; font-size: 14px; line-height: 1.5; }
-        .storage-status-body p:first-of-type { color: var(--text-light); }
+        .storage-status-body p.storage-status-intro { color: var(--text-light); }
+        .storage-status-body p.storage-status-list-title { margin-bottom: 6px; font-weight: 600; }
+        .storage-status-trees { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+        .storage-status-trees li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .storage-status-tree-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+        .storage-status-tree-when { margin-left: auto; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
         #storage-status-modal .buttons button[hidden] { display: none; }
         @media (max-width: 499px) {
             .storage-status-body p { font-size: 13px; }
+            /* Up to three actions: stacked full width, the primary on top. */
+            #storage-status-modal .buttons { flex-direction: column-reverse; align-items: stretch; }
+            #storage-status-modal .buttons button { width: 100%; margin: 0; }
         }
 
         /* PWA update prompt (non-blocking, same shape as the family offer) */
@@ -5579,6 +5593,12 @@
             align-items: center; justify-content: center;
         }
         .toolbar .mobile-more-btn:hover { background: var(--hover-bg); color: var(--text); }
+        .toolbar .mobile-more-btn { position: relative; }
+        .mobile-more-storage-dot {
+            position: absolute; top: 11px; right: 9px;
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--warning); box-shadow: 0 0 0 2px var(--surface);
+        }
         .mobile-more-glyph { font-size: 22px; line-height: 1; }
 
         /* Fixed bottom navigation bar. */
@@ -5613,8 +5633,11 @@
             border-top-color: var(--accent);
         }
         .bottom-bar-tab:active { background: var(--hover-bg); }
+        /* Dots ride the icon itself (not the tab, whose height and safe-area
+           padding vary): top-right corner of the glyph. */
+        .bottom-bar-icon-wrap { position: relative; display: block; }
         .bottom-bar-more-dot {
-            position: absolute; top: 8px; right: 50%; margin-right: -16px;
+            position: absolute; top: -2px; right: -4px;
             width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
         }
         /* Central raised FAB (add person). */
@@ -9475,7 +9498,7 @@
         <button class="add-person-round" onclick="window.Strom.UI.showAddPersonModal()" title="Add person" data-i18n-title="toolbar.addPerson">+</button>
 
         <!-- Mobile actions (⋯) — opens the "More" bottom sheet (≤1024px) -->
-        <button class="mobile-more-btn" onclick="window.Strom.UI.showMoreMenuSheet()" data-i18n-title="mobileMenu.more" data-i18n-aria-label="mobileMenu.more"><span class="mobile-more-glyph" aria-hidden="true">⋯</span></button>
+        <button class="mobile-more-btn" onclick="window.Strom.UI.showMoreMenuSheet()" data-i18n-title="mobileMenu.more" data-i18n-aria-label="mobileMenu.more"><span class="mobile-more-glyph" aria-hidden="true">⋯</span><span class="mobile-more-storage-dot is-storage storage-dot" aria-hidden="true"></span></button>
     </div>
 
     <!-- Mobile bottom navigation bar (≤1024px) — replaces the hamburger -->
@@ -9496,10 +9519,8 @@
             <span class="bottom-bar-label" data-i18n="viewModeSwitch.timeline"></span>
         </button>
         <button type="button" class="bottom-bar-tab bottom-bar-more" id="bb-view-more" onclick="window.Strom.UI.showMoreMenuSheet()">
-            <svg class="bottom-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
+            <span class="bottom-bar-icon-wrap"><svg class="bottom-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span id="bottom-bar-more-dot" class="bottom-bar-more-dot" style="display:none;"></span><span id="bottom-bar-more-storage-dot" class="bottom-bar-more-dot is-storage storage-dot" aria-hidden="true"></span></span>
             <span class="bottom-bar-label" data-i18n="mobileMenu.more"></span>
-            <span id="bottom-bar-more-dot" class="bottom-bar-more-dot" style="display:none;"></span>
-            <span id="bottom-bar-more-storage-dot" class="bottom-bar-more-dot is-storage" style="display:none;" aria-hidden="true"></span>
         </button>
     </nav>
 

@@ -419,7 +419,7 @@ test.describe('existing tree on a phone', () => {
         await expect(moreDot(page)).toBeVisible();
         // Other states may prefix it ("More – changes only in the browser"); the new item is always said.
         await expect(page.locator('#bb-view-more')).toHaveAttribute('aria-label', /^More.*, new item$/);
-        await expect(page.locator('.mobile-more-btn [class*="dot"]')).toHaveCount(0);
+        await expect(page.locator('.mobile-more-btn [class*="dot"]:not(.is-storage)')).toHaveCount(0);
         await expect(newDot(page)).toBeHidden();
 
         const buttons = await sheet.locator('.whats-new-actions button').evaluateAll(els =>

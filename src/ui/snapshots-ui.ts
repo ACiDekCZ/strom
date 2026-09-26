@@ -62,7 +62,7 @@ export const snapshotsUiMethods = uiModule({
         if (!el) return;
         await this.refreshUnsavedIndicator();
         const text = document.createElement('span');
-        text.textContent = this.storageStatusParagraphs(false).join(' ') + ' ';
+        text.textContent = this.storageStatusParagraphs().join(' ') + ' ';
         const more = document.createElement('button');
         more.type = 'button';
         more.className = 'link-button';

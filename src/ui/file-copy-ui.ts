@@ -146,8 +146,7 @@ export const fileCopyMethods = uiModule({
                 el.style.display = 'none';
             }
         }
-        const dot = document.getElementById('bottom-bar-more-storage-dot');
-        if (dot) dot.style.display = show ? 'block' : 'none';
+        document.body.classList.toggle('storage-unsaved', show);
         const more = document.getElementById('bb-view-more');
         if (more) {
             more.dataset.storage = show ? '1' : '';
@@ -235,6 +234,7 @@ export const fileCopyMethods = uiModule({
         this.showStorageNotice('file-copy-notice', message, actions);
         pulse(document.getElementById('unsaved-copy-indicator'));
         pulse(document.getElementById('bottom-bar-more-storage-dot'));
+        pulse(document.querySelector<HTMLElement>('.mobile-more-storage-dot'));
     },
 
     /**
@@ -280,67 +280,124 @@ export const fileCopyMethods = uiModule({
         const body = document.getElementById('storage-status-body');
         if (!body) return;
         knownState = await getPersistenceState();
+        const s = strings.fileCopy;
         const tree = activeTree();
+        const viewMode = DataManager.isViewMode();
+        const unsaved = viewMode ? [] : unsavedTreeList();
+        const openUnsaved = !!tree && unsaved.some(t => t.id === tree.id);
+        const para = (text: string, className?: string): HTMLParagraphElement => {
+            const p = document.createElement('p');
+            p.textContent = text;
+            if (className) p.className = className;
+            return p;
+        };
+
+        // 1) The state pill.
         const state: PillState = knownState === 'persistent' ? 'persistent'
-            : unsavedTreeList().length === 0 && !!tree?.meta.fileCopyAt ? 'saved' : 'unsaved';
+            : unsaved.length === 0 && !!tree?.meta.fileCopyAt ? 'saved' : 'unsaved';
         const pill = document.createElement('div');
         pill.className = 'storage-status-state';
         const chip = document.createElement('span');
         chip.className = 'storage-pill';
         setPillState(chip, state);
         pill.appendChild(chip);
-        body.replaceChildren(pill, ...this.storageStatusParagraphs(true).map(text => {
-            const p = document.createElement('p');
-            p.textContent = text;
-            return p;
-        }));
-        const advice = currentAdvice();
+        const nodes: HTMLElement[] = [pill];
+
+        // 2) The trees: a list when other trees are unsaved too, else the open tree's sentence.
+        if (unsaved.some(t => t.id !== tree?.id)) {
+            nodes.push(para(s.unsavedListTitle, 'storage-status-list-title'));
+            const list = document.createElement('ul');
+            list.className = 'storage-status-trees';
+            const ordered = [...unsaved].sort((x, y) => (x.id === tree?.id ? -1 : y.id === tree?.id ? 1 : 0));
+            for (const t of ordered) {
+                const li = document.createElement('li');
+                const name = document.createElement('span');
+                name.className = 'storage-status-tree-name';
+                name.textContent = t.name;
+                li.appendChild(name);
+                if (t.id === tree?.id) {
+                    const badge = document.createElement('span');
+                    badge.className = 'tree-badge';
+                    badge.textContent = s.openBadge;
+                    li.appendChild(badge);
+                }
+                const when = document.createElement('span');
+                when.className = 'storage-status-tree-when';
+                when.textContent = t.fileCopyAt
+                    ? formatRelativeDateTime(Date.parse(t.fileCopyAt), getCurrentLanguage())
+                    : s.never;
+                li.appendChild(when);
+                list.appendChild(li);
+            }
+            nodes.push(list);
+        } else {
+            const sentence = this.openTreeCopySentence();
+            if (sentence) nodes.push(para(sentence));
+        }
+
+        // 3) Storage, 4) advice, 5) backups, 6) the general intro last.
+        nodes.push(para(this.storageStateSentence()));
+        if (knownState !== 'persistent') nodes.push(para(this.storageAdviceSentence()));
+        nodes.push(para(s.backupsNote));
+        nodes.push(para(s.intro, 'storage-status-intro'));
+        body.replaceChildren(...nodes);
+
         const install = document.getElementById('storage-status-install');
-        if (install) install.hidden = advice !== 'install';
+        if (install) install.hidden = currentAdvice() !== 'install';
+        // Save this tree (primary) — or, when only other trees are unsaved,
+        // "Save all trees" takes the primary place; it shows beside "Save"
+        // only when two or more trees are unsaved.
+        const allPrimary = !openUnsaved && unsaved.length > 0;
         const save = document.getElementById('storage-status-save');
         if (save) {
-            save.textContent = this.activeFileHandleName ? strings.fileAccess.saveToFile : strings.fileCopy.save;
-            save.hidden = !activeTree() || DataManager.isViewMode();
+            save.textContent = this.activeFileHandleName ? strings.fileAccess.saveToFile : s.save;
+            save.hidden = !tree || viewMode || allPrimary;
         }
         const saveAll = document.getElementById('storage-status-save-all');
-        if (saveAll) saveAll.hidden = DataManager.isViewMode() || TreeManager.getTrees().length < 2;
+        if (saveAll) {
+            saveAll.hidden = !(allPrimary || unsaved.length >= 2);
+            saveAll.classList.toggle('primary', allPrimary);
+            saveAll.classList.toggle('secondary', !allPrimary);
+        }
         this.renderUnsavedIndicator();
     },
 
-    /**
-     * The status as sentences: storage state, the open tree's last file copy,
-     * and (withAdvice) what to do on this device. Uses the last known state.
-     */
-    storageStatusParagraphs(withAdvice: boolean): string[] {
-        const s = strings.fileCopy;
-        const out: string[] = [];
-        if (withAdvice) out.push(s.intro);
-        out.push(knownState === 'persistent' ? s.statePersistent
-            : knownState === 'unsupported' ? s.stateUnsupported : s.stateNotPersistent);
+    /** "“X” was last saved to a file … / has not been saved yet" for the open tree. */
+    openTreeCopySentence(): string | null {
         const tree = activeTree();
-        if (tree && !DataManager.isViewMode()) {
-            const { meta } = tree;
-            if (meta.fileCopyAt) {
-                const when = formatRelativeDateTime(Date.parse(meta.fileCopyAt), getCurrentLanguage());
-                out.push(s.copyAt(meta.name, when) + ' ' + (hasUnsavedChanges(meta) ? s.copyChanged : s.copyUpToDate));
-            } else {
-                out.push(s.copyNever(meta.name));
-            }
-            const others = unsavedTreeList().filter(t => t.id !== tree.id).map(t => t.name);
-            if (others.length > 0) out.push(s.othersUnsaved(others));
-        }
-        if (withAdvice) {
-            if (knownState !== 'persistent') {
-                const advice = currentAdvice();
-                out.push(advice === 'install' ? s.adviceInstall
-                    : advice === 'install-menu' ? s.adviceInstallMenu
-                    : advice === 'mac-dock' ? s.adviceMacDock
-                    : advice === 'firefox' ? s.adviceFirefox
-                    : advice === 'ios-safari' ? s.adviceIosSafari
-                    : advice === 'ios-app' ? s.adviceIosApp : s.adviceFile);
-            }
-            out.push(s.backupsNote);
-        }
+        if (!tree || DataManager.isViewMode()) return null;
+        const s = strings.fileCopy;
+        const { meta } = tree;
+        if (!meta.fileCopyAt) return s.copyNever(meta.name);
+        const when = formatRelativeDateTime(Date.parse(meta.fileCopyAt), getCurrentLanguage());
+        return s.copyAt(meta.name, when) + ' ' + (hasUnsavedChanges(meta) ? s.copyChanged : s.copyUpToDate);
+    },
+
+    storageStateSentence(): string {
+        const s = strings.fileCopy;
+        return knownState === 'persistent' ? s.statePersistent
+            : knownState === 'unsupported' ? s.stateUnsupported : s.stateNotPersistent;
+    },
+
+    storageAdviceSentence(): string {
+        const s = strings.fileCopy;
+        const advice = currentAdvice();
+        return advice === 'install' ? s.adviceInstall
+            : advice === 'install-menu' ? s.adviceInstallMenu
+            : advice === 'mac-dock' ? s.adviceMacDock
+            : advice === 'firefox' ? s.adviceFirefox
+            : advice === 'ios-safari' ? s.adviceIosSafari
+            : advice === 'ios-app' ? s.adviceIosApp : s.adviceFile;
+    },
+
+    /** The short status for the backups dialog: storage, the open tree, other unsaved trees. */
+    storageStatusParagraphs(): string[] {
+        const out = [this.storageStateSentence()];
+        const sentence = this.openTreeCopySentence();
+        if (sentence) out.push(sentence);
+        const openId = DataManager.getCurrentTreeId();
+        const others = DataManager.isViewMode() ? [] : unsavedTreeList().filter(t => t.id !== openId).map(t => t.name);
+        if (others.length > 0) out.push(strings.fileCopy.othersUnsaved(others));
         return out;
     },
 
