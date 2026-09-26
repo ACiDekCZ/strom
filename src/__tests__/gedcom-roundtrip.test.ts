@@ -387,6 +387,35 @@ describe('GEDCOM media (OBJE) and standard sources', () => {
         expect(p2.attachments![0].dataUrl).toBe(person.attachments[0].dataUrl);
     });
 
+    it('big images export in linear time and come back whole (40 MB export took 45 s)', () => {
+        const ged = GED(['0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M'].join('\n'));
+        const r = conv(ged);
+        const person = Object.values(r.data.persons)[0];
+        // ~6 MB of base64 in three attachments: the quadratic chunker needed minutes.
+        const big = (seed: string) => 'data:image/jpeg;base64,' + (seed + 'AbCdEfGh+/').repeat(200_000);
+        person.attachments = ['A', 'B', 'C'].map((k, i) => ({
+            id: `att${i}`, name: `scan-${k}.jpg`, mimeType: 'image/jpeg', dataUrl: big(k), sizeBytes: 1,
+        }));
+        const t = performance.now();
+        const out = exportToGedcom(r.data).content;
+        expect(performance.now() - t).toBeLessThan(3000);
+        for (const line of out.split('\n')) expect(line.length).toBeLessThanOrEqual(255);
+        const p2 = Object.values(conv(out).data.persons)[0];
+        expect(p2.attachments!.map(a => a.dataUrl)).toEqual(person.attachments.map(a => a.dataUrl));
+    });
+
+    it('long Czech and emoji text splits on byte limits without losing a character', () => {
+        const ged = GED(['0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M'].join('\n'));
+        const r = conv(ged);
+        const person = Object.values(r.data.persons)[0];
+        const note = 'Příliš žluťoučký kůň úpěl ďábelské ódy 🌳 — '.repeat(300) + 'konec';
+        person.notes = note;
+        const out = exportToGedcom(r.data).content;
+        const enc = new TextEncoder();
+        for (const line of out.split('\n')) expect(enc.encode(line).length).toBeLessThanOrEqual(255);
+        expect(Object.values(conv(out).data.persons)[0].notes).toBe(note);
+    });
+
     it('attachment note and source link survive a round-trip', () => {
         const ged = GED([
             '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SEX M', '1 SOUR @S1@',

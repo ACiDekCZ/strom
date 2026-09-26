@@ -226,23 +226,30 @@ function byteLen(text: string): number {
  */
 function chunkValue(text: string): string[] {
     if (byteLen(text) <= MAX_VALUE_BYTES) return [text];
+    // One pass from left to right (images are hundreds of kB of base64: the
+    // old re-measure-the-rest loop was quadratic — 45 s for a 40 MB export).
     const chunks: string[] = [];
-    let rest = text;
-    while (byteLen(rest) > MAX_VALUE_BYTES) {
-        // The longest prefix that fits, counted in bytes and whole code points.
-        let cut = 0;
+    let start = 0;
+    while (start < text.length) {
+        // The longest run from `start` that fits, in bytes and whole code points.
+        let end = start;
         let used = 0;
-        for (const ch of rest) {
-            const b = byteLen(ch);
+        while (end < text.length) {
+            const cp = text.codePointAt(end)!;
+            const b = cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
             if (used + b > MAX_VALUE_BYTES) break;
             used += b;
-            cut += ch.length;
+            end += cp > 0xffff ? 2 : 1;
         }
-        while (cut > 1 && (rest[cut] === ' ' || rest[cut - 1] === ' ')) cut--;
-        chunks.push(rest.slice(0, cut));
-        rest = rest.slice(cut);
+        if (end >= text.length) {
+            chunks.push(text.slice(start));
+            break;
+        }
+        let cut = end;
+        while (cut > start + 1 && (text[cut] === ' ' || text[cut - 1] === ' ')) cut--;
+        chunks.push(text.slice(start, cut));
+        start = cut;
     }
-    chunks.push(rest);
     return chunks;
 }
 
