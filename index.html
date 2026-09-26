@@ -9052,8 +9052,9 @@
             color: var(--text-light);
         }
         .export-encrypt-block { margin: 4px 0 0; padding-top: 8px; border-top: 1px solid var(--divider); }
+        /* Label left, switch right — like the Settings rows (row-reverse there too). */
         .modal label.export-encrypt-row {
-            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+            display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between; gap: 12px;
             min-height: 44px; margin: 0 0 8px; cursor: pointer;
         }
         .export-encrypt-row .settings-name { font-size: 14px; color: var(--text); font-weight: 500; }
@@ -11623,8 +11624,8 @@
             </div>
             <div id="export-encrypt-block" class="export-encrypt-block">
                 <label class="settings-checkbox export-encrypt-row" id="export-encrypt-row">
-                    <span class="settings-text"><span class="settings-name" data-i18n="encryption.encryptToggle">Encrypt with a password</span></span>
                     <input type="checkbox" role="switch" aria-checked="false" id="export-encrypt-toggle" onchange="window.Strom.UI.toggleExportEncryption(this.checked)">
+                    <span class="settings-text"><span class="settings-name" data-i18n="encryption.encryptToggle">Encrypt with a password</span></span>
                 </label>
                 <p class="export-app-encrypted-hint" id="export-app-encrypted-hint" data-i18n="fileCopy.appEncryptedHint" hidden></p>
                 <div class="form-group" id="export-password-group" hidden>

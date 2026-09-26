@@ -50,6 +50,12 @@ test('export opens on the button: no password fields, encryption off', async ({ 
     await expect(dialog(page).locator('#export-submit-btn')).toHaveText('Export');
     // One action button only.
     await expect(dialog(page).locator('.export-buttons button')).toHaveCount(1);
+    // Label left, switch right (like the Settings rows).
+    const pos = await page.evaluate(() => ({
+        label: document.querySelector('#export-encrypt-row .settings-name')!.getBoundingClientRect().left,
+        toggle: document.getElementById('export-encrypt-toggle')!.getBoundingClientRect().left,
+    }));
+    expect(pos.toggle).toBeGreaterThan(pos.label);
 });
 
 test('the switch shows the password fields, focuses them, and names the button; off empties them', async ({ page }) => {
