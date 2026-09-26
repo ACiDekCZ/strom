@@ -678,7 +678,7 @@ export interface AppSettings {
     researchNewFirstSeen?: string;   // ISO date the "New" marker was first shown
     researchNewDismissed?: boolean;  // the "New" marker went out for good
     whatsNew30Shown?: boolean;       // the one-time "What's new in 3.0" card was shown
-    persistenceWarningShown?: boolean; // the one-time "browser may clear this data" notice was shown
+    fileCopyReminders?: boolean;     // default: true - notice when edits are only in a storage the browser may clear
     importImages?: boolean;          // default: true - imports bring photos, attachments and source excerpts
     recentSourceIds?: Record<string, string[]>;  // per tree id: last cited sources, newest first (source picker)
 }
@@ -733,6 +733,12 @@ export interface TreeMetadata {
     autoBackups?: boolean;
     /** The "backups too big for this device" advice was shown (it is shown once). */
     backupsTooBigNoticed?: boolean;
+    /** Last edit of the user's (ISO). With fileCopyAt: edits no file holds (src/file-copy.ts). */
+    changedAt?: string;
+    /** Last full copy in a file: a full export, the working file, or the file it was imported from (ISO). */
+    fileCopyAt?: string;
+    /** Last "changes only in the browser" notice for this tree (ISO). */
+    fileCopyNoticeAt?: string;
 }
 
 /** Link between a local tree and the Strom Research tree it was opened from. */

@@ -989,6 +989,12 @@ class DataManagerClass {
         return createEmptyData();
     }
 
+    /** An edit of the user's reached storage: the tree now differs from its last file copy. */
+    private noteUserChange(): void {
+        if (this.viewMode || this.isLocked() || this.editSession || !this.currentTreeId) return;
+        TreeManager.noteUserChange(this.currentTreeId);
+    }
+
     private save(): void {
         // Never save in view mode (read-only) or over locked data (the
         // in-memory tree is a stand-in; TreeManager would refuse it anyway).
@@ -1037,6 +1043,7 @@ class DataManagerClass {
             this.pendingBefore = null;
         }
         this.save();
+        this.noteUserChange();
         // The Undo/Redo availability just changed (a push clears the redo stack)
         // — refresh the toolbar for EVERY commit, silent flows included. Doing it
         // here rather than piggy-backing on the next render keeps the toolbar
@@ -1301,6 +1308,7 @@ class DataManagerClass {
         if (!this.viewMode && this.currentTreeId) {
             TreeManager.saveTreeData(this.currentTreeId, this.data);
             CrossTree.invalidateCacheForTree(this.currentTreeId);
+            this.noteUserChange();
         }
     }
 
@@ -3029,6 +3037,7 @@ class DataManagerClass {
         a.download = `${safeName || 'family-tree'}.json`;
         a.click();
         URL.revokeObjectURL(a.href);
+        if (privacyMode === 'full') TreeManager.noteFileCopy([treeId]);
     }
 
     async exportFocusedJSON(visiblePersonIds: Set<PersonId>, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): Promise<void> {

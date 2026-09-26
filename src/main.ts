@@ -20,10 +20,11 @@ import { AppMode, PWA_HOSTNAME, BETA_HOSTNAME, APP_VERSION, TreeId } from './typ
 import { strings } from './strings.js';
 import { onTreeSavedElsewhere } from './tab-sync.js';
 import { StorageManager } from './storage.js';
-import { PERSISTENCE_EVENT, PersistenceState, getRequestedPersistenceState } from './persistence.js';
+import { PERSISTENCE_EVENT } from './persistence.js';
+import { FILE_COPY_EVENT } from './tree-manager.js';
 import { SNAPSHOTS_TRIMMED_EVENT, SNAPSHOT_CREATED_EVENT, SnapshotTrim } from './snapshots.js';
 import { collectPoolGarbage } from './media-pool.js';
-import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild } from './pwa.js';
+import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT } from './pwa.js';
 
 // Make modules available globally for HTML event handlers
 declare global {
@@ -186,6 +187,8 @@ function registerAppListeners(): void {
         UI.updateTreeSwitcher();
         UI.updateCollabBar();
         void UI.updateFileIndicator();
+        void UI.refreshUnsavedIndicator();
+        document.getElementById('file-copy-notice')?.remove();
         // A warning about another tab belongs to the tree it was raised for.
         document.getElementById('other-tab-notice')?.remove();
         // So does "on this day": the new tree gets its own (once a day).
@@ -359,6 +362,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     UI.initOnlineIndicator();
     if (shouldRegisterServiceWorker(APP_MODE)) {
         linkManifest();
+        captureInstallPrompt();
         registerServiceWorker(() => UI.showUpdateAvailable());
     }
     // The pre-release test build (/beta/) says so next to the wordmark.
@@ -369,7 +373,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             badge.className = 'beta-badge';
             badge.textContent = strings.about.betaBadge;
             badge.title = strings.about.betaTitle;
-            logo.appendChild(badge);
+            // Right after the name, before the unsaved-changes indicator.
+            logo.querySelector('.app-logo')?.after(badge);
         }
     }
 
@@ -407,12 +412,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Strom Research: light the "New" marker, maybe the one-time 3.0 card.
         UI.researchPromoAfterFirstRender();
 
-        // Persistent storage: a one-time notice when the browser may clear a
-        // big tree — for a request settled during startup, and for later ones.
-        const settled = getRequestedPersistenceState();
-        if (settled) UI.maybeWarnNotPersistent(settled);
-        window.addEventListener(PERSISTENCE_EVENT, (e) => {
-            UI.maybeWarnNotPersistent((e as CustomEvent<PersistenceState>).detail);
+        // Where the data is: the "changes only in the browser" indicator, and
+        // the notice at an edit no file holds (src/file-copy.ts).
+        void UI.refreshUnsavedIndicator();
+        window.addEventListener(PERSISTENCE_EVENT, () => { void UI.refreshUnsavedIndicator(); });
+        window.addEventListener(FILE_COPY_EVENT, (e) => {
+            void UI.handleFileCopyChange((e as CustomEvent<{ treeId: string }>).detail.treeId);
+        });
+        window.addEventListener(INSTALL_AVAILABILITY_EVENT, () => {
+            if (document.getElementById('storage-status-modal')?.classList.contains('active')) {
+                void UI.refreshStorageStatusDialog();
+            }
         });
 
         // "On this day" reminder — after the first render, off the critical path.

@@ -176,6 +176,7 @@ export const importExportMethods = uiModule({
             a.download = `${safeFileName(metadata?.name, 'family-tree')}.ged`;
             a.click();
             URL.revokeObjectURL(url);
+            if (this.readExportPrivacyMode() === 'full') TreeManager.noteFileCopy([treeId]);
         }, false, { defaultPrivacy: 'initials', passwordless: true, content: true });
     },
 
@@ -1334,6 +1335,7 @@ export const importExportMethods = uiModule({
             a.download = 'strom-all-trees.json';
             a.click();
             URL.revokeObjectURL(a.href);
+            if (privacyMode === 'full') TreeManager.noteFileCopy(Object.keys(allData) as TreeId[]);
         }, true);
     },
 });

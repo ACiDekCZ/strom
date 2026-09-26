@@ -1262,19 +1262,13 @@
             padding: 20px 24px 0;
             margin-bottom: 12px;
         }
-        /* Bottom fade hint, shown only while more content lies below the fold. A
-           sticky pseudo-element pinned to the scroll viewport's lower edge; the
-           negative margin keeps it from adding scroll height. */
-        .modal-content.is-scrollable::after {
-            content: '';
-            position: sticky;
-            bottom: 0;
-            left: 0;
-            display: block;
-            height: 18px;
-            margin-top: -18px;
-            background: linear-gradient(transparent, var(--surface-modal));
-            pointer-events: none;
+        /* Bottom fade hint, shown only while more content lies below the fold.
+           A mask on the scroll container itself: it does not scroll, ignores the
+           container's padding (a sticky overlay stopped inside it and floated as
+           a band) and fades any background — cards on --surface-2 included. */
+        .modal-content.is-scrollable {
+            -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+                    mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
         }
         /* On phones: near full-width dialogs; the flex skeleton keeps Save
            reachable, so no sticky action-bar hack is needed. */
@@ -4059,6 +4053,36 @@
             cursor: pointer;
         }
         .file-link-indicator:hover { background: var(--accent-soft, #e8f0fe); }
+        /* Edits only in the browser: the same button, in the warning tint, next
+           to the wordmark (inside the h1, so narrow toolbars can pin it as a
+           badge that takes no width). ".toolbar button" would paint it green. */
+        .toolbar h1.app-wordmark { position: relative; display: flex; align-items: center; flex-shrink: 0; }
+        .toolbar .unsaved-copy-indicator {
+            vertical-align: middle;
+            color: var(--accent-text);
+            background: var(--warning-soft);
+            border-color: var(--warning);
+            padding: 0;
+        }
+        .toolbar .unsaved-copy-indicator:hover { background: var(--warning-soft); filter: brightness(0.96); }
+        @media (max-width: 1024px) {
+            .toolbar .unsaved-copy-indicator {
+                position: absolute;
+                top: -9px;
+                right: -14px;
+                width: 20px;
+                height: 20px;
+                margin: 0;
+                border-radius: 50%;
+            }
+            .toolbar .unsaved-copy-indicator svg { width: 11px; height: 11px; }
+        }
+        .storage-status-body p { margin: 0 0 10px; font-size: 14px; line-height: 1.5; }
+        .storage-status-body p:first-child { color: var(--text-light); }
+        #storage-status-modal .buttons button[hidden] { display: none; }
+        @media (max-width: 499px) {
+            .storage-status-body p { font-size: 13px; }
+        }
 
         /* PWA update prompt (non-blocking, same shape as the family offer) */
         .pwa-update {
@@ -4119,6 +4143,12 @@
         }
         @media (max-width: 499px) {
             .storage-notice { top: 56px; width: calc(100vw - 32px); font-size: 13px; }
+            /* Two actions do not fit beside the text: text and × on top, the
+               buttons in a row below. */
+            .storage-notice:has(.pwa-update-btn + .pwa-update-btn) { flex-wrap: wrap; }
+            .storage-notice:has(.pwa-update-btn + .pwa-update-btn) > span { flex: 1 1 calc(100% - 64px); }
+            .storage-notice:has(.pwa-update-btn + .pwa-update-btn) > .pwa-update-close { order: 1; }
+            .storage-notice:has(.pwa-update-btn + .pwa-update-btn) > .pwa-update-btn { order: 2; }
         }
 
         /* Family wizard offer (non-blocking action toast) */
@@ -8915,6 +8945,7 @@
             line-height: 1.5;
             color: var(--text-light);
         }
+        .snapshots-persistence .link-button { font-size: inherit; padding: 0; }
         .snapshot-delete { padding: 4px 8px; }
         .snapshots-auto { margin: 0 0 12px; }
         .snapshots-budget-note { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: var(--text-light); }
@@ -9173,7 +9204,7 @@
 </head>
 <body>
     <div class="toolbar">
-        <h1 class="app-wordmark"><span class="app-logo" role="button" tabindex="0" onclick="window.Strom.UI.showAboutDialog()" data-i18n-title="about.title">Strom<span class="wordmark-dot" aria-hidden="true"></span></span></h1>
+        <h1 class="app-wordmark"><span class="app-logo" role="button" tabindex="0" onclick="window.Strom.UI.showAboutDialog()" data-i18n-title="about.title">Strom<span class="wordmark-dot" aria-hidden="true"></span></span><button id="unsaved-copy-indicator" class="file-link-indicator unsaved-copy-indicator" style="display:none;" onclick="window.Strom.UI.showStorageStatusDialog()" data-i18n-title="fileCopy.indicatorTitle" data-i18n-aria-label="fileCopy.indicatorTitle"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></button></h1>
         <span id="offline-indicator" class="offline-indicator" style="display:none;" data-i18n="pwa.offline"></span>
         <button id="file-link-indicator" class="file-link-indicator" style="display:none;" onclick="window.Strom.UI.saveActiveTreeToFile()" data-i18n-title="fileAccess.saveToFile"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button>
 
@@ -10249,6 +10280,13 @@
                 <h3 class="settings-group-title" id="settings-group-data" data-i18n="settings.groupData"></h3>
                 <div class="settings-group-body">
                     <label class="settings-checkbox settings-row">
+                        <input type="checkbox" id="file-copy-reminders-toggle" onchange="window.Strom.UI.toggleFileCopyReminders(this.checked)">
+                        <span class="settings-text">
+                            <span class="settings-name" data-i18n="fileCopy.settingLabel"></span>
+                            <span class="settings-desc" data-i18n="fileCopy.settingHint"></span>
+                        </span>
+                    </label>
+                    <label class="settings-checkbox settings-row">
                         <input type="checkbox" id="import-images-toggle" onchange="window.Strom.UI.toggleImportImages(this.checked)">
                         <span class="settings-text">
                             <span class="settings-name" data-i18n="importImages.setting"></span>
@@ -10364,6 +10402,21 @@
             <p class="snapshots-note" data-i18n="snapshots.inBrowser"></p>
             <div class="buttons snapshots-footer">
                 <button class="primary" onclick="window.Strom.UI.createManualSnapshot()" data-i18n="snapshots.createNow"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Where your data is (storage state, last file copy, advice) -->
+    <div class="modal-overlay" id="storage-status-modal">
+        <div class="modal modal--sm" role="dialog" aria-modal="true" aria-labelledby="storage-status-title">
+            <div class="modal-header">
+                <h2 id="storage-status-title" data-i18n="fileCopy.title"></h2>
+                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeStorageStatusDialog()">&times;</button>
+            </div>
+            <div id="storage-status-body" class="storage-status-body"></div>
+            <div class="buttons">
+                <button class="secondary" id="storage-status-install" hidden onclick="window.Strom.UI.installApp()" data-i18n="fileCopy.install"></button>
+                <button class="primary" id="storage-status-save" onclick="window.Strom.UI.closeStorageStatusDialog(); window.Strom.UI.saveTreeCopy()" data-i18n="fileCopy.save"></button>
             </div>
         </div>
     </div>

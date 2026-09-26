@@ -356,14 +356,14 @@ class SettingsManagerClass {
         this.saveQuietly();
     }
 
-    /** The one-time "the browser may clear this data" notice (see src/persistence.ts). */
-    isPersistenceWarningShown(): boolean {
-        return this.settings.persistenceWarningShown === true;
+    /** Notice when edits live only in a storage the browser may clear (default on; src/file-copy.ts). */
+    isFileCopyRemindersEnabled(): boolean {
+        return this.settings.fileCopyReminders !== false;
     }
 
-    setPersistenceWarningShown(): void {
-        this.settings.persistenceWarningShown = true;
-        this.saveQuietly();
+    setFileCopyReminders(enabled: boolean): void {
+        this.settings.fileCopyReminders = enabled;
+        this.save();
     }
 
     private saveQuietly(): void {

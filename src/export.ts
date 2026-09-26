@@ -270,6 +270,7 @@ class AppExporterClass {
 
             // Download
             this.downloadHtml(exportedHtml, filename);
+            if (privacyMode === 'full') TreeManager.noteFileCopy([targetTreeId]);
         } catch (error) {
             console.error('Export failed:', error);
             UI.showAlert(strings.export.failed, 'error');
@@ -352,6 +353,7 @@ class AppExporterClass {
 
             // Download with "all-trees" filename
             this.downloadHtml(exportedHtml, 'strom-all-trees.html');
+            if (privacyMode === 'full') TreeManager.noteFileCopy(Object.keys(allTreesData) as TreeId[]);
         } catch (error) {
             console.error('Export all failed:', error);
             UI.showAlert(strings.export.failed, 'error');

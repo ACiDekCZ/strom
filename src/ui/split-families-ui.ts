@@ -464,7 +464,7 @@ export const splitFamiliesMethods = uiModule({
             const subtree = structuredClone(src);
             subtree.defaultPersonId = component.defaultPersonId;
             createdPersons += Object.keys(subtree.persons).length;
-            TreeManager.createTreeFromImport(subtree, this.readSplitFamilyName(index));
+            TreeManager.createTreeFromImport(subtree, this.readSplitFamilyName(index), false);
         }
 
         // The split copies; restore the tree the user was on (createTreeFromImport

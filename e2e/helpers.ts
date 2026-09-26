@@ -42,11 +42,11 @@ export async function seedSetting(page: Page, name: string, value: unknown): Pro
  * Load the app and wait until the toolbar is interactive. By default the
  * Strom Research promotion counts as already seen (see seedResearchPromoSeen);
  * `{ researchPromo: true }` keeps the first-run state for suites testing it;
- * the one-time persistent-storage notice likewise (`{ persistenceWarning: true }`).
+ * the "changes only in the browser" notice is off unless `{ fileCopyReminders: true }`.
  */
-export async function openApp(page: Page, opts: { researchPromo?: boolean; persistenceWarning?: boolean } = {}): Promise<void> {
+export async function openApp(page: Page, opts: { researchPromo?: boolean; fileCopyReminders?: boolean } = {}): Promise<void> {
     if (!opts.researchPromo) await seedResearchPromoSeen(page);
-    if (!opts.persistenceWarning) await seedSetting(page, 'persistenceWarningShown', true);
+    if (!opts.fileCopyReminders) await seedSetting(page, 'fileCopyReminders', false);
     await page.goto('/strom.html');
     await expect(page.locator('.toolbar')).toBeVisible();
 }

@@ -18,7 +18,6 @@ import { emptyStateHtml } from './empty-state.js';
 
 import { iconSvg } from '../icons.js';
 import { SettingsManager } from '../settings.js';
-import { getPersistenceState, shouldWarnNotPersistent, PersistenceState } from '../persistence.js';
 /** Locked encryption vs anything else (quota, corrupt record). */
 function snapshotErrorMessage(err: unknown): string {
     const msg = err instanceof Error ? err.message : String(err);
@@ -61,33 +60,16 @@ export const snapshotsUiMethods = uiModule({
     async renderPersistenceNote(): Promise<void> {
         const el = document.getElementById('snapshots-persistence');
         if (!el) return;
-        const state = await getPersistenceState();
-        const s = strings.snapshots;
-        el.textContent = state === 'persistent' ? s.persistent
-            : state === 'best-effort' ? s.notPersistent : s.unsupported;
+        await this.refreshUnsavedIndicator();
+        const text = document.createElement('span');
+        text.textContent = this.storageStatusParagraphs(false).join(' ') + ' ';
+        const more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'link-button';
+        more.textContent = strings.fileCopy.details;
+        more.addEventListener('click', () => void this.showStorageStatusDialog());
+        el.replaceChildren(text, more);
         el.hidden = false;
-    },
-
-    /**
-     * One-time notice after the persistence request settled: the browser may
-     * clear a tree big enough to hurt. The button opens the export dialog.
-     */
-    maybeWarnNotPersistent(state: PersistenceState): void {
-        const personCount = Object.keys(DataManager.getData().persons).length;
-        if (!shouldWarnNotPersistent({
-            state,
-            personCount,
-            alreadyShown: SettingsManager.isPersistenceWarningShown(),
-            viewMode: DataManager.isViewMode(),
-        })) return;
-        SettingsManager.setPersistenceWarningShown();
-        this.showStorageNotice('persistence-notice', strings.snapshots.persistenceWarning(personCount), {
-            label: strings.snapshots.persistenceSave,
-            run: () => {
-                document.getElementById('persistence-notice')?.remove();
-                this.showExportDialog();
-            },
-        });
     },
 
     /**

@@ -45,6 +45,9 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 
+/** A button on a storage notice. */
+interface NoticeAction { label: string; run: () => void }
+
 export const encryptionUiMethods = uiModule({
     // ---- ENCRYPTION ----
     /**
@@ -515,7 +518,7 @@ export const encryptionUiMethods = uiModule({
      * Non-blocking notice bar with an optional action button (shared by the
      * locked banner, the other-tab warning and storage errors).
      */
-    showStorageNotice(id: string, message: string, action?: { label: string; run: () => void }): void {
+    showStorageNotice(id: string, message: string, action?: NoticeAction | NoticeAction[]): void {
         document.getElementById(id)?.remove();
         const el = document.createElement('div');
         el.id = id;
@@ -524,12 +527,12 @@ export const encryptionUiMethods = uiModule({
         const text = document.createElement('span');
         text.textContent = message;
         el.appendChild(text);
-        if (action) {
+        for (const a of action ? [action].flat() : []) {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'pwa-update-btn';
-            btn.textContent = action.label;
-            btn.addEventListener('click', () => action.run());
+            btn.textContent = a.label;
+            btn.addEventListener('click', () => a.run());
             el.appendChild(btn);
         }
         const close = document.createElement('button');

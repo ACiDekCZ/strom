@@ -55,6 +55,7 @@ export const fileAccessMethods = uiModule({
         const json = await this.buildFileJsonOrWarn(treeId);
         if (json === null) return;
         await saveToHandle(handle, json);
+        TreeManager.noteFileCopy([treeId]);
         await storeHandle(treeId, handle);
         await this.updateFileIndicator();
         this.showToast(strings.fileAccess.saved(handle.name));
@@ -97,6 +98,7 @@ export const fileAccessMethods = uiModule({
         if (json === null) return;
         try {
             await saveToHandle(handle, json);
+            TreeManager.noteFileCopy([treeId]);
             this.showToast(strings.fileAccess.saved(handle.name));
         } catch {
             this.showToast(strings.fileAccess.saveFailed);

@@ -723,7 +723,7 @@ class TreeManagerClass {
     /**
      * Create a new tree from imported data
      */
-    createTreeFromImport(data: StromData, name: string): TreeId {
+    createTreeFromImport(data: StromData, name: string, fromFile = true): TreeId {
         // Set current version on import
         data.version = STROM_DATA_VERSION;
 
@@ -739,7 +739,9 @@ class TreeManagerClass {
             lastModifiedAt: now,
             personCount: Object.keys(data.persons).length,
             partnershipCount: Object.keys(data.partnerships).length,
-            sizeBytes
+            sizeBytes,
+            // The file it came from is a copy (a split-off part is not).
+            ...(fromFile ? { fileCopyAt: now } : {})
         };
 
         // Add to index
@@ -927,6 +929,42 @@ class TreeManagerClass {
         return { ...this.index };
     }
 
+    // ==================== FILE COPIES (src/file-copy.ts) ====================
+
+    /**
+     * The user edited the tree. Kept in memory until the save that follows
+     * writes the index (updateMetadata); fires FILE_COPY_EVENT.
+     */
+    noteUserChange(treeId: TreeId): void {
+        const tree = this.index.trees.find(t => t.id === treeId);
+        if (!tree) return;
+        tree.changedAt = new Date().toISOString();
+        dispatchFileCopyEvent(treeId);
+    }
+
+    /** These trees were just written, whole, to a file (export, working file). */
+    noteFileCopy(treeIds: readonly TreeId[]): void {
+        const now = new Date().toISOString();
+        let any = false;
+        for (const id of treeIds) {
+            const tree = this.index.trees.find(t => t.id === id);
+            if (!tree) continue;
+            tree.fileCopyAt = now;
+            any = true;
+        }
+        if (!any) return;
+        this.saveIndex();
+        for (const id of treeIds) dispatchFileCopyEvent(id);
+    }
+
+    /** The "changes only in the browser" notice was shown for this tree. */
+    noteFileCopyNotice(treeId: TreeId): void {
+        const tree = this.index.trees.find(t => t.id === treeId);
+        if (!tree) return;
+        tree.fileCopyNoticeAt = new Date().toISOString();
+        this.saveIndex();
+    }
+
     // ==================== EXPORT ID TRACKING ====================
 
     findTreeByExportId(exportId: string): TreeMetadata | null {
@@ -989,6 +1027,14 @@ function dispatchSaveFailed(treeId: TreeId | null, err: unknown): void {
     window.dispatchEvent(new CustomEvent('strom:save-failed', {
         detail: { treeId, reason: err instanceof Error ? err.message : String(err) },
     }));
+}
+
+/** Window event: a tree's file-copy state changed; detail: { treeId }. */
+export const FILE_COPY_EVENT = 'strom:file-copy';
+
+function dispatchFileCopyEvent(treeId: TreeId): void {
+    if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') return;
+    window.dispatchEvent(new CustomEvent(FILE_COPY_EVENT, { detail: { treeId } }));
 }
 
 // Export singleton instance

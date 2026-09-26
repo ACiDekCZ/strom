@@ -82,6 +82,7 @@ import { researchPromoMethods } from './research-promo-ui.js';
 import { familyWizardMethods } from './family-wizard.js';
 import { pwaUiMethods } from './pwa-ui.js';
 import { fileAccessMethods } from './file-access-ui.js';
+import { fileCopyMethods } from './file-copy-ui.js';
 import { researchUiMethods } from './research-ui.js';
 import { tourMethods, TourStepDef } from './tour.js';
 
@@ -502,6 +503,10 @@ Object.assign(UIClass.prototype, pwaUiMethods);
 type FileAccessMethods = typeof fileAccessMethods;
 export interface UIClass extends FileAccessMethods {}
 Object.assign(UIClass.prototype, fileAccessMethods);
+
+type FileCopyMethods = typeof fileCopyMethods;
+export interface UIClass extends FileCopyMethods {}
+Object.assign(UIClass.prototype, fileCopyMethods);
 
 type ResearchUiMethods = typeof researchUiMethods;
 export interface UIClass extends ResearchUiMethods {}

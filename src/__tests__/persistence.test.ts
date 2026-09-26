@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
     requestPersistentStorage, resetPersistenceRequestForTests, getPersistenceState,
-    getRequestedPersistenceState, shouldWarnNotPersistent, PERSISTENCE_WARNING_MIN_PERSONS,
+    getRequestedPersistenceState, settledPersistenceState,
 } from '../persistence.js';
 
 function stubStorage(storage: unknown): void {
@@ -55,19 +55,27 @@ describe('requestPersistentStorage', () => {
     });
 });
 
-describe('shouldWarnNotPersistent', () => {
-    const big = PERSISTENCE_WARNING_MIN_PERSONS;
-    const base = { state: 'best-effort' as const, personCount: big, alreadyShown: false, viewMode: false };
-
-    it('warns once for a big tree the browser may clear', () => {
-        expect(shouldWarnNotPersistent(base)).toBe(true);
-        expect(shouldWarnNotPersistent({ ...base, state: 'unsupported' })).toBe(true);
-        expect(shouldWarnNotPersistent({ ...base, alreadyShown: true })).toBe(false);
+describe('settledPersistenceState', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        resetPersistenceRequestForTests();
     });
 
-    it('stays quiet for persistent storage, small trees and shared copies', () => {
-        expect(shouldWarnNotPersistent({ ...base, state: 'persistent' })).toBe(false);
-        expect(shouldWarnNotPersistent({ ...base, personCount: big - 1 })).toBe(false);
-        expect(shouldWarnNotPersistent({ ...base, viewMode: true })).toBe(false);
+    it('waits for a request still in flight instead of reporting best-effort', async () => {
+        let grant: ((ok: boolean) => void) | null = null;
+        stubStorage({
+            persisted: vi.fn().mockResolvedValue(false),
+            persist: vi.fn(() => new Promise<boolean>(r => { grant = r; })),
+        });
+        void requestPersistentStorage();
+        const settled = settledPersistenceState();
+        await vi.waitFor(() => expect(grant).not.toBeNull());
+        grant!(true);
+        expect(await settled).toBe('persistent');
+    });
+
+    it('reads the state when nothing was asked in this load', async () => {
+        stubStorage({ persisted: vi.fn().mockResolvedValue(false), persist: vi.fn() });
+        expect(await settledPersistenceState()).toBe('best-effort');
     });
 });

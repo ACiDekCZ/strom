@@ -132,7 +132,7 @@ export const splitMethods = uiModule({
             const component = this.splitComponents[index];
             const subtree = extractSubtree(data, new Set<PersonId>(component.personIds));
             const name = componentName(component, strings.split.familyName, strings.split.noSurname);
-            TreeManager.createTreeFromImport(subtree, name);
+            TreeManager.createTreeFromImport(subtree, name, false);
         }
 
         this.closeSplitDialog();

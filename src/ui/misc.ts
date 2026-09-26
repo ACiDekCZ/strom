@@ -266,6 +266,8 @@ export const miscMethods = uiModule({
         if (deathAnnToggle) deathAnnToggle.checked = SettingsManager.isDeathAnniversariesEnabled();
         const otdAllToggle = document.getElementById('on-this-day-all-trees-toggle') as HTMLInputElement | null;
         if (otdAllToggle) otdAllToggle.checked = SettingsManager.isOnThisDayAllTrees();
+        const fileCopyToggle = document.getElementById('file-copy-reminders-toggle') as HTMLInputElement | null;
+        if (fileCopyToggle) fileCopyToggle.checked = SettingsManager.isFileCopyRemindersEnabled();
 
         const densitySelect = document.getElementById('card-density-select') as HTMLSelectElement | null;
         if (densitySelect) densitySelect.value = SettingsManager.getCardDensity();

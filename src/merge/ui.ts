@@ -1434,6 +1434,7 @@ class MergerUIClass {
             // Create new tree with merged data
             const newTreeId = TreeManager.createTree(newTreeName);
             TreeManager.saveTreeData(newTreeId, result.mergedData);
+            TreeManager.noteUserChange(newTreeId);
 
             // Audit log - record merge summary in the new tree
             const sourceName = this.sourceTreeName || this.incomingFileName || '?';

@@ -106,3 +106,63 @@ export function applyServiceWorkerUpdate(): void {
         reg?.waiting?.postMessage({ type: 'SKIP_WAITING' });
     }).catch(() => {});
 }
+
+// ---- Install offer (Chromium: beforeinstallprompt) ----
+
+interface InstallPromptEvent extends Event {
+    prompt(): Promise<void>;
+    userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+let installPrompt: InstallPromptEvent | null = null;
+
+/** Window event: whether the app can be installed changed. */
+export const INSTALL_AVAILABILITY_EVENT = 'strom:install-availability';
+
+/**
+ * Keep the browser's install offer so the storage advice can show its own
+ * "Install" button. The browser's own entry points (address bar, menu) stay.
+ */
+export function captureInstallPrompt(): void {
+    if (typeof window === 'undefined') return;
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        installPrompt = e as InstallPromptEvent;
+        window.dispatchEvent(new Event(INSTALL_AVAILABILITY_EVENT));
+    });
+    window.addEventListener('appinstalled', () => {
+        installPrompt = null;
+        window.dispatchEvent(new Event(INSTALL_AVAILABILITY_EVENT));
+    });
+}
+
+/** The browser offers to install the app right now. */
+export function canPromptInstall(): boolean {
+    return installPrompt !== null;
+}
+
+/** Show the browser's install dialog; true when the user accepted. */
+export async function promptInstall(): Promise<boolean> {
+    const offer = installPrompt;
+    if (!offer) return false;
+    installPrompt = null;   // an offer can be shown once
+    try {
+        await offer.prompt();
+        const choice = await offer.userChoice;
+        return choice.outcome === 'accepted';
+    } catch {
+        return false;
+    } finally {
+        window.dispatchEvent(new Event(INSTALL_AVAILABILITY_EVENT));
+    }
+}
+
+/** Running as the installed app (home screen, dock, app window). */
+export function isStandaloneDisplay(): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+        if (window.matchMedia?.('(display-mode: standalone)').matches) return true;
+        if (window.matchMedia?.('(display-mode: window-controls-overlay)').matches) return true;
+    } catch { /* no matchMedia */ }
+    return (navigator as { standalone?: boolean }).standalone === true;
+}

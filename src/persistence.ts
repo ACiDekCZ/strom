@@ -13,9 +13,6 @@ export type PersistenceState = 'persistent' | 'best-effort' | 'unsupported';
 /** Window event fired once the request settles; detail: PersistenceState. */
 export const PERSISTENCE_EVENT = 'strom:persistence';
 
-/** Trees at least this big are worth a one-time warning when not persistent. */
-export const PERSISTENCE_WARNING_MIN_PERSONS = 50;
-
 interface StorageLike {
     persist?: () => Promise<boolean>;
     persisted?: () => Promise<boolean>;
@@ -45,6 +42,7 @@ export async function getPersistenceState(): Promise<PersistenceState> {
 
 let persistenceAsked = false;
 let lastRequestedState: PersistenceState | null = null;
+let pendingRequest: Promise<PersistenceState | null> | null = null;
 
 /** Outcome of this load's request, or null while none has settled. */
 export function getRequestedPersistenceState(): PersistenceState | null {
@@ -58,9 +56,14 @@ export function getRequestedPersistenceState(): PersistenceState | null {
  * later load, hence once per load rather than once ever. Fires
  * PERSISTENCE_EVENT with the outcome. Never throws.
  */
-export async function requestPersistentStorage(): Promise<PersistenceState | null> {
-    if (persistenceAsked) return null;
+export function requestPersistentStorage(): Promise<PersistenceState | null> {
+    if (persistenceAsked) return Promise.resolve(null);
     persistenceAsked = true;
+    pendingRequest = askPersistence();
+    return pendingRequest;
+}
+
+async function askPersistence(): Promise<PersistenceState> {
     let state = await getPersistenceState();
     if (state === 'best-effort') {
         try {
@@ -76,25 +79,19 @@ export async function requestPersistentStorage(): Promise<PersistenceState | nul
     return state;
 }
 
+/**
+ * The state to act on now: waits for this load's request when one is still in
+ * flight (a save asks, and a notice raised before the answer would warn about
+ * storage the browser is about to make persistent). Never throws.
+ */
+export async function settledPersistenceState(): Promise<PersistenceState> {
+    if (pendingRequest) await pendingRequest;
+    return lastRequestedState ?? getPersistenceState();
+}
+
 /** Test hook: forget that persistence was asked in this page load. */
 export function resetPersistenceRequestForTests(): void {
     persistenceAsked = false;
     lastRequestedState = null;
-}
-
-/**
- * The one-time "your browser may clear this data" notice: only when storage is
- * not persistent, the tree is big enough to hurt, it was not shown before, and
- * the tree is the user's own editable data.
- */
-export function shouldWarnNotPersistent(input: {
-    state: PersistenceState;
-    personCount: number;
-    alreadyShown: boolean;
-    viewMode: boolean;
-}): boolean {
-    return input.state !== 'persistent'
-        && !input.alreadyShown
-        && !input.viewMode
-        && input.personCount >= PERSISTENCE_WARNING_MIN_PERSONS;
+    pendingRequest = null;
 }
