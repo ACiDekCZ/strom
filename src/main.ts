@@ -238,11 +238,15 @@ function registerAppListeners(): void {
 /** IndexedDB could not be opened: say so instead of a blank page (S22). */
 function showStartupError(err: unknown): void {
     console.error('Startup failed', err);
+    document.documentElement.classList.remove('app-booting');
     void UI.showAlert(strings.storageSafety.storageInitFailed, 'error');
 }
 
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', async () => {
+    // The welcome stays hidden until the first render (renderer.ts); a safety
+    // net in case startup stops short of one (a password prompt left open).
+    setTimeout(() => document.documentElement.classList.remove('app-booting'), 10000);
     // Opening a research from outside (?import-url= / ?live=): keep the canvas
     // blank until that tree is in, instead of flashing the last-opened tree.
     // Cleared by UI.initExternalOpen when the open settles (with a safety net).

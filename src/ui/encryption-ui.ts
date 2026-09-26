@@ -594,6 +594,8 @@ export const encryptionUiMethods = uiModule({
         const locked = DataManager.isLocked();
         const was = document.body.classList.contains('data-locked');
         document.body.classList.toggle('data-locked', locked);
+        // The locked message is the answer to startup: no render comes first.
+        if (locked) document.documentElement.classList.remove('app-booting');
         if (locked && !was) {
             // Close whatever edit surface was open on the stand-in tree.
             this.hideContextMenu();

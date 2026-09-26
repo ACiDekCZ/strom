@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="app-booting">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -3253,6 +3253,9 @@
         }
 
         /* ==================== EMPTY STATE ==================== */
+        /* Until the first render decides (data still loading), the welcome
+           must not flash: it shows only for a tree that is really empty. */
+        html.app-booting #empty-state { visibility: hidden; }
         .empty-state {
             position: absolute;
             top: 50%;
@@ -9168,12 +9171,59 @@
         .attachments-empty { color: var(--text-light); font-size: 13px; padding: 4px 0; }
         .attachments-empty.empty-block--compact { font-size: inherit; padding: 8px 0 4px; }
         /* Fullscreen image preview */
+        /* Fullscreen image viewer (excerpts, scans): pinch / wheel / double-tap
+           zoom, drag to pan (src/image-zoom.ts, attachments-ui.ts). */
         #attachment-overlay {
             display: none; position: fixed; inset: 0; z-index: 3000;
-            background: rgba(0,0,0,0.85); align-items: center; justify-content: center; cursor: zoom-out;
+            background: rgba(0,0,0,0.94); overscroll-behavior: contain; outline: none;
         }
-        #attachment-overlay.active { display: flex; }
-        #attachment-overlay img { max-width: 92vw; max-height: 92vh; box-shadow: var(--shadow-lg); }
+        #attachment-overlay.active { display: block; }
+        .image-viewer-stage {
+            position: absolute; inset: 0; overflow: hidden;
+            touch-action: none; user-select: none; -webkit-user-select: none;
+            cursor: zoom-out;
+        }
+        .image-viewer-stage img {
+            position: absolute; left: 0; top: 0; max-width: none; max-height: none;
+            transform-origin: 0 0; will-change: transform;
+            box-shadow: var(--shadow-lg); cursor: zoom-in;
+            -webkit-user-drag: none; image-rendering: auto;
+        }
+        #attachment-overlay.is-zoomed .image-viewer-stage img { cursor: grab; }
+        #attachment-overlay.is-panning .image-viewer-stage img { cursor: grabbing; }
+        #attachment-overlay.is-animating .image-viewer-stage img { transition: transform 180ms ease-out; }
+        .image-viewer-tools {
+            position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px;
+            display: flex; gap: 2px; padding: 4px; border-radius: 999px;
+            background: rgba(20,20,20,0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+        }
+        .image-viewer-btn {
+            min-width: 44px; height: 44px; padding: 0 8px; border: none; border-radius: 999px;
+            background: transparent; color: #fff; font-size: 22px; line-height: 1;
+            font-family: var(--font-sans); cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .image-viewer-btn:hover { background: rgba(255,255,255,0.14); }
+        .image-viewer-btn:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+        .image-viewer-btn:disabled { opacity: 0.35; cursor: default; background: transparent; }
+        .image-viewer-level { min-width: 64px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .image-viewer-close { font-size: 26px; margin-left: 4px; }
+        .image-viewer-hint {
+            position: absolute; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+            transform: translateX(-50%); max-width: calc(100vw - 32px);
+            padding: 8px 14px; border-radius: 999px; background: rgba(20,20,20,0.72); color: #fff;
+            font-size: 13px; text-align: center; pointer-events: none;
+            opacity: 0; transition: opacity 300ms ease;
+        }
+        .image-viewer-hint.show { opacity: 1; }
+        @media (max-width: 499px) {
+            .image-viewer-tools { right: 8px; }
+            .image-viewer-level { min-width: 56px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #attachment-overlay.is-animating .image-viewer-stage img { transition: none; }
+            .image-viewer-hint { transition: none; }
+        }
 
         /* Duplicate suggestions */
         .duplicate-suggest {
@@ -10218,8 +10268,17 @@
     </div>
 
     <!-- Attachment fullscreen preview overlay -->
-    <div id="attachment-overlay" onclick="window.Strom.UI.closeAttachmentOverlay()">
-        <img id="attachment-overlay-img" alt="">
+    <div id="attachment-overlay" role="dialog" aria-modal="true" tabindex="-1" data-i18n-aria-label="imageViewer.label">
+        <div id="image-viewer-stage" class="image-viewer-stage">
+            <img id="attachment-overlay-img" alt="" draggable="false">
+        </div>
+        <div class="image-viewer-tools">
+            <button type="button" id="image-viewer-out" class="image-viewer-btn" data-i18n-aria-label="imageViewer.zoomOut" data-i18n-title="imageViewer.zoomOut">&minus;</button>
+            <button type="button" id="image-viewer-level" class="image-viewer-btn image-viewer-level" data-i18n-title="imageViewer.fit">100 %</button>
+            <button type="button" id="image-viewer-in" class="image-viewer-btn" data-i18n-aria-label="imageViewer.zoomIn" data-i18n-title="imageViewer.zoomIn">+</button>
+            <button type="button" id="image-viewer-close" class="image-viewer-btn image-viewer-close" data-i18n-aria-label="buttons.close" data-i18n-title="buttons.close">&times;</button>
+        </div>
+        <div id="image-viewer-hint" class="image-viewer-hint" aria-hidden="true"></div>
     </div>
 
     <!-- Relation Modal -->

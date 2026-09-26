@@ -512,6 +512,14 @@ const stringsEN = {
     },
 
     // Attachments
+    imageViewer: {
+        label: 'Image',
+        zoomIn: 'Zoom in (+)',
+        zoomOut: 'Zoom out (−)',
+        fit: 'Fit to screen (0)',
+        hintMouse: 'Scroll or double-click to zoom · drag to move',
+        hintTouch: 'Pinch or double-tap to zoom · drag to move',
+    },
     attachments: {
         title: 'Attachments',
         add: 'Add attachment',
@@ -2738,6 +2746,14 @@ const stringsCZ: StringsType = {
     },
 
     // Attachments
+    imageViewer: {
+        label: 'Obrázek',
+        zoomIn: 'Přiblížit (+)',
+        zoomOut: 'Oddálit (−)',
+        fit: 'Celý obrázek (0)',
+        hintMouse: 'Přibližte kolečkem nebo dvojklikem · posunete tažením',
+        hintTouch: 'Přibližte prsty nebo dvojím klepnutím · posunete tažením',
+    },
     attachments: {
         title: 'Přílohy',
         add: 'Přidat přílohu',
@@ -4958,6 +4974,14 @@ const stringsDE: StringsType = {
     },
 
     // Attachments
+    imageViewer: {
+        label: 'Bild',
+        zoomIn: 'Vergrößern (+)',
+        zoomOut: 'Verkleinern (−)',
+        fit: 'Ganzes Bild (0)',
+        hintMouse: 'Mit Mausrad oder Doppelklick zoomen · ziehen zum Verschieben',
+        hintTouch: 'Mit zwei Fingern oder Doppeltippen zoomen · ziehen zum Verschieben',
+    },
     attachments: {
         title: 'Anhänge',
         add: 'Anhang hinzufügen',

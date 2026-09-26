@@ -172,6 +172,8 @@ class TreeRendererClass {
         this.generationBands = [];
 
         const persons = DataManager.getAllPersons();
+        // The first render knows whether the tree is empty: the welcome may show now.
+        document.documentElement.classList.remove('app-booting');
         if (persons.length === 0) {
             if (empty) empty.style.display = 'block';
             this.focusPersonId = null;

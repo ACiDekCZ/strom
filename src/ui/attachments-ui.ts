@@ -15,6 +15,7 @@ import {
     MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES, ATTACHMENT_WARN_BYTES, pdfBlobFromDataUrl,
 } from '../attachments.js';
 import { uiModule } from './module.js';
+import { openImageViewer, closeImageViewer } from './image-viewer.js';
 import { emptyStateHtml } from './empty-state.js';
 
 import { iconSvg } from '../icons.js';
@@ -40,7 +41,6 @@ function isImage(att: Attachment): boolean {
  * never falls through to close the underlying edit modal. Kept at module scope
  * so it can be removed on close (no leaks / double-handling).
  */
-let attachmentOverlayEscHandler: ((e: KeyboardEvent) => void) | null = null;
 
 /** Convert a data URL to a Blob (for opening PDFs via an object URL). */
 export const attachmentsMethods = uiModule({
@@ -179,35 +179,13 @@ export const attachmentsMethods = uiModule({
         }
     },
 
-    /** Fullscreen preview of an image (attachment, source excerpt). */
+    /** Fullscreen preview of an image (attachment, source excerpt): zoom and pan. */
     showAttachmentImage(dataUrl: string): void {
-        const img = document.getElementById('attachment-overlay-img') as HTMLImageElement | null;
-        const overlay = document.getElementById('attachment-overlay');
-        if (img) img.src = dataUrl;
-        overlay?.classList.add('active');
-        // Escape closes only the preview — capture-phase + stopPropagation so
-        // it never reaches the global handler that would close the edit modal.
-        if (!attachmentOverlayEscHandler) {
-            attachmentOverlayEscHandler = (e: KeyboardEvent) => {
-                if (e.key !== 'Escape') return;
-                if (!document.getElementById('attachment-overlay')?.classList.contains('active')) return;
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                this.closeAttachmentOverlay();
-            };
-            document.addEventListener('keydown', attachmentOverlayEscHandler, true);
-        }
+        openImageViewer(dataUrl);
     },
 
     closeAttachmentOverlay(): void {
-        document.getElementById('attachment-overlay')?.classList.remove('active');
-        const img = document.getElementById('attachment-overlay-img') as HTMLImageElement | null;
-        if (img) img.src = '';
-        if (attachmentOverlayEscHandler) {
-            document.removeEventListener('keydown', attachmentOverlayEscHandler, true);
-            attachmentOverlayEscHandler = null;
-        }
+        closeImageViewer();
     },
 
     updateAttachmentNoteFromInput(attachmentId: string, note: string): void {
