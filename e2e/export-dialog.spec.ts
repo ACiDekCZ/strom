@@ -93,17 +93,17 @@ for (const [format, method, title] of [
     });
 }
 
-test('the storage notice saves with one click: a complete JSON, a toast, "Saved"', async ({ page }) => {
+test('"Where your data is" saves with one click: a complete JSON, a toast, "Saved"', async ({ page }) => {
     await refusePersistence(page);
-    await openApp(page, { fileCopyReminders: true });
+    await openApp(page);
     await importBigTree(page, 'Quick');
     await addPerson(page, 'First');
-    const notice = page.locator('#file-copy-notice');
-    await expect(notice).toBeVisible();
-    await expect(notice.getByRole('button', { name: 'Encrypt with a password…' })).toBeVisible();
+    await page.locator('#unsaved-copy-indicator').click();
+    const status = page.locator('#storage-status-modal');
+    await expect(status.locator('#storage-status-encrypt')).toBeVisible();
     const [download] = await Promise.all([
         page.waitForEvent('download'),
-        notice.getByRole('button', { name: 'Save to file' }).click(),
+        status.locator('#storage-status-save').click(),
     ]);
     await expect(dialog(page)).not.toHaveClass(/active/);
     expect(download.suggestedFilename()).toBe('quick.json');
@@ -115,10 +115,11 @@ test('the storage notice saves with one click: a complete JSON, a toast, "Saved"
 
 test('"Encrypt with a password…" opens the narrowed dialog, switch on, password focused', async ({ page }) => {
     await refusePersistence(page);
-    await openApp(page, { fileCopyReminders: true });
+    await openApp(page);
     await importBigTree(page, 'Secret');
     await addPerson(page, 'First');
-    await page.locator('#file-copy-notice').getByRole('button', { name: 'Encrypt with a password…' }).click();
+    await page.locator('#unsaved-copy-indicator').click();
+    await page.locator('#storage-status-encrypt').click();
     const d = dialog(page);
     await expect(d).toHaveClass(/active/);
     await expect(d.locator('#export-dialog-title')).toHaveText('Save to file');
@@ -132,7 +133,7 @@ test('"Encrypt with a password…" opens the narrowed dialog, switch on, passwor
 
 test('app data encrypted: the quick save opens the narrowed dialog with encryption on', async ({ page }) => {
     await refusePersistence(page);
-    await openApp(page, { fileCopyReminders: true });
+    await openApp(page);
     await importBigTree(page, 'Locked');
     await addPerson(page, 'First');
     // Only the decision is under test here (setting up a real session is elsewhere).

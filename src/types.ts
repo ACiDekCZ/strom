@@ -737,8 +737,8 @@ export interface TreeMetadata {
     changedAt?: string;
     /** Last full copy in a file: a full export, the working file, or the file it was imported from (ISO). */
     fileCopyAt?: string;
-    /** Last "changes only in the browser" notice for this tree (ISO). */
-    fileCopyNoticeAt?: string;
+    /** The "changes only in the browser" notice was closed for this tree (ISO); it returns after the next file copy. */
+    fileCopyNoticeClosedAt?: string;
 }
 
 /** Link between a local tree and the Strom Research tree it was opened from. */

@@ -957,11 +957,11 @@ class TreeManagerClass {
         for (const id of treeIds) dispatchFileCopyEvent(id);
     }
 
-    /** The "changes only in the browser" notice was shown for this tree. */
-    noteFileCopyNotice(treeId: TreeId): void {
+    /** The user closed the "changes only in the browser" notice for this tree. */
+    noteFileCopyNoticeClosed(treeId: TreeId): void {
         const tree = this.index.trees.find(t => t.id === treeId);
         if (!tree) return;
-        tree.fileCopyNoticeAt = new Date().toISOString();
+        tree.fileCopyNoticeClosedAt = new Date().toISOString();
         this.saveIndex();
     }
 

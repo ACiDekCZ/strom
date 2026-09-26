@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-    hasUnsavedChanges, shouldNoticeUnsaved, shouldShowUnsavedIndicator, unsavedTrees, storageAdvice, isIosDevice, browserFamily,
-    FILE_COPY_NOTICE_MIN_PERSONS, FILE_COPY_REMIND_MS,
+    hasUnsavedChanges, shouldShowNotice, shouldShowUnsavedIndicator, unsavedTrees, storageAdvice, isIosDevice, browserFamily,
+    FILE_COPY_NOTICE_MIN_PERSONS,
 } from '../file-copy.js';
 
 const T0 = Date.parse('2026-09-20T10:00:00.000Z');
@@ -17,41 +17,35 @@ describe('hasUnsavedChanges', () => {
     });
 });
 
-describe('shouldNoticeUnsaved', () => {
+describe('shouldShowNotice', () => {
     const base = {
         state: 'best-effort' as const,
         info: { changedAt: iso(T0 + 1000), fileCopyAt: iso(T0) },
         personCount: FILE_COPY_NOTICE_MIN_PERSONS,
         viewMode: false,
         enabled: true,
-        now: T0 + 2000,
     };
 
-    it('notices the first unsaved change when the browser may clear the data', () => {
-        expect(shouldNoticeUnsaved(base)).toBe(true);
-        expect(shouldNoticeUnsaved({ ...base, state: 'unsupported' })).toBe(true);
+    it('shows at unsaved changes when the browser may clear the data', () => {
+        expect(shouldShowNotice(base)).toBe(true);
+        expect(shouldShowNotice({ ...base, state: 'unsupported' })).toBe(true);
     });
 
     it('stays quiet for persistent storage, small trees, shared copies, the setting off, saved work', () => {
-        expect(shouldNoticeUnsaved({ ...base, state: 'persistent' })).toBe(false);
-        expect(shouldNoticeUnsaved({ ...base, personCount: FILE_COPY_NOTICE_MIN_PERSONS - 1 })).toBe(false);
-        expect(shouldNoticeUnsaved({ ...base, viewMode: true })).toBe(false);
-        expect(shouldNoticeUnsaved({ ...base, enabled: false })).toBe(false);
-        expect(shouldNoticeUnsaved({ ...base, info: { changedAt: iso(T0), fileCopyAt: iso(T0 + 1) } })).toBe(false);
+        expect(shouldShowNotice({ ...base, state: 'persistent' })).toBe(false);
+        expect(shouldShowNotice({ ...base, personCount: FILE_COPY_NOTICE_MIN_PERSONS - 1 })).toBe(false);
+        expect(shouldShowNotice({ ...base, viewMode: true })).toBe(false);
+        expect(shouldShowNotice({ ...base, enabled: false })).toBe(false);
+        expect(shouldShowNotice({ ...base, info: { changedAt: iso(T0), fileCopyAt: iso(T0 + 1) } })).toBe(false);
     });
 
-    it('once per stretch of unsaved work: again after a newer file copy', () => {
-        const noticed = { ...base.info, fileCopyNoticeAt: iso(T0 + 1500) };
-        expect(shouldNoticeUnsaved({ ...base, info: noticed })).toBe(false);
-        // Exported after the notice, then edited again: a new stretch.
-        const again = { changedAt: iso(T0 + 4000), fileCopyAt: iso(T0 + 3000), fileCopyNoticeAt: iso(T0 + 1500) };
-        expect(shouldNoticeUnsaved({ ...base, info: again, now: T0 + 5000 })).toBe(true);
-    });
-
-    it('reminds once more when the work stayed unsaved for a week', () => {
-        const noticed = { ...base.info, fileCopyNoticeAt: iso(T0 + 1500) };
-        expect(shouldNoticeUnsaved({ ...base, info: noticed, now: T0 + 1500 + FILE_COPY_REMIND_MS - 1 })).toBe(false);
-        expect(shouldNoticeUnsaved({ ...base, info: noticed, now: T0 + 1500 + FILE_COPY_REMIND_MS })).toBe(true);
+    it('closed: not back on further edits, only after a save and another change', () => {
+        const closed = { changedAt: iso(T0 + 3000), fileCopyAt: iso(T0), fileCopyNoticeClosedAt: iso(T0 + 1500) };
+        expect(shouldShowNotice({ ...base, info: closed })).toBe(false);
+        // Saved after closing, not changed since: nothing unsaved.
+        expect(shouldShowNotice({ ...base, info: { ...closed, fileCopyAt: iso(T0 + 4000) } })).toBe(false);
+        // Saved after closing, then changed: back.
+        expect(shouldShowNotice({ ...base, info: { ...closed, fileCopyAt: iso(T0 + 4000), changedAt: iso(T0 + 5000) } })).toBe(true);
     });
 });
 

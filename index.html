@@ -71,6 +71,8 @@
             --warning: #d0a23c;       /* pending merge */
             --danger-soft: #f5e6e2;   /* error/destructive tint backgrounds */
             --warning-soft: #f6ecd3;  /* warning tint backgrounds */
+            --warning-text: #7f5500;  /* warning text on paper / warning-soft (≥4.5:1) */
+            --on-warning: #2b2100;    /* mark drawn on a --warning fill */
             --info-soft: #e4ebf1;     /* informational tint backgrounds */
             --pending: #d0a23c;       /* unfinished merge state (dashed) */
             --chart-soft: #c9d8cc;    /* lighter shade for single-hue charts */
@@ -150,6 +152,8 @@
             --pending: #d8b25e;
             --danger-soft: #3d2b27;
             --warning-soft: #3a3324;
+            --warning-text: #e8c47c;
+            --on-warning: #1f1a10;
             --info-soft: #2a3139;
             --chart-soft: #3a4a3f;
 
@@ -4072,6 +4076,7 @@
         .toolbar .storage-pill { margin-left: 8px; cursor: pointer; }
         .storage-pill-icon { display: inline-flex; }
         .storage-pill-icon svg { width: 14px; height: 14px; display: block; }
+        .storage-pill.is-unsaved .storage-pill-icon svg { width: 16px; height: 16px; color: var(--warning-text); }
         .storage-pill.is-unsaved,
         .toolbar .storage-pill.is-unsaved {
             color: var(--accent-text); background: var(--warning-soft);
@@ -4104,7 +4109,10 @@
         @media (min-width: 1180px) {
             .actions-menu-storage-dot, .actions-storage-row { display: none !important; }
         }
-        .actions-menu-storage-dot.storage-dot { background: var(--warning); }
+        .actions-menu-storage-dot.storage-dot {
+            width: 14px; height: 14px; top: 0; right: 0;
+            background: none; border-radius: 0;
+        }
         body.storage-unsaved .actions-storage-row { display: flex; }
         .actions-storage-row {
             align-items: center; gap: 10px; margin: 2px 6px 4px; padding: 8px 10px;
@@ -4114,7 +4122,8 @@
         .actions-storage-row:hover { background: color-mix(in srgb, var(--warning) 22%, var(--warning-soft)); }
         .actions-storage-icon svg { width: 16px; height: 16px; display: block; }
         .actions-storage-text { display: flex; flex-direction: column; gap: 1px; }
-        .actions-storage-title { font-size: 13px; font-weight: 600; }
+        .actions-storage-title { font-size: 13px; font-weight: 600; color: var(--warning-text); }
+        .actions-storage-icon { color: var(--warning-text); }
         .actions-storage-sub { font-size: 12px; color: var(--text-secondary); }
         @media (max-width: 1280px) {
             .toolbar .storage-pill .storage-pill-label { display: none; }
@@ -4129,8 +4138,14 @@
             100% { box-shadow: 0 0 0 0 transparent; }
         }
         .storage-pulse { animation: storage-pulse 600ms ease-out 2; }
+        /* The triangle badges pulse by size (a ring would draw a square). */
+        @keyframes storage-badge-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.35); }
+        }
+        .storage-badge.storage-pulse { animation: storage-badge-pulse 600ms ease-in-out 2; }
         @media (prefers-reduced-motion: reduce) {
-            .storage-pulse { animation: none; }
+            .storage-pulse, .storage-badge.storage-pulse { animation: none; }
         }
         /* Edits only in the browser: the dots on "More" (bottom bar and the top
            ⋯) follow one body class, set with the toolbar pill. */
@@ -4138,9 +4153,14 @@
         body.storage-unsaved .storage-dot { display: block; }
         /* The "More" tab's dot for this state outranks the anniversaries dot. */
         .bottom-bar-more-dot.is-storage {
-            width: 8px; height: 8px; background: var(--warning);
-            box-shadow: 0 0 0 2px var(--surface);
+            width: 14px; height: 14px; top: -6px; right: -9px;
+            background: none; border-radius: 0; box-shadow: none;
         }
+        /* Unsaved edits wear a warning triangle, not a dot: dots mean news
+           (anniversaries, "About"), this means "save". */
+        .storage-badge svg { display: block; width: 100%; height: 100%; overflow: visible; }
+        .storage-badge .tri { fill: var(--warning); stroke: var(--surface); stroke-width: 3; paint-order: stroke; stroke-linejoin: round; }
+        .storage-badge .mark { stroke: var(--on-warning); stroke-width: 2.4; stroke-linecap: round; fill: none; }
         /* The state row on top of the "More" sheet. */
         .bottom-sheet-item.bottom-sheet-storage-row {
             display: flex; align-items: center; gap: 12px;
@@ -4152,7 +4172,8 @@
         }
         .bottom-sheet-storage-row svg { width: 18px; height: 18px; flex-shrink: 0; }
         .bottom-sheet-storage-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-        .bottom-sheet-storage-title { font-size: 14px; font-weight: 600; }
+        .bottom-sheet-storage-title { font-size: 14px; font-weight: 600; color: var(--warning-text); }
+        .bottom-sheet-storage-row svg { color: var(--warning-text); }
         .bottom-sheet-storage-sub { font-size: 12px; color: var(--text-secondary); font-weight: 400; }
         .bottom-sheet-storage-chevron { font-size: 20px; line-height: 1; }
         .storage-status-state { margin: 0 0 12px; }
@@ -4227,6 +4248,42 @@
         .storage-notice .pwa-update-btn { flex-shrink: 0; }
         .storage-notice .notice-link { flex-shrink: 0; font-size: 13px; color: var(--text-light); text-decoration: none; padding: 6px 2px; }
         .storage-notice .notice-link:hover { text-decoration: underline; }
+        /* "Changes only in the browser": information only — icon, readable
+           text over the full width, a quiet link, a 44px close. */
+        .storage-notice.file-copy-notice {
+            display: grid; grid-template-columns: auto 1fr auto; align-items: start;
+            gap: 12px;
+            width: min(520px, calc(100vw - 32px)); max-width: none;
+            padding: 16px; padding-right: 4px; padding-top: 12px;
+        }
+        .file-copy-notice-icon { color: var(--warning-text); padding-top: 4px; }
+        .file-copy-notice-icon svg { width: 20px; height: 20px; display: block; }
+        .file-copy-notice-body { min-width: 0; padding-top: 2px; }
+        .file-copy-notice-text {
+            margin: 0; font-size: 15px; line-height: 1.5; color: var(--text);
+            text-wrap: pretty;
+        }
+        .storage-notice .file-copy-notice-link {
+            margin-top: 4px; padding: 0; min-height: 0; min-width: 0;
+            font-size: 14px; color: var(--text-light);
+            text-decoration: underline; text-underline-offset: 2px;
+            background: none; border: none; cursor: pointer;
+        }
+        .storage-notice .file-copy-notice-link:hover { color: var(--text); }
+        .file-copy-notice-close {
+            width: 44px; height: 44px; margin-top: -8px;
+            display: inline-flex; align-items: center; justify-content: center;
+            border: none; background: none; border-radius: var(--r-md);
+            font-size: 22px; line-height: 1; color: var(--text-light); cursor: pointer;
+        }
+        .file-copy-notice-close:hover { color: var(--text); background: var(--hover-bg); }
+        @media (max-width: 499px) {
+            .storage-notice.file-copy-notice {
+                width: calc(100vw - 2 * 12px);
+                padding: 12px 4px 8px 12px; font-size: 15px;
+            }
+            .storage-notice .file-copy-notice-link { min-height: 44px; margin-top: 0; }
+        }
         .storage-status-encrypt { margin-right: auto; font-size: 13px; color: var(--text-light); text-decoration: none; }
         .storage-status-encrypt:hover { text-decoration: underline; }
         .storage-status-encrypt[hidden] { display: none; }
@@ -5630,9 +5687,8 @@
         .toolbar .mobile-more-btn:hover { background: var(--hover-bg); color: var(--text); }
         .toolbar .mobile-more-btn { position: relative; }
         .mobile-more-storage-dot {
-            position: absolute; top: 11px; right: 9px;
-            width: 8px; height: 8px; border-radius: 50%;
-            background: var(--warning); box-shadow: 0 0 0 2px var(--surface);
+            position: absolute; top: 6px; right: 3px;
+            width: 14px; height: 14px;
         }
         .mobile-more-glyph { font-size: 22px; line-height: 1; }
 
@@ -7634,7 +7690,6 @@
             transform: translateX(-50%) translateY(0);
             opacity: 1;
         }
-
         /* Drop a .ged anywhere onto the window (research-ui.ts). */
         .drop-overlay {
             position: fixed;
@@ -9439,11 +9494,11 @@
 
         <!-- Actions menu (⋯) — desktop only; the mobile ⋯ + "More" sheet cover smaller screens -->
         <div class="actions-menu desktop-only">
-            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><svg class="actions-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span><span id="actions-menu-new-dot" class="actions-menu-dot actions-menu-new-dot" style="display:none;" aria-hidden="true"></span><span class="actions-menu-dot actions-menu-storage-dot is-storage storage-dot" aria-hidden="true"></span></button>
+            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><svg class="actions-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span><span id="actions-menu-new-dot" class="actions-menu-dot actions-menu-new-dot" style="display:none;" aria-hidden="true"></span><span class="actions-menu-dot actions-menu-storage-dot is-storage storage-dot storage-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="tri" d="M10.27 3.2a2 2 0 0 1 3.46 0l8.5 14.8A2 2 0 0 1 20.5 21h-17a2 2 0 0 1-1.73-3z"/><path class="mark" d="M12 9.5v4M12 17h.01"/></svg></span></button>
             <div id="actions-menu-dropdown" class="tree-switcher-dropdown actions-menu-dropdown" role="menu">
                 <div id="actions-storage-row" class="tree-switcher-action actions-storage-row storage-dot" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showStorageStatusDialog()" tabindex="0" role="menuitem">
                     <span class="actions-storage-icon" aria-hidden="true"></span>
-                    <span class="actions-storage-text"><span class="actions-storage-title" data-i18n="fileCopy.indicatorShort"></span><span class="actions-storage-sub" data-i18n="fileCopy.moreRowSub"></span></span>
+                    <span class="actions-storage-text"><span class="actions-storage-title" data-i18n="fileCopy.menuUnsaved"></span><span class="actions-storage-sub" data-i18n="fileCopy.moreRowSub"></span></span>
                 </div>
                 <div id="actions-undo-row" class="tree-switcher-action edit-only actions-undo-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.performUndo()" tabindex="0" role="menuitem">
                     <span id="actions-undo-label"></span>
@@ -9557,7 +9612,7 @@
         <button class="add-person-round" onclick="window.Strom.UI.showAddPersonModal()" title="Add person" data-i18n-title="toolbar.addPerson">+</button>
 
         <!-- Mobile actions (⋯) — opens the "More" bottom sheet (≤1024px) -->
-        <button class="mobile-more-btn" onclick="window.Strom.UI.showMoreMenuSheet()" data-i18n-title="mobileMenu.more" data-i18n-aria-label="mobileMenu.more"><span class="mobile-more-glyph" aria-hidden="true">⋯</span><span class="mobile-more-storage-dot is-storage storage-dot" aria-hidden="true"></span></button>
+        <button class="mobile-more-btn" onclick="window.Strom.UI.showMoreMenuSheet()" data-i18n-title="mobileMenu.more" data-i18n-aria-label="mobileMenu.more"><span class="mobile-more-glyph" aria-hidden="true">⋯</span><span class="mobile-more-storage-dot is-storage storage-dot storage-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="tri" d="M10.27 3.2a2 2 0 0 1 3.46 0l8.5 14.8A2 2 0 0 1 20.5 21h-17a2 2 0 0 1-1.73-3z"/><path class="mark" d="M12 9.5v4M12 17h.01"/></svg></span></button>
     </div>
 
     <!-- Mobile bottom navigation bar (≤1024px) — replaces the hamburger -->
@@ -9578,7 +9633,7 @@
             <span class="bottom-bar-label" data-i18n="viewModeSwitch.timeline"></span>
         </button>
         <button type="button" class="bottom-bar-tab bottom-bar-more" id="bb-view-more" onclick="window.Strom.UI.showMoreMenuSheet()">
-            <span class="bottom-bar-icon-wrap"><svg class="bottom-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span id="bottom-bar-more-dot" class="bottom-bar-more-dot" style="display:none;"></span><span id="bottom-bar-more-storage-dot" class="bottom-bar-more-dot is-storage storage-dot" aria-hidden="true"></span></span>
+            <span class="bottom-bar-icon-wrap"><svg class="bottom-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span id="bottom-bar-more-dot" class="bottom-bar-more-dot" style="display:none;"></span><span id="bottom-bar-more-storage-dot" class="bottom-bar-more-dot is-storage storage-dot storage-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="tri" d="M10.27 3.2a2 2 0 0 1 3.46 0l8.5 14.8A2 2 0 0 1 20.5 21h-17a2 2 0 0 1-1.73-3z"/><path class="mark" d="M12 9.5v4M12 17h.01"/></svg></span></span>
             <span class="bottom-bar-label" data-i18n="mobileMenu.more"></span>
         </button>
     </nav>

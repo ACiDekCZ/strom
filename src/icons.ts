@@ -60,7 +60,7 @@ export function twoFiguresSvg(options: TwoFiguresOptions = {}): string {
 export type IconName =
     | 'trash' | 'pencil' | 'book' | 'file' | 'folder' | 'info' | 'check'
     | 'star' | 'pin' | 'timer' | 'play' | 'pause' | 'user' | 'lock' | 'chevron-down'
-    | 'file-unsaved' | 'file-saved';
+    | 'file-unsaved' | 'file-saved' | 'alert-triangle';
 
 /** Stroked 24×24 drawings (same stroke language as the chain/figures glyphs). */
 const ICON_PATHS: Record<IconName, string> = {
@@ -86,6 +86,9 @@ const ICON_PATHS: Record<IconName, string> = {
         + '<circle cx="18.5" cy="5.5" r="3.5" fill="currentColor" stroke="none"/>',
     'file-saved': '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V11"/><path d="M8 13h6M8 17h8"/>'
         + '<path d="M15.5 5.5l2 2 4-4"/>',
+    // Edits no file holds yet: a warning, set apart from the plain news dots.
+    'alert-triangle': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>'
+        + '<path d="M12 9v4"/><path d="M12 17h.01"/>',
 };
 
 interface IconOptions {

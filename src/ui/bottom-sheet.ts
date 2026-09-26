@@ -152,7 +152,7 @@ export const bottomSheetMethods = uiModule({
         // 0) Edits only in the browser: the state first, one tap from the dialog.
         if (!isView && this.isUnsavedInBrowser()) {
             blocks.push({ rows: [], storageRow: {
-                title: s.fileCopy.indicatorShort,
+                title: s.fileCopy.menuUnsaved,
                 sub: s.fileCopy.moreRowSub,
                 run: () => { void this.showStorageStatusDialog(); },
             } });
@@ -349,7 +349,7 @@ export const bottomSheetMethods = uiModule({
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'bottom-sheet-item bottom-sheet-storage-row';
-            btn.insertAdjacentHTML('beforeend', iconSvg('file-unsaved', { size: 18 }));
+            btn.insertAdjacentHTML('beforeend', iconSvg('alert-triangle', { size: 18 }));
             const text = document.createElement('span');
             text.className = 'bottom-sheet-storage-text';
             const title = document.createElement('span');

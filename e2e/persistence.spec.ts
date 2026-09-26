@@ -34,60 +34,84 @@ async function addPerson(page: Page, firstName: string): Promise<void> {
     await expect(page.locator('#person-modal')).toBeHidden();
 }
 
-test('edits no file holds: a notice at once, the toolbar icon until the next export', async ({ page }) => {
+test('edits no file holds: an information-only notice, the indicator until the next save', async ({ page }) => {
     await stubPersistence(page, false);
     await openApp(page, { fileCopyReminders: true });
     const notice = page.locator('#file-copy-notice');
     const indicator = page.locator('#unsaved-copy-indicator');
 
-    // An imported tree has its file: nothing to warn about yet.
+    // An imported tree has its file: nothing to say yet.
     await importBigTree(page, 'Persistence');
     await page.waitForFunction(() => (window as unknown as { __persistAsked?: number }).__persistAsked === 1);
     await expect(notice).toHaveCount(0);
     await expect(indicator).toBeHidden();
 
-    // The first edit: notice + icon (its one-click save: export-dialog.spec).
+    // The first edit: notice + indicator. The notice only informs: no button
+    // but the "Where is my data?" link and the close.
     await addPerson(page, 'First');
     await expect(notice).toBeVisible();
     await expect(notice).toContainText('Persistence');
+    await expect(notice).toHaveAttribute('role', 'status');
+    await expect(notice.locator('button')).toHaveCount(2);
+    await expect(notice.getByRole('button', { name: 'Where is my data?' })).toBeVisible();
     await expect(indicator).toBeVisible();
-    await notice.locator('.pwa-update-close').click();
-    await expect(notice).toHaveCount(0);
+    await expect(indicator.locator('.storage-pill-icon path')).toHaveCount(3);
 
-    // More edits in the same stretch stay quiet (the icon stays).
+    // Closed: not back on further edits, nor after a reload.
+    await notice.getByRole('button', { name: 'Close' }).click();
+    await expect(notice).toHaveCount(0);
     await addPerson(page, 'Second');
-    await expect(indicator).toBeVisible();
-    await expect(notice).toHaveCount(0);
-
-    // A full export: "Saved to file" briefly, then the pill goes; the next
-    // edit starts a new stretch.
-    await exportTreeJson(page);
-    await expect(indicator).toHaveClass(/is-saved/);
-    await expect(indicator).toBeHidden({ timeout: 6000 });
-    await addPerson(page, 'Third');
-    await expect(notice).toBeVisible();
-
-    // After a reload: the icon is back (still unsaved), no notice without an edit.
     await page.reload();
     await expect(page.locator('.toolbar')).toBeVisible();
     await expect(indicator).toBeVisible();
+    await addPerson(page, 'Third');
+    await page.waitForTimeout(300);
     await expect(notice).toHaveCount(0);
 
-    // The icon opens "Where your data is".
-    await indicator.click();
+    // Saved: "Saved to file" briefly, the pill goes; the next change brings the notice back.
+    await exportTreeJson(page);
+    await expect(indicator).toHaveClass(/is-saved/);
+    await expect(indicator).toBeHidden({ timeout: 6000 });
+    await addPerson(page, 'Fourth');
+    await expect(notice).toBeVisible();
+
+    // Not closed: it is there after a reload too.
+    await page.reload();
+    await expect(page.locator('.toolbar')).toBeVisible();
+    await expect(notice).toBeVisible();
+
+    // The link opens "Where your data is".
+    await notice.getByRole('button', { name: 'Where is my data?' }).click();
     const dialog = page.locator('#storage-status-modal');
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText('may clear it');
     await expect(dialog).toContainText('Changes made since then are only in the browser');
 });
 
-test('reminders off: no notice, the toolbar icon still shows', async ({ page }) => {
+test('reminders off: no notice, the indicator still shows', async ({ page }) => {
     await stubPersistence(page, false);
     await openApp(page);
     await importBigTree(page, 'Quiet');
     await addPerson(page, 'First');
     await expect(page.locator('#unsaved-copy-indicator')).toBeVisible();
     await expect(page.locator('#file-copy-notice')).toHaveCount(0);
+});
+
+test('phones: the "More" tab wears a warning triangle, not a dot; gone after a save', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await stubPersistence(page, false);
+    await openApp(page);
+    await importBigTree(page, 'Triangle');
+    await addPerson(page, 'First');
+    const badge = page.locator('#bottom-bar-more-storage-dot');
+    await expect(badge).toBeVisible();
+    await expect(badge.locator('svg path.tri')).toHaveCount(1);
+    await expect(page.locator('#bb-view-more')).toHaveAttribute('aria-label', /changes are not saved/);
+    await page.locator('#bb-view-more').click();
+    await expect(page.locator('.bottom-sheet-storage-title')).toHaveText('Only in browser – not saved');
+    await page.locator('.bottom-sheet-storage-row').click();
+    await page.locator('#storage-status-save').click();
+    await expect(badge).toBeHidden();
 });
 
 test('the backups dialog says whether the browser may clear the data', async ({ page }) => {
@@ -138,7 +162,7 @@ test('bottom-bar regime: the state rides the More tab and tops its sheet', async
     await addPerson(page, 'First');
     await expect(page.locator('#unsaved-copy-indicator')).toBeHidden();
     await expect(dot).toBeVisible();
-    await expect(page.locator('#bb-view-more')).toHaveAttribute('aria-label', 'More – changes only in the browser');
+    await expect(page.locator('#bb-view-more')).toHaveAttribute('aria-label', 'More – changes are not saved');
     await page.locator('#bb-view-more').click();
     const row = page.locator('.bottom-sheet-storage-row');
     await expect(row).toContainText('Only in browser');
@@ -164,7 +188,8 @@ test('reduced motion: the first-edit highlight does not animate', async ({ page 
     await openApp(page, { fileCopyReminders: true });
     await importBigTree(page, 'Calm');
     await addPerson(page, 'First');
-    await expect(page.locator('#file-copy-notice')).toBeVisible();
+    await expect(page.locator('#unsaved-copy-indicator')).toBeVisible();
+    await expect(page.locator('#unsaved-copy-indicator')).toHaveClass(/storage-pulse/);
     const running = await page.locator('#unsaved-copy-indicator').evaluate(el => el.getAnimations().length);
     expect(running).toBe(0);
 });

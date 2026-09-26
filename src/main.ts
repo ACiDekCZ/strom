@@ -188,7 +188,6 @@ function registerAppListeners(): void {
         UI.updateCollabBar();
         void UI.updateFileIndicator();
         void UI.refreshUnsavedIndicator();
-        document.getElementById('file-copy-notice')?.remove();
         // A warning about another tab belongs to the tree it was raised for.
         document.getElementById('other-tab-notice')?.remove();
         // So does "on this day": the new tree gets its own (once a day).

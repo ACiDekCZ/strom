@@ -6,7 +6,7 @@
  * tree was imported from) is the one copy that survives.
  *
  * Pure: the timestamps live in TreeMetadata (changedAt, fileCopyAt,
- * fileCopyNoticeAt); tree-manager records them, the UI asks these functions.
+ * fileCopyNoticeClosedAt); tree-manager records them, the UI asks these functions.
  */
 
 import type { PersistenceState } from './persistence.js';
@@ -16,15 +16,12 @@ export interface FileCopyInfo {
     changedAt?: string;
     /** Last full copy in a file: a full export, the working file, or the import. */
     fileCopyAt?: string;
-    /** Last time the "changes only in the browser" notice was shown. */
-    fileCopyNoticeAt?: string;
+    /** Last time the user closed the "changes only in the browser" notice. */
+    fileCopyNoticeClosedAt?: string;
 }
 
 /** Trees this small do not raise the notice (the indicator still shows). */
 export const FILE_COPY_NOTICE_MIN_PERSONS = 10;
-
-/** A tree still unsaved this long after the notice gets it once more. */
-export const FILE_COPY_REMIND_MS = 7 * 24 * 60 * 60 * 1000;
 
 function time(iso: string | undefined): number {
     const t = iso ? Date.parse(iso) : NaN;
@@ -38,26 +35,24 @@ export function hasUnsavedChanges(info: FileCopyInfo): boolean {
 }
 
 /**
- * Raise the notice now? Only when the browser may clear the data, the tree has
+ * Show the notice? Only when the browser may clear the data, the tree has
  * edits that no file holds, and it is the user's own tree worth protecting.
- * Once per stretch of unsaved work: again only after a newer file copy, or
- * when the work has stayed unsaved for a week since the last notice.
+ * It stays until closed; a closed notice returns only after the tree is
+ * saved to a file and changed again (not on further edits, not on reload).
  */
-export function shouldNoticeUnsaved(input: {
+export function shouldShowNotice(input: {
     state: PersistenceState;
     info: FileCopyInfo;
     personCount: number;
     viewMode: boolean;
     enabled: boolean;
-    now: number;
 }): boolean {
     const { state, info } = input;
     if (state === 'persistent' || input.viewMode || !input.enabled) return false;
     if (input.personCount < FILE_COPY_NOTICE_MIN_PERSONS) return false;
     if (!hasUnsavedChanges(info)) return false;
-    const noticed = time(info.fileCopyNoticeAt);
-    if (noticed === 0 || noticed < time(info.fileCopyAt)) return true;
-    return input.now - noticed >= FILE_COPY_REMIND_MS;
+    const closed = time(info.fileCopyNoticeClosedAt);
+    return closed === 0 || closed < time(info.fileCopyAt);
 }
 
 /** Trees with people whose edits no file holds (the indicator covers them all). */

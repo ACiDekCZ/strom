@@ -17,7 +17,7 @@ import { TreeId, TreeMetadata } from '../types.js';
 import { formatRelativeDateTime } from '../format.js';
 import { getPersistenceState, settledPersistenceState, PersistenceState } from '../persistence.js';
 import {
-    hasUnsavedChanges, shouldNoticeUnsaved, shouldShowUnsavedIndicator, unsavedTrees, storageAdvice, isIosDevice, browserFamily, StorageAdvice,
+    hasUnsavedChanges, shouldShowNotice, shouldShowUnsavedIndicator, unsavedTrees, storageAdvice, isIosDevice, browserFamily, StorageAdvice,
 } from '../file-copy.js';
 import { canPromptInstall, promptInstall, isStandaloneDisplay } from '../pwa.js';
 import { uiModule } from './module.js';
@@ -41,6 +41,18 @@ function activeTree(): { id: TreeId; meta: TreeMetadata } | null {
     const id = DataManager.getCurrentTreeId();
     const meta = id ? TreeManager.getTreeMetadata(id) : null;
     return id && meta ? { id, meta } : null;
+}
+
+/** The notice text, with the device's own advice. */
+function noticeMessage(treeName: string): string {
+    const s = strings.fileCopy;
+    const advice = currentAdvice();
+    return advice === 'install' ? s.noticeInstall(treeName)
+        : advice === 'install-menu' ? s.noticeInstallMenu(treeName)
+        : advice === 'mac-dock' ? s.noticeMacDock(treeName)
+        : advice === 'firefox' ? s.noticeFirefox(treeName)
+        : advice === 'ios-safari' ? s.noticeIosSafari(treeName)
+        : s.notice(treeName);
 }
 
 function personCount(): number {
@@ -84,7 +96,7 @@ function setPillState(el: HTMLElement, state: PillState): void {
         label.className = 'storage-pill-label';
         el.replaceChildren(icon, label);
     }
-    icon.innerHTML = iconSvg(state === 'saved' ? 'file-saved' : state === 'persistent' ? 'lock' : 'file-unsaved');
+    icon.innerHTML = iconSvg(state === 'saved' ? 'file-saved' : state === 'persistent' ? 'lock' : 'alert-triangle');
     label.textContent = state === 'saved' ? s.savedShort : state === 'persistent' ? s.persistentShort : s.indicatorShort;
 }
 
@@ -120,11 +132,20 @@ function pulse(el: HTMLElement | null): void {
     el.addEventListener('animationend', () => el.classList.remove('storage-pulse'), { once: true });
 }
 
+/** Draw the eye to every visible form of the indicator. */
+function pulseIndicators(): void {
+    pulse(document.getElementById('unsaved-copy-indicator'));
+    pulse(document.getElementById('bottom-bar-more-storage-dot'));
+    pulse(document.querySelector<HTMLElement>('.mobile-more-storage-dot'));
+    pulse(document.querySelector<HTMLElement>('.actions-menu-storage-dot'));
+}
+
 export const fileCopyMethods = uiModule({
     /** Show or hide the "only in browser" state for the open tree. */
     async refreshUnsavedIndicator(): Promise<void> {
         knownState = await getPersistenceState();
         this.renderUnsavedIndicator();
+        this.renderFileCopyNotice();
     },
 
     /** The state was showing at the last render (the "More" sheet asks). */
@@ -154,7 +175,7 @@ export const fileCopyMethods = uiModule({
         }
         document.body.classList.toggle('storage-unsaved', show);
         const rowIcon = document.querySelector<HTMLElement>('.actions-storage-icon');
-        if (rowIcon && !rowIcon.firstChild) rowIcon.innerHTML = iconSvg('file-unsaved');
+        if (rowIcon && !rowIcon.firstChild) rowIcon.innerHTML = iconSvg('alert-triangle');
         const more = document.getElementById('bb-view-more');
         if (more) {
             more.dataset.storage = show ? '1' : '';
@@ -193,7 +214,7 @@ export const fileCopyMethods = uiModule({
 
     /**
      * A tree's file-copy state changed (an edit, an export): refresh the
-     * indicator, and for an edit of the open tree maybe raise the notice.
+     * indicator (it pulses when it turns on) and the notice.
      */
     async handleFileCopyChange(treeId: string): Promise<void> {
         const wasShown = unsavedShown;
@@ -201,57 +222,77 @@ export const fileCopyMethods = uiModule({
         knownState = await settledPersistenceState();
         this.renderUnsavedIndicator();
         if (wasShown && !unsavedShown) this.flashSavedToFile();
+        if (!wasShown && unsavedShown) pulseIndicators();
         if (document.getElementById('storage-status-modal')?.classList.contains('active')) {
             void this.refreshStorageStatusDialog();
         }
-        // The notice speaks about an edit of the open tree.
         const tree = activeTree();
-        if (!tree || tree.id !== treeId) return;
-        const fresh = TreeManager.getTreeMetadata(tree.id);
-        if (!fresh || !hasUnsavedChanges(fresh)) {
-            document.getElementById('file-copy-notice')?.remove();
-            return;
-        }
-        if (!shouldNoticeUnsaved({
+        if (tree && tree.id === treeId) this.renderFileCopyNotice();
+    },
+
+    /**
+     * The "changes only in the browser" notice for the open tree: it only
+     * informs (no save buttons), stays until closed, and once closed returns
+     * only after the tree is saved to a file and changed again.
+     */
+    renderFileCopyNotice(): void {
+        const tree = activeTree();
+        const fresh = tree ? TreeManager.getTreeMetadata(tree.id) : null;
+        const show = !!fresh && shouldShowNotice({
             state: knownState,
             info: fresh,
             personCount: personCount(),
             viewMode: DataManager.isViewMode(),
             enabled: SettingsManager.isFileCopyRemindersEnabled(),
-            now: Date.now(),
-        })) return;
-        TreeManager.noteFileCopyNotice(tree.id);
-        this.showFileCopyNotice(fresh.name);
+        });
+        const existing = document.getElementById('file-copy-notice');
+        if (!show || !fresh) {
+            existing?.remove();
+            return;
+        }
+        const message = noticeMessage(fresh.name);
+        if (existing) {
+            const text = existing.querySelector('.file-copy-notice-text');
+            if (text) text.textContent = message;
+            return;
+        }
+        const treeId = fresh.id;
+        const el = document.createElement('div');
+        el.id = 'file-copy-notice';
+        el.className = 'storage-notice file-copy-notice';
+        el.setAttribute('role', 'status');
+        const icon = document.createElement('span');
+        icon.className = 'file-copy-notice-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        icon.innerHTML = iconSvg('alert-triangle');
+        const body = document.createElement('div');
+        body.className = 'file-copy-notice-body';
+        const text = document.createElement('p');
+        text.className = 'file-copy-notice-text';
+        text.textContent = message;
+        const link = document.createElement('button');
+        link.type = 'button';
+        link.className = 'link-button file-copy-notice-link';
+        link.textContent = strings.fileCopy.details;
+        link.addEventListener('click', () => { void this.showStorageStatusDialog(); });
+        body.append(text, link);
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'file-copy-notice-close';
+        close.setAttribute('aria-label', strings.buttons.close);
+        close.textContent = '\u00d7';
+        close.addEventListener('click', () => {
+            TreeManager.noteFileCopyNoticeClosed(treeId);
+            el.remove();
+        });
+        el.append(icon, body, close);
+        document.body.appendChild(el);
+        requestAnimationFrame(() => el.classList.add('show'));
     },
 
-    showFileCopyNotice(treeName: string): void {
-        const s = strings.fileCopy;
-        const advice = currentAdvice();
-        const message = advice === 'install' ? s.noticeInstall(treeName)
-            : advice === 'install-menu' ? s.noticeInstallMenu(treeName)
-            : advice === 'mac-dock' ? s.noticeMacDock(treeName)
-            : advice === 'firefox' ? s.noticeFirefox(treeName)
-            : advice === 'ios-safari' ? s.noticeIosSafari(treeName)
-            : s.notice(treeName);
-        const close = () => document.getElementById('file-copy-notice')?.remove();
-        const actions: { label: string; run: () => void; link?: boolean }[] = [
-            { label: s.save, run: () => { close(); this.saveTreeCopy(); } },
-        ];
-        if (advice === 'install') {
-            actions.push({ label: s.install, run: () => { close(); void this.installApp(); } });
-        } else {
-            actions.push({ label: s.details, run: () => { close(); void this.showStorageStatusDialog(); } });
-        }
-        // Encrypting is an option, never the default (with the app's data
-        // encrypted, "Save" itself opens the encrypted dialog).
-        if (!SettingsManager.isEncryptionEnabled() && !this.activeFileHandleName) {
-            actions.push({ label: s.encryptLink, link: true, run: () => { close(); this.saveTreeCopyEncrypted(); } });
-        }
-        this.showStorageNotice('file-copy-notice', message, actions);
-        pulse(document.getElementById('unsaved-copy-indicator'));
-        pulse(document.getElementById('bottom-bar-more-storage-dot'));
-        pulse(document.querySelector<HTMLElement>('.mobile-more-storage-dot'));
-        pulse(document.querySelector<HTMLElement>('.actions-menu-storage-dot'));
+    toggleFileCopyReminders(enabled: boolean): void {
+        SettingsManager.setFileCopyReminders(enabled);
+        this.renderFileCopyNotice();
     },
 
     /**
@@ -448,10 +489,5 @@ export const fileCopyMethods = uiModule({
         const others = DataManager.isViewMode() ? [] : unsavedTreeList().filter(t => t.id !== openId).map(t => t.name);
         if (others.length > 0) out.push(strings.fileCopy.othersUnsaved(others));
         return out;
-    },
-
-    toggleFileCopyReminders(enabled: boolean): void {
-        SettingsManager.setFileCopyReminders(enabled);
-        if (!enabled) document.getElementById('file-copy-notice')?.remove();
     },
 });
