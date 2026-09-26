@@ -252,6 +252,10 @@ for (const width of [360, 768]) {
         await openApp(page);
         await importBigTree(page, 'Dots');
         await addPerson(page, 'A');
+        // The badge pulses by size when it turns on: measure it at rest.
+        const badge = page.locator('#bottom-bar-more-storage-dot');
+        await expect(badge).toBeVisible();
+        await expect(badge).not.toHaveClass(/storage-pulse/, { timeout: 5000 });
         for (const pad of [0, 34]) {
             await page.evaluate((p) => { (document.querySelector('.bottom-bar') as HTMLElement).style.paddingBottom = `${p}px`; }, pad);
             const gap = await page.evaluate(() => {
