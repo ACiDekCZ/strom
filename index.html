@@ -4053,32 +4053,80 @@
             cursor: pointer;
         }
         .file-link-indicator:hover { background: var(--accent-soft, #e8f0fe); }
-        /* Edits only in the browser: the same button, in the warning tint, next
-           to the wordmark (inside the h1, so narrow toolbars can pin it as a
-           badge that takes no width). ".toolbar button" would paint it green. */
-        .toolbar h1.app-wordmark { position: relative; display: flex; align-items: center; flex-shrink: 0; }
-        .toolbar .unsaved-copy-indicator {
-            vertical-align: middle;
-            color: var(--accent-text);
-            background: var(--warning-soft);
-            border-color: var(--warning);
-            padding: 0;
+        /* Storage state pill: "Only in browser" (warning), "Saved to file"
+           (primary, briefly after an export), "Persistent storage" (neutral, in
+           the storage dialog). In the toolbar it sits after the wordmark (and
+           BETA); ≤1280px it folds to an icon, ≤1024px the bottom bar's "More"
+           tab carries the state instead. ".toolbar button" would paint it green. */
+        .toolbar h1.app-wordmark { display: flex; align-items: center; flex-shrink: 0; }
+        .storage-pill,
+        .toolbar .storage-pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            height: 28px; padding: 0 10px 0 8px; margin: 0;
+            border-radius: 999px; border: 1px solid transparent;
+            font-family: var(--font-sans); font-size: 12px; font-weight: 600; line-height: 1;
+            white-space: nowrap; letter-spacing: 0;
         }
-        .toolbar .unsaved-copy-indicator:hover { background: var(--warning-soft); filter: brightness(0.96); }
+        .toolbar .storage-pill { margin-left: 8px; cursor: pointer; }
+        .storage-pill-icon { display: inline-flex; }
+        .storage-pill-icon svg { width: 14px; height: 14px; display: block; }
+        .storage-pill.is-unsaved,
+        .toolbar .storage-pill.is-unsaved {
+            color: var(--accent-text); background: var(--warning-soft);
+            border-color: color-mix(in srgb, var(--warning) 60%, transparent);
+        }
+        .toolbar .storage-pill.is-unsaved:hover {
+            background: color-mix(in srgb, var(--warning) 22%, var(--warning-soft));
+        }
+        .storage-pill.is-saved,
+        .toolbar .storage-pill.is-saved {
+            color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+            border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+        }
+        .storage-pill.is-persistent {
+            color: var(--text-secondary); background: var(--surface-2); border-color: var(--divider);
+        }
+        .toolbar .storage-pill:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .toolbar .storage-pill.is-fading { opacity: 0; transition: opacity 0.3s; }
+        @media (max-width: 1280px) {
+            .toolbar .storage-pill { width: 28px; padding: 0; justify-content: center; }
+            .toolbar .storage-pill .storage-pill-label { display: none; }
+        }
         @media (max-width: 1024px) {
-            .toolbar .unsaved-copy-indicator {
-                position: absolute;
-                top: -9px;
-                right: -14px;
-                width: 20px;
-                height: 20px;
-                margin: 0;
-                border-radius: 50%;
-            }
-            .toolbar .unsaved-copy-indicator svg { width: 11px; height: 11px; }
+            .toolbar .storage-pill { display: none !important; }
         }
+        /* One-time attention: two ring pulses at the first unsaved edit. */
+        @keyframes storage-pulse {
+            0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--warning) 45%, transparent); }
+            60% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--warning) 45%, transparent); }
+            100% { box-shadow: 0 0 0 0 transparent; }
+        }
+        .storage-pulse { animation: storage-pulse 600ms ease-out 2; }
+        @media (prefers-reduced-motion: reduce) {
+            .storage-pulse { animation: none; }
+        }
+        /* The "More" tab's dot for this state outranks the anniversaries dot. */
+        .bottom-bar-more-dot.is-storage {
+            width: 8px; height: 8px; background: var(--warning);
+            box-shadow: 0 0 0 2px var(--surface);
+        }
+        /* The state row on top of the "More" sheet. */
+        .bottom-sheet-item.bottom-sheet-storage-row {
+            display: flex; align-items: center; gap: 12px;
+            min-height: 48px; padding: 12px 16px; margin: 4px 0 6px;
+            border-radius: var(--r-md);
+            color: var(--accent-text); background: var(--warning-soft);
+            border: 1px solid color-mix(in srgb, var(--warning) 60%, transparent);
+            text-align: left;
+        }
+        .bottom-sheet-storage-row svg { width: 18px; height: 18px; flex-shrink: 0; }
+        .bottom-sheet-storage-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+        .bottom-sheet-storage-title { font-size: 14px; font-weight: 600; }
+        .bottom-sheet-storage-sub { font-size: 12px; color: var(--text-secondary); font-weight: 400; }
+        .bottom-sheet-storage-chevron { font-size: 20px; line-height: 1; }
+        .storage-status-state { margin: 0 0 12px; }
         .storage-status-body p { margin: 0 0 10px; font-size: 14px; line-height: 1.5; }
-        .storage-status-body p:first-child { color: var(--text-light); }
+        .storage-status-body p:first-of-type { color: var(--text-light); }
         #storage-status-modal .buttons button[hidden] { display: none; }
         @media (max-width: 499px) {
             .storage-status-body p { font-size: 13px; }
@@ -9204,7 +9252,7 @@
 </head>
 <body>
     <div class="toolbar">
-        <h1 class="app-wordmark"><span class="app-logo" role="button" tabindex="0" onclick="window.Strom.UI.showAboutDialog()" data-i18n-title="about.title">Strom<span class="wordmark-dot" aria-hidden="true"></span></span><button id="unsaved-copy-indicator" class="file-link-indicator unsaved-copy-indicator" style="display:none;" onclick="window.Strom.UI.showStorageStatusDialog()" data-i18n-title="fileCopy.indicatorTitle" data-i18n-aria-label="fileCopy.indicatorTitle"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></button></h1>
+        <h1 class="app-wordmark"><span class="app-logo" role="button" tabindex="0" onclick="window.Strom.UI.showAboutDialog()" data-i18n-title="about.title">Strom<span class="wordmark-dot" aria-hidden="true"></span></span><button type="button" id="unsaved-copy-indicator" class="storage-pill is-unsaved unsaved-copy-indicator" style="display:none;" aria-live="polite" onclick="window.Strom.UI.showStorageStatusDialog()" data-i18n-title="fileCopy.indicatorTitle" data-i18n-aria-label="fileCopy.indicatorTitle"><span class="storage-pill-icon" aria-hidden="true"></span><span class="storage-pill-label" data-i18n="fileCopy.indicatorShort"></span></button></h1>
         <span id="offline-indicator" class="offline-indicator" style="display:none;" data-i18n="pwa.offline"></span>
         <button id="file-link-indicator" class="file-link-indicator" style="display:none;" onclick="window.Strom.UI.saveActiveTreeToFile()" data-i18n-title="fileAccess.saveToFile"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button>
 
@@ -9451,6 +9499,7 @@
             <svg class="bottom-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>
             <span class="bottom-bar-label" data-i18n="mobileMenu.more"></span>
             <span id="bottom-bar-more-dot" class="bottom-bar-more-dot" style="display:none;"></span>
+            <span id="bottom-bar-more-storage-dot" class="bottom-bar-more-dot is-storage" style="display:none;" aria-hidden="true"></span>
         </button>
     </nav>
 
@@ -10416,6 +10465,7 @@
             <div id="storage-status-body" class="storage-status-body"></div>
             <div class="buttons">
                 <button class="secondary" id="storage-status-install" hidden onclick="window.Strom.UI.installApp()" data-i18n="fileCopy.install"></button>
+                <button class="secondary" id="storage-status-save-all" hidden onclick="window.Strom.UI.closeStorageStatusDialog(); window.Strom.UI.saveAllTreesCopy()" data-i18n="fileCopy.saveAll"></button>
                 <button class="primary" id="storage-status-save" onclick="window.Strom.UI.closeStorageStatusDialog(); window.Strom.UI.saveTreeCopy()" data-i18n="fileCopy.save"></button>
             </div>
         </div>

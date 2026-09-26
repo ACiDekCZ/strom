@@ -5,6 +5,7 @@
  * different markup). Desktop (> 1024px, fine pointer) keeps the floating menu. See src/ui/module.ts for the composition pattern.
  */
 
+import { iconSvg } from '../icons.js';
 import { PersonId } from '../types.js';
 import { uiModule } from './module.js';
 import { strings } from '../strings.js';
@@ -24,7 +25,9 @@ interface MenuRow {
 /** The prominent "Strom: {name}" row that opens the second-level tree sheet
  *  (serif name + chevron + tinted background — mirrors the desktop submenu row). */
 interface TreeRow { prefix: string; name: string; run: () => void; badge?: number; }
-interface MenuBlock { header?: string; rows: MenuRow[]; pair?: MenuRow[]; treeRow?: TreeRow; divider?: boolean; }
+/** The "Only in browser" state row on top of the "More" sheet. */
+interface StorageRow { title: string; sub: string; run: () => void; }
+interface MenuBlock { header?: string; rows: MenuRow[]; pair?: MenuRow[]; treeRow?: TreeRow; divider?: boolean; storageRow?: StorageRow; }
 
 /** Coarse pointer = touch device; used to gate touch-only behaviour. */
 export function isCoarsePointer(): boolean {
@@ -145,6 +148,15 @@ export const bottomSheetMethods = uiModule({
         const mode = TreeRenderer.getViewMode();
 
         const blocks: MenuBlock[] = [];
+
+        // 0) Edits only in the browser: the state first, one tap from the dialog.
+        if (!isView && this.isUnsavedInBrowser()) {
+            blocks.push({ rows: [], storageRow: {
+                title: s.fileCopy.indicatorShort,
+                sub: s.fileCopy.moreRowSub,
+                run: () => { void this.showStorageStatusDialog(); },
+            } });
+        }
 
         // 1) Undo / Redo — compact first group, like the top of the desktop menu
         //    (edit-only; the sheet is the mobile home for these beyond the toast).
@@ -333,7 +345,34 @@ export const bottomSheetMethods = uiModule({
             return btn;
         };
 
+        const makeStorageButton = (row: StorageRow): HTMLButtonElement => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'bottom-sheet-item bottom-sheet-storage-row';
+            btn.insertAdjacentHTML('beforeend', iconSvg('file-unsaved', { size: 18 }));
+            const text = document.createElement('span');
+            text.className = 'bottom-sheet-storage-text';
+            const title = document.createElement('span');
+            title.className = 'bottom-sheet-storage-title';
+            title.textContent = row.title;
+            const sub = document.createElement('span');
+            sub.className = 'bottom-sheet-storage-sub';
+            sub.textContent = row.sub;
+            text.append(title, sub);
+            const chevron = document.createElement('span');
+            chevron.className = 'bottom-sheet-storage-chevron';
+            chevron.setAttribute('aria-hidden', 'true');
+            chevron.textContent = '\u203a';
+            btn.append(text, chevron);
+            btn.addEventListener('click', () => {
+                this.hideBottomSheet();
+                row.run();
+            });
+            return btn;
+        };
+
         for (const block of blocks) {
+            if (block.storageRow) list.appendChild(makeStorageButton(block.storageRow));
             if (block.divider) {
                 const divider = document.createElement('div');
                 divider.className = 'bottom-sheet-divider';

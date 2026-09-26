@@ -13,6 +13,7 @@
  * opens in a new tab on the user's click.
  */
 
+import { syncMoreTabLabel } from './file-copy-ui.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { DataManager } from '../data.js';
@@ -181,8 +182,8 @@ export const researchPromoMethods = uiModule({
         }
         const moreTab = document.getElementById('bb-view-more');
         if (moreTab) {
-            if (active) moreTab.setAttribute('aria-label', `${strings.mobileMenu.more}, ${s.triggerNewSr}`);
-            else moreTab.removeAttribute('aria-label');
+            moreTab.dataset.newItem = active ? '1' : '';
+            syncMoreTabLabel();
         }
     },
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    hasUnsavedChanges, shouldNoticeUnsaved, shouldShowUnsavedIndicator, storageAdvice, isIosDevice, browserFamily,
+    hasUnsavedChanges, shouldNoticeUnsaved, shouldShowUnsavedIndicator, unsavedTrees, storageAdvice, isIosDevice, browserFamily,
     FILE_COPY_NOTICE_MIN_PERSONS, FILE_COPY_REMIND_MS,
 } from '../file-copy.js';
 
@@ -55,14 +55,23 @@ describe('shouldNoticeUnsaved', () => {
     });
 });
 
-describe('shouldShowUnsavedIndicator', () => {
-    const base = { state: 'best-effort' as const, info: { changedAt: iso(T0) }, personCount: 1, viewMode: false };
-    it('shows for any tree with unsaved edits the browser may clear', () => {
+describe('unsavedTrees / shouldShowUnsavedIndicator', () => {
+    it('collects trees with people and edits no file holds', () => {
+        const trees = [
+            { id: 'a', personCount: 5, changedAt: iso(T0) },
+            { id: 'b', personCount: 5, changedAt: iso(T0), fileCopyAt: iso(T0 + 1) },
+            { id: 'c', personCount: 0, changedAt: iso(T0) },
+            { id: 'd', personCount: 3 },
+        ];
+        expect(unsavedTrees(trees).map(t => t.id)).toEqual(['a']);
+    });
+
+    it('shows while any tree is unsaved and the browser may clear it', () => {
+        const base = { state: 'best-effort' as const, unsavedCount: 1, viewMode: false };
         expect(shouldShowUnsavedIndicator(base)).toBe(true);
         expect(shouldShowUnsavedIndicator({ ...base, state: 'persistent' })).toBe(false);
-        expect(shouldShowUnsavedIndicator({ ...base, personCount: 0 })).toBe(false);
+        expect(shouldShowUnsavedIndicator({ ...base, unsavedCount: 0 })).toBe(false);
         expect(shouldShowUnsavedIndicator({ ...base, viewMode: true })).toBe(false);
-        expect(shouldShowUnsavedIndicator({ ...base, info: {} })).toBe(false);
     });
 });
 

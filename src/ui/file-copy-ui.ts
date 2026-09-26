@@ -17,10 +17,11 @@ import { TreeId, TreeMetadata } from '../types.js';
 import { formatRelativeDateTime } from '../format.js';
 import { getPersistenceState, settledPersistenceState, PersistenceState } from '../persistence.js';
 import {
-    hasUnsavedChanges, shouldNoticeUnsaved, shouldShowUnsavedIndicator, storageAdvice, isIosDevice, browserFamily, StorageAdvice,
+    hasUnsavedChanges, shouldNoticeUnsaved, shouldShowUnsavedIndicator, unsavedTrees, storageAdvice, isIosDevice, browserFamily, StorageAdvice,
 } from '../file-copy.js';
 import { canPromptInstall, promptInstall, isStandaloneDisplay } from '../pwa.js';
 import { uiModule } from './module.js';
+import { iconSvg } from '../icons.js';
 
 /** Last known storage state (refreshed on every check; best-effort until known). */
 let knownState: PersistenceState = 'best-effort';
@@ -46,24 +47,140 @@ function personCount(): number {
     return Object.keys(DataManager.getData().persons).length;
 }
 
+/** Every tree whose edits no file holds (the open one counted from memory). */
+function unsavedTreeList(): TreeMetadata[] {
+    const openId = DataManager.getCurrentTreeId();
+    const trees = TreeManager.getTrees().map(t =>
+        t.id === openId ? { ...t, personCount: personCount() } : t);
+    return unsavedTrees(trees);
+}
+
+type PillState = 'unsaved' | 'saved' | 'persistent';
+
+/** Whether the "only in browser" state was showing at the last render. */
+let unsavedShown = false;
+/** The toolbar pill's brief "Saved to file" after an export. */
+let savedFlashTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Paint a storage pill (toolbar or storage dialog) in one of its states. */
+function setPillState(el: HTMLElement, state: PillState): void {
+    const s = strings.fileCopy;
+    el.classList.toggle('is-unsaved', state === 'unsaved');
+    el.classList.toggle('is-saved', state === 'saved');
+    el.classList.toggle('is-persistent', state === 'persistent');
+    let icon = el.querySelector<HTMLElement>('.storage-pill-icon');
+    let label = el.querySelector<HTMLElement>('.storage-pill-label');
+    if (!icon || !label) {
+        icon = document.createElement('span');
+        icon.className = 'storage-pill-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        label = document.createElement('span');
+        label.className = 'storage-pill-label';
+        el.replaceChildren(icon, label);
+    }
+    icon.innerHTML = iconSvg(state === 'saved' ? 'file-saved' : state === 'persistent' ? 'lock' : 'file-unsaved');
+    label.textContent = state === 'saved' ? s.savedShort : state === 'persistent' ? s.persistentShort : s.indicatorShort;
+}
+
+/** ≤1024px: the bottom bar's "More" tab carries the state, not the toolbar. */
+function isBottomBarRegime(): boolean {
+    return typeof matchMedia === 'function' && matchMedia('(max-width: 1024px)').matches;
+}
+
+/**
+ * The bottom bar's "More" tab speaks for what its dots show: edits only in the
+ * browser (this module) and the Strom Research "New" item (research-promo-ui),
+ * each flagged on the tab's dataset. No flag: the visible label names it.
+ */
+export function syncMoreTabLabel(): void {
+    const tab = document.getElementById('bb-view-more');
+    if (!tab) return;
+    const storage = tab.dataset.storage === '1';
+    const isNew = tab.dataset.newItem === '1';
+    if (!storage && !isNew) {
+        tab.removeAttribute('aria-label');
+        return;
+    }
+    const base = storage ? strings.fileCopy.moreHint : strings.mobileMenu.more;
+    tab.setAttribute('aria-label', isNew ? `${base}, ${strings.research.triggerNewSr}` : base);
+}
+
+/** Two ring pulses (CSS; none with reduced motion). */
+function pulse(el: HTMLElement | null): void {
+    if (!el) return;
+    el.classList.remove('storage-pulse');
+    void el.offsetWidth;   // restart the animation
+    el.classList.add('storage-pulse');
+    el.addEventListener('animationend', () => el.classList.remove('storage-pulse'), { once: true });
+}
+
 export const fileCopyMethods = uiModule({
-    /** Show or hide the toolbar indicator for the open tree. */
+    /** Show or hide the "only in browser" state for the open tree. */
     async refreshUnsavedIndicator(): Promise<void> {
         knownState = await getPersistenceState();
         this.renderUnsavedIndicator();
     },
 
+    /** The state was showing at the last render (the "More" sheet asks). */
+    isUnsavedInBrowser(): boolean {
+        return unsavedShown;
+    },
+
     renderUnsavedIndicator(): void {
-        const el = document.getElementById('unsaved-copy-indicator');
-        if (!el) return;
-        const tree = activeTree();
-        const show = !!tree && shouldShowUnsavedIndicator({
+        const show = shouldShowUnsavedIndicator({
             state: knownState,
-            info: tree.meta,
-            personCount: personCount(),
+            unsavedCount: unsavedTreeList().length,
             viewMode: DataManager.isViewMode(),
         });
-        el.style.display = show ? 'inline-flex' : 'none';
+        unsavedShown = show;
+        const el = document.getElementById('unsaved-copy-indicator');
+        if (el) {
+            if (show) {
+                if (savedFlashTimer) { clearTimeout(savedFlashTimer); savedFlashTimer = null; }
+                el.classList.remove('is-fading');
+                setPillState(el, 'unsaved');
+                el.title = strings.fileCopy.indicatorTitle;
+                el.setAttribute('aria-label', strings.fileCopy.indicatorTitle);
+                el.style.display = 'inline-flex';
+            } else if (!savedFlashTimer) {
+                el.style.display = 'none';
+            }
+        }
+        const dot = document.getElementById('bottom-bar-more-storage-dot');
+        if (dot) dot.style.display = show ? 'block' : 'none';
+        const more = document.getElementById('bb-view-more');
+        if (more) {
+            more.dataset.storage = show ? '1' : '';
+            syncMoreTabLabel();
+        }
+    },
+
+    /**
+     * Briefly "Saved to file" where "Only in browser" was showing: the pill
+     * for 4 s on wide screens, a toast in the bottom-bar regime (unless the
+     * working-file save shows its own).
+     */
+    flashSavedToFile(): void {
+        if (isBottomBarRegime()) {
+            if (!this.activeFileHandleName) this.showToast(strings.fileCopy.savedShort);
+            return;
+        }
+        const el = document.getElementById('unsaved-copy-indicator');
+        if (!el) return;
+        if (savedFlashTimer) clearTimeout(savedFlashTimer);
+        setPillState(el, 'saved');
+        el.title = strings.fileCopy.savedShort;
+        el.setAttribute('aria-label', strings.fileCopy.savedShort);
+        el.classList.remove('is-fading');
+        el.style.display = 'inline-flex';
+        savedFlashTimer = setTimeout(() => {
+            el.classList.add('is-fading');
+            savedFlashTimer = setTimeout(() => {
+                savedFlashTimer = null;
+                el.classList.remove('is-fading');
+                this.renderUnsavedIndicator();
+            }, 300);
+        }, 4000);
     },
 
     /**
@@ -71,11 +188,17 @@ export const fileCopyMethods = uiModule({
      * indicator, and for an edit of the open tree maybe raise the notice.
      */
     async handleFileCopyChange(treeId: string): Promise<void> {
-        const tree = activeTree();
-        if (!tree || tree.id !== treeId) return;
+        const wasShown = unsavedShown;
         // An edit's save asks for persistent storage: act on the answer.
         knownState = await settledPersistenceState();
         this.renderUnsavedIndicator();
+        if (wasShown && !unsavedShown) this.flashSavedToFile();
+        if (document.getElementById('storage-status-modal')?.classList.contains('active')) {
+            void this.refreshStorageStatusDialog();
+        }
+        // The notice speaks about an edit of the open tree.
+        const tree = activeTree();
+        if (!tree || tree.id !== treeId) return;
         const fresh = TreeManager.getTreeMetadata(tree.id);
         if (!fresh || !hasUnsavedChanges(fresh)) {
             document.getElementById('file-copy-notice')?.remove();
@@ -110,12 +233,30 @@ export const fileCopyMethods = uiModule({
             actions.push({ label: s.details, run: () => { close(); void this.showStorageStatusDialog(); } });
         }
         this.showStorageNotice('file-copy-notice', message, actions);
+        pulse(document.getElementById('unsaved-copy-indicator'));
+        pulse(document.getElementById('bottom-bar-more-storage-dot'));
     },
 
-    /** Export the open tree — or save into its attached working file. */
+    /**
+     * Save the open tree where it counts as a copy: into its attached working
+     * file, else a full JSON backup (all data, all content; encryption optional)
+     * — not the export menu, whose share formats default to reduced privacy
+     * and would not count.
+     */
     saveTreeCopy(): void {
-        if (this.activeFileHandleName) void this.saveActiveTreeToFile();
-        else this.showExportDialog();
+        if (this.activeFileHandleName) {
+            void this.saveActiveTreeToFile();
+            return;
+        }
+        const treeId = DataManager.getCurrentTreeId();
+        if (!treeId || DataManager.isViewMode()) return;
+        this.exportTargetTreeId = treeId;
+        void this.exportTargetTreeJSON();
+    },
+
+    /** Every tree into one backup file (the "Export all" JSON, full data). */
+    saveAllTreesCopy(): void {
+        void this.exportAllAsJson();
     },
 
     async installApp(): Promise<void> {
@@ -139,7 +280,16 @@ export const fileCopyMethods = uiModule({
         const body = document.getElementById('storage-status-body');
         if (!body) return;
         knownState = await getPersistenceState();
-        body.replaceChildren(...this.storageStatusParagraphs(true).map(text => {
+        const tree = activeTree();
+        const state: PillState = knownState === 'persistent' ? 'persistent'
+            : unsavedTreeList().length === 0 && !!tree?.meta.fileCopyAt ? 'saved' : 'unsaved';
+        const pill = document.createElement('div');
+        pill.className = 'storage-status-state';
+        const chip = document.createElement('span');
+        chip.className = 'storage-pill';
+        setPillState(chip, state);
+        pill.appendChild(chip);
+        body.replaceChildren(pill, ...this.storageStatusParagraphs(true).map(text => {
             const p = document.createElement('p');
             p.textContent = text;
             return p;
@@ -152,6 +302,8 @@ export const fileCopyMethods = uiModule({
             save.textContent = this.activeFileHandleName ? strings.fileAccess.saveToFile : strings.fileCopy.save;
             save.hidden = !activeTree() || DataManager.isViewMode();
         }
+        const saveAll = document.getElementById('storage-status-save-all');
+        if (saveAll) saveAll.hidden = DataManager.isViewMode() || TreeManager.getTrees().length < 2;
         this.renderUnsavedIndicator();
     },
 
@@ -174,6 +326,8 @@ export const fileCopyMethods = uiModule({
             } else {
                 out.push(s.copyNever(meta.name));
             }
+            const others = unsavedTreeList().filter(t => t.id !== tree.id).map(t => t.name);
+            if (others.length > 0) out.push(s.othersUnsaved(others));
         }
         if (withAdvice) {
             if (knownState !== 'persistent') {

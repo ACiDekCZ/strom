@@ -60,15 +60,22 @@ export function shouldNoticeUnsaved(input: {
     return input.now - noticed >= FILE_COPY_REMIND_MS;
 }
 
-/** The unsaved-changes indicator in the toolbar. */
+/** Trees with people whose edits no file holds (the indicator covers them all). */
+export function unsavedTrees<T extends FileCopyInfo & { personCount: number }>(trees: readonly T[]): T[] {
+    return trees.filter(t => t.personCount > 0 && hasUnsavedChanges(t));
+}
+
+/**
+ * The "only in browser" indicator: some tree has edits no file holds and the
+ * browser may clear them — any tree, not just the open one (edit one, switch
+ * to another, and the first is still at risk).
+ */
 export function shouldShowUnsavedIndicator(input: {
     state: PersistenceState;
-    info: FileCopyInfo;
-    personCount: number;
+    unsavedCount: number;
     viewMode: boolean;
 }): boolean {
-    return input.state !== 'persistent' && !input.viewMode
-        && input.personCount > 0 && hasUnsavedChanges(input.info);
+    return input.state !== 'persistent' && !input.viewMode && input.unsavedCount > 0;
 }
 
 /**
