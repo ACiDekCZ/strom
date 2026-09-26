@@ -29,7 +29,8 @@ export default defineConfig({
     fullyParallel: true,
     forbidOnly: !!process.env.CI,
     retries: 0,
-    workers: process.env.CI ? 1 : undefined,
+    // GitHub's runner has 4 vCPUs; one worker ran the suite serially (~16 min).
+    workers: process.env.CI ? 4 : undefined,
     reporter: [['list']],
     timeout: 30_000,
     use: {
