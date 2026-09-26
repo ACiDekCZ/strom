@@ -4270,6 +4270,12 @@
             background: none; border: none; cursor: pointer;
         }
         .storage-notice .file-copy-notice-link:hover { color: var(--text); }
+        .file-copy-notice-links { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 16px; row-gap: 2px; margin-top: 4px; }
+        .file-copy-notice-links .file-copy-notice-link { margin-top: 0; }
+        .file-copy-notice-kbd { font-size: 13px; color: var(--text-light); white-space: nowrap; }
+        @media (max-width: 1024px), (hover: none) {
+            .file-copy-notice-kbd { display: none; }
+        }
         .file-copy-notice-close {
             width: 44px; height: 44px; margin-top: -8px;
             display: inline-flex; align-items: center; justify-content: center;
