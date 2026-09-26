@@ -73,19 +73,42 @@ export function shouldShowUnsavedIndicator(input: {
 
 /**
  * What to recommend on this device:
- * - `install`: the browser offers to install the app (Chromium, desktop or
- *   Android) — an installed app usually gets persistent storage;
+ * - `install`: the browser offers to install the app right now (Chromium) —
+ *   an installed app usually gets persistent storage; the notice gets a button;
+ * - `install-menu`: Chromium in a tab without that offer (not yet eligible, or
+ *   already installed and opened in a tab) — install / open it from the menu;
+ * - `mac-dock`: Safari on a Mac — File → Add to Dock (own storage, like iOS);
  * - `ios-safari`: Safari on iPhone/iPad clears sites unused for 7 days; the
  *   home-screen app is exempt (and has its own storage);
  * - `ios-app`: the home-screen app — iOS still does not guarantee storage;
- * - `file`: nothing better than saving to a file regularly.
+ * - `firefox`: Firefox on a computer asks before keeping data for good and
+ *   cannot install web apps — allow it in the site permissions, or use
+ *   Chrome/Edge for the installed app;
+ * - `file`: nothing better than saving to a file regularly (installed apps, others).
  */
-export type StorageAdvice = 'install' | 'ios-safari' | 'ios-app' | 'file';
+export type StorageAdvice = 'install' | 'install-menu' | 'mac-dock' | 'firefox' | 'ios-safari' | 'ios-app' | 'file';
 
-export function storageAdvice(env: { ios: boolean; standalone: boolean; canInstall: boolean }): StorageAdvice {
+export type BrowserFamily = 'chromium' | 'safari' | 'firefox' | 'other';
+
+export function storageAdvice(env: {
+    ios: boolean; standalone: boolean; canInstall: boolean; browser: BrowserFamily;
+}): StorageAdvice {
     if (env.ios) return env.standalone ? 'ios-app' : 'ios-safari';
-    if (env.canInstall && !env.standalone) return 'install';
+    if (env.standalone) return 'file';
+    if (env.canInstall) return 'install';
+    if (env.browser === 'chromium') return 'install-menu';
+    if (env.browser === 'safari') return 'mac-dock';
+    if (env.browser === 'firefox') return 'firefox';
     return 'file';
+}
+
+/** Chromium (Chrome, Edge, Opera, Brave…), Safari and Firefox on a computer, or anything else. */
+export function browserFamily(userAgent: string, brands: readonly string[] = []): BrowserFamily {
+    if (brands.some(b => /Chromium|Google Chrome|Microsoft Edge/.test(b))) return 'chromium';
+    if (/Firefox|FxiOS/.test(userAgent)) return /Android|Mobile|FxiOS/.test(userAgent) ? 'other' : 'firefox';
+    if (/Chrome\/|Chromium\/|Edg\/|OPR\//.test(userAgent)) return 'chromium';
+    if (/Safari\//.test(userAgent) && /Macintosh/.test(userAgent)) return 'safari';
+    return 'other';
 }
 
 /** Detect iPhone/iPad (iPadOS reports itself as a Mac with touch). */

@@ -17,7 +17,7 @@ import { TreeId, TreeMetadata } from '../types.js';
 import { formatRelativeDateTime } from '../format.js';
 import { getPersistenceState, settledPersistenceState, PersistenceState } from '../persistence.js';
 import {
-    hasUnsavedChanges, shouldNoticeUnsaved, shouldShowUnsavedIndicator, storageAdvice, isIosDevice, StorageAdvice,
+    hasUnsavedChanges, shouldNoticeUnsaved, shouldShowUnsavedIndicator, storageAdvice, isIosDevice, browserFamily, StorageAdvice,
 } from '../file-copy.js';
 import { canPromptInstall, promptInstall, isStandaloneDisplay } from '../pwa.js';
 import { uiModule } from './module.js';
@@ -31,6 +31,8 @@ function currentAdvice(): StorageAdvice {
         ios: nav ? isIosDevice(nav.userAgent ?? '', nav.platform ?? '', nav.maxTouchPoints ?? 0) : false,
         standalone: isStandaloneDisplay(),
         canInstall: canPromptInstall(),
+        browser: nav ? browserFamily(nav.userAgent ?? '',
+            (nav as { userAgentData?: { brands?: { brand: string }[] } }).userAgentData?.brands?.map(b => b.brand)) : 'other',
     });
 }
 
@@ -95,6 +97,9 @@ export const fileCopyMethods = uiModule({
         const s = strings.fileCopy;
         const advice = currentAdvice();
         const message = advice === 'install' ? s.noticeInstall(treeName)
+            : advice === 'install-menu' ? s.noticeInstallMenu(treeName)
+            : advice === 'mac-dock' ? s.noticeMacDock(treeName)
+            : advice === 'firefox' ? s.noticeFirefox(treeName)
             : advice === 'ios-safari' ? s.noticeIosSafari(treeName)
             : s.notice(treeName);
         const close = () => document.getElementById('file-copy-notice')?.remove();
@@ -174,6 +179,9 @@ export const fileCopyMethods = uiModule({
             if (knownState !== 'persistent') {
                 const advice = currentAdvice();
                 out.push(advice === 'install' ? s.adviceInstall
+                    : advice === 'install-menu' ? s.adviceInstallMenu
+                    : advice === 'mac-dock' ? s.adviceMacDock
+                    : advice === 'firefox' ? s.adviceFirefox
                     : advice === 'ios-safari' ? s.adviceIosSafari
                     : advice === 'ios-app' ? s.adviceIosApp : s.adviceFile);
             }
