@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     hasUnsavedChanges, shouldShowNotice, shouldShowUnsavedIndicator, unsavedTrees, storageAdvice, isIosDevice, browserFamily,
-    FILE_COPY_NOTICE_MIN_PERSONS,
+    FILE_COPY_NOTICE_MIN_PERSONS, FILE_COPY_NOTICE_PAUSE_MS,
 } from '../file-copy.js';
 
 const T0 = Date.parse('2026-09-20T10:00:00.000Z');
@@ -39,13 +39,17 @@ describe('shouldShowNotice', () => {
         expect(shouldShowNotice({ ...base, info: { changedAt: iso(T0), fileCopyAt: iso(T0 + 1) } })).toBe(false);
     });
 
-    it('closed: not back on further edits, only after a save and another change', () => {
-        const closed = { changedAt: iso(T0 + 3000), fileCopyAt: iso(T0), fileCopyNoticeClosedAt: iso(T0 + 1500) };
-        expect(shouldShowNotice({ ...base, info: closed })).toBe(false);
-        // Saved after closing, not changed since: nothing unsaved.
-        expect(shouldShowNotice({ ...base, info: { ...closed, fileCopyAt: iso(T0 + 4000) } })).toBe(false);
-        // Saved after closing, then changed: back.
-        expect(shouldShowNotice({ ...base, info: { ...closed, fileCopyAt: iso(T0 + 4000), changedAt: iso(T0 + 5000) } })).toBe(true);
+    it('closed: back only at an edit made a day or more after closing', () => {
+        const closedAt = T0 + 1500;
+        const info = (changed: number, saved = T0) => ({ changedAt: iso(changed), fileCopyAt: iso(saved), fileCopyNoticeClosedAt: iso(closedAt) });
+        // Edits within the day stay quiet, saved in between or not.
+        expect(shouldShowNotice({ ...base, info: info(T0 + 3000) })).toBe(false);
+        expect(shouldShowNotice({ ...base, info: info(closedAt + FILE_COPY_NOTICE_PAUSE_MS - 1, T0 + 4000) })).toBe(false);
+        // A day on: the next edit brings it back, whether saved in between or not.
+        expect(shouldShowNotice({ ...base, info: info(closedAt + FILE_COPY_NOTICE_PAUSE_MS) })).toBe(true);
+        expect(shouldShowNotice({ ...base, info: info(closedAt + 2 * FILE_COPY_NOTICE_PAUSE_MS, T0 + 4000) })).toBe(true);
+        // Reopened a day on, no edit since: quiet (the last edit predates the pause).
+        expect(shouldShowNotice({ ...base, info: info(T0 + 3000) })).toBe(false);
     });
 });
 

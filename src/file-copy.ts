@@ -23,6 +23,9 @@ export interface FileCopyInfo {
 /** Trees this small do not raise the notice (the indicator still shows). */
 export const FILE_COPY_NOTICE_MIN_PERSONS = 10;
 
+/** A closed notice returns at an edit made at least this long after closing it. */
+export const FILE_COPY_NOTICE_PAUSE_MS = 24 * 60 * 60 * 1000;
+
 function time(iso: string | undefined): number {
     const t = iso ? Date.parse(iso) : NaN;
     return Number.isFinite(t) ? t : 0;
@@ -37,8 +40,9 @@ export function hasUnsavedChanges(info: FileCopyInfo): boolean {
 /**
  * Show the notice? Only when the browser may clear the data, the tree has
  * edits that no file holds, and it is the user's own tree worth protecting.
- * It stays until closed; a closed notice returns only after the tree is
- * saved to a file and changed again (not on further edits, not on reload).
+ * It stays until closed; a closed notice returns as a reminder at the first
+ * edit made a day or more after closing it (not on edits within that day,
+ * not on a mere reload).
  */
 export function shouldShowNotice(input: {
     state: PersistenceState;
@@ -52,7 +56,8 @@ export function shouldShowNotice(input: {
     if (input.personCount < FILE_COPY_NOTICE_MIN_PERSONS) return false;
     if (!hasUnsavedChanges(info)) return false;
     const closed = time(info.fileCopyNoticeClosedAt);
-    return closed === 0 || closed < time(info.fileCopyAt);
+    if (closed === 0) return true;
+    return time(info.changedAt) - closed >= FILE_COPY_NOTICE_PAUSE_MS;
 }
 
 /** Trees with people whose edits no file holds (the indicator covers them all). */

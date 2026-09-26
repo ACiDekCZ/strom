@@ -68,11 +68,22 @@ test('edits no file holds: an information-only notice, the indicator until the n
     await page.waitForTimeout(300);
     await expect(notice).toHaveCount(0);
 
-    // Saved: "Saved to file" briefly, the pill goes; the next change brings the notice back.
+    // Saved and changed again the same day: still quiet (at most once a day).
     await exportTreeJson(page);
     await expect(indicator).toHaveClass(/is-saved/);
     await expect(indicator).toBeHidden({ timeout: 6000 });
     await addPerson(page, 'Fourth');
+    await expect(indicator).toBeVisible();
+    await page.waitForTimeout(300);
+    await expect(notice).toHaveCount(0);
+
+    // A day after closing: the next edit brings the reminder back.
+    await page.evaluate(() => {
+        const id = window.Strom.DataManager.getCurrentTreeId()!;
+        const meta = window.Strom.TreeManager.getTreeMetadata(id)!;
+        meta.fileCopyNoticeClosedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    });
+    await addPerson(page, 'Fifth');
     await expect(notice).toBeVisible();
 
     // Not closed: it is there after a reload too.
