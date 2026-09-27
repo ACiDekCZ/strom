@@ -59,6 +59,23 @@ async function setPromoSettings(page: Page, values: PromoSettings): Promise<void
 }
 
 /**
+ * The same, applied when the next page load starts: the page being left may
+ * still save its in-memory settings (with the old values) after an in-page
+ * write, so a write followed by a reload could lose the race.
+ */
+async function setPromoSettingsForReload(page: Page, values: PromoSettings): Promise<void> {
+    await page.addInitScript((v) => {
+        const s = JSON.parse(localStorage.getItem('strom-settings') || '{}');
+        for (const key of ['researchNewFirstSeen', 'researchNewDismissed', 'whatsNew30Shown']) {
+            const value = (v as Record<string, unknown>)[key];
+            if (value === undefined) delete s[key];
+            else s[key] = value;
+        }
+        localStorage.setItem('strom-settings', JSON.stringify(s));
+    }, values);
+}
+
+/**
  * A browser that already has a tree and now runs 3.0 for the first time:
  * create a person, wait until it is stored, clear the promotion keys, reload.
  */
@@ -338,7 +355,7 @@ test.describe('existing tree on desktop', () => {
         const firstSeen = (await readSettings(page)).researchNewFirstSeen;
         expect(typeof firstSeen).toBe('string');
         const past = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
-        await setPromoSettings(page, { researchNewFirstSeen: past, whatsNew30Shown: true });
+        await setPromoSettingsForReload(page, { researchNewFirstSeen: past, whatsNew30Shown: true });
         await page.reload();
         await expect(card(page, 'Jan')).toBeVisible();
         await openActionsMenu(page);
