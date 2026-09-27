@@ -187,6 +187,51 @@ test.describe('send changes back to the research', () => {
         expect(posts).toHaveLength(1);
     });
 
+    /** A stand-in for the installed app's launchQueue: launches are fed by the test. */
+    const fakeLaunchQueue = () => {
+        const w = window as unknown as { __launch: (p: unknown) => void };
+        const pending: unknown[] = [];
+        let consumer: ((p: unknown) => void) | null = null;
+        // Chrome's own window.launchQueue is a read-only accessor: redefine it.
+        Object.defineProperty(window, 'launchQueue', { configurable: true, value: {
+            setConsumer(c: (p: unknown) => void) { consumer = c; pending.splice(0).forEach(p => c(p)); },
+        } });
+        w.__launch = (p: unknown) => { if (consumer) consumer(p); else pending.push(p); };
+    };
+
+    test('the installed app already open: a later launch with ?send= is taken over by that window', async ({ page }) => {
+        await page.addInitScript(fakeLaunchQueue);
+        await openResearch(page, true);
+        const { posts } = await bridge(page);
+        // Chrome brings the open window forward and hands it the address.
+        await page.evaluate((b) => (window as unknown as { __launch: (p: unknown) => void })
+            .__launch({ targetURL: `${location.origin}/strom.html?send=${encodeURIComponent(b)}`, files: [] }), BRIDGE);
+        await expect(dialog(page)).toContainText('Send the changes of the tree “Víškovi”');
+        await dialog(page).getByRole('button', { name: 'Send' }).click();
+        await expect(dialog(page)).toContainText('Sent.');
+        expect(posts).toHaveLength(1);
+    });
+
+    test('the launch that started the page is not handled twice', async ({ page }) => {
+        await openResearch(page, true);
+        let statusCalls = 0;
+        const { posts } = await bridge(page);
+        page.on('request', (r) => { if (r.url().endsWith('/status')) statusCalls++; });
+        const target = `/strom.html?send=${encodeURIComponent(BRIDGE)}`;
+        await page.addInitScript((t) => {
+            Object.defineProperty(window, 'launchQueue', { configurable: true, value: {
+                setConsumer(c: (p: unknown) => void) { c({ targetURL: location.origin + t, files: [] }); },
+            } });
+        }, target);
+        await page.goto(target);
+        await expect(dialog(page)).toContainText('Send the changes of the tree “Víškovi”');
+        await dialog(page).getByRole('button', { name: 'Cancel' }).click();
+        await page.waitForTimeout(500);
+        expect(statusCalls).toBe(1);
+        await expect(dialog(page)).toBeHidden();
+        expect(posts).toHaveLength(0);
+    });
+
     test('exports of a tied tree name the research — only when faithful; JSON import ties it again', async ({ page }) => {
         await openResearch(page, true);
         // Faithful JSON ("Save to file": everything, as is).

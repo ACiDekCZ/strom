@@ -356,7 +356,8 @@ export const researchUiMethods = uiModule({
         if (externalReady) return;
         externalReady = true;
         try {
-            const params = new URLSearchParams(window.location.search);
+            const startSearch = window.location.search;
+            const params = new URLSearchParams(startSearch);
             const importUrl = params.get('import-url');
             const liveUrl = params.get('live');
             const sendUrl = params.get('send');
@@ -372,7 +373,7 @@ export const researchUiMethods = uiModule({
             }
             window.addEventListener('strom:data-changed', () => this.syncLivePanelVisibility());
             window.addEventListener('resize', () => this.placeLivePanel());
-            this.initLaunchQueue();
+            this.initLaunchQueue(startSearch);
             const reveal = (): void => document.documentElement.classList.remove('external-opening');
             const explicit = liveUrl !== null || importUrl !== null || sendUrl !== null || params.has('open');
             // Something else was asked for in this tab: the old bridge is over.
@@ -390,15 +391,30 @@ export const researchUiMethods = uiModule({
         }
     },
 
-    /** A. File Handling API: the installed app was asked to open .ged files. */
-    initLaunchQueue(): void {
-        type LaunchParamsLike = { files?: ArrayLike<{ getFile?: () => Promise<File> }> };
+    /**
+     * A. The installed app launched again (manifest launch_handler
+     * "focus-existing"): the open window is brought forward and gets the launch
+     * here — .ged files (File Handling API) and/or the address it was opened
+     * with (`targetURL`), e.g. ?send= from Strom Research. The launch that
+     * started this page arrives here too; its address was already handled by
+     * initExternalOpen, so it is skipped once.
+     */
+    initLaunchQueue(startSearch = ''): void {
+        type LaunchParamsLike = { files?: ArrayLike<{ getFile?: () => Promise<File> }>; targetURL?: string };
         const lq = (window as unknown as {
             launchQueue?: { setConsumer?: (consumer: (params: LaunchParamsLike) => void) => void };
         }).launchQueue;
         if (!lq || typeof lq.setConsumer !== 'function') return;
+        let startupLaunchSeen = false;
         try {
             lq.setConsumer((params) => {
+                if (typeof params?.targetURL === 'string') {
+                    let search = '';
+                    try { search = new URL(params.targetURL).search; } catch { /* not a URL */ }
+                    const isStartup = !startupLaunchSeen && search === startSearch;
+                    startupLaunchSeen = true;
+                    if (!isStartup) this.openExternalRequest(new URLSearchParams(search));
+                }
                 const files = params?.files ? Array.from(params.files) : [];
                 for (const handle of files) {
                     if (!handle || typeof handle.getFile !== 'function') continue;
@@ -411,6 +427,24 @@ export const researchUiMethods = uiModule({
         } catch (err) {
             console.warn('launchQueue unavailable', err);
         }
+    },
+
+    /**
+     * A request from Strom Research reaching the window that is already open
+     * (a later launch of the installed app): the same handling as at startup.
+     * Returns whether there was one.
+     */
+    openExternalRequest(params: URLSearchParams): boolean {
+        const sendUrl = params.get('send');
+        const liveUrl = params.get('live');
+        const importUrl = params.get('import-url');
+        if (sendUrl === null && liveUrl === null && importUrl === null) return false;
+        // Something else was asked for: the old bridge is over.
+        forgetLiveBridge();
+        if (sendUrl !== null) void this.sendChangesToResearch(sendUrl);
+        else if (liveUrl !== null) void this.startLiveFollow(liveUrl);
+        else if (importUrl !== null) void this.importResearchFromUrl(importUrl);
+        return true;
     },
 
     /** C. A file dropped anywhere onto the window. No-op without drag and drop. */
