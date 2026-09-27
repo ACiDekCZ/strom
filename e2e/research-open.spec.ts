@@ -118,10 +118,14 @@ test.describe('open a research', () => {
         expect(names.length).toBe(2);
         expect(names[0]).toBe('Víškovi');
         expect(names[1]).toMatch(/^Víškovi \(/);
-        // The copy carries the research link now; the edited tree keeps its edit.
+        // The new tree takes the research's updates; the edited tree keeps its
+        // edit and its tie as a copy (its changes can still be sent back).
         const trees = await page.evaluate(() => window.Strom.TreeManager.getTrees());
-        expect(trees[0].research).toBeUndefined();
+        expect(trees[0].research.id).toBe(UUID);
+        expect(trees[0].research.copy).toBe(true);
         expect(trees[1].research.id).toBe(UUID);
+        expect(trees[1].research.copy).toBeUndefined();
+        expect(await page.evaluate((u) => window.Strom.TreeManager.findTreeByResearchId(u)?.id, UUID)).toBe(trees[1].id);
         const editedStill = await page.evaluate(async (id) => {
             const data = await window.Strom.TreeManager.getTreeData(id);
             return Object.values(data.persons).some((p: any) => p.firstName === 'Johann');

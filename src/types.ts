@@ -749,8 +749,14 @@ export interface ResearchLink {
     fingerprint: string;
     /** ISO time of the last import/update. */
     syncedAt: string;
-    /** Commit of the research at the last update (live bridge only). */
+    /** Commit of the research at the last update (the file header or the live bridge). */
     head?: string;
+    /**
+     * An older copy of the research (the tree kept by "Open as a new copy", a
+     * duplicate, a second import): offered when sending changes back, never
+     * updated from the research — only the tree without `copy` is.
+     */
+    copy?: boolean;
 }
 
 /** Index of all trees */

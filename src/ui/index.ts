@@ -115,6 +115,8 @@ export class UIClass {
     mergeViewSourceData: StromData | null = null;
     mergeViewSourceLabel: string | undefined = undefined;
     importTreeData: StromData | null = null;
+    /** The `research` tie named by the JSON file being imported (restored on the new tree). */
+    pendingImportResearch: { id: string; head?: string } | null = null;
     exportTargetTreeId: TreeId | null = null;
     defaultPersonTreeId: TreeId | null = null;
     snapshotsTreeId: TreeId | null = null;

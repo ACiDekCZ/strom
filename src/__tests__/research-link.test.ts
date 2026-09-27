@@ -13,6 +13,11 @@ import {
     isGedcomFileName, normalizeResearchId, parseEventData, isSafariBrowser,
 } from '../research-link.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
+import {
+    isResearchHead, parseSendBridge, pickSendDefault, researchHeaderLines, sanitizeResearchField,
+    sanitizeSyncReply, isFaithfulExport, readResearchHeader as readHeader, sanitizeLiveStatus as liveStatus,
+} from '../research-link.js';
+import { exportToGedcom } from '../ged-exporter.js';
 import { StromData } from '../types.js';
 
 const UUID = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
@@ -379,5 +384,85 @@ describe('humanizeChange with words', () => {
         expect(humanizeChange('~P0003 E0010 DEAT 1950 [probable]', nameOf, words)).toBe('Jan Novák úmrtí 1950');
         expect(humanizeChange('strom session start: 2 changes', nameOf, words)).toBe('strom session start: 2 changes');
         expect(humanizeChange('F0001 +child P0999', nameOf, words)).toBe('Nové dítě: P0999');
+    });
+});
+
+// ==================== SENDING CHANGES BACK ====================
+
+
+const RID = '0d2f8913-4f08-4c84-b1b6-91a600580e06';
+
+describe('research version in the header (_STROM_HEAD)', () => {
+    it('reads a commit id from a Strom Research file only, lower case', () => {
+        const ged = `0 HEAD\n1 SOUR STROM_RESEARCH\n1 _STROM_TREE ${RID}\n1 _STROM_HEAD 3F2A9C1E\n0 TRLR`;
+        expect(readHeader(ged).head).toBe('3f2a9c1e');
+        expect(readHeader(ged.replace('STROM_RESEARCH', 'PAF')).head).toBeNull();
+        expect(readHeader(ged.replace('3F2A9C1E', 'not a commit')).head).toBeNull();
+    });
+
+    it('accepts hex 7–64 characters', () => {
+        expect(isResearchHead('abc1234')).toBe('abc1234');
+        expect(isResearchHead('abc123')).toBeNull();
+        expect(isResearchHead('g'.repeat(10))).toBeNull();
+        expect(isResearchHead('a'.repeat(65))).toBeNull();
+    });
+
+    it('a linked export writes _STROM_TREE and _STROM_HEAD, not SOUR STROM_RESEARCH', () => {
+        expect(researchHeaderLines({ id: RID.toUpperCase(), head: 'ABCDEF1' })).toEqual([`1 _STROM_TREE ${RID}`, '1 _STROM_HEAD abcdef1']);
+        expect(researchHeaderLines({ id: RID })).toEqual([`1 _STROM_TREE ${RID}`]);
+        expect(researchHeaderLines({ id: 'nope' })).toEqual([]);
+        const data: StromData = { persons: {}, partnerships: {} } as StromData;
+        const ged = exportToGedcom(data, 'T', { research: { id: RID, head: 'abcdef1' } }).content;
+        expect(ged).toContain(`1 _STROM_TREE ${RID}`);
+        expect(ged).toContain('1 _STROM_HEAD abcdef1');
+        expect(ged).not.toContain('STROM_RESEARCH');
+        expect(exportToGedcom(data, 'T').content).not.toContain('_STROM_TREE');
+    });
+});
+
+describe('faithful exports only', () => {
+    const all = { photos: true, attachments: true, notes: true, sources: true };
+    it('whole content, living people as they are', () => {
+        expect(isFaithfulExport('full', all)).toBe(true);
+        expect(isFaithfulExport('initials', all)).toBe(false);
+        expect(isFaithfulExport('full', { ...all, photos: false })).toBe(false);
+        expect(isFaithfulExport('full', { ...all, notes: false })).toBe(false);
+    });
+});
+
+describe('send bridge', () => {
+    it('loopback only; status and sync endpoints', () => {
+        expect(parseSendBridge('http://127.0.0.1:5000/tok/')).toEqual({
+            base: 'http://127.0.0.1:5000/tok', status: 'http://127.0.0.1:5000/tok/status', sync: 'http://127.0.0.1:5000/tok/sync',
+        });
+        expect(parseSendBridge('https://127.0.0.1:5000/tok')).toBeNull();
+        expect(parseSendBridge('http://127.0.0.1.evil.com/tok')).toBeNull();
+    });
+
+    it('status: tree as { id, name } or as the id with the name beside it', () => {
+        expect(liveStatus({ tree: { id: RID, name: 'A' }, head: 'x' })).toMatchObject({ treeId: RID, name: 'A' });
+        expect(liveStatus({ tree: RID.toUpperCase(), name: 'B' })).toMatchObject({ treeId: RID, name: 'B' });
+        expect(liveStatus({ tree: 'nope', name: 'C' })?.treeId).toBeNull();
+    });
+
+    it('suggests the open tree, else the one changed last', () => {
+        const trees = [
+            { id: 'a', changedAt: '2026-09-20T10:00:00Z' },
+            { id: 'b', changedAt: '2026-09-26T10:00:00Z' },
+            { id: 'c', lastModifiedAt: '2026-09-22T10:00:00Z' },
+        ];
+        expect(pickSendDefault(trees, 'c')?.id).toBe('c');
+        expect(pickSendDefault(trees, 'zzz')?.id).toBe('b');
+        expect(pickSendDefault([], 'a')).toBeNull();
+    });
+
+    it('the reply and the JSON field are checked', () => {
+        expect(sanitizeSyncReply({ ok: true, input: 'I1', changes: 12 })).toEqual({ ok: true, changes: 12, error: '' });
+        expect(sanitizeSyncReply({ error: 'bad\u0000 thing' })).toEqual({ ok: false, changes: null, error: 'bad thing' });
+        expect(sanitizeSyncReply('x').ok).toBe(false);
+        expect(sanitizeResearchField({ id: RID, head: 'ABCDEF1' })).toEqual({ id: RID, head: 'abcdef1' });
+        expect(sanitizeResearchField({ id: RID, head: 'zz' })).toEqual({ id: RID });
+        expect(sanitizeResearchField({ id: 'x' })).toBeNull();
+        expect(sanitizeResearchField(null)).toBeNull();
     });
 });

@@ -14,6 +14,8 @@ import { StromData, PersonId, ResearchLink } from './types.js';
 export const STROM_RESEARCH_SOURCE = 'STROM_RESEARCH';
 /** Header tag carrying the research tree's UUID: `1 _STROM_TREE <uuid>`. */
 export const STROM_TREE_TAG = '_STROM_TREE';
+/** Header tag carrying the research commit the file was written from. */
+export const STROM_HEAD_TAG = '_STROM_HEAD';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Longest tree name taken from a file or a bridge (longer is cut). */
@@ -33,6 +35,8 @@ export interface ResearchHeader {
     name: string | null;
     /** The header `1 DATE` (when the file was written), raw GEDCOM. */
     date: string | null;
+    /** `1 _STROM_HEAD`: the research commit the file was written from. */
+    head: string | null;
 }
 
 /** Normalise a research UUID (lower case), or null when it is not one. */
@@ -40,6 +44,13 @@ export function normalizeResearchId(value: unknown): string | null {
     if (typeof value !== 'string') return null;
     const v = value.trim();
     return UUID_RE.test(v) ? v.toLowerCase() : null;
+}
+
+/** A research commit id (hex, 7–64 characters, lower case), or null. */
+export function isResearchHead(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const v = value.trim();
+    return /^[0-9a-f]{7,64}$/i.test(v) ? v.toLowerCase() : null;
 }
 
 /** Plain one-line text: control characters out, whitespace collapsed, capped. */
@@ -55,7 +66,7 @@ export function cleanText(value: unknown, max = MAX_TEXT): string {
  * records themselves go through the normal importer.
  */
 export function readResearchHeader(text: string): ResearchHeader {
-    const none: ResearchHeader = { isStromResearch: false, treeId: null, name: null, date: null };
+    const none: ResearchHeader = { isStromResearch: false, treeId: null, name: null, date: null, head: null };
     if (typeof text !== 'string') return none;
     const body = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
     const lines = body.split(/\r\n|\r|\n/);
@@ -66,6 +77,7 @@ export function readResearchHeader(text: string): ResearchHeader {
 
     let source = '';
     let treeRaw: string | null = null;
+    let headRaw: string | null = null;
     let date: string | null = null;
     let noteLines: string[] | null = null;
     let inFirstNote = false;
@@ -81,6 +93,7 @@ export function readResearchHeader(text: string): ResearchHeader {
             inFirstNote = false;
             if (tag === 'SOUR') source = value.trim();
             else if (tag === STROM_TREE_TAG) treeRaw = value;
+            else if (tag === STROM_HEAD_TAG) headRaw = value;
             else if (tag === 'DATE') date = value.trim() || null;
             else if (tag === 'NOTE' && noteLines === null) {
                 noteLines = [value];
@@ -99,6 +112,7 @@ export function readResearchHeader(text: string): ResearchHeader {
         treeId: isStromResearch ? normalizeResearchId(treeRaw) : null,
         name: cleanText(firstLine, MAX_NAME) || null,
         date,
+        head: isStromResearch ? isResearchHead(headRaw) : null,
     };
 }
 
@@ -412,10 +426,12 @@ export function sanitizeWaiting(value: unknown): LiveWaiting[] {
 export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
     const r = asRecord(value);
     if (!r) return null;
+    // `tree` is `{ id, name }` (the live bridge) or the id itself with the
+    // name beside it (the send bridge).
     const tree = asRecord(r.tree);
     return {
-        treeId: normalizeResearchId(tree?.id),
-        name: cleanText(tree?.name, MAX_NAME),
+        treeId: normalizeResearchId(tree ? tree.id : r.tree),
+        name: cleanText(tree?.name ?? r.name, MAX_NAME),
         head: cleanText(r.head, 80),
         persons: asCount(r.persons),
         families: asCount(r.families),
@@ -534,4 +550,76 @@ export const RESEARCH_SITE_URL = 'https://stromapp.info/research/';
  */
 export function researchSiteUrl(lang: string): string {
     return lang === 'cs' || lang === 'de' ? `${RESEARCH_SITE_URL}?lang=${lang}` : RESEARCH_SITE_URL;
+}
+
+// ==================== SENDING CHANGES BACK ====================
+
+/** The endpoints of a send bridge (`?send=`): its status and where to POST. */
+export interface SendBridgeUrls {
+    base: string;
+    status: string;
+    sync: string;
+}
+
+/** Endpoints of the bridge at `raw` (`http://127.0.0.1:<port>/<token>`), or null. */
+export function parseSendBridge(raw: unknown): SendBridgeUrls | null {
+    const live = parseLiveBridge(raw);
+    if (!live) return null;
+    return { base: live.base, status: live.status, sync: `${live.base}/sync` };
+}
+
+/** A tree that could be sent: the open one, or the one changed last. */
+export function pickSendDefault<T extends { id: string; changedAt?: string; lastModifiedAt?: string }>(
+    trees: readonly T[],
+    openTreeId: string | null
+): T | null {
+    if (trees.length === 0) return null;
+    const open = trees.find(t => t.id === openTreeId);
+    if (open) return open;
+    const when = (t: T): number => Date.parse(t.changedAt ?? t.lastModifiedAt ?? '') || 0;
+    return [...trees].sort((a, b) => when(b) - when(a))[0];
+}
+
+/** The header lines that tie an exported GEDCOM to its research. */
+export function researchHeaderLines(link: { id: string; head?: string } | null | undefined): string[] {
+    const id = normalizeResearchId(link?.id);
+    if (!id) return [];
+    const head = isResearchHead(link?.head);
+    return [`1 ${STROM_TREE_TAG} ${id}`, ...(head ? [`1 ${STROM_HEAD_TAG} ${head}`] : [])];
+}
+
+/** The `research` field of a JSON export / import: `{ id, head? }`, checked. */
+export function sanitizeResearchField(value: unknown): { id: string; head?: string } | null {
+    const r = asRecord(value);
+    const id = normalizeResearchId(r?.id);
+    if (!id) return null;
+    const head = isResearchHead(r?.head);
+    return head ? { id, head } : { id };
+}
+
+/** The bridge's answer to a sync: `{ ok, input, changes }` or `{ error }`. Untrusted. */
+export interface SyncReply {
+    ok: boolean;
+    changes: number | null;
+    error: string;
+}
+
+export function sanitizeSyncReply(value: unknown): SyncReply {
+    const r = asRecord(value);
+    if (!r) return { ok: false, changes: null, error: '' };
+    return {
+        ok: r.ok === true,
+        changes: asCount(r.changes),
+        error: cleanText(r.error),
+    };
+}
+
+/**
+ * Only a faithful export names its research: the whole tree, every living
+ * person as is, all content. The research compares what it sent with what
+ * comes back — hidden living people, dropped images or notes would read as
+ * edits and deletions.
+ */
+export function isFaithfulExport(privacy: string, content: { photos: boolean; attachments: boolean; notes: boolean; sources: boolean }): boolean {
+    return privacy === 'full' && content.photos && content.attachments && content.notes && content.sources;
 }

@@ -22,6 +22,7 @@
  * the 255-byte line limit, and the importer joins it back.
  */
 
+import { researchHeaderLines } from './research-link.js';
 import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType } from './types.js';
 import { strings } from './strings.js';
 import { eventValueIsOnTag } from './events.js';
@@ -32,6 +33,12 @@ import { applyContentOptions, ContentOptions } from './privacy.js';
 export interface GedcomExportOptions {
     /** Omitted = everything; photos/attachments off drop the embedded base64 media. */
     content?: ContentOptions;
+    /**
+     * The research this tree came from (a faithful export of a linked tree):
+     * written back as `1 _STROM_TREE` + `1 _STROM_HEAD`, so Strom Research
+     * can tell which of its versions the edits start from.
+     */
+    research?: { id: string; head?: string };
 }
 
 /** Partnership statuses MARR/DIV cannot express, written as 1 _STAT. */
@@ -376,6 +383,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     lines.push('2 VERS 5.5.1');
     lines.push('2 FORM LINEAGE-LINKED');
     lines.push('1 CHAR UTF-8');
+    lines.push(...researchHeaderLines(options.research));
 
     // Surname-variant groups: no GEDCOM structure fits "these spellings mean one
     // family", so they ride in a header NOTE (standard, kept by every reader).

@@ -6,6 +6,7 @@
 import type { PrivacyMode, ContentOptions } from '../privacy.js';
 import { DataManager, auditPersonName } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
+import { sanitizeResearchField } from '../research-link.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { TreePreview, TreeCompare } from '../tree-preview.js';
@@ -167,8 +168,15 @@ export const importExportMethods = uiModule({
             const metadata = TreeManager.getTreeMetadata(treeId);
             if (!data) return;
 
-            const filtered = applyLivingPrivacy(data, this.readExportPrivacyMode());
-            const result = exportToGedcom(filtered, metadata?.name, { content: this.readExportContentOptions() });
+            const { isFaithfulExport } = await import('../research-link.js');
+            const { resolveContentOptions } = await import('../privacy.js');
+            const privacy = this.readExportPrivacyMode();
+            const content = this.readExportContentOptions();
+            const filtered = applyLivingPrivacy(data, privacy);
+            // A faithful export of a research tree names the research and its version.
+            const research = metadata?.research && isFaithfulExport(privacy, resolveContentOptions(content))
+                ? { id: metadata.research.id, head: metadata.research.head } : undefined;
+            const result = exportToGedcom(filtered, metadata?.name, { content, research });
 
             // Download file
             const blob = new Blob([result.content], { type: 'text/plain;charset=utf-8' });
@@ -702,6 +710,9 @@ export const importExportMethods = uiModule({
             await this.importMultiTreeBackup(parsed);
             return;
         }
+        // A faithful export of a research tree names its research: the tree
+        // made from it is tied again (sending changes back works from here).
+        this.pendingImportResearch = sanitizeResearchField((parsed as { research?: unknown } | null)?.research);
 
         const result = validateJsonImport(content);
         if (!result.valid) {
@@ -729,6 +740,8 @@ export const importExportMethods = uiModule({
             void DataManager.snapshotNow('pre-import');
             // Load data directly into current tree
             DataManager.loadStromData(data);
+            const loadedId = DataManager.getCurrentTreeId();
+            if (loadedId) this.restoreImportResearch(loadedId);
             TreeRenderer.render();
             this.showToast(strings.buttons.importComplete);
             // "Open from file" into the current (empty) tree: the picked file
@@ -1160,9 +1173,31 @@ export const importExportMethods = uiModule({
     /**
      * Close import tree dialog
      */
+    /**
+     * Tie the tree made from a JSON file to the research the file names: it
+     * receives the research's updates when no other tree does, else it is a
+     * copy (still offered when sending changes back).
+     */
+    restoreImportResearch(treeId: TreeId): void {
+        const research = this.pendingImportResearch;
+        this.pendingImportResearch = null;
+        if (!research) return;
+        const holder = TreeManager.findTreeByResearchId(research.id);
+        TreeManager.setResearchLink(treeId, {
+            id: research.id,
+            // Unknown since the research sent it (the file may hold edits made
+            // elsewhere): counts as changed — it can be sent, an update asks.
+            fingerprint: '',
+            syncedAt: new Date().toISOString(),
+            ...(research.head ? { head: research.head } : {}),
+            ...(holder && holder.id !== treeId ? { copy: true } : {}),
+        });
+    },
+
     closeImportTreeDialog(): void {
         document.getElementById('import-tree-modal')?.classList.remove('active');
         this.importTreeData = null;
+        this.pendingImportResearch = null;
         if (this.importFromTreeManager) {
             this.returnToParentDialog();
             this.importFromTreeManager = false;
@@ -1179,6 +1214,7 @@ export const importExportMethods = uiModule({
         const name = nameInput?.value.trim() || strings.treeManager.importTreeName;
 
         const newTreeId = await DataManager.importAsNewTree(this.importTreeData, name);
+        this.restoreImportResearch(newTreeId);
 
         this.closeImportTreeDialog();
         this.updateTreeSwitcher();

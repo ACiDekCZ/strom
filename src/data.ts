@@ -46,7 +46,7 @@ import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDa
 import { ValidationIssue, stripUnsafeMediaDataUrls, translateValidationType } from './validation.js';
 import { cloneTreeData } from './clone.js';
 import { UndoManager } from './undo.js';
-import { applyLivingPrivacy, applyContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
+import { applyLivingPrivacy, applyContentOptions, resolveContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
 import { safeFileName } from './filenames.js';
 
 /** Extended updates for Partnership */
@@ -3020,6 +3020,15 @@ class DataManagerClass {
         treeData.version = STROM_DATA_VERSION;
 
         const treeMeta = TreeManager.getTreeMetadata(treeId);
+        // A faithful export of a research tree names the research and its
+        // version (Strom Research reads it; our import restores the tie).
+        const { isFaithfulExport } = await import('./research-link.js');
+        if (treeMeta?.research && isFaithfulExport(privacyMode, resolveContentOptions(content))) {
+            (treeData as StromData & { research?: { id: string; head?: string } }).research = {
+                id: treeMeta.research.id,
+                ...(treeMeta.research.head ? { head: treeMeta.research.head } : {}),
+            };
+        }
         const treeName = treeMeta?.name || 'family-tree';
         const safeName = safeFileName(treeName, 'family-tree');
 

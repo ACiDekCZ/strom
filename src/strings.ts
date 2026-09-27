@@ -681,6 +681,22 @@ const stringsEN = {
 
     // Opening a research from Strom Research (file handler, link, drag & drop, live bridge)
     research: {
+        sendNoTree: (name: string) => `You do not have the research “${name}” in the app. Open it from the research first (strom app).`,
+        sendPickTitle: 'Which tree to send?',
+        sendPickMessage: (name: string) => `Several trees in the app come from the research “${name}”. Choose the one whose changes to send — only one is sent.`,
+        sendPickItem: (tree: string, when: string) => `${tree} (changed ${when})`,
+        sendNothing: (tree: string) => `“${tree}” has not changed since it was last loaded from the research — there is nothing to send.`,
+        sendConfirmTitle: 'Send changes to the research',
+        sendConfirm: (tree: string, name: string) => `Send the changes of the tree “${tree}” to the research “${name}”? The research shows them to you first; nothing is written without your confirmation.`,
+        sendButton: 'Send',
+        sending: 'Sending to the research…',
+        sent: 'Sent. Confirm the changes in the research (in the terminal window).',
+        sendRefused: (error: string) => `The research did not accept the changes${error ? `: ${error}` : '.'}`,
+        sendUnreachable: 'The research did not answer — is it still running? You can also export the tree as GEDCOM and load it in the research.',
+        sendExportGedcom: 'Export GEDCOM',
+        sendMenu: 'Send changes to the research',
+        sendHowTitle: 'Send changes to the research',
+        sendHow: 'In the research, choose “Extend research → Load changes from the Strom app”. It opens this app and the changes go straight to the research, which shows them to you before writing anything. Or export the tree as GEDCOM and load that file in the research.',
         excerptsReplaced: 'Excerpts you added to this tree will be replaced by the update.',
         defaultName: 'Research',
         opened: (name: string, persons: number, families: number, date: string) =>
@@ -2915,6 +2931,22 @@ const stringsCZ: StringsType = {
 
     // Otevření výzkumu ze Strom Research (obsluha souborů, odkaz, přetažení, živý most)
     research: {
+        sendNoTree: (name: string) => `Výzkum „${name}“ v aplikaci nemáte — otevřete ho nejdřív z výzkumu (strom app).`,
+        sendPickTitle: 'Který strom poslat?',
+        sendPickMessage: (name: string) => `Z výzkumu „${name}“ máte v aplikaci víc stromů. Vyberte ten, jehož úpravy chcete poslat — posílá se vždy jen jeden.`,
+        sendPickItem: (tree: string, when: string) => `${tree} (upraveno ${when})`,
+        sendNothing: (tree: string) => `Strom „${tree}“ jste od posledního načtení z výzkumu nezměnili — není co poslat.`,
+        sendConfirmTitle: 'Poslat úpravy do výzkumu',
+        sendConfirm: (tree: string, name: string) => `Poslat úpravy stromu „${tree}“ do výzkumu „${name}“? Výzkum vám je nejdřív ukáže, nic se nezapíše bez vašeho potvrzení.`,
+        sendButton: 'Poslat',
+        sending: 'Posílám do výzkumu…',
+        sent: 'Odesláno. Změny potvrďte ve výzkumu (v okně terminálu).',
+        sendRefused: (error: string) => `Výzkum úpravy nepřijal${error ? `: ${error}` : '.'}`,
+        sendUnreachable: 'Výzkum neodpovídá — běží ještě? Strom můžete také vyexportovat jako GEDCOM a načíst ho ve výzkumu.',
+        sendExportGedcom: 'Exportovat GEDCOM',
+        sendMenu: 'Poslat úpravy do výzkumu',
+        sendHowTitle: 'Poslat úpravy do výzkumu',
+        sendHow: 'Ve výzkumu zvolte „Rozšířit výzkum → Načíst úpravy z aplikace Strom“. Otevře se tato aplikace a úpravy půjdou rovnou do výzkumu, který vám je ukáže, než cokoli zapíše. Nebo strom vyexportujte jako GEDCOM a ten soubor načtěte ve výzkumu.',
         excerptsReplaced: 'Výřezy, které jste do tohoto stromu přidali, se aktualizací nahradí.',
         defaultName: 'Výzkum',
         opened: (name: string, persons: number, families: number, date: string) =>
@@ -5143,6 +5175,22 @@ const stringsDE: StringsType = {
 
     // Opening a research from Strom Research (file handler, link, drag & drop, live bridge)
     research: {
+        sendNoTree: (name: string) => `Die Forschung „${name}“ ist nicht in der App — öffnen Sie sie zuerst aus der Forschung (strom app).`,
+        sendPickTitle: 'Welchen Stammbaum senden?',
+        sendPickMessage: (name: string) => `Aus der Forschung „${name}“ gibt es mehrere Stammbäume in der App. Wählen Sie den, dessen Änderungen gesendet werden — es wird immer nur einer gesendet.`,
+        sendPickItem: (tree: string, when: string) => `${tree} (geändert ${when})`,
+        sendNothing: (tree: string) => `„${tree}“ wurde seit dem letzten Laden aus der Forschung nicht geändert — es gibt nichts zu senden.`,
+        sendConfirmTitle: 'Änderungen an die Forschung senden',
+        sendConfirm: (tree: string, name: string) => `Die Änderungen am Stammbaum „${tree}“ an die Forschung „${name}“ senden? Die Forschung zeigt sie Ihnen zuerst; ohne Ihre Bestätigung wird nichts geschrieben.`,
+        sendButton: 'Senden',
+        sending: 'Wird an die Forschung gesendet…',
+        sent: 'Gesendet. Bestätigen Sie die Änderungen in der Forschung (im Terminalfenster).',
+        sendRefused: (error: string) => `Die Forschung hat die Änderungen nicht angenommen${error ? `: ${error}` : '.'}`,
+        sendUnreachable: 'Die Forschung antwortet nicht — läuft sie noch? Sie können den Stammbaum auch als GEDCOM exportieren und in der Forschung laden.',
+        sendExportGedcom: 'GEDCOM exportieren',
+        sendMenu: 'Änderungen an die Forschung senden',
+        sendHowTitle: 'Änderungen an die Forschung senden',
+        sendHow: 'Wählen Sie in der Forschung „Forschung erweitern → Änderungen aus der Strom-App laden“. Dann öffnet sich diese App und die Änderungen gehen direkt an die Forschung, die sie Ihnen zeigt, bevor etwas geschrieben wird. Oder exportieren Sie den Stammbaum als GEDCOM und laden Sie die Datei in der Forschung.',
         excerptsReplaced: 'Ausschnitte, die Sie diesem Stammbaum hinzugefügt haben, werden durch die Aktualisierung ersetzt.',
         defaultName: 'Forschung',
         opened: (name: string, persons: number, families: number, date: string) =>

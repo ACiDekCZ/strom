@@ -377,6 +377,7 @@ class TreeManagerClass {
     async duplicateTree(id: TreeId, newName: string): Promise<TreeId | null> {
         const sourceData = await this.getTreeData(id);
         if (!sourceData) return null;
+        const source = this.index.trees.find(t => t.id === id);
 
         const newId = generateTreeId();
         const now = new Date().toISOString();
@@ -390,7 +391,9 @@ class TreeManagerClass {
             lastModifiedAt: now,
             personCount: Object.keys(sourceData.persons).length,
             partnershipCount: Object.keys(sourceData.partnerships).length,
-            sizeBytes
+            sizeBytes,
+            // A duplicate of a research tree can be sent back too, as a copy.
+            ...(source?.research ? { research: { ...source.research, copy: true } } : {}),
         };
 
         // Add to index, then save through the encrypting path — a direct
@@ -1005,10 +1008,16 @@ class TreeManagerClass {
 
     // ==================== STROM RESEARCH LINK ====================
 
-    /** The tree that holds the research with this UUID, if any. */
+    /** The tree that receives updates of the research with this UUID (not a copy), if any. */
     findTreeByResearchId(researchId: string): TreeMetadata | null {
         const id = researchId.toLowerCase();
-        return this.index.trees.find(t => t.research?.id === id) || null;
+        return this.index.trees.find(t => t.research?.id === id && !t.research.copy) || null;
+    }
+
+    /** Every tree tied to the research, copies included (what can be sent back). */
+    findTreesByResearchId(researchId: string): TreeMetadata[] {
+        const id = researchId.toLowerCase();
+        return this.index.trees.filter(t => t.research?.id === id);
     }
 
     /** Link a tree to a research (or drop the link with `undefined`). */

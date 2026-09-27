@@ -35,18 +35,24 @@ import {
     decideResearchOpen, stabilizeIds, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
+    parseSendBridge, pickSendDefault, sanitizeSyncReply,
     LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { iconSvg } from '../icons.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
+import { exportToGedcom } from '../ged-exporter.js';
+import { formatRelativeDateTime } from '../format.js';
+import { safeFileName } from '../filenames.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
     treeId: string | null;
     name: string | null;
     date: string | null;
+    /** The research commit (file header `_STROM_HEAD`); the bridge passes it in opts. */
+    head?: string | null;
 }
 
 export interface LiveChangeItem {
@@ -151,6 +157,33 @@ async function fetchGedcomText(url: string): Promise<string> {
     const res = await fetchWithTimeout(url, 30000);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return decodeGedcomFile(await res.arrayBuffer());
+}
+
+/** POST the tree to the send bridge; never sends cookies. */
+async function postSync(url: string, gedcom: string, ms: number): Promise<Response> {
+    if (typeof fetch !== 'function') throw new Error('fetch unavailable');
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), ms) : null;
+    try {
+        // text/plain keeps it a simple request (no CORS preflight beyond the
+        // browser's own private-network check).
+        return await fetch(url, {
+            method: 'POST',
+            mode: 'cors',
+            credentials: 'omit',
+            cache: 'no-store',
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            body: gedcom,
+            signal: ctl?.signal,
+        });
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+}
+
+/** The GEDCOM the research gets back: the whole tree, as is, naming its research and version. */
+function researchGedcom(data: StromData, treeName: string, link: { id: string; head?: string }): string {
+    return exportToGedcom(data, treeName, { research: { id: link.id, head: link.head } }).content;
 }
 
 async function fetchStatus(url: string): Promise<LiveStatus | null> {
@@ -301,11 +334,13 @@ export const researchUiMethods = uiModule({
             const params = new URLSearchParams(window.location.search);
             const importUrl = params.get('import-url');
             const liveUrl = params.get('live');
-            if (importUrl !== null || liveUrl !== null || params.has('open')) {
+            const sendUrl = params.get('send');
+            if (importUrl !== null || liveUrl !== null || sendUrl !== null || params.has('open')) {
                 try {
                     const url = new URL(window.location.href);
                     url.searchParams.delete('import-url');
                     url.searchParams.delete('live');
+                    url.searchParams.delete('send');
                     url.searchParams.delete('open');
                     history.replaceState(null, '', url.toString());
                 } catch { /* keep the address as it is */ }
@@ -314,11 +349,12 @@ export const researchUiMethods = uiModule({
             window.addEventListener('resize', () => this.placeLivePanel());
             this.initLaunchQueue();
             const reveal = (): void => document.documentElement.classList.remove('external-opening');
-            const explicit = liveUrl !== null || importUrl !== null || params.has('open');
+            const explicit = liveUrl !== null || importUrl !== null || sendUrl !== null || params.has('open');
             // Something else was asked for in this tab: the old bridge is over.
             if (explicit) forgetLiveBridge();
             const resume = explicit ? null : rememberedLiveBridge();
-            if (liveUrl !== null) void this.startLiveFollow(liveUrl).finally(reveal);
+            if (sendUrl !== null) { reveal(); void this.sendChangesToResearch(sendUrl); }
+            else if (liveUrl !== null) void this.startLiveFollow(liveUrl).finally(reveal);
             else if (importUrl !== null) void this.importResearchFromUrl(importUrl).finally(reveal);
             // A reload while following: follow the same bridge again, quietly.
             else if (resume !== null) void this.startLiveFollow(resume, { resume: true }).finally(reveal);
@@ -563,9 +599,10 @@ export const researchUiMethods = uiModule({
         let treeId: TreeId;
         let created = false;
         if (!existing || asCopy) {
-            // The copy takes the link: the next open of this research updates
-            // it, and the tree the user changed stays exactly as it is.
-            if (existing) TreeManager.setResearchLink(existing.id, undefined);
+            // The new tree takes the updates: the next open of this research
+            // updates it. The tree the user changed stays exactly as it is and
+            // keeps its tie as a copy — its changes can still be sent back.
+            if (existing?.research) TreeManager.setResearchLink(existing.id, { ...existing.research, copy: true });
             const treeName = existing ? strings.research.copyName(name, formatFlexDate(todayIso())) : name;
             treeId = await DataManager.importAsNewTree(data, treeName);
             created = true;
@@ -583,11 +620,12 @@ export const researchUiMethods = uiModule({
         }
 
         if (source.treeId) {
+            const head = opts.head || source.head;
             TreeManager.setResearchLink(treeId, {
                 id: source.treeId,
                 fingerprint: contentFingerprint(DataManager.getData()),
                 syncedAt: new Date().toISOString(),
-                ...(opts.head ? { head: opts.head } : {}),
+                ...(head ? { head } : {}),
             });
         }
 
@@ -614,6 +652,129 @@ export const researchUiMethods = uiModule({
                 : strings.research.updated(name, persons, families, dateLabel), 6000);
         }
         return treeId;
+    },
+
+    // ==================== E. SENDING CHANGES BACK ====================
+
+    /**
+     * ?send=: Strom Research asks for the user's changes to one of its trees.
+     * The app sends one tree, as a faithful GEDCOM naming the research and
+     * the version it came from; the research works out the changes, shows
+     * them and writes nothing without the user. The app's data is untouched.
+     */
+    async sendChangesToResearch(raw: string): Promise<void> {
+        const r = strings.research;
+        const bridge = parseSendBridge(raw);
+        if (!bridge) {
+            this.showToast(r.notLocal, 6000);
+            return;
+        }
+        if (DataManager.isViewMode()) {
+            this.showToast(r.notInViewMode, 5000);
+            return;
+        }
+        let status: LiveStatus | null = null;
+        try {
+            status = await fetchStatus(bridge.status);
+        } catch (err) {
+            console.warn('The research bridge did not answer', err);
+        }
+        if (!status?.treeId) {
+            await this.offerResearchGedcom(r.sendUnreachable, null);
+            return;
+        }
+        const researchName = status.name || r.defaultName;
+        const trees = TreeManager.findTreesByResearchId(status.treeId);
+        let tree = pickSendDefault(trees, DataManager.getCurrentTreeId());
+        if (!tree) {
+            await this.showAlert(r.sendNoTree(researchName), 'info');
+            return;
+        }
+        if (trees.length > 1) {
+            // Never more than one tree: the user picks (suggested one last = primary).
+            const lang = getCurrentLanguage();
+            const suggested = tree;
+            const ordered = [...trees.filter(t => t.id !== suggested.id), suggested];
+            const pick = await this.showChoice(r.sendPickMessage(researchName), r.sendPickTitle,
+                ordered.map(t => ({
+                    id: t.id,
+                    label: r.sendPickItem(t.name, formatRelativeDateTime(Date.parse(t.changedAt ?? t.lastModifiedAt) || Date.now(), lang)),
+                })));
+            if (pick === null) return;
+            tree = trees.find(t => t.id === pick) ?? suggested;
+        }
+        const link = tree.research;
+        if (!link) return;
+        if (!await this.ensureLocalUnlocked()) return;
+        const data = TreeManager.isTreeUnreadable(tree.id) ? null : await readTree(tree.id);
+        if (!data) {
+            await this.showAlert(strings.storageSafety.treeLocked, 'warning');
+            return;
+        }
+        // Nothing changed since the research sent it (a tree followed live
+        // is read-only, so it always lands here).
+        if (link.fingerprint && fingerprintLike(data, link.fingerprint) === link.fingerprint) {
+            await this.showAlert(r.sendNothing(tree.name), 'info');
+            return;
+        }
+        const ok = await this.showConfirm(r.sendConfirm(tree.name, researchName), r.sendConfirmTitle, { confirmLabel: r.sendButton });
+        if (!ok) return;
+
+        this.showToast(r.sending, 60000);
+        let res: Response;
+        try {
+            res = await postSync(bridge.sync, researchGedcom(data, tree.name, link), 120000);
+        } catch (err) {
+            console.warn('Sending to the research failed', err);
+            document.querySelector('.toast')?.remove();
+            await this.offerResearchGedcom(r.sendUnreachable, tree.id);
+            return;
+        }
+        let reply = sanitizeSyncReply(null);
+        try {
+            reply = sanitizeSyncReply(await res.json());
+        } catch { /* not JSON: a refusal without a reason */ }
+        document.querySelector('.toast')?.remove();
+        if (res.ok && reply.ok) await this.showAlert(r.sent, 'info');
+        else await this.showAlert(r.sendRefused(reply.error), 'error');
+    },
+
+    /** Explain the way back to the research; offer the faithful GEDCOM of the tree. */
+    async offerResearchGedcom(message: string, treeId: TreeId | null): Promise<void> {
+        const r = strings.research;
+        const id = treeId ?? DataManager.getCurrentTreeId();
+        const linked = id ? TreeManager.getTreeMetadata(id)?.research : undefined;
+        if (!id || !linked) {
+            await this.showAlert(message, 'warning');
+            return;
+        }
+        const pick = await this.showConfirm(message, r.sendHowTitle, { confirmLabel: r.sendExportGedcom, cancel: r.close });
+        if (pick) await this.downloadResearchGedcom(id);
+    },
+
+    /** Tree menu: how to send changes back (the research starts it), or the file. */
+    async showSendToResearchHelp(treeId: TreeId): Promise<void> {
+        await this.offerResearchGedcom(strings.research.sendHow, treeId);
+    },
+
+    /** Download the faithful GEDCOM of a research tree (naming its research and version). */
+    async downloadResearchGedcom(treeId: TreeId): Promise<void> {
+        const meta = TreeManager.getTreeMetadata(treeId);
+        if (!meta?.research) return;
+        if (!await this.ensureLocalUnlocked()) return;
+        const data = TreeManager.isTreeUnreadable(treeId) ? null : await readTree(treeId);
+        if (!data) {
+            await this.showAlert(strings.storageSafety.treeLocked, 'warning');
+            return;
+        }
+        const blob = new Blob([researchGedcom(data, meta.name, meta.research)], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${safeFileName(meta.name, 'family-tree')}.ged`;
+        a.click();
+        URL.revokeObjectURL(url);
+        TreeManager.noteFileCopy([treeId]);
     },
 
     // ==================== D. LIVE BRIDGE ====================

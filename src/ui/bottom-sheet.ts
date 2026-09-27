@@ -248,6 +248,9 @@ export const bottomSheetMethods = uiModule({
                 : []),
             { label: s.book.menu, run: () => this.showBookDialog() },
             { label: s.menu.export, run: () => this.showExportDialog() },
+            ...(active.research
+                ? [{ label: s.research.sendMenu, run: () => void this.showSendToResearchHelp(id) }]
+                : []),
         ];
         if (isFsa) rows.push({ label: s.fileAccess.saveToFile, run: () => this.attachSaveToFile() });
         rows.push({ label: s.anniversaries.menu, run: () => this.showAnniversariesDialog(), badge: this.anniversaryBadgeCount() });
