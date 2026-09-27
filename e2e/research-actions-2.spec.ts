@@ -478,6 +478,20 @@ test.describe('Start research with this tree (G3)', () => {
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research)).toBeUndefined();
     });
 
+    test('a person just added to a new tree: the open tree can go over at once', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await seed(page, ALL);
+        await openApp(page);
+        const before = await page.evaluate(async () => {
+            const id = await window.Strom.TreeManager.createTree('Nový');
+            await window.Strom.DataManager.switchTree(id);
+            const empty = window.Strom.UI.researchAdoptActiveAvailable();
+            window.Strom.DataManager.createPerson({ firstName: 'Jan', lastName: 'Nový', gender: 'male' });
+            return { empty, now: window.Strom.UI.researchAdoptActiveAvailable() };
+        });
+        expect(before).toEqual({ empty: false, now: true });
+    });
+
     test('tree manager: "Start research with this tree ↗" in the row menu of an app tree', async ({ page }) => {
         await appTree(page, ALL);
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());

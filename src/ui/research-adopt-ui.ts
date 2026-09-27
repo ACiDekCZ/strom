@@ -44,8 +44,12 @@ export const researchAdoptMethods = uiModule({
      * a research tree yet.
      */
     researchAdoptAvailable(tree: TreeMetadata | null | undefined): boolean {
-        return !!tree && !tree.research && tree.personCount > 0 && !DataManager.isViewMode()
-            && onComputer() && this.researchLinkAvailable('new');
+        if (!tree || tree.research || DataManager.isViewMode() || !onComputer() || !this.researchLinkAvailable('new')) return false;
+        // The open tree counts from its data: the metadata catch up only when it is saved.
+        const people = DataManager.getCurrentTreeId() === tree.id
+            ? Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder)
+            : tree.personCount > 0;
+        return people;
     },
 
     /** The active tree can be handed over (the explanation dialog's variant). */
