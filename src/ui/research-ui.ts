@@ -132,6 +132,12 @@ let idlePanel: string | null = null;
 /** How long "Load new version" waits for the research to send it. */
 const VERSION_WAIT_MS = 20_000;
 let versionWait: ReturnType<typeof setTimeout> | null = null;
+/**
+ * A new version the research sent to another tab (the app open in a browser,
+ * not installed: the address opens a new tab) also ends this tab's wait.
+ */
+const VERSION_CHANNEL = 'strom-research-version';
+let versionChannel: BroadcastChannel | null = null;
 
 /** What the page says after handing a link over: it cannot tell whether anything opened. */
 export type ResearchLinkKind = 'terminal' | 'agent' | 'version';
@@ -394,6 +400,7 @@ export const researchUiMethods = uiModule({
             window.addEventListener('strom:tree-switched', () => this.syncLivePanelVisibility());
             window.addEventListener('resize', () => this.placeLivePanel());
             this.initLaunchQueue(startSearch);
+            this.initResearchVersionChannel(importUrl !== null || liveUrl !== null);
             const reveal = (): void => document.documentElement.classList.remove('external-opening');
             const explicit = liveUrl !== null || importUrl !== null || sendUrl !== null || params.has('open');
             // Something else was asked for in this tab: the old bridge is over.
@@ -874,6 +881,16 @@ export const researchUiMethods = uiModule({
         if (kind === 'version') this.awaitResearchVersion();
         else if (kind === 'agent') this.showToast(r.openingAgentHint, 8000, { title: r.openingAgent });
         else this.showToast(r.openingHint, 8000, { title: r.opening });
+    },
+
+    /** Listen for a version that reached another tab; announce one that reached this tab. */
+    initResearchVersionChannel(arrivedHere: boolean): void {
+        if (typeof BroadcastChannel !== 'function') return;
+        try {
+            versionChannel = new BroadcastChannel(VERSION_CHANNEL);
+            versionChannel.onmessage = () => this.settleResearchVersion();
+            if (arrivedHere) versionChannel.postMessage('arrived');
+        } catch { /* no channel: the wait just ends on its own */ }
     },
 
     /** "Load new version": a spinner until the research sends ?import-url=, at most 20 s. */

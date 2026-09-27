@@ -146,6 +146,17 @@ test.describe('Actions → Research', () => {
         await expect(page.locator('.toast')).not.toContainText('did not answer');
     });
 
+    test('"Load new version": the version opening in another tab (app in a browser) ends the wait here', async ({ page, context }) => {
+        await setup(page);
+        await openResearchMenu(page);
+        await page.locator('#research-item-version').click();
+        await expect(page.locator('.toast .toast-spinner')).toBeVisible();
+        const other = await context.newPage();
+        await other.goto(`/strom.html?import-url=${encodeURIComponent('http://127.0.0.1:5995/tree.ged')}`);
+        await expect(page.locator('.toast .toast-spinner')).toHaveCount(0);
+        await other.close();
+    });
+
     test('"Waiting for you" without following: the last known state, no answer buttons, Esc closes', async ({ page }) => {
         await setup(page, ALL, [{ id: 'T0001', what: 'Confirm the father of Jan', at: new Date().toISOString() }]);
         await openResearchMenu(page);
