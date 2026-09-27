@@ -9649,6 +9649,11 @@
                         <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
                     </div>
                     <div class="actions-tree-submenu" id="actions-tree-submenu" role="menu">
+                        <!-- Strom Research tree on a computer: send the edits back, first. -->
+                        <div class="tree-switcher-action edit-only" id="actions-tree-send-row" style="display:none;" role="menuitem" onclick="window.Strom.UI.treeActionSendToResearch()" tabindex="0">
+                            <span data-i18n="research.sendMenu"></span>
+                        </div>
+                        <div class="tree-switcher-divider edit-only" id="actions-tree-send-divider" style="display:none;"></div>
                         <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionRename()" tabindex="0">
                             <span data-i18n="treeManager.rename"></span>
                         </div>

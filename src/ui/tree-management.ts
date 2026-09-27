@@ -228,6 +228,13 @@ export const treeManagementMethods = uiModule({
         if (auditRow) auditRow.style.display = SettingsManager.isAuditLogEnabled() ? '' : 'none';
         const sourcesRow = document.getElementById('actions-tree-sources-row');
         if (sourcesRow) sourcesRow.style.display = this.isSourcesMenuOffered() ? '' : 'none';
+        // "Send changes to the research": a research tree, on a computer.
+        const activeId = TreeManager.getActiveTreeId();
+        const canSend = !!activeId && !!TreeManager.getTreeMetadata(activeId)?.research && researchRunsHere();
+        for (const id of ['actions-tree-send-row', 'actions-tree-send-divider']) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = canSend ? '' : 'none';
+        }
         // Strom Research "New" marker (its dot yields to the anniversaries dot).
         this.refreshResearchNewMarker(count);
         this.refreshActionsUndoRedo();
@@ -373,6 +380,12 @@ export const treeManagementMethods = uiModule({
 
     // The "Tree:" submenu actions reuse the app's own functions (no duplicated
     // logic) against the ACTIVE tree, resolved at click time.
+    treeActionSendToResearch(): void {
+        const id = TreeManager.getActiveTreeId();
+        this.closeActionsMenu();
+        if (id) void this.sendTreeToResearch(id);
+    },
+
     treeActionRename(): void {
         const id = TreeManager.getActiveTreeId();
         this.closeActionsMenu();

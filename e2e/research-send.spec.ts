@@ -298,6 +298,27 @@ test.describe('where the tree menu offers it', () => {
         await expect(page.locator('#tree-manager-modal')).toContainText('Send changes to the research');
     });
 
+    test('a computer: first in the Actions → Tree submenu of a tied tree, not of another tree', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openResearch(page, false);
+        await page.locator('.actions-menu-btn').click();
+        await page.locator('#actions-tree-row').click();
+        const first = page.locator('#actions-tree-submenu .tree-switcher-action:visible').first();
+        await expect(first).toHaveText('Send changes to the research');
+        await first.click();
+        // No research links announced here: the way back is explained.
+        await expect(dialog(page)).toContainText('Add to the research');
+        await dialog(page).getByRole('button', { name: 'Close' }).click();
+
+        await page.evaluate(async () => {
+            const id = await window.Strom.TreeManager.createTree('Jiny strom');
+            await window.Strom.UI.switchToTree(id);
+        });
+        await page.locator('.actions-menu-btn').click();
+        await page.locator('#actions-tree-row').click();
+        await expect(page.locator('#actions-tree-send-row')).toBeHidden();
+    });
+
     test('a phone (touch): not offered — the research cannot run there', async ({ browser }) => {
         const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
         const page = await ctx.newPage();
