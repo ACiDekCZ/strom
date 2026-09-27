@@ -135,6 +135,8 @@ export const researchPromoMethods = uiModule({
     /** Is the "New" marker lit right now? */
     isResearchNewActive(): boolean {
         if (!promoReady) return false;
+        // A research tree on a computer has its "Research" submenu instead of the item.
+        if (this.researchMenuShown()) return false;
         return isNewMarkerActive(SettingsManager.getResearchPromoState(), this.researchPromoContext(), new Date());
     },
 

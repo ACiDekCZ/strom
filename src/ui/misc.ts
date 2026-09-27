@@ -608,11 +608,15 @@ export const miscMethods = uiModule({
                 }
                 const actionsMenu = document.getElementById('actions-menu-dropdown');
                 if (actionsMenu?.classList.contains('active')) {
-                    // The "Strom:" submenu (a flyout) closes first; the next
-                    // Escape closes the whole actions menu.
+                    // The "Strom:" / "Research" submenu (a flyout) closes
+                    // first; the next Escape closes the whole actions menu.
                     const treeWrap = document.getElementById('actions-tree-wrap');
                     if (treeWrap?.classList.contains('submenu-open')) {
                         this.closeActionsTreeSubmenu();
+                        return;
+                    }
+                    if (document.getElementById('actions-research-wrap')?.classList.contains('submenu-open')) {
+                        this.closeActionsResearchSubmenu();
                         return;
                     }
                     this.closeActionsMenu();
@@ -621,6 +625,16 @@ export const miscMethods = uiModule({
                 const switcher = document.getElementById('tree-switcher-dropdown');
                 if (switcher?.classList.contains('active')) {
                     switcher.classList.remove('active');
+                    return;
+                }
+
+                // The research's "Waiting for you" panel shown without
+                // following (an info panel, not a modal): Escape closes it
+                // when no dialog is above it.
+                if (this.isResearchIdlePanelOpen()
+                    && this.dialogStack.length === 0
+                    && document.querySelectorAll('.modal-overlay.active').length === 0) {
+                    this.closeResearchIdlePanel();
                     return;
                 }
 
@@ -725,6 +739,10 @@ export const miscMethods = uiModule({
                     }
                     if (currentDialog === 'person-story-modal') {
                         this.closePersonStoryDialog();
+                        return;
+                    }
+                    if (currentDialog === 'research-review-modal') {
+                        this.closeResearchReviewDialog();
                         return;
                     }
                     if (currentDialog === 'kinship-modal') {
@@ -1251,15 +1269,31 @@ export const miscMethods = uiModule({
     /**
      * Show a toast notification
      */
-    showToast(message: string, duration = 3000): void {
+    showToast(message: string, duration = 3000, opts: { title?: string; spinner?: boolean } = {}): void {
         // Remove existing toast
         const existing = document.querySelector('.toast');
         if (existing) existing.remove();
 
         const toast = document.createElement('div');
-        toast.className = 'toast';
+        toast.className = opts.title || opts.spinner ? 'toast toast--rich' : 'toast';
         toast.setAttribute('role', 'status');
-        toast.textContent = message;
+        if (opts.spinner) {
+            const spin = document.createElement('span');
+            spin.className = 'toast-spinner';
+            spin.setAttribute('aria-hidden', 'true');
+            toast.appendChild(spin);
+        }
+        if (opts.title) {
+            const body = document.createElement('span');
+            body.className = 'toast-body';
+            const title = document.createElement('strong');
+            title.className = 'toast-title';
+            title.textContent = opts.title;
+            body.append(title, document.createTextNode(message));
+            toast.appendChild(body);
+        } else {
+            toast.appendChild(document.createTextNode(message));
+        }
         document.body.appendChild(toast);
 
         // Trigger animation

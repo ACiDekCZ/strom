@@ -35,8 +35,8 @@ import {
     decideResearchOpen, stabilizeIds, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
-    parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl,
-    ResearchLinkAction, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
+    parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
+    ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { iconSvg } from '../icons.js';
@@ -45,7 +45,9 @@ import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { formatRelativeDateTime } from '../format.js';
 import { safeFileName } from '../filenames.js';
-import { noteResearchLinks, announcedResearchLinks, researchLinksEnabled } from '../research-device.js';
+import {
+    noteResearchLinks, announcedResearchLinks, researchLinksEnabled, noteResearchWaiting, storedResearchWaiting,
+} from '../research-device.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -124,6 +126,22 @@ export function rememberedLiveBridge(): string | null {
 
 let externalReady = false;
 let live: LiveSession | null = null;
+/** The "Waiting for you" panel while no research is followed (the research's id). */
+let idlePanel: string | null = null;
+
+/** How long "Load new version" waits for the research to send it. */
+const VERSION_WAIT_MS = 20_000;
+let versionWait: ReturnType<typeof setTimeout> | null = null;
+
+/** What the page says after handing a link over: it cannot tell whether anything opened. */
+export type ResearchLinkKind = 'terminal' | 'agent' | 'version';
+
+/** What waits for the user in the active tree's research: live, or as last heard. */
+export interface ResearchWaitingState {
+    items: LiveWaiting[];
+    at: number;
+    live: boolean;
+}
 /** One open at a time: a second file waits for the first dialog. */
 let openChain: Promise<unknown> = Promise.resolve();
 
@@ -209,11 +227,12 @@ async function fetchStatus(url: string): Promise<LiveStatus | null> {
     const status = sanitizeLiveStatus(await res.json());
     // The bridge runs on this computer: what it announces holds here.
     if (status) noteResearchLinks(status.links);
+    if (status?.treeId) noteResearchWaiting(status.treeId, status.waiting);
     return status;
 }
 
 /** Strom Research runs in a terminal on a computer, never on a phone or tablet. */
-function onComputer(): boolean {
+export function onComputer(): boolean {
     try { return !(window.matchMedia?.('(pointer: coarse)').matches ?? false); } catch { return true; }
 }
 
@@ -372,6 +391,7 @@ export const researchUiMethods = uiModule({
                 } catch { /* keep the address as it is */ }
             }
             window.addEventListener('strom:data-changed', () => this.syncLivePanelVisibility());
+            window.addEventListener('strom:tree-switched', () => this.syncLivePanelVisibility());
             window.addEventListener('resize', () => this.placeLivePanel());
             this.initLaunchQueue(startSearch);
             const reveal = (): void => document.documentElement.classList.remove('external-opening');
@@ -441,6 +461,7 @@ export const researchUiMethods = uiModule({
         if (sendUrl === null && liveUrl === null && importUrl === null) return false;
         // Something else was asked for: the old bridge is over.
         forgetLiveBridge();
+        this.settleResearchVersion();
         if (sendUrl !== null) void this.sendChangesToResearch(sendUrl);
         else if (liveUrl !== null) void this.startLiveFollow(liveUrl);
         else if (importUrl !== null) void this.importResearchFromUrl(importUrl);
@@ -540,6 +561,8 @@ export const researchUiMethods = uiModule({
 
     /** B. ?import-url=: a file offered by Strom Research on this computer. */
     async importResearchFromUrl(raw: string): Promise<void> {
+        // "Load new version" asked for this: its spinner is done.
+        this.settleResearchVersion();
         const url = parseLoopbackUrl(raw);
         if (!url) {
             this.showToast(strings.research.notLocal, 6000);
@@ -834,7 +857,7 @@ export const researchUiMethods = uiModule({
     },
 
     /** Hand a strom-research:// link to the system (the browser asks first). */
-    launchResearchLink(url: string): void {
+    handOverResearchLink(url: string): void {
         const a = document.createElement('a');
         a.href = url;
         a.rel = 'noopener';
@@ -842,15 +865,105 @@ export const researchUiMethods = uiModule({
         document.body.appendChild(a);
         a.click();
         a.remove();
-        // The page cannot tell whether anything opened: say what to expect.
-        this.showToast(strings.research.linkOpening, 8000);
+    },
+
+    /** Open a strom-research:// link and say what to expect (the page cannot tell whether it opened). */
+    launchResearchLink(url: string, kind: ResearchLinkKind = 'terminal'): void {
+        this.handOverResearchLink(url);
+        const r = strings.research;
+        if (kind === 'version') this.awaitResearchVersion();
+        else if (kind === 'agent') this.showToast(r.openingAgentHint, 8000, { title: r.openingAgent });
+        else this.showToast(r.openingHint, 8000, { title: r.opening });
+    },
+
+    /** "Load new version": a spinner until the research sends ?import-url=, at most 20 s. */
+    awaitResearchVersion(): void {
+        const r = strings.research;
+        if (versionWait) clearTimeout(versionWait);
+        this.showToast(r.awaitingVersion, VERSION_WAIT_MS + 500, { spinner: true });
+        versionWait = setTimeout(() => {
+            versionWait = null;
+            this.showToast(r.noAnswer, 6000);
+        }, VERSION_WAIT_MS);
+    },
+
+    /** The version came (or something else was asked for): stop waiting quietly. */
+    settleResearchVersion(): void {
+        if (!versionWait) return;
+        clearTimeout(versionWait);
+        versionWait = null;
+        document.querySelector('.toast')?.remove();
+    },
+
+    /** The active tree's research id, when it is a research tree (the app's own trees: null). */
+    activeResearchId(): string | null {
+        if (DataManager.isViewMode()) return null;
+        const id = DataManager.getCurrentTreeId();
+        return (id ? TreeManager.getTreeMetadata(id)?.research?.id : undefined) ?? null;
+    },
+
+    /** A strom-research:// link for the active research tree, or null (not announced, not a research tree, bad id). */
+    activeResearchLink(action: ResearchLinkAction, params: Omit<ResearchLinkParams, 'tree'> = {}): string | null {
+        if (!this.researchLinkAvailable(action)) return null;
+        const tree = this.activeResearchId();
+        return tree ? researchSchemeUrl(action, { tree, ...params }) : null;
+    },
+
+    /** What waits for the user in the active tree's research (null: nothing known, or older than a week). */
+    researchWaiting(): ResearchWaitingState | null {
+        const treeId = DataManager.getCurrentTreeId();
+        if (live && !live.ended && live.treeId === treeId) return { items: live.waiting, at: Date.now(), live: true };
+        const researchId = this.activeResearchId();
+        const stored = researchId ? storedResearchWaiting(researchId) : null;
+        return stored ? { ...stored, live: false } : null;
+    },
+
+    /** Research menu "Waiting for you": the live panel open at that section, or the last known state. */
+    showResearchWaiting(): void {
+        const treeId = DataManager.getCurrentTreeId();
+        if (live && !live.ended && live.treeId === treeId) {
+            live.collapsed = false;
+            this.renderLivePanel();
+        } else {
+            const researchId = this.activeResearchId();
+            if (!researchId) return;
+            if (live) {
+                // The ended session's panel makes way for the current state.
+                live = null;
+                TreeRenderer.setChangedIds(null);
+            }
+            idlePanel = researchId;
+            this.renderLivePanel();
+        }
+        const panel = document.getElementById('live-panel');
+        const body = panel?.querySelector<HTMLElement>('.live-panel-body');
+        const heading = panel?.querySelector<HTMLElement>('.live-panel-heading-waiting');
+        if (body && heading) body.scrollTop = Math.max(0, heading.offsetTop - body.offsetTop - 4);
+    },
+
+    /** Close the "Waiting for you" panel shown without following. */
+    closeResearchIdlePanel(): void {
+        if (!idlePanel) return;
+        idlePanel = null;
+        this.renderLivePanel();
+    },
+
+    isResearchIdlePanelOpen(): boolean {
+        return idlePanel !== null && !!document.getElementById('live-panel');
+    },
+
+    /** "Answer ↗" at a waiting task: that task in the research, else the research itself. */
+    answerResearchTask(w: LiveWaiting): void {
+        const task = researchTaskRef(w.id);
+        const url = (task ? this.activeResearchLink('task', { task }) : null) ?? this.activeResearchLink('open');
+        if (url) this.launchResearchLink(url);
     },
 
     /** Tree menu "Send changes to the research": one click when the research handles it, else the way there. */
     async sendTreeToResearch(treeId: TreeId): Promise<void> {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         const url = link && this.researchLinkAvailable('send') ? researchSchemeUrl('send', { tree: link.id }) : null;
-        if (url) this.launchResearchLink(url);
+        if (url) this.launchResearchLink(url, 'terminal');
         else await this.showSendToResearchHelp(treeId);
     },
 
@@ -977,6 +1090,7 @@ export const researchUiMethods = uiModule({
             DataManager.setLiveTree(treeId);
             TreeRenderer.render();
             this.renderLivePanel();
+            this.refreshActionMenuBadges();
             this.connectLiveEvents(live);
         });
     },
@@ -1059,6 +1173,8 @@ export const researchUiMethods = uiModule({
         }
         s.working = status.working;
         s.waiting = status.waiting;
+        if (status.treeId) noteResearchWaiting(status.treeId, status.waiting);
+        this.refreshActionMenuBadges();
         if (status.head && status.head !== s.head) {
             this.enqueueLive(s, () => this.onLiveChange(s, { head: status.head, what: [], at: '' }));
         }
@@ -1192,26 +1308,69 @@ export const researchUiMethods = uiModule({
 
     syncLivePanelVisibility(): void {
         const panel = document.getElementById('live-panel');
-        if (!panel || !live) return;
-        panel.hidden = DataManager.getCurrentTreeId() !== live.treeId;
+        if (!panel) return;
+        if (live) panel.hidden = DataManager.getCurrentTreeId() !== live.treeId;
+        else if (idlePanel) panel.hidden = this.activeResearchId() !== idlePanel;
     },
 
-    /** Draw the "Research now" panel. Bridge text is set as text, never HTML. */
-    renderLivePanel(): void {
-        const s = live;
+    /** The panel element (created on first use). */
+    livePanelElement(): HTMLElement {
         let panel = document.getElementById('live-panel');
-        if (!s) {
-            panel?.remove();
-            return;
-        }
         if (!panel) {
             panel = el('aside', 'live-panel');
             panel.id = 'live-panel';
             panel.setAttribute('role', 'region');
             document.body.appendChild(panel);
         }
+        return panel;
+    },
+
+    /**
+     * The "Waiting for you" section: the tasks, since when, and (while the
+     * research runs) "Answer ↗" into the research. Bridge text is text only.
+     */
+    appendWaitingSection(body: HTMLElement, items: readonly LiveWaiting[], answerable: boolean): void {
+        const r = strings.research;
+        body.appendChild(el('h4', 'live-panel-heading live-panel-heading-waiting', `${r.waiting} · ${items.length}`));
+        const list = el('ul', 'live-panel-list live-waiting');
+        body.appendChild(list);
+        const canAnswer = answerable && (this.researchLinkAvailable('task') || this.researchLinkAvailable('open'));
+        for (const w of items) {
+            const li = el('li', 'live-waiting-row');
+            const text = el('div', 'live-waiting-text');
+            text.appendChild(el('span', 'live-waiting-what', w.what));
+            // "on" is the agent's free text; "user" only repeats the heading.
+            if (!waitsOnUser(w.on)) text.appendChild(el('small', 'live-time', r.waitingOn(w.on!)));
+            const at = timeEl(w.at, 'ago');
+            if (at) text.appendChild(at);
+            li.appendChild(text);
+            if (canAnswer) {
+                const answer = el('button', 'live-waiting-answer', r.answer);
+                answer.type = 'button';
+                answer.onclick = () => this.answerResearchTask(w);
+                li.appendChild(answer);
+            }
+            list.appendChild(li);
+        }
+    },
+
+    /** Draw the "Research now" panel. Bridge text is set as text, never HTML. */
+    renderLivePanel(): void {
+        const s = live;
+        if (!s && !idlePanel) {
+            document.getElementById('live-panel')?.remove();
+            return;
+        }
+        const panel = this.livePanelElement();
+        if (!s) {
+            this.renderIdleResearchPanel(panel);
+            return;
+        }
+        // Following a research: its panel says it all.
+        idlePanel = null;
         const r = strings.research;
         panel.setAttribute('aria-label', r.panelLabel);
+        panel.classList.remove('idle');
         panel.classList.toggle('ended', s.ended);
         panel.classList.toggle('collapsed', s.collapsed);
         panel.hidden = DataManager.getCurrentTreeId() !== s.treeId;
@@ -1268,6 +1427,12 @@ export const researchUiMethods = uiModule({
             working.appendChild(li);
         }
 
+        // What waits for the user comes before what changed: it needs them.
+        if (s.waiting.length > 0) {
+            this.appendWaitingSection(body, s.waiting, !s.ended);
+            if (!s.ended) body.appendChild(el('p', 'live-panel-hint', r.answerWhere));
+        }
+
         // Every change row looks the same; one that names a person in the
         // tree is a button (hover background) that shows that person.
         const changes = section(r.changes, 'live-changes');
@@ -1291,18 +1456,53 @@ export const researchUiMethods = uiModule({
             li.appendChild(row);
             changes.appendChild(li);
         }
+        panel.appendChild(body);
+        placeLivePanel(panel);
+        if (!timeTicker) timeTicker = setInterval(tickLiveTimes, TIME_TICK_MS);
+    },
 
-        if (s.waiting.length > 0) {
-            const waiting = section(r.waiting, 'live-waiting');
-            for (const w of s.waiting) {
-                const li = el('li', undefined, w.what);
-                // "on" is the agent's free text; "user" only repeats the heading.
-                if (!waitsOnUser(w.on)) li.appendChild(el('small', 'live-time', r.waitingOn(w.on!)));
-                waiting.appendChild(li);
-            }
-            if (!s.ended) body.appendChild(el('p', 'live-panel-hint', r.waitingHint));
+    /** The panel without following: what waited for the user when the research last said so. */
+    renderIdleResearchPanel(panel: HTMLElement): void {
+        const r = strings.research;
+        const researchId = idlePanel;
+        const state = researchId ? storedResearchWaiting(researchId) : null;
+        panel.setAttribute('aria-label', r.panelIdle);
+        panel.classList.remove('ended', 'collapsed');
+        panel.classList.add('idle');
+        panel.hidden = this.activeResearchId() !== researchId;
+        panel.replaceChildren();
+
+        const head = el('div', 'live-panel-head');
+        head.appendChild(el('span', 'live-dot'));
+        head.appendChild(el('span', 'live-panel-title live-panel-title--static', r.panelIdle));
+        const close = el('button', 'live-panel-close');
+        close.type = 'button';
+        close.innerHTML = '&times;';
+        close.setAttribute('aria-label', r.close);
+        close.title = r.close;
+        close.onclick = () => this.closeResearchIdlePanel();
+        head.appendChild(close);
+        panel.appendChild(head);
+
+        const body = el('div', 'live-panel-body');
+        this.appendWaitingSection(body, state?.items ?? [], false);
+        if (state) {
+            const when = new Date(state.at).toLocaleString(getCurrentLanguage(), {
+                day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit',
+            });
+            body.appendChild(el('p', 'live-panel-hint', r.waitingAsOf(when)));
         }
         panel.appendChild(body);
+
+        const open = this.activeResearchLink('open');
+        if (open) {
+            const foot = el('div', 'live-panel-foot');
+            const btn = el('button', 'primary live-panel-open', r.openResearch + ' ↗');
+            btn.type = 'button';
+            btn.onclick = () => this.launchResearchLink(open);
+            foot.appendChild(btn);
+            panel.appendChild(foot);
+        }
         placeLivePanel(panel);
         if (!timeTicker) timeTicker = setInterval(tickLiveTimes, TIME_TICK_MS);
     },

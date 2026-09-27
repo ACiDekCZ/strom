@@ -67,6 +67,7 @@ import { appModeMethods } from './app-mode.js';
 import { kinshipUiMethods } from './kinship-ui.js';
 import { archivesUiMethods } from './archives-ui.js';
 import { personSourcesMethods } from './person-sources-ui.js';
+import { researchActionsMethods } from './research-actions-ui.js';
 import { exportImageMethods } from './export-image-ui.js';
 import { bookUiMethods } from './book-ui.js';
 import { snapshotsUiMethods } from './snapshots-ui.js';
@@ -453,6 +454,10 @@ Object.assign(UIClass.prototype, archivesUiMethods);
 type PersonSourcesMethods = typeof personSourcesMethods;
 export interface UIClass extends PersonSourcesMethods {}
 Object.assign(UIClass.prototype, personSourcesMethods);
+
+type ResearchActionsMethods = typeof researchActionsMethods;
+export interface UIClass extends ResearchActionsMethods {}
+Object.assign(UIClass.prototype, researchActionsMethods);
 
 type ExportImageMethods = typeof exportImageMethods;
 export interface UIClass extends ExportImageMethods {}

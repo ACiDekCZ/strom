@@ -288,9 +288,13 @@ test.describe('existing tree on desktop', () => {
         await expect(badge).toBeVisible();
         await expect(badge).toHaveText('New');
         // Right below the "Strom:" row, above Settings.
+        // (The "Research" submenu of research trees sits between them, hidden here.)
         const after = await page.evaluate(() => {
-            const wrap = document.getElementById('actions-tree-wrap')!;
-            return [wrap.nextElementSibling?.className, wrap.nextElementSibling?.nextElementSibling?.id];
+            const out: string[] = [];
+            for (let n = document.getElementById('actions-tree-wrap')!.nextElementSibling; n && out.length < 2; n = n.nextElementSibling) {
+                if (n.getClientRects().length > 0) out.push(n.id || n.className);
+            }
+            return out;
         });
         expect(after).toEqual(['tree-switcher-divider research-menu-divider', 'research-menu-row']);
 
@@ -583,7 +587,7 @@ test.describe('hidden', () => {
         expect((await readSettings(page)).whatsNew30Shown).toBeUndefined();
     });
 
-    test('a tree from Strom Research: no card, no "New" — but the item is there', async ({ page }) => {
+    test('a tree from Strom Research: no card, no "New" — its "Research" submenu instead of the item', async ({ page }) => {
         await openApp(page, { researchPromo: true });
         const ged = [
             '0 HEAD', '1 SOUR STROM_RESEARCH', '2 NAME Strom Research', '1 DATE 23 SEP 2026',
@@ -608,8 +612,9 @@ test.describe('hidden', () => {
         await expect(whatsNew(page)).toHaveCount(0);
         await expect(newDot(page)).toBeHidden();
         await openActionsMenu(page);
-        await expect(menuRow(page)).toBeVisible();
-        await expect(menuRow(page).locator('.research-new-badge')).toBeHidden();
+        // On a computer the research tree gets Actions → Research in its place.
+        await expect(page.locator('#actions-research-row')).toBeVisible();
+        await expect(menuRow(page)).toBeHidden();
     });
 
     test('an open from the command line: no card, but the "New" marker', async ({ page }) => {

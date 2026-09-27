@@ -112,9 +112,9 @@ function onKeydown(e: KeyboardEvent): void {
             if (!dropdown?.contains(target)) continue;
             setTimeout(() => {
                 if (dropdown.classList.contains('active')) {
-                    // Only the "Strom:" submenu closed: back to its row.
+                    // Only a submenu ("Strom:", "Research") closed: back to its row.
                     if (target.getClientRects().length === 0) {
-                        document.getElementById('actions-tree-row')?.focus();
+                        target.closest('.actions-tree-wrap')?.querySelector<HTMLElement>('.actions-tree-row')?.focus();
                     }
                     return;
                 }

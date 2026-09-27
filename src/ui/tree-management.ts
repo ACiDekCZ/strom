@@ -81,24 +81,34 @@ export const treeManagementMethods = uiModule({
             }
         });
 
-        // The flyout opens on hover too (CSS): fit it into the window then.
-        document.getElementById('actions-tree-wrap')?.addEventListener('mouseenter', () => {
-            this.positionActionsTreeSubmenu();
-            requestAnimationFrame(() => this.positionActionsTreeSubmenu());
-        });
-
-        // Keyboard for the "Tree:" submenu row: → opens, ← / Esc closes.
-        // (Esc still bubbles to the global handler that closes the whole menu.)
-        document.getElementById('actions-tree-row')?.addEventListener('keydown', (e) => {
-            const ev = e as KeyboardEvent;
-            if (ev.key === 'ArrowRight' || ev.key === 'Enter' || ev.key === ' ') {
-                ev.preventDefault();
-                this.openActionsTreeSubmenu();
-            } else if (ev.key === 'ArrowLeft') {
-                ev.preventDefault();
-                this.closeActionsTreeSubmenu();
-            }
-        });
+        // The flyouts ("Tree:", "Research") open on hover too (CSS): fit the
+        // one under the pointer into the window, and close a flyout another
+        // one opened by click / keyboard.
+        const flyouts: Array<{ wrap: string; row: string; sub: string; open: () => void; close: () => void }> = [
+            { wrap: 'actions-tree-wrap', row: 'actions-tree-row', sub: 'actions-tree-submenu',
+                open: () => this.openActionsTreeSubmenu(), close: () => this.closeActionsTreeSubmenu() },
+            { wrap: 'actions-research-wrap', row: 'actions-research-row', sub: 'actions-research-submenu',
+                open: () => this.openActionsResearchSubmenu(), close: () => this.closeActionsResearchSubmenu() },
+        ];
+        for (const f of flyouts) {
+            document.getElementById(f.wrap)?.addEventListener('mouseenter', () => {
+                for (const other of flyouts) if (other !== f) other.close();
+                this.positionActionsSubmenu(f.sub);
+                requestAnimationFrame(() => this.positionActionsSubmenu(f.sub));
+            });
+            // Keyboard for a submenu row: → opens, ← / Esc closes.
+            // (Esc still bubbles to the global handler that closes the whole menu.)
+            document.getElementById(f.row)?.addEventListener('keydown', (e) => {
+                const ev = e as KeyboardEvent;
+                if (ev.key === 'ArrowRight' || ev.key === 'Enter' || ev.key === ' ') {
+                    ev.preventDefault();
+                    f.open();
+                } else if (ev.key === 'ArrowLeft') {
+                    ev.preventDefault();
+                    f.close();
+                }
+            });
+        }
     },
 
     /**
@@ -217,6 +227,11 @@ export const treeManagementMethods = uiModule({
             const dot = document.getElementById(id);
             if (dot) dot.style.display = count > 0 ? 'block' : 'none';
         }
+        // "Research" row + its submenu; waiting tasks light the ⋯ dot as well.
+        if (this.refreshResearchMenu() > 0) {
+            const dot = document.getElementById('actions-menu-dot');
+            if (dot) dot.style.display = 'block';
+        }
         // Count badge on the Anniversaries row inside the "Strom:" submenu.
         const badge = document.getElementById('actions-tree-ann-badge');
         if (badge) {
@@ -228,13 +243,6 @@ export const treeManagementMethods = uiModule({
         if (auditRow) auditRow.style.display = SettingsManager.isAuditLogEnabled() ? '' : 'none';
         const sourcesRow = document.getElementById('actions-tree-sources-row');
         if (sourcesRow) sourcesRow.style.display = this.isSourcesMenuOffered() ? '' : 'none';
-        // "Send changes to the research": a research tree, on a computer.
-        const activeId = TreeManager.getActiveTreeId();
-        const canSend = !!activeId && !!TreeManager.getTreeMetadata(activeId)?.research && researchRunsHere();
-        for (const id of ['actions-tree-send-row', 'actions-tree-send-divider']) {
-            const el = document.getElementById(id);
-            if (el) el.style.display = canSend ? '' : 'none';
-        }
         // Strom Research "New" marker (its dot yields to the anniversaries dot).
         this.refreshResearchNewMarker(count);
         this.refreshActionsUndoRedo();
@@ -310,12 +318,14 @@ export const treeManagementMethods = uiModule({
             this.refreshActionMenuBadges();
             this.updateActionsTreeRow();
             this.closeActionsTreeSubmenu();
+            this.closeActionsResearchSubmenu();
         }
     },
 
-    /** Close the desktop ⋯ actions menu (and its "Tree:" submenu). */
+    /** Close the desktop ⋯ actions menu (and its "Tree:" / "Research" submenus). */
     closeActionsMenu(): void {
         this.closeActionsTreeSubmenu();
+        this.closeActionsResearchSubmenu();
         document.getElementById('actions-menu-dropdown')?.classList.remove('active');
     },
 
@@ -343,6 +353,7 @@ export const treeManagementMethods = uiModule({
     openActionsTreeSubmenu(): void {
         const wrap = document.getElementById('actions-tree-wrap');
         if (!wrap) return;
+        this.closeActionsResearchSubmenu();
         wrap.classList.add('submenu-open');
         document.getElementById('actions-tree-row')?.setAttribute('aria-expanded', 'true');
         this.positionActionsTreeSubmenu();
@@ -356,7 +367,12 @@ export const treeManagementMethods = uiModule({
      * is not enough.
      */
     positionActionsTreeSubmenu(): void {
-        const sub = document.getElementById('actions-tree-submenu');
+        this.positionActionsSubmenu('actions-tree-submenu');
+    },
+
+    /** Keep a ⋯-menu flyout ("Tree:", "Research") inside the window. */
+    positionActionsSubmenu(id: string): void {
+        const sub = document.getElementById(id);
         if (!sub) return;
         sub.style.top = '';
         const margin = 8;

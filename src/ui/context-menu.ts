@@ -24,14 +24,23 @@ export interface PersonMenuAction {
     meta?: string;
     /** Accessible name when the visible label and meta read badly together. */
     ariaLabel?: string;
+    /** A section heading rendered before this item (not clickable). */
+    header?: string;
+    /** "ai": the AI label (the action starts a paid agent). */
+    badge?: 'ai';
+    /** Continues outside the app (↗). */
+    external?: boolean;
 }
 
-/** Label (+ the quiet right-aligned meta) of a person menu item, escaped. */
+/** Label (+ the quiet right-aligned meta, AI label, ↗) of a person menu item, escaped. */
 export function menuItemBody(a: PersonMenuAction): string {
-    const e = (t: string): string => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return a.meta
-        ? `<span class="menu-item-label">${e(a.label)}</span><span class="menu-item-meta" aria-hidden="true">${e(a.meta)}</span>`
-        : e(a.label);
+    const e = (t: string): string => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const tail = (a.meta ? `<span class="menu-item-meta" aria-hidden="true">${e(a.meta)}</span>` : '')
+        + (a.badge === 'ai'
+            ? `<span class="research-ai-badge menu-item-badge" title="${e(strings.research.aiCostHint)}" aria-hidden="true">${e(strings.research.aiBadge)}</span>`
+            : '')
+        + (a.external ? '<span class="menu-item-ext" aria-hidden="true">↗</span>' : '');
+    return tail ? `<span class="menu-item-label">${e(a.label)}</span>${tail}` : e(a.label);
 }
 
 /** ` aria-label="…"` when the item carries one. */
@@ -58,6 +67,8 @@ export const contextMenuMethods = uiModule({
         // form. Read-only / locked: only when there is something to show; in
         // normal mode "Sources" always (its dialog is the quick way to cite).
         const sourceCount = this.personSourceCount(personId);
+        // "In the research" closes every variant of the menu.
+        const research = this.personResearchActions(personId);
         const hasStory = !!person.story?.text?.trim();
         const readItems = (always: boolean): PersonMenuAction[] => {
             const out: PersonMenuAction[] = [];
@@ -78,6 +89,7 @@ export const contextMenuMethods = uiModule({
                 ...readItems(false),
                 { action: 'relationship', label: strings.contextMenu.relationship, divider: true },
                 { action: 'archives', label: strings.contextMenu.archives },
+                ...research,
             ];
         }
         if (isPersonLocked) {
@@ -90,7 +102,7 @@ export const contextMenuMethods = uiModule({
             if (!isTreeLocked) {
                 items.push({ action: 'toggle-lock', label: strings.lock.unlockPerson, divider: true });
             }
-            return items;
+            return [...items, ...research];
         }
         const items: PersonMenuAction[] = [
             { action: 'focus', label: strings.contextMenu.focus },
@@ -112,7 +124,7 @@ export const contextMenuMethods = uiModule({
         items.push({ action: 'toggle-lock', label: strings.lock.lockPerson });
         items.push({ action: 'merge', label: `${strings.personMerge.mergeWith}...` });
         items.push({ action: 'delete', label: strings.contextMenu.delete, danger: true });
-        return items;
+        return [...items, ...research];
     },
 
     /** Run a person menu action (shared by context menu + bottom sheet). */
@@ -182,6 +194,11 @@ export const contextMenuMethods = uiModule({
             case 'delete':
                 this.confirmDelete(personId);
                 break;
+            case 'research-review':
+            case 'research-ancestors':
+            case 'research-ask':
+                this.runPersonResearchAction(personId, action);
+                break;
         }
     },
 
@@ -218,7 +235,8 @@ export const contextMenuMethods = uiModule({
         menu.innerHTML = header + actions.map(a => {
             const cls = a.danger ? 'context-menu-item danger' : 'context-menu-item';
             const divider = a.divider ? '<div class="context-menu-divider"></div>' : '';
-            return `${divider}<div class="${cls}" role="menuitem" tabindex="-1" data-action="${a.action}"${menuItemAria(a)}>${menuItemBody(a)}</div>`;
+            const header = a.header ? `<div class="menu-section-header" role="presentation">${this.escapeHtml(a.header)}</div>` : '';
+            return `${divider}${header}<div class="${cls}" role="menuitem" tabindex="-1" data-action="${a.action}"${menuItemAria(a)}>${menuItemBody(a)}</div>`;
         }).join('');
 
         // Position menu near click (adjusted after DOM insert)

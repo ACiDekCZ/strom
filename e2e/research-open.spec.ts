@@ -299,7 +299,7 @@ test.describe('live research (?live=)', () => {
         await expect(panel.locator('.live-working')).toContainText('Sčítání 1921');
         // "on: user" only repeats the heading — not shown; where to answer is.
         await expect(panel.locator('.live-waiting')).not.toContainText('waiting on');
-        await expect(panel).toContainText('Answer the agent where it runs');
+        await expect(panel).toContainText('You answer in the research. The tree updates by itself afterwards.');
         // Fresh times read as such, not as a date.
         await expect(panel.locator('.live-changes .live-time').first()).toHaveText(/just now|min/);
         await expect(panel.locator('.live-working .live-time').first()).toHaveText(/^since \d{1,2}:\d{2}/);

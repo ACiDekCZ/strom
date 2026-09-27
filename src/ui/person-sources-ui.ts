@@ -33,7 +33,7 @@ function fullName(personId: PersonId): string {
 }
 
 /** "Jan Novák · 1865–1932" (the years only when known). */
-function personSubtitle(personId: PersonId): string {
+export function personSubtitle(personId: PersonId): string {
     const p = DataManager.getPerson(personId);
     const born = yearOf(p?.birthDate);
     const died = yearOf(p?.deathDate);
@@ -140,6 +140,7 @@ export const personSourcesMethods = uiModule({
                 </div>
                 <div class="person-sources-list" id="person-sources-list"></div>
                 <div class="buttons">
+                    <button type="button" class="link-button" id="person-sources-find" hidden>${esc(strings.research.findSource)}</button>
                     <button type="button" class="secondary" id="person-sources-close" data-dismiss>${esc(strings.buttons.close)}</button>
                     <button type="button" class="primary" id="person-sources-cite">${esc(strings.sources.cite)}</button>
                 </div>
@@ -150,6 +151,11 @@ export const personSourcesMethods = uiModule({
         (overlay.querySelector('#person-sources-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#person-sources-close') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#person-sources-cite') as HTMLButtonElement).onclick = () => this.showSourcePickerForPersonId(personId);
+        // No source yet: the research can look for one (the dialog stays open).
+        (overlay.querySelector('#person-sources-find') as HTMLButtonElement).onclick = () => {
+            const url = this.personFindSourceUrl(personId);
+            if (url) this.launchResearchLink(url);
+        };
         this.renderPersonSourcesDialog();
         // Reading, not typing: focus the dialog itself, not the first control.
         const box = overlay.querySelector('.modal') as HTMLElement;
@@ -179,6 +185,8 @@ export const personSourcesMethods = uiModule({
         }
         const cite = document.getElementById('person-sources-cite');
         if (cite) cite.hidden = !this.canCiteOnPerson(personId);
+        const find = document.getElementById('person-sources-find');
+        if (find) find.hidden = rows.length > 0 || !this.personFindSourceUrl(personId);
 
         // Rows new or with a new label since the last draw get a short highlight.
         const before = this.personSourcesShown;

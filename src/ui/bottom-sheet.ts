@@ -71,7 +71,8 @@ export const bottomSheetMethods = uiModule({
                         // Keep the class out of the attribute (see context-menu.ts note).
                         const cls = a.danger ? 'bottom-sheet-item danger' : 'bottom-sheet-item';
                         const divider = a.divider ? '<div class="bottom-sheet-divider" role="separator"></div>' : '';
-                        return `${divider}<button type="button" class="${cls}" role="menuitem" data-action="${esc(a.action)}"${menuItemAria(a)}>${menuItemBody(a)}</button>`;
+                        const header = a.header ? `<div class="bottom-sheet-section" role="presentation">${esc(a.header)}</div>` : '';
+                        return `${divider}${header}<button type="button" class="${cls}" role="menuitem" data-action="${esc(a.action)}"${menuItemAria(a)}>${menuItemBody(a)}</button>`;
                     }).join('')}
                 </div>
             </div>

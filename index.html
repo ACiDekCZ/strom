@@ -3404,6 +3404,24 @@
         body.research-menu .research-menu-divider { display: block; }
         body.research-menu .research-menu-row { display: flex; }
         body.data-locked .research-menu-divider, body.data-locked .research-menu-row { display: none; }
+        /* A research tree on a computer: the "Research" submenu replaces the entry. */
+        body.research-actions .research-menu-divider, body.research-actions .research-menu-row { display: none; }
+        body.data-locked .actions-research-wrap { display: none !important; }
+        .actions-research-label { flex: 1; min-width: 0; color: var(--text); }
+        .actions-research-badge { background: var(--accent); }
+        .actions-research-badge + .actions-tree-chevron { margin-left: 4px; }
+        .actions-research-submenu { min-width: 240px; max-width: 300px; }
+        .actions-research-submenu .tree-switcher-action { display: flex; align-items: center; gap: 8px; }
+        .research-item-label { flex: 1; min-width: 0; }
+        .research-item-ext { flex: none; color: var(--text-faint); }
+        .research-ai-badge {
+            flex: none; font-size: 11px; font-weight: 600; line-height: 1.4;
+            padding: 1px 6px; border-radius: 999px;
+            background: var(--warning-soft); color: var(--warning-text);
+        }
+        .research-submenu-note {
+            padding: 6px 14px 8px; font-size: 12px; line-height: 1.45; color: var(--text-light);
+        }
         .research-menu-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         /* "New" label — the look of the .beta-badge. */
         .research-new-badge {
@@ -7693,6 +7711,22 @@
             transform: translateX(-50%) translateY(0);
             opacity: 1;
         }
+        /* Toast with a heading line and/or a spinner (research links). */
+        .toast--rich {
+            display: flex; align-items: flex-start; gap: 10px;
+            max-width: min(440px, calc(100vw - 32px)); width: max-content;
+            line-height: 1.4;
+        }
+        .toast-body { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+        .toast-title { font-size: 14px; font-weight: 600; }
+        .toast-spinner {
+            flex-shrink: 0; width: 14px; height: 14px; margin-top: 2px;
+            border: 2px solid color-mix(in srgb, var(--surface) 35%, transparent);
+            border-top-color: var(--surface); border-radius: 50%;
+            animation: toast-spin 0.9s linear infinite;
+        }
+        @keyframes toast-spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { .toast-spinner { animation-duration: 2.4s; } }
         /* Drop a .ged anywhere onto the window (research-ui.ts). */
         .drop-overlay {
             position: fixed;
@@ -7866,6 +7900,34 @@
         .live-change-link:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .live-panel-list li:has(> .live-change) { padding: 1px 0; }
         .live-panel-hint { margin: 6px 0 0; font-size: 12px; color: var(--text-light); }
+        /* "Waiting for you": the task, since when, and "Answer ↗" into the research. */
+        .live-panel-list li.live-waiting-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; }
+        .live-waiting-text { flex: 1; min-width: 0; }
+        .live-waiting-what { font-size: 14px; color: var(--text); }
+        .live-waiting-answer {
+            flex: none; margin-top: 1px;
+            border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+            border-radius: var(--r-md); padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer;
+        }
+        .live-waiting-answer:hover { background: var(--hover-bg); }
+        .live-waiting-answer:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        /* Without following (the research is not running): grey dot, ×, "Open research ↗". */
+        .live-panel.idle .live-dot { background: var(--text-ghost); box-shadow: none; }
+        .live-panel-title--static { flex: 1; font-weight: 600; padding: 4px 0; }
+        .live-panel-close {
+            flex: none; width: 28px; height: 28px; border: 0; background: none; border-radius: var(--r-md);
+            color: var(--text-light); font-size: 20px; line-height: 1; cursor: pointer;
+        }
+        .live-panel-close:hover { background: var(--hover-bg); color: var(--text); }
+        .live-panel-close:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .live-panel-foot { display: flex; justify-content: flex-end; padding: 8px 12px 12px; border-top: 1px solid var(--divider); }
+        .live-panel-open {
+            font: inherit; font-size: 13px; font-weight: 500; padding: 6px 12px; cursor: pointer;
+            border: 1px solid var(--primary); border-radius: var(--r-md);
+            background: var(--primary); color: var(--on-primary);
+        }
+        .live-panel-open:hover { filter: brightness(1.06); }
+        .live-panel-open:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         /* Tablet: narrower card, same place. */
         @media (min-width: 500px) and (max-width: 900px) {
             .live-panel { width: 260px; right: 12px; max-height: 50vh; }
@@ -8956,6 +9018,31 @@
             margin-left: auto; padding-left: 16px; font-size: 13px;
             color: var(--text-faint); font-variant-numeric: tabular-nums;
         }
+        /* Person menu "In the research": the AI label and ↗ at the row's end. */
+        .context-menu-item .menu-item-label, .bottom-sheet-item .menu-item-label { flex: 1; min-width: 0; }
+        .menu-item-badge { margin-left: 12px; }
+        .menu-item-ext { flex: none; margin-left: 8px; color: var(--text-faint); }
+        .context-menu .menu-section-header { padding: 6px 16px 2px; }
+
+        /* "Review again" (research): whole rows clickable, ≥ 48px. */
+        #research-review-modal { z-index: 190; }
+        .research-review-intro { margin: 0 0 12px; font-size: 14px; line-height: 1.5; color: var(--text); }
+        .research-review-scopes { display: flex; flex-direction: column; gap: 6px; }
+        .modal label.research-review-scope {
+            display: flex; margin: 0; font-weight: 400; align-items: center; gap: 12px; min-height: 48px; padding: 6px 12px;
+            border: 1px solid var(--border); border-radius: var(--r-md); cursor: pointer;
+        }
+        .research-review-scope:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+        .research-review-scope:has(input:focus-visible) { box-shadow: var(--shadow-focus); }
+        .modal .research-review-scope input { width: auto; margin: 0; flex: none; accent-color: var(--primary); }
+        .research-review-scope-text { display: flex; flex-direction: column; gap: 1px; }
+        .research-review-scope-label { font-size: 14px; color: var(--text); }
+        .research-review-scope-hint { font-size: 12px; color: var(--text-light); }
+        .research-review-where { margin: 12px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .research-review-living {
+            margin: 12px 0 0; padding: 8px 12px; border-radius: var(--r-md);
+            font-size: 13px; background: var(--warning-soft); color: var(--warning-text);
+        }
 
         /* "Sources" / "Story" of one person (person menu). Below the dialogs
            they open (picker, catalog, viewer, editor), above the canvas. */
@@ -9649,11 +9736,6 @@
                         <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
                     </div>
                     <div class="actions-tree-submenu" id="actions-tree-submenu" role="menu">
-                        <!-- Strom Research tree on a computer: send the edits back, first. -->
-                        <div class="tree-switcher-action edit-only" id="actions-tree-send-row" style="display:none;" role="menuitem" onclick="window.Strom.UI.treeActionSendToResearch()" tabindex="0">
-                            <span data-i18n="research.sendMenu"></span>
-                        </div>
-                        <div class="tree-switcher-divider edit-only" id="actions-tree-send-divider" style="display:none;"></div>
                         <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionRename()" tabindex="0">
                             <span data-i18n="treeManager.rename"></span>
                         </div>
@@ -9702,6 +9784,17 @@
                             <span data-i18n="treeManager.manageTreesTitle"></span>
                         </div>
                     </div>
+                </div>
+                <!-- "Research": a Strom Research tree on a computer — the research's
+                     actions (filled by research-actions-ui.ts); it takes the place
+                     of the "AI ancestor research" entry below. -->
+                <div class="actions-tree-wrap actions-research-wrap" id="actions-research-wrap" style="display:none;">
+                    <div class="tree-switcher-action actions-tree-row actions-research-row" id="actions-research-row" role="menuitem" tabindex="0" aria-haspopup="true" aria-expanded="false" onclick="window.Strom.UI.toggleActionsResearchSubmenu()">
+                        <span class="actions-research-label" data-i18n="research.menuTitle"></span>
+                        <span id="actions-research-badge" class="tree-switcher-badge actions-research-badge" style="display:none;"></span>
+                        <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
+                    </div>
+                    <div class="actions-tree-submenu actions-research-submenu" id="actions-research-submenu" role="menu"></div>
                 </div>
                 <!-- Strom Research (3.0): permanent entry; "New" label while it is new.
                      Shown via body.research-menu (never in exports / view mode / locked). -->

@@ -20,7 +20,7 @@ export const STROM_HEAD_TAG = '_STROM_HEAD';
 export const STROM_LINKS_TAG = '_STROM_LINKS';
 
 /** Actions of the strom-research:// scheme the app knows how to use. */
-export const RESEARCH_LINK_ACTIONS = ['send', 'excerpt'] as const;
+export const RESEARCH_LINK_ACTIONS = ['send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research'] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
 /** The known actions in `value` (an array, or a space-separated header value); anything else is dropped. */
@@ -41,20 +41,73 @@ export function researchSourceRef(refn: unknown): string | null {
     return typeof refn === 'string' && /^S\d{1,9}$/.test(refn.trim()) ? refn.trim() : null;
 }
 
+/** A person's id in the research (its REFN, e.g. "P0012"), or null. */
+export function researchPersonRef(refn: unknown): string | null {
+    return typeof refn === 'string' && /^P\d{1,7}$/.test(refn.trim()) ? refn.trim() : null;
+}
+
+/** A task's id in the research ("T0003"), or null. */
+export function researchTaskRef(id: unknown): string | null {
+    return typeof id === 'string' && /^T\d{1,7}$/.test(id.trim()) ? id.trim() : null;
+}
+
+/** How far "Review again" reaches: the person, with the family, or the whole line up. */
+export type ResearchReviewScope = 'person' | 'family' | 'line';
+const REVIEW_SCOPES: readonly string[] = ['person', 'family', 'line'];
+/** Direction of a new research ("descendants" is agreed but not offered yet). */
+export type ResearchDirection = 'ancestors' | 'descendants';
+const DIRECTIONS: readonly string[] = ['ancestors', 'descendants'];
+
+/** Parameters of a strom-research:// link (only ids and fixed values — never names or free text). */
+export interface ResearchLinkParams {
+    tree: string;
+    source?: string;
+    clip?: string;
+    person?: string;
+    task?: string;
+    scope?: ResearchReviewScope;
+    direction?: ResearchDirection;
+}
+
 /**
  * A strom-research:// link, or null when a parameter is not what the research
  * accepts (it checks again: any web page can open such a link).
  */
-export function researchSchemeUrl(action: 'send', p: { tree: string }): string | null;
-export function researchSchemeUrl(action: 'excerpt', p: { tree: string; source: string; clip: string }): string | null;
-export function researchSchemeUrl(action: ResearchLinkAction, p: { tree: string; source?: string; clip?: string }): string | null {
+export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkParams): string | null {
     const tree = normalizeResearchId(p.tree);
     if (!tree) return null;
-    if (action === 'send') return `strom-research://send?tree=${tree}`;
-    const source = researchSourceRef(p.source);
-    const clip = researchClip(p.clip);
-    if (!source || !clip) return null;
-    return `strom-research://excerpt?tree=${tree}&source=${source}&clip=${clip}`;
+    const base = `strom-research://${action}?tree=${tree}`;
+    switch (action) {
+        case 'send':
+        case 'app':
+        case 'open':
+            return base;
+        case 'excerpt': {
+            const source = researchSourceRef(p.source);
+            const clip = researchClip(p.clip);
+            return source && clip ? `${base}&source=${source}&clip=${clip}` : null;
+        }
+        case 'chat': {
+            if (p.person === undefined) return base;
+            const person = researchPersonRef(p.person);
+            return person ? `${base}&person=${person}` : null;
+        }
+        case 'task': {
+            const task = researchTaskRef(p.task);
+            return task ? `${base}&task=${task}` : null;
+        }
+        case 'review': {
+            const person = researchPersonRef(p.person);
+            const scope = p.scope ?? 'person';
+            return person && REVIEW_SCOPES.includes(scope) ? `${base}&person=${person}&scope=${scope}` : null;
+        }
+        case 'research': {
+            const person = researchPersonRef(p.person);
+            const direction = p.direction ?? 'ancestors';
+            return person && DIRECTIONS.includes(direction) ? `${base}&person=${person}&direction=${direction}` : null;
+        }
+    }
+    return null;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -413,6 +466,8 @@ export interface LiveWaiting {
     id: string;
     what: string;
     on: string;
+    /** Since when it waits (ISO time; empty when the research does not say). */
+    at: string;
 }
 
 /** The bridge's /status (and the `hello` event), checked and cleaned. */
@@ -464,7 +519,7 @@ export function sanitizeWaiting(value: unknown): LiveWaiting[] {
         if (!r) continue;
         const what = cleanText(r.what);
         if (!what) continue;
-        out.push({ id: cleanText(r.id, 40), what, on: cleanText(r.on, 120) });
+        out.push({ id: cleanText(r.id, 40), what, on: cleanText(r.on, 120), at: cleanText(r.at ?? r.since, 40) });
     }
     return out;
 }

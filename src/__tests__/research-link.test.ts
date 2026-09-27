@@ -11,7 +11,7 @@ import {
     decideResearchOpen, stabilizeIds, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, extractChangedRefs, personsByRefs, humanizeChange,
     isGedcomFileName, normalizeResearchId, parseEventData, isSafariBrowser,
-    sanitizeResearchLinks, researchSchemeUrl, researchSourceRef, researchClip,
+    sanitizeResearchLinks, researchSchemeUrl, researchSourceRef, researchClip, researchPersonRef, researchTaskRef,
 } from '../research-link.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
@@ -293,14 +293,14 @@ describe('bridge messages are untrusted', () => {
             persons: 580,
             families: -4,
             working: [{ who: 'agent-1', since: '2026-09-23T10:00:00Z', task: 'Matriky Lučice' }, 'junk', { since: 'x' }],
-            waiting: [{ id: 'T1', what: 'Potvrďte otce', on: 'user' }, { id: 'T2' }],
+            waiting: [{ id: 'T1', what: 'Potvrďte otce', on: 'user', at: '2026-09-26T12:10:00Z' }, { id: 'T2' }],
         })!;
         expect(s.treeId).toBe(UUID);
         expect(s.name).toBe('Víškovi <img src=x onerror=alert(1)>');
         expect(s.persons).toBe(580);
         expect(s.families).toBeNull();
         expect(s.working).toEqual([{ who: 'agent-1', since: '2026-09-23T10:00:00Z', task: 'Matriky Lučice' }]);
-        expect(s.waiting).toEqual([{ id: 'T1', what: 'Potvrďte otce', on: 'user' }]);
+        expect(s.waiting).toEqual([{ id: 'T1', what: 'Potvrďte otce', on: 'user', at: '2026-09-26T12:10:00Z' }]);
     });
 
     it('rejects non-objects and a missing tree id', () => {
@@ -474,7 +474,8 @@ describe('strom-research:// links', () => {
 
     it('known actions only, from a list or a header value', () => {
         expect(sanitizeResearchLinks(['send', 'EXCERPT', 'rm -rf', 'send', 3])).toEqual(['send', 'excerpt']);
-        expect(sanitizeResearchLinks('send  excerpt open')).toEqual(['send', 'excerpt']);
+        expect(sanitizeResearchLinks('send  excerpt open delete')).toEqual(['send', 'excerpt', 'open']);
+        expect(sanitizeResearchLinks('app chat task review research')).toEqual(['app', 'chat', 'task', 'review', 'research']);
         expect(sanitizeResearchLinks(undefined)).toEqual([]);
     });
 
@@ -500,6 +501,36 @@ describe('strom-research:// links', () => {
         expect(researchClip(' ab-9 ')).toBe('ab-9');
         expect(researchSourceRef(' S7 ')).toBe('S7');
         expect(researchSourceRef('P0001')).toBeNull();
+    });
+
+    it('research actions: ids and fixed values only, each checked', () => {
+        const t = `tree=${UUID}`;
+        expect(researchSchemeUrl('app', { tree: UUID })).toBe(`strom-research://app?${t}`);
+        expect(researchSchemeUrl('open', { tree: UUID })).toBe(`strom-research://open?${t}`);
+        expect(researchSchemeUrl('chat', { tree: UUID })).toBe(`strom-research://chat?${t}`);
+        expect(researchSchemeUrl('chat', { tree: UUID, person: 'P0012' })).toBe(`strom-research://chat?${t}&person=P0012`);
+        expect(researchSchemeUrl('task', { tree: UUID, task: 'T0003' })).toBe(`strom-research://task?${t}&task=T0003`);
+        for (const scope of ['person', 'family', 'line'] as const) {
+            expect(researchSchemeUrl('review', { tree: UUID, person: 'P0012', scope }))
+                .toBe(`strom-research://review?${t}&person=P0012&scope=${scope}`);
+        }
+        expect(researchSchemeUrl('review', { tree: UUID, person: 'P0012' })).toBe(`strom-research://review?${t}&person=P0012&scope=person`);
+        expect(researchSchemeUrl('research', { tree: UUID, person: 'P0012', direction: 'ancestors' }))
+            .toBe(`strom-research://research?${t}&person=P0012&direction=ancestors`);
+
+        // Anything else: no link at all.
+        expect(researchSchemeUrl('chat', { tree: UUID, person: 'Jan Novák' })).toBeNull();
+        expect(researchSchemeUrl('chat', { tree: UUID, person: 'P12345678' })).toBeNull();
+        expect(researchSchemeUrl('review', { tree: UUID })).toBeNull();
+        expect(researchSchemeUrl('review', { tree: UUID, person: 'S0012' })).toBeNull();
+        expect(researchSchemeUrl('review', { tree: UUID, person: 'P0012', scope: 'all' as never })).toBeNull();
+        expect(researchSchemeUrl('research', { tree: UUID, person: 'P0012', direction: 'sideways' as never })).toBeNull();
+        expect(researchSchemeUrl('task', { tree: UUID })).toBeNull();
+        expect(researchSchemeUrl('task', { tree: UUID, task: 'T1&x=1' })).toBeNull();
+        expect(researchSchemeUrl('task', { tree: UUID, task: 'P0003' })).toBeNull();
+        expect(researchSchemeUrl('open', { tree: 'not-a-tree' })).toBeNull();
+        expect(researchPersonRef(' P7 ')).toBe('P7');
+        expect(researchTaskRef('T12')).toBe('T12');
     });
 });
 
