@@ -639,6 +639,15 @@ export const miscMethods = uiModule({
                     this.closeSourceViewer();
                     return;
                 }
+                // Any other dialog opened above the stack's top without joining
+                // the stack (the source picker and catalog from "Cite a source",
+                // …) closes first: Escape takes off what is visually on top,
+                // never the dialog underneath it.
+                const floating = this.topFloatingDialog();
+                if (floating) {
+                    this.closeFloatingDialog(floating);
+                    return;
+                }
 
                 // Handle dialog stack - return to parent dialog
                 if (this.dialogStack.length > 0) {
@@ -891,6 +900,31 @@ export const miscMethods = uiModule({
     /**
      * Close dialog by ID
      */
+    /**
+     * The id of the dialog visually on top when it is not on the stack while
+     * the stack is in use (a dialog opened above a stacked one without
+     * pushing itself), else null. On top = highest z-index, then later in
+     * the document. The confirmation and promise-managed prompts are left to
+     * their own Escape handling.
+     */
+    topFloatingDialog(): string | null {
+        if (this.dialogStack.length === 0) return null;
+        const skip = new Set(['confirmation-modal', 'password-prompt-modal', 'export-password-modal', 'password-setup-modal']);
+        const open = [...document.querySelectorAll<HTMLElement>('.modal-overlay.active')].filter(el => !skip.has(el.id));
+        if (open.length === 0) return null;
+        const z = (el: HTMLElement): number => Number.parseInt(getComputedStyle(el).zIndex, 10) || 0;
+        let top = open[0];
+        for (const el of open) if (z(el) >= z(top)) top = el;
+        return top.id && !this.dialogStack.includes(top.id) ? top.id : null;
+    },
+
+    /** Close a floating dialog through its own close (state reset), else just hide it. */
+    closeFloatingDialog(id: string): void {
+        if (id === 'source-picker-modal') this.closeSourcePicker();
+        else if (id === 'sources-modal') this.closeSourcesDialog();
+        else this.closeDialogById(id);
+    },
+
     closeDialogById(dialogId: string | undefined): void {
         if (!dialogId) return;
         document.getElementById(dialogId)?.classList.remove('active');

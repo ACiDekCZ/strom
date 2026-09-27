@@ -76,6 +76,38 @@ const editor = (page: Page) => page.locator('#source-editor-modal');
 const viewer = (page: Page) => page.locator('#source-viewer-modal');
 const cropper = (page: Page) => page.locator('.crop-overlay');
 
+test.describe('Escape closes one dialog at a time', () => {
+    test('"Cite a source" from the person: Escape closes the picker (and the catalog above it), not the person', async ({ page }) => {
+        const jan = await setup(page);
+        await addCitedSource(page, jan, { title: 'Křest Jana' });
+        await page.evaluate(() => window.Strom.DataManager.addSource({ title: 'Oddací matrika' }));
+        const modal = await openPersonSources(page);
+        const picker = page.locator('#source-picker-modal');
+
+        await modal.locator('#btn-cite-person').click();
+        await expect(picker).toHaveClass(/active/);
+        await page.keyboard.press('Escape');
+        await expect(picker).not.toHaveClass(/active/);
+        await expect(modal).toBeVisible();
+
+        // The catalog opened from the picker: Escape goes back to the picker, then out of it.
+        await modal.locator('#btn-cite-person').click();
+        await expect(picker).toHaveClass(/active/);
+        await page.evaluate(() => window.Strom.UI.manageSourcesFromPicker());
+        await expect(page.locator('#sources-modal')).toHaveClass(/active/);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#sources-modal')).not.toHaveClass(/active/);
+        await expect(picker).toHaveClass(/active/);
+        await page.keyboard.press('Escape');
+        await expect(picker).not.toHaveClass(/active/);
+        await expect(modal).toBeVisible();
+
+        // Only now the person dialog itself.
+        await page.keyboard.press('Escape');
+        await expect(modal).toBeHidden();
+    });
+});
+
 test.describe('citation chips and the viewer', () => {
     test('a chip shows an icon or the excerpt; clicking opens the viewer; × still uncites', async ({ page }) => {
         const jan = await setup(page);
