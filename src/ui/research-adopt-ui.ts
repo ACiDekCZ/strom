@@ -27,6 +27,8 @@ import { normalizeModal } from './modal-skeleton.js';
 const ADOPT_ID = 'research-adopt-modal';
 /** How long the research has to come back for the tree. */
 const TOKEN_MAX_AGE_MS = 60 * 60 * 1000;
+/** Strom Research takes photos and attachments over with a tree (not yet: it skips data URLs). */
+const RESEARCH_TAKES_IMAGES = false;
 
 /** HTML-escape a string for innerHTML (text and attribute values). */
 function esc(text: string): string {
@@ -112,6 +114,7 @@ export const researchAdoptMethods = uiModule({
             postCancel(cancelUrl, 'cancelled');
             return;
         }
+        // The research does not take photos over yet: they stay here only.
         const gedcom = exportToGedcom(choice.images ? data : stripMedia(data), tree.name).content;
         let reply: { tree: string; head: string | null } | null = null;
         try {
@@ -150,7 +153,8 @@ export const researchAdoptMethods = uiModule({
         const families = Object.keys(data.partnerships).length;
         const sources = Object.keys(data.sources ?? {}).length;
         const images = countImages(data);
-        const files = images.photos + images.attachments + images.excerpts;
+        // "Include photos and attachments" waits until the research takes them over.
+        const files = RESEARCH_TAKES_IMAGES ? images.photos + images.attachments + images.excerpts : 0;
         const summary = [strings.about.stats.persons(persons), strings.about.stats.families(families),
             strings.personSources.countSub(sources)].join(' · ');
         const researchName = offer.name || r.defaultName;

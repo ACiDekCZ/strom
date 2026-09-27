@@ -128,7 +128,7 @@ function toStory(raw: RawStory | undefined): Story | undefined {
  * only): conflicting sources, hypotheses, what was searched.
  */
 interface RawResearch {
-    conflicts: { id: string; fact: string; stat: string; values: RawResearchValue[]; decision?: RawResearchValue }[];
+    conflicts: { id: string; fact: string; title: string; stat: string; values: RawResearchValue[]; decision?: RawResearchValue }[];
     hypotheses: { title: string; note: string }[];
     searched: { title: string; date: string; resn: string; at: string }[];
 }
@@ -173,12 +173,13 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
     };
     const out: PersonResearch = {};
     const conflicts = raw.conflicts
-        .filter(c => /^C\d{1,7}$/.test(c.id) && c.fact && c.values.length > 0)
+        .filter(c => /^X\d{1,7}$/.test(c.id) && (c.fact || c.title.trim()) && c.values.length > 0)
         .map(c => {
             const decided = c.stat.trim().toLowerCase() === 'decided';
             return {
                 id: c.id,
-                fact: c.fact.toUpperCase(),
+                fact: (c.fact || 'EVEN').toUpperCase(),
+                ...(c.title.trim() ? { title: c.title.trim() } : {}),
                 status: decided ? 'decided' as const : 'open' as const,
                 values: c.values.filter(v => v.value).map(value),
                 ...(decided && c.decision?.value ? { decision: value(c.decision) } : {}),
@@ -1593,7 +1594,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             if (!stromResearch) { drop(tag); break; }
                             const research = indi.research ??= newResearch();
                             if (tag === '_STROM_CONFLICT') {
-                                research.conflicts.push({ id: value.trim(), fact: '', stat: '', values: [] });
+                                research.conflicts.push({ id: value.trim(), fact: '', title: '', stat: '', values: [] });
                                 currentResearch = { kind: 'conflict', sub: null };
                             } else if (tag === '_STROM_HYPO') {
                                 research.hypotheses.push({ title: '', note: '' });
@@ -1736,12 +1737,14 @@ export function parseGedcom(content: string): ParsedGedcom {
                     if (level === 2) {
                         open.sub = tag;
                         if (tag === 'TYPE') c.fact = value.trim();
+                        else if (tag === 'TITL') c.title = value;
                         else if (tag === 'STAT') c.stat = value;
                         else if (tag === 'VAL') c.values.push({ value: value.trim(), sourceRefs: [] });
                         else if (tag === 'DECI') c.decision = { value: value.trim(), sourceRefs: [] };
                     } else if (level === 3) {
                         const v = lastValue();
-                        if (v && tag === 'SOUR' && GED_POINTER.test(value)) v.sourceRefs.push(value);
+                        if (open.sub === 'TITL' && (tag === 'CONC' || tag === 'CONT')) c.title += tag === 'CONT' ? ' ' + value : value;
+                        else if (v && tag === 'SOUR' && GED_POINTER.test(value)) v.sourceRefs.push(value);
                         else if (v && tag === 'CONC') v.value += value;
                         else if (v && tag === 'CONT') v.value += ' ' + value;
                     }

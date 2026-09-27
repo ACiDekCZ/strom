@@ -308,13 +308,16 @@ export interface ResearchConflictValue {
 
 /** Sources that disagree about one fact. */
 export interface ResearchConflict {
-    /** The research's id ("C0007"). */
+    /** The research's id ("X0007"). */
     id: string;
-    /** The fact: a GEDCOM event tag (BIRT, DEAT, CHR …), NAME or SEX. */
+    /** The fact: a GEDCOM event tag (BIRT, DEAT, CHR …), NAME or SEX; EVEN when the research does not know which. */
     fact: string;
+    /** The question in words ("Year of Jan's birth"). */
+    title?: string;
     status: 'open' | 'decided';
+    /** What each source claims, as the research wrote it (a GEDCOM date, or words). */
     values: ResearchConflictValue[];
-    /** The chosen value and the sources that decided it (decided only). */
+    /** The decision in words ("1865 (S0001)"), decided only. */
     decision?: ResearchConflictValue;
 }
 

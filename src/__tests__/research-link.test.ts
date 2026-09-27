@@ -551,17 +551,18 @@ describe('strom-research:// links', () => {
         for (const a of ['update', 'sessions', 'setup'] as const) {
             expect(researchSchemeUrl(a, { tree: UUID })).toBe(`strom-research://${a}?${t}`);
         }
-        expect(researchSchemeUrl('conflict', { tree: UUID, conflict: 'C0007' })).toBe(`strom-research://conflict?${t}&id=C0007&do=decide`);
-        expect(researchSchemeUrl('conflict', { tree: UUID, conflict: 'C0007', conflictDo: 'agent' })).toBe(`strom-research://conflict?${t}&id=C0007&do=agent`);
+        expect(researchSchemeUrl('conflict', { tree: UUID, conflict: 'X0007' })).toBe(`strom-research://conflict?${t}&id=X0007&do=decide`);
+        expect(researchSchemeUrl('conflict', { tree: UUID, conflict: 'X0007', conflictDo: 'agent' })).toBe(`strom-research://conflict?${t}&id=X0007&do=agent`);
         expect(researchSchemeUrl('conflict', { tree: UUID, conflict: 'T0007' })).toBeNull();
-        expect(researchSchemeUrl('conflict', { tree: UUID, conflict: 'C0007', conflictDo: 'drop' as never })).toBeNull();
+        expect(researchSchemeUrl('conflict', { tree: UUID, conflict: 'X0007', conflictDo: 'drop' as never })).toBeNull();
         expect(researchSchemeUrl('story', { tree: UUID, person: 'P0012' })).toBe(`strom-research://story?${t}&person=P0012&do=final`);
         expect(researchSchemeUrl('story', { tree: UUID })).toBeNull();
         expect(researchSchemeUrl('sync-undo', { tree: UUID, intake: 'I0042' })).toBe(`strom-research://sync-undo?${t}&intake=I0042`);
         expect(researchSchemeUrl('sync-undo', { tree: UUID, intake: 'I42&x' })).toBeNull();
         expect(researchSchemeUrl('research', { tree: UUID, person: 'P0012', direction: 'descendants' }))
             .toBe(`strom-research://research?${t}&person=P0012&direction=descendants`);
-        expect(researchConflictRef(' C1 ')).toBe('C1');
+        expect(researchConflictRef(' X1 ')).toBe('X1');
+        expect(researchConflictRef('C0007')).toBeNull();
         expect(researchIntakeRef('I12345678')).toBeNull();
         expect(sanitizeResearchLinks('new update sessions conflict story sync-undo setup'))
             .toEqual(['new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup']);

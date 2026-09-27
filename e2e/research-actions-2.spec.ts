@@ -30,8 +30,9 @@ function researchGed(): string {
         '0 @P0012@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '2 SOUR @S12@', '1 DEAT', '2 DATE 1932',
         '1 REFN P0012', '1 FAMC @F0001@',
         '1 _STORY', '2 STAT navrh', '2 TEXT Jan se narodil v Chlumech.',
-        '1 _STROM_CONFLICT C0007', '2 TYPE BIRT', '2 STAT open', '2 VAL 3 FEB 1865', '3 SOUR @S12@', '2 VAL 1866', '3 SOUR @S31@',
-        '1 _STROM_CONFLICT C0008', '2 TYPE DEAT', '2 STAT decided', '2 VAL 1931', '2 VAL 1932', '2 DECI 1932', '3 SOUR @S31@',
+        '1 _STROM_CONFLICT X0007', '2 TYPE BIRT', '2 STAT open', '2 VAL 3 FEB 1865', '3 SOUR @S12@', '2 VAL 1866', '3 SOUR @S31@',
+        '1 _STROM_CONFLICT X0008', '2 TYPE DEAT', '2 STAT decided', '2 VAL 1931', '2 VAL 1932', '2 DECI 1932 (S0031)',
+        '1 _STROM_CONFLICT X0009', '2 TYPE EVEN', '2 TITL Rok sňatku rodičů', '2 STAT open', '2 VAL 70 let při úmrtí 1937', '2 VAL 1890',
         '1 _STROM_HYPO', '2 TITL Otec: Josef, nebo Jan Víšek?', '2 NOTE Oba žili v Chlumech.',
         '1 _STROM_SEARCHED', '2 TITL Sčítání lidu 1880', '2 DATE 1880', '2 RESN found',
         '1 _STROM_SEARCHED', '2 TITL Křestní matrika Chlumy', '2 DATE FROM 1860 TO 1870', '2 RESN found',
@@ -229,8 +230,8 @@ test.describe('What the research knows', () => {
         const actions = await menuActions(page, 'Jan');
         expect(actions.slice(actions.indexOf('sources'), actions.indexOf('sources') + 2)).toEqual(['sources', 'research-knows']);
         const knows = page.locator('.context-menu [data-action="research-knows"]');
-        await expect(knows.locator('.menu-item-tag')).toHaveText('1 conflict');
-        await expect(knows).toHaveAttribute('aria-label', 'What the research knows, 1 conflict');
+        await expect(knows.locator('.menu-item-tag')).toHaveText('2 conflicts');
+        await expect(knows).toHaveAttribute('aria-label', 'What the research knows, 2 conflicts');
         expect(actions.slice(-4)).toEqual(['research-review', 'research-ancestors', 'research-descendants', 'research-ask']);
         await page.locator('.context-menu [data-action="research-descendants"]').click();
         expect(await launched(page)).toEqual([`strom-research://research?tree=${UUID}&person=P0012&direction=descendants`]);
@@ -251,23 +252,25 @@ test.describe('What the research knows', () => {
         await expect(dialog.locator('.audit-log-subtitle')).toHaveText(/^Jan Víšek · 1865–1932 · as of \S*2026$/);
         await expect(dialog.locator('.menu-section-header')).toHaveText(['Conflicts', 'Hypotheses', 'Searched']);
         const conflict = dialog.locator('.person-research-conflict');
-        await expect(conflict.locator('.person-research-fact')).toHaveText('Birth');
-        await expect(conflict.locator('.person-research-open-tag')).toHaveText('Open');
+        await expect(conflict.locator('.person-research-fact')).toHaveText(['Birth', 'Rok sňatku rodičů']);
+        // A claim in words stays as written.
+        await expect(conflict.nth(1).locator('tbody td:first-child')).toHaveText(['70 let při úmrtí 1937', '1890']);
+        await expect(conflict.first().locator('.person-research-open-tag')).toHaveText('Open');
         // The research's GEDCOM date reads in the app's date style.
-        await expect(conflict.locator('tbody td:first-child')).toHaveText([/^(?!3 FEB).*1865$/, '1866']);
+        await expect(conflict.first().locator('tbody td:first-child')).toHaveText([/^(?!3 FEB).*1865$/, '1866']);
         await expect(dialog.locator('.person-research-decided')).toContainText('Death: 1931 vs. 1932');
-        await expect(dialog.locator('.person-research-decision')).toHaveText('decided: 1932 (Sčítání lidu 1880)');
+        await expect(dialog.locator('.person-research-decision')).toHaveText('decided: 1932 (S0031)');
         await expect(dialog.locator('.person-research-hypo-title')).toHaveText('Otec: Josef, nebo Jan Víšek?');
         await expect(dialog.locator('.person-research-searched tbody td:first-child')).toHaveText(['Křestní matrika Chlumy', 'Sčítání lidu 1880']);
         await expect(dialog.locator('.person-research-years')).toHaveText(['1860–1870', '1880']);
         await expect(dialog.locator('.person-research-result--found')).toHaveText(['found', 'found']);
 
-        await dialog.locator('[data-do="decide"]').click();
-        await dialog.locator('[data-do="agent"]').click();
+        await dialog.locator('[data-do="decide"]').first().click();
+        await dialog.locator('[data-do="agent"]').first().click();
         await expect(page.locator('.toast')).toContainText('Opening the agent…');
         expect(await launched(page)).toEqual([
-            `strom-research://conflict?tree=${UUID}&id=C0007&do=decide`,
-            `strom-research://conflict?tree=${UUID}&id=C0007&do=agent`,
+            `strom-research://conflict?tree=${UUID}&id=X0007&do=decide`,
+            `strom-research://conflict?tree=${UUID}&id=X0007&do=agent`,
         ]);
 
         await dialog.locator('.person-research-source').first().click();
@@ -289,7 +292,7 @@ test.describe('What the research knows', () => {
         const jan = await personId(page, 'P0012');
         await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'research-knows'), jan);
         const dialog = page.locator('#person-research-modal');
-        await expect(dialog.locator('.person-research-conflict')).toBeVisible();
+        await expect(dialog.locator('.person-research-conflict')).toHaveCount(2);
         await expect(dialog.locator('[data-conflict]')).toHaveCount(0);
     });
 
@@ -317,7 +320,7 @@ test.describe('What the research knows', () => {
         await card(page, 'Jan').click();
         const item = page.locator('.bottom-sheet [data-action="research-knows"]');
         await expect(item).toBeVisible();
-        await expect(item.locator('.menu-item-tag')).toHaveText('1 conflict');
+        await expect(item.locator('.menu-item-tag')).toHaveText('2 conflicts');
         await item.click();
         await expect(page.locator('#person-research-modal')).toBeVisible();
         // No research links on a phone, the content is there.

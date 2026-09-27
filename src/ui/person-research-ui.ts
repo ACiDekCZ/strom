@@ -38,6 +38,14 @@ export function researchFactLabel(fact: string): string {
     return type ? strings.events.types[type] : tag;
 }
 
+/** Only GEDCOM date words and numbers ("ABT 1870", "3 FEB 1865", "BET 1870 AND 1872"). */
+const GEDCOM_DATE_TEXT = /^(?:\s*(?:ABT|BEF|AFT|EST|CAL|INT|FROM|TO|BET|AND|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|\d{1,4}))+\s*$/i;
+
+/** The heading of a conflict: its question when the research wrote one, else the fact. */
+export function researchConflictTitle(c: ResearchConflict): string {
+    return c.title || researchFactLabel(c.fact);
+}
+
 /** A value as people read it: a GEDCOM date in the app's date style, a sex as a word, else as written. */
 export function researchValueText(fact: string, value: string): string {
     if (fact.toUpperCase() === 'SEX') {
@@ -46,6 +54,8 @@ export function researchValueText(fact: string, value: string): string {
         if (v === 'F') return strings.gender.female;
         return value;
     }
+    // A claim in words ("70 years at death 1937", "12 MAR 1865, Týnec") stays as written.
+    if (!GEDCOM_DATE_TEXT.test(value)) return value;
     let date = '';
     try { date = parseGedcomDate(value); } catch { date = ''; }
     return date ? formatFlexDate(date) : value;
@@ -107,7 +117,7 @@ export const personResearchMethods = uiModule({
             return `
                 <div class="person-research-conflict">
                     <div class="person-research-conflict-head">
-                        <span class="person-research-fact">${esc(researchFactLabel(c.fact))}</span>
+                        <span class="person-research-fact">${esc(researchConflictTitle(c))}</span>
                         <span class="person-research-open-tag">${esc(r.conflictOpen)}</span>
                     </div>
                     <table class="person-research-values">
@@ -125,10 +135,11 @@ export const personResearchMethods = uiModule({
         }).join('');
         const decidedHtml = conflicts.filter(c => c.status === 'decided').map(c => {
             const values = c.values.map(v => researchValueText(c.fact, v.value)).join(' vs. ');
-            const decision = c.decision ? r.decided(researchValueText(c.fact, c.decision.value), sourceTitle(c.decision)) : '';
+            // The decision is words ("1865 (S0001)"); a source only when the research names one.
+            const decision = c.decision ? r.decided(c.decision.value, sourceTitle(c.decision)) : '';
             return `
                 <div class="person-research-decided">
-                    <span>${esc(researchFactLabel(c.fact))}: ${esc(values)}</span>
+                    <span>${esc(researchConflictTitle(c))}: ${esc(values)}</span>
                     ${decision ? `<span class="person-research-decision">${esc(decision)}</span>` : ''}
                 </div>`;
         }).join('');

@@ -24,22 +24,28 @@ const BODY = `0 @S12@ SOUR
 1 REFN P0012
 1 BIRT
 2 DATE 1872
-1 _STROM_CONFLICT C0007
+1 _STROM_CONFLICT X0007
 2 TYPE BIRT
 2 STAT open
 2 VAL 3 FEB 1871
 3 SOUR @S12@
 2 VAL 1872
 3 SOUR @S31@
-1 _STROM_CONFLICT C0008
+1 _STROM_CONFLICT X0008
 2 TYPE deat
 2 STAT decided
 2 VAL 1944
 2 VAL 1945
 3 SOUR @S31@
-2 DECI 1945
-3 SOUR @S31@
-1 _STROM_CONFLICT X1
+2 DECI 1945 (S0031)
+1 _STROM_CONFLICT X0009
+2 TYPE EVEN
+2 TITL Rok narození An
+3 CONC ny
+2 STAT open
+2 VAL 70 let při úmrtí 1937
+2 VAL 12 MAR 1865, Týnec
+1 _STROM_CONFLICT C0010
 2 TYPE BIRT
 2 VAL 1870
 1 _STROM_HYPO
@@ -69,15 +75,18 @@ describe('Strom Research knowledge in GEDCOM', () => {
         const { person, asOf, sources } = anna(true);
         expect(asOf).toBe('2026-09-20');
         const r = person.research!;
-        expect(r.conflicts).toHaveLength(2);
-        const [open, decided] = r.conflicts!;
-        expect(open).toMatchObject({ id: 'C0007', fact: 'BIRT', status: 'open' });
+        // X1 (no TYPE, no VAL) and C0010 (not a research id) are dropped.
+        expect(r.conflicts).toHaveLength(3);
+        const [open, decided, general] = r.conflicts!;
+        expect(general).toMatchObject({ id: 'X0009', fact: 'EVEN', title: 'Rok narození Anny', status: 'open' });
+        expect(general.values.map(v => v.value)).toEqual(['70 let při úmrtí 1937', '12 MAR 1865, Týnec']);
+        expect(open).toMatchObject({ id: 'X0007', fact: 'BIRT', status: 'open' });
         expect(open.values.map(v => v.value)).toEqual(['3 FEB 1871', '1872']);
         expect(sources[open.values[0].sourceIds![0]].title).toBe('Křestní matrika Chlumy 1871');
         expect(sources[open.values[1].sourceIds![0]].title).toBe('Sčítání lidu 1880');
-        expect(decided).toMatchObject({ id: 'C0008', fact: 'DEAT', status: 'decided' });
-        expect(decided.decision?.value).toBe('1945');
-        expect(decided.decision?.sourceIds).toHaveLength(1);
+        expect(decided).toMatchObject({ id: 'X0008', fact: 'DEAT', status: 'decided' });
+        expect(decided.decision?.value).toBe('1945 (S0031)');
+        expect(decided.decision?.sourceIds).toBeUndefined();
         expect(decided.values[0].sourceIds).toBeUndefined();
         expect(r.hypotheses).toEqual([{ title: 'Otec: Václav, nebo Jan Víšek?', note: 'Oba žili v Chlumech.\nRozhodne oddací zápis.' }]);
         expect(r.searched).toEqual([
@@ -100,10 +109,10 @@ describe('Strom Research knowledge in GEDCOM', () => {
 
     it('a new version replaces them whole', () => {
         const first = convertToStrom(parseGedcom(head(true) + BODY)).data;
-        const next = convertToStrom(parseGedcom(head(true) + BODY.replace(/1 _STROM_CONFLICT C0007[\s\S]*?(?=1 _STROM_CONFLICT C0008)/, ''))).data;
+        const next = convertToStrom(parseGedcom(head(true) + BODY.replace(/1 _STROM_CONFLICT X0007[\s\S]*?(?=1 _STROM_CONFLICT X0008)/, ''))).data;
         const before = Object.values(first.persons).find(p => p.refn === 'P0012')!;
         const after = Object.values(next.persons).find(p => p.refn === 'P0012')!;
-        expect(before.research?.conflicts?.map(c => c.id)).toEqual(['C0007', 'C0008']);
-        expect(after.research?.conflicts?.map(c => c.id)).toEqual(['C0008']);
+        expect(before.research?.conflicts?.map(c => c.id)).toEqual(['X0007', 'X0008', 'X0009']);
+        expect(after.research?.conflicts?.map(c => c.id)).toEqual(['X0008', 'X0009']);
     });
 });

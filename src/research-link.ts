@@ -54,9 +54,9 @@ export function researchTaskRef(id: unknown): string | null {
     return typeof id === 'string' && /^T\d{1,7}$/.test(id.trim()) ? id.trim() : null;
 }
 
-/** A conflict's id in the research ("C0007"), or null. */
+/** A conflict's id in the research ("X0007"), or null. */
 export function researchConflictRef(id: unknown): string | null {
-    return typeof id === 'string' && /^C\d{1,7}$/.test(id.trim()) ? id.trim() : null;
+    return typeof id === 'string' && /^X\d{1,7}$/.test(id.trim()) ? id.trim() : null;
 }
 
 /** A send's id in the research ("I0042", what it took in), or null. */
@@ -87,7 +87,7 @@ export interface ResearchLinkParams {
     direction?: ResearchDirection;
     /** A task: park / drop / wake (without: answer it). */
     taskDo?: ResearchTaskDo;
-    /** A conflict ("C0007") and what to do with it. */
+    /** A conflict ("X0007") and what to do with it. */
     conflict?: string;
     conflictDo?: ResearchConflictDo;
     /** The send to take back ("I0042"). */
