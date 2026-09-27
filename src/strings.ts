@@ -2276,9 +2276,9 @@ const stringsEN = {
      */
     personSources: {
         title: 'Sources',
-        groupPerson: 'Person',
-        groupEvents: 'Events',
-        groupUnions: 'Marriages',
+        citePerson: 'Person',
+        citeUnion: (y: number | null) => (y !== null ? `Marriage ${y}` : 'Marriage'),
+        countSub: (n: number) => nEn(n, 'source', 'sources'),
         empty: 'No sources cited for this person yet.',
         countSr: (n: number) => `Show sources, ${n}`,
     },
@@ -4543,9 +4543,9 @@ const stringsCZ: StringsType = {
     // Poster export (SVG / PNG / tiled PDF)
     personSources: {
         title: 'Prameny',
-        groupPerson: 'Osoba',
-        groupEvents: 'Události',
-        groupUnions: 'Sňatky',
+        citePerson: 'Osoba',
+        citeUnion: (y: number | null) => (y !== null ? `Sňatek ${y}` : 'Sňatek'),
+        countSub: (n: number) => nCs(n, 'pramen', 'prameny', 'pramenů'),
         empty: 'U této osoby zatím nejsou citované prameny.',
         countSr: (n: number) => `Zobrazit prameny, ${n}`,
     },
@@ -6734,9 +6734,9 @@ const stringsDE: StringsType = {
     // Poster export (SVG / PNG / tiled PDF)
     personSources: {
         title: 'Quellen',
-        groupPerson: 'Person',
-        groupEvents: 'Ereignisse',
-        groupUnions: 'Ehen',
+        citePerson: 'Person',
+        citeUnion: (y: number | null) => (y !== null ? `Ehe ${y}` : 'Ehe'),
+        countSub: (n: number) => nDe(n, 'Quelle', 'Quellen'),
         empty: 'Für diese Person sind noch keine Quellen zitiert.',
         countSr: (n: number) => `Quellen anzeigen, ${n}`,
     },

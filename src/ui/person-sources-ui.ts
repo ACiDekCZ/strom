@@ -14,7 +14,7 @@ import { storyProseHtml } from '../book.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { eventTypeLabel } from './person-events.js';
-import { CitationContext, sourceMeta, qualityLabel, sourceThumbHtml, hydrateThumbs } from './sources.js';
+import { CitationContext, qualityLabel, sourceThumbHtml, hydrateThumbs } from './sources.js';
 
 const SOURCES_ID = 'person-sources-modal';
 const STORY_ID = 'person-story-modal';
@@ -41,53 +41,75 @@ function personSubtitle(personId: PersonId): string {
     return [fullName(personId), years].filter(Boolean).join(' · ');
 }
 
-/** One row of the sources dialog: a source and the citation it comes from. */
+/** One thing a source supports for this person ("Person", "Baptism 1865", "Marriage 1890"). */
+interface Cite {
+    label: string;
+    ctx: CitationContext;
+    year: number | null;
+    /** Tooltip telling two marriages apart. */
+    title?: string;
+}
+
+/** One row of the sources dialog: a source and everything it supports here. */
 interface SourceRow {
     source: Source;
-    ctx: CitationContext;
-    /** What the citation supports, for event / marriage rows. */
-    context?: string;
+    cites: Cite[];
 }
 
-interface SourceGroups {
-    person: SourceRow[];
-    events: SourceRow[];
-    unions: SourceRow[];
-}
-
-/** The person's citations grouped as the dialog shows them (each source once per group). */
-function personSourceGroups(personId: PersonId): SourceGroups {
+/**
+ * The person's citations merged per source: person, events, marriages. Each
+ * source is one row whose labels say what it supports; rows are ordered by
+ * the earliest year they document (else the record date), so the list reads
+ * like a life; undated ones last, then by title.
+ */
+function personSourceRows(personId: PersonId): SourceRow[] {
     const data = DataManager.getData();
     const catalog = data.sources ?? {};
     const person = data.persons[personId];
-    const groups: SourceGroups = { person: [], events: [], unions: [] };
-    if (!person) return groups;
-    const add = (list: SourceRow[], ids: string[] | undefined, ctx: CitationContext, context?: string) => {
-        for (const id of ids ?? []) {
+    if (!person) return [];
+    const rows = new Map<string, SourceRow>();
+    const add = (ids: string[] | undefined, cite: Cite) => {
+        for (const id of new Set(ids ?? [])) {
             const source = catalog[id];
-            if (!source || list.some(r => r.source.id === id)) continue;
-            list.push({ source, ctx, context });
+            if (!source) continue;
+            const row = rows.get(id) ?? { source, cites: [] };
+            if (!row.cites.some(c => c.label === cite.label)) row.cites.push(cite);
+            rows.set(id, row);
         }
     };
-    add(groups.person, person.sourceIds, { personId });
+    const withYear = (label: string, year: number | null) => (year !== null ? `${label} ${year}` : label);
+    add(person.sourceIds, { label: strings.personSources.citePerson, ctx: { personId }, year: null });
     for (const ev of sortLifeEvents(person.events ?? [])) {
         const year = yearOf(ev.date);
-        add(groups.events, ev.sourceIds, { personId, eventId: ev.id },
-            [eventTypeLabel(ev), year !== null ? String(year) : ''].filter(Boolean).join(' · '));
+        add(ev.sourceIds, { label: withYear(eventTypeLabel(ev), year), ctx: { personId, eventId: ev.id }, year });
     }
     for (const u of Object.values(data.partnerships)) {
         if (u.person1Id !== personId && u.person2Id !== personId) continue;
-        add(groups.unions, u.sourceIds, { partnershipId: u.id },
-            strings.sources.citedPartnership(fullName(u.person1Id), fullName(u.person2Id)));
+        const year = yearOf(u.startDate);
+        add(u.sourceIds, {
+            label: strings.personSources.citeUnion(year), ctx: { partnershipId: u.id }, year,
+            title: strings.sources.citedPartnership(fullName(u.person1Id), fullName(u.person2Id)),
+        });
     }
-    return groups;
+    const byYear = (a: number | null, b: number | null) => (a ?? Infinity) - (b ?? Infinity);
+    const list = [...rows.values()];
+    for (const row of list) {
+        // Collected person → events → marriages: the first is what a click opens.
+        const person = row.cites.filter(c => 'personId' in c.ctx && !c.ctx.eventId);
+        const rest = row.cites.filter(c => !person.includes(c)).sort((a, b) => byYear(a.year, b.year));
+        row.cites = [...person, ...rest];
+    }
+    const rowYear = (r: SourceRow): number | null => {
+        const years = r.cites.map(c => c.year).filter((y): y is number => y !== null);
+        return years.length > 0 ? Math.min(...years) : yearOf(r.source.recordDate);
+    };
+    return list.sort((a, b) => byYear(rowYear(a), rowYear(b)) || a.source.title.localeCompare(b.source.title));
 }
 
 export const personSourcesMethods = uiModule({
     /** Distinct sources cited on the person, their events and their marriages. */
     personSourceCount(personId: PersonId): number {
-        const g = personSourceGroups(personId);
-        return new Set([...g.person, ...g.events, ...g.unions].map(r => r.source.id)).size;
+        return personSourceRows(personId).length;
     },
 
     /** Citing is possible: an editable tree and the person not locked. */
@@ -148,48 +170,43 @@ export const personSourcesMethods = uiModule({
         const list = document.getElementById('person-sources-list');
         if (!personId || !list) return;
         const s = strings.personSources;
-        const groups = personSourceGroups(personId);
-        const total = this.personSourceCount(personId);
+        const rows = personSourceRows(personId);
 
         const subtitle = document.getElementById('person-sources-subtitle');
-        if (subtitle) subtitle.textContent = total > 0 ? `${personSubtitle(personId)} · ${total}` : personSubtitle(personId);
+        if (subtitle) {
+            subtitle.textContent = [personSubtitle(personId), rows.length > 0 ? s.countSub(rows.length) : '']
+                .filter(Boolean).join(' · ');
+        }
         const cite = document.getElementById('person-sources-cite');
         if (cite) cite.hidden = !this.canCiteOnPerson(personId);
 
-        // Rows cited since the last draw get a short highlight.
+        // Rows new or with a new label since the last draw get a short highlight.
         const before = this.personSourcesShown;
-        const fresh = (id: string): boolean => before !== null && !before.has(id);
-        this.personSourcesShown = new Set(groups.person.map(r => r.source.id));
+        const key = (r: SourceRow): string => `${r.source.id}\u0000${r.cites.map(c => c.label).join('\u0000')}`;
+        this.personSourcesShown = new Set(rows.map(key));
 
-        if (total === 0) {
+        if (rows.length === 0) {
             list.innerHTML = `<p class="person-sources-empty">${esc(s.empty)}</p>`;
             return;
         }
-        const row = (r: SourceRow, i: number, key: string): string => {
-            const meta = r.context ?? sourceMeta(r.source);
-            const q = r.context ? '' : qualityLabel(r.source.quality);
-            const cls = key === 'person' && fresh(r.source.id) ? 'person-source-row is-new' : 'person-source-row';
+        list.innerHTML = rows.map((r, i) => {
+            const q = qualityLabel(r.source.quality);
+            const labels = r.cites.map(c => c.title
+                ? `<span title="${esc(c.title)}">${esc(c.label)}</span>` : esc(c.label)).join(' · ');
+            const cls = before !== null && !before.has(key(r)) ? 'person-source-row is-new' : 'person-source-row';
             return `
-                <button type="button" class="${cls}" data-group="${key}" data-row="${i}">
+                <button type="button" class="${cls}" data-row="${i}">
                     ${sourceThumbHtml(r.source, 'picker')}
                     <span class="person-source-text">
                         <span class="person-source-title">${esc(r.source.title)}</span>
-                        ${meta || q ? `<span class="person-source-meta">${esc(meta)}${q ? ` <span class="source-quality-tag">${esc(q)}</span>` : ''}</span>` : ''}
+                        <span class="person-source-meta">${labels}${q ? ` <span class="source-quality-tag">${esc(q)}</span>` : ''}</span>
                     </span>
                 </button>`;
-        };
-        const onlyPerson = groups.events.length === 0 && groups.unions.length === 0;
-        const section = (key: keyof SourceGroups, title: string): string => {
-            const rows = groups[key];
-            if (rows.length === 0) return '';
-            const head = key === 'person' && onlyPerson ? '' : `<div class="menu-section-header person-sources-group">${esc(title)}</div>`;
-            return `${head}${rows.map((r, i) => row(r, i, key)).join('')}`;
-        };
-        list.innerHTML = section('person', s.groupPerson) + section('events', s.groupEvents) + section('unions', s.groupUnions);
+        }).join('');
         list.querySelectorAll<HTMLElement>('.person-source-row').forEach(btn => {
             btn.addEventListener('click', () => {
-                const r = groups[btn.dataset.group as keyof SourceGroups]?.[Number(btn.dataset.row)];
-                if (r) this.showSourceViewer(r.source.id, r.ctx);
+                const r = rows[Number(btn.dataset.row)];
+                if (r) this.showSourceViewer(r.source.id, r.cites[0].ctx);
             });
         });
         hydrateThumbs(list);

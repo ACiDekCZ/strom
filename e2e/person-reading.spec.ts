@@ -31,12 +31,13 @@ async function seedCitations(page: Page): Promise<string> {
     return page.evaluate(() => {
         const DM = window.Strom.DataManager;
         const jan = DM.getAllPersons().find((p: { firstName: string }) => p.firstName === 'Jan') as { id: string };
-        const book = DM.addSource({ title: 'Krestni matrika Lipany', repository: 'SOA Trebon', reference: 'fol. 34' })!;
-        const marriage = DM.addSource({ title: 'Oddaci matrika Lipany 1890' })!;
+        const book = DM.addSource({ title: 'Krestni matrika Lipany', repository: 'SOA Trebon', reference: 'fol. 34', quality: 3 })!;
+        const marriage = DM.addSource({ title: 'Oddaci matrika Lipany' })!;
         DM.citePerson(jan.id, book.id);
         const ev = DM.addLifeEvent(jan.id, { type: 'baptism', date: '1865' })!;
         DM.citeEvent(jan.id, ev.id, book.id);
         const union = Object.values(DM.getData().partnerships)[0] as { id: string };
+        DM.updatePartnership(union.id, { startDate: '1890' });
         DM.citePartnership(union.id, marriage.id);
         return jan.id;
     });
@@ -101,24 +102,34 @@ test('menu: a locked person and a read-only view show the sources item only when
     await expect(dialog.locator('.buttons [data-dismiss]')).toHaveText('Close');
 });
 
-test('sources dialog: groups, a row opens the viewer and Escape comes back to the list', async ({ page }) => {
+test('sources dialog: one row per source with what it supports, by year; a row opens the viewer, Escape comes back', async ({ page }) => {
     await openApp(page);
-    await seedCitations(page);
+    const janId = await seedCitations(page);
+    // The marriage register also on the person; an undated source goes last.
+    await page.evaluate((id) => {
+        const DM = window.Strom.DataManager;
+        const all = Object.values(DM.getData().sources) as Array<{ id: string; title: string }>;
+        DM.citePerson(id, all.find(s => s.title === 'Oddaci matrika Lipany')!.id);
+        DM.citePerson(id, DM.addSource({ title: 'Aaa bez roku' })!.id);
+    }, janId);
     await cardAction(page, 'Jan', 'sources');
     const dialog = page.locator('#person-sources-modal');
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator('#person-sources-subtitle')).toHaveText('Jan Novak · 1865– · 2');
-    await expect(dialog.locator('.person-sources-group')).toHaveText(['Person', 'Events', 'Marriages']);
+    await expect(dialog.locator('#person-sources-subtitle')).toHaveText('Jan Novak · 1865– · 3 sources');
     const rows = dialog.locator('.person-source-row');
     await expect(rows).toHaveCount(3);
-    await expect(rows.nth(0)).toContainText('SOA Trebon · fol. 34');
-    await expect(rows.nth(1)).toContainText('Baptism · 1865');
-    await expect(rows.nth(2)).toContainText('Marriage: Jan Novak and Anna Nova');
+    await expect(rows.nth(0).locator('.person-source-title')).toHaveText('Krestni matrika Lipany');
+    await expect(rows.nth(0).locator('.person-source-meta')).toHaveText('Person · Baptism 1865 Original');
+    await expect(rows.nth(1).locator('.person-source-meta')).toHaveText('Person · Marriage 1890');
+    await expect(rows.nth(1).locator('[title]')).toHaveAttribute('title', 'Marriage: Jan Novak and Anna Nova');
+    await expect(rows.nth(2).locator('.person-source-title')).toHaveText('Aaa bez roku');
+    // The archive and shelfmark live in the viewer, not in the row.
+    await expect(dialog).not.toContainText('SOA Trebon');
 
-    await rows.nth(2).click();
+    await rows.nth(1).click();
     const viewer = page.locator('#source-viewer-modal');
     await expect(viewer).toBeVisible();
-    await expect(viewer.locator('#source-viewer-title')).toHaveText('Oddaci matrika Lipany 1890');
+    await expect(viewer.locator('#source-viewer-title')).toHaveText('Oddaci matrika Lipany');
     await page.keyboard.press('Escape');
     await expect(viewer).toBeHidden();
     await expect(dialog).toBeVisible();
@@ -142,6 +153,7 @@ test('sources dialog: Cite → pick → the row is under Person, the edit form h
     await expect(picker).toBeHidden();
     await expect(dialog.locator('.person-source-row')).toHaveCount(1);
     await expect(dialog.locator('.person-source-row')).toContainText('Scitani lidu 1921');
+    await expect(dialog.locator('.person-source-meta')).toHaveText('Person');
     await expect(dialog.locator('.person-source-row')).toHaveClass(/is-new/);
 
     await dialog.locator('[data-dismiss]').click();
@@ -174,7 +186,7 @@ test('sources dialog: Cite → New source → Save cites it on the person', asyn
     await expect(editor).toBeHidden();
     await expect(picker).toBeHidden();
     await expect(dialog.locator('.person-source-row')).toContainText('Pozemkova kniha');
-    await expect(dialog.locator('#person-sources-subtitle')).toContainText('· 1');
+    await expect(dialog.locator('#person-sources-subtitle')).toContainText('· 1 source');
 });
 
 test('story reader: paragraphs, bold, escaped HTML, Draft tag; Edit lands in the story field', async ({ page }) => {

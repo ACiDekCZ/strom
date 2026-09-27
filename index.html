@@ -8960,8 +8960,6 @@
            they open (picker, catalog, viewer, editor), above the canvas. */
         #person-sources-modal, #person-story-modal { z-index: 190; }
         .person-sources-list { display: flex; flex-direction: column; }
-        .person-sources-group { padding: 12px 0 4px; }
-        .person-sources-group:first-child { padding-top: 0; }
         .person-source-row {
             /* Bleeds 10px past the text column so the hover fill has room. */
             display: flex; align-items: center; gap: 12px; min-height: 56px;
@@ -8971,7 +8969,8 @@
         }
         .modal .person-source-row { padding: 8px 10px; border-radius: 8px; }  /* beats `.modal button` */
         .person-source-row:last-child { border-bottom: none; }
-        .person-source-row:hover { background: var(--surface-2); }
+        /* Hover only where there is one: on touch the tap that opened the dialog left the first row grey. */
+        @media (hover: hover) { .person-source-row:hover { background: var(--surface-2); } }
         .person-source-row:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
         .person-source-row.is-new { animation: person-source-new 1.2s ease-out; }
         @keyframes person-source-new { from { background: var(--primary-soft); } to { background: transparent; } }
