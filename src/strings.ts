@@ -696,7 +696,7 @@ const stringsEN = {
         sendExportGedcom: 'Export GEDCOM',
         sendMenu: 'Send changes to the research',
         sendHowTitle: 'Send changes to the research',
-        sendHow: 'In the research, choose “Extend research → Take in edits from the Strom app or another family tree (.ged, .json)”, then “Directly from the Strom app”. It opens this app and the changes go straight to the research, which shows them to you before writing anything. Or export the tree as GEDCOM and load that file in the research.',
+        sendHow: 'In the research, choose “Add to the research → Take in edits from the Strom app or another family tree (.ged, .json)”, then “Straight from the Strom app”. It opens this app and the changes go straight to the research, which shows them to you before writing anything. Or export the tree as GEDCOM and load that file in the research.',
         excerptsReplaced: 'Excerpts you added to this tree will be replaced by the update.',
         defaultName: 'Research',
         opened: (name: string, persons: number, families: number, date: string) =>

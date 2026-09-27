@@ -235,7 +235,7 @@ test.describe('send changes back to the research', () => {
         await openResearch(page, true);
         const id = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
         const done = page.evaluate((i) => window.Strom.UI.showSendToResearchHelp(i), id);
-        await expect(dialog(page)).toContainText('Extend research → Take in edits from the Strom app or another family tree (.ged, .json)”, then “Directly from the Strom app');
+        await expect(dialog(page)).toContainText('Add to the research → Take in edits from the Strom app or another family tree (.ged, .json)”, then “Straight from the Strom app');
         const [download] = await Promise.all([
             page.waitForEvent('download'),
             dialog(page).getByRole('button', { name: 'Export GEDCOM' }).click(),
