@@ -115,7 +115,23 @@ export const researchPromoMethods = uiModule({
 
     /** `body.research-promo` shows the offer + menu item (never in exports / view mode). */
     syncResearchPromoAvailability(): void {
-        document.body.classList.toggle('research-promo', isPromoAvailable(this.researchPromoContext()));
+        document.body.classList.toggle('research-promo',
+            isPromoAvailable(this.researchPromoContext()) && !this.researchRunsHereKnown());
+    },
+
+    /**
+     * Strom Research already announced itself on this computer: the way to
+     * its website is no use any more. The menu item stays only where it can
+     * hand the open tree over ("Start research with this tree").
+     */
+    researchRunsHereKnown(): boolean {
+        return this.researchAnyAnnounced();
+    },
+
+    /** The menu item is offered: the promotion rules, minus a research already here (unless the tree can go over). */
+    researchMenuItemVisible(): boolean {
+        return isMenuItemVisible(this.researchPromoContext())
+            && (!this.researchRunsHereKnown() || this.researchAdoptActiveAvailable());
     },
 
     /** After the first real render: light the markers, maybe show the card. */
@@ -137,6 +153,7 @@ export const researchPromoMethods = uiModule({
         if (!promoReady) return false;
         // A research tree on a computer has its "Research" submenu instead of the item.
         if (this.researchMenuShown()) return false;
+        if (!this.researchMenuItemVisible()) return false;
         return isNewMarkerActive(SettingsManager.getResearchPromoState(), this.researchPromoContext(), new Date());
     },
 
@@ -165,7 +182,7 @@ export const researchPromoMethods = uiModule({
         const s = strings.research;
 
         const row = document.getElementById('research-menu-row');
-        const rowVisible = promoReady && isMenuItemVisible(this.researchPromoContext());
+        const rowVisible = promoReady && this.researchMenuItemVisible();
         document.body.classList.toggle('research-menu', rowVisible);
         if (row) {
             row.setAttribute('aria-label', active ? `${s.menuItem}, ${s.newSr}` : s.menuItem);
@@ -209,7 +226,7 @@ export const researchPromoMethods = uiModule({
 
     /** The "More" sheet row (bottom-navigation regime), or null when not offered. */
     researchMenuSheetRow(): { label: string; run: () => void; isNew: boolean; ariaLabel: string } | null {
-        if (!isMenuItemVisible(this.researchPromoContext()) || DataManager.isReadOnly()) return null;
+        if (!this.researchMenuItemVisible() || DataManager.isReadOnly()) return null;
         const isNew = this.isResearchNewActive();
         const s = strings.research;
         return {

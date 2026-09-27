@@ -373,7 +373,18 @@ test.describe('Start research with this tree (G3)', () => {
         await expect(page.locator('.research-info-need')).toBeVisible();
         await page.keyboard.press('Escape');
 
+        // Research here, `new` not announced: the menu item (a way to the website) is gone.
+        await page.evaluate(() => window.Strom.UI.refreshResearchPromo());
+        await page.locator('.actions-menu-btn').click();
+        await expect(page.locator('#research-menu-row')).toBeHidden();
+        await page.keyboard.press('Escape');
+
         await page.evaluate(() => localStorage.setItem('strom-research-links', JSON.stringify({ actions: ['new'], at: new Date().toISOString() })));
+        // `new` announced: the item is back, and it hands the tree over.
+        await page.evaluate(() => window.Strom.UI.refreshResearchPromo());
+        await page.locator('.actions-menu-btn').click();
+        await expect(page.locator('#research-menu-row')).toBeVisible();
+        await page.keyboard.press('Escape');
         await page.evaluate(() => window.Strom.UI.showResearchInfoDialog());
         const dialog = page.locator('#research-info-modal');
         await expect(dialog.locator('.research-info-lead')).toContainText('can continue with your tree Dvořákovi');
