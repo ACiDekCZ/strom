@@ -383,10 +383,12 @@ test.describe('Start research with this tree (G3)', () => {
         await page.keyboard.press('Escape');
 
         await page.evaluate(() => localStorage.setItem('strom-research-links', JSON.stringify({ actions: ['new'], at: new Date().toISOString() })));
-        // `new` announced: the item is back, and it hands the tree over.
+        // `new` announced: the item is back, named for what it does now, and it hands the tree over.
         await page.evaluate(() => window.Strom.UI.refreshResearchPromo());
         await page.locator('.actions-menu-btn').click();
         await expect(page.locator('#research-menu-row')).toBeVisible();
+        await expect(page.locator('#research-menu-row .research-menu-label')).toHaveText('Start research with this tree');
+        await expect(page.locator('#research-menu-row .research-new-badge')).toBeHidden();
         await page.keyboard.press('Escape');
         await page.evaluate(() => window.Strom.UI.showResearchInfoDialog());
         const dialog = page.locator('#research-info-modal');

@@ -134,6 +134,15 @@ export const researchPromoMethods = uiModule({
             && (!this.researchRunsHereKnown() || this.researchAdoptActiveAvailable());
     },
 
+    /**
+     * The menu item's label: the promotion's name, or, once the research runs
+     * on this computer (the item stays only to hand the open tree over), what
+     * it does.
+     */
+    researchMenuItemLabel(): string {
+        return this.researchRunsHereKnown() ? strings.research.startWithTree : strings.research.menuItem;
+    },
+
     /** After the first real render: light the markers, maybe show the card. */
     researchPromoAfterFirstRender(): void {
         try {
@@ -153,6 +162,8 @@ export const researchPromoMethods = uiModule({
         if (!promoReady) return false;
         // A research tree on a computer has its "Research" submenu instead of the item.
         if (this.researchMenuShown()) return false;
+        // The research is already here: nothing new to point at.
+        if (this.researchRunsHereKnown()) return false;
         if (!this.researchMenuItemVisible()) return false;
         return isNewMarkerActive(SettingsManager.getResearchPromoState(), this.researchPromoContext(), new Date());
     },
@@ -185,7 +196,13 @@ export const researchPromoMethods = uiModule({
         const rowVisible = promoReady && this.researchMenuItemVisible();
         document.body.classList.toggle('research-menu', rowVisible);
         if (row) {
-            row.setAttribute('aria-label', active ? `${s.menuItem}, ${s.newSr}` : s.menuItem);
+            const label = this.researchMenuItemLabel();
+            const text = row.querySelector<HTMLElement>('.research-menu-label');
+            if (text) {
+                text.textContent = label;
+                text.dataset.i18n = this.researchRunsHereKnown() ? 'research.startWithTree' : 'research.menuItem';
+            }
+            row.setAttribute('aria-label', active ? `${label}, ${s.newSr}` : label);
             const badge = row.querySelector<HTMLElement>('.research-new-badge');
             if (badge) badge.hidden = !active;
         }
@@ -229,10 +246,11 @@ export const researchPromoMethods = uiModule({
         if (!this.researchMenuItemVisible() || DataManager.isReadOnly()) return null;
         const isNew = this.isResearchNewActive();
         const s = strings.research;
+        const label = this.researchMenuItemLabel();
         return {
-            label: s.menuItem,
+            label,
             isNew,
-            ariaLabel: isNew ? `${s.menuItem}, ${s.newSr}` : s.menuItem,
+            ariaLabel: isNew ? `${label}, ${s.newSr}` : label,
             run: () => this.showResearchInfoDialog(),
         };
     },

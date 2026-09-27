@@ -207,6 +207,7 @@ test.describe('Actions → Research', () => {
         await openApp(page);
         await page.locator('.actions-menu-btn').click();
         await expect(page.locator('#research-menu-row')).toBeVisible();
+        await expect(page.locator('#research-menu-row')).toContainText('AI ancestor research');
     });
 
     test('a touch device: nothing of the research in the menus', async ({ browser }) => {
