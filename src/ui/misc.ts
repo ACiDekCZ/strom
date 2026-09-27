@@ -6,6 +6,7 @@
 import { initDialogFocus } from './dialog-focus.js';
 import { initKeyboardAccess } from './keyboard-access.js';
 import { DataManager, auditPersonName } from '../data.js';
+import { announcedResearchLinks, researchLinksEnabled, setResearchLinksEnabled } from '../research-device.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -268,6 +269,11 @@ export const miscMethods = uiModule({
         if (otdAllToggle) otdAllToggle.checked = SettingsManager.isOnThisDayAllTrees();
         const fileCopyToggle = document.getElementById('file-copy-reminders-toggle') as HTMLInputElement | null;
         if (fileCopyToggle) fileCopyToggle.checked = SettingsManager.isFileCopyRemindersEnabled();
+        // Only where the research announced its links (computer, not phone).
+        const researchRow = document.getElementById('research-links-row');
+        if (researchRow) researchRow.hidden = announcedResearchLinks().length === 0 || window.matchMedia?.('(pointer: coarse)').matches === true;
+        const researchToggle = document.getElementById('research-links-toggle') as HTMLInputElement | null;
+        if (researchToggle) researchToggle.checked = researchLinksEnabled();
 
         const densitySelect = document.getElementById('card-density-select') as HTMLSelectElement | null;
         if (densitySelect) densitySelect.value = SettingsManager.getCardDensity();
@@ -312,6 +318,10 @@ export const miscMethods = uiModule({
             child.disabled = !parent.checked;
             child.closest('.settings-row')?.classList.toggle('is-disabled', !parent.checked);
         }
+    },
+
+    toggleResearchLinks(on: boolean): void {
+        setResearchLinksEnabled(on);
     },
 
     closeSettingsDialog(): void {

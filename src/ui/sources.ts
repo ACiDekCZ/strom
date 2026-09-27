@@ -303,14 +303,19 @@ export const sourcesMethods = uiModule({
 
         const chunks: string[] = [];
         const excerpts = src.excerpts ?? [];
+        // The research on this computer keeps the original scan: offer it.
+        const fullUrls = excerpts.map((_, i) => this.excerptResearchUrl(src.id, i));
         excerpts.forEach((exc, i) => {
             const alt = exc.caption || s.excerptAlt(src.title);
+            const full = fullUrls[i]
+                ? `<button type="button" class="link-button viewer-full-quality" data-full-quality="${i}"
+                    title="${esc(strings.research.fullQualityTitle)}">${esc(strings.research.fullQuality)} ↗</button>` : '';
             chunks.push(`
                 <figure class="viewer-excerpt">
                     <img src="${esc(exc.dataUrl)}" alt="${esc(alt)}" data-excerpt-index="${i}">
                     <button type="button" class="viewer-zoom" data-excerpt-index="${i}" aria-label="${esc(s.viewerZoom)}">⤢</button>
                     ${exc.caption ? `<figcaption>${esc(exc.caption)}</figcaption>` : ''}
-                </figure>`);
+                </figure>${full}`);
         });
         if (excerpts.length === 0 && editable) {
             chunks.push(`<button type="button" class="secondary viewer-add-excerpt">${esc(s.addExcerpt)}</button>`);
@@ -346,6 +351,12 @@ export const sourcesMethods = uiModule({
             el.addEventListener('click', () => {
                 const exc = excerpts[Number(el.dataset.excerptIndex)];
                 if (exc) this.showImageOverlay(exc.dataUrl);
+            });
+        });
+        body.querySelectorAll<HTMLElement>('[data-full-quality]').forEach(el => {
+            el.addEventListener('click', () => {
+                const url = fullUrls[Number(el.dataset.fullQuality)];
+                if (url) this.launchResearchLink(url);
             });
         });
         body.querySelector('.viewer-add-excerpt')?.addEventListener('click', () => this.editFromSourceViewer(true));

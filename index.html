@@ -1520,6 +1520,7 @@
         /* `.modal label { display: block }` used to win here, wrapping the
            switch above its text — the `.modal` prefix keeps the row a flex row. */
         .settings-checkbox,
+        .modal label.settings-checkbox[hidden] { display: none; }
         .modal label.settings-checkbox {
             display: flex;
             margin: 0;
@@ -9029,6 +9030,8 @@
             background: var(--surface-2); cursor: zoom-in;
         }
         .viewer-excerpt figcaption { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
+        /* Right under its excerpt (the body's 14px gap pulled back). */
+        .modal .viewer-full-quality { align-self: flex-start; margin-top: -8px; padding: 4px 0; font-size: 13px; }
         .viewer-zoom {
             position: absolute; right: 8px; bottom: 8px; width: 32px; height: 32px; border-radius: 50%;
             border: none; background: rgba(0,0,0,0.55); color: #fff; cursor: pointer; font-size: 16px;
@@ -10598,6 +10601,13 @@
                         <span class="settings-text">
                             <span class="settings-name" data-i18n="fileCopy.settingLabel"></span>
                             <span class="settings-desc" data-i18n="fileCopy.settingHint"></span>
+                        </span>
+                    </label>
+                    <label class="settings-checkbox settings-row" id="research-links-row" hidden>
+                        <input type="checkbox" id="research-links-toggle" onchange="window.Strom.UI.toggleResearchLinks(this.checked)">
+                        <span class="settings-text">
+                            <span class="settings-name" data-i18n="research.linksSetting"></span>
+                            <span class="settings-desc" data-i18n="research.linksSettingHint"></span>
                         </span>
                     </label>
                     <label class="settings-checkbox settings-row">

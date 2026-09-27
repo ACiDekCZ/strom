@@ -16,6 +16,41 @@ export const STROM_RESEARCH_SOURCE = 'STROM_RESEARCH';
 export const STROM_TREE_TAG = '_STROM_TREE';
 /** Header tag carrying the research commit the file was written from. */
 export const STROM_HEAD_TAG = '_STROM_HEAD';
+/** Header tag listing the strom-research:// links this computer handles. */
+export const STROM_LINKS_TAG = '_STROM_LINKS';
+
+/** Actions of the strom-research:// scheme the app knows how to use. */
+export const RESEARCH_LINK_ACTIONS = ['send', 'excerpt'] as const;
+export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
+
+/** The known actions in `value` (an array, or a space-separated header value); anything else is dropped. */
+export function sanitizeResearchLinks(value: unknown): ResearchLinkAction[] {
+    const items = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/\s+/) : [];
+    const known = new Set<string>(RESEARCH_LINK_ACTIONS);
+    return [...new Set(items.filter((v): v is string => typeof v === 'string').map(v => v.trim().toLowerCase()))]
+        .filter((v): v is ResearchLinkAction => known.has(v));
+}
+
+/** A source's id in the research (its REFN, e.g. "S0042"), or null. */
+export function researchSourceRef(refn: unknown): string | null {
+    return typeof refn === 'string' && /^S\d{1,9}$/.test(refn.trim()) ? refn.trim() : null;
+}
+
+/**
+ * A strom-research:// link, or null when a parameter is not what the research
+ * accepts (it checks again: any web page can open such a link).
+ */
+export function researchSchemeUrl(action: 'send', p: { tree: string }): string | null;
+export function researchSchemeUrl(action: 'excerpt', p: { tree: string; source: string; n: number }): string | null;
+export function researchSchemeUrl(action: ResearchLinkAction, p: { tree: string; source?: string; n?: number }): string | null {
+    const tree = normalizeResearchId(p.tree);
+    if (!tree) return null;
+    if (action === 'send') return `strom-research://send?tree=${tree}`;
+    const source = researchSourceRef(p.source);
+    const n = p.n;
+    if (!source || typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 99) return null;
+    return `strom-research://excerpt?tree=${tree}&source=${encodeURIComponent(source)}&n=${n}`;
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Longest tree name taken from a file or a bridge (longer is cut). */
@@ -37,6 +72,8 @@ export interface ResearchHeader {
     date: string | null;
     /** `1 _STROM_HEAD`: the research commit the file was written from. */
     head: string | null;
+    /** `1 _STROM_LINKS`: strom-research:// actions this computer handles (Strom Research files only). */
+    links: ResearchLinkAction[];
 }
 
 /** Normalise a research UUID (lower case), or null when it is not one. */
@@ -66,7 +103,7 @@ export function cleanText(value: unknown, max = MAX_TEXT): string {
  * records themselves go through the normal importer.
  */
 export function readResearchHeader(text: string): ResearchHeader {
-    const none: ResearchHeader = { isStromResearch: false, treeId: null, name: null, date: null, head: null };
+    const none: ResearchHeader = { isStromResearch: false, treeId: null, name: null, date: null, head: null, links: [] };
     if (typeof text !== 'string') return none;
     const body = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
     const lines = body.split(/\r\n|\r|\n/);
@@ -78,6 +115,7 @@ export function readResearchHeader(text: string): ResearchHeader {
     let source = '';
     let treeRaw: string | null = null;
     let headRaw: string | null = null;
+    let linksRaw = '';
     let date: string | null = null;
     let noteLines: string[] | null = null;
     let inFirstNote = false;
@@ -94,6 +132,7 @@ export function readResearchHeader(text: string): ResearchHeader {
             if (tag === 'SOUR') source = value.trim();
             else if (tag === STROM_TREE_TAG) treeRaw = value;
             else if (tag === STROM_HEAD_TAG) headRaw = value;
+            else if (tag === STROM_LINKS_TAG) linksRaw = value;
             else if (tag === 'DATE') date = value.trim() || null;
             else if (tag === 'NOTE' && noteLines === null) {
                 noteLines = [value];
@@ -113,6 +152,7 @@ export function readResearchHeader(text: string): ResearchHeader {
         name: cleanText(firstLine, MAX_NAME) || null,
         date,
         head: isStromResearch ? isResearchHead(headRaw) : null,
+        links: isStromResearch ? sanitizeResearchLinks(linksRaw) : [],
     };
 }
 
@@ -379,6 +419,8 @@ export interface LiveStatus {
     families: number | null;
     working: LiveWorker[];
     waiting: LiveWaiting[];
+    /** strom-research:// actions this computer handles (empty: none announced). */
+    links: ResearchLinkAction[];
 }
 
 /** A `change` event, checked and cleaned. */
@@ -437,6 +479,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         families: asCount(r.families),
         working: sanitizeWorking(r.working),
         waiting: sanitizeWaiting(r.waiting),
+        links: sanitizeResearchLinks(r.links),
     };
 }
 

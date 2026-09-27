@@ -35,8 +35,8 @@ import {
     decideResearchOpen, stabilizeIds, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
-    parseSendBridge, pickSendDefault, sanitizeSyncReply,
-    LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
+    parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl,
+    ResearchLinkAction, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { iconSvg } from '../icons.js';
@@ -45,6 +45,7 @@ import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { formatRelativeDateTime } from '../format.js';
 import { safeFileName } from '../filenames.js';
+import { noteResearchLinks, announcedResearchLinks, researchLinksEnabled } from '../research-device.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -205,7 +206,15 @@ function researchGedcom(data: StromData, treeName: string, link: { id: string; h
 async function fetchStatus(url: string): Promise<LiveStatus | null> {
     const res = await fetchWithTimeout(url, 10000);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return sanitizeLiveStatus(await res.json());
+    const status = sanitizeLiveStatus(await res.json());
+    // The bridge runs on this computer: what it announces holds here.
+    if (status) noteResearchLinks(status.links);
+    return status;
+}
+
+/** Strom Research runs in a terminal on a computer, never on a phone or tablet. */
+function onComputer(): boolean {
+    try { return !(window.matchMedia?.('(pointer: coarse)').matches ?? false); } catch { return true; }
 }
 
 /** Read a File as bytes (FileReader fallback for browsers without File.arrayBuffer). */
@@ -515,6 +524,9 @@ export const researchUiMethods = uiModule({
                 await this.offerManualImport(strings.research.fetchFailed);
                 return;
             }
+            // Served from 127.0.0.1: the research is on this computer.
+            const header = readResearchHeader(text);
+            if (header.isStromResearch) noteResearchLinks(header.links);
             await this.openGedcomText(text);
         });
     },
@@ -778,6 +790,44 @@ export const researchUiMethods = uiModule({
     /** Tree menu: how to send changes back (the research starts it), or the file. */
     async showSendToResearchHelp(treeId: TreeId): Promise<void> {
         await this.offerResearchGedcom(strings.research.sendHow, treeId);
+    },
+
+    // ==================== F. LINKS INTO THE RESEARCH (strom-research://) ====================
+
+    /** The research on this computer handles `action` (announced, not switched off, on a computer). */
+    researchLinkAvailable(action: ResearchLinkAction): boolean {
+        return onComputer() && researchLinksEnabled() && announcedResearchLinks().includes(action);
+    },
+
+    /** Hand a strom-research:// link to the system (the browser asks first). */
+    launchResearchLink(url: string): void {
+        const a = document.createElement('a');
+        a.href = url;
+        a.rel = 'noopener';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        // The page cannot tell whether anything opened: say what to expect.
+        this.showToast(strings.research.linkOpening, 8000);
+    },
+
+    /** Tree menu "Send changes to the research": one click when the research handles it, else the way there. */
+    async sendTreeToResearch(treeId: TreeId): Promise<void> {
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        const url = link && this.researchLinkAvailable('send') ? researchSchemeUrl('send', { tree: link.id }) : null;
+        if (url) this.launchResearchLink(url);
+        else await this.showSendToResearchHelp(treeId);
+    },
+
+    /** The link opening excerpt `index` (0-based) of a source at full quality in the research, or null. */
+    excerptResearchUrl(sourceId: string, index: number): string | null {
+        if (!this.researchLinkAvailable('excerpt')) return null;
+        const treeId = DataManager.getCurrentTreeId();
+        const link = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
+        const source = DataManager.getData().sources?.[sourceId];
+        if (!link || !source?.refn) return null;
+        return researchSchemeUrl('excerpt', { tree: link.id, source: source.refn, n: index + 1 });
     },
 
     /** Download the faithful GEDCOM of a research tree (naming its research and version). */

@@ -11,6 +11,7 @@ import {
     decideResearchOpen, stabilizeIds, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, extractChangedRefs, personsByRefs, humanizeChange,
     isGedcomFileName, normalizeResearchId, parseEventData, isSafariBrowser,
+    sanitizeResearchLinks, researchSchemeUrl, researchSourceRef,
 } from '../research-link.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
@@ -465,5 +466,38 @@ describe('send bridge', () => {
         expect(sanitizeResearchField({ id: RID, head: 'zz' })).toEqual({ id: RID });
         expect(sanitizeResearchField({ id: 'x' })).toBeNull();
         expect(sanitizeResearchField(null)).toBeNull();
+    });
+});
+
+describe('strom-research:// links', () => {
+    const UUID = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
+
+    it('known actions only, from a list or a header value', () => {
+        expect(sanitizeResearchLinks(['send', 'EXCERPT', 'rm -rf', 'send', 3])).toEqual(['send', 'excerpt']);
+        expect(sanitizeResearchLinks('send  excerpt open')).toEqual(['send', 'excerpt']);
+        expect(sanitizeResearchLinks(undefined)).toEqual([]);
+    });
+
+    it('the header announces links for Strom Research files only', () => {
+        const head = (sour: string) => `0 HEAD\n1 SOUR ${sour}\n1 _STROM_TREE ${UUID}\n1 _STROM_LINKS send excerpt\n0 TRLR`;
+        expect(readResearchHeader(head('STROM_RESEARCH')).links).toEqual(['send', 'excerpt']);
+        expect(readResearchHeader(head('OTHER')).links).toEqual([]);
+    });
+
+    it('the bridge status carries them; missing means none', () => {
+        expect(sanitizeLiveStatus({ tree: UUID, links: ['excerpt'] })?.links).toEqual(['excerpt']);
+        expect(sanitizeLiveStatus({ tree: UUID })?.links).toEqual([]);
+    });
+
+    it('links are built only from valid parameters', () => {
+        expect(researchSchemeUrl('send', { tree: UUID.toUpperCase() })).toBe(`strom-research://send?tree=${UUID}`);
+        expect(researchSchemeUrl('send', { tree: 'x&evil=1' })).toBeNull();
+        expect(researchSchemeUrl('excerpt', { tree: UUID, source: 'S0042', n: 2 }))
+            .toBe(`strom-research://excerpt?tree=${UUID}&source=S0042&n=2`);
+        expect(researchSchemeUrl('excerpt', { tree: UUID, source: 'S1&x=y', n: 1 })).toBeNull();
+        expect(researchSchemeUrl('excerpt', { tree: UUID, source: 'S0042', n: 0 })).toBeNull();
+        expect(researchSchemeUrl('excerpt', { tree: UUID, source: 'S0042', n: 1.5 })).toBeNull();
+        expect(researchSourceRef(' S7 ')).toBe('S7');
+        expect(researchSourceRef('P0001')).toBeNull();
     });
 });
