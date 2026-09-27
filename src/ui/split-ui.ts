@@ -46,7 +46,7 @@ export const splitMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = 'split-modal';
         overlay.innerHTML = `
-            <div class="modal split-modal modal--md" role="dialog" aria-modal="true">
+            <div class="modal split-modal modal--md" role="dialog" data-dialog-kind="${this.splitComponents.length < 2 ? 'info' : 'form'}" aria-modal="true">
                 <div class="modal-header">
                     <h2>${strings.split.title}</h2>
                     <button class="close-btn" id="split-close-x" aria-label="${strings.buttons.close}">&times;</button>
@@ -57,15 +57,19 @@ export const splitMethods = uiModule({
                        <div class="split-list">${this.splitComponents.map((c, i) => this.splitRowHtml(c, i)).join('')}</div>
                        <p class="split-note">${strings.split.keepsOriginal}</p>`}
                 ${this.splitComponents.length >= 2
-                    ? `<div class="modal-buttons">
+                    ? `<div class="buttons">
+                        <button type="button" class="secondary" id="split-close" data-dismiss>${strings.buttons.cancel}</button>
                         <button type="button" class="primary" id="split-go">${strings.split.selected(0)}</button>
-                       </div>` : ''}
+                       </div>`
+                    : `<div class="buttons">
+                        <button type="button" class="secondary" id="split-close" data-dismiss>${strings.buttons.close}</button>
+                       </div>`}
             </div>`;
         document.body.appendChild(overlay);
 
         const close = (): void => this.closeSplitDialog();
-        overlay.onclick = (e) => { if (e.target === overlay) close(); };
         (overlay.querySelector('#split-close-x') as HTMLButtonElement).onclick = close;
+        (overlay.querySelector('#split-close') as HTMLButtonElement).onclick = close;
         overlay.querySelectorAll('.split-check').forEach(box => {
             (box as HTMLInputElement).onchange = () => this.updateSplitButton();
         });

@@ -53,18 +53,18 @@ function formatBytes(bytes: number): string {
 }
 
 /** Secondary line for a source: repository / reference joined with a middot. */
-function sourceMeta(source: Source): string {
+export function sourceMeta(source: Source): string {
     return [source.repository, source.reference].filter(Boolean).join(' · ');
 }
 
 /** Label of a QUAY value as the editor names it (0 reads as "uncertain"). */
-function qualityLabel(q: number | undefined): string {
+export function qualityLabel(q: number | undefined): string {
     if (q === undefined) return '';
     return q >= 3 ? strings.sources.quality3 : q === 2 ? strings.sources.quality2 : strings.sources.quality1;
 }
 
 /** Thumbnail (or document icon) for a source, in one of the three sizes. */
-function sourceThumbHtml(src: Source, kind: 'chip' | 'row' | 'picker'): string {
+export function sourceThumbHtml(src: Source, kind: 'chip' | 'row' | 'picker'): string {
     const first = src.excerpts?.[0];
     if (first && kind === 'chip') return `<img class="source-${kind}-thumb" src="${esc(first.dataUrl)}" alt="">`;
     // Lists: the image comes when the row scrolls into view (hydrateThumbs).
@@ -78,7 +78,7 @@ function sourceThumbHtml(src: Source, kind: 'chip' | 'row' | 'picker'): string {
 const thumbObservers = new WeakMap<HTMLElement, IntersectionObserver>();
 
 /** Give the list's thumbnails their image once they are (nearly) visible. */
-function hydrateThumbs(container: HTMLElement): void {
+export function hydrateThumbs(container: HTMLElement): void {
     thumbObservers.get(container)?.disconnect();
     const imgs = container.querySelectorAll<HTMLImageElement>('img[data-thumb-source]');
     if (imgs.length === 0) return;
@@ -175,8 +175,8 @@ export const sourcesMethods = uiModule({
         const all = Object.values(DataManager.getData().sources ?? {});
         // The empty state carries "Add source" itself; the footer copy hides
         // meanwhile so the dialog keeps a single primary action.
-        const footer = document.querySelector<HTMLElement>('#sources-modal .sources-footer');
-        if (footer) footer.hidden = all.length === 0;
+        const addBtn = document.querySelector<HTMLElement>('#sources-modal .sources-footer .primary');
+        if (addBtn) addBtn.hidden = all.length === 0;
         const search = document.getElementById('sources-search') as HTMLInputElement | null;
         if (search) search.hidden = all.length <= 10;
         const totalEl = document.getElementById('sources-total');
@@ -354,9 +354,6 @@ export const sourcesMethods = uiModule({
         if (editBtn) editBtn.hidden = !editable;
         const sameBook = document.getElementById('source-viewer-same-book');
         if (sameBook) sameBook.hidden = !editable;
-        // Read-only: nothing to do in the footer (the × and Escape close).
-        const footer = document.querySelector<HTMLElement>('#source-viewer-modal .source-viewer-footer');
-        if (footer) footer.hidden = !editable;
     },
 
     /** "Edit" in the viewer: the editor on top; the viewer comes back when it closes. */
@@ -987,6 +984,7 @@ export const sourcesMethods = uiModule({
     refreshCitationChips(): void {
         if (this.currentId) this.renderPersonSourcesChips();
         if (this.currentId && this.editingEventId) this.renderEventSourcesChips();
+        if (document.getElementById('person-sources-modal')) this.renderPersonSourcesDialog();
     },
 
     renderPersonSourcesChips(): void {
@@ -1018,7 +1016,12 @@ export const sourcesMethods = uiModule({
 
     showSourcePickerForPerson(): void {
         if (!this.currentId) return;
-        this.citationContext = { personId: this.currentId };
+        this.showSourcePickerForPersonId(this.currentId);
+    },
+
+    /** Cite on a person without the edit dialog (the person's "Sources" dialog). */
+    showSourcePickerForPersonId(personId: PersonId): void {
+        this.citationContext = { personId };
         this.openSourcePicker();
     },
 

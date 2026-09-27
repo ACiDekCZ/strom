@@ -21,9 +21,9 @@
 // (form-modal / menu-modal use a bare heading instead of a .modal-header div).
 const HEADER_SELECTOR = '.modal-header, .pm-header';
 
-// Action row = the last direct child matching any known footer class.
-const FOOTER_SELECTOR =
-    '.buttons, .modal-buttons, .export-buttons, .pm-footer, .tree-manager-footer, .wiz-actions';
+// Action row = the last direct child `.buttons` (every dialog footer carries
+// it; other footer classes are modifiers only).
+const FOOTER_SELECTOR = '.buttons';
 
 /**
  * Wrap a single `.modal` body into a `.modal-content` scroll container.

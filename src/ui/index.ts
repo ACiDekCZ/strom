@@ -66,6 +66,7 @@ import { miscMethods } from './misc.js';
 import { appModeMethods } from './app-mode.js';
 import { kinshipUiMethods } from './kinship-ui.js';
 import { archivesUiMethods } from './archives-ui.js';
+import { personSourcesMethods } from './person-sources-ui.js';
 import { exportImageMethods } from './export-image-ui.js';
 import { bookUiMethods } from './book-ui.js';
 import { snapshotsUiMethods } from './snapshots-ui.js';
@@ -217,6 +218,9 @@ export class UIClass {
     reopenViewerAfterEditor: string | null = null;
     /** The catalog was opened from the picker: go back to it on close. */
     returnToPickerAfterManager = false;
+    /** The person whose "Sources" dialog is open, and the person-level rows it last drew. */
+    personSourcesId: PersonId | null = null;
+    personSourcesShown: Set<string> | null = null;
     /** One-time wiring of the source editor's paste / drop / quality handlers. */
     sourceEditorWired = false;
     // Slideshow / TV mode
@@ -445,6 +449,10 @@ Object.assign(UIClass.prototype, kinshipUiMethods);
 type ArchivesUiMethods = typeof archivesUiMethods;
 export interface UIClass extends ArchivesUiMethods {}
 Object.assign(UIClass.prototype, archivesUiMethods);
+
+type PersonSourcesMethods = typeof personSourcesMethods;
+export interface UIClass extends PersonSourcesMethods {}
+Object.assign(UIClass.prototype, personSourcesMethods);
 
 type ExportImageMethods = typeof exportImageMethods;
 export interface UIClass extends ExportImageMethods {}

@@ -68,7 +68,7 @@ export const archivesUiMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = 'archives-modal';
         overlay.innerHTML = `
-            <div class="modal archives-modal modal--md" role="dialog" aria-modal="true">
+            <div class="modal archives-modal modal--md" role="dialog" data-dialog-kind="info" aria-modal="true">
                 <div class="modal-header">
                     <h2>${strings.archives.title}</h2>
                     <button class="close-btn" id="archives-close-x" aria-label="${strings.buttons.close}">&times;</button>
@@ -78,12 +78,16 @@ export const archivesUiMethods = uiModule({
                 ${link(familySearchUrl(person), 'FamilySearch', strings.archives.familySearchHint)}
                 ${czechHtml}
                 <p class="archive-disclaimer">${strings.archives.disclaimer}</p>
+                <div class="buttons">
+                    <button type="button" class="secondary" id="archives-close" data-dismiss>${strings.buttons.close}</button>
+                </div>
             </div>
         `;
         document.body.appendChild(overlay);
         const close = () => this.closeArchiveSearch();
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
         (overlay.querySelector('#archives-close-x') as HTMLButtonElement).onclick = close;
+        (overlay.querySelector('#archives-close') as HTMLButtonElement).onclick = close;
         // ESC support via the shared dialog stack (see misc.ts keyboard handler).
         this.clearDialogStack();
         this.pushDialog('archives-modal');

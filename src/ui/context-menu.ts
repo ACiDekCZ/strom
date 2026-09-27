@@ -20,14 +20,31 @@ export interface PersonMenuAction {
     danger?: boolean;
     /** Render a divider before this item (starts a new group). */
     divider?: boolean;
+    /** Quiet right-aligned detail (the number of sources). */
+    meta?: string;
+    /** Accessible name when the visible label and meta read badly together. */
+    ariaLabel?: string;
+}
+
+/** Label (+ the quiet right-aligned meta) of a person menu item, escaped. */
+export function menuItemBody(a: PersonMenuAction): string {
+    const e = (t: string): string => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return a.meta
+        ? `<span class="menu-item-label">${e(a.label)}</span><span class="menu-item-meta" aria-hidden="true">${e(a.meta)}</span>`
+        : e(a.label);
+}
+
+/** ` aria-label="…"` when the item carries one. */
+export function menuItemAria(a: PersonMenuAction): string {
+    return a.ariaLabel ? ` aria-label="${a.ariaLabel.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"` : '';
 }
 
 export const contextMenuMethods = uiModule({
     /**
      * The per-person actions, depending on view/lock state. Both the desktop
      * context menu and the bottom sheet build their markup from this.
-     * Groups: the person itself (edit / focus / descendants) → add relatives →
-     * everything else (kinship, archives, lock, merge, delete).
+     * Groups: the person itself (focus / edit / sources / story / descendants)
+     * → add relatives → everything else (kinship, archives, lock, merge, delete).
      */
     getPersonMenuActions(personId: PersonId): PersonMenuAction[] {
         const person = DataManager.getPerson(personId);
@@ -37,18 +54,38 @@ export const contextMenuMethods = uiModule({
         const isPersonLocked = DataManager.isPersonLocked(personId);
         const isTreeLocked = DataManager.isTreeLocked();
 
+        // Looking at the person's sources and story without opening the edit
+        // form. Read-only / locked: only when there is something to show; in
+        // normal mode "Sources" always (its dialog is the quick way to cite).
+        const sourceCount = this.personSourceCount(personId);
+        const hasStory = !!person.story?.text?.trim();
+        const readItems = (always: boolean): PersonMenuAction[] => {
+            const out: PersonMenuAction[] = [];
+            if (always || sourceCount > 0) {
+                out.push({
+                    action: 'sources', label: strings.contextMenu.showSources,
+                    meta: sourceCount > 0 ? String(sourceCount) : undefined,
+                    ariaLabel: sourceCount > 0 ? strings.personSources.countSr(sourceCount) : undefined,
+                });
+            }
+            if (hasStory) out.push({ action: 'story', label: strings.contextMenu.showStory });
+            return out;
+        };
+
         if (isViewMode) {
             return [
                 { action: 'focus', label: strings.contextMenu.focus },
+                ...readItems(false),
                 { action: 'relationship', label: strings.contextMenu.relationship, divider: true },
                 { action: 'archives', label: strings.contextMenu.archives },
             ];
         }
         if (isPersonLocked) {
             const items: PersonMenuAction[] = [
+                { action: 'focus', label: strings.contextMenu.focus },
                 // Read-only look at the record (the edit form in its locked mode).
                 { action: 'view', label: strings.contextMenu.view },
-                { action: 'focus', label: strings.contextMenu.focus },
+                ...readItems(false),
             ];
             if (!isTreeLocked) {
                 items.push({ action: 'toggle-lock', label: strings.lock.unlockPerson, divider: true });
@@ -56,8 +93,9 @@ export const contextMenuMethods = uiModule({
             return items;
         }
         const items: PersonMenuAction[] = [
-            { action: 'edit', label: strings.contextMenu.edit },
             { action: 'focus', label: strings.contextMenu.focus },
+            { action: 'edit', label: strings.contextMenu.edit },
+            ...readItems(true),
             { action: 'descendants', label: strings.contextMenu.showDescendants },
         ];
         // Add… group
@@ -94,6 +132,16 @@ export const contextMenuMethods = uiModule({
                     TreeRenderer.presetViewMode('family');
                 }
                 TreeRenderer.setFocus(personId);
+                break;
+            case 'sources':
+                this.clearDialogStack();
+                this.pushDialog('person-sources-modal');
+                this.showPersonSourcesDialog(personId);
+                break;
+            case 'story':
+                this.clearDialogStack();
+                this.pushDialog('person-story-modal');
+                this.showPersonStoryDialog(personId);
                 break;
             case 'descendants':
                 // Set the mode first (no render), then let setFocus do the
@@ -170,7 +218,7 @@ export const contextMenuMethods = uiModule({
         menu.innerHTML = header + actions.map(a => {
             const cls = a.danger ? 'context-menu-item danger' : 'context-menu-item';
             const divider = a.divider ? '<div class="context-menu-divider"></div>' : '';
-            return `${divider}<div class="${cls}" role="menuitem" tabindex="-1" data-action="${a.action}">${a.label}</div>`;
+            return `${divider}<div class="${cls}" role="menuitem" tabindex="-1" data-action="${a.action}"${menuItemAria(a)}>${menuItemBody(a)}</div>`;
         }).join('');
 
         // Position menu near click (adjusted after DOM insert)

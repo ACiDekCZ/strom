@@ -22,7 +22,7 @@ async function styleOf(page: import('@playwright/test').Page, root: string) {
     }, root);
 }
 
-test('sources: empty state with its own Add source, footer hidden meanwhile', async ({ page }) => {
+test('sources: empty state with its own Add source, the footer copy hidden meanwhile', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     await page.evaluate(() => window.Strom.UI.showSourcesDialog());
@@ -38,7 +38,8 @@ test('sources: empty state with its own Add source, footer hidden meanwhile', as
 
     // Exactly one visible "Add source" — the empty state's.
     await expect(modal.getByRole('button', { name: 'Add source' })).toHaveCount(1);
-    await expect(modal.locator('.sources-footer')).toBeHidden();
+    await expect(modal.locator('.sources-footer .primary')).toBeHidden();
+    await expect(modal.locator('.sources-footer [data-dismiss]')).toBeVisible();
     await modal.getByRole('button', { name: 'Add source' }).click();
     await expect(page.locator('#source-editor-modal')).toHaveClass(/active/);
 });
@@ -50,7 +51,8 @@ test('backups: empty state, then the list with relative times and no small sizes
     const modal = page.locator('#snapshots-modal');
     const rows = modal.locator('.snapshot-row');
     await expect(modal.locator('.empty-block-title')).toHaveText('No backups yet');
-    await expect(modal.locator('.snapshots-footer')).toBeHidden();
+    await expect(modal.locator('.snapshots-footer .primary')).toBeHidden();
+    await expect(modal.locator('.snapshots-footer [data-dismiss]')).toBeVisible();
     await expect(modal.getByRole('button', { name: 'Create backup now' })).toHaveCount(1);
     await page.evaluate(() => window.Strom.UI.closeSnapshotsDialog());
 
@@ -58,7 +60,7 @@ test('backups: empty state, then the list with relative times and no small sizes
     await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
     await modal.getByRole('button', { name: 'Create backup now' }).first().click();
     await expect(rows.first()).toBeVisible();
-    await expect(modal.locator('.snapshots-footer')).toBeVisible();
+    await expect(modal.locator('.snapshots-footer .primary')).toBeVisible();
     // "today 14:36" — no seconds, no kB for a tiny tree.
     await expect(rows.first().locator('.snapshot-date')).toHaveText(/^today \d{1,2}:\d{2}(\s[AP]M)?$/);
     await expect(rows.first().locator('.snapshot-meta')).not.toContainText(/kB|KB| B$/);

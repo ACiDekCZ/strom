@@ -243,6 +243,7 @@ export const researchPromoMethods = uiModule({
         overlay.id = INFO_MODAL_ID;
         const modal = el('div', 'modal modal--sm research-info-modal');
         modal.setAttribute('role', 'dialog');
+        modal.dataset.dialogKind = 'info';
         modal.setAttribute('aria-modal', 'true');
         modal.setAttribute('aria-labelledby', 'research-info-title');
 
@@ -275,9 +276,10 @@ export const researchPromoMethods = uiModule({
         need.append(el('div', 'research-info-need-title', s.needTitle), el('p', 'research-info-need-text', s.needText));
         content.appendChild(need);
 
-        const buttons = el('div', 'modal-buttons research-info-buttons');
-        const closeBtn = el('button', 'secondary', s.close);
+        const buttons = el('div', 'buttons research-info-buttons');
+        const closeBtn = el('button', 'secondary', strings.buttons.close);
         closeBtn.type = 'button';
+        closeBtn.dataset.dismiss = '';
         const openBtn = externalButton('primary', s.openSite);
         buttons.append(closeBtn, openBtn);
 
@@ -285,7 +287,6 @@ export const researchPromoMethods = uiModule({
         overlay.appendChild(modal);
 
         const close = (): void => this.closeResearchInfoDialog();
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
         closeX.addEventListener('click', close);
         closeBtn.addEventListener('click', close);
         openBtn.addEventListener('click', () => {

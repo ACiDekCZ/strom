@@ -169,7 +169,7 @@ export const splitFamiliesMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = 'split-families-modal';
         overlay.innerHTML = `
-            <div class="modal splitfam-modal modal--lg" role="dialog" aria-modal="true">
+            <div class="modal splitfam-modal modal--lg" role="dialog" data-dialog-kind="form" aria-modal="true">
                 <div class="modal-header">
                     <h2>${s.title}</h2>
                     <button class="close-btn" id="splitfam-close-x" aria-label="${strings.buttons.close}">&times;</button>
@@ -188,18 +188,15 @@ export const splitFamiliesMethods = uiModule({
                     ${components.map((c, i) => this.splitFamiliesRowHtml(c, i)).join('')}
                 </div>
                 <p class="splitfam-note">${s.keepsOriginal}</p>
-                <div class="modal-buttons splitfam-footer">
+                <div class="buttons splitfam-footer">
                     <span class="splitfam-summary" id="splitfam-summary"></span>
-                    <span class="splitfam-footer-buttons">
-                        <button type="button" class="secondary" id="splitfam-cancel">${s.cancel}</button>
-                        <button type="button" class="primary" id="splitfam-go"></button>
-                    </span>
+                    <button type="button" class="secondary" id="splitfam-cancel" data-dismiss>${strings.buttons.cancel}</button>
+                    <button type="button" class="primary" id="splitfam-go"></button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);
 
         const close = (): void => this.closeSplitFamiliesDialog();
-        overlay.onclick = (e) => { if (e.target === overlay) close(); };
         (overlay.querySelector('#splitfam-cancel') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#splitfam-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#splitfam-go') as HTMLButtonElement).onclick = () => void this.performSplitFamilies();

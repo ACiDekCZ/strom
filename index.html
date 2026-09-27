@@ -922,13 +922,6 @@
             border: none; background: none; font-size: 18px; line-height: 1;
             color: var(--text-light); cursor: pointer; padding: 0 2px;
         }
-        .about-actions { margin-top: 14px; display: flex; justify-content: center; }
-        /* Same compact size as the coffee link below — no tall generic button. */
-        /* (0,2,1) — beats the later generic `.modal button` padding. */
-        .about-modal .about-actions button {
-            padding: 7px 14px; font-size: 13px; font-weight: 600;
-            line-height: 1.3; border-radius: var(--r-md);
-        }
         /* Support the project: one quiet line + a link button (no third-party widget). */
         .about-support { margin: 14px 0 4px; text-align: center; }
         .about-support p { margin: 0 0 8px; font-size: 12px; color: var(--text-light); }
@@ -1818,7 +1811,6 @@
         @media (pointer: coarse), (max-width: 900px) {
             .close-btn { width: 44px; height: 44px; }
             .modal .buttons button,
-            .modal .export-buttons button,
             .menu-option { min-height: 44px; }
             .search-filter-toggle { min-width: 44px; }
             /* Dismiss crosses on toasts/banners (were ~20px) */
@@ -2663,9 +2655,7 @@
             background: transparent; color: var(--text); cursor: pointer;
         }
         .splitfam-preview-btn:hover { border-color: var(--primary); color: var(--primary); }
-        .modal .splitfam-footer { justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-        .splitfam-summary { font-size: 12px; color: var(--text-light); }
-        .splitfam-footer-buttons { display: flex; gap: 8px; }
+        .splitfam-summary { font-size: 12px; color: var(--text-light); margin-right: auto; }
 
         /* Reusable static tree thumbnail (also usable elsewhere). One SVG that
            always fits the box via a xMidYMid-meet viewBox — never balloons. */
@@ -2689,8 +2679,7 @@
         @media (max-width: 499px) {
             .splitfam-row { grid-template-columns: auto 1fr; }
             .splitfam-thumb { grid-row: 2; grid-column: 1 / -1; width: 100%; height: 96px; }
-            .splitfam-footer { flex-direction: column; align-items: stretch; }
-            .splitfam-footer-buttons { justify-content: flex-end; }
+            .splitfam-summary { margin: 0; }
         }
 
         /* ---- Places manager: names + where they sit on the map (K5/A6) ---- */
@@ -2868,8 +2857,7 @@
         /* Unified action row: pinned to the modal bottom by the flex skeleton,
            with a top divider and a subtly recessed surface. Covers every footer
            class the dialogs use. */
-        .modal .buttons,
-        .modal .modal-buttons {
+        .modal .buttons {
             display: flex;
             gap: 10px;
             justify-content: flex-end;
@@ -2878,12 +2866,6 @@
             padding: 14px 24px;
             border-top: 1px solid var(--divider);
             background: var(--surface-2);
-        }
-        .modal .buttons.export-buttons {
-            justify-content: space-between;
-        }
-        .modal .buttons.export-buttons button {
-            flex: 1;
         }
         .modal button {
             padding: 10px 18px;
@@ -2922,7 +2904,21 @@
             .modal.modal--sm, .modal.modal--md, .modal.modal--lg { width: 100%; max-width: 100vw; }
         }
         /* A footer hidden while an empty state carries its action. */
-        .modal .buttons[hidden], .modal .modal-buttons[hidden] { display: none; }
+        .modal .buttons[hidden] { display: none; }
+        .modal .buttons > [hidden] { display: none !important; }
+        /* Footer order: [links] … [secondary] [Cancel|Close] [primary]. Text
+           links sit on the left, pushing the buttons right. */
+        .modal .buttons > .link-button:first-child,
+        .modal .buttons > .pm-delete-link:first-child { margin-right: auto; }
+        /* Phones: one button per row, full width, the primary on top and
+           Cancel/Close under it; the text links go last, left-aligned. */
+        @media (max-width: 499px) {
+            .modal .buttons { flex-direction: column-reverse; align-items: stretch; gap: 8px; }
+            .modal .buttons > button, .modal .buttons > a { width: 100%; margin: 0; text-align: center; justify-content: center; }
+            .modal .buttons > .link-button, .modal .buttons > .pm-delete-link { width: auto; align-self: flex-start; order: -2; }
+            /* Close/Cancel under every other button (reversed column: lower order = lower on screen). */
+            .modal .buttons > [data-dismiss] { order: -1; }
+        }
 
         /* Destructive confirmation: the confirm button is painted in --danger
            (never the primary green) and says the verb. */
@@ -3239,6 +3235,8 @@
         .form-modal .buttons {
             border-radius: 0 0 14px 14px;
         }
+        .form-modal > .modal-header { background: transparent; }
+        .form-modal > .modal-header h2 { font-size: 20px; }
 
         @media (max-width: 499px) {
             .pm-modal { min-width: 0; width: 100%; max-width: 100vw; padding: 0; }
@@ -3443,8 +3441,7 @@
         .research-info-need-text { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
         .research-ext-arrow { font-size: 0.95em; }
         @media (max-width: 499px) {
-            .modal .research-info-buttons { flex-direction: column-reverse; align-items: stretch; }
-            .modal .research-info-buttons button { width: 100%; min-height: 48px; }
+            .modal .research-info-buttons button { min-height: 48px; }
         }
 
         /* One-time "What's new in 3.0" card. */
@@ -4190,9 +4187,6 @@
         #storage-status-modal .buttons button[hidden] { display: none; }
         @media (max-width: 499px) {
             .storage-status-body p { font-size: 13px; }
-            /* Up to three actions: stacked full width, the primary on top. */
-            #storage-status-modal .buttons { flex-direction: column-reverse; align-items: stretch; }
-            #storage-status-modal .buttons button { width: 100%; margin: 0; }
         }
 
         /* PWA update prompt (non-blocking, same shape as the family offer) */
@@ -4401,7 +4395,6 @@
             border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; margin-top: 2px;
         }
         .wiz-add:hover { border-color: var(--primary); color: var(--primary); }
-        .wiz-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-shrink: 0; padding: 14px 24px; border-top: 1px solid var(--divider); background: var(--surface-2); }
         /* On a phone the role column ate 60px of ~370 and squeezed the name
            fields to 133px. The role is a heading for the row, not a column —
            put it above and give the fields the whole width. */
@@ -8402,8 +8395,7 @@
             .modal .form-group.half {
                 margin-bottom: 16px;
             }
-            .modal .buttons,
-            .modal .modal-buttons {
+            .modal .buttons {
                 padding: 14px 16px;
             }
 
@@ -8957,6 +8949,68 @@
         }
         .source-quality button:last-child { border-right: none; }
         .source-quality button[aria-checked="true"] { background: var(--primary); color: #fff; }
+
+        /* Person menu: a quiet number at the row's end ("Show sources  3"). */
+        .menu-item-meta {
+            margin-left: auto; padding-left: 16px; font-size: 13px;
+            color: var(--text-faint); font-variant-numeric: tabular-nums;
+        }
+
+        /* "Sources" / "Story" of one person (person menu). Below the dialogs
+           they open (picker, catalog, viewer, editor), above the canvas. */
+        #person-sources-modal, #person-story-modal { z-index: 190; }
+        .person-sources-list { display: flex; flex-direction: column; }
+        .person-sources-group { padding: 12px 0 4px; }
+        .person-sources-group:first-child { padding-top: 0; }
+        .person-source-row {
+            /* Bleeds 10px past the text column so the hover fill has room. */
+            display: flex; align-items: center; gap: 12px; min-height: 56px;
+            padding: 8px 10px; margin: 0 -10px; width: calc(100% + 20px);
+            border: none; border-bottom: 1px solid var(--divider); border-radius: 8px;
+            background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+        }
+        .modal .person-source-row { padding: 8px 10px; border-radius: 8px; }  /* beats `.modal button` */
+        .person-source-row:last-child { border-bottom: none; }
+        .person-source-row:hover { background: var(--surface-2); }
+        .person-source-row:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+        .person-source-row.is-new { animation: person-source-new 1.2s ease-out; }
+        @keyframes person-source-new { from { background: var(--primary-soft); } to { background: transparent; } }
+        @media (prefers-reduced-motion: reduce) { .person-source-row.is-new { animation: none; } }
+        .person-source-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .person-source-title {
+            font-family: var(--font-serif); font-size: 15px; font-weight: 600; color: var(--text);
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .person-source-meta { font-size: 13px; color: var(--text-light); }
+        .person-sources-empty { margin: 24px 0; text-align: center; font-size: 15px; color: var(--text-light); }
+        @media (pointer: coarse) { .person-source-row { min-height: 60px; } }
+
+        .story-draft-tag {
+            display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px;
+            font-size: 11px; font-weight: 600; background: var(--surface-2); color: var(--text-light);
+            vertical-align: 1px;
+        }
+        .story-reader-body { outline: none; }
+        .story-reader-body > * { max-width: 62ch; }
+        .story-reader-title { font-family: var(--font-serif); font-size: 22px; font-weight: 600; margin: 4px 0 14px; color: var(--text); }
+        .story-reader-text {
+            font-family: var(--font-serif); font-size: 17px; line-height: 1.65; color: var(--text);
+            text-align: left; text-wrap: pretty; hyphens: auto;
+        }
+        .story-reader-text p { margin: 0 0 0.9em; }
+        .story-reader-text p:last-child { margin-bottom: 0; }
+        .story-reader-extra {
+            margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--divider);
+            font-family: var(--font-sans); font-size: 13px; color: var(--text-light);
+        }
+        .story-reader-extra .menu-section-header { padding: 0 0 6px; }
+        .story-reader-facts { margin: 0 0 10px; padding-left: 18px; }
+        .story-reader-facts li { margin: 2px 0; }
+        .story-reader-note { margin: 0; font-style: italic; }
+        @media (max-width: 499px) {
+            .story-reader-text { font-size: 16px; }
+            .story-reader-title { font-size: 20px; }
+        }
 
         /* Source viewer */
         #source-viewer-modal { z-index: 250; }
@@ -9885,7 +9939,7 @@
 
     <!-- Person Modal -->
     <div class="modal-overlay" id="person-modal">
-        <div class="modal pm-modal" role="dialog" aria-modal="true" aria-labelledby="pm-name">
+        <div class="modal pm-modal" role="dialog" data-dialog-kind="form" aria-modal="true" aria-labelledby="pm-name">
             <div class="pm-header">
                 <div class="pm-avatar male" id="pm-avatar"></div>
                 <div class="pm-header-text">
@@ -10087,7 +10141,7 @@
             <div class="buttons pm-footer">
                 <button class="pm-delete-link" id="btn-delete" style="display:none;" onclick="window.Strom.UI.deletePerson()" data-i18n="personModal.deletePerson"></button>
                 <button class="secondary" id="btn-merge" style="display:none;" onclick="window.Strom.UI.mergePersonFromModal()"><span data-i18n="personMerge.mergeWith"></span>...</button>
-                <button class="secondary" onclick="window.Strom.UI.closeModal()" data-i18n="buttons.cancel"></button>
+                <button class="secondary" id="pm-dismiss" data-dismiss onclick="window.Strom.UI.closeModal()" data-i18n="buttons.cancel"></button>
                 <button class="primary" id="btn-save" onclick="window.Strom.UI.savePerson()" data-i18n="buttons.save"></button>
             </div>
         </div>
@@ -10095,8 +10149,11 @@
 
     <!-- Event Editor Modal -->
     <div class="modal-overlay" id="event-editor-modal">
-        <div class="modal form-modal modal--md" role="dialog" aria-modal="true">
-            <h2 id="event-editor-title" data-i18n="events.addTitle"></h2>
+        <div class="modal form-modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
+            <div class="modal-header">
+                <h2 id="event-editor-title" data-i18n="events.addTitle"></h2>
+                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeEventEditor()">&times;</button>
+            </div>
             <div class="form-group">
                 <label for="input-event-type" data-i18n="events.type"></label>
                 <select id="input-event-type"></select>
@@ -10131,7 +10188,7 @@
                 <button type="button" class="secondary" id="btn-cite-event" onclick="window.Strom.UI.showSourcePickerForEvent()" data-i18n="sources.cite"></button>
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closeEventEditor()" data-i18n="buttons.cancel"></button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeEventEditor()" data-i18n="buttons.cancel"></button>
                 <button class="primary" onclick="window.Strom.UI.saveEventFromModal()" data-i18n="buttons.save"></button>
             </div>
         </div>
@@ -10139,7 +10196,7 @@
 
     <!-- Sources Manager Modal -->
     <div class="modal-overlay" id="sources-modal">
-        <div class="modal modal--lg" role="dialog" aria-modal="true">
+        <div class="modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="sources.title"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeSourcesDialog()">&times;</button>
@@ -10148,6 +10205,7 @@
             <div id="sources-list" class="sources-list"></div>
             <p class="sources-total" id="sources-total" hidden></p>
             <div class="buttons sources-footer">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeSourcesDialog()" data-i18n="buttons.close"></button>
                 <button class="primary" onclick="window.Strom.UI.showAddSourceModal()" data-i18n="sources.add"></button>
             </div>
         </div>
@@ -10155,8 +10213,11 @@
 
     <!-- Source Editor Modal -->
     <div class="modal-overlay" id="source-editor-modal">
-        <div class="modal form-modal modal--md" role="dialog" aria-modal="true">
-            <h2 id="source-editor-title" data-i18n="sources.addTitle"></h2>
+        <div class="modal form-modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
+            <div class="modal-header">
+                <h2 id="source-editor-title" data-i18n="sources.addTitle"></h2>
+                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeSourceEditor()">&times;</button>
+            </div>
             <div class="form-group">
                 <label for="input-source-title" data-i18n="sources.fieldTitle"></label>
                 <input type="text" id="input-source-title" autocomplete="off">
@@ -10211,7 +10272,7 @@
             <div class="buttons source-editor-buttons">
                 <button type="button" class="link-button source-same-book" id="source-editor-same-book" hidden
                     onclick="window.Strom.UI.startSameBookEntry()" data-i18n="sources.sameBook"></button>
-                <button class="secondary" onclick="window.Strom.UI.closeSourceEditor()" data-i18n="buttons.cancel"></button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeSourceEditor()" data-i18n="buttons.cancel"></button>
                 <button class="primary" onclick="window.Strom.UI.saveSourceFromModal()" data-i18n="buttons.save"></button>
             </div>
         </div>
@@ -10219,7 +10280,7 @@
 
     <!-- Source viewer: one entry at a glance (excerpt, transcript, what it supports) -->
     <div class="modal-overlay" id="source-viewer-modal">
-        <div class="modal modal--lg source-viewer" role="dialog" aria-modal="true" aria-labelledby="source-viewer-title">
+        <div class="modal modal--lg source-viewer" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="source-viewer-title">
             <div class="modal-header source-viewer-header">
                 <div class="source-viewer-heading">
                     <h2 id="source-viewer-title"></h2>
@@ -10231,6 +10292,7 @@
             <div class="buttons source-viewer-footer">
                 <button type="button" class="link-button source-same-book" id="source-viewer-same-book"
                     onclick="window.Strom.UI.startSameBookEntry()" data-i18n="sources.sameBook"></button>
+                <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeSourceViewer()" data-i18n="buttons.close"></button>
                 <button type="button" class="primary" id="source-viewer-edit" onclick="window.Strom.UI.editFromSourceViewer()" data-i18n="sources.edit"></button>
             </div>
         </div>
@@ -10239,20 +10301,20 @@
     <!-- Source Picker Modal (cite an existing source or create a new one) -->
     <!-- Picking someone from the tree for an event (a godparent who IS a relative) -->
     <div class="modal-overlay" id="participant-picker-modal">
-        <div class="modal modal--md" role="dialog" aria-modal="true">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="picker" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="events.participantLink"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.cancelParticipantPicker()">&times;</button>
             </div>
             <div id="participant-picker"></div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.cancelParticipantPicker()" data-i18n="buttons.cancel"></button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.cancelParticipantPicker()" data-i18n="buttons.cancel"></button>
             </div>
         </div>
     </div>
 
     <div class="modal-overlay" id="source-picker-modal">
-        <div class="modal modal--md" role="dialog" aria-modal="true">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="picker" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="sources.pickTitle"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeSourcePicker()">&times;</button>
@@ -10261,7 +10323,7 @@
             <div id="source-picker-list" class="source-picker-list"></div>
             <div class="buttons source-picker-footer">
                 <button type="button" class="link-button" onclick="window.Strom.UI.manageSourcesFromPicker()" data-i18n="sources.manage"></button>
-                <button class="secondary" onclick="window.Strom.UI.closeSourcePicker()" data-i18n="buttons.cancel"></button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeSourcePicker()" data-i18n="buttons.cancel"></button>
                 <button class="primary" onclick="window.Strom.UI.createSourceFromPicker()" data-i18n="sources.createNew"></button>
             </div>
         </div>
@@ -10283,8 +10345,11 @@
 
     <!-- Relation Modal -->
     <div class="modal-overlay" id="relation-modal">
-        <div class="modal form-modal modal--md" role="dialog" aria-modal="true">
-            <h2 id="relation-title"></h2>
+        <div class="modal form-modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
+            <div class="modal-header">
+                <h2 id="relation-title"></h2>
+                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeRelationModal()">&times;</button>
+            </div>
             <div id="rel-other-parent" class="form-group" style="display:none;">
                 <label for="rel-other-parent-select" id="rel-other-parent-label"></label>
                 <select id="rel-other-parent-select"></select>
@@ -10337,9 +10402,9 @@
                 </div>
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closeRelationModal()" data-i18n="buttons.cancel"></button>
                 <button class="secondary" id="toggle-link-mode" data-i18n-title="relationModal.linkExistingTitle"><svg class="chain-glyph" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> <span data-i18n="relationModal.linkExisting"></span></button>
                 <button class="secondary merge-btn-preview-wide" id="rel-preview-btn" onclick="window.Strom.UI.previewRelationPerson()" style="display:none;" aria-label="Preview" data-i18n-aria-label="treePreview.preview" data-i18n-title="treePreview.preview">👁</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeRelationModal()" data-i18n="buttons.cancel"></button>
                 <button class="primary" id="rel-submit-btn" onclick="window.Strom.UI.saveRelation()" data-i18n="buttons.add"></button>
             </div>
         </div>
@@ -10347,12 +10412,12 @@
 
     <!-- Confirmation Modal -->
     <div class="modal-overlay" id="confirmation-modal">
-        <div class="modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="decision" aria-modal="true">
             <h2 id="confirm-title"></h2>
             <div class="confirm-message" id="confirm-message"></div>
             <div class="confirm-options" id="confirm-options"></div>
             <div class="buttons" id="confirm-buttons">
-                <button class="secondary" id="confirm-cancel-btn" data-i18n="buttons.cancel"></button>
+                <button class="secondary" id="confirm-cancel-btn" data-dismiss data-i18n="buttons.cancel"></button>
                 <button class="primary" id="confirm-ok-btn" data-i18n="buttons.ok"></button>
             </div>
         </div>
@@ -10360,14 +10425,14 @@
 
     <!-- Relationships Panel Modal -->
     <div class="modal-overlay" id="relationships-modal">
-        <div class="modal modal--lg" role="dialog" aria-modal="true">
+        <div class="modal modal--lg" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 id="relationships-title"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.cancelRelationshipsPanel()">&times;</button>
             </div>
             <div id="relationships-content"></div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.cancelRelationshipsPanel()" data-i18n="buttons.cancel"></button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.cancelRelationshipsPanel()" data-i18n="buttons.cancel"></button>
                 <button class="primary" onclick="window.Strom.UI.saveRelationships()" data-i18n="buttons.save"></button>
             </div>
         </div>
@@ -10375,7 +10440,7 @@
 
     <!-- About Modal -->
     <div class="modal-overlay" id="about-modal">
-        <div class="modal about-modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal about-modal modal--sm" role="dialog" data-dialog-kind="info" aria-modal="true">
             <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeAboutDialog()">&times;</button>
             <div class="about-header">
                 <svg class="about-logo" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 19a4 4 0 0 1-2.24-7.32A3.5 3.5 0 0 1 9 6.03V6a3 3 0 1 1 6 0v.04a3.5 3.5 0 0 1 3.24 5.65A4 4 0 0 1 16 19Z"/><path d="M12 19v3"/></svg>
@@ -10387,9 +10452,6 @@
                 <a href="https://stromapp.info" target="_blank" rel="noopener">stromapp.info</a>
                 <span>•</span>
                 <span>MPL-2.0</span>
-            </div>
-            <div class="about-actions">
-                <button class="secondary" onclick="window.Strom.UI.startTour()" data-i18n="tour.menu"></button>
             </div>
             <div class="about-support">
                 <p data-i18n="about.support"></p>
@@ -10405,12 +10467,16 @@
             <div class="about-stats about-stats-total" id="about-stats-total">
                 <div class="about-stats-row" id="about-stats-total-row"></div>
             </div>
+            <div class="buttons about-footer">
+                <button type="button" class="secondary" onclick="window.Strom.UI.startTour()" data-i18n="tour.menu"></button>
+                <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeAboutDialog()" data-i18n="buttons.close"></button>
+            </div>
         </div>
     </div>
 
     <!-- Settings Dialog -->
     <div class="modal-overlay" id="settings-modal">
-        <div class="modal settings-modal modal--md" role="dialog" aria-modal="true">
+        <div class="modal settings-modal modal--md" role="dialog" data-dialog-kind="info" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="settings.title"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeSettingsDialog()">&times;</button>
@@ -10623,8 +10689,8 @@
                     </label>
                 </div>
             </section>
-            <div class="modal-actions">
-                <button class="secondary" onclick="window.Strom.UI.closeSettingsDialog()" data-i18n="settings.close"></button>
+            <div class="buttons">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeSettingsDialog()" data-i18n="buttons.close"></button>
             </div>
         </div>
     </div>
@@ -10632,7 +10698,7 @@
     <!-- Audit Log Dialog -->
     <!-- Backups / snapshots -->
     <div class="modal-overlay" id="snapshots-modal">
-        <div class="modal modal--lg" role="dialog" aria-modal="true">
+        <div class="modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="snapshots.title"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeSnapshotsDialog()">&times;</button>
@@ -10650,6 +10716,7 @@
             <p class="snapshots-persistence" id="snapshots-persistence" hidden></p>
             <p class="snapshots-note" data-i18n="snapshots.inBrowser"></p>
             <div class="buttons snapshots-footer">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeSnapshotsDialog()" data-i18n="buttons.close"></button>
                 <button class="primary" onclick="window.Strom.UI.createManualSnapshot()" data-i18n="snapshots.createNow"></button>
             </div>
         </div>
@@ -10657,7 +10724,7 @@
 
     <!-- Where your data is (storage state, last file copy, advice) -->
     <div class="modal-overlay" id="storage-status-modal">
-        <div class="modal modal--sm" role="dialog" aria-modal="true" aria-labelledby="storage-status-title">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="storage-status-title">
             <div class="modal-header">
                 <h2 id="storage-status-title" data-i18n="fileCopy.title"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeStorageStatusDialog()">&times;</button>
@@ -10667,6 +10734,7 @@
                 <button type="button" class="link-button storage-status-encrypt" id="storage-status-encrypt" hidden onclick="window.Strom.UI.closeStorageStatusDialog(); if (this.dataset.target === 'all') window.Strom.UI.saveAllTreesCopyEncrypted(); else window.Strom.UI.saveTreeCopyEncrypted()" data-i18n="fileCopy.encryptLink"></button>
                 <button class="secondary" id="storage-status-install" hidden onclick="window.Strom.UI.installApp()" data-i18n="fileCopy.install"></button>
                 <button class="secondary" id="storage-status-save-all" hidden onclick="window.Strom.UI.closeStorageStatusDialog(); window.Strom.UI.saveAllTreesCopy()" data-i18n="fileCopy.saveAll"></button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeStorageStatusDialog()" data-i18n="buttons.close"></button>
                 <button class="primary" id="storage-status-save" onclick="window.Strom.UI.closeStorageStatusDialog(); window.Strom.UI.saveTreeCopy()" data-i18n="fileCopy.save"></button>
             </div>
         </div>
@@ -10674,18 +10742,21 @@
 
     <!-- Upcoming anniversaries -->
     <div class="modal-overlay" id="anniversaries-modal">
-        <div class="modal modal--md" role="dialog" aria-modal="true">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="info" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="anniversaries.title"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeAnniversariesDialog()">&times;</button>
             </div>
             <div id="anniversaries-list" class="anniversaries-list"></div>
+            <div class="buttons">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeAnniversariesDialog()" data-i18n="buttons.close"></button>
+            </div>
         </div>
     </div>
 
     <!-- Family wizard: add a whole family in one step -->
     <div class="modal-overlay" id="family-wizard-modal">
-        <div class="modal family-wizard-modal form-modal modal--md" role="dialog" aria-modal="true">
+        <div class="modal family-wizard-modal form-modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="familyWizard.title"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeFamilyWizard()">&times;</button>
@@ -10703,8 +10774,8 @@
                 <div id="wiz-children"></div>
                 <button class="wiz-add" type="button" onclick="window.Strom.UI.wizardAddRow('child')" data-i18n="familyWizard.addChild"></button>
             </div>
-            <div class="wiz-actions">
-                <button class="secondary" onclick="window.Strom.UI.closeFamilyWizard()" data-i18n="buttons.cancel"></button>
+            <div class="buttons wiz-actions">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeFamilyWizard()" data-i18n="buttons.cancel"></button>
                 <button class="primary" onclick="window.Strom.UI.saveFamilyWizard()" data-i18n="familyWizard.save"></button>
             </div>
         </div>
@@ -10717,7 +10788,7 @@
     </div>
 
     <div class="modal-overlay" id="audit-log-modal">
-        <div class="modal audit-log-modal modal--lg" role="dialog" aria-modal="true">
+        <div class="modal audit-log-modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true">
             <div class="modal-header">
                 <div class="audit-log-heading">
                     <h2 class="audit-log-title-text" data-i18n="auditLog.title"></h2>
@@ -10726,16 +10797,17 @@
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeAuditLogDialog()">&times;</button>
             </div>
             <div class="audit-log-list" id="audit-log-list"></div>
-            <div class="pm-footer audit-log-footer">
+            <div class="buttons pm-footer audit-log-footer">
                 <button class="pm-delete-link" id="audit-log-clear" onclick="window.Strom.UI.clearAuditLog()" data-i18n="auditLog.clear"></button>
                 <button class="secondary" id="audit-log-export" onclick="window.Strom.UI.exportAuditLogTxt()" data-i18n="auditLog.exportTxt"></button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeAuditLogDialog()" data-i18n="buttons.close"></button>
             </div>
         </div>
     </div>
 
     <!-- Export Dialog -->
     <div class="modal-overlay" id="export-modal">
-        <div class="modal menu-modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal menu-modal modal--sm" role="dialog" data-dialog-kind="choice" aria-modal="true">
             <div class="modal-header">
                 <h2><span data-i18n="menu.export"></span><span id="export-modal-tree-name"></span></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeExportDialog()">&times;</button>
@@ -10824,12 +10896,15 @@
                     </button>
                 </div>
             </div>
+            <div class="buttons">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeExportDialog()" data-i18n="buttons.cancel"></button>
+            </div>
         </div>
     </div>
 
     <!-- Family Book Dialog -->
     <div class="modal-overlay" id="book-modal">
-        <div class="modal modal--md" role="dialog" aria-modal="true">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="book.dialogTitle"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeBookDialog()">&times;</button>
@@ -10858,7 +10933,7 @@
                 </label>
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closeBookDialog()" data-i18n="buttons.cancel"></button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeBookDialog()" data-i18n="buttons.cancel"></button>
                 <button class="primary" onclick="window.Strom.UI.generateFamilyBook()" data-i18n="book.generate"></button>
             </div>
         </div>
@@ -10866,7 +10941,7 @@
 
     <!-- Poster Export Dialog -->
     <div class="modal-overlay" id="poster-modal">
-        <div class="modal menu-modal modal--md" role="dialog" aria-modal="true">
+        <div class="modal menu-modal modal--md" role="dialog" data-dialog-kind="choice" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="poster.title"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closePosterDialog()">&times;</button>
@@ -10925,14 +11000,14 @@
                 </button>
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closePosterDialog()" data-i18n="buttons.cancel"></button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closePosterDialog()" data-i18n="buttons.cancel"></button>
             </div>
         </div>
     </div>
 
     <!-- Import Dialog -->
     <div class="modal-overlay" id="import-modal">
-        <div class="modal menu-modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal menu-modal modal--sm" role="dialog" data-dialog-kind="choice" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="menu.import"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeImportDialog()">&times;</button>
@@ -10957,6 +11032,9 @@
                     </span>
                 </button>
             </div>
+            <div class="buttons">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeImportDialog()" data-i18n="buttons.cancel"></button>
+            </div>
         </div>
     </div>
 
@@ -10969,7 +11047,7 @@
 
     <!-- GEDCOM Result Dialog -->
     <div class="modal-overlay" id="gedcom-result-modal">
-        <div class="modal menu-modal modal--md" role="dialog" aria-modal="true">
+        <div class="modal menu-modal modal--md" role="dialog" data-dialog-kind="choice" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="gedcom.resultTitle"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeGedcomResultDialog()">&times;</button>
@@ -11058,14 +11136,14 @@
                 </button>
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closeGedcomResultDialog()" data-i18n="buttons.cancel"></button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeGedcomResultDialog()" data-i18n="buttons.cancel"></button>
             </div>
         </div>
     </div>
 
     <!-- Save Current Data Dialog -->
     <div class="modal-overlay" id="save-current-modal">
-        <div class="modal menu-modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal menu-modal modal--sm" role="dialog" data-dialog-kind="choice" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="saveCurrent.title"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeSaveCurrentDialog()">&times;</button>
@@ -11084,15 +11162,15 @@
                 </button>
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closeSaveCurrentDialog()" data-i18n="buttons.cancel"></button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeSaveCurrentDialog()" data-i18n="buttons.cancel"></button>
                 <button class="primary" id="save-current-continue-btn" data-i18n="saveCurrent.continueWithout"></button>
             </div>
         </div>
     </div>
 
     <!-- Merge Import Modal -->
-    <div class="modal-overlay" id="merge-modal" onclick="if(event.target===this) window.Strom.MergerUI.closeMergeModal()">
-        <div class="modal merge-modal modal--lg" role="dialog" aria-modal="true">
+    <div class="modal-overlay" id="merge-modal">
+        <div class="modal merge-modal modal--lg" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="merge.wizardTitle">Merge data</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.MergerUI.closeMergeModal()">&times;</button>
@@ -11159,17 +11237,17 @@
                 <!-- Match items rendered here -->
             </div>
             <div class="buttons merge-actions">
-                <button class="secondary" onclick="window.Strom.MergerUI.closeMergeModal()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="secondary" onclick="window.Strom.MergerUI.saveForLater()" data-i18n="merge.closeSave">Save for later</button>
                 <button class="secondary" onclick="window.Strom.MergerUI.reanalyze()" data-i18n="merge.reanalyze">Re-analyze</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.MergerUI.closeMergeModal()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.MergerUI.executeMerge()" data-i18n="merge.execute">Execute merge</button>
             </div>
         </div>
     </div>
 
     <!-- Manual Match Dialog -->
-    <div class="modal-overlay" id="merge-manual-dialog" onclick="if(event.target===this) window.Strom.MergerUI.closeManualMatchDialog()">
-        <div class="modal modal--md" role="dialog" aria-modal="true">
+    <div class="modal-overlay" id="merge-manual-dialog">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="merge.manualMatch">Match to existing</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.MergerUI.closeManualMatchDialog()">&times;</button>
@@ -11183,16 +11261,16 @@
                 <div id="merge-manual-picker"></div>
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.MergerUI.closeManualMatchDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button id="merge-manual-preview-btn" class="secondary merge-btn-preview-wide" onclick="window.Strom.MergerUI.previewManualMatch()" data-i18n-title="treePreview.preview">👁</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.MergerUI.closeManualMatchDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.MergerUI.confirmManualMatch()" data-i18n="buttons.save">Save</button>
             </div>
         </div>
     </div>
 
     <!-- Conflict Resolution Dialog -->
-    <div class="modal-overlay" id="merge-conflict-dialog" onclick="if(event.target===this) window.Strom.MergerUI.closeConflictDialog()">
-        <div class="modal modal--md" role="dialog" aria-modal="true">
+    <div class="modal-overlay" id="merge-conflict-dialog">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="merge.conflicts">Conflicts</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.MergerUI.closeConflictDialog()">&times;</button>
@@ -11201,7 +11279,7 @@
                 <!-- Conflict rows rendered here -->
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.MergerUI.closeConflictDialog()" data-i18n="buttons.cancel">Cancel</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.MergerUI.closeConflictDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.MergerUI.saveConflictResolutions()" data-i18n="buttons.save">Save</button>
             </div>
         </div>
@@ -11209,22 +11287,22 @@
 
     <!-- Merge Close Confirmation Dialog -->
     <div class="modal-overlay" id="merge-close-confirm" onclick="if(event.target===this) window.Strom.MergerUI.handleCloseCancel()">
-        <div class="modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="decision" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="merge.closeConfirmTitle">Close merge?</h2>
             </div>
             <p class="merge-close-message" data-i18n="merge.closeConfirmMessage">You have unsaved merge progress.</p>
             <div class="buttons merge-close-buttons">
                 <button class="secondary" onclick="window.Strom.MergerUI.handleCloseDiscard()" data-i18n="merge.closeDiscard">Discard changes</button>
-                <button class="secondary" onclick="window.Strom.MergerUI.handleCloseCancel()" data-i18n="merge.closeCancel">Continue merging</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.MergerUI.handleCloseCancel()" data-i18n="merge.closeCancel">Continue merging</button>
                 <button class="primary" onclick="window.Strom.MergerUI.handleCloseSave()" data-i18n="merge.closeSave">Save for later</button>
             </div>
         </div>
     </div>
 
     <!-- Pending Merge Dialog -->
-    <div class="modal-overlay" id="pending-merge-modal" onclick="if(event.target===this) window.Strom.UI.closePendingMergeDialog()">
-        <div class="modal modal--md" role="dialog" aria-modal="true">
+    <div class="modal-overlay" id="pending-merge-modal">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="info" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="merge.pendingMerges">Pending merges</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closePendingMergeDialog()">&times;</button>
@@ -11233,12 +11311,15 @@
             <div id="pending-merge-list" class="pending-merge-list">
                 <!-- Pending merge items rendered here -->
             </div>
+            <div class="buttons">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closePendingMergeDialog()" data-i18n="buttons.close"></button>
+            </div>
         </div>
     </div>
 
     <!-- Person Merge Dialog -->
-    <div class="modal-overlay" id="person-merge-modal" onclick="if(event.target===this) window.Strom.UI.closePersonMergeDialog()">
-        <div class="modal modal--md" role="dialog" aria-modal="true">
+    <div class="modal-overlay" id="person-merge-modal">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="personMerge.title">Merge people</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closePersonMergeDialog()">&times;</button>
@@ -11273,8 +11354,8 @@
                 </div>
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closePersonMergeDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="secondary merge-btn-preview-wide" onclick="window.Strom.UI.previewPersonMerge()" data-i18n-title="treePreview.preview">👁</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closePersonMergeDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" id="person-merge-btn" onclick="window.Strom.UI.executePersonMerge()" data-i18n="personMerge.confirmMerge" disabled>Merge people</button>
             </div>
         </div>
@@ -11282,7 +11363,7 @@
 
     <!-- Validation Error Dialog -->
     <div class="modal-overlay" id="validation-modal">
-        <div class="modal modal--lg" role="dialog" aria-modal="true">
+        <div class="modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="validation.validationFailed">Validation</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="document.getElementById('validation-modal').classList.remove('active')">&times;</button>
@@ -11291,7 +11372,7 @@
                 <!-- Validation errors/warnings rendered here -->
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="document.getElementById('validation-modal').classList.remove('active')" data-i18n="buttons.cancel">Cancel</button>
+                <button class="secondary" id="validation-dismiss" data-dismiss onclick="document.getElementById('validation-modal').classList.remove('active')" data-i18n="buttons.close">Close</button>
                 <button class="primary" id="validation-continue-btn" style="display:none" data-i18n="validation.continueWithWarnings">Continue</button>
             </div>
         </div>
@@ -11299,7 +11380,7 @@
 
     <!-- Tree Manager Dialog -->
     <div class="modal-overlay" id="tree-manager-modal">
-        <div class="modal tree-manager-modal modal--lg" role="dialog" aria-modal="true">
+        <div class="modal tree-manager-modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="treeManager.manageTreesTitle">Manage trees</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeTreeManagerDialog()">&times;</button>
@@ -11311,10 +11392,11 @@
             <div id="tree-manager-list" class="tree-manager-list">
                 <!-- Tree list rendered dynamically -->
             </div>
-            <div class="tree-manager-footer">
+            <div class="buttons tree-manager-footer">
                 <button class="secondary" onclick="window.Strom.UI.showExportAllDialog()" data-i18n-title="treeManager.exportAll">
                     <span class="btn-text" data-i18n="treeManager.exportAll">Export All</span>
                 </button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeTreeManagerDialog()" data-i18n="buttons.close"></button>
                 <button class="primary edit-only" onclick="window.Strom.UI.showNewTreeMenu()">
                     <span class="btn-icon" aria-hidden="true">+</span><span class="btn-text" data-i18n="treeManager.newTree">New tree</span>
                 </button>
@@ -11324,7 +11406,7 @@
 
     <!-- New Tree Dialog -->
     <div class="modal-overlay" id="new-tree-modal">
-        <div class="modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="treeManager.newTree">New tree</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeNewTreeDialog()">&times;</button>
@@ -11334,7 +11416,7 @@
                 <input type="text" id="new-tree-name" data-i18n-placeholder="treeManager.newTreePlaceholder" autocomplete="off">
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closeNewTreeDialog()" data-i18n="buttons.cancel">Cancel</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeNewTreeDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.UI.createNewTreeFromDialog()" data-i18n="buttons.save">Save</button>
             </div>
         </div>
@@ -11342,7 +11424,7 @@
 
     <!-- Rename Tree Dialog -->
     <div class="modal-overlay" id="rename-tree-modal">
-        <div class="modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="treeManager.rename">Rename</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeRenameTreeDialog()">&times;</button>
@@ -11352,7 +11434,7 @@
                 <input type="text" id="rename-tree-name" autocomplete="off">
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closeRenameTreeDialog()" data-i18n="buttons.cancel">Cancel</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeRenameTreeDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.UI.confirmRenameTree()" data-i18n="buttons.save">Save</button>
             </div>
         </div>
@@ -11360,7 +11442,7 @@
 
     <!-- Duplicate Tree Dialog -->
     <div class="modal-overlay" id="duplicate-tree-modal">
-        <div class="modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="treeManager.duplicateTitle">Duplicate tree</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeDuplicateTreeDialog()">&times;</button>
@@ -11370,7 +11452,7 @@
                 <input type="text" id="duplicate-tree-name" autocomplete="off">
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closeDuplicateTreeDialog()" data-i18n="buttons.cancel">Cancel</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeDuplicateTreeDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.UI.confirmDuplicateTree()" data-i18n="treeManager.duplicate">Duplicate</button>
             </div>
         </div>
@@ -11378,7 +11460,7 @@
 
     <!-- Tree Stats Dialog -->
     <div class="modal-overlay" id="tree-stats-modal">
-        <div class="modal tree-stats-modal modal--lg" role="dialog" aria-modal="true">
+        <div class="modal tree-stats-modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true">
             <div class="modal-header">
                 <h2 id="tree-stats-title" data-i18n="treeManager.statsTitle">Tree statistics</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeTreeStatsDialog()">&times;</button>
@@ -11386,12 +11468,15 @@
             <div id="tree-stats-content" class="tree-stats-content">
                 <!-- Stats rendered dynamically -->
             </div>
+            <div class="buttons">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeTreeStatsDialog()" data-i18n="buttons.close"></button>
+            </div>
         </div>
     </div>
 
     <!-- Tree Validation Dialog (genealogical consistency checks) -->
     <div class="modal-overlay" id="tree-validation-modal">
-        <div class="modal validation-modal modal--lg" role="dialog" aria-modal="true">
+        <div class="modal validation-modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true">
             <div class="modal-header">
                 <h2 id="tree-validation-title" data-i18n="treeManager.validationTitle">Tree validation</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeTreeValidationDialog()">&times;</button>
@@ -11399,12 +11484,15 @@
             <div id="tree-validation-content" class="validation-content">
                 <!-- Validation results rendered dynamically -->
             </div>
+            <div class="buttons">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeTreeValidationDialog()" data-i18n="buttons.close"></button>
+            </div>
         </div>
     </div>
 
     <!-- Tree Health Dashboard (R4) -->
     <div class="modal-overlay" id="tree-health-modal">
-        <div class="modal tree-health-modal modal--lg" role="dialog" aria-modal="true">
+        <div class="modal tree-health-modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true">
             <div class="modal-header">
                 <h2 id="tree-health-title" data-i18n="treeHealth.menu">Tree health</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeTreeHealthDialog()">&times;</button>
@@ -11412,12 +11500,15 @@
             <div id="tree-health-content" class="tree-health-content">
                 <!-- Health dashboard rendered dynamically -->
             </div>
+            <div class="buttons">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeTreeHealthDialog()" data-i18n="buttons.close"></button>
+            </div>
         </div>
     </div>
 
     <!-- Default Person Dialog -->
     <div class="modal-overlay" id="default-person-modal">
-        <div class="modal modal--md" role="dialog" aria-modal="true">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="treeManager.defaultPerson">Default person</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeDefaultPersonDialog()">&times;</button>
@@ -11441,7 +11532,7 @@
                 </div>
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closeDefaultPersonDialog()" data-i18n="buttons.cancel">Cancel</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeDefaultPersonDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.UI.confirmDefaultPerson()" data-i18n="buttons.save">Save</button>
             </div>
         </div>
@@ -11449,7 +11540,7 @@
 
     <!-- Default Tree Dialog -->
     <div class="modal-overlay" id="default-tree-modal">
-        <div class="modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="treeManager.defaultTree">Default tree</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeDefaultTreeDialog()">&times;</button>
@@ -11473,15 +11564,15 @@
                 </div>
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closeDefaultTreeDialog()" data-i18n="buttons.cancel">Cancel</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeDefaultTreeDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.UI.confirmDefaultTree()" data-i18n="buttons.save">Save</button>
             </div>
         </div>
     </div>
 
     <!-- Merge Trees Dialog -->
-    <div class="modal-overlay" id="merge-trees-modal" onclick="if(event.target===this) window.Strom.UI.closeMergeTreesDialog()">
-        <div class="modal modal--md" role="dialog" aria-modal="true">
+    <div class="modal-overlay" id="merge-trees-modal">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="treeManager.mergeInto">Merge into...</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeMergeTreesDialog()">&times;</button>
@@ -11491,7 +11582,7 @@
                 <!-- Target tree options rendered here -->
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closeMergeTreesDialog()" data-i18n="buttons.cancel">Cancel</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeMergeTreesDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" id="merge-trees-btn" onclick="window.Strom.UI.startTreeMerge()" data-i18n="treeManager.startMerge">Start merge</button>
             </div>
         </div>
@@ -11499,7 +11590,7 @@
 
     <!-- Import Tree Dialog -->
     <div class="modal-overlay" id="import-tree-modal">
-        <div class="modal menu-modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal menu-modal modal--sm" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="treeManager.importAsNewTree">Import as new tree</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeImportTreeDialog()">&times;</button>
@@ -11519,7 +11610,7 @@
                 <input type="text" id="import-tree-name" data-i18n-placeholder="treeManager.newTreePlaceholder" autocomplete="off">
             </div>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closeImportTreeDialog()" data-i18n="buttons.cancel">Cancel</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeImportTreeDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.UI.confirmImportTree()" data-i18n="menu.import">Import</button>
             </div>
         </div>
@@ -11527,7 +11618,7 @@
 
     <!-- New Tree Menu Dialog -->
     <div class="modal-overlay" id="new-tree-menu-modal">
-        <div class="modal menu-modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal menu-modal modal--sm" role="dialog" data-dialog-kind="choice" aria-modal="true">
             <div class="modal-header">
                 <h2 id="new-tree-menu-title" data-i18n="treeManager.newTreeMenu">New tree</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeNewTreeMenu()">&times;</button>
@@ -11573,12 +11664,15 @@
                     </span>
                 </button>
             </div>
+            <div class="buttons">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeNewTreeMenu()" data-i18n="buttons.cancel"></button>
+            </div>
         </div>
     </div>
 
     <!-- Import File Dialog (for empty state) -->
     <div class="modal-overlay" id="import-file-modal">
-        <div class="modal menu-modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal menu-modal modal--sm" role="dialog" data-dialog-kind="choice" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="emptyState.importFromFile">Import from File</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeImportFileDialog()">&times;</button>
@@ -11603,12 +11697,15 @@
                     </span>
                 </button>
             </div>
+            <div class="buttons">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeImportFileDialog()" data-i18n="buttons.cancel"></button>
+            </div>
         </div>
     </div>
 
     <!-- Export All Dialog -->
     <div class="modal-overlay" id="export-all-modal">
-        <div class="modal menu-modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal menu-modal modal--sm" role="dialog" data-dialog-kind="choice" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="treeManager.exportAll">Export all trees</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeExportAllDialog()">&times;</button>
@@ -11627,13 +11724,16 @@
                     </span>
                 </button>
             </div>
+            <div class="buttons">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeExportAllDialog()" data-i18n="buttons.cancel"></button>
+            </div>
         </div>
     </div>
 
     <!-- Export Focus Dialog -->
     <!-- Password Prompt Dialog (unlock encrypted data) -->
     <div class="modal-overlay" id="password-prompt-modal">
-        <div class="modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="encryption.unlockData">Unlock data</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.cancelPasswordPrompt()">&times;</button>
@@ -11648,7 +11748,7 @@
                 </div>
                 <div id="password-prompt-error" class="form-error" style="display: none;"></div>
                 <div class="buttons">
-                    <button type="button" class="secondary" onclick="window.Strom.UI.cancelPasswordPrompt()" data-i18n="buttons.cancel">Cancel</button>
+                    <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.cancelPasswordPrompt()" data-i18n="buttons.cancel">Cancel</button>
                     <button type="submit" class="primary" data-i18n="buttons.ok">OK</button>
                 </div>
             </form>
@@ -11657,7 +11757,7 @@
 
     <!-- Password Setup Dialog (enable encryption) -->
     <div class="modal-overlay" id="password-setup-modal">
-        <div class="modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="encryption.setPassword">Set password</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closePasswordSetupDialog()">&times;</button>
@@ -11679,7 +11779,7 @@
                 </div>
                 <div id="password-setup-error" class="form-error" style="display: none;"></div>
                 <div class="buttons">
-                    <button type="button" class="secondary" onclick="window.Strom.UI.closePasswordSetupDialog()" data-i18n="buttons.cancel">Cancel</button>
+                    <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closePasswordSetupDialog()" data-i18n="buttons.cancel">Cancel</button>
                     <button type="submit" class="primary" data-i18n="buttons.save">Save</button>
                 </div>
             </form>
@@ -11688,7 +11788,7 @@
 
     <!-- Export Password Dialog (password for export) -->
     <div class="modal-overlay" id="export-password-modal">
-        <div class="modal modal--md" role="dialog" aria-modal="true">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 id="export-dialog-title">Export</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeExportPasswordDialog()">&times;</button>
@@ -11759,6 +11859,7 @@
                 <div id="export-password-error" class="form-error" style="display: none;"></div>
             </div>
             <div class="buttons export-buttons">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeExportPasswordDialog()" data-i18n="buttons.cancel"></button>
                 <button class="primary" id="export-submit-btn" onclick="window.Strom.UI.confirmExport()" data-i18n="encryption.exportBtn">Export</button>
             </div>
         </div>
@@ -11766,7 +11867,7 @@
 
     <!-- Newer Version Warning Dialog (Storage) - No continue option -->
     <div class="modal-overlay" id="newer-version-storage-modal">
-        <div class="modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="decision" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="validation.newerDataTitle">Newer data version detected</h2>
             </div>
@@ -11787,10 +11888,9 @@
 
     <!-- Newer Version Warning Dialog (View Mode) - Allow viewing, no import -->
     <div class="modal-overlay" id="newer-version-viewmode-modal">
-        <div class="modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="decision" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="validation.newerDataTitle">Newer data version detected</h2>
-                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeNewerVersionViewMode()">&times;</button>
             </div>
             <div class="newer-version-content">
                 <p class="warning-message" data-i18n="validation.newerDataInImport">This file was created with a newer version of the application.</p>
@@ -11801,6 +11901,7 @@
                 <p class="info-text" data-i18n="validation.viewOnlyAllowed">You can view this data, but importing is disabled to prevent data loss.</p>
             </div>
             <div class="buttons">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeNewerVersionViewMode()" data-i18n="buttons.cancel"></button>
                 <button class="primary" onclick="window.Strom.UI.viewNewerVersionData()" data-i18n="validation.viewOnly">View only (read-only)</button>
             </div>
         </div>
@@ -11837,7 +11938,7 @@
 
     <!-- Embedded Mode Info Dialog -->
     <div class="modal-overlay" id="embedded-info-modal">
-        <div class="modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="info" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="embeddedMode.infoTitle">About this file</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeEmbeddedInfoDialog()">&times;</button>
@@ -11856,6 +11957,7 @@
                 </div>
             </div>
             <div class="buttons">
+                <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeEmbeddedInfoDialog()" data-i18n="buttons.close"></button>
                 <a id="embedded-info-go-online" href="https://stromapp.info?import=from-file" target="_blank" class="btn-primary" data-i18n="embeddedMode.goOnline">stromapp.info</a>
             </div>
         </div>
@@ -11864,7 +11966,7 @@
     <!-- Existing Export Dialog -->
     <!-- Share (send to a relative) dialog -->
     <div class="modal-overlay" id="share-modal">
-        <div class="modal modal--md" role="dialog" aria-modal="true">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="share.dialogTitle"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeShareDialog()">&times;</button>
@@ -11901,7 +12003,7 @@
                 <input type="password" id="share-password" autocomplete="new-password">
             </div>
             <div class="buttons">
-                <button type="button" class="secondary" onclick="window.Strom.UI.closeShareDialog()" data-i18n="buttons.cancel"></button>
+                <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeShareDialog()" data-i18n="buttons.cancel"></button>
                 <button type="button" class="primary" onclick="window.Strom.UI.submitShareDialog()" data-i18n="share.createFile"></button>
             </div>
         </div>
@@ -11909,13 +12011,13 @@
 
     <!-- Recipient welcome (opened shared file) -->
     <div class="modal-overlay" id="share-welcome-modal">
-        <div class="modal share-welcome modal--sm" role="dialog" aria-modal="true">
+        <div class="modal share-welcome modal--sm" role="dialog" data-dialog-kind="decision" aria-modal="true">
             <div class="share-welcome-icon">Strom</div>
             <h2 id="share-welcome-title"></h2>
             <div id="share-welcome-counts" class="share-welcome-counts"></div>
             <blockquote id="share-welcome-message" class="share-message"></blockquote>
             <div class="buttons share-welcome-buttons">
-                <button type="button" class="secondary" onclick="window.Strom.UI.closeShareWelcome()" data-i18n="share.welcomeView"></button>
+                <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeShareWelcome()" data-i18n="share.welcomeView"></button>
                 <button type="button" class="primary" onclick="window.Strom.UI.shareWelcomeEdit()" data-i18n="share.welcomeEdit"></button>
             </div>
         </div>
@@ -11923,13 +12025,13 @@
 
     <!-- Sender: a relative returned the tree -->
     <div class="modal-overlay" id="share-reply-modal">
-        <div class="modal share-welcome modal--sm" role="dialog" aria-modal="true">
+        <div class="modal share-welcome modal--sm" role="dialog" data-dialog-kind="decision" aria-modal="true">
             <div class="share-welcome-icon">Strom</div>
             <h2 id="share-reply-title"></h2>
             <p id="share-reply-intro" class="modal-description"></p>
             <blockquote id="share-reply-message" class="share-message"></blockquote>
             <div class="buttons share-welcome-buttons">
-                <button type="button" class="secondary" onclick="window.Strom.UI.closeShareReplyDialog()" data-i18n="share.replyView"></button>
+                <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeShareReplyDialog()" data-i18n="share.replyView"></button>
                 <button type="button" class="secondary" onclick="window.Strom.UI.shareReplyImport()" data-i18n="share.replyImport"></button>
                 <button type="button" class="primary" onclick="window.Strom.UI.shareReplyMerge()" data-i18n="share.replyMerge"></button>
             </div>
@@ -11938,14 +12040,14 @@
 
     <!-- Recipient: preview of an opened change packet (send only changes) -->
     <div class="modal-overlay" id="share-packet-modal">
-        <div class="modal share-welcome modal--sm" role="dialog" aria-modal="true">
+        <div class="modal share-welcome modal--sm" role="dialog" data-dialog-kind="decision" aria-modal="true">
             <div class="share-welcome-icon">Strom</div>
             <h2 id="share-packet-title"></h2>
             <p id="share-packet-intro" class="modal-description"></p>
             <blockquote id="share-packet-message" class="share-message"></blockquote>
             <div id="share-packet-body" class="share-packet-body"></div>
             <div class="buttons share-welcome-buttons">
-                <button type="button" class="secondary" onclick="window.Strom.UI.closeChangePacketPreview()" data-i18n="buttons.cancel"></button>
+                <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeChangePacketPreview()" data-i18n="buttons.cancel"></button>
                 <button type="button" class="secondary" onclick="window.Strom.UI.reviewChangePacketInMerge()" data-i18n="shareDiff.reviewDetail"></button>
                 <button type="button" class="primary" onclick="window.Strom.UI.acceptChangePacket()" data-i18n="shareDiff.accept"></button>
             </div>
@@ -11953,16 +12055,15 @@
     </div>
 
     <div class="modal-overlay" id="existing-export-modal">
-        <div class="modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="decision" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="viewMode.existingTitle">Tree already exists</h2>
-                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeExistingExportDialog()">&times;</button>
             </div>
             <p class="modal-description" data-i18n="viewMode.existingMessage">A tree from this export is already in your storage.</p>
             <p id="existing-export-tree-name" class="existing-tree-name"></p>
             <div class="buttons">
                 <button class="secondary" onclick="window.Strom.UI.viewStoredVersion()" data-i18n="viewMode.viewStored">View stored version</button>
-                <button class="secondary" onclick="window.Strom.UI.viewEmbeddedVersion()" data-i18n="viewMode.viewEmbedded">View embedded version</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.viewEmbeddedVersion()" data-i18n="viewMode.viewEmbedded">View embedded version</button>
                 <button class="primary" onclick="window.Strom.UI.updateStoredVersion()" data-i18n="viewMode.updateStored">Update storage</button>
             </div>
         </div>
@@ -11970,7 +12071,7 @@
 
     <!-- Import from View Mode Dialog -->
     <div class="modal-overlay" id="import-view-mode-modal">
-        <div class="modal modal--sm" role="dialog" aria-modal="true">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="choice" aria-modal="true">
             <div class="modal-header">
                 <h2 data-i18n="viewMode.importTitle">Import tree</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeImportViewModeDialog()">&times;</button>
@@ -11978,7 +12079,7 @@
             <p class="modal-description" data-i18n="viewMode.importMessage">Import this tree to your local storage?</p>
             <p id="import-tree-name" class="import-tree-name"></p>
             <div class="buttons">
-                <button class="secondary" onclick="window.Strom.UI.closeImportViewModeDialog()" data-i18n="buttons.cancel">Cancel</button>
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeImportViewModeDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.UI.importAsNew()" data-i18n="viewMode.importButton">Import to storage</button>
             </div>
         </div>

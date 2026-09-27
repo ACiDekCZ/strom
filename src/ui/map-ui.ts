@@ -863,7 +863,7 @@ export const mapMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = 'places-modal';
         overlay.innerHTML = `
-            <div class="modal places-modal modal--lg" role="dialog" aria-modal="true">
+            <div class="modal places-modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true">
                 <div class="modal-header">
                     <h2>${strings.map.placesTitle}</h2>
                     <button class="close-btn" id="places-close-x" aria-label="${strings.buttons.close}">&times;</button>
@@ -872,9 +872,10 @@ export const mapMethods = uiModule({
                 <div class="places-list">
                     ${places.map(p => this.renderPlaceRow(p)).join('')}
                 </div>
-                <div class="modal-buttons places-footer">
+                <div class="buttons places-footer">
                     <button type="button" class="secondary places-clean-orphans" id="places-clean-orphans"
                         ${orphanCount === 0 ? 'disabled' : ''}>${strings.map.cleanOrphans(orphanCount)}</button>
+                    <button type="button" class="secondary" id="places-close" data-dismiss>${strings.buttons.close}</button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);
@@ -882,6 +883,7 @@ export const mapMethods = uiModule({
         const close = (): void => this.closePlacesManager();
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
         (overlay.querySelector('#places-close-x') as HTMLButtonElement).onclick = close;
+        (overlay.querySelector('#places-close') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#places-clean-orphans') as HTMLButtonElement).onclick = () => void this.cleanOrphanPlaces();
         overlay.querySelectorAll('.place-row').forEach(row => this.bindPlaceRow(row as HTMLElement));
 

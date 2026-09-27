@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { openApp, createFirstPerson, card } from './helpers.js';
 
 /** The expected group order: the person itself → add relatives → the rest. */
-const ORDER = ['edit', 'focus', 'descendants', 'parent', 'partner', 'child', 'sibling', 'add-family',
+const ORDER = ['focus', 'edit', 'sources', 'descendants', 'parent', 'partner', 'child', 'sibling', 'add-family',
     'relationship', 'archives', 'toggle-lock', 'merge', 'delete'];
 
 async function actionsOf(page: Page, selector: string): Promise<string[]> {

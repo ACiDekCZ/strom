@@ -158,6 +158,8 @@ export const snapshotsUiMethods = uiModule({
     closeSnapshotsDialog(): void {
         document.getElementById('snapshots-modal')?.classList.remove('active');
         this.snapshotsTreeId = null;
+        // Close (button, ×, backdrop) returns to the parent like Escape does.
+        if (this.dialogStack[this.dialogStack.length - 1] === 'snapshots-modal') this.returnToParentDialog();
     },
 
     async renderSnapshotsList(): Promise<void> {
@@ -197,8 +199,8 @@ export const snapshotsUiMethods = uiModule({
 
         // While the list is empty the empty state carries "Create backup now";
         // the footer copy of it hides so the dialog has one primary action.
-        const footer = document.querySelector<HTMLElement>('#snapshots-modal .snapshots-footer');
-        if (footer) footer.hidden = snaps.length === 0;
+        const createBtn = document.querySelector<HTMLElement>('#snapshots-modal .snapshots-footer .primary');
+        if (createBtn) createBtn.hidden = snaps.length === 0;
 
         if (!snaps.length) {
             const e = strings.emptyStates;

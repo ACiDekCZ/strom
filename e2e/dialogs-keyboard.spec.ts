@@ -107,7 +107,9 @@ test('a dialog takes focus on open, traps Tab, and gives focus back on close', a
     await expect(menu).toBeVisible();
     await expect(menu.locator('.context-menu-item').first()).toBeFocused();
 
-    // Enter on "Edit" opens the person modal with focus in the first field.
+    // "Focus" is first; ArrowDown to "Edit", Enter opens the person modal
+    // with focus in the first field.
+    await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
     const modal = personModal(page);
     await expect(modal).toBeVisible();

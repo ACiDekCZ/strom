@@ -463,18 +463,22 @@ export const relationshipsPanelMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = 'reassign-modal';
         overlay.innerHTML = `
-            <div class="modal reassign-modal modal--sm" role="dialog" aria-modal="true">
+            <div class="modal reassign-modal modal--sm" role="dialog" data-dialog-kind="picker" aria-modal="true">
                 <div class="modal-header">
                     <h2>${strings.relationships.reassignHeading}</h2>
                     <button class="close-btn" id="reassign-close" aria-label="${strings.buttons.close}">&times;</button>
                 </div>
                 <p class="reassign-hint">${this.escapeHtml(strings.relationships.reassignHint(name(child), name(oldParent)))}</p>
                 <div id="reassign-picker"></div>
+                <div class="buttons">
+                    <button type="button" class="secondary" id="reassign-cancel" data-dismiss>${strings.buttons.cancel}</button>
+                </div>
             </div>`;
         document.body.appendChild(overlay);
         const close = (): void => overlay.remove();
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
         (overlay.querySelector('#reassign-close') as HTMLButtonElement).onclick = close;
+        (overlay.querySelector('#reassign-cancel') as HTMLButtonElement).onclick = close;
 
         // Only valid new parents are offered: not the child, not its current
         // parents, and nobody from the child's own descendants (a cycle).

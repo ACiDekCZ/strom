@@ -38,6 +38,17 @@ function esc(text: string): string {
 
 type Book = ReturnType<typeof getStringsForLang>['book'];
 
+/**
+ * Prose as the writer typed it: '\n\n' a paragraph, '\n' a line break and
+ * markdown **bold**. Everything is escaped first, so the only markup that
+ * survives is what is rendered here (the book and the story reader).
+ */
+export function storyProseHtml(text: string): string {
+    return text.split(/\n{2,}/).map(par => par.trim()).filter(Boolean)
+        .map(par => `<p>${esc(par).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/\n/g, '<br>')}</p>`).join('');
+}
+
 /** Generate the complete family-book HTML for `data`. */
 export function buildFamilyBook(data: StromData, options: BookOptions): string {
     const lang = options.lang;
@@ -172,11 +183,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     const LONG_NOTE = 140;
     const isLongNote = (person?: Person): boolean => (person?.notes?.length ?? 0) > LONG_NOTE;
 
-    /** Paragraphs, escaped, with the writer's **bold** rendered. */
-    const proseHtml = (text: string): string =>
-        text.split(/\n{2,}/).map(par => par.trim()).filter(Boolean)
-            .map(par => `<p>${esc(par).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-                .replace(/\n/g, '<br>')}</p>`).join('');
+    const proseHtml = storyProseHtml;
 
     /** A person's long note, set below the couple like a narrative. */
     const longNoteHtml = (person: Person): string => {

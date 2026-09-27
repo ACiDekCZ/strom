@@ -13,6 +13,7 @@ import { SettingsManager } from '../settings.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
+import { menuItemBody, menuItemAria } from './context-menu.js';
 
 /** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
 interface MenuRow {
@@ -70,7 +71,7 @@ export const bottomSheetMethods = uiModule({
                         // Keep the class out of the attribute (see context-menu.ts note).
                         const cls = a.danger ? 'bottom-sheet-item danger' : 'bottom-sheet-item';
                         const divider = a.divider ? '<div class="bottom-sheet-divider" role="separator"></div>' : '';
-                        return `${divider}<button type="button" class="${cls}" role="menuitem" data-action="${esc(a.action)}">${esc(a.label)}</button>`;
+                        return `${divider}<button type="button" class="${cls}" role="menuitem" data-action="${esc(a.action)}"${menuItemAria(a)}>${menuItemBody(a)}</button>`;
                     }).join('')}
                 </div>
             </div>

@@ -888,6 +888,8 @@ const stringsEN = {
         view: 'View',
         focus: 'Focus',
         showDescendants: 'Show descendants',
+        showSources: 'Show sources',
+        showStory: 'Show story',
         relationship: 'Find relationship…',
         archives: 'Search in archives…',
         addParent: 'Add parent',
@@ -1779,8 +1781,7 @@ const stringsEN = {
         themeLight: 'Light',
         themeDark: 'Dark',
         language: 'Language',
-        languageSystem: 'System (browser language)',
-        close: 'Close'
+        languageSystem: 'System (browser language)'
     },
 
     // Tree Manager
@@ -2273,7 +2274,17 @@ const stringsEN = {
      * Narratives (GEDCOM _STORY): the family-book text written on top of the
      * facts. Not evidence — the wording says so.
      */
+    personSources: {
+        title: 'Sources',
+        groupPerson: 'Person',
+        groupEvents: 'Events',
+        groupUnions: 'Marriages',
+        empty: 'No sources cited for this person yet.',
+        countSr: (n: number) => `Show sources, ${n}`,
+    },
     story: {
+        readerTitle: 'Story',
+        edit: 'Edit',
         section: 'Story',
         titleField: 'Chapter subheading',
         text: 'The story',
@@ -3138,6 +3149,8 @@ const stringsCZ: StringsType = {
         view: 'Zobrazit',
         focus: 'Zaměřit',
         showDescendants: 'Zobrazit potomky',
+        showSources: 'Zobrazit prameny',
+        showStory: 'Zobrazit vyprávění',
         relationship: 'Zjistit vztah…',
         archives: 'Hledat v archivech…',
         addParent: 'Přidat rodiče',
@@ -4040,8 +4053,7 @@ const stringsCZ: StringsType = {
         themeLight: 'Světlý',
         themeDark: 'Tmavý',
         language: 'Jazyk',
-        languageSystem: 'Systémový (podle prohlížeče)',
-        close: 'Zavřít'
+        languageSystem: 'Systémový (podle prohlížeče)'
     },
 
     // Tree Manager
@@ -4529,7 +4541,17 @@ const stringsCZ: StringsType = {
     },
 
     // Poster export (SVG / PNG / tiled PDF)
+    personSources: {
+        title: 'Prameny',
+        groupPerson: 'Osoba',
+        groupEvents: 'Události',
+        groupUnions: 'Sňatky',
+        empty: 'U této osoby zatím nejsou citované prameny.',
+        countSr: (n: number) => `Zobrazit prameny, ${n}`,
+    },
     story: {
+        readerTitle: 'Vyprávění',
+        edit: 'Upravit',
         section: 'Vyprávění',
         titleField: 'Podnadpis kapitoly',
         text: 'Text vyprávění',
@@ -5378,6 +5400,8 @@ const stringsDE: StringsType = {
         view: 'Anzeigen',
         focus: 'Fokussieren',
         showDescendants: 'Nachkommen anzeigen',
+        showSources: 'Quellen anzeigen',
+        showStory: 'Erzählung anzeigen',
         relationship: 'Verwandtschaft finden…',
         archives: 'In Archiven suchen…',
         addParent: 'Elternteil hinzufügen',
@@ -6240,8 +6264,7 @@ const stringsDE: StringsType = {
         themeLight: 'Hell',
         themeDark: 'Dunkel',
         language: 'Sprache',
-        languageSystem: 'System (Browsersprache)',
-        close: 'Schließen'
+        languageSystem: 'System (Browsersprache)'
     },
 
     // Tree Manager
@@ -6709,7 +6732,17 @@ const stringsDE: StringsType = {
     },
 
     // Poster export (SVG / PNG / tiled PDF)
+    personSources: {
+        title: 'Quellen',
+        groupPerson: 'Person',
+        groupEvents: 'Ereignisse',
+        groupUnions: 'Ehen',
+        empty: 'Für diese Person sind noch keine Quellen zitiert.',
+        countSr: (n: number) => `Quellen anzeigen, ${n}`,
+    },
     story: {
+        readerTitle: 'Erzählung',
+        edit: 'Bearbeiten',
         section: 'Erzählung',
         titleField: 'Untertitel des Kapitels',
         text: 'Der Text',

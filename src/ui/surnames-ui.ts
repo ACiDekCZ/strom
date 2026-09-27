@@ -29,7 +29,7 @@ export const surnamesMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = 'surnames-modal';
         overlay.innerHTML = `
-            <div class="modal surnames-modal modal--md" role="dialog" aria-modal="true">
+            <div class="modal surnames-modal modal--md" role="dialog" data-dialog-kind="info" aria-modal="true">
                 <div class="modal-header">
                     <h2>${strings.surnames.title}</h2>
                     <button class="close-btn" id="surnames-close-x" aria-label="${strings.buttons.close}">&times;</button>
@@ -52,7 +52,8 @@ export const surnamesMethods = uiModule({
                         <button type="button" class="secondary" id="surname-other-add">${strings.surnames.addSpelling}</button>
                     </div>
                 </div>
-                <div class="modal-buttons">
+                <div class="buttons">
+                    <button type="button" class="secondary" id="surnames-close" data-dismiss>${strings.buttons.close}</button>
                     <button type="button" class="primary" id="surnames-link" disabled>${strings.surnames.link}</button>
                 </div>
             </div>`;
@@ -61,6 +62,7 @@ export const surnamesMethods = uiModule({
         const close = (): void => this.closeSurnamesDialog();
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
         (overlay.querySelector('#surnames-close-x') as HTMLButtonElement).onclick = close;
+        (overlay.querySelector('#surnames-close') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#surnames-link') as HTMLButtonElement).onclick = () => this.linkSurnames();
 
         // A spelling the tree has never seen — the register's, which is exactly

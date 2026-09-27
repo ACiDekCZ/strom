@@ -77,6 +77,7 @@ export const personModalMethods = uiModule({
         // Reset readonly states (may have been set by edit modal for locked person)
         this.setPersonFormReadOnly(false);
         if (saveBtn) saveBtn.style.display = '';
+        this.setPersonModalDismiss(false);
 
         deleteBtn.style.display = 'none';
         if (mergeBtn) mergeBtn.style.display = 'none';
@@ -164,6 +165,12 @@ export const personModalMethods = uiModule({
      * start of every open, so a locked person's read-only state never leaks
      * into the next edit.
      */
+    /** Read-only (locked person): nothing to throw away, so "Close", not "Cancel". */
+    setPersonModalDismiss(readOnly: boolean): void {
+        const btn = document.getElementById('pm-dismiss');
+        if (btn) btn.textContent = readOnly ? strings.buttons.close : strings.buttons.cancel;
+    },
+
     setPersonFormReadOnly(readOnly: boolean): void {
         for (const id of ['input-firstname', 'input-lastname', 'input-birthdate', 'input-birthplace',
             'input-deathdate', 'input-deathplace', 'input-notes', 'input-name-variants', 'input-refn',
@@ -536,6 +543,7 @@ export const personModalMethods = uiModule({
         this.setPersonFormReadOnly(false);
         const saveBtnReset = document.getElementById('btn-save');
         if (saveBtnReset) saveBtnReset.style.display = '';
+        this.setPersonModalDismiss(false);
 
         deleteBtn.style.display = 'block';
         if (mergeBtn) mergeBtn.style.display = 'block';
@@ -637,6 +645,7 @@ export const personModalMethods = uiModule({
         if (DataManager.isPersonLocked(id)) {
             this.setPersonFormReadOnly(true);
             if (saveBtn) saveBtn.style.display = 'none';
+            this.setPersonModalDismiss(true);
             deleteBtn.style.display = 'none';
             if (mergeBtn) mergeBtn.style.display = 'none';
             if (linkRelBtn) linkRelBtn.style.display = 'none';

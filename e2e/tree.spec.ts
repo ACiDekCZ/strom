@@ -226,10 +226,10 @@ test('tree manager: Close button closes; the active tree has Open too', async ({
     await expect(manager).toBeHidden();
     await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Branch E');
 
-    // The header × closes it (the footer is for actions only).
+    // The header × closes it (the footer Close does the same).
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     await expect(manager).toBeVisible();
-    await expect(manager.locator('.tree-manager-footer')).not.toContainText('Close');
+    await expect(manager.locator('.tree-manager-footer [data-dismiss]')).toHaveText('Close');
     await manager.locator('.modal-header .close-btn').click();
     await expect(manager).toBeHidden();
 });

@@ -502,6 +502,24 @@ export const miscMethods = uiModule({
         // refresh even when no toast is shown and render() early-returns.
         DataManager.onUndoRedoChanged = () => this.refreshUndoRedoToolbar();
 
+        // Backdrop click: info, choice and picker dialogs close through their
+        // Close/Cancel button ([data-dismiss]), so it runs the same handler;
+        // forms and decisions ignore it. A press that started inside the
+        // dialog (a text selection dragged out) is not a backdrop click, and
+        // overlays wiring their own backdrop handler keep it.
+        let pressTarget: EventTarget | null = null;
+        document.addEventListener('pointerdown', (e) => { pressTarget = e.target; }, true);
+        document.addEventListener('click', (e) => {
+            const overlay = e.target;
+            if (!(overlay instanceof HTMLElement) || pressTarget !== overlay) return;
+            if (!overlay.classList.contains('modal-overlay') || !overlay.classList.contains('active')) return;
+            if (overlay.onclick) return;
+            const modal = overlay.querySelector(':scope > .modal');
+            const kind = modal?.getAttribute('data-dialog-kind');
+            if (kind !== 'info' && kind !== 'choice' && kind !== 'picker') return;
+            modal?.querySelector<HTMLElement>('[data-dismiss]')?.click();
+        });
+
         document.addEventListener('keydown', (e) => {
             // The slideshow owns the keyboard while it runs (TV remote style).
             if (this.slideshowActive) {
@@ -530,6 +548,15 @@ export const miscMethods = uiModule({
                 if (this.confirmEscape
                     && document.getElementById('confirmation-modal')?.classList.contains('active')) {
                     this.confirmEscape();
+                    return;
+                }
+                // A decision dialog on top (newer data version, a shared file
+                // opened, …): Escape takes its "leave it" option when it has
+                // one ([data-dismiss]), otherwise nothing — it must be answered.
+                const topOverlay = this.topActiveOverlay();
+                if (topOverlay && topOverlay.id !== 'confirmation-modal' && topOverlay.id !== 'merge-close-confirm'
+                    && topOverlay.querySelector(':scope > .modal')?.getAttribute('data-dialog-kind') === 'decision') {
+                    topOverlay.querySelector<HTMLElement>('[data-dismiss]')?.click();
                     return;
                 }
                 // The cross-tree chooser (a floating menu, not a modal) closes
@@ -680,6 +707,14 @@ export const miscMethods = uiModule({
                     }
                     if (currentDialog === 'research-info-modal') {
                         this.closeResearchInfoDialog();
+                        return;
+                    }
+                    if (currentDialog === 'person-sources-modal') {
+                        this.closePersonSourcesDialog();
+                        return;
+                    }
+                    if (currentDialog === 'person-story-modal') {
+                        this.closePersonStoryDialog();
                         return;
                     }
                     if (currentDialog === 'kinship-modal') {
@@ -910,12 +945,18 @@ export const miscMethods = uiModule({
     topFloatingDialog(): string | null {
         if (this.dialogStack.length === 0) return null;
         const skip = new Set(['confirmation-modal', 'password-prompt-modal', 'export-password-modal', 'password-setup-modal']);
+        const top = this.topActiveOverlay(skip);
+        return top?.id && !this.dialogStack.includes(top.id) ? top.id : null;
+    },
+
+    /** The open dialog overlay visually on top (highest z-index, then later in the document). */
+    topActiveOverlay(skip: Set<string> = new Set()): HTMLElement | null {
         const open = [...document.querySelectorAll<HTMLElement>('.modal-overlay.active')].filter(el => !skip.has(el.id));
         if (open.length === 0) return null;
         const z = (el: HTMLElement): number => Number.parseInt(getComputedStyle(el).zIndex, 10) || 0;
         let top = open[0];
         for (const el of open) if (z(el) >= z(top)) top = el;
-        return top.id && !this.dialogStack.includes(top.id) ? top.id : null;
+        return top;
     },
 
     /** Close a floating dialog through its own close (state reset), else just hide it. */
@@ -1025,6 +1066,11 @@ export const miscMethods = uiModule({
         } else {
             continueBtn.style.display = 'none';
         }
+        // Only errors: nothing to go on with, so "Close"; with Continue it cancels.
+        const canContinue = continueBtn.style.display !== 'none';
+        const dismiss = document.getElementById('validation-dismiss');
+        if (dismiss) dismiss.textContent = canContinue ? strings.buttons.cancel : strings.buttons.close;
+        modal.querySelector('.modal')?.setAttribute('data-dialog-kind', canContinue ? 'choice' : 'info');
 
         modal.classList.add('active');
     },

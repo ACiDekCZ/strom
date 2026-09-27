@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp } from './helpers.js';
+import { openApp, createFirstPerson, addRelation, card } from './helpers.js';
 
 /**
  * Dialogs whose header is a bare <h2> — the confirm box, the event editor,
@@ -65,27 +65,137 @@ test('every dialog has one of the three width classes', async ({ page }) => {
     expect(missing).toEqual([]);
 });
 
-test('no dialog footer carries a Close button, and one primary sits last', async ({ page }) => {
-    await openApp(page);
-    const problems = await page.evaluate(() => {
+/**
+ * Dialog kinds (dialogs unification): every dialog declares data-dialog-kind.
+ * form / info / choice / picker: a header × AND exactly one footer button
+ * [data-dismiss] — "Close" for info, "Cancel" otherwise — standing right
+ * before the single primary (or last when there is none). Decisions have no ×.
+ */
+async function dialogRuleProblems(page: import('@playwright/test').Page): Promise<string[]> {
+    return page.evaluate(() => {
         const out: string[] = [];
-        const footers = '.buttons, .modal-buttons, .pm-footer, .tree-manager-footer, .wiz-actions';
         document.querySelectorAll('.modal-overlay').forEach(o => {
-            const hasX = !!o.querySelector('.close-btn');
-            o.querySelectorAll(footers).forEach(f => {
-                const btns = Array.from(f.querySelectorAll(':scope > button, :scope > a, :scope > span > button'));
-                if (hasX && btns.some(b => /^(Close|Zavřít|Schließen)$/.test((b.textContent || '').trim()))) {
-                    out.push(`${o.id}: footer Close`);
-                }
-                const prim = btns.filter(b => b.classList.contains('primary') || b.classList.contains('btn-primary'));
-                if (prim.length > 1) out.push(`${o.id}: ${prim.length} primaries`);
-                if (prim.length === 1 && btns[btns.length - 1] !== prim[0]) out.push(`${o.id}: primary not last`);
-            });
+            const modal = o.querySelector(':scope > .modal');
+            if (!modal) return;
+            const id = o.id || '(no id)';
+            const kind = modal.getAttribute('data-dialog-kind');
+            if (!kind) { out.push(`${id}: no data-dialog-kind`); return; }
+            const hasX = !!modal.querySelector('.close-btn');
+            const prim = Array.from(modal.querySelectorAll('.buttons .primary, .buttons .btn-primary'));
+            if (prim.length > 1) out.push(`${id}: ${prim.length} primaries`);
+            if (kind === 'decision') {
+                if (hasX) out.push(`${id}: decision with ×`);
+                return;
+            }
+            if (!['form', 'info', 'choice', 'picker'].includes(kind)) { out.push(`${id}: unknown kind ${kind}`); return; }
+            if (!hasX) out.push(`${id}: no ×`);
+            const dismiss = Array.from(modal.querySelectorAll('.buttons [data-dismiss]'));
+            if (dismiss.length !== 1) { out.push(`${id}: ${dismiss.length} [data-dismiss]`); return; }
+            const d = dismiss[0] as HTMLElement;
+            const want = kind === 'info' ? 'Close' : 'Cancel';
+            if ((d.textContent || '').trim() !== want) out.push(`${id}: dismiss says "${(d.textContent || '').trim()}", want ${want}`);
+            if (!d.classList.contains('secondary')) out.push(`${id}: dismiss not secondary`);
+            const next = d.nextElementSibling;
+            if (prim.length === 1 ? next !== prim[0] : next !== null) out.push(`${id}: dismiss not right before the primary / last`);
         });
         return out;
     });
-    expect(problems).toEqual([]);
+}
+
+test('every dialog follows its kind: ×, one Close|Cancel before the primary', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
+    const janId = await card(page, 'Jan').getAttribute('data-id');
+    const petrId = await card(page, 'Petr').getAttribute('data-id');
+    // Built-per-open dialogs: open each, check, close.
+    const dynamic: Array<[string, string]> = [
+        ['kinship-modal', `window.Strom.UI.showRelationshipCalculator('${janId}')`],
+        ['archives-modal', `window.Strom.UI.showArchiveSearch('${janId}')`],
+        ['surnames-modal', 'window.Strom.UI.showSurnamesDialog()'],
+        ['split-modal', 'window.Strom.UI.showSplitDialog()'],
+        ['reassign-modal', `window.Strom.UI.openReassignPicker('${petrId}', '${janId}', 'parent')`],
+        ['research-info-modal', 'window.Strom.UI.showResearchInfoDialog()'],
+        ['person-sources-modal', `window.Strom.UI.showPersonSourcesDialog('${janId}')`],
+        ['person-story-modal', `window.Strom.UI.showPersonStoryDialog('${janId}')`],
+    ];
+    await page.evaluate((id) => window.Strom.DataManager.updatePerson(id, { story: { text: 'Kovar.' } }), janId!);
+    expect(await dialogRuleProblems(page)).toEqual([]);
+    for (const [id, open] of dynamic) {
+        await page.evaluate(open);
+        await expect(page.locator(`#${id}`), id).toBeVisible();
+        expect(await dialogRuleProblems(page), id).toEqual([]);
+        // Its footer Close/Cancel runs the dialog's own close (a click on
+        // the title first folds away an open person-picker list).
+        await page.locator(`#${id} .modal-header h2`).click();
+        await page.locator(`#${id} [data-dismiss]`).click();
+        await expect(page.locator(`#${id}`), id).toBeHidden();
+    }
 });
+
+test('info dialogs close on the backdrop and on Close; forms ignore the backdrop', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    // Info: backdrop click closes.
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    const settings = page.locator('#settings-modal');
+    await expect(settings).toBeVisible();
+    await page.mouse.click(5, 5);
+    await expect(settings).toBeHidden();
+    // Info: the footer Close closes, and so does Escape.
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    await settings.locator('[data-dismiss]').click();
+    await expect(settings).toBeHidden();
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    await expect(settings).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(settings).toBeHidden();
+    // Form: a backdrop click keeps it open.
+    await page.evaluate(() => window.Strom.UI.showNewTreeDialog());
+    const form = page.locator('#new-tree-modal');
+    await expect(form).toBeVisible();
+    await page.mouse.click(5, 5);
+    await expect(form).toBeVisible();
+    await form.locator('[data-dismiss]').click();
+    await expect(form).toBeHidden();
+});
+
+test('a decision without a "leave it" option ignores Escape', async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => document.getElementById('newer-version-storage-modal')!.classList.add('active'));
+    const modal = page.locator('#newer-version-storage-modal');
+    await expect(modal).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(modal).toBeVisible();
+});
+
+for (const id of ['storage-status-modal', 'tree-manager-modal'] as const) {
+    test(`360px: ${id} footer stacks full width, primary on top`, async ({ page }) => {
+        await page.setViewportSize({ width: 360, height: 740 });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.evaluate((dialog) => {
+            if (dialog === 'tree-manager-modal') void window.Strom.UI.showTreeManagerDialog();
+            else void window.Strom.UI.showStorageStatusDialog();
+        }, id);
+        const modal = page.locator(`#${id}`);
+        await expect(modal).toBeVisible();
+        const m = await page.evaluate((dialog) => {
+            const footer = document.querySelector(`#${dialog} .buttons`) as HTMLElement;
+            const btns = Array.from(footer.children).filter(b => (b as HTMLElement).offsetParent && !b.classList.contains('link-button')) as HTMLElement[];
+            const f = footer.getBoundingClientRect();
+            const primary = footer.querySelector('.primary') as HTMLElement;
+            const dismiss = footer.querySelector('[data-dismiss]') as HTMLElement;
+            return {
+                overflow: btns.some(b => b.getBoundingClientRect().right > f.right + 0.5 || b.getBoundingClientRect().left < f.left - 0.5),
+                fullWidth: btns.every(b => b.getBoundingClientRect().width > f.width - 40),
+                primaryAbove: primary.getBoundingClientRect().top < dismiss.getBoundingClientRect().top,
+                pageScroll: document.documentElement.scrollWidth > window.innerWidth,
+            };
+        }, id);
+        expect(m).toEqual({ overflow: false, fullWidth: true, primaryAbove: true, pageScroll: false });
+    });
+}
 
 test('the confirm dialog is the small width and its title keeps the 20px/24px inset', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -109,6 +219,7 @@ test('tree manager: New tree is the only primary, rows offer "Open at startup"',
     const footer = manager.locator('.tree-manager-footer');
     await expect(footer.locator('button.primary')).toHaveCount(1);
     await expect(footer.locator('button').last()).toHaveClass(/primary/);
+    await expect(footer.locator('[data-dismiss]')).toHaveText('Close');
     await expect(footer).not.toContainText('Default tree');
 
     const more = manager.locator('.tree-row-menu-btn').first();
@@ -128,8 +239,9 @@ test('surname spellings: Link is the footer primary, typed spellings use an Add 
     await page.evaluate(() => window.Strom.UI.showSurnamesDialog());
     const modal = page.locator('#surnames-modal');
     await expect(modal).toBeVisible();
-    await expect(modal.locator('.modal-buttons #surnames-link')).toHaveClass(/primary/);
-    await expect(modal.locator('.modal-buttons button')).toHaveCount(1);
+    await expect(modal.locator('.buttons #surnames-link')).toHaveClass(/primary/);
+    await expect(modal.locator('.buttons button')).toHaveCount(2);
+    await expect(modal.locator('.buttons [data-dismiss]')).toHaveText('Close');
     await expect(modal.locator('#surname-other-add')).toHaveText('Add');
     await expect(modal.locator('.surnames-none .empty-block-title')).toBeVisible();
 });
