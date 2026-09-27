@@ -1,0 +1,545 @@
+import { test, expect, Page } from '@playwright/test';
+import { openApp, card } from './helpers.js';
+
+/**
+ * Research actions, second wave: the Research submenu's update block, "Undo
+ * last send" and "Research settings"; the live panel's "Up next", update
+ * strip and spend; "What the research knows" (menu, dialog, edit form);
+ * approving a draft story; "Start research with this tree" (G3); and "Where
+ * evidence is missing" in tree health with its highlight in the tree.
+ * Handing a strom-research:// link to the system is recorded instead.
+ */
+
+const UUID = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
+const BRIDGE = 'http://127.0.0.1:5996/0123456789abcdef0123456789abcdef';
+const cors = { 'access-control-allow-origin': '*' };
+const ALL = ['send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
+    'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup'];
+
+function researchGed(): string {
+    return [
+        '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 27 SEP 2026', `1 _STROM_TREE ${UUID}`, '1 _STROM_HEAD 3f2a9c1e5b7d',
+        '1 _STROM_ASOF 2026-09-20', '1 CHAR UTF-8', '1 NOTE Víškovi',
+        '0 @S12@ SOUR', '1 TITL Křestní matrika Chlumy 1865', '1 REFN S0012',
+        '0 @S31@ SOUR', '1 TITL Sčítání lidu 1880', '1 REFN S0031',
+        '0 @P0001@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1840', '1 DEAT', '2 DATE 1900',
+        '1 REFN P0001', '1 FAMS @F0001@',
+        '1 _STORY', '2 STAT hotovo', '2 TEXT Josef hospodařil na čp. 12.',
+        '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '1 FAMS @F0001@',
+        '1 _STROM_SEARCHED', '2 TITL Oddací matrika Chlumy', '2 DATE FROM 1860 TO 1864', '2 RESN none',
+        '0 @P0012@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '2 SOUR @S12@', '1 DEAT', '2 DATE 1932',
+        '1 REFN P0012', '1 FAMC @F0001@',
+        '1 _STORY', '2 STAT navrh', '2 TEXT Jan se narodil v Chlumech.',
+        '1 _STROM_CONFLICT C0007', '2 TYPE BIRT', '2 STAT open', '2 VAL 3 FEB 1865', '3 SOUR @S12@', '2 VAL 1866', '3 SOUR @S31@',
+        '1 _STROM_CONFLICT C0008', '2 TYPE DEAT', '2 STAT decided', '2 VAL 1931', '2 VAL 1932', '2 DECI 1932', '3 SOUR @S31@',
+        '1 _STROM_HYPO', '2 TITL Otec: Josef, nebo Jan Víšek?', '2 NOTE Oba žili v Chlumech.',
+        '1 _STROM_SEARCHED', '2 TITL Sčítání lidu 1880', '2 DATE 1880', '2 RESN found',
+        '1 _STROM_SEARCHED', '2 TITL Křestní matrika Chlumy', '2 DATE FROM 1860 TO 1870', '2 RESN found',
+        '0 @P0013@ INDI', '1 NAME Eva /Víšková/', '1 SEX F', '1 BIRT', '2 DATE 1990', '1 REFN P0013', '1 FAMC @F0001@',
+        '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0012@', '1 CHIL @P0013@',
+        '0 TRLR',
+    ].join('\n');
+}
+
+async function dropFile(page: Page, content: string): Promise<void> {
+    const dataTransfer = await page.evaluateHandle((content) => {
+        const dt = new DataTransfer();
+        dt.items.add(new File([content], 'tree-strom.ged', { type: 'text/plain' }));
+        return dt;
+    }, content);
+    for (const type of ['dragenter', 'dragover', 'drop']) await page.dispatchEvent('#tree-container', type, { dataTransfer });
+}
+
+/** Links the research announced on this computer, and what it last said (before the app starts). */
+async function seed(page: Page, links: string[], stored: Record<string, unknown> | null = null): Promise<void> {
+    await page.addInitScript(([links, stored, uuid]) => {
+        if (sessionStorage.getItem('seeded')) return;
+        sessionStorage.setItem('seeded', '1');
+        if ((links as string[]).length) localStorage.setItem('strom-research-links', JSON.stringify({ actions: links, at: new Date().toISOString() }));
+        if (stored) localStorage.setItem(`strom-research-waiting:${uuid}`, JSON.stringify({ items: [], at: new Date(Date.now() - 3600_000).toISOString(), ...stored }));
+    }, [links, stored, UUID] as const);
+}
+
+async function recordLaunches(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const launched: string[] = [];
+        (window as unknown as { __launched: string[] }).__launched = launched;
+        window.Strom.UI.handOverResearchLink = (url: string) => { launched.push(url); };
+    });
+}
+
+const launched = (page: Page) => page.evaluate(() => (window as unknown as { __launched: string[] }).__launched);
+
+/** A research tree on screen; launched links are recorded. */
+async function setup(page: Page, links: string[] = ALL, stored: Record<string, unknown> | null = null): Promise<void> {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await seed(page, links, stored);
+    await openApp(page);
+    await dropFile(page, researchGed());
+    await expect(card(page, 'Jan')).toBeVisible();
+    await recordLaunches(page);
+}
+
+async function openResearchMenu(page: Page): Promise<void> {
+    await page.locator('.actions-menu-btn').click();
+    await page.locator('#actions-research-row').click();
+    await expect(page.locator('#actions-research-submenu')).toBeVisible();
+}
+
+const personId = (page: Page, refn: string) => page.evaluate((refn) =>
+    window.Strom.DataManager.getAllPersons().find((p: { refn?: string }) => p.refn === refn)!.id, refn);
+
+async function menuActions(page: Page, name: string): Promise<string[]> {
+    await card(page, name).click();
+    const menu = page.locator('.context-menu');
+    await expect(menu).toBeVisible();
+    return menu.locator('[data-action]').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action || ''));
+}
+
+test.describe('Research submenu, second wave', () => {
+    test('update block, "Undo last send" with its time, "Research settings"', async ({ page }) => {
+        const sentAt = new Date(Date.now() - 2 * 3600_000);
+        await setup(page, ALL, { update: { version: '1.7.0' }, lastIntake: { id: 'I0042', at: sentAt.toISOString() } });
+        await openResearchMenu(page);
+        const block = page.locator('#research-update-block');
+        await expect(block).toContainText('New Strom Research 1.7.0');
+        await expect(page.locator('#research-item-update')).toHaveText('Update ↗');
+        const hhmm = await page.evaluate((iso) => new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso)), sentAt.toISOString());
+        await expect(page.locator('#research-item-undo .research-item-sub')).toHaveText(`sent ${hhmm}`);
+        await expect(page.locator('#actions-research-submenu .research-item-label'))
+            .toContainText(['Load new version', 'Send changes', 'Undo last send', 'Open research', 'Continue with the agent', 'Research settings']);
+
+        await page.locator('#research-item-update').click();
+        await openResearchMenu(page);
+        await page.locator('#research-item-undo').click();
+        await openResearchMenu(page);
+        await page.locator('#research-item-setup').click();
+        expect(await launched(page)).toEqual([
+            `strom-research://update?tree=${UUID}`,
+            `strom-research://sync-undo?tree=${UUID}&intake=I0042`,
+            `strom-research://setup?tree=${UUID}`,
+        ]);
+    });
+
+    test('no intake (or an old one), no setup announced: neither row', async ({ page }) => {
+        const old = new Date(Date.now() - 8 * 24 * 3600_000).toISOString();
+        await setup(page, ALL.filter(a => a !== 'setup'), { lastIntake: { id: 'I0042', at: old } });
+        await openResearchMenu(page);
+        await expect(page.locator('#research-item-undo')).toHaveCount(0);
+        await expect(page.locator('#research-item-setup')).toHaveCount(0);
+        await expect(page.locator('#research-update-block')).toHaveCount(0);
+    });
+});
+
+test.describe('live panel: up next, update, spend', () => {
+    const status = (extra: Record<string, unknown>) => ({
+        tree: { id: UUID, name: 'Víškovi' }, head: 'h1', working: [], waiting: [], links: ALL, ...extra,
+    });
+
+    async function follow(page: Page, extra: Record<string, unknown>): Promise<void> {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await seed(page, ALL);
+        await page.route(`${BRIDGE}/**`, async (route) => {
+            const path = new URL(route.request().url()).pathname;
+            if (path.endsWith('/status')) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(status(extra)) });
+            }
+            if (path.endsWith('/tree.ged')) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain' }, body: researchGed() });
+            }
+            return new Promise(() => {});
+        });
+        await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
+        await expect(page.locator('#live-panel')).toBeVisible();
+        await recordLaunches(page);
+    }
+
+    test('three next tasks, parked below, the rest as one link; ⋯ parks or drops in the research', async ({ page }) => {
+        await follow(page, {
+            queue: [
+                { id: 'T0101', text: 'Matriky Chlumy 1860–1870', state: 'next' },
+                { id: 'T0102', text: 'Sčítání 1880', state: 'next' },
+                { id: 'T0103', text: 'Pozemková kniha', state: 'next' },
+                { id: 'T0104', text: 'Čtvrtý úkol', state: 'next' },
+                { id: 'T0105', text: 'Oddací matrika', state: 'parked' },
+            ],
+            queueMore: 8,
+            update: { version: '1.7.0' },
+            spend: { month: '2026-09', sessions: 4, amount: 3.2, currency: 'USD' },
+        });
+        const panel = page.locator('#live-panel');
+        await expect(panel.locator('.live-queue-toggle')).toHaveText('Up next');
+        const rows = panel.locator('.live-queue-row');
+        await expect(rows.locator('.live-queue-text')).toHaveText([
+            'Matriky Chlumy 1860–1870', 'Sčítání 1880', 'Pozemková kniha', 'Parked: Oddací matrika',
+        ]);
+        await expect(panel.locator('.live-queue-num')).toHaveText(['1', '2', '3']);
+        await expect(panel.locator('.live-queue-rest')).toHaveText('and 9 more in the research ↗');
+        // Order: at work → up next → latest changes (nobody waits here).
+        const headings = await panel.locator('.live-panel-heading').allTextContents();
+        expect(headings.map(h => h.trim())).toEqual(['At work', 'Up next', 'Latest changes']);
+        await expect(panel.locator('.live-panel-update')).toContainText('New Strom Research 1.7.0');
+        await expect(panel.locator('.live-panel-spend')).toHaveText(/Agent this month: 4 sessions · \$3\.20/);
+
+        // ⋯ → a small menu; Escape closes it (and only it).
+        const more = panel.locator('.live-queue-more').first();
+        await expect(more).toHaveAttribute('aria-label', 'Task options');
+        await more.click();
+        const menu = page.locator('#live-task-menu');
+        await expect(menu.locator('.context-menu-item')).toHaveText(['Park ↗', 'Drop ↗']);
+        await page.keyboard.press('Escape');
+        await expect(menu).toHaveCount(0);
+        await expect(panel).toBeVisible();
+        await more.click();
+        await menu.getByText('Park ↗').click();
+        await panel.locator('.live-queue-more').nth(1).click();
+        await page.locator('#live-task-menu').getByText('Drop ↗').click();
+        await panel.locator('.live-queue-wake').click();
+        await panel.locator('.live-queue-rest').click();
+        await panel.locator('.live-panel-update-link').click();
+        await panel.locator('.live-panel-spend-link').click();
+        expect(await launched(page)).toEqual([
+            `strom-research://task?tree=${UUID}&task=T0101&do=park`,
+            `strom-research://task?tree=${UUID}&task=T0102&do=drop`,
+            `strom-research://task?tree=${UUID}&task=T0105&do=wake`,
+            `strom-research://open?tree=${UUID}`,
+            `strom-research://update?tree=${UUID}`,
+            `strom-research://sessions?tree=${UUID}`,
+        ]);
+        // Nothing changes here after an action: the next status tells.
+        await expect(rows).toHaveCount(5);
+    });
+
+    test('without the fields: no queue, no update strip, no spend; the idle panel has no queue', async ({ page }) => {
+        await follow(page, {});
+        const panel = page.locator('#live-panel');
+        await expect(panel.locator('.live-queue-toggle')).toHaveCount(0);
+        await expect(panel.locator('.live-panel-update')).toHaveCount(0);
+        await expect(panel.locator('.live-panel-spend')).toHaveCount(0);
+        await panel.getByRole('button', { name: 'Stop' }).click();
+        await page.evaluate(() => window.Strom.UI.showResearchWaiting());
+        await expect(page.locator('#live-panel.idle')).toBeVisible();
+        await expect(page.locator('#live-panel .live-queue-toggle')).toHaveCount(0);
+    });
+});
+
+test.describe('What the research knows', () => {
+    test('in the menu under "Show sources" only with data, the conflict tag; Find descendants under Find ancestors', async ({ page }) => {
+        await setup(page);
+        const actions = await menuActions(page, 'Jan');
+        expect(actions.slice(actions.indexOf('sources'), actions.indexOf('sources') + 2)).toEqual(['sources', 'research-knows']);
+        const knows = page.locator('.context-menu [data-action="research-knows"]');
+        await expect(knows.locator('.menu-item-tag')).toHaveText('1 conflict');
+        await expect(knows).toHaveAttribute('aria-label', 'What the research knows, 1 conflict');
+        expect(actions.slice(-4)).toEqual(['research-review', 'research-ancestors', 'research-descendants', 'research-ask']);
+        await page.locator('.context-menu [data-action="research-descendants"]').click();
+        expect(await launched(page)).toEqual([`strom-research://research?tree=${UUID}&person=P0012&direction=descendants`]);
+
+        // Anna: searched only — no tag. Eva: nothing — no item.
+        await menuActions(page, 'Anna');
+        await expect(page.locator('.context-menu [data-action="research-knows"] .menu-item-tag')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        expect(await menuActions(page, 'Eva')).not.toContain('research-knows');
+    });
+
+    test('the dialog: open conflict card, decided row, hypotheses, searched by year; links, source viewer', async ({ page }) => {
+        await setup(page);
+        const jan = await personId(page, 'P0012');
+        await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'research-knows'), jan);
+        const dialog = page.locator('#person-research-modal');
+        await expect(dialog).toBeVisible();
+        await expect(dialog.locator('.audit-log-subtitle')).toHaveText(/^Jan Víšek · 1865–1932 · as of \S*2026$/);
+        await expect(dialog.locator('.menu-section-header')).toHaveText(['Conflicts', 'Hypotheses', 'Searched']);
+        const conflict = dialog.locator('.person-research-conflict');
+        await expect(conflict.locator('.person-research-fact')).toHaveText('Birth');
+        await expect(conflict.locator('.person-research-open-tag')).toHaveText('Open');
+        // The research's GEDCOM date reads in the app's date style.
+        await expect(conflict.locator('tbody td:first-child')).toHaveText([/^(?!3 FEB).*1865$/, '1866']);
+        await expect(dialog.locator('.person-research-decided')).toContainText('Death: 1931 vs. 1932');
+        await expect(dialog.locator('.person-research-decision')).toHaveText('decided: 1932 (Sčítání lidu 1880)');
+        await expect(dialog.locator('.person-research-hypo-title')).toHaveText('Otec: Josef, nebo Jan Víšek?');
+        await expect(dialog.locator('.person-research-searched tbody td:first-child')).toHaveText(['Křestní matrika Chlumy', 'Sčítání lidu 1880']);
+        await expect(dialog.locator('.person-research-years')).toHaveText(['1860–1870', '1880']);
+        await expect(dialog.locator('.person-research-result--found')).toHaveText(['found', 'found']);
+
+        await dialog.locator('[data-do="decide"]').click();
+        await dialog.locator('[data-do="agent"]').click();
+        await expect(page.locator('.toast')).toContainText('Opening the agent…');
+        expect(await launched(page)).toEqual([
+            `strom-research://conflict?tree=${UUID}&id=C0007&do=decide`,
+            `strom-research://conflict?tree=${UUID}&id=C0007&do=agent`,
+        ]);
+
+        await dialog.locator('.person-research-source').first().click();
+        await expect(page.locator('#source-viewer-modal')).toBeVisible();
+        await expect(page.locator('#source-viewer-title')).toHaveText('Křestní matrika Chlumy 1865');
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#source-viewer-modal')).toBeHidden();
+        await page.keyboard.press('Escape');
+        await expect(dialog).toHaveCount(0);
+
+        // Anna: only what was searched — the other sections are not there.
+        const anna = await personId(page, 'P0002');
+        await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'research-knows'), anna);
+        await expect(page.locator('#person-research-modal .menu-section-header')).toHaveText(['Searched']);
+    });
+
+    test('links only when announced: the content stays', async ({ page }) => {
+        await setup(page, ['send', 'open']);
+        const jan = await personId(page, 'P0012');
+        await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'research-knows'), jan);
+        const dialog = page.locator('#person-research-modal');
+        await expect(dialog.locator('.person-research-conflict')).toBeVisible();
+        await expect(dialog.locator('[data-conflict]')).toHaveCount(0);
+    });
+
+    test('edit form: "conflict ›" at the birth date opens the dialog above the form', async ({ page }) => {
+        await setup(page);
+        const jan = await personId(page, 'P0012');
+        await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'edit'), jan);
+        const tag = page.locator('#person-modal label[for="input-birthdate"] .pm-conflict-tag');
+        await expect(tag).toHaveText('conflict ›');
+        await expect(page.locator('#person-modal .pm-conflict-tag')).toHaveCount(1);
+        await tag.click();
+        await expect(page.locator('#person-research-modal')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#person-research-modal')).toHaveCount(0);
+        await expect(page.locator('#person-modal')).toBeVisible();
+    });
+
+    test('phone (360 px): the item in the bottom sheet too', async ({ browser }) => {
+        const context = await browser.newContext({ viewport: { width: 360, height: 740 }, hasTouch: true, isMobile: true });
+        const page = await context.newPage();
+        await seed(page, ALL);
+        await openApp(page);
+        await dropFile(page, researchGed());
+        await expect(card(page, 'Jan')).toBeVisible();
+        await card(page, 'Jan').click();
+        const item = page.locator('.bottom-sheet [data-action="research-knows"]');
+        await expect(item).toBeVisible();
+        await expect(item.locator('.menu-item-tag')).toHaveText('1 conflict');
+        await item.click();
+        await expect(page.locator('#person-research-modal')).toBeVisible();
+        // No research links on a phone, the content is there.
+        await expect(page.locator('#person-research-modal [data-conflict]')).toHaveCount(0);
+        await context.close();
+    });
+});
+
+test.describe('approve a draft story', () => {
+    test('draft + story announced: "Approve in the research ↗"; an approved story: none', async ({ page }) => {
+        await setup(page);
+        const jan = await personId(page, 'P0012');
+        await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), jan);
+        const approve = page.locator('#person-story-approve');
+        await expect(approve).toHaveText('Approve in the research ↗');
+        await approve.click();
+        expect(await launched(page)).toEqual([`strom-research://story?tree=${UUID}&person=P0012&do=final`]);
+        await page.keyboard.press('Escape');
+        const josef = await personId(page, 'P0001');
+        await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), josef);
+        await expect(page.locator('#person-story-modal')).toBeVisible();
+        await expect(page.locator('#person-story-approve')).toHaveCount(0);
+    });
+});
+
+test.describe('Start research with this tree (G3)', () => {
+    const TOKEN_RE = /^strom-research:\/\/new\?app=([A-Za-z0-9_-]{43})$/;
+
+    async function appTree(page: Page, links: string[]): Promise<void> {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await seed(page, links);
+        await openApp(page);
+        await page.evaluate(async () => {
+            const p = (id: string, firstName: string, extra: Record<string, unknown> = {}) => ({
+                id, firstName, lastName: 'Dvořák', gender: 'male', isPlaceholder: false,
+                partnerships: [], parentIds: [], childIds: [], ...extra,
+            });
+            await window.Strom.DataManager.importAsNewTree({
+                persons: { a: p('a', 'Karel', { childIds: ['b'] }), b: p('b', 'Petr', { parentIds: ['a'] }) },
+                partnerships: {},
+            }, 'Dvořákovi');
+            window.Strom.UI.updateTreeSwitcher();
+        });
+        await expect(card(page, 'Karel')).toBeVisible();
+        await recordLaunches(page);
+    }
+
+    test('the explanation dialog offers "Start research ↗" only when the research announced `new`', async ({ page }) => {
+        await appTree(page, ['send']);
+        await page.evaluate(() => window.Strom.UI.showResearchInfoDialog());
+        await expect(page.locator('#research-info-modal')).toBeVisible();
+        await expect(page.locator('#research-adopt-start')).toHaveCount(0);
+        await expect(page.locator('.research-info-need')).toBeVisible();
+        await page.keyboard.press('Escape');
+
+        await page.evaluate(() => localStorage.setItem('strom-research-links', JSON.stringify({ actions: ['new'], at: new Date().toISOString() })));
+        await page.evaluate(() => window.Strom.UI.showResearchInfoDialog());
+        const dialog = page.locator('#research-info-modal');
+        await expect(dialog.locator('.research-info-lead')).toContainText('can continue with your tree Dvořákovi');
+        await expect(dialog.locator('.research-info-need')).toHaveCount(0);
+        await expect(dialog.locator('.research-info-step')).toHaveCount(3);
+        await expect(dialog.locator('.research-info-about')).toContainText('What is Strom Research');
+        await dialog.locator('#research-adopt-start').click();
+        await expect(dialog).toHaveCount(0);
+        const [url] = await launched(page);
+        expect(url).toMatch(TOKEN_RE);
+        await expect(page.locator('.toast .toast-spinner')).toBeVisible();
+        await expect(page.locator('.toast')).toContainText('Waiting for the research… Finish setting up in the terminal.');
+        const stored = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.researchAdoptToken?.token);
+        expect(stored).toBe(url.match(TOKEN_RE)![1]);
+        // Closing the toast keeps the token.
+        await page.locator('.toast-close').click();
+        await expect(page.locator('.toast')).toHaveCount(0);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.researchAdoptToken?.token)).toBe(stored);
+    });
+
+    async function routeBridge(page: Page, token: string, calls: { cancel: string[]; posted: string[] }): Promise<void> {
+        await page.route(`${BRIDGE}/**`, async (route) => {
+            const req = route.request();
+            const path = new URL(req.url()).pathname;
+            if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-headers': '*' } });
+            if (path.endsWith('/adopt') && req.method() === 'GET') {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
+                    body: JSON.stringify({ token, name: 'Dvořákovi – výzkum' }) });
+            }
+            if (path.endsWith('/adopt') && req.method() === 'POST') {
+                calls.posted.push(req.postData() ?? '');
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
+                    body: JSON.stringify({ tree: UUID, head: 'abc1234' }) });
+            }
+            if (path.endsWith('/cancel')) {
+                calls.cancel.push(req.postData() ?? '');
+                return route.fulfill({ status: 200, headers: cors, body: '{}' });
+            }
+            return route.fulfill({ status: 404, headers: cors, body: '' });
+        });
+    }
+
+    test('?adopt= with the token: "Hand the tree to the research?" → linked, Research menu shown', async ({ page }) => {
+        await appTree(page, ALL);
+        await page.evaluate(() => window.Strom.UI.startResearchAdopt(window.Strom.DataManager.getCurrentTreeId()));
+        const token = (await launched(page))[0].match(TOKEN_RE)![1];
+        const calls = { cancel: [] as string[], posted: [] as string[] };
+        await routeBridge(page, token, calls);
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+        const dialog = page.locator('#research-adopt-modal');
+        await expect(dialog).toBeVisible();
+        await expect(dialog.locator('.close-btn')).toHaveCount(0);
+        await expect(dialog.locator('.audit-log-subtitle')).toHaveText('Dvořákovi → research “Dvořákovi – výzkum”');
+        await expect(dialog.locator('.research-adopt-summary')).toHaveText('2 people · 0 families · 0 sources');
+        await expect(dialog.locator('#research-adopt-images')).toHaveCount(0);
+        await dialog.locator('#research-adopt-confirm').click();
+        await expect(page.locator('.toast')).toContainText('Dvořákovi is now linked to the research.');
+        expect(calls.posted[0]).toContain('1 NAME Karel /Dvořák/');
+        const research = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata());
+        expect(research?.research).toMatchObject({ id: UUID, head: 'abc1234' });
+        expect(research?.researchAdoptToken).toBeUndefined();
+        await expect(page.locator('#actions-research-wrap')).toBeAttached();
+        expect(await page.evaluate(() => window.Strom.UI.researchMenuShown())).toBe(true);
+        expect(calls.cancel).toEqual([]);
+    });
+
+    test('an unknown token: a toast, no dialog, the research is told', async ({ page }) => {
+        await appTree(page, ALL);
+        const calls = { cancel: [] as string[], posted: [] as string[] };
+        await routeBridge(page, 'x'.repeat(43), calls);
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+        await expect(page.locator('.toast')).toContainText('The research asked for a tree that is not here.');
+        await expect(page.locator('#research-adopt-modal')).toHaveCount(0);
+        await expect.poll(() => calls.cancel).toEqual([JSON.stringify({ reason: 'no-tree' })]);
+    });
+
+    test('"Don\'t hand over": the research is told, the tree stays unlinked', async ({ page }) => {
+        await appTree(page, ALL);
+        await page.evaluate(() => window.Strom.UI.startResearchAdopt(window.Strom.DataManager.getCurrentTreeId()));
+        const token = (await launched(page))[0].match(TOKEN_RE)![1];
+        const calls = { cancel: [] as string[], posted: [] as string[] };
+        await routeBridge(page, token, calls);
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+        await page.locator('#research-adopt-cancel').click();
+        await expect(page.locator('#research-adopt-modal')).toHaveCount(0);
+        await expect.poll(() => calls.cancel).toEqual([JSON.stringify({ reason: 'cancelled' })]);
+        expect(calls.posted).toEqual([]);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research)).toBeUndefined();
+    });
+
+    test('tree manager: "Start research with this tree ↗" in the row menu of an app tree', async ({ page }) => {
+        await appTree(page, ALL);
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const item = page.locator('.tree-manager-item', { hasText: 'Dvořákovi' }).locator('.tree-row-menu-item', { hasText: 'Start research with this tree ↗' });
+        await expect(item).toHaveCount(1);
+    });
+});
+
+test.describe('Where evidence is missing (tree health)', () => {
+    async function tree(page: Page): Promise<void> {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await page.evaluate(async () => {
+            const p = (id: string, firstName: string, extra: Record<string, unknown> = {}) => ({
+                id, firstName, lastName: 'Horák', gender: 'male', isPlaceholder: false,
+                partnerships: [], parentIds: [], childIds: [], ...extra,
+            });
+            await window.Strom.DataManager.importAsNewTree({
+                persons: {
+                    gp: p('gp', 'Václav', { partnerships: ['u1'], childIds: ['f'] }),
+                    gm: p('gm', 'Marie', { gender: 'female', partnerships: ['u1'], childIds: ['f'] }),
+                    f: p('f', 'Tomáš', { parentIds: ['gp', 'gm'], childIds: ['s'], sourceIds: ['s1'], birthDate: '1900' }),
+                    s: p('s', 'Ondřej', { parentIds: ['f'], birthDate: '1930' }),
+                },
+                partnerships: { u1: { id: 'u1', person1Id: 'gp', person2Id: 'gm', childIds: ['f'], status: 'married', sourceIds: ['s1'] } },
+                sources: { s1: { id: 's1', title: 'Matrika' } },
+                defaultPersonId: 's',
+            }, 'Horákovi');
+            window.Strom.UI.updateTreeSwitcher();
+        });
+        await expect(card(page, 'Ondřej')).toBeVisible();
+    }
+
+    test('counts (a marriage citation counts), Show in tree, Next, Escape', async ({ page }) => {
+        await tree(page);
+        await page.evaluate(() => window.Strom.UI.showTreeHealthDialog(window.Strom.DataManager.getCurrentTreeId()));
+        const block = page.locator('#tree-health-content .health-evidence');
+        await expect(block.locator('.health-block-title')).toHaveText('Where evidence is missing');
+        await expect(block.locator('.health-evidence-label')).toHaveText(['People without a source', 'Births without a source', 'Line ends (no parents)']);
+        await expect(block.locator('.health-evidence-count')).toHaveText(['1 of 4', '1', '2']);
+
+        await block.locator('[data-evidence="lineEnds"]').click();
+        await expect(page.locator('#tree-health-modal')).toBeHidden();
+        const pill = page.locator('#evidence-pill');
+        await expect(pill).toContainText('Line ends (no parents) · 2');
+        await expect(card(page, 'Václav')).toHaveClass(/evidence-hit/);
+        await expect(card(page, 'Ondřej')).toHaveClass(/evidence-dim/);
+        await pill.locator('.evidence-pill-next').click();
+        await expect(card(page, 'Marie').or(card(page, 'Václav')).first()).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(pill).toHaveCount(0);
+        await expect(page.locator('.person-card.evidence-dim')).toHaveCount(0);
+    });
+
+    test('citing the last person ends the highlight with a toast', async ({ page }) => {
+        await tree(page);
+        await page.evaluate(() => window.Strom.UI.showTreeHealthDialog(window.Strom.DataManager.getCurrentTreeId()));
+        await page.locator('[data-evidence="noSource"]').click();
+        await expect(page.locator('#evidence-pill')).toContainText('People without a source · 1');
+        await expect(card(page, 'Ondřej')).toHaveClass(/evidence-hit/);
+        await page.evaluate(() => window.Strom.DataManager.citePerson('s' as never, 's1'));
+        await expect(page.locator('.toast')).toContainText('Done, no one left in this selection.');
+        await expect(page.locator('#evidence-pill')).toHaveCount(0);
+    });
+
+    test('all documented: one sentence', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await page.evaluate(async () => {
+            await window.Strom.DataManager.importAsNewTree({
+                persons: { a: { id: 'a', firstName: 'Jiří', lastName: 'Malý', gender: 'male', isPlaceholder: false,
+                    partnerships: [], parentIds: [], childIds: [], sourceIds: ['s1'] } },
+                partnerships: {}, sources: { s1: { id: 's1', title: 'Matrika' } },
+            }, 'Malí');
+        });
+        await page.evaluate(() => window.Strom.UI.showTreeHealthDialog(window.Strom.DataManager.getCurrentTreeId()));
+        await expect(page.locator('.health-evidence-good')).toHaveText('Everyone has a source and parents.');
+    });
+});

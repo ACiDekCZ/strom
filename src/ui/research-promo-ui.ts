@@ -258,31 +258,47 @@ export const researchPromoMethods = uiModule({
         closeX.innerHTML = '&times;';
         header.append(title, closeX);
 
+        // The research runs on this computer and can take the tree over (G3):
+        // the dialog offers exactly that, not the way to install it.
+        const adoptTreeId = this.researchAdoptActiveAvailable() ? DataManager.getCurrentTreeId() : null;
+        const adoptName = adoptTreeId ? TreeManager.getTreeMetadata(adoptTreeId)?.name ?? '' : '';
+
         const content = el('div', 'modal-content research-info-body');
-        content.appendChild(el('p', 'research-info-lead', s.dialogLead));
+        content.appendChild(el('p', 'research-info-lead', adoptTreeId ? s.adoptIntro(adoptName) : s.dialogLead));
         const points = el('ol', 'research-info-points');
-        const pointDefs: Array<[string, string]> = [
-            [s.point1Title, s.point1Text], [s.point2Title, s.point2Text], [s.point3Title, s.point3Text],
-        ];
+        const pointDefs: Array<[string, string]> = adoptTreeId
+            ? [[s.adoptStep1, ''], [s.adoptStep2, ''], [s.adoptStep3, '']]
+            : [[s.point1Title, s.point1Text], [s.point2Title, s.point2Text], [s.point3Title, s.point3Text]];
         pointDefs.forEach(([t, d], i) => {
             const li = el('li', 'research-info-point');
             const num = el('span', 'research-info-num', String(i + 1));
             num.setAttribute('aria-hidden', 'true');
             const text = el('div');
-            text.append(el('div', 'research-info-point-title', t), el('div', 'research-info-point-text', d));
+            if (d) text.append(el('div', 'research-info-point-title', t), el('div', 'research-info-point-text', d));
+            else text.append(el('div', 'research-info-step', t));
             li.append(num, text);
             points.appendChild(li);
         });
         content.appendChild(points);
-        const need = el('div', 'research-info-need');
-        need.append(el('div', 'research-info-need-title', s.needTitle), el('p', 'research-info-need-text', s.needText));
-        content.appendChild(need);
+        if (adoptTreeId) {
+            content.appendChild(el('p', 'research-info-cost', s.adoptCost));
+        } else {
+            const need = el('div', 'research-info-need');
+            need.append(el('div', 'research-info-need-title', s.needTitle), el('p', 'research-info-need-text', s.needText));
+            content.appendChild(need);
+        }
 
         const buttons = el('div', 'buttons research-info-buttons');
         const closeBtn = el('button', 'secondary', strings.buttons.close);
         closeBtn.type = 'button';
         closeBtn.dataset.dismiss = '';
-        const openBtn = externalButton('primary', s.openSite);
+        const openBtn = externalButton('primary', adoptTreeId ? s.adoptStart.replace(/\s*↗$/, '') : s.openSite);
+        if (adoptTreeId) {
+            openBtn.id = 'research-adopt-start';
+            const about = externalButton('link-button research-info-about', s.whatIs);
+            about.addEventListener('click', () => this.openResearchSite());
+            buttons.append(about);
+        }
         buttons.append(closeBtn, openBtn);
 
         modal.append(header, content, buttons);
@@ -292,8 +308,9 @@ export const researchPromoMethods = uiModule({
         closeX.addEventListener('click', close);
         closeBtn.addEventListener('click', close);
         openBtn.addEventListener('click', () => {
-            this.openResearchSite();
             close();
+            if (adoptTreeId) this.startResearchAdopt(adoptTreeId);
+            else this.openResearchSite();
         });
 
         document.body.appendChild(overlay);

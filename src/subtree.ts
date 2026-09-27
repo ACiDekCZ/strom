@@ -115,6 +115,7 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
     if (data.surnameVariants && data.surnameVariants.length > 0) {
         result.surnameVariants = structuredClone(data.surnameVariants);
     }
+    if (data.researchAsOf) result.researchAsOf = data.researchAsOf;
     return result;
 }
 

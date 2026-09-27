@@ -7949,6 +7949,199 @@
             .live-panel { left: 16px; right: 76px; max-height: 40vh; font-size: 12.5px; }
         }
 
+        /* ===== Research actions, second wave ===== */
+        /* Research submenu: "New Strom Research 1.7" block, second line of "Undo last send". */
+        .research-update-block {
+            margin: 6px 8px 4px; padding: 8px 10px 6px;
+            background: var(--surface-2); border-radius: 8px;
+        }
+        .research-update-title { font-size: 13px; font-weight: 600; color: var(--text); }
+        .actions-research-submenu .tree-switcher-action.research-update-action {
+            display: inline-flex; margin: 2px -6px 0; padding: 4px 6px; border-radius: var(--r-sm);
+            font-size: 13px; color: var(--primary); background: none;
+        }
+        .actions-research-submenu .tree-switcher-action.research-update-action:hover { background: var(--hover-bg); }
+        .research-item-label--two { display: flex; flex-direction: column; gap: 1px; }
+        .research-item-sub { font-size: 12px; color: var(--text-light); }
+
+        /* Live panel: update strip, "Up next", this month's spend. */
+        .live-panel-update {
+            display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+            font-size: 13px; background: var(--surface-2); border-bottom: 1px solid var(--divider);
+        }
+        .live-panel-update-text { flex: 1; min-width: 0; color: var(--text); }
+        .live-panel-update .link-button { padding: 0; font-size: 13px; }
+        .live-queue-toggle {
+            display: flex; align-items: center; gap: 4px; width: 100%; padding: 0;
+            border: 0; background: none; cursor: pointer; font-family: inherit; text-align: left;
+        }
+        .live-queue-toggle .live-panel-chevron { display: inline-flex; transition: transform 0.15s; }
+        .live-queue-toggle[aria-expanded="false"] .live-panel-chevron { transform: rotate(-90deg); }
+        .live-queue-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+        .live-panel-list li.live-queue-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+        .live-queue-num {
+            flex: none; min-width: 12px; font-size: 12px; color: var(--text-faint);
+            font-variant-numeric: tabular-nums; text-align: right;
+        }
+        .live-queue-text { flex: 1; min-width: 0; font-size: 14px; color: var(--text); }
+        .live-queue-row--parked .live-queue-text { color: var(--text-faint); font-size: 13px; }
+        .live-queue-more {
+            flex: none; width: 26px; height: 22px; padding: 0; cursor: pointer;
+            border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface);
+            color: var(--text-light); font: inherit; font-size: 14px; line-height: 1;
+        }
+        .live-queue-more:hover, .live-queue-more[aria-expanded="true"] { background: var(--hover-bg); color: var(--text); }
+        .live-queue-more:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .live-queue .link-button { flex: none; padding: 0; font-size: 12px; }
+        .live-queue-row--more .link-button { font-size: 13px; }
+        .live-task-menu { z-index: 120; min-width: 150px; }
+        .live-panel-spend {
+            display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+            font-size: 13px; color: var(--text-light);
+            background: var(--surface-2); border-top: 1px solid var(--divider);
+        }
+        .live-panel-spend-text { flex: 1; min-width: 0; }
+        .live-panel-spend-link {
+            flex: none; width: 26px; height: 22px; padding: 0; cursor: pointer; border: 0;
+            border-radius: var(--r-sm); background: none; color: var(--text-light); font: inherit;
+        }
+        .live-panel-spend-link:hover { background: var(--hover-bg); color: var(--text); }
+        .live-panel-spend-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .live-panel.collapsed .live-panel-spend { display: none; }
+
+        /* Person menu: "1 conflict" on "What the research knows". */
+        .menu-item-tag {
+            flex: none; font-size: 11px; font-weight: 600; line-height: 1.4;
+            padding: 1px 6px; border-radius: 999px;
+            background: var(--warning-soft); color: var(--warning-text);
+        }
+
+        /* "What the research knows". */
+        .person-research-body { display: flex; flex-direction: column; gap: 14px; }
+        .person-research-section .menu-section-header { padding: 0 0 6px; margin: 0; }
+        .person-research-conflict {
+            border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+        }
+        .person-research-conflict-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .person-research-fact { font-size: 14px; font-weight: 600; color: var(--text); }
+        .person-research-open-tag {
+            font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+            background: var(--warning-soft); color: var(--warning-text);
+        }
+        .person-research-values, .person-research-searched { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .person-research-values th, .person-research-searched th {
+            text-align: left; font-size: 11px; font-weight: 600; color: var(--text-faint);
+            padding: 2px 8px 4px 0; border-bottom: 1px solid var(--divider);
+        }
+        .person-research-values td, .person-research-searched td {
+            padding: 5px 8px 5px 0; border-bottom: 1px solid var(--divider); vertical-align: top; color: var(--text);
+        }
+        .person-research-values tr:last-child td, .person-research-searched tr:last-child td { border-bottom: 0; }
+        .person-research-values .link-button { padding: 0; font-size: 14px; text-align: left; }
+        .person-research-nosource { color: var(--text-faint); }
+        .person-research-conflict-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; }
+        .person-research-conflict-actions .link-button { padding: 2px 0; font-size: 13px; }
+        .person-research-agent { display: inline-flex; align-items: center; gap: 5px; }
+        .person-research-agent .research-ai-badge { text-decoration: none; }
+        .person-research-decided {
+            display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px;
+            padding: 6px 0; font-size: 14px; color: var(--text); border-bottom: 1px solid var(--divider);
+        }
+        .person-research-decided:last-child { border-bottom: 0; }
+        .person-research-decision { color: var(--text-light); font-size: 13px; }
+        .person-research-hypo { padding: 4px 0 8px; }
+        .person-research-hypo-title { font-size: 14px; font-weight: 600; color: var(--text); }
+        .person-research-hypo-note { margin: 2px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); white-space: pre-line; }
+        .person-research-years { white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .person-research-result--found { color: var(--primary); font-weight: 600; }
+        .person-research-result--none { color: var(--text-faint); }
+        @media (max-width: 499px) {
+            .person-research-values, .person-research-searched { font-size: 13px; }
+        }
+
+        /* Edit form: "conflict ›" at the label of a field with an open conflict. */
+        #person-modal .pm-conflict-tag {
+            display: inline-block; width: auto; height: auto; min-height: 0; min-width: 0;
+            margin: 0 0 0 6px; padding: 0 7px; border: 0; border-radius: 999px; box-shadow: none; cursor: pointer;
+            font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1.6;
+            background: var(--surface-2); color: var(--text-light); vertical-align: 1px;
+        }
+        #person-modal .pm-conflict-tag:hover { background: var(--hover-bg); color: var(--text); }
+        #person-modal .pm-conflict-tag:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+        /* Story reader: "Approve in the research ↗" on the left of the footer. */
+        .story-reader .buttons .story-approve { margin-right: auto; }
+
+        /* "Start research with this tree": the explanation variant and the hand-over. */
+        .research-info-step { font-size: 14px; line-height: 1.45; color: var(--text); padding-top: 1px; }
+        .research-info-cost { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .research-info-buttons { flex-wrap: wrap; }
+        .research-info-buttons button { white-space: nowrap; }
+        .research-info-buttons .research-info-about { margin-right: auto; padding: 6px 0; font-size: 13px; }
+        .research-adopt-summary { margin: 0 0 12px; font-size: 14px; color: var(--text); }
+        .modal label.research-adopt-images { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 12px; font-size: 14px; color: var(--text); cursor: pointer; }
+        .research-adopt-images input { margin-top: 3px; }
+        .research-adopt-size { color: var(--text-light); font-size: 13px; }
+        .research-adopt-after { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+
+        /* A toast that waits (no time limit) closes with its ×. */
+        .toast--closable { display: flex; align-items: flex-start; gap: 10px; }
+        .toast-close {
+            flex: none; margin: -4px -12px -4px 4px; width: 28px; height: 28px; padding: 0; cursor: pointer;
+            border: 0; border-radius: 50%; background: none; color: inherit; font-size: 18px; line-height: 1; opacity: 0.8;
+        }
+        .toast-close:hover { opacity: 1; background: color-mix(in srgb, var(--surface) 15%, transparent); }
+        .toast-close:focus-visible { outline: 2px solid var(--surface); outline-offset: 1px; }
+
+        /* Tree health: "Where evidence is missing". */
+        .health-evidence-row {
+            display: flex; align-items: center; gap: 10px; padding: 6px 0;
+            border-bottom: 1px solid var(--divider);
+        }
+        .health-evidence-row:last-child { border-bottom: 0; }
+        .health-evidence-label { flex: 1; min-width: 0; font-size: 14px; color: var(--text); }
+        .health-evidence-count { flex: none; font-size: 13px; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .health-evidence-show { flex: none; padding: 4px 10px; font-size: 13px; }
+        @media (max-width: 499px) {
+            .health-evidence-row { flex-wrap: wrap; }
+            .health-evidence-show { width: 100%; min-height: 44px; }
+        }
+
+        /* "Show in tree": the others dim, those found get a dashed frame; lines stay. */
+        .person-card.evidence-dim { opacity: 0.45; }
+        .person-card.evidence-hit { outline: 1.5px dashed var(--accent); outline-offset: 2px; }
+        .fan-sector.evidence-dim, .fan-focus.evidence-dim { opacity: 0.45; }
+        .fan-sector.evidence-hit path { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
+        .evidence-pill {
+            position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 95;
+            display: flex; align-items: center; gap: 4px; max-width: calc(100vw - 32px);
+            padding: 4px 4px 4px 14px; border-radius: 999px;
+            background: var(--surface); color: var(--text); border: 1px solid var(--border);
+            box-shadow: var(--shadow-lg); font-size: 13px;
+        }
+        .evidence-pill-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 4px; }
+        .evidence-pill-next, .evidence-pill-close {
+            flex: none; height: 30px; padding: 0 10px; cursor: pointer; border: 0; border-radius: 999px;
+            background: none; color: var(--primary); font: inherit; font-size: 13px; font-weight: 500;
+        }
+        .evidence-pill-close { width: 30px; padding: 0; color: var(--text-light); font-size: 18px; }
+        .evidence-pill-next:hover, .evidence-pill-close:hover { background: var(--hover-bg); }
+        .evidence-pill-next:focus-visible, .evidence-pill-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        body[data-view-mode="timeline"] .evidence-pill, body[data-view-mode="map"] .evidence-pill { display: none; }
+        /* Tablet: same place, wider margins. */
+        @media (max-width: 900px) and (min-width: 500px) {
+            .evidence-pill { max-width: calc(100vw - 48px); }
+        }
+        /* Phones: above the bottom bar. */
+        @media (max-width: 640px) {
+            .evidence-pill {
+                top: auto; bottom: calc(var(--bottom-bar-h, 64px) + 12px);
+                left: 16px; right: 80px; transform: none; max-width: none;
+            }
+            .evidence-pill-label { flex: 1; }
+            .evidence-pill-next, .evidence-pill-close { height: 40px; min-width: 40px; }
+        }
+
         /* Undo toast — paper pill raised after each single user mutation. */
         .undo-toast {
             position: fixed;

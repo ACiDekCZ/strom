@@ -269,7 +269,7 @@ test.describe('person menu: In the research', () => {
     test('at the end with its heading, AI label at "Ask the agent"; none without REFN', async ({ page }) => {
         await setup(page);
         const actions = await personMenu(page, 'Jan');
-        expect(actions.slice(-3)).toEqual(['research-review', 'research-ancestors', 'research-ask']);
+        expect(actions.slice(-4)).toEqual(['research-review', 'research-ancestors', 'research-descendants', 'research-ask']);
         const menu = page.locator('.context-menu');
         await expect(menu.locator('.menu-section-header')).toHaveText('In the research');
         const ask = menu.locator('[data-action="research-ask"]');

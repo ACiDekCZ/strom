@@ -282,6 +282,58 @@ export interface Person {
      * (or 'biological') is the default, so existing data needs no migration.
      */
     parentRelTypes?: Record<PersonId, ParentChildRelType>;
+    /**
+     * What Strom Research knows about the person beyond the facts: conflicting
+     * sources, hypotheses, what was searched (GEDCOM _STROM_CONFLICT /
+     * _STROM_HYPO / _STROM_SEARCHED). Research trees only; the research is its
+     * source of truth — never edited in the app, never sent back, replaced
+     * whole by each new version.
+     */
+    research?: PersonResearch;
+}
+
+/** What the research knows about one person (see Person.research). */
+export interface PersonResearch {
+    conflicts?: ResearchConflict[];
+    hypotheses?: ResearchHypothesis[];
+    searched?: ResearchSearch[];
+}
+
+/** One value a source gives for a fact, with the sources that say so. */
+export interface ResearchConflictValue {
+    /** As the research wrote it (a GEDCOM date, a place, a name). */
+    value: string;
+    sourceIds?: string[];
+}
+
+/** Sources that disagree about one fact. */
+export interface ResearchConflict {
+    /** The research's id ("C0007"). */
+    id: string;
+    /** The fact: a GEDCOM event tag (BIRT, DEAT, CHR …), NAME or SEX. */
+    fact: string;
+    status: 'open' | 'decided';
+    values: ResearchConflictValue[];
+    /** The chosen value and the sources that decided it (decided only). */
+    decision?: ResearchConflictValue;
+}
+
+/** A question the research works with ("Father: Václav, or Jan?"). */
+export interface ResearchHypothesis {
+    title: string;
+    note?: string;
+}
+
+/** A place the research searched for this person. */
+export interface ResearchSearch {
+    /** What was searched (a register book). */
+    title: string;
+    /** The years it covered (GEDCOM FROM … TO …), from / to. */
+    from?: number;
+    to?: number;
+    result?: 'found' | 'none';
+    /** When it was searched (ISO date). */
+    at?: string;
 }
 
 /**
@@ -427,6 +479,12 @@ export interface StromData {
      * is the wrong one, and the registers disagree in every direction.
      */
     surnameVariants?: string[][];
+
+    /**
+     * When Strom Research wrote what the people's `research` says (GEDCOM
+     * header `_STROM_ASOF`, ISO date): "as of". Research trees only.
+     */
+    researchAsOf?: string;
 
     // Last focused state (used when defaultPersonId === LAST_FOCUSED)
     lastFocusPersonId?: PersonId;
@@ -730,6 +788,11 @@ export interface TreeMetadata {
      * this tree instead of creating a duplicate.
      */
     research?: ResearchLink;
+    /**
+     * "Start research with this tree" is under way: the one-time token the
+     * research brings back (?adopt=) to name this tree. Valid for an hour.
+     */
+    researchAdoptToken?: { token: string; at: string };
     /**
      * Automatic backups (daily, before import / merge) for this tree. Missing =
      * on. Off for a tree the user keeps elsewhere, or whose scans make every

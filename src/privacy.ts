@@ -70,6 +70,8 @@ export function stripNotes(data: StromData): StromData {
     for (const person of Object.values(copy.persons)) {
         delete person.notes;
         delete person.story;
+        // What the research knows is free text too (hypotheses, searches).
+        delete person.research;
         for (const ev of person.events ?? []) {
             delete ev.note;
             for (const part of ev.participants ?? []) delete part.note;
@@ -93,6 +95,8 @@ export function stripSources(data: StromData): StromData {
     delete copy.sources;
     for (const person of Object.values(copy.persons)) {
         delete person.sourceIds;
+        // The research's conflicts and searches are part of the source apparatus.
+        delete person.research;
         for (const ev of person.events ?? []) delete ev.sourceIds;
         for (const att of person.attachments ?? []) delete att.sourceId;
     }
@@ -235,6 +239,8 @@ function stripDetails(person: Person): void {
     delete person.question;
     delete person.refn;
     delete person.refnType;
+    // What the research knows about them (conflicts, hypotheses, searches).
+    delete person.research;
 }
 
 /**

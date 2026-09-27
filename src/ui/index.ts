@@ -68,6 +68,9 @@ import { kinshipUiMethods } from './kinship-ui.js';
 import { archivesUiMethods } from './archives-ui.js';
 import { personSourcesMethods } from './person-sources-ui.js';
 import { researchActionsMethods } from './research-actions-ui.js';
+import { personResearchMethods } from './person-research-ui.js';
+import { researchAdoptMethods } from './research-adopt-ui.js';
+import { evidenceUiMethods } from './evidence-ui.js';
 import { exportImageMethods } from './export-image-ui.js';
 import { bookUiMethods } from './book-ui.js';
 import { snapshotsUiMethods } from './snapshots-ui.js';
@@ -222,6 +225,8 @@ export class UIClass {
     /** The person whose "Sources" dialog is open, and the person-level rows it last drew. */
     personSourcesId: PersonId | null = null;
     personSourcesShown: Set<string> | null = null;
+    /** Ends the open "Hand the tree to the research?" dialog as "Don't hand over". */
+    researchAdoptResolve: (() => void) | null = null;
     /** One-time wiring of the source editor's paste / drop / quality handlers. */
     sourceEditorWired = false;
     // Slideshow / TV mode
@@ -458,6 +463,18 @@ Object.assign(UIClass.prototype, personSourcesMethods);
 type ResearchActionsMethods = typeof researchActionsMethods;
 export interface UIClass extends ResearchActionsMethods {}
 Object.assign(UIClass.prototype, researchActionsMethods);
+
+type PersonResearchMethods = typeof personResearchMethods;
+export interface UIClass extends PersonResearchMethods {}
+Object.assign(UIClass.prototype, personResearchMethods);
+
+type ResearchAdoptMethods = typeof researchAdoptMethods;
+export interface UIClass extends ResearchAdoptMethods {}
+Object.assign(UIClass.prototype, researchAdoptMethods);
+
+type EvidenceUiMethods = typeof evidenceUiMethods;
+export interface UIClass extends EvidenceUiMethods {}
+Object.assign(UIClass.prototype, evidenceUiMethods);
 
 type ExportImageMethods = typeof exportImageMethods;
 export interface UIClass extends ExportImageMethods {}

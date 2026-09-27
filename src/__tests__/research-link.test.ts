@@ -12,6 +12,7 @@ import {
     sanitizeWorking, extractChangedRefs, personsByRefs, humanizeChange,
     isGedcomFileName, normalizeResearchId, parseEventData, isSafariBrowser,
     sanitizeResearchLinks, researchSchemeUrl, researchSourceRef, researchClip, researchPersonRef, researchTaskRef,
+    researchNewUrl, researchAdoptToken, researchConflictRef, researchIntakeRef,
 } from '../research-link.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
@@ -531,6 +532,90 @@ describe('strom-research:// links', () => {
         expect(researchSchemeUrl('open', { tree: 'not-a-tree' })).toBeNull();
         expect(researchPersonRef(' P7 ')).toBe('P7');
         expect(researchTaskRef('T12')).toBe('T12');
+    });
+
+    it('second wave: new, task do, update, sessions, conflict, story, sync-undo, setup, descendants', () => {
+        const t = `tree=${UUID}`;
+        const token = 'aB3_-xYz0123456789abcdefGHIJ';
+        expect(researchNewUrl(token)).toBe(`strom-research://new?app=${token}`);
+        expect(researchNewUrl('short')).toBeNull();
+        expect(researchNewUrl('x'.repeat(44))).toBeNull();
+        expect(researchNewUrl('a'.repeat(21) + '&')).toBeNull();
+        expect(researchAdoptToken('a'.repeat(22))).toBe('a'.repeat(22));
+        expect(researchSchemeUrl('new', { tree: UUID })).toBeNull();
+
+        for (const d of ['park', 'drop', 'wake'] as const) {
+            expect(researchSchemeUrl('task', { tree: UUID, task: 'T0003', taskDo: d })).toBe(`strom-research://task?${t}&task=T0003&do=${d}`);
+        }
+        expect(researchSchemeUrl('task', { tree: UUID, task: 'T0003', taskDo: 'delete' as never })).toBeNull();
+        for (const a of ['update', 'sessions', 'setup'] as const) {
+            expect(researchSchemeUrl(a, { tree: UUID })).toBe(`strom-research://${a}?${t}`);
+        }
+        expect(researchSchemeUrl('conflict', { tree: UUID, conflict: 'C0007' })).toBe(`strom-research://conflict?${t}&id=C0007&do=decide`);
+        expect(researchSchemeUrl('conflict', { tree: UUID, conflict: 'C0007', conflictDo: 'agent' })).toBe(`strom-research://conflict?${t}&id=C0007&do=agent`);
+        expect(researchSchemeUrl('conflict', { tree: UUID, conflict: 'T0007' })).toBeNull();
+        expect(researchSchemeUrl('conflict', { tree: UUID, conflict: 'C0007', conflictDo: 'drop' as never })).toBeNull();
+        expect(researchSchemeUrl('story', { tree: UUID, person: 'P0012' })).toBe(`strom-research://story?${t}&person=P0012&do=final`);
+        expect(researchSchemeUrl('story', { tree: UUID })).toBeNull();
+        expect(researchSchemeUrl('sync-undo', { tree: UUID, intake: 'I0042' })).toBe(`strom-research://sync-undo?${t}&intake=I0042`);
+        expect(researchSchemeUrl('sync-undo', { tree: UUID, intake: 'I42&x' })).toBeNull();
+        expect(researchSchemeUrl('research', { tree: UUID, person: 'P0012', direction: 'descendants' }))
+            .toBe(`strom-research://research?${t}&person=P0012&direction=descendants`);
+        expect(researchConflictRef(' C1 ')).toBe('C1');
+        expect(researchIntakeRef('I12345678')).toBeNull();
+        expect(sanitizeResearchLinks('new update sessions conflict story sync-undo setup'))
+            .toEqual(['new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup']);
+    });
+});
+
+describe('bridge status: queue, update, spend, last intake', () => {
+    it('takes valid fields', () => {
+        const s = sanitizeLiveStatus({
+            tree: UUID,
+            queue: [
+                { id: 'T0123', text: 'Matriky Chlumy', state: 'next' },
+                { id: 'T0124', text: 'Sčítání 1880', state: 'parked' },
+            ],
+            queueMore: 9,
+            update: { version: '1.7.0' },
+            spend: { month: '2026-09', sessions: 4, amount: 3.2, currency: 'USD' },
+            lastIntake: { id: 'I0042', at: '2026-09-27T09:20:00Z' },
+        })!;
+        expect(s.queue).toEqual([
+            { id: 'T0123', text: 'Matriky Chlumy', state: 'next' },
+            { id: 'T0124', text: 'Sčítání 1880', state: 'parked' },
+        ]);
+        expect(s.queueMore).toBe(9);
+        expect(s.update).toEqual({ version: '1.7.0' });
+        expect(s.spend).toEqual({ month: '2026-09', sessions: 4, amount: 3.2, currency: 'USD' });
+        expect(s.lastIntake).toEqual({ id: 'I0042', at: '2026-09-27T09:20:00Z' });
+    });
+
+    it('drops a bad field without losing the rest', () => {
+        const s = sanitizeLiveStatus({
+            tree: UUID,
+            head: 'abc',
+            queue: [
+                { id: 'X1', text: 'bad id', state: 'next' },
+                { id: 'T1', text: '', state: 'next' },
+                { id: 'T2', text: 'bad state', state: 'running' },
+                'junk',
+                { id: 'T3', text: 'kept', state: 'next' },
+                ...Array.from({ length: 30 }, (_, i) => ({ id: `T${100 + i}`, text: 'x', state: 'next' })),
+            ],
+            queueMore: -3,
+            update: { version: '<b>1.7</b>' },
+            spend: { month: '2026-09', sessions: 4, amount: 'lots', currency: 'USD' },
+            lastIntake: { id: 'I0042', at: 'yesterday' },
+        })!;
+        expect(s.head).toBe('abc');
+        expect(s.queue[0]).toEqual({ id: 'T3', text: 'kept', state: 'next' });
+        expect(s.queue).toHaveLength(20);
+        expect(s.queueMore).toBe(0);
+        expect(s.update).toBeNull();
+        expect(s.spend).toBeNull();
+        expect(s.lastIntake).toBeNull();
+        expect(sanitizeLiveStatus({ tree: UUID, queue: 'x', spend: [], update: 3 })).toMatchObject({ queue: [], spend: null, update: null });
     });
 });
 

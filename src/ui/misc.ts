@@ -510,7 +510,11 @@ export const miscMethods = uiModule({
         // R3: fires for EVERY commit, silent bulk flows included — a silent
         // import/merge/batch/restore clears the redo stack, so the toolbar must
         // refresh even when no toast is shown and render() early-returns.
-        DataManager.onUndoRedoChanged = () => this.refreshUndoRedoToolbar();
+        DataManager.onUndoRedoChanged = () => {
+            this.refreshUndoRedoToolbar();
+            // Every commit and undo: "Show in tree" recounts who is still missing evidence.
+            this.refreshEvidenceHighlight();
+        };
 
         // Backdrop click: info, choice and picker dialogs close through their
         // Close/Cancel button ([data-dismiss]), so it runs the same handler;
@@ -625,6 +629,15 @@ export const miscMethods = uiModule({
                 const switcher = document.getElementById('tree-switcher-dropdown');
                 if (switcher?.classList.contains('active')) {
                     switcher.classList.remove('active');
+                    return;
+                }
+
+                // "Show in tree" from tree health: Escape ends the highlight
+                // when no dialog is open above the tree.
+                if (this.isEvidenceHighlightOn()
+                    && this.dialogStack.length === 0
+                    && document.querySelectorAll('.modal-overlay.active').length === 0) {
+                    this.endEvidenceHighlight();
                     return;
                 }
 
@@ -743,6 +756,14 @@ export const miscMethods = uiModule({
                     }
                     if (currentDialog === 'research-review-modal') {
                         this.closeResearchReviewDialog();
+                        return;
+                    }
+                    if (currentDialog === 'person-research-modal') {
+                        this.closePersonResearchDialog();
+                        return;
+                    }
+                    if (currentDialog === 'research-adopt-modal') {
+                        this.cancelResearchAdoptDialog();
                         return;
                     }
                     if (currentDialog === 'kinship-modal') {
@@ -1269,7 +1290,11 @@ export const miscMethods = uiModule({
     /**
      * Show a toast notification
      */
-    showToast(message: string, duration = 3000, opts: { title?: string; spinner?: boolean } = {}): void {
+    /**
+     * A short message at the bottom. `duration` Infinity keeps it until it is
+     * replaced or (with `closable`) closed with its ×.
+     */
+    showToast(message: string, duration = 3000, opts: { title?: string; spinner?: boolean; closable?: boolean; kind?: string } = {}): void {
         // Remove existing toast
         const existing = document.querySelector('.toast');
         if (existing) existing.remove();
@@ -1277,6 +1302,7 @@ export const miscMethods = uiModule({
         const toast = document.createElement('div');
         toast.className = opts.title || opts.spinner ? 'toast toast--rich' : 'toast';
         toast.setAttribute('role', 'status');
+        if (opts.kind) toast.dataset.kind = opts.kind;
         if (opts.spinner) {
             const spin = document.createElement('span');
             spin.className = 'toast-spinner';
@@ -1294,6 +1320,19 @@ export const miscMethods = uiModule({
         } else {
             toast.appendChild(document.createTextNode(message));
         }
+        if (opts.closable) {
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'toast-close';
+            close.setAttribute('aria-label', strings.buttons.close);
+            close.innerHTML = '&times;';
+            close.onclick = () => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            };
+            toast.classList.add('toast--closable');
+            toast.appendChild(close);
+        }
         document.body.appendChild(toast);
 
         // Trigger animation
@@ -1302,6 +1341,7 @@ export const miscMethods = uiModule({
         });
 
         // Auto-hide
+        if (!Number.isFinite(duration)) return;
         setTimeout(() => {
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 300);

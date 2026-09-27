@@ -230,6 +230,8 @@ export const personSourcesMethods = uiModule({
         const s = strings.story;
         const editable = !DataManager.isReadOnly() && !DataManager.isPersonLocked(personId);
         const facts = (story.facts ?? []).filter(f => f.trim());
+        // A research draft can be approved there (the label changes with the next version).
+        const approveUrl = this.storyApproveUrl(personId);
 
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
@@ -254,6 +256,7 @@ export const personSourcesMethods = uiModule({
                     </div>` : ''}
                 </div>
                 <div class="buttons">
+                    ${approveUrl ? `<button type="button" class="link-button story-approve" id="person-story-approve">${esc(strings.research.approveStory)}</button>` : ''}
                     <button type="button" class="secondary" id="person-story-close" data-dismiss>${esc(strings.buttons.close)}</button>
                     ${editable ? `<button type="button" class="primary" id="person-story-edit">${esc(s.edit)}</button>` : ''}
                 </div>
@@ -264,6 +267,9 @@ export const personSourcesMethods = uiModule({
         (overlay.querySelector('#person-story-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#person-story-close') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#person-story-edit') as HTMLButtonElement | null)?.addEventListener('click', () => this.editPersonStory(personId));
+        (overlay.querySelector('#person-story-approve') as HTMLButtonElement | null)?.addEventListener('click', () => {
+            if (approveUrl) this.launchResearchLink(approveUrl);
+        });
         // Focus the text body (not a control), so arrows / PgDn scroll it —
         // after the skeleton has wrapped the body (moving a node drops focus).
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);

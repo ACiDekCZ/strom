@@ -7,7 +7,9 @@
  * switch the features off (Settings → Data).
  */
 
-import { ResearchLinkAction, LiveWaiting, sanitizeResearchLinks, sanitizeWaiting } from './research-link.js';
+import {
+    ResearchLinkAction, LiveWaiting, LiveIntake, sanitizeResearchLinks, sanitizeWaiting, sanitizeUpdate, sanitizeIntake,
+} from './research-link.js';
 
 const LINKS_KEY = 'strom-research-links';
 const OFF_KEY = 'strom-research-links-off';
@@ -49,13 +51,29 @@ export interface StoredResearchWaiting {
     items: LiveWaiting[];
     /** When the research said so (ms). */
     at: number;
+    /** A newer Strom Research was out. */
+    update: { version: string } | null;
+    /** The last send it took in. */
+    lastIntake: LiveIntake | null;
 }
 
-/** Remember the research's "waiting" list (task id, text and time only) per research tree. */
-export function noteResearchWaiting(researchId: string, items: readonly LiveWaiting[]): void {
+/**
+ * Remember the research's "waiting" list (task id, text and time only), the
+ * update it announced and its last intake, per research tree.
+ */
+export function noteResearchWaiting(
+    researchId: string,
+    items: readonly LiveWaiting[],
+    extra: { update?: { version: string } | null; lastIntake?: LiveIntake | null } = {}
+): void {
     try {
         const kept = items.map(w => ({ id: w.id, what: w.what, at: w.at }));
-        localStorage.setItem(WAITING_KEY + researchId, JSON.stringify({ items: kept, at: new Date().toISOString() }));
+        localStorage.setItem(WAITING_KEY + researchId, JSON.stringify({
+            items: kept,
+            at: new Date().toISOString(),
+            ...(extra.update ? { update: extra.update } : {}),
+            ...(extra.lastIntake ? { lastIntake: extra.lastIntake } : {}),
+        }));
     } catch { /* no storage: the count just is not remembered */ }
 }
 
@@ -64,10 +82,15 @@ export function storedResearchWaiting(researchId: string, now = Date.now()): Sto
     try {
         const raw = localStorage.getItem(WAITING_KEY + researchId);
         if (!raw) return null;
-        const parsed = JSON.parse(raw) as { items?: unknown; at?: unknown };
+        const parsed = JSON.parse(raw) as { items?: unknown; at?: unknown; update?: unknown; lastIntake?: unknown };
         const at = typeof parsed.at === 'string' ? Date.parse(parsed.at) : NaN;
         if (!Number.isFinite(at) || now - at > WAITING_MAX_AGE_MS) return null;
-        return { items: sanitizeWaiting(parsed.items), at };
+        return {
+            items: sanitizeWaiting(parsed.items),
+            at,
+            update: sanitizeUpdate(parsed.update),
+            lastIntake: sanitizeIntake(parsed.lastIntake),
+        };
     } catch {
         return null;
     }

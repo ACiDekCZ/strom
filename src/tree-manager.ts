@@ -1028,6 +1028,22 @@ class TreeManagerClass {
         else delete tree.research;
         this.saveIndex();
     }
+
+    /** Remember (or forget, null) the token of "Start research with this tree". */
+    setResearchAdoptToken(treeId: TreeId, value: { token: string; at: string } | null): void {
+        const tree = this.index.trees.find(t => t.id === treeId);
+        if (!tree) return;
+        if (value) tree.researchAdoptToken = value;
+        else delete tree.researchAdoptToken;
+        this.saveIndex();
+    }
+
+    /** The tree waiting to be taken over with `token` (issued less than `maxAgeMs` ago), or null. */
+    findTreeByAdoptToken(token: string, maxAgeMs: number, now = Date.now()): TreeMetadata | null {
+        const tree = this.index.trees.find(t => t.researchAdoptToken?.token === token);
+        const at = tree ? Date.parse(tree.researchAdoptToken!.at) : NaN;
+        return tree && Number.isFinite(at) && now - at <= maxAgeMs ? tree : null;
+    }
 }
 
 /** Raise the app-wide "saving failed" signal (toast in main.ts). */

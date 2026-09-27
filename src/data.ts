@@ -172,6 +172,10 @@ export function migrateData(data: unknown): StromData {
         result.surnameVariants = d.surnameVariants as StromData['surnameVariants'];
     }
 
+    if (typeof d.researchAsOf === 'string') {
+        result.researchAsOf = d.researchAsOf;
+    }
+
     // Preserve default person settings if present
     if (d.defaultPersonId !== undefined) {
         result.defaultPersonId = d.defaultPersonId as PersonId | LastFocusedMarker;

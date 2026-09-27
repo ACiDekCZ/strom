@@ -81,6 +81,7 @@ export const bookUiMethods = uiModule({
             maxGenerations,
             treeSvg,
             dateLabel: strings.book.compiled(new Date().toLocaleDateString()),
+            approveStoryUrl: (p) => this.storyApproveUrl(p.id),
         });
 
         this.closeBookDialog();

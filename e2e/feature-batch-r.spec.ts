@@ -191,7 +191,7 @@ test('R3: a silent bulk flow clears the redo stack AND greys the Redo button', a
 
 // ==================== R4: tree-health dashboard ====================
 
-test('R4: the tree-health dashboard opens with all four blocks', async ({ page }) => {
+test('R4: the tree-health dashboard opens with all its blocks', async ({ page }) => {
     await loadSample(page);
 
     await page.evaluate(() => {
@@ -202,8 +202,10 @@ test('R4: the tree-health dashboard opens with all four blocks', async ({ page }
     const modal = page.locator('#tree-health-modal');
     await expect(modal).toHaveClass(/active/);
 
-    // Four composed blocks: validation, completeness, structure, actions.
-    await expect(modal.locator('.health-block')).toHaveCount(4);
+    // Five composed blocks: validation, completeness, structure, actions,
+    // where evidence is missing.
+    await expect(modal.locator('.health-block')).toHaveCount(5);
+    await expect(modal.locator('.health-block').last()).toHaveClass(/health-evidence/);
     // Completeness renders four bars (birth date/place, death date, photo).
     await expect(modal.locator('.health-bar-row')).toHaveCount(4);
     // Structure renders four stat tiles (people/unions/generations/islands).

@@ -30,12 +30,15 @@ export interface PersonMenuAction {
     badge?: 'ai';
     /** Continues outside the app (↗). */
     external?: boolean;
+    /** A small warm label at the end ("1 conflict"). */
+    tag?: string;
 }
 
 /** Label (+ the quiet right-aligned meta, AI label, ↗) of a person menu item, escaped. */
 export function menuItemBody(a: PersonMenuAction): string {
     const e = (t: string): string => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const tail = (a.meta ? `<span class="menu-item-meta" aria-hidden="true">${e(a.meta)}</span>` : '')
+        + (a.tag ? `<span class="menu-item-tag" aria-hidden="true">${e(a.tag)}</span>` : '')
         + (a.badge === 'ai'
             ? `<span class="research-ai-badge menu-item-badge" title="${e(strings.research.aiCostHint)}" aria-hidden="true">${e(strings.research.aiBadge)}</span>`
             : '')
@@ -79,6 +82,9 @@ export const contextMenuMethods = uiModule({
                     ariaLabel: sourceCount > 0 ? strings.personSources.countSr(sourceCount) : undefined,
                 });
             }
+            // What the research knows sits with the sources: it is about them.
+            const knows = this.personResearchKnows(personId);
+            if (knows) out.push(knows);
             if (hasStory) out.push({ action: 'story', label: strings.contextMenu.showStory });
             return out;
         };
@@ -194,8 +200,13 @@ export const contextMenuMethods = uiModule({
             case 'delete':
                 this.confirmDelete(personId);
                 break;
+            case 'research-knows':
+                this.clearDialogStack();
+                this.showPersonResearchDialog(personId);
+                break;
             case 'research-review':
             case 'research-ancestors':
+            case 'research-descendants':
             case 'research-ask':
                 this.runPersonResearchAction(personId, action);
                 break;

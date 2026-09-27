@@ -86,6 +86,8 @@ class TreeRendererClass {
     private highlightIds: Set<PersonId> | null = null;
     /** People the last live-research change touched: 'live-changed' glow. */
     private changedIds: Set<PersonId> | null = null;
+    /** "Show in tree" from tree health: these people stand out, the rest dims. Not kept over a reload. */
+    private evidenceIds: Set<PersonId> | null = null;
     private focusDepthUp: number = 3;
     private focusDepthDown: number = 3;
 
@@ -269,6 +271,8 @@ class TreeRendererClass {
             map: { id: 'map-container', display: 'block', draw: el => UI.renderMapView?.(el) },
         };
         const active = standalone[this.viewMode];
+        // Chrome that belongs to some views only (the evidence pill) reads it here.
+        document.body.dataset.viewMode = this.viewMode;
         for (const [mode, view] of Object.entries(standalone)) {
             const el = document.getElementById(view.id);
             if (el) el.style.display = mode === this.viewMode ? view.display : 'none';
@@ -670,6 +674,31 @@ class TreeRendererClass {
         });
     }
 
+    /**
+     * "Where evidence is missing → Show in tree": the people in `ids` get a
+     * dashed frame, everyone else dims (cards and fan sectors). Null ends it.
+     * Class toggling only; re-applied on every render.
+     */
+    setEvidenceHighlight(ids: Set<PersonId> | null): void {
+        this.evidenceIds = ids;
+        this.applyEvidenceHighlight();
+    }
+
+    getEvidenceHighlight(): ReadonlySet<PersonId> | null {
+        return this.evidenceIds;
+    }
+
+    private applyEvidenceHighlight(): void {
+        const mark = (el: Element, id: string | null | undefined): void => {
+            el.classList.remove('evidence-hit', 'evidence-dim');
+            if (!this.evidenceIds || !id) return;
+            el.classList.add(this.evidenceIds.has(id as PersonId) ? 'evidence-hit' : 'evidence-dim');
+        };
+        document.querySelectorAll<HTMLElement>('.person-card').forEach(card => mark(card, card.dataset.id));
+        document.querySelectorAll<HTMLElement>('[data-fan-person]').forEach(seg => mark(seg, seg.dataset.fanPerson));
+        document.body.classList.toggle('evidence-mode', !!this.evidenceIds);
+    }
+
     private updateFocusUI(): void {
         this.updateNavButtons();
         const focusControls = document.getElementById('focus-controls');
@@ -954,6 +983,7 @@ class TreeRendererClass {
                 classes += this.highlightIds.has(id) ? ' search-hit' : ' search-dim';
             }
             if (this.changedIds?.has(id)) classes += ' live-changed';
+            if (this.evidenceIds) classes += this.evidenceIds.has(id) ? ' evidence-hit' : ' evidence-dim';
             // Optional branch colour stripe (focus and placeholders never tagged).
             if (branchMap && !person.isPlaceholder) {
                 const b = branchMap.get(id);
@@ -1897,6 +1927,7 @@ class TreeRendererClass {
             showKekule: SettingsManager.isFanKekuleEnabled(),
             relTypeLabel: (t) => strings.parentRelType[t],
         });
+        if (this.evidenceIds) this.applyEvidenceHighlight();
 
         // Mobile: the fan keeps a minimum drawing width and overflows the
         // container — start the view centered on the focus person.

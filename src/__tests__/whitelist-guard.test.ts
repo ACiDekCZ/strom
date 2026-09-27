@@ -90,6 +90,7 @@ function fullTree(): Required<StromData> {
             'kolin': { lat: 50.0281, lon: 15.2003, label: 'Kolín, Česko' },
         },
         surnameVariants: [['Víšek', 'Vyšek', 'Wischek']],
+        researchAsOf: '2026-09-20',
         defaultPersonId: LAST_FOCUSED,
         lastFocusPersonId: ALICE,
         lastFocusDepthUp: 3,
@@ -305,7 +306,8 @@ type OwnedElsewhere =
     | 'sourceIds'           // citePerson / uncitePerson
     | 'attachments'         // addAttachment / removeAttachment
     | 'photoOriginalName'   // set with the photo itself (import / upload)
-    | 'refnType';           // GEDCOM import only; updatePerson drops it with a changed refn
+    | 'refnType'            // GEDCOM import only; updatePerson drops it with a changed refn
+    | 'research';           // written by Strom Research only (GEDCOM import), never edited
 
 /**
  * Compile-time proof that the two lists together cover Person exactly. Add a

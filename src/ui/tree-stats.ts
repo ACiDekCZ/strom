@@ -440,6 +440,13 @@ export const treeStatsMethods = uiModule({
                     if (t && p) void this.focusPersonFromHealth(t, p);
                     return;
                 }
+                const show = target.closest('.health-evidence-show') as HTMLElement | null;
+                if (show) {
+                    e.preventDefault();
+                    const kind = show.getAttribute('data-evidence');
+                    if (kind === 'noSource' || kind === 'birthNoSource' || kind === 'lineEnds') void this.showEvidenceInTree(kind, treeId);
+                    return;
+                }
                 const btn = target.closest('.health-action') as HTMLElement | null;
                 if (btn) {
                     e.preventDefault();
@@ -611,7 +618,7 @@ export const treeStatsMethods = uiModule({
                 ${isActive ? '' : `<div class="health-block-hint">${this.escapeHtml(s.switchFirst)}</div>`}
             </div>`;
 
-        return validationBlock + completenessBlock + structureBlock + actionsBlock;
+        return validationBlock + completenessBlock + structureBlock + actionsBlock + this.evidenceHealthHtml(data, treeId);
     },
 
     /**

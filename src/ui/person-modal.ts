@@ -148,6 +148,7 @@ export const personModalMethods = uiModule({
         if (sourcesSection) sourcesSection.style.display = 'none';
         const attachmentsSection = document.getElementById('attachments-section');
         if (attachmentsSection) attachmentsSection.style.display = 'none';
+        document.querySelectorAll('#person-modal .pm-conflict-tag').forEach(n => n.remove());
 
         modal.classList.add('active');
         firstNameInput.focus();
@@ -683,6 +684,8 @@ export const personModalMethods = uiModule({
 
         // Editing an existing person → no duplicate suggestions.
         this.disableDuplicateSuggest('person');
+        // "conflict ›" at the fields the research has an open conflict about.
+        this.markResearchConflicts(id);
 
         modal.classList.add('active');
         // Now that the dialog has a layout, let the long text fields take the

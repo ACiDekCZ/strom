@@ -37,7 +37,9 @@ import {
     generateLifeEventId,
     generateParticipantId,
     generateSourceId,
-    PlaceGeo
+    PlaceGeo,
+    PersonResearch,
+    ResearchConflictValue,
 } from './types';
 import { dateSortKey, formatFlexDate } from './dates';
 import { placeKey } from './places';
@@ -121,6 +123,86 @@ function toStory(raw: RawStory | undefined): Story | undefined {
     };
 }
 
+/**
+ * What Strom Research writes about a person beyond the facts (research files
+ * only): conflicting sources, hypotheses, what was searched.
+ */
+interface RawResearch {
+    conflicts: { id: string; fact: string; stat: string; values: RawResearchValue[]; decision?: RawResearchValue }[];
+    hypotheses: { title: string; note: string }[];
+    searched: { title: string; date: string; resn: string; at: string }[];
+}
+
+interface RawResearchValue {
+    value: string;
+    sourceRefs: string[];
+}
+
+/** The research block being read, and the level-2 line inside it. */
+interface OpenResearch {
+    kind: 'conflict' | 'hypo' | 'searched';
+    sub: string | null;
+}
+
+const newResearch = (): RawResearch => ({ conflicts: [], hypotheses: [], searched: [] });
+
+/** "FROM 1890 TO 1900" / "BET 1890 AND 1900" / "1890" → the years it spans. */
+function researchYears(date: string): { from?: number; to?: number } {
+    const years = [...date.matchAll(/\b(\d{3,4})\b/g)].map(m => Number(m[1]));
+    if (years.length === 0) return {};
+    if (/^\s*TO\b/i.test(date) || /^\s*BEF\b/i.test(date)) return { to: years[0] };
+    if (years.length === 1) return /^\s*(FROM|AFT)\b/i.test(date) && !/\bTO\b/i.test(date) ? { from: years[0] } : { from: years[0], to: years[0] };
+    return { from: years[0], to: years[years.length - 1] };
+}
+
+/** An ISO date from what the research wrote (ISO or a GEDCOM date); '' when neither. */
+function researchIsoDate(value: string): string {
+    const v = value.trim();
+    const iso = v.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (iso) return iso[1];
+    const parsed = v ? parseGedcomDate(v) : '';
+    return /^\d{4}-\d{2}-\d{2}$/.test(parsed) ? parsed : '';
+}
+
+/** Raw research lines → the person's `research`, citations resolved (undefined: nothing kept). */
+function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]) => string[]): PersonResearch | undefined {
+    if (!raw) return undefined;
+    const value = (v: RawResearchValue): ResearchConflictValue => {
+        const ids = mapRefs(v.sourceRefs);
+        return { value: v.value, ...(ids.length > 0 ? { sourceIds: ids } : {}) };
+    };
+    const out: PersonResearch = {};
+    const conflicts = raw.conflicts
+        .filter(c => /^C\d{1,7}$/.test(c.id) && c.fact && c.values.length > 0)
+        .map(c => {
+            const decided = c.stat.trim().toLowerCase() === 'decided';
+            return {
+                id: c.id,
+                fact: c.fact.toUpperCase(),
+                status: decided ? 'decided' as const : 'open' as const,
+                values: c.values.filter(v => v.value).map(value),
+                ...(decided && c.decision?.value ? { decision: value(c.decision) } : {}),
+            };
+        })
+        .filter(c => c.values.length > 0);
+    if (conflicts.length > 0) out.conflicts = conflicts;
+    const hypotheses = raw.hypotheses.filter(h => h.title.trim())
+        .map(h => ({ title: h.title.trim(), ...(h.note.trim() ? { note: h.note.trim() } : {}) }));
+    if (hypotheses.length > 0) out.hypotheses = hypotheses;
+    const searched = raw.searched.filter(x => x.title.trim()).map(x => {
+        const resn = x.resn.trim().toLowerCase();
+        const at = researchIsoDate(x.at);
+        return {
+            title: x.title.trim(),
+            ...researchYears(x.date),
+            ...(resn === 'found' || resn === 'none' ? { result: resn as 'found' | 'none' } : {}),
+            ...(at ? { at } : {}),
+        };
+    });
+    if (searched.length > 0) out.searched = searched;
+    return Object.keys(out).length > 0 ? out : undefined;
+}
+
 /** GEDCOM event tag <-> LifeEvent type. */
 const EVENT_TAG_TO_TYPE: Record<string, LifeEventType> = {
     BAPM: 'baptism', BURI: 'burial', OCCU: 'occupation', RESI: 'residence',
@@ -143,6 +225,11 @@ const EVENT_TAG_TO_TYPE: Record<string, LifeEventType> = {
     _MILI: 'military',
     MILI: 'military',
 };
+
+/** The life event a GEDCOM tag stands for (BAPM / CHR → baptism), or null. */
+export function gedcomTagEventType(tag: string): LifeEventType | null {
+    return EVENT_TAG_TO_TYPE[tag.toUpperCase()] ?? null;
+}
 
 /** An EVEN TYPE that names military service, in any language the app speaks. */
 function isMilitaryLabel(label: string): boolean {
@@ -413,6 +500,8 @@ interface GedcomIndividual {
     noteFacts: RawNoteFact[];
     /** The person's narrative (1 _STORY), when the file carries one. */
     story?: RawStory;
+    /** What the research knows (research files only). */
+    research?: RawResearch;
     /**
      * Godparents / informants named under 1 BIRT and 1 DEAT. Birth and death
      * are fields, not events, so these are re-homed on conversion: onto the
@@ -486,6 +575,10 @@ export interface ParsedGedcom {
     places: Map<string, PlaceGeo>;
     /** Surname-variant groups read from the header NOTE (see exporter marker). */
     surnameGroups: string[][];
+    /** Header `1 SOUR STROM_RESEARCH`: written by Strom Research. */
+    stromResearch?: boolean;
+    /** Header `1 _STROM_ASOF`: when the research wrote it (as written). */
+    researchAsOf?: string;
 }
 
 /** Result of GEDCOM to Strom conversion */
@@ -1138,6 +1231,11 @@ export function parseGedcom(content: string): ParsedGedcom {
     /** The current header NOTE is the surname-groups marker note. */
     let inSurnameNote = false;
     const surnameGroups: string[][] = [];
+    /** Header `1 SOUR STROM_RESEARCH` / `1 _STROM_ASOF`. */
+    let stromResearch = false;
+    let researchAsOf = '';
+    /** The _STROM_CONFLICT / _HYPO / _SEARCHED block being read. */
+    let currentResearch: OpenResearch | null = null;
 
     const { records: gedLines, noteRecords, inlineSources } = preprocessGedcomLines(lines);
 
@@ -1320,6 +1418,7 @@ export function parseGedcom(content: string): ParsedGedcom {
             currentFactSubTag = null;
             currentStory = null;
             currentStorySubTag = null;
+            currentResearch = null;
             currentMedia = null;
             currentMediaSubTag = null;
             currentCitationId = null;
@@ -1333,6 +1432,10 @@ export function parseGedcom(content: string): ParsedGedcom {
             // header is bookkeeping the data model does not carry.
             if (level === 1) {
                 inSurnameNote = tag === 'NOTE' && value.trim() === SURNAME_GROUPS_MARKER;
+                // Strom Research's own lines: who wrote the file, and when
+                // its knowledge about people was current.
+                if (tag === 'SOUR' && value.trim() === 'STROM_RESEARCH') stromResearch = true;
+                else if (tag === '_STROM_ASOF') researchAsOf = value.trim();
             } else if (level === 2 && inSurnameNote && (tag === 'CONT' || tag === 'CONC')) {
                 const group = value.split(SURNAME_GROUP_SEP.trim())
                     .map(s => s.trim()).filter(Boolean);
@@ -1419,6 +1522,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentFactSubTag = null;
                 currentStory = null;
                 currentStorySubTag = null;
+                currentResearch = null;
                 if (tag !== 'OBJE') currentMedia = null;
                 currentMediaSubTag = null;
                 if (tag !== 'SOUR') currentCitationId = null;
@@ -1480,6 +1584,26 @@ export function parseGedcom(content: string): ParsedGedcom {
                             indi.story = newStory();
                             currentStory = indi.story;
                             break;
+                        case '_STROM_CONFLICT':
+                        case '_STROM_HYPO':
+                        case '_STROM_SEARCHED': {
+                            // What Strom Research knows about the person. Only
+                            // its own files are trusted with it; elsewhere the
+                            // tag is as unknown as it always was.
+                            if (!stromResearch) { drop(tag); break; }
+                            const research = indi.research ??= newResearch();
+                            if (tag === '_STROM_CONFLICT') {
+                                research.conflicts.push({ id: value.trim(), fact: '', stat: '', values: [] });
+                                currentResearch = { kind: 'conflict', sub: null };
+                            } else if (tag === '_STROM_HYPO') {
+                                research.hypotheses.push({ title: '', note: '' });
+                                currentResearch = { kind: 'hypo', sub: null };
+                            } else {
+                                research.searched.push({ title: '', date: '', resn: '', at: '' });
+                                currentResearch = { kind: 'searched', sub: null };
+                            }
+                            break;
+                        }
                         case 'SOUR':
                             // Level-1 SOUR on INDI is a citation reference (@Sx@).
                             if (value) { indi.sourceRefs.push(value); currentCitationId = value; }
@@ -1600,6 +1724,48 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 drop(tag);
                             }
                             break;
+                    }
+                }
+            } else if (currentResearch && level >= 2 && currentType === 'INDI') {
+                const research = (currentRecord as GedcomIndividual).research!;
+                const open = currentResearch;
+                if (open.kind === 'conflict') {
+                    const c = research.conflicts[research.conflicts.length - 1];
+                    const lastValue = (): RawResearchValue | undefined =>
+                        open.sub === 'DECI' ? c.decision : open.sub === 'VAL' ? c.values[c.values.length - 1] : undefined;
+                    if (level === 2) {
+                        open.sub = tag;
+                        if (tag === 'TYPE') c.fact = value.trim();
+                        else if (tag === 'STAT') c.stat = value;
+                        else if (tag === 'VAL') c.values.push({ value: value.trim(), sourceRefs: [] });
+                        else if (tag === 'DECI') c.decision = { value: value.trim(), sourceRefs: [] };
+                    } else if (level === 3) {
+                        const v = lastValue();
+                        if (v && tag === 'SOUR' && GED_POINTER.test(value)) v.sourceRefs.push(value);
+                        else if (v && tag === 'CONC') v.value += value;
+                        else if (v && tag === 'CONT') v.value += ' ' + value;
+                    }
+                } else if (open.kind === 'hypo') {
+                    const h = research.hypotheses[research.hypotheses.length - 1];
+                    if (level === 2) {
+                        open.sub = tag;
+                        if (tag === 'TITL') h.title = value;
+                        else if (tag === 'NOTE') h.note = h.note ? `${h.note}\n${value}` : value;
+                    } else if (level === 3 && (tag === 'CONC' || tag === 'CONT')) {
+                        const glue = tag === 'CONT' ? '\n' + value : value;
+                        if (open.sub === 'TITL') h.title += tag === 'CONT' ? ' ' + value : value;
+                        else if (open.sub === 'NOTE') h.note += glue;
+                    }
+                } else {
+                    const x = research.searched[research.searched.length - 1];
+                    if (level === 2) {
+                        open.sub = tag;
+                        if (tag === 'TITL') x.title = value;
+                        else if (tag === 'DATE') x.date = value;
+                        else if (tag === 'RESN') x.resn = value;
+                        else if (tag === '_AT') x.at = value;
+                    } else if (level === 3 && open.sub === 'TITL' && (tag === 'CONC' || tag === 'CONT')) {
+                        x.title += tag === 'CONT' ? ' ' + value : value;
                     }
                 }
             } else if (currentStory && level >= 2) {
@@ -1943,7 +2109,10 @@ export function parseGedcom(content: string): ParsedGedcom {
         if (Number.isFinite(geo.lat) && Number.isFinite(geo.lon)) places.set(key, geo);
     }
 
-    return { individuals, families, sources, repositories, droppedTags, places, surnameGroups };
+    return {
+        individuals, families, sources, repositories, droppedTags, places, surnameGroups,
+        ...(stromResearch ? { stromResearch, ...(researchAsOf ? { researchAsOf } : {}) } : {}),
+    };
 }
 
 // ==================== CONVERTER ====================
@@ -2177,6 +2346,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
 
         const story = toStory(indi.story);
         if (story) person.story = story;
+
+        const research = gedcom.stromResearch ? toPersonResearch(indi.research, mapRefs) : undefined;
+        if (research) person.research = research;
 
         const personRefs = mapRefs(indi.sourceRefs);
         if (personRefs.length > 0) person.sourceIds = personRefs;
@@ -2565,7 +2737,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             partnerships,
             ...(Object.keys(sources).length > 0 ? { sources } : {}),
             ...(gedcom.places.size > 0 ? { places: Object.fromEntries(gedcom.places) } : {}),
-            ...(gedcom.surnameGroups.length > 0 ? { surnameVariants: gedcom.surnameGroups } : {})
+            ...(gedcom.surnameGroups.length > 0 ? { surnameVariants: gedcom.surnameGroups } : {}),
+            ...(gedcom.stromResearch && gedcom.researchAsOf && researchIsoDate(gedcom.researchAsOf)
+                ? { researchAsOf: researchIsoDate(gedcom.researchAsOf) } : {}),
         },
         stats: {
             otherFamilyLinks,

@@ -37,6 +37,7 @@ import {
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
+    LiveQueueItem, LiveSpend, LiveIntake,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { iconSvg } from '../icons.js';
@@ -72,6 +73,15 @@ export interface LiveSession {
     head: string;
     working: LiveWorker[];
     waiting: LiveWaiting[];
+    queue: LiveQueueItem[];
+    queueMore: number;
+    update: { version: string } | null;
+    spend: LiveSpend | null;
+    lastIntake: LiveIntake | null;
+    /** The "Up next" section is folded (starts folded in a low window). */
+    queueCollapsed: boolean;
+    /** The user folded or unfolded it: the panel no longer does it by itself. */
+    queueToggled: boolean;
     changes: LiveChangeItem[];
     ended: boolean;
     collapsed: boolean;
@@ -125,6 +135,8 @@ export function rememberedLiveBridge(): string | null {
 }
 
 let externalReady = false;
+/** Removes the listeners of the open ⋯ task menu (null: none open). */
+let liveTaskMenuCleanup: (() => void) | null = null;
 let live: LiveSession | null = null;
 /** The "Waiting for you" panel while no research is followed (the research's id). */
 let idlePanel: string | null = null;
@@ -147,6 +159,10 @@ export interface ResearchWaitingState {
     items: LiveWaiting[];
     at: number;
     live: boolean;
+    /** A newer Strom Research is out. */
+    update: { version: string } | null;
+    /** The last send the research took in. */
+    lastIntake: LiveIntake | null;
 }
 /** One open at a time: a second file waits for the first dialog. */
 let openChain: Promise<unknown> = Promise.resolve();
@@ -161,7 +177,7 @@ function enqueueOpen<T>(job: () => Promise<T>): Promise<T | undefined> {
 }
 
 /** fetch with a timeout where AbortController exists; never sends cookies. */
-async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
+export async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
     if (typeof fetch !== 'function') throw new Error('fetch unavailable');
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), ms) : null;
@@ -185,7 +201,7 @@ async function fetchGedcomText(url: string): Promise<string> {
 }
 
 /** POST the tree to the send bridge; never sends cookies. */
-async function postSync(url: string, gedcom: string, ms: number): Promise<Response> {
+export async function postSync(url: string, gedcom: string, ms: number): Promise<Response> {
     if (typeof fetch !== 'function') throw new Error('fetch unavailable');
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), ms) : null;
@@ -207,10 +223,10 @@ async function postSync(url: string, gedcom: string, ms: number): Promise<Respon
 }
 
 /** Why nothing is sent: the research ends its wait at once and says why. */
-type SendCancelReason = 'unchanged' | 'cancelled' | 'no-tree';
+export type SendCancelReason = 'unchanged' | 'cancelled' | 'no-tree';
 
 /** Tell the send bridge nothing is coming (fire and forget; errors ignored). */
-function postCancel(url: string, reason: SendCancelReason): void {
+export function postCancel(url: string, reason: SendCancelReason): void {
     if (typeof fetch !== 'function') return;
     void fetch(url, {
         method: 'POST',
@@ -233,7 +249,7 @@ async function fetchStatus(url: string): Promise<LiveStatus | null> {
     const status = sanitizeLiveStatus(await res.json());
     // The bridge runs on this computer: what it announces holds here.
     if (status) noteResearchLinks(status.links);
-    if (status?.treeId) noteResearchWaiting(status.treeId, status.waiting);
+    if (status?.treeId) noteResearchWaiting(status.treeId, status.waiting, status);
     return status;
 }
 
@@ -254,7 +270,7 @@ function readFileBuffer(file: Blob): Promise<ArrayBuffer> {
 }
 
 /** A tree's stored data as the app would load it, or null when unreadable. */
-async function readTree(treeId: TreeId): Promise<StromData | null> {
+export async function readTree(treeId: TreeId): Promise<StromData | null> {
     if (DataManager.getCurrentTreeId() === treeId && !DataManager.isLocked()) return DataManager.getData();
     try {
         const data = await TreeManager.getTreeData(treeId);
@@ -386,12 +402,14 @@ export const researchUiMethods = uiModule({
             const importUrl = params.get('import-url');
             const liveUrl = params.get('live');
             const sendUrl = params.get('send');
-            if (importUrl !== null || liveUrl !== null || sendUrl !== null || params.has('open')) {
+            const adoptUrl = params.get('adopt');
+            if (importUrl !== null || liveUrl !== null || sendUrl !== null || adoptUrl !== null || params.has('open')) {
                 try {
                     const url = new URL(window.location.href);
                     url.searchParams.delete('import-url');
                     url.searchParams.delete('live');
                     url.searchParams.delete('send');
+                    url.searchParams.delete('adopt');
                     url.searchParams.delete('open');
                     history.replaceState(null, '', url.toString());
                 } catch { /* keep the address as it is */ }
@@ -400,13 +418,14 @@ export const researchUiMethods = uiModule({
             window.addEventListener('strom:tree-switched', () => this.syncLivePanelVisibility());
             window.addEventListener('resize', () => this.placeLivePanel());
             this.initLaunchQueue(startSearch);
-            this.initResearchVersionChannel(importUrl !== null || liveUrl !== null);
+            this.initResearchVersionChannel(importUrl !== null || liveUrl !== null || adoptUrl !== null);
             const reveal = (): void => document.documentElement.classList.remove('external-opening');
-            const explicit = liveUrl !== null || importUrl !== null || sendUrl !== null || params.has('open');
+            const explicit = liveUrl !== null || importUrl !== null || sendUrl !== null || adoptUrl !== null || params.has('open');
             // Something else was asked for in this tab: the old bridge is over.
             if (explicit) forgetLiveBridge();
             const resume = explicit ? null : rememberedLiveBridge();
             if (sendUrl !== null) { reveal(); void this.sendChangesToResearch(sendUrl); }
+            else if (adoptUrl !== null) { reveal(); void this.adoptFromResearch(adoptUrl); }
             else if (liveUrl !== null) void this.startLiveFollow(liveUrl).finally(reveal);
             else if (importUrl !== null) void this.importResearchFromUrl(importUrl).finally(reveal);
             // A reload while following: follow the same bridge again, quietly.
@@ -465,11 +484,13 @@ export const researchUiMethods = uiModule({
         const sendUrl = params.get('send');
         const liveUrl = params.get('live');
         const importUrl = params.get('import-url');
-        if (sendUrl === null && liveUrl === null && importUrl === null) return false;
+        const adoptUrl = params.get('adopt');
+        if (sendUrl === null && liveUrl === null && importUrl === null && adoptUrl === null) return false;
         // Something else was asked for: the old bridge is over.
         forgetLiveBridge();
         this.settleResearchVersion();
         if (sendUrl !== null) void this.sendChangesToResearch(sendUrl);
+        else if (adoptUrl !== null) void this.adoptFromResearch(adoptUrl);
         else if (liveUrl !== null) void this.startLiveFollow(liveUrl);
         else if (importUrl !== null) void this.importResearchFromUrl(importUrl);
         return true;
@@ -888,7 +909,11 @@ export const researchUiMethods = uiModule({
         if (typeof BroadcastChannel !== 'function') return;
         try {
             versionChannel = new BroadcastChannel(VERSION_CHANNEL);
-            versionChannel.onmessage = () => this.settleResearchVersion();
+            versionChannel.onmessage = () => {
+                this.settleResearchVersion();
+                // The research came back for the tree in another tab: stop waiting here.
+                document.querySelector('.toast[data-kind="adopt"]')?.remove();
+            };
             if (arrivedHere) versionChannel.postMessage('arrived');
         } catch { /* no channel: the wait just ends on its own */ }
     },
@@ -929,7 +954,9 @@ export const researchUiMethods = uiModule({
     /** What waits for the user in the active tree's research (null: nothing known, or older than a week). */
     researchWaiting(): ResearchWaitingState | null {
         const treeId = DataManager.getCurrentTreeId();
-        if (live && !live.ended && live.treeId === treeId) return { items: live.waiting, at: Date.now(), live: true };
+        if (live && !live.ended && live.treeId === treeId) {
+            return { items: live.waiting, at: Date.now(), live: true, update: live.update, lastIntake: live.lastIntake };
+        }
         const researchId = this.activeResearchId();
         const stored = researchId ? storedResearchWaiting(researchId) : null;
         return stored ? { ...stored, live: false } : null;
@@ -1095,6 +1122,13 @@ export const researchUiMethods = uiModule({
                 head: status.head,
                 working: status.working,
                 waiting: status.waiting,
+                queue: status.queue,
+                queueMore: status.queueMore,
+                update: status.update,
+                spend: status.spend,
+                lastIntake: status.lastIntake,
+                queueCollapsed: window.innerHeight < 700,
+                queueToggled: false,
                 changes: [],
                 ended: false,
                 collapsed: isMobile(),
@@ -1190,7 +1224,12 @@ export const researchUiMethods = uiModule({
         }
         s.working = status.working;
         s.waiting = status.waiting;
-        if (status.treeId) noteResearchWaiting(status.treeId, status.waiting);
+        s.queue = status.queue;
+        s.queueMore = status.queueMore;
+        s.update = status.update;
+        s.spend = status.spend;
+        s.lastIntake = status.lastIntake;
+        if (status.treeId) noteResearchWaiting(status.treeId, status.waiting, status);
         this.refreshActionMenuBadges();
         if (status.head && status.head !== s.head) {
             this.enqueueLive(s, () => this.onLiveChange(s, { head: status.head, what: [], at: '' }));
@@ -1391,6 +1430,9 @@ export const researchUiMethods = uiModule({
         panel.classList.toggle('ended', s.ended);
         panel.classList.toggle('collapsed', s.collapsed);
         panel.hidden = DataManager.getCurrentTreeId() !== s.treeId;
+        // A redraw replaces the ⋯ buttons: an open task menu moves to the new one.
+        const menuTask = document.getElementById('live-task-menu')?.dataset.task ?? null;
+        this.closeLiveTaskMenu();
         panel.replaceChildren();
 
         const head = el('div', 'live-panel-head');
@@ -1411,6 +1453,7 @@ export const researchUiMethods = uiModule({
         action.onclick = () => (s.ended ? this.closeLivePanel() : this.stopLiveFollow());
         head.appendChild(action);
         panel.appendChild(head);
+        if (!s.ended && s.update) this.appendUpdateStrip(panel, s.update.version);
         // Collapsed: what the hidden body would say first — new changes, and
         // that the tree cannot be edited meanwhile.
         if (s.collapsed) {
@@ -1450,6 +1493,9 @@ export const researchUiMethods = uiModule({
             if (!s.ended) body.appendChild(el('p', 'live-panel-hint', r.answerWhere));
         }
 
+        // The agent's queue: only while live (an old queue misleads).
+        if (!s.ended) this.appendQueueSection(body, s);
+
         // Every change row looks the same; one that names a person in the
         // tree is a button (hover background) that shows that person.
         const changes = section(r.changes, 'live-changes');
@@ -1474,8 +1520,198 @@ export const researchUiMethods = uiModule({
             changes.appendChild(li);
         }
         panel.appendChild(body);
+        if (!s.ended && s.spend) this.appendSpendFoot(panel, s.spend);
         placeLivePanel(panel);
+        const again = menuTask ? panel.querySelector<HTMLElement>(`.live-queue-more[data-task="${menuTask}"]`) : null;
+        if (again && menuTask) this.openLiveTaskMenu(again, menuTask);
+        // Too tall for the window: "Up next" folds first (unless the user chose).
+        if (!s.collapsed && !s.queueCollapsed && !s.queueToggled && body.querySelector('.live-queue')
+            && body.scrollHeight > body.clientHeight + 1) {
+            s.queueCollapsed = true;
+            this.renderLivePanel();
+            return;
+        }
         if (!timeTicker) timeTicker = setInterval(tickLiveTimes, TIME_TICK_MS);
+    },
+
+    /** "New Strom Research 1.7" under the panel heading, with "Update ↗". */
+    appendUpdateStrip(panel: HTMLElement, version: string): void {
+        const r = strings.research;
+        const strip = el('div', 'live-panel-update');
+        strip.appendChild(el('span', 'live-panel-update-text', r.updateAvailable(version)));
+        const url = this.activeResearchLink('update');
+        if (url) {
+            const btn = el('button', 'link-button live-panel-update-link', r.updateResearch);
+            btn.type = 'button';
+            btn.onclick = () => this.launchResearchLink(url);
+            strip.appendChild(btn);
+        }
+        panel.appendChild(strip);
+    },
+
+    /**
+     * "Up next": the first three tasks of the agent's queue (⋯ parks or drops
+     * one in the research), parked ones below (Resume ↗), the rest as one
+     * link. Nothing changes here after an action: the next status tells.
+     */
+    appendQueueSection(body: HTMLElement, s: LiveSession): void {
+        const r = strings.research;
+        const next = s.queue.filter(q => q.state === 'next');
+        const parked = s.queue.filter(q => q.state === 'parked');
+        if (next.length === 0 && parked.length === 0 && s.queueMore === 0) return;
+        const shownNext = next.slice(0, 3);
+        const shownParked = parked.slice(0, 3);
+        const hidden = s.queueMore + (next.length - shownNext.length) + (parked.length - shownParked.length);
+
+        const toggle = el('button', 'live-panel-heading live-queue-toggle');
+        toggle.type = 'button';
+        toggle.setAttribute('aria-expanded', String(!s.queueCollapsed));
+        toggle.appendChild(el('span', undefined, r.queue));
+        const chevron = el('span', 'live-panel-chevron');
+        chevron.setAttribute('aria-hidden', 'true');
+        chevron.innerHTML = iconSvg('chevron-down', { size: 12 });
+        toggle.appendChild(chevron);
+        toggle.onclick = () => {
+            s.queueCollapsed = !s.queueCollapsed;
+            s.queueToggled = true;
+            this.renderLivePanel();
+        };
+        body.appendChild(toggle);
+        if (s.queueCollapsed) return;
+
+        const list = el('ul', 'live-panel-list live-queue');
+        body.appendChild(list);
+        const canTask = this.researchLinkAvailable('task');
+        shownNext.forEach((q, i) => {
+            const li = el('li', 'live-queue-row');
+            li.appendChild(el('span', 'live-queue-num', String(i + 1)));
+            li.appendChild(el('span', 'live-queue-text', q.text));
+            if (canTask) {
+                const more = el('button', 'live-queue-more', '⋯');
+                more.type = 'button';
+                more.setAttribute('aria-label', r.taskMenu);
+                more.setAttribute('aria-haspopup', 'menu');
+                more.dataset.task = q.id;
+                more.onclick = (e) => {
+                    e.stopPropagation();
+                    this.openLiveTaskMenu(more, q.id);
+                };
+                li.appendChild(more);
+            }
+            list.appendChild(li);
+        });
+        for (const q of shownParked) {
+            const li = el('li', 'live-queue-row live-queue-row--parked');
+            li.appendChild(el('span', 'live-queue-text', `${r.parkedPrefix} ${q.text}`));
+            if (canTask) {
+                const wake = el('button', 'link-button live-queue-wake', r.wake);
+                wake.type = 'button';
+                wake.onclick = () => this.runLiveTask(q.id, 'wake');
+                li.appendChild(wake);
+            }
+            list.appendChild(li);
+        }
+        const open = this.activeResearchLink('open');
+        if (hidden > 0 && open) {
+            const li = el('li', 'live-queue-row live-queue-row--more');
+            const more = el('button', 'link-button live-queue-rest', r.queueMore(hidden));
+            more.type = 'button';
+            more.onclick = () => this.launchResearchLink(open);
+            li.appendChild(more);
+            list.appendChild(li);
+        }
+    },
+
+    /** Park / drop / wake a queued task in the research. */
+    runLiveTask(task: string, what: 'park' | 'drop' | 'wake'): void {
+        this.closeLiveTaskMenu();
+        const url = this.activeResearchLink('task', { task, taskDo: what });
+        if (url) this.launchResearchLink(url);
+    },
+
+    /** The small ⋯ menu of a queued task: Park ↗ / Drop ↗. Escape or a click elsewhere closes it. */
+    openLiveTaskMenu(anchor: HTMLElement, task: string): void {
+        const wasOpen = document.getElementById('live-task-menu')?.dataset.task === task;
+        this.closeLiveTaskMenu();
+        if (wasOpen) return;
+        const r = strings.research;
+        const menu = el('div', 'context-menu live-task-menu');
+        menu.id = 'live-task-menu';
+        menu.dataset.task = task;
+        menu.setAttribute('role', 'menu');
+        menu.setAttribute('aria-label', r.taskMenu);
+        for (const [what, label] of [['park', r.park], ['drop', r.drop]] as const) {
+            const item = el('div', 'context-menu-item', label);
+            item.setAttribute('role', 'menuitem');
+            item.tabIndex = -1;
+            item.dataset.action = what;
+            item.onclick = () => this.runLiveTask(task, what);
+            item.onkeydown = (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.runLiveTask(task, what); }
+            };
+            menu.appendChild(item);
+        }
+        document.body.appendChild(menu);
+        anchor.setAttribute('aria-expanded', 'true');
+        const rect = anchor.getBoundingClientRect();
+        const left = Math.max(8, Math.min(rect.right - menu.offsetWidth, window.innerWidth - menu.offsetWidth - 8));
+        const below = rect.bottom + 4;
+        const top = below + menu.offsetHeight > window.innerHeight - 8 ? rect.top - menu.offsetHeight - 4 : below;
+        menu.style.left = `${Math.round(left)}px`;
+        menu.style.top = `${Math.round(top)}px`;
+        (menu.firstElementChild as HTMLElement | null)?.focus();
+        const onKey = (e: KeyboardEvent): void => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                this.closeLiveTaskMenu();
+                anchor.focus();
+            } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                const items = [...menu.querySelectorAll<HTMLElement>('.context-menu-item')];
+                const i = items.indexOf(document.activeElement as HTMLElement);
+                items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus();
+            }
+        };
+        const onDown = (e: Event): void => {
+            if (!menu.contains(e.target as Node)) this.closeLiveTaskMenu();
+        };
+        document.addEventListener('keydown', onKey, true);
+        setTimeout(() => document.addEventListener('mousedown', onDown, true), 0);
+        liveTaskMenuCleanup = () => {
+            document.removeEventListener('keydown', onKey, true);
+            document.removeEventListener('mousedown', onDown, true);
+            anchor.setAttribute('aria-expanded', 'false');
+        };
+    },
+
+    closeLiveTaskMenu(): void {
+        liveTaskMenuCleanup?.();
+        liveTaskMenuCleanup = null;
+        document.getElementById('live-task-menu')?.remove();
+    },
+
+    /** "Agent this month: 4 sessions · $3.20" at the foot of the panel, ↗ to the sessions. */
+    appendSpendFoot(panel: HTMLElement, spend: LiveSpend): void {
+        const r = strings.research;
+        let amount: string;
+        try {
+            amount = new Intl.NumberFormat(getCurrentLanguage(), { style: 'currency', currency: spend.currency }).format(spend.amount);
+        } catch {
+            amount = `${spend.amount.toFixed(2)} ${spend.currency}`;
+        }
+        const foot = el('div', 'live-panel-spend');
+        foot.appendChild(el('span', 'live-panel-spend-text', r.spend(spend.sessions, amount)));
+        const url = this.activeResearchLink('sessions');
+        if (url) {
+            const btn = el('button', 'live-panel-spend-link', '↗');
+            btn.type = 'button';
+            btn.setAttribute('aria-label', r.spendOpenSr);
+            btn.title = r.spendOpenSr;
+            btn.onclick = () => this.launchResearchLink(url);
+            foot.appendChild(btn);
+        }
+        panel.appendChild(foot);
     },
 
     /** The panel without following: what waited for the user when the research last said so. */

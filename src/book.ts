@@ -28,6 +28,12 @@ export interface BookOptions {
     treeSvg?: string;
     /** "compiled …" line (supplied so output is deterministic for tests). */
     dateLabel?: string;
+    /**
+     * The strom-research:// link approving a person's draft story, or null
+     * (supplied by the UI: only a research tree whose research announced it).
+     * Shown on screen under the draft, never printed.
+     */
+    approveStoryUrl?: (person: Person) => string | null;
 }
 
 function esc(text: string): string {
@@ -193,7 +199,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
             : '';
     };
 
-    const storyHtml = (story: Story, kind: 'person' | 'couple', who: string): string => {
+    const storyHtml = (story: Story, kind: 'person' | 'couple', who: string, person?: Person): string => {
         const paragraphs = proseHtml(story.text);
         if (!paragraphs) return '';
         // The draft/approved state is the author's workshop note: it travels in
@@ -202,7 +208,11 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         const title = story.title
             ? ` <span class="book-story-title">${esc(story.title)}</span>` : '';
         const head = `<h4 class="book-story-head">${who}${title}</h4>`;
-        return `<div class="book-story book-story-${kind}">${head}${paragraphs}</div>`;
+        // A draft of a research tree can be approved there — on screen only.
+        const approve = story.status === 'draft' && person ? options.approveStoryUrl?.(person) : null;
+        const approveHtml = approve
+            ? `<p class="book-story-approve"><a href="${esc(approve)}">${esc(S.research.approveStory)}</a></p>` : '';
+        return `<div class="book-story book-story-${kind}">${head}${paragraphs}${approveHtml}</div>`;
     };
 
     // Photo (circular) or initials.
@@ -302,9 +312,9 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         // a long note first, then the narrative written about that person.
         const stories = [
             ...(isLongNote(p1) ? [longNoteHtml(p1!)] : []),
-            ...(p1?.story ? [storyHtml(p1.story, 'person', name(p1))] : []),
+            ...(p1?.story ? [storyHtml(p1.story, 'person', name(p1), p1)] : []),
             ...(isLongNote(p2) ? [longNoteHtml(p2!)] : []),
-            ...(p2?.story ? [storyHtml(p2.story, 'person', name(p2))] : []),
+            ...(p2?.story ? [storyHtml(p2.story, 'person', name(p2), p2)] : []),
             ...(u.story ? [storyHtml(u.story, 'couple',
                 `${name(p1)}${p2 ? ` <span class="book-amp">&amp;</span> ${name(p2)}` : ''}`)] : []),
         ].join('');
@@ -435,7 +445,10 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     .book-toolbar button:hover { background: #fff; }
 
     @page { size: A4; margin: 18mm 16mm; }
+    .book-story-approve { margin: 6px 0 0; font-family: system-ui, sans-serif; font-size: 13px; }
+    .book-story-approve a { color: #8a5a2b; }
     @media print {
+        .book-story-approve { display: none; }
         .book-toolbar { display: none; }
         body { background: #fff; }
         .book-page { max-width: none; box-shadow: none; margin: 0; padding: 0; background: #fff; }

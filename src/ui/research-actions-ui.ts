@@ -8,7 +8,8 @@
  */
 
 import { DataManager } from '../data.js';
-import { strings } from '../strings.js';
+import { strings, getCurrentLanguage } from '../strings.js';
+import { formatLiveClock } from '../live-time.js';
 import { PersonId } from '../types.js';
 import { yearOf } from '../dates.js';
 import { RESEARCH_LINK_ACTIONS, ResearchReviewScope, researchPersonRef } from '../research-link.js';
@@ -62,17 +63,25 @@ interface SubmenuItem {
     ai?: boolean;
     /** A count at the end ("Waiting for you  2"). */
     count?: number;
+    /** A quiet second line ("sent 11:20"). */
+    sub?: string;
 }
+
+/** An intake older than this can no longer be taken back from the app. */
+const UNDO_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function submenuItemHtml(item: SubmenuItem): string {
     const r = strings.research;
     const aria = [item.label];
     if (item.count) aria.push(r.waitingCountSr(item.count));
     if (item.ai) aria.push(r.aiBadge);
+    if (item.sub) aria.push(item.sub);
     if (item.ext) aria.push(r.opensInResearchSr);
     return `<div class="tree-switcher-action" id="${item.id}" role="menuitem" tabindex="0"`
         + ` aria-label="${esc(aria.join(', '))}" onclick="${item.run}">`
-        + `<span class="research-item-label">${esc(item.label)}</span>`
+        + (item.sub
+            ? `<span class="research-item-label research-item-label--two"><span>${esc(item.label)}</span><span class="research-item-sub">${esc(item.sub)}</span></span>`
+            : `<span class="research-item-label">${esc(item.label)}</span>`)
         + (item.count ? `<span class="tree-switcher-badge actions-research-badge" aria-hidden="true">${item.count}</span>` : '')
         + (item.ai ? `<span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span>` : '')
         + (item.ext ? '<span class="research-item-ext" aria-hidden="true">↗</span>' : '')
@@ -126,6 +135,7 @@ export const researchActionsMethods = uiModule({
 
         let groups: SubmenuItem[][];
         let note = false;
+        let updateBlock = '';
         if (!this.researchAnyAnnounced()) {
             // An older research (or the links switched off): the way back, and what it is.
             groups = [[
@@ -136,16 +146,37 @@ export const researchActionsMethods = uiModule({
             const look: SubmenuItem[] = [];
             if (this.researchLinkAvailable('app')) look.push({ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') });
             if (waiting > 0) look.push({ id: 'research-item-waiting', label: r.waiting, run: call('researchActionWaiting'), count: waiting });
+            const known = this.researchWaiting();
             const work: SubmenuItem[] = [
                 { id: 'research-item-send', label: r.sendChanges, run: call('researchActionSend'), ext: this.researchLinkAvailable('send') },
             ];
+            const intake = known?.lastIntake;
+            const sentAt = intake ? Date.parse(intake.at) : NaN;
+            if (intake && this.researchLinkAvailable('sync-undo') && Number.isFinite(sentAt) && Date.now() - sentAt < UNDO_MAX_AGE_MS) {
+                work.push({ id: 'research-item-undo', label: r.undoSend, run: call('researchActionUndoSend'), ext: true,
+                    sub: r.sentAt(formatLiveClock(sentAt, Date.now(), getCurrentLanguage())) });
+            }
             if (this.researchLinkAvailable('open')) work.push({ id: 'research-item-open', label: r.openResearch, run: call('researchActionOpen'), ext: true });
             const agent: SubmenuItem[] = [];
             if (this.researchLinkAvailable('chat')) agent.push({ id: 'research-item-chat', label: r.continueAgent, run: call('researchActionChat'), ext: true, ai: true });
-            groups = [look, work, agent];
+            const setup: SubmenuItem[] = [];
+            if (this.researchLinkAvailable('setup')) setup.push({ id: 'research-item-setup', label: r.settings, run: call('researchActionSetup'), ext: true });
+            groups = [look, work, agent, setup];
             note = true;
+            // A newer research: a block above the rows, its "Update" the only item in it.
+            if (known?.update) {
+                const canUpdate = this.researchLinkAvailable('update');
+                updateBlock = `<div class="research-update-block" id="research-update-block">`
+                    + `<div class="research-update-title">${esc(r.updateAvailable(known.update.version))}</div>`
+                    + (canUpdate
+                        ? `<div class="tree-switcher-action research-update-action" id="research-item-update" role="menuitem" tabindex="0"`
+                            + ` aria-label="${esc(`${r.updateAvailable(known.update.version)}, ${r.updateResearch.replace(' ↗', '')}, ${r.opensInResearchSr}`)}"`
+                            + ` onclick="${call('researchActionUpdate')}">${esc(r.updateResearch)}</div>`
+                        : '')
+                    + '</div>';
+            }
         }
-        const html = groups.filter(g => g.length > 0)
+        const html = updateBlock + groups.filter(g => g.length > 0)
             .map(g => g.map(submenuItemHtml).join(''))
             .join('<div class="tree-switcher-divider"></div>')
             + (note ? `<div class="tree-switcher-divider"></div><div class="research-submenu-note">${esc(r.submenuNote)}</div>` : '');
@@ -203,6 +234,25 @@ export const researchActionsMethods = uiModule({
         if (url) this.launchResearchLink(url);
     },
 
+    researchActionUndoSend(): void {
+        this.closeActionsMenu();
+        const intake = this.researchWaiting()?.lastIntake;
+        const url = intake ? this.activeResearchLink('sync-undo', { intake: intake.id }) : null;
+        if (url) this.launchResearchLink(url);
+    },
+
+    researchActionUpdate(): void {
+        this.closeActionsMenu();
+        const url = this.activeResearchLink('update');
+        if (url) this.launchResearchLink(url);
+    },
+
+    researchActionSetup(): void {
+        this.closeActionsMenu();
+        const url = this.activeResearchLink('setup');
+        if (url) this.launchResearchLink(url);
+    },
+
     researchActionChat(): void {
         this.closeActionsMenu();
         const url = this.activeResearchLink('chat');
@@ -237,6 +287,8 @@ export const researchActionsMethods = uiModule({
         if (this.researchLinkAvailable('research')) {
             items.push({ action: 'research-ancestors', label: r.findAncestors, external: true,
                 ariaLabel: `${r.findAncestors}, ${r.opensInResearchSr}` });
+            items.push({ action: 'research-descendants', label: r.findDescendants, external: true,
+                ariaLabel: `${r.findDescendants}, ${r.opensInResearchSr}` });
         }
         if (this.researchLinkAvailable('chat')) {
             items.push({ action: 'research-ask', label: r.askAgent, external: true, badge: 'ai',
@@ -251,8 +303,9 @@ export const researchActionsMethods = uiModule({
         if (!person) return;
         if (action === 'research-review') {
             this.showResearchReviewDialog(personId);
-        } else if (action === 'research-ancestors') {
-            const url = this.activeResearchLink('research', { person, direction: 'ancestors' });
+        } else if (action === 'research-ancestors' || action === 'research-descendants') {
+            const direction = action === 'research-ancestors' ? 'ancestors' : 'descendants';
+            const url = this.activeResearchLink('research', { person, direction });
             if (url) this.launchResearchLink(url);
         } else if (action === 'research-ask') {
             const url = this.activeResearchLink('chat', { person });
@@ -326,6 +379,15 @@ export const researchActionsMethods = uiModule({
     closeResearchReviewDialog(): void {
         document.getElementById(REVIEW_ID)?.remove();
         this.dialogStack = this.dialogStack.filter(d => d !== REVIEW_ID);
+    },
+
+    // ==================== F1: APPROVE A DRAFT STORY ====================
+
+    /** "Approve in the research ↗" for a person's draft story, or null (not a draft, not offered). */
+    storyApproveUrl(personId: PersonId): string | null {
+        if (DataManager.getPerson(personId)?.story?.status !== 'draft') return null;
+        const person = this.personResearchRef(personId);
+        return person ? this.activeResearchLink('story', { person }) : null;
     },
 
     // ==================== PERSON SOURCES: FIND A SOURCE ====================

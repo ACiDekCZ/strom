@@ -20,7 +20,10 @@ export const STROM_HEAD_TAG = '_STROM_HEAD';
 export const STROM_LINKS_TAG = '_STROM_LINKS';
 
 /** Actions of the strom-research:// scheme the app knows how to use. */
-export const RESEARCH_LINK_ACTIONS = ['send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research'] as const;
+export const RESEARCH_LINK_ACTIONS = [
+    'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
+    'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup',
+] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
 /** The known actions in `value` (an array, or a space-separated header value); anything else is dropped. */
@@ -51,10 +54,25 @@ export function researchTaskRef(id: unknown): string | null {
     return typeof id === 'string' && /^T\d{1,7}$/.test(id.trim()) ? id.trim() : null;
 }
 
+/** A conflict's id in the research ("C0007"), or null. */
+export function researchConflictRef(id: unknown): string | null {
+    return typeof id === 'string' && /^C\d{1,7}$/.test(id.trim()) ? id.trim() : null;
+}
+
+/** A send's id in the research ("I0042", what it took in), or null. */
+export function researchIntakeRef(id: unknown): string | null {
+    return typeof id === 'string' && /^I\d{1,7}$/.test(id.trim()) ? id.trim() : null;
+}
+
+/** The one-time token of "Start research with this tree" (base64url, 22–43 characters), or null. */
+export function researchAdoptToken(value: unknown): string | null {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{22,43}$/.test(value) ? value : null;
+}
+
 /** How far "Review again" reaches: the person, with the family, or the whole line up. */
 export type ResearchReviewScope = 'person' | 'family' | 'line';
 const REVIEW_SCOPES: readonly string[] = ['person', 'family', 'line'];
-/** Direction of a new research ("descendants" is agreed but not offered yet). */
+/** Direction of a new research. */
 export type ResearchDirection = 'ancestors' | 'descendants';
 const DIRECTIONS: readonly string[] = ['ancestors', 'descendants'];
 
@@ -67,6 +85,26 @@ export interface ResearchLinkParams {
     task?: string;
     scope?: ResearchReviewScope;
     direction?: ResearchDirection;
+    /** A task: park / drop / wake (without: answer it). */
+    taskDo?: ResearchTaskDo;
+    /** A conflict ("C0007") and what to do with it. */
+    conflict?: string;
+    conflictDo?: ResearchConflictDo;
+    /** The send to take back ("I0042"). */
+    intake?: string;
+}
+
+/** What to do with a task in the research (nothing: answer it). */
+export type ResearchTaskDo = 'park' | 'drop' | 'wake';
+const TASK_DOS: readonly string[] = ['park', 'drop', 'wake'];
+/** A conflict: decide it there, or leave it to the agent. */
+export type ResearchConflictDo = 'decide' | 'agent';
+const CONFLICT_DOS: readonly string[] = ['decide', 'agent'];
+
+/** "Start research with this tree": the one link without a tree (the research makes one). */
+export function researchNewUrl(token: string): string | null {
+    const app = researchAdoptToken(token);
+    return app ? `strom-research://new?app=${app}` : null;
 }
 
 /**
@@ -81,6 +119,9 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
         case 'send':
         case 'app':
         case 'open':
+        case 'update':
+        case 'sessions':
+        case 'setup':
             return base;
         case 'excerpt': {
             const source = researchSourceRef(p.source);
@@ -94,8 +135,26 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
         }
         case 'task': {
             const task = researchTaskRef(p.task);
-            return task ? `${base}&task=${task}` : null;
+            if (!task) return null;
+            if (p.taskDo === undefined) return `${base}&task=${task}`;
+            return TASK_DOS.includes(p.taskDo) ? `${base}&task=${task}&do=${p.taskDo}` : null;
         }
+        case 'conflict': {
+            const id = researchConflictRef(p.conflict);
+            const what = p.conflictDo ?? 'decide';
+            return id && CONFLICT_DOS.includes(what) ? `${base}&id=${id}&do=${what}` : null;
+        }
+        case 'story': {
+            const person = researchPersonRef(p.person);
+            return person ? `${base}&person=${person}&do=final` : null;
+        }
+        case 'sync-undo': {
+            const intake = researchIntakeRef(p.intake);
+            return intake ? `${base}&intake=${intake}` : null;
+        }
+        case 'new':
+            // Carries a token, not a tree: see researchNewUrl.
+            return null;
         case 'review': {
             const person = researchPersonRef(p.person);
             const scope = p.scope ?? 'person';
@@ -481,6 +540,39 @@ export interface LiveStatus {
     waiting: LiveWaiting[];
     /** strom-research:// actions this computer handles (empty: none announced). */
     links: ResearchLinkAction[];
+    /** The agent's queue, in its order (at most 20). */
+    queue: LiveQueueItem[];
+    /** How many more tasks the queue holds beyond `queue`. */
+    queueMore: number;
+    /** A newer Strom Research is out ("1.7.0"); null: none. */
+    update: { version: string } | null;
+    /** What the agent cost this month; null: not said. */
+    spend: LiveSpend | null;
+    /** The last send the research took in; null: none. */
+    lastIntake: LiveIntake | null;
+}
+
+/** A task in the agent's queue. */
+export interface LiveQueueItem {
+    id: string;
+    text: string;
+    state: 'next' | 'parked';
+}
+
+/** The agent's sessions and cost this month. */
+export interface LiveSpend {
+    /** "2026-09". */
+    month: string;
+    sessions: number;
+    amount: number;
+    /** ISO 4217 ("USD"). */
+    currency: string;
+}
+
+/** The last send the research took in (it can be taken back). */
+export interface LiveIntake {
+    id: string;
+    at: string;
 }
 
 /** A `change` event, checked and cleaned. */
@@ -524,6 +616,51 @@ export function sanitizeWaiting(value: unknown): LiveWaiting[] {
     return out;
 }
 
+/** Most queue items taken from the status. */
+const MAX_QUEUE = 20;
+
+/** The `queue` list of the status. Untrusted input: bad items are dropped. */
+export function sanitizeQueue(value: unknown): LiveQueueItem[] {
+    if (!Array.isArray(value)) return [];
+    const out: LiveQueueItem[] = [];
+    for (const item of value) {
+        if (out.length >= MAX_QUEUE) break;
+        const r = asRecord(item);
+        const id = researchTaskRef(r?.id);
+        const text = cleanText(r?.text);
+        if (!r || !id || !text) continue;
+        const state = r.state === 'parked' ? 'parked' : r.state === 'next' ? 'next' : null;
+        if (state) out.push({ id, text, state });
+    }
+    return out;
+}
+
+/** `update: { version }`: a newer research, or null. */
+export function sanitizeUpdate(value: unknown): { version: string } | null {
+    const r = asRecord(value);
+    const version = typeof r?.version === 'string' ? r.version.trim() : '';
+    return /^\d{1,4}(\.\d{1,4}){1,3}([-.][0-9A-Za-z.]{1,20})?$/.test(version) ? { version } : null;
+}
+
+/** `spend: { month, sessions, amount, currency }`, or null when any part is wrong. */
+export function sanitizeSpend(value: unknown): LiveSpend | null {
+    const r = asRecord(value);
+    if (!r) return null;
+    const month = typeof r.month === 'string' && /^\d{4}-\d{2}$/.test(r.month) ? r.month : null;
+    const sessions = asCount(r.sessions);
+    const amount = typeof r.amount === 'number' && Number.isFinite(r.amount) && r.amount >= 0 ? r.amount : null;
+    const currency = typeof r.currency === 'string' && /^[A-Z]{3}$/.test(r.currency) ? r.currency : null;
+    return month && sessions !== null && amount !== null && currency ? { month, sessions, amount, currency } : null;
+}
+
+/** `lastIntake: { id, at }`, or null. */
+export function sanitizeIntake(value: unknown): LiveIntake | null {
+    const r = asRecord(value);
+    const id = researchIntakeRef(r?.id);
+    const at = typeof r?.at === 'string' && Number.isFinite(Date.parse(r.at)) ? r.at : null;
+    return id && at ? { id, at } : null;
+}
+
 /** The bridge status. Untrusted input: every field is checked. */
 export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
     const r = asRecord(value);
@@ -540,6 +677,11 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         working: sanitizeWorking(r.working),
         waiting: sanitizeWaiting(r.waiting),
         links: sanitizeResearchLinks(r.links),
+        queue: sanitizeQueue(r.queue),
+        queueMore: asCount(r.queueMore) ?? 0,
+        update: sanitizeUpdate(r.update),
+        spend: sanitizeSpend(r.spend),
+        lastIntake: sanitizeIntake(r.lastIntake),
     };
 }
 
@@ -727,4 +869,37 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
  */
 export function isFaithfulExport(privacy: string, content: { photos: boolean; attachments: boolean; notes: boolean; sources: boolean }): boolean {
     return privacy === 'full' && content.photos && content.attachments && content.notes && content.sources;
+}
+
+// ==================== "START RESEARCH WITH THIS TREE" ====================
+
+/** What the research asks for at `GET <bridge>/adopt`: the tree by its token, and its own name. */
+export interface AdoptOffer {
+    token: string;
+    name: string;
+    /** The research tree's UUID, when it already made one. */
+    tree: string | null;
+}
+
+/** The adopt offer, or null when it does not carry a valid token. Untrusted. */
+export function sanitizeAdoptOffer(value: unknown): AdoptOffer | null {
+    const r = asRecord(value);
+    const token = researchAdoptToken(r?.token);
+    if (!r || !token) return null;
+    return { token, name: cleanText(r.name, MAX_NAME), tree: normalizeResearchId(r.tree) };
+}
+
+/** The research's answer to the handed-over tree: its tree UUID and version, or null. Untrusted. */
+export function sanitizeAdoptReply(value: unknown): { tree: string; head: string | null } | null {
+    const r = asRecord(value);
+    const tree = normalizeResearchId(r?.tree);
+    return tree ? { tree, head: isResearchHead(r?.head) } : null;
+}
+
+/** A one-time token for "Start research with this tree": 32 random bytes, base64url (43 characters). */
+export function newAdoptToken(random: (bytes: Uint8Array) => Uint8Array = (b) => crypto.getRandomValues(b)): string {
+    const bytes = random(new Uint8Array(32));
+    let bin = '';
+    for (const b of bytes) bin += String.fromCharCode(b);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }

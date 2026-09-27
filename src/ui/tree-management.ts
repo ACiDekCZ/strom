@@ -682,6 +682,7 @@ export const treeManagementMethods = uiModule({
                                 ${menuItem(`window.Strom.UI.showTreeHealthDialog('${tree.id}', 'tree-manager-modal')`, strings.treeHealth.menu)}
                                 ${menuItem(`window.Strom.UI.showExportDialogFromManager('${tree.id}')`, s.export)}
                                 ${tree.research && researchRunsHere() ? menuItem(`window.Strom.UI.sendTreeToResearch('${tree.id}')`, strings.research.sendMenu, 'edit-only') : ''}
+                                ${this.researchAdoptAvailable(tree) ? menuItem(`window.Strom.UI.treeActionStartResearch('${tree.id}')`, this.escapeHtml(strings.research.adoptTree), 'edit-only') : ''}
                                 ${menuItem(`window.Strom.UI.showRenameTreeDialog('${tree.id}', 'tree-manager-modal')`, s.rename, 'edit-only tree-row-menu-divider')}
                                 ${menuItem(`window.Strom.UI.showDefaultPersonDialog('${tree.id}', 'tree-manager-modal')`, s.defaultPerson, 'edit-only')}
                                 ${startupItem}
