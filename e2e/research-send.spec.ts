@@ -216,3 +216,21 @@ test.describe('send changes back to the research', () => {
         expect(ged).toContain(`1 _STROM_HEAD ${HEAD}`);
     });
 });
+
+test.describe('where the tree menu offers it', () => {
+    test('a computer: in the tree manager of a tied tree', async ({ page }) => {
+        await openResearch(page, false);
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        await expect(page.locator('#tree-manager-modal')).toContainText('Send changes to the research');
+    });
+
+    test('a phone (touch): not offered — the research cannot run there', async ({ browser }) => {
+        const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+        const page = await ctx.newPage();
+        await openResearch(page, false);
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        await expect(page.locator('#tree-manager-modal')).toBeVisible();
+        await expect(page.locator('#tree-manager-modal')).not.toContainText('Send changes to the research');
+        await ctx.close();
+    });
+});

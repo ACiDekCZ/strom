@@ -44,6 +44,15 @@ import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 
 import { iconSvg } from '../icons.js';
+
+/**
+ * Strom Research runs in a terminal on a computer: phones and tablets (a
+ * coarse pointer) never reach its bridge, so they get no "send to research".
+ */
+function researchRunsHere(): boolean {
+    try { return !(window.matchMedia?.('(pointer: coarse)').matches ?? false); } catch { return true; }
+}
+
 export const treeManagementMethods = uiModule({
     // ---- TREE SWITCHER ----
     /**
@@ -643,7 +652,7 @@ export const treeManagementMethods = uiModule({
                                 ${menuItem(`window.Strom.UI.showTreeStatsDialog('${tree.id}', 'tree-manager-modal')`, s.stats)}
                                 ${menuItem(`window.Strom.UI.showTreeHealthDialog('${tree.id}', 'tree-manager-modal')`, strings.treeHealth.menu)}
                                 ${menuItem(`window.Strom.UI.showExportDialogFromManager('${tree.id}')`, s.export)}
-                                ${tree.research ? menuItem(`window.Strom.UI.showSendToResearchHelp('${tree.id}')`, strings.research.sendMenu, 'edit-only') : ''}
+                                ${tree.research && researchRunsHere() ? menuItem(`window.Strom.UI.showSendToResearchHelp('${tree.id}')`, strings.research.sendMenu, 'edit-only') : ''}
                                 ${menuItem(`window.Strom.UI.showRenameTreeDialog('${tree.id}', 'tree-manager-modal')`, s.rename, 'edit-only tree-row-menu-divider')}
                                 ${menuItem(`window.Strom.UI.showDefaultPersonDialog('${tree.id}', 'tree-manager-modal')`, s.defaultPerson, 'edit-only')}
                                 ${startupItem}
