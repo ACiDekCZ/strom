@@ -820,14 +820,19 @@ export const researchUiMethods = uiModule({
         else await this.showSendToResearchHelp(treeId);
     },
 
-    /** The link opening excerpt `index` (0-based) of a source at full quality in the research, or null. */
+    /**
+     * The link opening excerpt `index` (0-based) of a source at full quality in
+     * the research, or null: only crops the research marked (`_STROM_CLIP`)
+     * have an original there.
+     */
     excerptResearchUrl(sourceId: string, index: number): string | null {
         if (!this.researchLinkAvailable('excerpt')) return null;
         const treeId = DataManager.getCurrentTreeId();
         const link = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
         const source = DataManager.getData().sources?.[sourceId];
-        if (!link || !source?.refn) return null;
-        return researchSchemeUrl('excerpt', { tree: link.id, source: source.refn, n: index + 1 });
+        const clip = source?.excerpts?.[index]?.clip;
+        if (!link || !source?.refn || !clip) return null;
+        return researchSchemeUrl('excerpt', { tree: link.id, source: source.refn, clip });
     },
 
     /** Download the faithful GEDCOM of a research tree (naming its research and version). */

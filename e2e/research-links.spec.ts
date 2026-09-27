@@ -41,7 +41,10 @@ async function setup(page: Page): Promise<void> {
         const DM = window.Strom.DataManager;
         const jan = DM.getAllPersons()[0] as { id: string };
         const src = DM.addSource({ title: 'Krest Jan', refn: 'S0042',
-            excerpts: [{ id: 'e1', dataUrl: png, width: 1, height: 1, sizeBytes: 70 }] })!;
+            excerpts: [
+                { id: 'e1', dataUrl: png, width: 1, height: 1, sizeBytes: 70, clip: 'c3' },
+                { id: 'e2', dataUrl: png, width: 1, height: 1, sizeBytes: 70 },
+            ] })!;
         DM.citePerson(jan.id, src.id);
         const launched: string[] = [];
         (window as unknown as { __launched: string[] }).__launched = launched;
@@ -83,13 +86,15 @@ test('announced links: Send is one click and the excerpt opens at full quality',
 
     await contact(page, ['send', 'excerpt']);
     await openSource(page);
+    // Only the crop the research marked has an original there.
     const full = page.locator('.viewer-full-quality');
+    await expect(full).toHaveCount(1);
     await expect(full).toHaveText('Full quality ↗');
     await full.click();
     const treeId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
     await page.evaluate((id) => window.Strom.UI.sendTreeToResearch(id), treeId);
     expect(await launched(page)).toEqual([
-        `strom-research://excerpt?tree=${UUID}&source=S0042&n=1`,
+        `strom-research://excerpt?tree=${UUID}&source=S0042&clip=c3`,
         `strom-research://send?tree=${UUID}`,
     ]);
 });
@@ -135,4 +140,18 @@ test('a phone (touch) never offers them', async ({ browser }) => {
     await expect(page.locator('.viewer-full-quality')).toHaveCount(0);
     expect(await page.evaluate(() => window.Strom.UI.researchLinkAvailable('send'))).toBe(false);
     await context.close();
+});
+
+test('_STROM_LINKS in a file opened by hand is not believed, and does not wipe what the bridge said', async ({ page }) => {
+    await openApp(page);
+    const withLinks = researchGed().replace('1 CHAR UTF-8', '1 _STROM_LINKS send excerpt\n1 CHAR UTF-8');
+    await dropFile(page, withLinks);
+    await expect(card(page, 'Jan')).toBeVisible();
+    expect(await page.evaluate(() => window.Strom.UI.researchLinkAvailable('send'))).toBe(false);
+
+    // The bridge announced them; a dropped file without the tag changes nothing.
+    await page.evaluate(() => localStorage.setItem('strom-research-links', JSON.stringify({ actions: ['send'], at: '' })));
+    await dropFile(page, researchGed());
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => window.Strom.UI.researchLinkAvailable('send'))).toBe(true);
 });

@@ -810,7 +810,7 @@ export const sourcesMethods = uiModule({
             if (!result) return;
             const exc = excerptFromDataUrl(result.dataUrl, {
                 width: result.width, height: result.height,
-                caption: d.excerpt.caption, pageUrl: d.excerpt.pageUrl,
+                caption: d.excerpt.caption, pageUrl: d.excerpt.pageUrl, clip: d.excerpt.clip,
             });
             if (!exc) return;
             // A rotated page no longer matches the stored one: the link goes.

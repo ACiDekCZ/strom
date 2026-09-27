@@ -362,6 +362,8 @@ interface RawSourceMedia {
     file: string;
     /** _URL: the page in the archive's image viewer. */
     pageUrl?: string;
+    /** _STROM_CLIP: the crop's id in Strom Research. */
+    clip?: string;
 }
 
 // ==================== TYPES ====================
@@ -1401,6 +1403,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     if (tag === 'FILE') media.file = value;
                     else if (tag === 'TITL') media.title = value;
                     else if (tag === '_URL') media.pageUrl = value;
+                    else if (tag === '_STROM_CLIP' && /^[A-Za-z0-9-]{1,32}$/.test(value.trim())) media.clip = value.trim();
                     // FORM, _STROM_KIND, _REGION: nothing to keep — the data URL
                     // says the format, and every image on a source is its excerpt.
                 }
@@ -1984,7 +1987,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         // folder) or any other payload is skipped and counted.
         for (const media of raw.media) {
             const exc = media.file.startsWith('data:')
-                ? excerptFromDataUrl(media.file, { caption: media.title, pageUrl: media.pageUrl })
+                ? excerptFromDataUrl(media.file, { caption: media.title, pageUrl: media.pageUrl, clip: media.clip })
                 : null;
             if (!exc) {
                 skippedMedia++;

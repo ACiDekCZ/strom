@@ -146,6 +146,11 @@ export interface SourceExcerpt {
     /** Permalink to the page in the online archive's image viewer. */
     pageUrl?: string;
     caption?: string;
+    /**
+     * The crop's id in Strom Research (GEDCOM `2 _STROM_CLIP`), opaque. Kept
+     * through a re-crop here so "Full quality" still finds the original.
+     */
+    clip?: string;
 }
 
 /** The UI offers at most this many excerpts per source (an entry across a page break). */

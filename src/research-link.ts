@@ -31,6 +31,11 @@ export function sanitizeResearchLinks(value: unknown): ResearchLinkAction[] {
         .filter((v): v is ResearchLinkAction => known.has(v));
 }
 
+/** A crop's id in the research (`_STROM_CLIP`: letters, digits, '-', ≤ 32), or null. */
+export function researchClip(value: unknown): string | null {
+    return typeof value === 'string' && /^[A-Za-z0-9-]{1,32}$/.test(value.trim()) ? value.trim() : null;
+}
+
 /** A source's id in the research (its REFN, e.g. "S0042"), or null. */
 export function researchSourceRef(refn: unknown): string | null {
     return typeof refn === 'string' && /^S\d{1,9}$/.test(refn.trim()) ? refn.trim() : null;
@@ -41,15 +46,15 @@ export function researchSourceRef(refn: unknown): string | null {
  * accepts (it checks again: any web page can open such a link).
  */
 export function researchSchemeUrl(action: 'send', p: { tree: string }): string | null;
-export function researchSchemeUrl(action: 'excerpt', p: { tree: string; source: string; n: number }): string | null;
-export function researchSchemeUrl(action: ResearchLinkAction, p: { tree: string; source?: string; n?: number }): string | null {
+export function researchSchemeUrl(action: 'excerpt', p: { tree: string; source: string; clip: string }): string | null;
+export function researchSchemeUrl(action: ResearchLinkAction, p: { tree: string; source?: string; clip?: string }): string | null {
     const tree = normalizeResearchId(p.tree);
     if (!tree) return null;
     if (action === 'send') return `strom-research://send?tree=${tree}`;
     const source = researchSourceRef(p.source);
-    const n = p.n;
-    if (!source || typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 99) return null;
-    return `strom-research://excerpt?tree=${tree}&source=${encodeURIComponent(source)}&n=${n}`;
+    const clip = researchClip(p.clip);
+    if (!source || !clip) return null;
+    return `strom-research://excerpt?tree=${tree}&source=${source}&clip=${clip}`;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

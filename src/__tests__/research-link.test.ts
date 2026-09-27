@@ -11,7 +11,7 @@ import {
     decideResearchOpen, stabilizeIds, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, extractChangedRefs, personsByRefs, humanizeChange,
     isGedcomFileName, normalizeResearchId, parseEventData, isSafariBrowser,
-    sanitizeResearchLinks, researchSchemeUrl, researchSourceRef,
+    sanitizeResearchLinks, researchSchemeUrl, researchSourceRef, researchClip,
 } from '../research-link.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
@@ -492,12 +492,31 @@ describe('strom-research:// links', () => {
     it('links are built only from valid parameters', () => {
         expect(researchSchemeUrl('send', { tree: UUID.toUpperCase() })).toBe(`strom-research://send?tree=${UUID}`);
         expect(researchSchemeUrl('send', { tree: 'x&evil=1' })).toBeNull();
-        expect(researchSchemeUrl('excerpt', { tree: UUID, source: 'S0042', n: 2 }))
-            .toBe(`strom-research://excerpt?tree=${UUID}&source=S0042&n=2`);
-        expect(researchSchemeUrl('excerpt', { tree: UUID, source: 'S1&x=y', n: 1 })).toBeNull();
-        expect(researchSchemeUrl('excerpt', { tree: UUID, source: 'S0042', n: 0 })).toBeNull();
-        expect(researchSchemeUrl('excerpt', { tree: UUID, source: 'S0042', n: 1.5 })).toBeNull();
+        expect(researchSchemeUrl('excerpt', { tree: UUID, source: 'S0042', clip: 'c3' }))
+            .toBe(`strom-research://excerpt?tree=${UUID}&source=S0042&clip=c3`);
+        expect(researchSchemeUrl('excerpt', { tree: UUID, source: 'S1&x=y', clip: 'c3' })).toBeNull();
+        expect(researchSchemeUrl('excerpt', { tree: UUID, source: 'S0042', clip: 'c3&x=1' })).toBeNull();
+        expect(researchSchemeUrl('excerpt', { tree: UUID, source: 'S0042', clip: 'x'.repeat(33) })).toBeNull();
+        expect(researchClip(' ab-9 ')).toBe('ab-9');
         expect(researchSourceRef(' S7 ')).toBe('S7');
         expect(researchSourceRef('P0001')).toBeNull();
+    });
+});
+
+describe('research crop ids (_STROM_CLIP)', () => {
+    it('are read from a source OBJE, kept, and written back', () => {
+        const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+        const ged = ['0 HEAD', '1 SOUR STROM_RESEARCH', '1 CHAR UTF-8',
+            '0 @I1@ INDI', '1 NAME Jan /Novak/', '1 SOUR @S1@',
+            '0 @S1@ SOUR', '1 TITL Krest', '1 REFN S0042',
+            '1 OBJE', '2 FORM png', '2 _STROM_KIND excerpt', '2 _STROM_CLIP c3', `2 FILE ${png}`,
+            '1 OBJE', '2 FORM png', '2 _STROM_KIND excerpt', '2 _STROM_CLIP bad id!', `2 FILE ${png}`,
+            '0 TRLR'].join('\n');
+        const data = convertToStrom(parseGedcom(ged)).data;
+        const src = Object.values(data.sources ?? {})[0];
+        expect(src.excerpts?.map(e => e.clip)).toEqual(['c3', undefined]);
+        const out = exportToGedcom(data, 'T').content;
+        expect(out).toContain('2 _STROM_CLIP c3');
+        expect(out.match(/_STROM_CLIP/g)).toHaveLength(1);
     });
 });

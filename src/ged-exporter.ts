@@ -725,6 +725,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (exc.caption) pushWrapped(lines, 2, 'TITL', exc.caption);
             lines.push('2 _STROM_KIND excerpt');
             if (exc.pageUrl) pushWrapped(lines, 2, '_URL', exc.pageUrl);
+            if (exc.clip) lines.push(`2 _STROM_CLIP ${exc.clip}`);
             pushWrapped(lines, 2, 'FILE', exc.dataUrl);
         }
     }
