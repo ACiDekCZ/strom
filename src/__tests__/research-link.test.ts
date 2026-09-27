@@ -431,9 +431,10 @@ describe('faithful exports only', () => {
 });
 
 describe('send bridge', () => {
-    it('loopback only; status and sync endpoints', () => {
+    it('loopback only; status, sync and cancel endpoints', () => {
         expect(parseSendBridge('http://127.0.0.1:5000/tok/')).toEqual({
             base: 'http://127.0.0.1:5000/tok', status: 'http://127.0.0.1:5000/tok/status', sync: 'http://127.0.0.1:5000/tok/sync',
+            cancel: 'http://127.0.0.1:5000/tok/cancel',
         });
         expect(parseSendBridge('https://127.0.0.1:5000/tok')).toBeNull();
         expect(parseSendBridge('http://127.0.0.1.evil.com/tok')).toBeNull();

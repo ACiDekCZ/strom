@@ -559,13 +559,15 @@ export interface SendBridgeUrls {
     base: string;
     status: string;
     sync: string;
+    /** POST {"reason": …} here whenever nothing will be sent, so the research stops waiting. */
+    cancel: string;
 }
 
 /** Endpoints of the bridge at `raw` (`http://127.0.0.1:<port>/<token>`), or null. */
 export function parseSendBridge(raw: unknown): SendBridgeUrls | null {
     const live = parseLiveBridge(raw);
     if (!live) return null;
-    return { base: live.base, status: live.status, sync: `${live.base}/sync` };
+    return { base: live.base, status: live.status, sync: `${live.base}/sync`, cancel: `${live.base}/cancel` };
 }
 
 /** A tree that could be sent: the open one, or the one changed last. */

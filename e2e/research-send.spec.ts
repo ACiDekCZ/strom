@@ -52,8 +52,9 @@ async function openResearch(page: Page, edit: boolean): Promise<void> {
 }
 
 /** A fake bridge: /status names the research, /sync records what it got. */
-async function bridge(page: Page, reply: { status?: number; body?: unknown } = {}): Promise<{ posts: { body: string; type: string }[] }> {
+async function bridge(page: Page, reply: { status?: number; body?: unknown } = {}): Promise<{ posts: { body: string; type: string }[]; cancels: string[] }> {
     const posts: { body: string; type: string }[] = [];
+    const cancels: string[] = [];
     await page.route(`${BRIDGE}/**`, async (route) => {
         const url = route.request().url();
         if (url.endsWith('/status')) {
@@ -65,9 +66,15 @@ async function bridge(page: Page, reply: { status?: number; body?: unknown } = {
             return route.fulfill({ status: reply.status ?? 200, headers: { ...cors, 'content-type': 'application/json' },
                 body: JSON.stringify(reply.body ?? { ok: true, input: 'I0042', changes: 1 }) });
         }
+        if (url.endsWith('/cancel') && route.request().method() === 'POST') {
+            const reason = JSON.parse(route.request().postData() ?? '{}').reason as string;
+            cancels.push(reason);
+            return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
+                body: JSON.stringify({ ok: true, reason }) });
+        }
         return route.fulfill({ status: 404, headers: cors, body: '' });
     });
-    return { posts };
+    return { posts, cancels };
 }
 
 const send = (page: Page) => page.evaluate((b) => window.Strom.UI.sendChangesToResearch(b), BRIDGE);
@@ -78,7 +85,7 @@ test.describe('send changes back to the research', () => {
         await openResearch(page, true);
         const meta = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata());
         expect(meta.research.head).toBe(HEAD);
-        const { posts } = await bridge(page);
+        const { posts, cancels } = await bridge(page);
 
         const done = send(page);
         await expect(dialog(page)).toContainText('Send the changes of the tree “Víškovi” to the research “Víškovi”?');
@@ -96,16 +103,19 @@ test.describe('send changes back to the research', () => {
         expect(ged).not.toContain('SOUR STROM_RESEARCH');
         expect(ged).toMatch(/1 REFN P0003\r?\n2 TYPE strom-research/);
         expect(ged).toContain('14 MAR 1850');
+        await page.waitForTimeout(100);
+        expect(cancels).toEqual([]);   // a sent tree cancels nothing
     });
 
-    test('cancel sends nothing; an unchanged tree has nothing to send', async ({ page }) => {
+    test('cancel sends nothing; an unchanged tree has nothing to send — both tell the bridge why', async ({ page }) => {
         await openResearch(page, false);
-        const { posts } = await bridge(page);
+        const { posts, cancels } = await bridge(page);
         const done = send(page);
         await expect(dialog(page)).toContainText('has not changed since it was last loaded from the research');
         await dialog(page).getByRole('button', { name: 'OK' }).click();
         await done;
         expect(posts).toHaveLength(0);
+        await expect.poll(() => cancels).toEqual(['unchanged']);
 
         await page.evaluate(() => {
             const dm = window.Strom.DataManager;
@@ -116,6 +126,7 @@ test.describe('send changes back to the research', () => {
         await dialog(page).getByRole('button', { name: 'Cancel' }).click();
         await again;
         expect(posts).toHaveLength(0);
+        await expect.poll(() => cancels).toEqual(['unchanged', 'cancelled']);
     });
 
     test('several tied trees: the user picks one (the open tree suggested); only that one is sent', async ({ page }) => {
@@ -132,6 +143,8 @@ test.describe('send changes back to the research', () => {
         await expect(buttons.last()).toContainText('Víškovi (changed');   // the open tree, primary
         await dialog(page).getByRole('button', { name: /Víškovi – pokus/ }).click();
         await expect(dialog(page)).toContainText('the tree “Víškovi – pokus”');
+        // The tree being sent is the one on screen behind the dialog.
+        await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Víškovi – pokus');
         await dialog(page).getByRole('button', { name: 'Send' }).click();
         await dialog(page).getByRole('button', { name: 'OK' }).click();
         await done;
@@ -140,11 +153,12 @@ test.describe('send changes back to the research', () => {
 
     test('no tree of this research; a refusal shows the reason; a foreign address is refused', async ({ page }) => {
         await openApp(page);
-        await bridge(page);
+        const { cancels } = await bridge(page);
         const done = send(page);
         await expect(dialog(page)).toContainText('You do not have the research “Víškovi” in the app');
         await dialog(page).getByRole('button', { name: 'OK' }).click();
         await done;
+        await expect.poll(() => cancels).toEqual(['no-tree']);
 
         await page.unrouteAll();
         await openResearch(page, true);
@@ -202,11 +216,26 @@ test.describe('send changes back to the research', () => {
         expect(stored).toBeUndefined();
     });
 
+    test('a newer export over an edited tree: Cancel in "Changed in the app" leaves the tree and its version as they were', async ({ page }) => {
+        await openResearch(page, true);
+        const before = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata().research);
+        await dropFile(page, 'tree-strom.ged', researchGed().replace(`_STROM_HEAD ${HEAD}`, '_STROM_HEAD 9a8b7c6d5e4f'));
+        await expect(dialog(page)).toContainText('Changed in the app');
+        await dialog(page).getByRole('button', { name: 'Cancel' }).click();
+        await expect(dialog(page)).toBeHidden();
+        const after = await page.evaluate(() => ({
+            research: window.Strom.TreeManager.getActiveTreeMetadata().research,
+            trees: window.Strom.TreeManager.getTrees().length,
+            born: (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any).birthDate,
+        }));
+        expect(after).toEqual({ research: before, trees: 1, born: '1850-03-14' });
+    });
+
     test('the tree menu explains the way back and offers the GEDCOM', async ({ page }) => {
         await openResearch(page, true);
         const id = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
         const done = page.evaluate((i) => window.Strom.UI.showSendToResearchHelp(i), id);
-        await expect(dialog(page)).toContainText('Extend research → Load changes from the Strom app');
+        await expect(dialog(page)).toContainText('Extend research → Take in edits from the Strom app or another family tree (.ged, .json)”, then “Directly from the Strom app');
         const [download] = await Promise.all([
             page.waitForEvent('download'),
             dialog(page).getByRole('button', { name: 'Export GEDCOM' }).click(),

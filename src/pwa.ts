@@ -57,16 +57,26 @@ export function registerServiceWorker(onUpdateReady: () => void): void {
     // controllerchange fires once as it takes control — that must not reload.
     // Only an update that replaces an existing controller should reload.
     const hadController = !!navigator.serviceWorker.controller;
+    // Opened by Strom Research (?import-url= / ?live= / ?send=): an older
+    // build may not know the request. Captured now — the address is cleaned
+    // once the request is read — so the reload can carry it to the new build.
+    const researchRequest = /[?&](import-url|live|send)=/.test(location.search) ? location.href : null;
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (refreshing || !hadController) return;
         refreshing = true;
-        location.reload();
+        if (researchRequest) location.replace(researchRequest);
+        else location.reload();
     });
 
     navigator.serviceWorker.register(swUrl()).then((reg) => {
-        // If one is already waiting (installed between visits), prompt now.
-        if (reg.waiting && navigator.serviceWorker.controller) onUpdateReady();
+        // If one is already waiting (installed between visits): a research
+        // request switches to it right away (the new build handles it), else
+        // the user is offered the refresh.
+        if (reg.waiting && navigator.serviceWorker.controller) {
+            if (researchRequest) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            else onUpdateReady();
+        }
 
         reg.addEventListener('updatefound', () => {
             const installing = reg.installing;

@@ -696,7 +696,7 @@ const stringsEN = {
         sendExportGedcom: 'Export GEDCOM',
         sendMenu: 'Send changes to the research',
         sendHowTitle: 'Send changes to the research',
-        sendHow: 'In the research, choose “Extend research → Load changes from the Strom app”. It opens this app and the changes go straight to the research, which shows them to you before writing anything. Or export the tree as GEDCOM and load that file in the research.',
+        sendHow: 'In the research, choose “Extend research → Take in edits from the Strom app or another family tree (.ged, .json)”, then “Directly from the Strom app”. It opens this app and the changes go straight to the research, which shows them to you before writing anything. Or export the tree as GEDCOM and load that file in the research.',
         excerptsReplaced: 'Excerpts you added to this tree will be replaced by the update.',
         defaultName: 'Research',
         opened: (name: string, persons: number, families: number, date: string) =>
@@ -2957,7 +2957,7 @@ const stringsCZ: StringsType = {
         sendExportGedcom: 'Exportovat GEDCOM',
         sendMenu: 'Poslat úpravy do výzkumu',
         sendHowTitle: 'Poslat úpravy do výzkumu',
-        sendHow: 'Ve výzkumu zvolte „Rozšířit výzkum → Načíst úpravy z aplikace Strom“. Otevře se tato aplikace a úpravy půjdou rovnou do výzkumu, který vám je ukáže, než cokoli zapíše. Nebo strom vyexportujte jako GEDCOM a ten soubor načtěte ve výzkumu.',
+        sendHow: 'Ve výzkumu zvolte „Rozšířit výzkum → Načíst úpravy z aplikace Strom nebo z jiného rodokmenu (.ged, .json)“ a pak „Přímo z aplikace Strom“. Otevře se tato aplikace a úpravy půjdou rovnou do výzkumu, který vám je ukáže, než cokoli zapíše. Nebo strom vyexportujte jako GEDCOM a ten soubor načtěte ve výzkumu.',
         excerptsReplaced: 'Výřezy, které jste do tohoto stromu přidali, se aktualizací nahradí.',
         defaultName: 'Výzkum',
         opened: (name: string, persons: number, families: number, date: string) =>
@@ -5212,7 +5212,7 @@ const stringsDE: StringsType = {
         sendExportGedcom: 'GEDCOM exportieren',
         sendMenu: 'Änderungen an die Forschung senden',
         sendHowTitle: 'Änderungen an die Forschung senden',
-        sendHow: 'Wählen Sie in der Forschung „Forschung erweitern → Änderungen aus der Strom-App laden“. Dann öffnet sich diese App und die Änderungen gehen direkt an die Forschung, die sie Ihnen zeigt, bevor etwas geschrieben wird. Oder exportieren Sie den Stammbaum als GEDCOM und laden Sie die Datei in der Forschung.',
+        sendHow: 'Wählen Sie in der Forschung „Forschung erweitern → Änderungen aus der Strom-App oder einem anderen Stammbaum übernehmen (.ged, .json)“ und dann „Direkt aus der Strom-App“. Dann öffnet sich diese App und die Änderungen gehen direkt an die Forschung, die sie Ihnen zeigt, bevor etwas geschrieben wird. Oder exportieren Sie den Stammbaum als GEDCOM und laden Sie die Datei in der Forschung.',
         excerptsReplaced: 'Ausschnitte, die Sie diesem Stammbaum hinzugefügt haben, werden durch die Aktualisierung ersetzt.',
         defaultName: 'Forschung',
         opened: (name: string, persons: number, families: number, date: string) =>

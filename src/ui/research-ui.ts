@@ -181,6 +181,22 @@ async function postSync(url: string, gedcom: string, ms: number): Promise<Respon
     }
 }
 
+/** Why nothing is sent: the research ends its wait at once and says why. */
+type SendCancelReason = 'unchanged' | 'cancelled' | 'no-tree';
+
+/** Tell the send bridge nothing is coming (fire and forget; errors ignored). */
+function postCancel(url: string, reason: SendCancelReason): void {
+    if (typeof fetch !== 'function') return;
+    void fetch(url, {
+        method: 'POST',
+        mode: 'cors',
+        credentials: 'omit',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        body: JSON.stringify({ reason }),
+    }).catch(() => { /* the research gives up on its own */ });
+}
+
 /** The GEDCOM the research gets back: the whole tree, as is, naming its research and version. */
 function researchGedcom(data: StromData, treeName: string, link: { id: string; head?: string }): string {
     return exportToGedcom(data, treeName, { research: { id: link.id, head: link.head } }).content;
@@ -669,7 +685,9 @@ export const researchUiMethods = uiModule({
             this.showToast(r.notLocal, 6000);
             return;
         }
+        const cancel = (reason: SendCancelReason): void => postCancel(bridge.cancel, reason);
         if (DataManager.isViewMode()) {
+            cancel('cancelled');
             this.showToast(r.notInViewMode, 5000);
             return;
         }
@@ -687,6 +705,7 @@ export const researchUiMethods = uiModule({
         const trees = TreeManager.findTreesByResearchId(status.treeId);
         let tree = pickSendDefault(trees, DataManager.getCurrentTreeId());
         if (!tree) {
+            cancel('no-tree');
             await this.showAlert(r.sendNoTree(researchName), 'info');
             return;
         }
@@ -700,25 +719,29 @@ export const researchUiMethods = uiModule({
                     id: t.id,
                     label: r.sendPickItem(t.name, formatRelativeDateTime(Date.parse(t.changedAt ?? t.lastModifiedAt) || Date.now(), lang)),
                 })));
-            if (pick === null) return;
+            if (pick === null) { cancel('cancelled'); return; }
             tree = trees.find(t => t.id === pick) ?? suggested;
         }
         const link = tree.research;
-        if (!link) return;
-        if (!await this.ensureLocalUnlocked()) return;
+        if (!link) { cancel('no-tree'); return; }
+        if (!await this.ensureLocalUnlocked()) { cancel('cancelled'); return; }
         const data = TreeManager.isTreeUnreadable(tree.id) ? null : await readTree(tree.id);
         if (!data) {
+            cancel('cancelled');
             await this.showAlert(strings.storageSafety.treeLocked, 'warning');
             return;
         }
+        // Show the tree being sent behind the dialogs, not whichever was open.
+        if (DataManager.getCurrentTreeId() !== tree.id) await this.switchToTree(tree.id);
         // Nothing changed since the research sent it (a tree followed live
         // is read-only, so it always lands here).
         if (link.fingerprint && fingerprintLike(data, link.fingerprint) === link.fingerprint) {
+            cancel('unchanged');
             await this.showAlert(r.sendNothing(tree.name), 'info');
             return;
         }
         const ok = await this.showConfirm(r.sendConfirm(tree.name, researchName), r.sendConfirmTitle, { confirmLabel: r.sendButton });
-        if (!ok) return;
+        if (!ok) { cancel('cancelled'); return; }
 
         this.showToast(r.sending, 60000);
         let res: Response;
