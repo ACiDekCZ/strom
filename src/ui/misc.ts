@@ -447,6 +447,12 @@ export const miscMethods = uiModule({
         this.updateTreeSwitcher();
         this.updateEncryptionStatus();
         TreeRenderer.render();
+        // Panels drawn from code: the live research panel and its overview,
+        // the research menu, the highlight pill, "Show on card".
+        this.renderLivePanel();
+        this.refreshResearchMenu();
+        this.renderEvidencePill();
+        this.renderCardSignalSettings();
     },
 
     // ---- MENUS ----

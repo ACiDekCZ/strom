@@ -231,6 +231,18 @@ test.describe('Research overview', () => {
         await expect(page.locator('#research-item-overview')).toHaveCount(1);
     });
 
+    test('switching the language redraws the panel and the overview', async ({ page }) => {
+        await follow(page);
+        await expect(page.locator('#live-panel .live-changes li')).toHaveCount(5);
+        await page.evaluate(() => window.Strom.UI.setLanguage('cs'));
+        await expect(page.locator('#live-panel .live-section__title').first()).toHaveText('Pracuje se');
+        await page.locator('#live-panel .live-panel-expand').click();
+        await expect(page.locator('#research-overview .research-overview__title')).toHaveText('Přehled výzkumu');
+        await page.evaluate(() => window.Strom.UI.setLanguage('de'));
+        await expect(page.locator('#research-overview .research-overview__title')).toHaveText('Forschungsübersicht');
+        await expect(page.locator('#research-overview .research-overview__filter').first()).toHaveText('Alle 6');
+    });
+
     test('tablet: over the tree, the tree keeps its width', async ({ page }) => {
         await follow(page, { width: 1024, height: 768 });
         const before = await page.locator('#tree-container').evaluate(el => el.getBoundingClientRect().width);
