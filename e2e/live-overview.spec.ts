@@ -195,7 +195,7 @@ test.describe('the research history (/log)', () => {
         await expect(ov.locator('.research-overview__older')).toContainText('Older changes are in the research');
         // From the research's history the highlight says its window, not "while watching".
         await ov.locator('.research-overview__show-changed').click();
-        await expect(page.locator('#evidence-pill')).toContainText('Changed people · 24 h · 1');
+        await expect(page.locator('#evidence-pill')).toContainText('Changed people in the progress · 1');
     });
 
     test('the overview previews at most 20 steps, the rest is in the research', async ({ page }) => {
@@ -304,15 +304,15 @@ test.describe('Research overview', () => {
         await expect(head(page, '#research-overview', 'What the research knows').locator('.live-section__sum')).toHaveText('1 conflict');
 
         await ov.locator('.research-overview__show-changed').click();
-        await expect(page.locator('#evidence-pill')).toContainText('Changed people · while watching · 4');
+        await expect(page.locator('#evidence-pill')).toContainText('Changed people in the progress · 4');
         await expect(card(page, 'Ludmila')).toHaveClass(/evidence-hit/);
         await expect(card(page, 'Josef')).toHaveClass(/evidence-dim/);
         // A filter narrows the people shown in the tree (Stories: whose story changed).
         await ov.locator('.research-overview__filter[data-filter="stories"]').click();
-        await expect(page.locator('#evidence-pill')).toContainText('Changed people · while watching · Stories · 1');
+        await expect(page.locator('#evidence-pill')).toContainText('Changed people in the progress · Stories · 1');
         await expect(card(page, 'Ludmila')).toHaveClass(/evidence-dim/);
         await ov.locator('.research-overview__filter[data-filter="all"]').click();
-        await expect(page.locator('#evidence-pill')).toContainText('Changed people · while watching · 4');
+        await expect(page.locator('#evidence-pill')).toContainText('Changed people in the progress · 4');
         await expect(ov).toBeVisible();
         await page.keyboard.press('Escape');
         await expect(page.locator('#evidence-pill')).toHaveCount(0);
