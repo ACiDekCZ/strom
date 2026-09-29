@@ -10,7 +10,7 @@
  */
 
 import { Partnership, Person, StromData } from './types.js';
-import { PersonEvidence, personEvidence } from './evidence-level.js';
+import { EvidenceLevel, PersonEvidence, personEvidence } from './evidence-level.js';
 import type { CardSignals } from './settings.js';
 
 export type ActionSignal = 'waiting' | 'conflict' | 'question' | 'agent';
@@ -96,6 +96,20 @@ export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInf
     };
     info.action = ACTION_ORDER.find(s => present[s] && ctx.settings[s]) ?? null;
     return info;
+}
+
+/**
+ * The person's status as stripes: evidence (2 full, 1 partial, none: nothing)
+ * on the left, the story (1, faint as a draft) on the right. Empty when there
+ * is nothing to show. `inline`: in a tooltip or menu line, not in the card's corner.
+ */
+export function stateStripesHtml(evidence: EvidenceLevel | null, story: 'final' | 'draft' | null, inline = false): string {
+    const ev = evidence === 'full' ? 2 : evidence === 'partial' ? 1 : 0;
+    const groups = [
+        ev > 0 ? `<span class="st-group st-ev">${'<i></i>'.repeat(ev)}</span>` : '',
+        story ? `<span class="st-group st-story${story === 'draft' ? ' draft' : ''}"><i></i></span>` : '',
+    ].join('');
+    return groups ? `<span class="card-state${inline ? ' card-state--inline' : ''}" aria-hidden="true">${groups}</span>` : '';
 }
 
 /** The glyph inside the badge. */

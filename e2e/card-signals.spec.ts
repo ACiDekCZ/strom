@@ -74,13 +74,15 @@ async function plainTree(page: Page, persons: Record<string, Record<string, unkn
 test.describe('card signals', () => {
     test('status icons, badges by priority, tooltip and aria-label', async ({ page }) => {
         await setup(page);
-        // Josef: nothing cited, a finished story. Jan: birth cited on the person, a draft story.
-        await expect(card(page, 'Josef').locator('.birth-date .ev-circle')).toHaveClass(/ev-none/);
-        await expect(card(page, 'Josef').locator('.card-state .story-leaf')).not.toHaveClass(/draft/);
-        await expect(card(page, 'Jan').locator('.birth-date .ev-circle')).toHaveClass(/ev-full/);
-        await expect(card(page, 'Jan').locator('.card-state .story-leaf')).toHaveClass(/draft/);
-        await expect(card(page, 'Anna').locator('.card-state .story-leaf')).toHaveCount(0);
-        // The year text itself is unchanged by the icons.
+        // Stripes in the card's corner. Josef: nothing cited (no evidence stripe), a finished story.
+        // Jan: birth cited on the person (two stripes), a draft story (faint).
+        await expect(card(page, 'Josef').locator(':scope > .card-state .st-ev')).toHaveCount(0);
+        await expect(card(page, 'Josef').locator(':scope > .card-state .st-story')).not.toHaveClass(/draft/);
+        await expect(card(page, 'Jan').locator(':scope > .card-state .st-ev i')).toHaveCount(2);
+        await expect(card(page, 'Jan').locator(':scope > .card-state .st-story')).toHaveClass(/draft/);
+        await expect(card(page, 'Jan').locator(':scope > .card-state .st-story i')).toHaveCSS('opacity', '0.45');
+        await expect(card(page, 'Anna').locator(':scope > .card-state .st-story')).toHaveCount(0);
+        // The year text itself is unchanged by the stripes.
         await expect(card(page, 'Jan').locator('.birth-date')).toHaveText('1865 – 1932');
 
         // Jan: an open conflict (≠). Eva: a conflict AND a waiting task — waiting wins (!).
@@ -104,16 +106,28 @@ test.describe('card signals', () => {
         await expect(page.locator('.context-menu')).toHaveCount(0);
     });
 
-    test('the evidence circle opens the sources, the story leaf the story', async ({ page }) => {
+    test('the stripes sit in the bottom-right corner in every density, over no text', async ({ page }) => {
         await setup(page);
-        await card(page, 'Jan').locator('.card-state-btn[data-open="sources"]').click();
-        await expect(page.locator('#person-sources-modal')).toBeVisible();
-        await expect(page.locator('.context-menu')).toHaveCount(0);
-        await page.keyboard.press('Escape');
-        await expect(page.locator('#person-sources-modal')).toBeHidden();
-        await card(page, 'Jan').locator('.card-state-btn[data-open="story"]').click();
-        await expect(page.locator('#person-story-modal')).toBeVisible();
-        await expect(page.locator('#person-story-modal')).toContainText('Jan se narodil v Chlumech.');
+        for (const density of ['compact', 'normal', 'detailed']) {
+            await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
+            const jan = card(page, 'Jan');
+            await expect(jan.locator(':scope > .card-state')).toBeVisible();
+            const box = (await jan.boundingBox())!;
+            const stripes = (await jan.locator(':scope > .card-state').boundingBox())!;
+            expect(box.x + box.width - (stripes.x + stripes.width)).toBeGreaterThan(4);
+            expect(box.y + box.height - (stripes.y + stripes.height)).toBeGreaterThan(3);
+            // No text line of the card runs under them.
+            for (const sel of ['.name-text', '.birth-date', '.card-place']) {
+                const t = jan.locator(sel);
+                if (await t.count() === 0 || !(await t.isVisible())) continue;
+                const r = (await t.boundingBox())!;
+                const overlaps = r.x < stripes.x + stripes.width && stripes.x < r.x + r.width
+                    && r.y < stripes.y + stripes.height && stripes.y < r.y + r.height;
+                expect(overlaps, `${density}: ${sel} under the stripes`).toBe(false);
+            }
+        }
+        // Decoration only: a click there is a click on the card.
+        await expect(card(page, 'Jan').locator(':scope > .card-state')).toHaveCSS('pointer-events', 'none');
     });
 
     test('the desktop person menu leads with the signal', async ({ page }) => {
@@ -126,10 +140,9 @@ test.describe('card signals', () => {
         await expect(page.locator('#person-research-modal')).toBeVisible();
     });
 
-    test('compact: no status icons, a dot on the card corner; far zoom: dots only', async ({ page }) => {
+    test('compact: a dot on the card corner; far zoom: dots only', async ({ page }) => {
         await setup(page);
         await page.evaluate(() => window.Strom.UI.setCardDensity('compact'));
-        await expect(card(page, 'Jan').locator('.card-state')).toHaveCount(0);
         await expect(card(page, 'Jan').locator('.card-signal-dot')).toBeVisible();
         await page.evaluate(() => window.Strom.UI.setCardDensity('normal'));
         await expect(card(page, 'Jan').locator('.card-signal')).toBeVisible();
@@ -143,7 +156,7 @@ test.describe('card signals', () => {
         }, { timeout: 10000 }).toBeLessThan(0.55);
         await expect(page.locator('#tree-canvas')).toHaveClass(/zoom-far/);
         await expect(card(page, 'Jan').locator('.card-signal')).toBeHidden();
-        await expect(card(page, 'Jan').locator('.card-state')).toBeHidden();
+        await expect(card(page, 'Jan').locator(':scope > .card-state')).toBeHidden();
         await expect(card(page, 'Jan').locator('.card-signal-dot')).toBeVisible();
     });
 
@@ -158,9 +171,9 @@ test.describe('card signals', () => {
         await expect(settings.locator('input[data-signal="agent"]')).toHaveCount(0);
         await settings.locator('input[data-signal="conflict"]').uncheck();
         await settings.locator('input[data-signal="evidence"]').uncheck();
-        await expect(settings.locator('.card-signals-preview .ev-circle')).toHaveCount(0);
+        await expect(settings.locator('.card-signals-preview .st-ev')).toHaveCount(0);
         await expect(card(page, 'Jan').locator('.card-signal')).toHaveCount(0);
-        await expect(card(page, 'Jan').locator('.card-state .ev-circle')).toHaveCount(0);
+        await expect(card(page, 'Jan').locator(':scope > .card-state .st-ev')).toHaveCount(0);
         await expect(card(page, 'Jan').locator('.card-tooltip .tt-ev')).toHaveCount(1);
         await expect(card(page, 'Jan').locator('.card-tooltip .tt-action')).toHaveText(['1 conflict · 1 hypothesis']);
         // Eva still shows the waiting task.
@@ -173,13 +186,13 @@ test.describe('card signals', () => {
             a: { firstName: 'Marie', lastName: 'Dvořáková', birthDate: '1901', question: 'Kde se narodila?' },
         });
         await expect(card(page, 'Marie')).toBeVisible();
-        await expect(card(page, 'Marie').locator('.ev-circle')).toHaveCount(0);
+        await expect(card(page, 'Marie').locator('.st-ev')).toHaveCount(0);
         await expect(card(page, 'Marie').locator('.card-tooltip .tt-ev')).toHaveCount(0);
         await expect(card(page, 'Marie').locator('.card-signal')).toHaveText('?');
         await expect(card(page, 'Marie').locator('.card-tooltip .tt-action')).toHaveText(['Question: Kde se narodila?']);
     });
 
-    test('the name keeps its whole row; a long place gives way to the icons', async ({ page }) => {
+    test('the name keeps its whole row; the stripes stay inside the card', async ({ page }) => {
         await plainTree(page, {
             k: {
                 firstName: 'Kateřina', lastName: 'Výšková', birthDate: '1842', deathDate: '1901',
@@ -188,15 +201,15 @@ test.describe('card signals', () => {
             },
         }, { s1: { id: 's1', title: 'Matrika' } });
         const k = card(page, 'Kateřina');
-        await expect(k.locator('.card-state .ev-circle')).toBeVisible();
-        await expect(k.locator('.card-state .story-leaf')).toBeVisible();
+        await expect(k.locator(':scope > .card-state .st-ev')).toBeVisible();
+        await expect(k.locator(':scope > .card-state .st-story')).toBeVisible();
         const clipped = await k.locator('.name-text').evaluate(el => el.scrollWidth > el.clientWidth + 0.5);
         expect(clipped).toBe(false);
         // The card keeps its width (the focused card is drawn a little larger).
         expect(await k.evaluate(el => (el as HTMLElement).offsetWidth)).toBe(188);
         const box = await k.boundingBox();
-        // The icons stay inside the card.
-        const icons = await k.locator('.card-state').boundingBox();
+        // The stripes stay inside the card.
+        const icons = await k.locator(':scope > .card-state').boundingBox();
         expect(icons!.x + icons!.width).toBeLessThanOrEqual(box!.x + box!.width);
     });
 

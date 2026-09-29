@@ -9,7 +9,7 @@ import { TreeRenderer } from '../renderer.js';
 import { SettingsManager, CardSignals, CARD_SIGNAL_KEYS } from '../settings.js';
 import { strings } from '../strings.js';
 import { PersonId } from '../types.js';
-import { ActionSignal, CardSignalInfo, ACTION_GLYPH } from '../card-signals.js';
+import { ActionSignal, CardSignalInfo, ACTION_GLYPH, stateStripesHtml } from '../card-signals.js';
 import { TreeManager } from '../tree-manager.js';
 import { announcedResearchLinks } from '../research-device.js';
 import { uiModule } from './module.js';
@@ -51,16 +51,10 @@ export const cardSignalsUiMethods = uiModule({
         let html = '';
         if (touch && (s.showEvidence || s.showStory)) {
             const bits: string[] = [];
-            let icons = '';
-            if (s.showEvidence && s.evidence) {
-                icons += `<span class="ev-circle ev-${s.evidence.level}"></span>`;
-                bits.push(c.ariaEv[s.evidence.level]);
-            }
-            if (s.showStory) {
-                icons += `<span class="story-leaf${s.story === 'draft' ? ' draft' : ''}"></span>`;
-                bits.push(s.story === 'draft' ? c.ttStoryDraft.toLowerCase() : c.ttStory.toLowerCase());
-            }
-            html += `<div class="menu-person-state"><span class="card-state" aria-hidden="true">${icons}</span>${this.escapeHtml(bits.join(' · '))}</div>`;
+            if (s.showEvidence && s.evidence) bits.push(c.ariaEv[s.evidence.level]);
+            if (s.showStory) bits.push(s.story === 'draft' ? c.ttStoryDraft.toLowerCase() : c.ttStory.toLowerCase());
+            const stripes = stateStripesHtml(s.showEvidence && s.evidence ? s.evidence.level : null, s.showStory ? s.story : null, true);
+            html += `<div class="menu-person-state">${stripes}${this.escapeHtml(bits.join(' · '))}</div>`;
         }
         if (s.action) html += this.personSignalBlockHtml(s, s.action, touch, itemClass);
         return html;
@@ -142,10 +136,7 @@ export const cardSignalsUiMethods = uiModule({
     /** A made-up card in the current density with the chosen signals. */
     cardSignalsPreviewHtml(on: CardSignals): string {
         const density = SettingsManager.getCardDensity();
-        const icons = [
-            on.evidence ? '<span class="ev-circle ev-partial"></span>' : '',
-            on.story ? '<span class="story-leaf draft"></span>' : '',
-        ].join('');
+        const stripes = stateStripesHtml(on.evidence ? 'partial' : null, on.story ? 'draft' : null);
         const action: ActionSignal | null = on.waiting ? 'waiting' : on.conflict ? 'conflict' : on.question ? 'question' : null;
         const badge = action ? `<span class="card-signal signal-${action}">${ACTION_GLYPH[action]}</span>` : '';
         const dot = action ? `<span class="card-signal-dot signal-${action}"></span>` : '';
@@ -155,8 +146,9 @@ export const cardSignalsUiMethods = uiModule({
                 ${compact ? '' : `<div class="card-avatar-wrap"><div class="card-avatar"><span class="avatar-initials">MV</span></div>${badge}</div>`}
                 <div class="card-body">
                     <div class="name"><span class="name-text">Milan Víšek</span></div>
-                    ${compact ? '' : `<div class="birth-date"><span class="meta-text">1842 – ?</span>${icons ? `<span class="card-state">${icons}</span>` : ''}</div>`}
+                    ${compact ? '' : '<div class="birth-date"><span class="meta-text">1842 – ?</span></div>'}
                 </div>
+                ${stripes}
                 ${dot}
             </div>`;
     },

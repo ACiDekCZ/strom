@@ -74,6 +74,8 @@
             --warning-text: #7f5500;  /* warning text on paper / warning-soft (≥4.5:1) */
             --signal-warn: #a2660f;   /* card action badge (waiting, conflict, question) */
             --on-signal-warn: #ffffff;
+            --ev-stripe: #8fae98;     /* card status stripes: evidence */
+            --story-stripe: #c8a27a;  /* card status stripes: story */
             --on-warning: #2b2100;    /* mark drawn on a --warning fill */
             --info-soft: #e4ebf1;     /* informational tint backgrounds */
             --pending: #d0a23c;       /* unfinished merge state (dashed) */
@@ -157,6 +159,8 @@
             --warning-text: #e8c47c;
             --signal-warn: #d19a3a;
             --on-signal-warn: #1c1a15;
+            --ev-stripe: #6f9a7c;
+            --story-stripe: #a88560;
             --on-warning: #1f1a10;
             --info-soft: #2a3139;
             --chart-soft: #3a4a3f;
@@ -5574,40 +5578,25 @@
             overflow: hidden;
         }
         /* ==================== CARD SIGNALS ====================
-           At a glance (src/card-signals.ts): the person's status at the end of
-           the year row — never beside the name — and one action badge on the
-           avatar's corner (a dot on the card's corner in compact density and
-           when zoomed far out). Shapes, not colour alone, tell them apart. */
-        /* The text ellipsizes on its own; the row does not clip (an icon grows on hover). */
-        .person-card .birth-date { display: flex; align-items: center; overflow: visible; }
+           At a glance (src/card-signals.ts): the person's status as quiet
+           stripes in the card's bottom-right corner (evidence 0/1/2 on the
+           left, the story on the right) and one action badge on the avatar's
+           corner (a dot on the card's corner in compact density and when
+           zoomed far out). Count and order, not colour alone, tell them apart. */
         .person-card .birth-date .meta-text {
             min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .card-state {
-            display: inline-flex; align-items: center; gap: 5px;
-            margin-left: auto; padding-left: 4px; flex-shrink: 0;
+            position: absolute; right: 8px; bottom: 6px; z-index: 1;
+            display: flex; align-items: center; gap: 4px; pointer-events: none;
         }
-        .card-state-btn {
-            position: relative; display: inline-flex; align-items: center; justify-content: center;
-            width: auto; min-width: 0; height: auto; padding: 0; margin: 0; border: 0; background: none;
-            box-shadow: none; cursor: pointer; line-height: 0;
-        }
-        /* A 20px hit area around the 10px icons. */
-        .card-state-btn::before { content: ''; position: absolute; inset: -5px; border-radius: 50%; }
-        .card-state-btn:hover .ev-circle, .card-state-btn:hover .story-leaf { transform: scale(1.25); }
-        .ev-circle, .story-leaf { transition: transform 0.12s; }
-        .ev-circle {
-            display: inline-block; width: 10px; height: 10px; box-sizing: border-box;
-            border-radius: 50%; border: 1.5px solid var(--primary); flex-shrink: 0;
-        }
-        .ev-circle.ev-full { background: var(--primary); }
-        .ev-circle.ev-partial { background: linear-gradient(90deg, var(--primary) 50%, transparent 50%); }
-        .ev-circle.ev-none { border-color: var(--text-faint); }
-        .story-leaf {
-            display: inline-block; width: 8px; height: 10px; box-sizing: border-box;
-            border-radius: 2px; background: var(--text-faint); flex-shrink: 0;
-        }
-        .story-leaf.draft { background: transparent; border: 1.5px dashed var(--text-faint); }
+        .st-group { display: inline-flex; gap: 2px; }
+        .st-group i { display: block; width: 10px; height: 3px; border-radius: 2px; }
+        .st-ev i { background: var(--ev-stripe); }
+        .st-story i { background: var(--story-stripe); }
+        .st-story.draft i { opacity: 0.45; }
+        /* In the tooltip and the menu: inline, before the words. */
+        .card-state--inline { position: static; flex-shrink: 0; }
         .card-avatar-wrap { position: relative; flex: 0 0 auto; display: flex; }
         .card-signal {
             position: absolute; top: -6px; right: -6px; z-index: 2;

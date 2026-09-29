@@ -19,7 +19,7 @@ import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
 import { CARD_SIZE, ViewMode, STANDALONE_VIEWS } from './types.js';
-import { ACTION_GLYPH, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow } from './card-signals.js';
+import { ACTION_GLYPH, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, stateStripesHtml } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
 import {
     computeLayout,
@@ -1030,14 +1030,6 @@ class TreeRendererClass {
                 if (target.classList.contains('add-btn') || target.classList.contains('branch-tab')) return;
                 // Don't open context menu when clicking on badge buttons or their children
                 if (target.closest('.hidden-partners-btn') || target.closest('.hidden-families-btn')) return;
-                // The status icons open the person's sources / story (touch: the person menu).
-                const stateBtn = target.closest<HTMLElement>('.card-state-btn');
-                if (stateBtn && !window.matchMedia?.('(pointer: coarse)').matches) {
-                    e.stopPropagation();
-                    UI.hideContextMenu();
-                    UI.runPersonMenuAction(id, stateBtn.dataset.open === 'story' ? 'story' : 'sources');
-                    return;
-                }
                 // The badge opens what it signals (touch: the person menu, which leads with it).
                 const badge = target.closest<HTMLElement>('.card-signal');
                 if (badge && !window.matchMedia?.('(pointer: coarse)').matches) {
@@ -1234,17 +1226,11 @@ class TreeRendererClass {
                     .filter(Boolean).join(' · ')
                 : [metaYears, metaPlace].filter(Boolean).join(' · ');
 
-            // Person status at the end of the year row (never beside the name):
-            // the evidence circle and the story leaf. A click opens the person's
-            // sources / story (as the person menu does); out of the tab order —
-            // the card's aria-label says the state and its menu has both.
-            const stateIcons = density === 'compact' ? '' : [
-                signals.showEvidence && signals.evidence
-                    ? `<button type="button" class="card-state-btn" data-open="sources" tabindex="-1" aria-label="${this.escapeHtml(strings.contextMenu.showSources)}"><span class="ev-circle ev-${signals.evidence.level}"></span></button>` : '',
-                signals.showStory
-                    ? `<button type="button" class="card-state-btn" data-open="story" tabindex="-1" aria-label="${this.escapeHtml(strings.contextMenu.showStory)}"><span class="story-leaf${signals.story === 'draft' ? ' draft' : ''}"></span></button>` : '',
-            ].join('');
-            const stateHtml = stateIcons ? `<span class="card-state">${stateIcons}</span>` : '';
+            // Person status: quiet stripes in the card's bottom-right corner, in
+            // every density (decoration; the tooltip and aria-label say it).
+            const stateHtml = stateStripesHtml(
+                signals.showEvidence && signals.evidence ? signals.evidence.level : null,
+                signals.showStory ? signals.story : null);
             // The action badge on the avatar's corner (a dot on the card's
             // corner where there is no avatar, or when zoomed far out).
             const signalLabel = signals.action ? this.signalText(signals, signals.action) : '';
@@ -1261,11 +1247,12 @@ class TreeRendererClass {
                 ${showAvatar ? `<div class="card-avatar-wrap"><div class="card-avatar">${avatarInner}</div>${badgeHtml}</div>` : ''}
                 <div class="card-body">
                     <div class="name"><span class="name-text" title="${this.escapeHtml(fullName)}" data-given="${this.escapeHtml(displayName)}" data-surname="${this.escapeHtml(displaySurname)}">${this.escapeHtml(fullName)}</span></div>
-                    ${density !== 'compact' && (metaText || stateHtml) ? `<div class="birth-date" data-years="${this.escapeHtml(metaYears)}"><span class="meta-text">${this.escapeHtml(metaText)}</span>${stateHtml}</div>` : ''}
+                    ${density !== 'compact' && metaText ? `<div class="birth-date" data-years="${this.escapeHtml(metaYears)}"><span class="meta-text">${this.escapeHtml(metaText)}</span></div>` : ''}
                     ${trade ? `<div class="card-trade">${this.escapeHtml(trade)}</div>` : ''}
                     ${density === 'detailed' && metaPlace ? `<div class="card-place">${this.escapeHtml(metaPlace)}</div>` : ''}
                 </div>
                 ${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">${iconSvg('lock', { size: 10 })}</span>` : ''}
+                ${stateHtml}
                 ${dotHtml}
             `;
 
@@ -1619,14 +1606,13 @@ class TreeRendererClass {
             const bits = [ev.sources > 0 ? c.ttSources(ev.sources) : c.ariaEv.none];
             if (ev.sources > 0 && ev.hasBirth) bits.push(ev.birthCited ? c.ttBirthCited : c.ttBirthMissing);
             if (ev.sources > 0 && ev.hasDeath && !ev.deathCited) bits.push(c.ttDeathMissing);
-            rows.push(`<div class="tt-line tt-ev"><span class="ev-circle ev-${ev.level}" aria-hidden="true"></span>${this.escapeHtml(bits.join(' · '))}</div>`);
+            rows.push(`<div class="tt-line tt-ev">${stateStripesHtml(ev.level, null, true)}${this.escapeHtml(bits.join(' · '))}</div>`);
         }
         if (s.story || s.attachments > 0) {
             const bits: string[] = [];
             if (s.story) bits.push(s.story === 'draft' ? c.ttStoryDraft : c.ttStory);
             if (s.attachments > 0) bits.push(c.ttAttachments(s.attachments));
-            const leaf = s.story ? `<span class="story-leaf${s.story === 'draft' ? ' draft' : ''}" aria-hidden="true"></span>` : '';
-            rows.push(`<div class="tt-line tt-story">${leaf}${this.escapeHtml(bits.join(' · '))}</div>`);
+            rows.push(`<div class="tt-line tt-story">${stateStripesHtml(null, s.story, true)}${this.escapeHtml(bits.join(' · '))}</div>`);
         }
         const action = (text: string): string => `<div class="tt-line tt-action">${this.escapeHtml(text)}</div>`;
         if (s.waiting) rows.push(action(this.signalText(s, 'waiting')));
