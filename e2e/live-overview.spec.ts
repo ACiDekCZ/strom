@@ -46,7 +46,7 @@ const CHANGE = [
     'F0001 +child P0006',
 ];
 
-interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean; paused: Record<string, unknown> | null }
+interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean; paused: Record<string, unknown> | null; workPerson: string }
 
 /** A bridge that sends one change of six lines, then keeps quiet. */
 async function follow(page: Page, size: { width: number; height: number } = { width: 1440, height: 900 },
@@ -66,13 +66,14 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
         log: null,
         events: true,
         paused: null,
+        workPerson: 'P0012',
     };
     setup(bridge);
     const status = () => ({
         tree: { id: UUID, name: 'Víškovi' }, head: bridge.gedCalls > 1 ? 'h2' : 'h1', persons: 3,
-        working: [{ who: 'agent-matriky', since: new Date(Date.now() - 16 * 60_000).toISOString(), ...(bridge.paused ? { paused: bridge.paused } : { task: 'Sčítání 1921', person: 'P0012' }) }],
+        working: [{ who: 'agent-matriky', since: new Date(Date.now() - 16 * 60_000).toISOString(), ...(bridge.paused ? { paused: bridge.paused } : { task: 'Sčítání 1921', person: bridge.workPerson }) }],
         waiting: bridge.waiting, links: ALL,
-        queue: [{ id: 'T0101', text: 'Matriky Chlumy', state: 'next' }, { id: 'T0102', text: 'Pozemková kniha', state: 'next' }],
+        queue: [{ id: 'T0101', text: 'Matriky Chlumy', state: 'next', person: 'P0001' }, { id: 'T0102', text: 'Pozemková kniha', state: 'next' }],
         queueMore: 3,
         spend: { month: '2026-09', sessions: 4, amount: 3.2, currency: 'USD' },
     });
@@ -201,8 +202,17 @@ test.describe('the research history (/log)', () => {
     });
 });
 
+test.describe('the agent badge', () => {
+    test('marks whom the agent works on now, not the people of its queue', async ({ page }) => {
+        // Anna (no conflict of her own, which would come first) is worked on; Josef is only queued.
+        await follow(page, { width: 1440, height: 900 }, (b) => { b.waiting = []; b.workPerson = 'P0002'; });
+        await expect(card(page, 'Anna').locator('.card-signal.signal-agent')).toHaveCount(1);
+        await expect(card(page, 'Josef').locator('.card-signal')).toHaveCount(0);
+    });
+});
+
 test.describe('a run waiting for its gate', () => {
-    test('is paused, not working: when it goes on, and no agent badge', async ({ page }) => {
+    test('is paused, not working: when it goes on, and no agent badge (a queued person gets none either)', async ({ page }) => {
         const until = new Date(Date.now() + 90 * 60_000);
         await follow(page, { width: 1440, height: 900 }, (b) => {
             b.waiting = [];

@@ -262,7 +262,8 @@ let idlePanel: string | null = null;
 /**
  * The research's word per person REFN for the card badges: what waits for
  * the user (live, or as last heard within a week) and, while following, what
- * the agent works on or has queued. Only for the active research tree.
+ * the agent works on right now (its queue stays in the panel: a dozen queued
+ * people would all look worked on). Only for the active research tree.
  */
 function researchCardInfo(): Map<string, ResearchCardInfo> {
     const out = new Map<string, ResearchCardInfo>();
@@ -281,7 +282,6 @@ function researchCardInfo(): Map<string, ResearchCardInfo> {
     for (const w of waiting) note(w.person, 'waiting', w.what);
     if (following) {
         for (const w of following.working) if (!w.paused) note(w.person, 'agent', w.task || w.who);
-        for (const q of following.queue) if (q.state === 'next') note(q.person, 'agent', q.text);
     }
     return out;
 }

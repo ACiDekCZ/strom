@@ -22,7 +22,7 @@ export const ACTION_ORDER: ActionSignal[] = ['waiting', 'conflict', 'question', 
 export interface ResearchCardInfo {
     /** A task waits for the user about this person (its text). */
     waiting?: string;
-    /** The agent works on this person, or has them queued (the task's text; live only). */
+    /** The agent works on this person right now (the task's text; live only). */
     agent?: string;
 }
 
