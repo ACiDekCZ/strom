@@ -96,18 +96,31 @@ function recentChanges(changes: readonly LiveChangeItem[], now = Date.now()): Li
     return changes.filter(c => now - (Date.parse(c.at) || 0) < RECENT_MS);
 }
 
+/** The task a session line names ("N0123 closed: T0124: …", "N0124 session started on T0039"). */
+const SESSION_TASK_RE = /^N\d+ (?:closed: |session started on )(T\d+)\b/;
+
 function groupChanges(changes: readonly LiveChangeItem[]): ChangeGroup[] {
     const groups: ChangeGroup[] = [];
+    // A task by its id, as the research titles it elsewhere in the history.
+    const titles = new Map<string, string>();
+    for (const c of changes) {
+        const id = /^T\d+\b/.exec(c.task)?.[0];
+        if (id && !titles.has(id)) titles.set(id, c.task);
+    }
     for (const c of changes) {
         const ts = Date.parse(c.at);
         const bucket = Number.isFinite(ts) ? Math.floor(ts / GROUP_MS) * GROUP_MS : 0;
-        const run = c.task ? `t:${c.task}` : `b:${bucket}`;
+        // A session's own line without a task still belongs to the task it names.
+        const named = c.task ? '' : SESSION_TASK_RE.exec(c.text)?.[1] ?? '';
+        const task = c.task || (named ? titles.get(named) ?? named : '');
+        const run = task ? `t:${task}` : `b:${bucket}`;
         const last = groups[groups.length - 1];
         if (last && last.run === run) {
             last.items.push(c);
             continue;
         }
-        const title = c.task || (bucket ? `${hhmm(bucket)} – ${hhmm(bucket + GROUP_MS)}` : '');
+        // Changes outside any task: the head's time span says when.
+        const title = task || strings.live.otherChanges;
         groups.push({ key: `${run}:${Number.isFinite(ts) ? ts : groups.length}`, run, title, items: [c] });
     }
     return groups;

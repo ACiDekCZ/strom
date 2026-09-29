@@ -159,14 +159,15 @@ test.describe('the research history (/log)', () => {
         await follow(page, { width: 1440, height: 900 }, (b) => {
             b.events = false;
             b.log = { entries: [
+                { head: 'h2', at: new Date(Date.now() - 4 * 60_000).toISOString(), what: ['N0007 closed: T0134: hotovo'], task: '' },
                 { head: 'h1', at: new Date(Date.now() - 5 * 60_000).toISOString(), what: ['+S0031 Sčítání lidu 1880', 'P0012 _STORY navrh'], task: 'T0134 Úmrtí Václava' },
                 { head: 'h0', at: new Date(Date.now() - 30 * hour).toISOString(), what: ['+P0099 Starý /Záznam/'], task: '' },
             ] };
         });
         const panel = page.locator('#live-panel');
-        await expect(panel.locator('.live-changes li')).toHaveCount(3);
+        await expect(panel.locator('.live-changes li')).toHaveCount(4);
         // Newest first; within one version its last line first (as the changes that come live).
-        await expect(panel.locator('.live-changes li')).toContainText(['Jan Víšek', 'Sčítání lidu 1880', 'Starý Záznam']);
+        await expect(panel.locator('.live-changes li')).toContainText(['N0007 closed', 'Jan Víšek', 'Sčítání lidu 1880', 'Starý Záznam']);
         // The history is not news: no "N new".
         await expect(panel.locator('.live-section__sum--new')).toHaveCount(0);
         await panel.locator('.live-panel-expand').click();
@@ -174,9 +175,10 @@ test.describe('the research history (/log)', () => {
         await expect(ov.locator('.research-overview__cell-label').nth(1)).toHaveText('Last 24 h');
         await expect(ov.locator('.research-overview__cell-value').nth(1)).toHaveText('+0 people');
         await expect(ov.locator('.research-overview__cell-sub').nth(1)).toHaveText('+1 source');
-        await expect(ov.locator('.research-overview__cell-sub').first()).toHaveText(/^last change 5 min/);
+        await expect(ov.locator('.research-overview__cell-sub').first()).toHaveText(/^last change 4 min/);
         await expect(ov.locator('.research-overview__group-title').first()).toHaveText('T0134 Úmrtí Václava');
         // A preview of the last 24 hours: the older change is left to the research.
+        // The session's closing line (no task of its own) joins the task it names.
         await expect(ov.locator('.research-overview__group-head')).toHaveCount(1);
         await expect(ov.locator('.research-overview__older')).toContainText('Older changes are in the research');
     });
