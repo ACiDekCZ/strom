@@ -524,6 +524,8 @@ export interface LiveWorker {
     task: string;
     /** The person the work is about (REFN "P12"), when the research says. */
     person?: string;
+    /** The run waits between sessions (its gate said wait, e.g. the usage limit). */
+    paused?: { until: string; reason: string };
 }
 
 /** Something the research waits for from the user. */
@@ -610,7 +612,10 @@ export function sanitizeWorking(value: unknown): LiveWorker[] {
         const who = cleanText(r.who, 80);
         if (!who) continue;
         const person = researchPersonRef(r.person);
-        out.push({ who, since: cleanText(r.since, 40), task: cleanText(r.task), ...(person ? { person } : {}) });
+        const p = asRecord(r.paused);
+        const until = p ? cleanText(p.until, 40) : '';
+        const paused = p ? { until: Number.isFinite(Date.parse(until)) ? until : '', reason: cleanText(p.reason, 200) } : null;
+        out.push({ who, since: cleanText(r.since, 40), task: cleanText(r.task), ...(person ? { person } : {}), ...(paused ? { paused } : {}) });
     }
     return out;
 }

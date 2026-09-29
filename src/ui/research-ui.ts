@@ -280,7 +280,7 @@ function researchCardInfo(): Map<string, ResearchCardInfo> {
     };
     for (const w of waiting) note(w.person, 'waiting', w.what);
     if (following) {
-        for (const w of following.working) note(w.person, 'agent', w.task || w.who);
+        for (const w of following.working) if (!w.paused) note(w.person, 'agent', w.task || w.who);
         for (const q of following.queue) if (q.state === 'next') note(q.person, 'agent', q.text);
     }
     return out;
@@ -495,6 +495,24 @@ function liveTimeText(ts: number, kind: 'ago' | 'since' | 'sincefor' | 'lastchan
     return kind === 'since'
         ? strings.research.since(formatLiveClock(ts, Date.now(), lang))
         : formatLiveTime(ts, Date.now(), lang, strings.research.justNow);
+}
+
+/** The research's state in a word: at work, waiting for the user, paused (its runs wait for their gate), idle. */
+export function liveState(s: LiveSession): { label: string; cls: 'is-working' | 'is-waiting' | 'is-paused' | 'is-idle' } {
+    const L = strings.live;
+    if (s.working.some(w => !w.paused)) return { label: L.stateWorking, cls: 'is-working' };
+    if (s.waiting.length > 0) return { label: L.stateWaiting, cls: 'is-waiting' };
+    if (s.working.length > 0) return { label: L.statePaused, cls: 'is-paused' };
+    return { label: L.stateIdle, cls: 'is-idle' };
+}
+
+/** A paused run: "Paused · <why> · resumes at 21:30" (what the research says of it). */
+export function pausedText(w: LiveWorker): string {
+    if (!w.paused) return '';
+    const ts = Date.parse(w.paused.until);
+    const L = strings.live;
+    return [L.statePaused, w.paused.reason, Number.isFinite(ts) ? L.pausedUntil(formatLiveClock(ts, Date.now(), getCurrentLanguage())) : '']
+        .filter(Boolean).join(' · ');
 }
 
 /** Keep the panel's (and the overview's) times fresh while shown. */
@@ -1717,6 +1735,7 @@ export const researchUiMethods = uiModule({
             const li = el('li');
             li.appendChild(el('strong', undefined, w.who));
             if (w.task) li.appendChild(el('span', 'live-task', ` — ${w.task}`));
+            if (w.paused) li.appendChild(el('span', 'live-paused', pausedText(w)));
             const since = timeEl(w.since, 'sincefor');
             if (since) li.appendChild(since);
             working.appendChild(li);
@@ -1806,7 +1825,7 @@ export const researchUiMethods = uiModule({
         if (collapsed) {
             const summary = el('div', 'live-panel-summary');
             if (phone && !s.ended) {
-                summary.appendChild(el('span', 'live-panel-chip', s.working.length > 0 ? L.stateWorking : L.stateIdle));
+                summary.appendChild(el('span', 'live-panel-chip', liveState(s).label));
                 if (s.waiting.length > 0) summary.appendChild(el('span', 'live-panel-chip live-panel-chip--warn', `${r.waiting} ${s.waiting.length}`));
             }
             const fresh = s.changes.length - s.seenChanges;
@@ -1828,7 +1847,7 @@ export const researchUiMethods = uiModule({
         if (!s.ended) {
             const w = s.working[0];
             const since = w ? Date.parse(w.since) : NaN;
-            const summary = w ? [w.who, Number.isFinite(since) ? liveDuration(since) : ''].filter(Boolean).join(' · ') : L.nobody;
+            const summary = w ? [w.who, w.paused ? L.statePaused : Number.isFinite(since) ? liveDuration(since) : ''].filter(Boolean).join(' · ') : L.nobody;
             const host = liveSection(body, { ...fold('working'), title: r.atWork, summary });
             this.appendWorkingList(host, s);
         }

@@ -20,10 +20,12 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId } from '../types.js';
 import { computeEvidenceGaps } from '../stats.js';
 import { LiveChangeKind } from '../research-link.js';
+import { formatLiveClock } from '../live-time.js';
 import { uiModule } from './module.js';
 import {
     LiveChangeItem, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
     liveSession, storeLiveSection, storedLiveSections, timeEl,
+    liveState, pausedText,
 } from './research-ui.js';
 
 /** The overview stays open over a reload / the next following (per device). */
@@ -266,15 +268,22 @@ export const researchOverviewMethods = uiModule({
             c.appendChild(subEl);
             strip.appendChild(c);
         };
-        const [state, stateCls] = s.working.length > 0 ? [L.stateWorking, 'is-working']
-            : s.waiting.length > 0 ? [L.stateWaiting, 'is-waiting'] : [L.stateIdle, 'is-idle'];
+        const { label: state, cls: stateCls } = liveState(s);
         // When the research last changed (its own time; else the last change
         // seen; unknown: nothing). The research version (commit) on hover.
         const lastIso = s.headAt || s.changes[0]?.at || '';
         const lastEl = timeEl(lastIso, 'lastchange');
         lastEl?.classList.add('research-overview__cell-sub');
         const hover = s.head ? L.versionTitle(s.head.slice(0, 7)) : '';
-        cell(L.state, state, lastEl ?? '', stateCls, [lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
+        // Paused: when it goes on (and why, on hover) says more than the last change.
+        const paused = stateCls === 'is-paused' ? s.working.find(w => w.paused) : undefined;
+        const resumes = paused ? Date.parse(paused.paused!.until) : NaN;
+        if (paused && Number.isFinite(resumes)) {
+            cell(L.state, state, L.pausedUntil(formatLiveClock(resumes, Date.now(), getCurrentLanguage())), stateCls,
+                [pausedText(paused), lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
+        } else {
+            cell(L.state, state, lastEl ?? '', stateCls, [paused ? pausedText(paused) : '', lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
+        }
         if (s.logged) {
             // The research's own history: what it added in the last 24 hours.
             const recent = recentChanges(s.changes);
@@ -349,7 +358,7 @@ export const researchOverviewMethods = uiModule({
         const since0 = w0 ? Date.parse(w0.since) : NaN;
         const host = liveSection(body, {
             ...fold, title: L.now,
-            summary: w0 ? [w0.who, Number.isFinite(since0) ? liveDuration(since0) : ''].filter(Boolean).join(' · ') : L.nobody,
+            summary: w0 ? [w0.who, w0.paused ? L.statePaused : Number.isFinite(since0) ? liveDuration(since0) : ''].filter(Boolean).join(' · ') : L.nobody,
         });
         const list = el('ul', 'live-panel-list live-working research-overview__now');
         host.appendChild(list);
@@ -359,6 +368,7 @@ export const researchOverviewMethods = uiModule({
             const text = el('div', 'research-overview__now-text');
             text.appendChild(el('strong', undefined, w.who));
             if (w.task) text.appendChild(el('span', 'live-task', ` — ${w.task}`));
+            if (w.paused) text.appendChild(el('span', 'live-paused', pausedText(w)));
             const since = timeEl(w.since, 'sincefor');
             if (since) text.appendChild(since);
             li.appendChild(text);

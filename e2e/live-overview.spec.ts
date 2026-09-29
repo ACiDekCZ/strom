@@ -46,7 +46,7 @@ const CHANGE = [
     'F0001 +child P0006',
 ];
 
-interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean }
+interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean; paused: Record<string, unknown> | null }
 
 /** A bridge that sends one change of six lines, then keeps quiet. */
 async function follow(page: Page, size: { width: number; height: number } = { width: 1440, height: 900 },
@@ -65,11 +65,12 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
         gedCalls: 0,
         log: null,
         events: true,
+        paused: null,
     };
     setup(bridge);
     const status = () => ({
         tree: { id: UUID, name: 'Víškovi' }, head: bridge.gedCalls > 1 ? 'h2' : 'h1', persons: 3,
-        working: [{ who: 'agent-matriky', since: new Date(Date.now() - 16 * 60_000).toISOString(), task: 'Sčítání 1921', person: 'P0012' }],
+        working: [{ who: 'agent-matriky', since: new Date(Date.now() - 16 * 60_000).toISOString(), ...(bridge.paused ? { paused: bridge.paused } : { task: 'Sčítání 1921', person: 'P0012' }) }],
         waiting: bridge.waiting, links: ALL,
         queue: [{ id: 'T0101', text: 'Matriky Chlumy', state: 'next' }, { id: 'T0102', text: 'Pozemková kniha', state: 'next' }],
         queueMore: 3,
@@ -192,6 +193,24 @@ test.describe('the research history (/log)', () => {
         const ov = page.locator('#research-overview');
         await expect(ov.locator('.research-overview__group-head')).toHaveCount(20);
         await expect(ov.locator('.research-overview__older')).toHaveCount(1);
+    });
+});
+
+test.describe('a run waiting for its gate', () => {
+    test('is paused, not working: when it goes on, and no agent badge', async ({ page }) => {
+        const until = new Date(Date.now() + 90 * 60_000);
+        await follow(page, { width: 1440, height: 900 }, (b) => {
+            b.waiting = [];
+            b.paused = { until: until.toISOString(), reason: 'Claude usage 92 %' };
+        });
+        const panel = page.locator('#live-panel');
+        await expect(panel.locator('.live-paused')).toContainText('Paused · Claude usage 92 % · resumes at');
+        await panel.locator('.live-panel-expand').click();
+        const ov = page.locator('#research-overview');
+        await expect(ov.locator('.research-overview__cell').first()).toHaveClass(/is-paused/);
+        await expect(ov.locator('.research-overview__cell-value').first()).toHaveText('Paused');
+        await expect(ov.locator('.research-overview__cell-sub').first()).toHaveText(/^resumes at /);
+        await expect(page.locator('.person-card .card-signal.signal-agent')).toHaveCount(0);
     });
 });
 

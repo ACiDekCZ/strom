@@ -305,6 +305,16 @@ describe('bridge messages are untrusted', () => {
         expect(s.waiting).toEqual([{ id: 'T1', what: 'Potvrďte otce', on: 'user', at: '2026-09-26T12:10:00Z' }]);
     });
 
+    it('a run waiting for its gate is paused (a bad time is dropped)', () => {
+        const [w, bad] = sanitizeWorking([
+            { who: 'run-1', since: '2026-09-29T19:00:00Z', paused: { until: '2026-09-29T21:30:00+02:00', reason: 'Claude usage 92 %' } },
+            { who: 'run-2', paused: { until: 'soon', reason: 7 } },
+        ]);
+        expect(w.paused).toEqual({ until: '2026-09-29T21:30:00+02:00', reason: 'Claude usage 92 %' });
+        expect(bad.paused).toEqual({ until: '', reason: '' });
+        expect(sanitizeWorking([{ who: 'run-3' }])[0].paused).toBeUndefined();
+    });
+
     it('rejects non-objects and a missing tree id', () => {
         expect(sanitizeLiveStatus(null)).toBeNull();
         expect(sanitizeLiveStatus([1, 2])).toBeNull();
