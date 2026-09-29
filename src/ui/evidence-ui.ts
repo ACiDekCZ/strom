@@ -205,6 +205,7 @@ export const evidenceUiMethods = uiModule({
         if (!evidence || evidence.ids.length === 0) return;
         evidence.index = (evidence.index + 1) % evidence.ids.length;
         const id = evidence.ids[evidence.index];
+        this.renderEvidencePill();
         if (document.querySelector(`.person-card[data-id="${CSS.escape(id)}"]`)) {
             ZoomPan.centerOnPerson(id);
         } else {
@@ -264,7 +265,9 @@ export const evidenceUiMethods = uiModule({
             }
         } else if (evidence) {
             what.textContent = evidence.label;
-            label.append(what, document.createTextNode(` · ${evidence.ids.length}`));
+            // While going through them: where you are ("3 / 16").
+            const n = evidence.ids.length;
+            label.append(what, document.createTextNode(evidence.index >= 0 && evidence.index < n ? ` · ${evidence.index + 1} / ${n}` : ` · ${n}`));
             pill.append(label);
         }
         if (evidence) {

@@ -562,7 +562,10 @@ test.describe('Where evidence is missing (tree health)', () => {
         await expect(pill).toContainText('Line ends (no parents) · 2');
         await expect(card(page, 'Václav')).toHaveClass(/evidence-hit/);
         await expect(card(page, 'Ondřej')).toHaveClass(/evidence-dim/);
+        await expect(pill.locator('.evidence-pill-next')).toHaveText('Next person ›');
         await pill.locator('.evidence-pill-next').click();
+        // Going through them says where you are.
+        await expect(pill).toContainText('Line ends (no parents) · 1 / 2');
         await expect(card(page, 'Marie').or(card(page, 'Václav')).first()).toBeVisible();
         await page.keyboard.press('Escape');
         await expect(pill).toHaveCount(0);
