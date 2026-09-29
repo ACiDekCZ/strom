@@ -557,13 +557,21 @@
             min-width: 200px;
             background: var(--surface); border: 1px solid var(--border);
             border-radius: 10px; box-shadow: var(--shadow-lg);
-            padding: 4px 0; z-index: 210; display: none;
+            padding: 4px 0; z-index: 210;
             /* The submenu carries every whole-tree action — kept on-screen by
                positionActionsTreeSubmenu() (shifted up, scrolls when needed). */
             max-height: calc(100vh - 16px); overflow-y: auto;
+            /* Hidden a moment late: a pointer on its way from the row to the
+               flyout may cross the gap (or clip a corner) without losing it. */
+            visibility: hidden; transition: visibility 0s linear 0.25s;
         }
         .actions-tree-wrap:hover > .actions-tree-submenu,
-        .actions-tree-wrap.submenu-open > .actions-tree-submenu { display: block; }
+        .actions-tree-wrap.submenu-open > .actions-tree-submenu { visibility: visible; transition-delay: 0s; z-index: 211; }
+        /* The gap between the row and the flyout still counts as the row. */
+        .actions-tree-wrap:hover::before,
+        .actions-tree-wrap.submenu-open::before {
+            content: ''; position: absolute; top: 0; bottom: 0; right: 100%; width: 16px;
+        }
 
         /* Keyboard-shortcut chip inside menu rows (same pill as the search "/"). */
         .menu-shortcut-hint {

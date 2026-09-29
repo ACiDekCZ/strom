@@ -379,7 +379,7 @@ export const treeManagementMethods = uiModule({
         const viewport = window.innerHeight;
         sub.style.maxHeight = `${Math.max(120, viewport - 2 * margin)}px`;
         const rect = sub.getBoundingClientRect();
-        if (rect.height === 0) return;   // not shown (hover already left)
+        if (rect.height === 0 || getComputedStyle(sub).visibility === 'hidden') return;   // not shown (hover already left)
         const overflow = rect.bottom - (viewport - margin);
         if (overflow <= 0) return;
         const shift = Math.min(overflow, Math.max(0, rect.top - margin));

@@ -91,6 +91,30 @@ test.describe('actions menu "Tree:" submenu', () => {
         await expect(submenu).not.toContainText('Validate');
     });
 
+    test('the mouse crosses from the row to the flyout without losing it', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.locator('.actions-menu-btn').click();
+        const row = page.locator('#actions-tree-row');
+        const submenu = page.locator('#actions-tree-submenu');
+        await row.hover();
+        await expect(submenu).toBeVisible();
+        const r = (await row.boundingBox())!;
+        const sub = (await submenu.boundingBox())!;
+        const y = r.y + r.height / 2;
+        // Along the row, through the gap between the menu and the flyout…
+        await page.mouse.move(r.x + 4, y);
+        await page.mouse.move((r.x + sub.x + sub.width) / 2, y);
+        await expect(submenu).toBeVisible();
+        // …a corner off the row (a diagonal path) is forgiven a moment…
+        await page.mouse.move(sub.x + sub.width + 6, r.y + r.height + 6);
+        await page.mouse.move(sub.x + sub.width - 20, r.y + r.height + 10);
+        await expect(submenu).toBeVisible();
+        // …and it stays while in the flyout.
+        await page.waitForTimeout(400);
+        await expect(submenu).toBeVisible();
+    });
+
     test('keyboard: → opens the submenu, ← closes it', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
