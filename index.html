@@ -5578,7 +5578,8 @@
            the year row — never beside the name — and one action badge on the
            avatar's corner (a dot on the card's corner in compact density and
            when zoomed far out). Shapes, not colour alone, tell them apart. */
-        .person-card .birth-date { display: flex; align-items: center; }
+        /* The text ellipsizes on its own; the row does not clip (an icon grows on hover). */
+        .person-card .birth-date { display: flex; align-items: center; overflow: visible; }
         .person-card .birth-date .meta-text {
             min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
