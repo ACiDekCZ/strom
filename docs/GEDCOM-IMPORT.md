@@ -116,8 +116,9 @@ These blocks carry the register entry itself, and all of it is read:
 2 RELI Římskokatolické
 ```
 
-- `SOUR` (with `PAGE`, `QUAY`) — cites the person, since a birth entry is
-  evidence about them.
+- `SOUR` (with `PAGE`, `QUAY`) — cites the birth itself (the death under
+  `DEAT`), kept apart from citations of the person as a whole: it is what
+  makes the birth count as documented. Written back under `BIRT` / `DEAT`.
 - `NOTE` — kept on the person, labelled with the fact it sat under.
 - `ASSO` / `_WITN` — the people the entry names. Godparents recorded under
   `BIRT` move to the christening when the file has one; otherwise Strom makes a
