@@ -51,8 +51,15 @@ describe('evidence level', () => {
     });
 
     it('a source on the person counts for birth and death (the BIRT / DEAT citations land there)', () => {
-        const ev = personEvidence(person('a', { sourceIds: ['s1', 's2'], deathDate: '1930', events: [{ id: 'e', type: 'occupation', sourceIds: ['s2', 's3'] }] }), data([]));
+        const ev = personEvidence(person('a', { sourceIds: ['s1', 's2'], birthDate: '1865', deathDate: '1930', events: [{ id: 'e', type: 'occupation', sourceIds: ['s2', 's3'] }] }), data([]));
         expect(ev).toMatchObject({ level: 'full', sources: 3, birthCited: true, hasDeath: true, deathCited: true });
+    });
+
+    it('no birth in the data: a source on the person documents no birth (partial)', () => {
+        const ev = personEvidence(person('a', { sourceIds: ['s1'] }), data([]));
+        expect(ev).toMatchObject({ level: 'partial', sources: 1, hasBirth: false, birthCited: false });
+        // A birth place is a birth too.
+        expect(level(person('b', { sourceIds: ['s1'], birthPlace: 'Chlumy' }))).toBe('full');
     });
 
     it('a placeholder has no level', () => {

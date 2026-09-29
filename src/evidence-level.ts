@@ -5,9 +5,10 @@
  *   full    — the birth (or baptism) is cited and, when the person has a
  *             death in the data (date, place, a death / burial event), so is
  *             the death (or burial).
- * A source on the person itself counts for the birth and the death: the
- * GEDCOM import puts the citations of the BIRT / DEAT entries there (the
- * person has no separate birth or death citation). Pure; placeholders have
+ * A source on the person itself counts for the birth and the death when the
+ * person has one: the GEDCOM import puts the citations of the BIRT / DEAT
+ * entries there (the person has no separate birth or death citation). A
+ * person with no birth in the data has no documented birth, whatever is cited. Pure; placeholders have
  * no level. Tree health's "Where evidence is missing" counts with the same
  * rules (src/stats.ts).
  */
@@ -63,11 +64,11 @@ export function personEvidence(
 
     const birthEvents = events.filter(e => BIRTH_EVENTS.has(e.type));
     const hasBirth = !!p.birthDate || !!p.birthPlace?.trim() || birthEvents.length > 0;
-    const birthCited = personCited || birthEvents.some(cited);
+    const birthCited = (hasBirth && personCited) || birthEvents.some(cited);
 
     const deathEvents = events.filter(e => DEATH_EVENTS.has(e.type));
     const hasDeath = !!p.deathDate || !!p.deathPlace?.trim() || deathEvents.length > 0;
-    const deathCited = personCited || deathEvents.some(cited);
+    const deathCited = (hasDeath && personCited) || deathEvents.some(cited);
 
     const level: EvidenceLevel = sources.size === 0 ? 'none'
         : birthCited && (!hasDeath || deathCited) ? 'full'

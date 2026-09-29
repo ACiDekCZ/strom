@@ -99,7 +99,8 @@ async function menuActions(page: Page, name: string): Promise<string[]> {
 
 test.describe('Research submenu, second wave', () => {
     test('update block, "Undo last send" with its time, "Research settings"', async ({ page }) => {
-        const sentAt = new Date(Date.now() - 2 * 3600_000);
+        // Earlier today (just after midnight two hours back is yesterday: shown with its date).
+        const sentAt = new Date(Math.max(Date.now() - 2 * 3600_000, new Date().setHours(0, 0, 1, 0)));
         await setup(page, ALL, { update: { version: '1.7.0' }, lastIntake: { id: 'I0042', at: sentAt.toISOString() } });
         await openResearchMenu(page);
         const block = page.locator('#research-update-block');
