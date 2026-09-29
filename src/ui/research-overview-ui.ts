@@ -18,7 +18,6 @@ import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId } from '../types.js';
-import { formatLiveClock } from '../live-time.js';
 import { computeEvidenceGaps } from '../stats.js';
 import { LiveChangeKind } from '../research-link.js';
 import { uiModule } from './module.js';
@@ -63,12 +62,8 @@ function personByRefn(refn: string | undefined): Person | null {
 
 const fullName = (p: Person): string => `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() || '?';
 
-function clock(ts: number): string {
-    return formatLiveClock(ts, Date.now(), getCurrentLanguage());
-}
-
 function hhmm(ts: number): string {
-    return new Date(ts).toLocaleTimeString(getCurrentLanguage(), { hour: '2-digit', minute: '2-digit' });
+    return new Date(ts).toLocaleTimeString(getCurrentLanguage(), { hour: 'numeric', minute: '2-digit' });
 }
 
 /** Light a card up while its change row is hovered. */
@@ -251,17 +246,24 @@ export const researchOverviewMethods = uiModule({
         const persons = Object.values(data.persons).filter(p => !p.isPlaceholder).length;
         const sources = Object.keys(data.sources ?? {}).length;
         const strip = el('div', 'research-overview__summary');
-        const cell = (label: string, value: string, sub: HTMLElement | string, cls = ''): void => {
+        const cell = (label: string, value: string, sub: HTMLElement | string, cls = '', title = ''): void => {
             const c = el('div', `research-overview__cell${cls ? ` ${cls}` : ''}`);
             c.append(el('div', 'research-overview__cell-label', label), el('div', 'research-overview__cell-value', value));
-            c.appendChild(typeof sub === 'string' ? el('div', 'research-overview__cell-sub', sub) : sub);
+            const subEl = typeof sub === 'string' ? el('div', 'research-overview__cell-sub', sub) : sub;
+            // One line; the whole text (and the research version) on hover.
+            subEl.title = title || subEl.textContent || '';
+            c.appendChild(subEl);
             strip.appendChild(c);
         };
         const [state, stateCls] = s.working.length > 0 ? [L.stateWorking, 'is-working']
             : s.waiting.length > 0 ? [L.stateWaiting, 'is-waiting'] : [L.stateIdle, 'is-idle'];
-        cell(L.state, state, s.head ? L.version(s.head.slice(0, 7)) : '', stateCls);
+        const last = s.changes.length > 0 ? Date.parse(s.changes[0].at) : NaN;
+        // When the last change came, and the research's version (its commit) after it.
+        const lastText = Number.isFinite(last) ? L.lastChange(hhmm(last)) : L.noChangeYet;
+        cell(L.state, state, [lastText, s.head ? s.head.slice(0, 7) : ''].filter(Boolean).join(' · '), stateCls,
+            s.head ? `${lastText} · ${L.versionTitle(s.head.slice(0, 7))}` : '');
         cell(L.sinceWatching, L.plusPersons(Math.max(0, persons - s.startPersons)),
-            L.plusSources(Math.max(0, sources - s.startSources), clock(s.startedAt)));
+            L.plusSources(Math.max(0, sources - s.startSources), hhmm(s.startedAt)));
         if (s.spend && mode !== 'sheet') {
             let amount: string;
             try {

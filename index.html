@@ -8160,7 +8160,10 @@
         .research-overview__cell.is-working .research-overview__cell-value { color: var(--primary); }
         .research-overview__cell.is-waiting .research-overview__cell-value { color: var(--warning-text); }
         .research-overview__cell.is-idle .research-overview__cell-value { color: var(--text-light); }
-        .research-overview__cell-sub { display: block; margin-top: 2px; padding: 0; font-size: 12px; color: var(--text-light); text-align: left; }
+        .research-overview__cell-sub {
+            display: block; max-width: 100%; margin-top: 2px; padding: 0; font-size: 12px; color: var(--text-light); text-align: left;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
         .research-overview__waiting { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
         .research-overview--overlay .research-overview__waiting, .research-overview--sheet .research-overview__waiting { grid-template-columns: 1fr; }
         .research-overview__waiting-card {
