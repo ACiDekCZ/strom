@@ -186,6 +186,12 @@ test.describe('the research history (/log)', () => {
         await expect(ov.locator('.research-overview__row')).toHaveCount(0);
         await ov.locator('.research-overview__group-head').click();
         await expect(ov.locator('.research-overview__row')).toHaveCount(3);
+        await ov.locator('.research-overview__group-head').click();
+        // A filter opens the groups: what it found is to be seen.
+        await ov.locator('.research-overview__filter[data-filter="stories"]').click();
+        await expect(ov.locator('.research-overview__row')).toHaveCount(1);
+        await ov.locator('.research-overview__filter[data-filter="all"]').click();
+        await expect(ov.locator('.research-overview__row')).toHaveCount(0);
         await expect(ov.locator('.research-overview__older')).toContainText('Older changes are in the research');
         // From the research's history the highlight says its window, not "while watching".
         await ov.locator('.research-overview__show-changed').click();

@@ -421,6 +421,8 @@ export const researchOverviewMethods = uiModule({
             chip.dataset.filter = f;
             chip.onclick = () => {
                 filter = f;
+                // What was opened or folded by hand meant the other default.
+                toggledGroups.clear();
                 this.renderResearchOverview();
                 // The changed people shown in the tree follow the filter.
                 if (mode !== 'sheet' && this.evidenceHighlightKind() === 'changed') {
@@ -456,7 +458,8 @@ export const researchOverviewMethods = uiModule({
         }
         const groups = groupChanges(shown);
         // Open: what goes on now (a task a run works on); what is done folds.
-        // A click flips that for the group.
+        // A filter opens every group: what it found is to be seen. A click
+        // flips that for the group.
         const running = new Set(s.working.filter(w => !w.paused && w.task).map(w => w.task));
         groups.forEach((g, i) => {
             const newest = Date.parse(g.items[0].at);
@@ -464,7 +467,7 @@ export const researchOverviewMethods = uiModule({
             // Stable while the group grows at its newest end.
             const key = `${g.run}:${Number.isFinite(oldest) ? oldest : i}`;
             const now = running.has(g.title);
-            const open = now !== toggledGroups.has(key);
+            const open = (now || filter !== 'all') !== toggledGroups.has(key);
             const to = i === 0 && now ? L.groupNow : Number.isFinite(newest) ? hhmm(newest) : '';
             const span = [Number.isFinite(oldest) ? hhmm(oldest) : '', to].filter(Boolean).join(' – ');
             const gh = el('button', 'research-overview__group-head');
