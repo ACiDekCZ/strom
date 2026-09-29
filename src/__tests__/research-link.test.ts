@@ -317,8 +317,9 @@ describe('bridge messages are untrusted', () => {
     it('cleans a change and caps its lines', () => {
         const c = sanitizeLiveChange({ head: 'h2', what: ['+P0101 Marie /Nováková/ ← S0202', 7, ''], at: '2026-09-23T10:05:00Z' })!;
         expect(c.what).toEqual(['+P0101 Marie /Nováková/ ← S0202']);
-        const many = sanitizeLiveChange({ what: Array.from({ length: 500 }, (_, i) => `line ${i}`) })!;
-        expect(many.what.length).toBe(50);
+        // A bulk command lists every change it saved: hundreds pass, not endless.
+        const many = sanitizeLiveChange({ what: Array.from({ length: 1500 }, (_, i) => `line ${i}`) })!;
+        expect(many.what.length).toBe(1000);
         expect(sanitizeLiveChange('x')).toBeNull();
     });
 

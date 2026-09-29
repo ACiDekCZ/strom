@@ -34,6 +34,8 @@ const SECTIONS_KEY = 'strom-live-overview-sections';
 const FOLDED_BY_DEFAULT = new Set(['queue', 'knows']);
 /** Changes without a task are grouped by this long. */
 const GROUP_MS = 15 * 60_000;
+/** Rows shown in one group: a bulk command can save hundreds of changes at once. */
+const GROUP_ROWS = 100;
 
 type Filter = 'all' | Exclude<LiveChangeKind, 'other'>;
 type Mode = 'docked' | 'overlay' | 'sheet';
@@ -429,7 +431,7 @@ export const researchOverviewMethods = uiModule({
             host.appendChild(gh);
             if (!open) return;
             const list = el('ul', 'research-overview__rows live-changes');
-            for (const c of g.items) {
+            for (const c of g.items.slice(0, GROUP_ROWS)) {
                 const li = el('li', 'research-overview__row');
                 const ts = Date.parse(c.at);
                 if (Number.isFinite(ts) && ts >= openedAt && Date.now() - ts < 4000) li.classList.add('is-new');
@@ -447,6 +449,7 @@ export const researchOverviewMethods = uiModule({
                 list.appendChild(li);
             }
             host.appendChild(list);
+            if (g.items.length > GROUP_ROWS) host.appendChild(el('p', 'research-overview__group-more', L.groupMore(g.items.length - GROUP_ROWS)));
         });
     },
 

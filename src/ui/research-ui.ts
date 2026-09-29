@@ -126,7 +126,7 @@ const POLL_MS = 10000;
 /** Failed probes in a row after which the bridge is taken as gone. */
 const MAX_FAILURES = 2;
 /** Most change lines kept while following (the overview lists them all). */
-const MAX_CHANGES = 500;
+const MAX_CHANGES = 3000;
 /** Change lines in the small panel. */
 const PANEL_CHANGES = 5;
 /** Sections the user folded (true) or unfolded (false), per device. */

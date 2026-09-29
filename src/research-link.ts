@@ -712,6 +712,8 @@ export interface LiveLogEntry {
 
 /** Most history entries taken from the bridge. */
 const MAX_LOG = 500;
+/** Lines of one commit: a bulk command (an intake, a fetch) lists every change it saved. */
+const MAX_CHANGE_LINES = 1000;
 
 /** The bridge's /log (`{ entries: [...] }`, newest first). Untrusted input: bad entries are dropped. */
 export function sanitizeLiveLog(value: unknown): LiveLogEntry[] | null {
@@ -723,7 +725,7 @@ export function sanitizeLiveLog(value: unknown): LiveLogEntry[] | null {
         const e = asRecord(item);
         if (!e) continue;
         const at = cleanText(e.at, 40);
-        const what = Array.isArray(e.what) ? e.what.slice(0, MAX_ITEMS).map(w => cleanText(w)).filter(Boolean) : [];
+        const what = Array.isArray(e.what) ? e.what.slice(0, MAX_CHANGE_LINES).map(w => cleanText(w)).filter(Boolean) : [];
         if (!Number.isFinite(Date.parse(at)) || what.length === 0) continue;
         out.push({ head: cleanText(e.head, 80), at, what, task: cleanText(e.task) });
     }
@@ -743,7 +745,7 @@ export function sanitizeLiveChange(value: unknown): LiveChange | null {
     const r = asRecord(value);
     if (!r) return null;
     const what = Array.isArray(r.what)
-        ? r.what.slice(0, MAX_ITEMS).map(w => cleanText(w)).filter(Boolean)
+        ? r.what.slice(0, MAX_CHANGE_LINES).map(w => cleanText(w)).filter(Boolean)
         : [];
     return { head: cleanText(r.head, 80), what, at: cleanText(r.at, 40) };
 }
