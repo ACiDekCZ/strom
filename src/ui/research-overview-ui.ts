@@ -36,6 +36,10 @@ const FOLDED_BY_DEFAULT = new Set(['queue', 'knows']);
 const GROUP_MS = 15 * 60_000;
 /** Rows shown in one group: a bulk command can save hundreds of changes at once. */
 const GROUP_ROWS = 100;
+/** How far back the timeline and its summary look. */
+const RECENT_MS = 24 * 60 * 60_000;
+/** Steps (groups) the timeline shows at most. */
+const MAX_STEPS = 20;
 
 type Filter = 'all' | Exclude<LiveChangeKind, 'other'>;
 type Mode = 'docked' | 'overlay' | 'sheet';
@@ -85,6 +89,11 @@ interface ChangeGroup {
 }
 
 /** Changes (newest first) in runs of the same task; without one, by 15 minutes. */
+/** The changes of the last 24 hours: the overview is a preview, the research has the rest. */
+function recentChanges(changes: readonly LiveChangeItem[], now = Date.now()): LiveChangeItem[] {
+    return changes.filter(c => now - (Date.parse(c.at) || 0) < RECENT_MS);
+}
+
 function groupChanges(changes: readonly LiveChangeItem[]): ChangeGroup[] {
     const groups: ChangeGroup[] = [];
     for (const c of changes) {
@@ -267,12 +276,10 @@ export const researchOverviewMethods = uiModule({
         const hover = s.head ? L.versionTitle(s.head.slice(0, 7)) : '';
         cell(L.state, state, lastEl ?? '', stateCls, [lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
         if (s.logged) {
-            // The research's own history: what it added today.
-            const start = new Date();
-            start.setHours(0, 0, 0, 0);
-            const today = s.changes.filter(c => Date.parse(c.at) >= start.getTime());
-            cell(L.today, L.plusPersons(today.filter(c => c.adds === 'person').length),
-                L.plusSourcesToday(today.filter(c => c.adds === 'source').length));
+            // The research's own history: what it added in the last 24 hours.
+            const recent = recentChanges(s.changes);
+            cell(L.last24h, L.plusPersons(recent.filter(c => c.adds === 'person').length),
+                L.plusSourcesToday(recent.filter(c => c.adds === 'source').length));
         } else {
             cell(L.sinceWatching, L.plusPersons(Math.max(0, persons - s.startPersons)),
                 L.plusSources(Math.max(0, sources - s.startSources), hhmm(s.startedAt)));
@@ -369,14 +376,21 @@ export const researchOverviewMethods = uiModule({
     /** Progress: the changes while watching, by task, filtered; hover and click reach the tree. */
     appendOverviewTimeline(body: HTMLElement, s: LiveSession, fold: { id: string; collapsed: boolean; onToggle: () => void }, mode: Mode): void {
         const L = strings.live;
-        const host = liveSection(body, { ...fold, title: L.timeline, summary: s.changes.length > 0 ? String(s.changes.length) : undefined });
+        // A preview: the last 24 hours, at most 20 steps; a quiet day still
+        // shows the last step. The research has the rest.
+        const recent = recentChanges(s.changes);
+        const changes = recent.length > 0 || s.changes.length === 0
+            ? groupChanges(recent).slice(0, MAX_STEPS).flatMap(g => g.items)
+            : groupChanges(s.changes)[0].items;
+        const older = s.changes.length - changes.length;
+        const host = liveSection(body, { ...fold, title: L.timeline, summary: changes.length > 0 ? String(changes.length) : undefined });
         host.classList.add('research-overview__timeline');
 
         const bar = el('div', 'research-overview__timeline-bar');
         const filters = el('div', 'research-overview__filters');
         filters.setAttribute('role', 'radiogroup');
         filters.setAttribute('aria-label', L.filterLabel);
-        const count = (f: Filter): number => (f === 'all' ? s.changes.length : s.changes.filter(c => c.kind === f).length);
+        const count = (f: Filter): number => (f === 'all' ? changes.length : changes.filter(c => c.kind === f).length);
         const labels: Record<Filter, string> = { all: L.filterAll, persons: L.filterPersons, sources: L.filterSources, stories: L.filterStories };
         for (const f of ['all', 'persons', 'sources', 'stories'] as Filter[]) {
             const chip = el('button', 'research-overview__filter', `${labels[f]} ${count(f)}`);
@@ -391,7 +405,7 @@ export const researchOverviewMethods = uiModule({
             filters.appendChild(chip);
         }
         bar.appendChild(filters);
-        const changedIds = [...new Set(s.changes.flatMap(c => c.personIds))].filter(id => DataManager.getPerson(id));
+        const changedIds = [...new Set(changes.flatMap(c => c.personIds))].filter(id => DataManager.getPerson(id));
         if (changedIds.length > 0) {
             const show = el('button', 'link-button research-overview__show-changed', L.showChanged);
             show.type = 'button';
@@ -403,9 +417,10 @@ export const researchOverviewMethods = uiModule({
         }
         host.appendChild(bar);
 
-        const shown = filter === 'all' ? s.changes : s.changes.filter(c => c.kind === filter);
+        const shown = filter === 'all' ? changes : changes.filter(c => c.kind === filter);
         if (shown.length === 0) {
             host.appendChild(el('p', 'live-empty', strings.research.noChanges));
+            this.appendOverviewOlder(host, older, mode);
             return;
         }
         const groups = groupChanges(shown);
@@ -451,6 +466,21 @@ export const researchOverviewMethods = uiModule({
             host.appendChild(list);
             if (g.items.length > GROUP_ROWS) host.appendChild(el('p', 'research-overview__group-more', L.groupMore(g.items.length - GROUP_ROWS)));
         });
+        this.appendOverviewOlder(host, older, mode);
+    },
+
+    /** Changes left out of the preview: the research has them (↗ on a computer). */
+    appendOverviewOlder(host: HTMLElement, older: number, mode: Mode): void {
+        if (older <= 0) return;
+        const open = mode === 'sheet' ? null : this.activeResearchLink('open');
+        if (open) {
+            const btn = el('button', 'link-button research-overview__older', `${strings.live.olderInResearch} ↗`);
+            btn.type = 'button';
+            btn.onclick = () => this.launchResearchLink(open);
+            host.appendChild(btn);
+        } else {
+            host.appendChild(el('p', 'research-overview__older', strings.live.olderInResearch));
+        }
     },
 
     /** What the research knows across the tree: open conflicts first, then hypotheses. */

@@ -170,11 +170,28 @@ test.describe('the research history (/log)', () => {
         await expect(panel.locator('.live-section__sum--new')).toHaveCount(0);
         await panel.locator('.live-panel-expand').click();
         const ov = page.locator('#research-overview');
-        await expect(ov.locator('.research-overview__cell-label').nth(1)).toHaveText('Today');
+        await expect(ov.locator('.research-overview__cell-label').nth(1)).toHaveText('Last 24 h');
         await expect(ov.locator('.research-overview__cell-value').nth(1)).toHaveText('+0 people');
         await expect(ov.locator('.research-overview__cell-sub').nth(1)).toHaveText('+1 source');
         await expect(ov.locator('.research-overview__cell-sub').first()).toHaveText(/^last change 5 min/);
         await expect(ov.locator('.research-overview__group-title').first()).toHaveText('T0134 Úmrtí Václava');
+        // A preview of the last 24 hours: the older change is left to the research.
+        await expect(ov.locator('.research-overview__group-head')).toHaveCount(1);
+        await expect(ov.locator('.research-overview__older')).toContainText('Older changes are in the research');
+    });
+
+    test('the overview previews at most 20 steps, the rest is in the research', async ({ page }) => {
+        const min = 60_000;
+        await follow(page, { width: 1440, height: 900 }, (b) => {
+            b.events = false;
+            b.log = { entries: Array.from({ length: 25 }, (_, i) => ({
+                head: `h${i}`, at: new Date(Date.now() - (i + 1) * 20 * min).toISOString(), what: [`+S${String(100 + i).padStart(4, '0')} Zdroj ${i}`], task: `T${1000 + i} Úkol ${i}`,
+            })) };
+        });
+        await page.locator('#live-panel .live-panel-expand').click();
+        const ov = page.locator('#research-overview');
+        await expect(ov.locator('.research-overview__group-head')).toHaveCount(20);
+        await expect(ov.locator('.research-overview__older')).toHaveCount(1);
     });
 });
 
