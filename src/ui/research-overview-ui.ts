@@ -424,18 +424,27 @@ export const researchOverviewMethods = uiModule({
             chip.onclick = () => {
                 filter = f;
                 this.renderResearchOverview();
+                // The changed people shown in the tree follow the filter.
+                if (mode !== 'sheet' && this.evidenceHighlightKind() === 'changed') {
+                    const show = document.querySelector<HTMLButtonElement>('#research-overview .research-overview__show-changed');
+                    if (show) show.click();
+                    else this.endEvidenceHighlight();
+                }
             };
             filters.appendChild(chip);
         }
         bar.appendChild(filters);
         // With the research's history: who changed in the last 24 hours; else while watching.
-        const changedIds = [...new Set((s.logged ? recent : changes).flatMap(c => c.personIds))].filter(id => DataManager.getPerson(id));
+        // The chosen filter narrows it (Stories: whose story changed).
+        const pool = (s.logged ? recent : changes).filter(c => filter === 'all' || c.kind === filter);
+        const changedIds = [...new Set(pool.flatMap(c => c.personIds))].filter(id => DataManager.getPerson(id));
+        const changedTitle = [s.logged ? L.changedRecentTitle : L.changedTitle, filter === 'all' ? '' : labels[filter]].filter(Boolean).join(' · ');
         if (changedIds.length > 0) {
             const show = el('button', 'link-button research-overview__show-changed', L.showChanged);
             show.type = 'button';
             show.onclick = () => {
                 if (mode === 'sheet') this.closeResearchOverview();
-                this.startPersonHighlight('changed', s.logged ? L.changedRecentTitle : L.changedTitle, changedIds, null);
+                this.startPersonHighlight('changed', changedTitle, changedIds, null);
             };
             bar.appendChild(show);
         }

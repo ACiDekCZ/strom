@@ -284,6 +284,12 @@ test.describe('Research overview', () => {
         await expect(page.locator('#evidence-pill')).toContainText('Changed while watching · 4');
         await expect(card(page, 'Ludmila')).toHaveClass(/evidence-hit/);
         await expect(card(page, 'Josef')).toHaveClass(/evidence-dim/);
+        // A filter narrows the people shown in the tree (Stories: whose story changed).
+        await ov.locator('.research-overview__filter[data-filter="stories"]').click();
+        await expect(page.locator('#evidence-pill')).toContainText('Changed while watching · Stories · 1');
+        await expect(card(page, 'Ludmila')).toHaveClass(/evidence-dim/);
+        await ov.locator('.research-overview__filter[data-filter="all"]').click();
+        await expect(page.locator('#evidence-pill')).toContainText('Changed while watching · 4');
         await expect(ov).toBeVisible();
         await page.keyboard.press('Escape');
         await expect(page.locator('#evidence-pill')).toHaveCount(0);

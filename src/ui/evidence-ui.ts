@@ -167,6 +167,11 @@ export const evidenceUiMethods = uiModule({
         this.renderEvidencePill();
     },
 
+    /** Which group the pill highlights now (null: none). */
+    evidenceHighlightKind(): Highlight['kind'] | null {
+        return evidence?.kind ?? null;
+    },
+
     isEvidenceHighlightOn(): boolean {
         return evidence !== null || levelsMode;
     },
