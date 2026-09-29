@@ -15,7 +15,7 @@ const UUID = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
 const BRIDGE = 'http://127.0.0.1:5996/0123456789abcdef0123456789abcdef';
 const cors = { 'access-control-allow-origin': '*' };
 const ALL = ['send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
-    'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup'];
+    'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live'];
 
 function ged(extra: boolean): string {
     return [
@@ -232,6 +232,8 @@ test.describe('Research overview', () => {
         await page.evaluate(() => window.Strom.UI.researchActionOverview());
         await expect(page.locator('#research-overview')).toBeVisible();
         await expect(page.locator('#research-item-overview')).toHaveCount(1);
+        // Already following: no "Follow live".
+        await expect(page.locator('#research-item-live')).toHaveCount(0);
     });
 
     test('switching the language redraws the panel and the overview', async ({ page }) => {

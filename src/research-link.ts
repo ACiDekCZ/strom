@@ -22,7 +22,7 @@ export const STROM_LINKS_TAG = '_STROM_LINKS';
 /** Actions of the strom-research:// scheme the app knows how to use. */
 export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
-    'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup',
+    'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
@@ -122,6 +122,7 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
         case 'update':
         case 'sessions':
         case 'setup':
+        case 'live':
             return base;
         case 'excerpt': {
             const source = researchSourceRef(p.source);

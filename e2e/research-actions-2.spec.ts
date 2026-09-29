@@ -132,6 +132,25 @@ test.describe('Research submenu, second wave', () => {
     });
 });
 
+test.describe('Follow live from the app', () => {
+    test('announced: "Follow live ↗" asks the research to open the tree live here', async ({ page }) => {
+        await setup(page, [...ALL, 'live']);
+        await openResearchMenu(page);
+        const item = page.locator('#research-item-live');
+        await expect(item).toContainText('Follow live');
+        await expect(item).toContainText('↗');
+        await item.click();
+        expect(await launched(page)).toEqual([`strom-research://live?tree=${UUID}`]);
+        await expect(page.locator('.toast')).toContainText('Opening the research');
+    });
+
+    test('not announced by the research: no item', async ({ page }) => {
+        await setup(page, ALL);
+        await openResearchMenu(page);
+        await expect(page.locator('#research-item-live')).toHaveCount(0);
+    });
+});
+
 test.describe('live panel: up next, update, spend', () => {
     const status = (extra: Record<string, unknown>) => ({
         tree: { id: UUID, name: 'Víškovi' }, head: 'h1', working: [], waiting: [], links: ALL, ...extra,

@@ -146,6 +146,10 @@ export const researchActionsMethods = uiModule({
             const look: SubmenuItem[] = [];
             if (this.researchLinkAvailable('app')) look.push({ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') });
             if (waiting > 0) look.push({ id: 'research-item-waiting', label: r.waiting, run: call('researchActionWaiting'), count: waiting });
+            // Follow live: the research starts (or reuses) its bridge and opens ?live= here.
+            if (this.researchLinkAvailable('live') && !this.isFollowingActiveResearch()) {
+                look.push({ id: 'research-item-live', label: r.followLive, run: call('researchActionLive'), ext: true });
+            }
             if (this.isFollowingActiveResearch()) look.push({ id: 'research-item-overview', label: strings.live.overviewTitle, run: call('researchActionOverview') });
             const known = this.researchWaiting();
             const work: SubmenuItem[] = [
@@ -222,6 +226,12 @@ export const researchActionsMethods = uiModule({
     researchActionWaiting(): void {
         this.closeActionsMenu();
         this.showResearchWaiting();
+    },
+
+    researchActionLive(): void {
+        this.closeActionsMenu();
+        const url = this.activeResearchLink('live');
+        if (url) this.launchResearchLink(url);
     },
 
     researchActionOverview(): void {
