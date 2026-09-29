@@ -46,7 +46,7 @@ const CHANGE = [
     'F0001 +child P0006',
 ];
 
-interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean; paused: Record<string, unknown> | null; workPerson: string }
+interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean; paused: Record<string, unknown> | null; workPerson: string; changeEntries: Record<string, unknown>[] | null }
 
 /** A bridge that sends one change of six lines, then keeps quiet. */
 async function follow(page: Page, size: { width: number; height: number } = { width: 1440, height: 900 },
@@ -67,6 +67,7 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
         events: true,
         paused: null,
         workPerson: 'P0012',
+        changeEntries: null,
     };
     setup(bridge);
     const status = () => ({
@@ -92,7 +93,7 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
         if (path.endsWith('/events')) {
             if (!bridge.events) return new Promise(() => {});
             const body = `event: hello\ndata: ${JSON.stringify(status())}\n\n`
-                + `event: change\ndata: ${JSON.stringify({ head: 'h2', what: CHANGE, at: new Date().toISOString() })}\n\n`;
+                + `event: change\ndata: ${JSON.stringify({ head: 'h2', what: CHANGE, at: new Date().toISOString(), ...(bridge.changeEntries ? { entries: bridge.changeEntries } : {}) })}\n\n`;
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body });
         }
         return route.fulfill({ status: 404, headers: cors, body: '' });
@@ -210,6 +211,38 @@ test.describe('the research history (/log)', () => {
         const ov = page.locator('#research-overview');
         await expect(ov.locator('.research-overview__group-head')).toHaveCount(20);
         await expect(ov.locator('.research-overview__older')).toHaveCount(1);
+    });
+});
+
+test.describe('the research says it in its language (text)', () => {
+    test('the history shows the text, hides a commit with nothing to say, links the people', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 }, (b) => {
+            b.events = false;
+            b.log = { entries: [
+                { head: 'h3', at: new Date(Date.now() - 2 * 60_000).toISOString(), what: ['N0010 closed: T0200 · output/tree.ged'], task: 'T0200 Křty', text: [] },
+                { head: 'h2', at: new Date(Date.now() - 3 * 60_000).toISOString(), what: ['+P0004 Ludmila /Víšková/'], task: 'T0200 Křty', text: ['Nová osoba: Jan Víšek (*1865) [P0012]'] },
+            ] };
+        });
+        const rows = page.locator('#live-panel .live-changes li');
+        await expect(rows).toHaveCount(1);
+        await expect(rows.first()).toContainText('Nová osoba: Jan Víšek (*1865)');
+        await expect(rows.first()).not.toContainText('[P0012]');
+        await expect(rows.first().locator('.live-person-link')).toHaveText('Jan Víšek');
+        await page.locator('#live-panel .live-panel-expand').click();
+        // The count comes from what the commit added ("+P…"), not from the words.
+        await expect(page.locator('#research-overview .research-overview__cell-value').nth(1)).toHaveText('+1 person');
+    });
+
+    test('a live change groups by the task of each of its commits', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 }, (b) => {
+            b.changeEntries = [
+                { head: 'h2', at: new Date().toISOString(), what: ['+S0031 Sčítání lidu 1880'], task: 'T0300 Sčítání', text: ['Záznam z pramene: Sčítání lidu 1880'] },
+                { head: 'h1b', at: new Date(Date.now() - 60_000).toISOString(), what: ['N0020 closed: T0299'], task: 'T0299 Matriky', text: ['Hotovo: Matriky'] },
+            ];
+        });
+        await page.locator('#live-panel .live-panel-expand').click();
+        const ov = page.locator('#research-overview');
+        await expect(ov.locator('.research-overview__group-title')).toHaveText(['T0300 Sčítání', 'T0299 Matriky']);
     });
 });
 

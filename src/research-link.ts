@@ -594,6 +594,8 @@ export interface LiveChange {
     head: string;
     what: string[];
     at: string;
+    /** The new commits, as /log gives them (a newer research): each with its task and text. */
+    entries?: LiveLogEntry[];
 }
 
 const asRecord = (v: unknown): Record<string, unknown> | null =>
@@ -713,6 +715,12 @@ export interface LiveLogEntry {
     what: string[];
     /** The task it was done for ('' = none said). */
     task: string;
+    /**
+     * What it did in the research's language, line by line ("Nová osoba: Jan
+     * Víšek (*1865) [P0012]"); empty: nothing worth saying (don't show it).
+     * Absent from an older research (then `what` is shown).
+     */
+    text?: string[];
 }
 
 /** Most history entries taken from the bridge. */
@@ -732,7 +740,8 @@ export function sanitizeLiveLog(value: unknown): LiveLogEntry[] | null {
         const at = cleanText(e.at, 40);
         const what = Array.isArray(e.what) ? e.what.slice(0, MAX_CHANGE_LINES).map(w => cleanText(w)).filter(Boolean) : [];
         if (!Number.isFinite(Date.parse(at)) || what.length === 0) continue;
-        out.push({ head: cleanText(e.head, 80), at, what, task: cleanText(e.task) });
+        const text = Array.isArray(e.text) ? e.text.slice(0, MAX_CHANGE_LINES).map(t => cleanText(t)).filter(Boolean) : null;
+        out.push({ head: cleanText(e.head, 80), at, what, task: cleanText(e.task), ...(text ? { text } : {}) });
     }
     return out;
 }
@@ -752,7 +761,34 @@ export function sanitizeLiveChange(value: unknown): LiveChange | null {
     const what = Array.isArray(r.what)
         ? r.what.slice(0, MAX_CHANGE_LINES).map(w => cleanText(w)).filter(Boolean)
         : [];
-    return { head: cleanText(r.head, 80), what, at: cleanText(r.at, 40) };
+    const entries = Array.isArray(r.entries) ? sanitizeLiveLog({ entries: r.entries }) : null;
+    return { head: cleanText(r.head, 80), what, at: cleanText(r.at, 40), ...(entries && entries.length > 0 ? { entries } : {}) };
+}
+
+/** People a research text line names ("… [P0019] …"). */
+export function textPersonRefs(line: string): string[] {
+    return [...line.matchAll(/\[(P\d{1,7})\]/g)].map(m => m[1]);
+}
+
+/** A research text line as shown: the "[P0019]" marks go (the names become links). */
+export function textWithoutRefs(line: string): string {
+    return line.replace(/\s*\[P\d{1,7}\]/g, '').trim();
+}
+
+/**
+ * The filter kind of a text line of a commit. The text is in the research's
+ * language, so the commit's `what` decides: one kind there is the kind of
+ * every line; a mixed commit: a line naming a person is about people (a story
+ * line when the commit wrote a story), else its sources, else other.
+ */
+export function textKind(line: string, what: readonly string[]): LiveChangeKind {
+    const kinds = new Set(what.map(changeKind).filter(k => k !== 'other'));
+    if (kinds.size === 1) return [...kinds][0];
+    if (kinds.size === 0) return 'other';
+    if (textPersonRefs(line).length > 0) {
+        return kinds.has('stories') && /vyprávění|story|erzählung/i.test(line) ? 'stories' : 'persons';
+    }
+    return kinds.has('sources') ? 'sources' : 'other';
 }
 
 /** Parse an event's JSON payload; null when it is not JSON. */
@@ -797,7 +833,8 @@ export function personsByRefs(data: StromData, refs: string[]): PersonId[] {
  * are named. Lines of any other shape keep their wording.
  */
 export function humanizeChange(line: string, nameOf?: (ref: string) => string | null, words?: ChangeWords): string {
-    const plain = line.replace(/\/([^/]*)\//g, '$1').replace(/\s+/g, ' ').trim();
+    // A GEDCOM surname ("Marie /Víšková/") loses its slashes; a path ("output/tree.ged") keeps them.
+    const plain = line.replace(/(^|\s)\/([^/\s][^/]*)\/(?=$|[\s,.;:·)])/g, '$1$2').replace(/\s+/g, ' ').trim();
     if (!words) return plain;
     const name = (ref: string): string => nameOf?.(ref) || ref;
     const facts = (text: string): string => text

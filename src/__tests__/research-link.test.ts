@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { changeKind, changeAdds, sanitizeLiveLog,
+import { changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs,
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
     decideResearchOpen, stabilizeIds, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, extractChangedRefs, personsByRefs, humanizeChange,
@@ -322,6 +322,35 @@ describe('bridge messages are untrusted', () => {
         expect(sanitizeWorking('x')).toEqual([]);
         expect(parseEventData('{bad json')).toBeNull();
         expect(normalizeResearchId(42)).toBeNull();
+    });
+
+    it('a newer research: the text of each commit, and the commits of a change', () => {
+        const [e] = sanitizeLiveLog({ entries: [{ head: 'h1', at: '2026-09-29T22:37:09+02:00', task: 'T0154 Sňatek', what: ['+S0171 source'], text: ['Záznam z pramene: Sňatek 1893', 7, ''] }] })!;
+        expect(e.text).toEqual(['Záznam z pramene: Sňatek 1893']);
+        // An empty text is kept empty (nothing to show), an older research has none.
+        expect(sanitizeLiveLog({ entries: [{ at: '2026-09-29T22:00:00Z', what: ['x'], text: [] }] })![0].text).toEqual([]);
+        expect(sanitizeLiveLog({ entries: [{ at: '2026-09-29T22:00:00Z', what: ['x'] }] })![0].text).toBeUndefined();
+        const c = sanitizeLiveChange({ head: 'h2', what: ['a'], at: '2026-09-29T22:38:00Z', entries: [{ head: 'h2', at: '2026-09-29T22:38:00Z', what: ['a'], task: 'T1 x', text: ['A'] }] })!;
+        expect(c.entries).toEqual([{ head: 'h2', at: '2026-09-29T22:38:00Z', what: ['a'], task: 'T1 x', text: ['A'] }]);
+        expect(sanitizeLiveChange({ head: 'h3', what: ['a'], entries: 'x' })!.entries).toBeUndefined();
+    });
+
+    it('text lines: the people they name, shown without the marks, and their filter', () => {
+        const line = 'Upřesněno: František Strach (*1869) [P0019] – narození: 2. 10. 1869';
+        expect(textPersonRefs(line)).toEqual(['P0019']);
+        expect(textWithoutRefs(line)).toBe('Upřesněno: František Strach (*1869) – narození: 2. 10. 1869');
+        expect(textKind('Nové snímky: Buštěhrad 17 (obr. 16–21)', ['+M2694 image 21 of B0059'])).toBe('other');
+        expect(textKind('Záznam z pramene: Sňatek', ['+S0171 source'])).toBe('sources');
+        // A mixed commit: a line naming a person is about people, a story line about the story.
+        const mixed = ['+S0171 source', 'E0100 BIRT 1869 ← S0171', 'P0019 _STORY draft'];
+        expect(textKind(line, mixed)).toBe('persons');
+        expect(textKind('Vyprávění: František Strach [P0019]', mixed)).toBe('stories');
+        expect(textKind('Záznam z pramene: Sňatek', mixed)).toBe('sources');
+    });
+
+    it('a path in a line keeps its slashes, a GEDCOM surname loses them', () => {
+        expect(humanizeChange('N0131 closed: T0159 · output/tree.ged, output/tree-strom.ged')).toBe('N0131 closed: T0159 · output/tree.ged, output/tree-strom.ged');
+        expect(humanizeChange('+P0101 Marie /Nováková/ ← S0202')).toBe('+P0101 Marie Nováková ← S0202');
     });
 
     it('cleans a change and caps its lines', () => {

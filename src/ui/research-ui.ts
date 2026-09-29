@@ -40,7 +40,7 @@ import {
     LiveQueueItem, LiveSpend, LiveIntake,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { changeKind, changeAdds, sanitizeLiveLog, LiveChangeKind, LiveLogEntry } from '../research-link.js';
+import { changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry } from '../research-link.js';
 import { ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import { iconSvg } from '../icons.js';
 import { SettingsManager } from '../settings.js';
@@ -71,8 +71,14 @@ export interface LiveChangeItem {
     task: string;
     /** The research version it came with ('' = unknown). */
     head: string;
-    /** What it adds (today's "+N people, +N sources"). */
-    adds: 'person' | 'source' | null;
+}
+
+/** What one research commit added (the "+N people, +N sources" of the last 24 hours). */
+export interface LiveAdds {
+    head: string;
+    at: string;
+    persons: number;
+    sources: number;
 }
 
 /** The panel's sections (each folds on its own). */
@@ -108,6 +114,8 @@ export interface LiveSession {
     /** The changes come from the research's own history (/log), not only from following. */
     logged: boolean;
     changes: LiveChangeItem[];
+    /** Every commit seen (also those with nothing to show), newest first. */
+    adds: LiveAdds[];
     ended: boolean;
     collapsed: boolean;
     /** Changes already seen when the panel was collapsed (for "N new"). */
@@ -189,6 +197,39 @@ export function liveSection(host: HTMLElement, o: {
 }
 
 /** A change's text with the people in it as links (a click shows them in the tree). */
+/**
+ * The rows of one research commit, newest line first: its text in the
+ * research's language (a newer research; an empty text shows nothing), else
+ * its `what` lines put into words here.
+ */
+function entryItems(e: LiveLogEntry, data: StromData | null, nameOf: (ref: string) => string | null): LiveChangeItem[] {
+    const base = { at: e.at, task: e.task, head: e.head };
+    const ids = (refs: string[]): PersonId[] => (data && refs.length > 0 ? personsByRefs(data, refs) : []);
+    if (e.text) {
+        return [...e.text].reverse().map(line => ({
+            ...base, text: textWithoutRefs(line), personIds: ids(textPersonRefs(line)), kind: textKind(line, e.what),
+        }));
+    }
+    return [...e.what].reverse().map(line => ({
+        ...base,
+        text: humanizeChange(line, nameOf, strings.research.changeWords),
+        personIds: ids(extractChangedRefs([line])),
+        kind: changeKind(line),
+    }));
+}
+
+/** What a commit added: its `+P…` and `+S…` lines (whatever the text says). */
+function entryAdds(e: LiveLogEntry): LiveAdds {
+    let persons = 0;
+    let sources = 0;
+    for (const line of e.what) {
+        const a = changeAdds(line);
+        if (a === 'person') persons++;
+        else if (a === 'source') sources++;
+    }
+    return { head: e.head, at: e.at, persons, sources };
+}
+
 export function appendChangeText(host: HTMLElement, c: LiveChangeItem, show: (id: PersonId) => void): void {
     const names: { id: PersonId; name: string }[] = [];
     for (const id of c.personIds) {
@@ -1342,6 +1383,7 @@ export const researchUiMethods = uiModule({
                 overview: false,
                 logged: false,
                 changes: [],
+                adds: [],
                 ended: false,
                 collapsed: isMobile(),
                 seenChanges: 0,
@@ -1478,22 +1520,26 @@ export const researchUiMethods = uiModule({
         };
         // An older research does not say when it changed: a change says it.
         if (change.at && Date.parse(change.at) > (Date.parse(s.headAt) || 0)) s.headAt = change.at;
-        const task = s.working[0]?.task ?? '';
         // Already there from the research's history.
-        if (change.head && s.changes.some(c => c.head === change.head)) {
+        if (change.head && s.adds.some(a => a.head === change.head)) {
             this.renderLivePanel();
             return;
         }
-        const items: LiveChangeItem[] = change.what.map((line) => ({
-            text: humanizeChange(line, nameOf, strings.research.changeWords),
-            at: change.at || new Date().toISOString(),
-            personIds: personsByRefs(data, extractChangedRefs([line])),
-            kind: changeKind(line),
-            task,
-            head: change.head,
-            adds: changeAdds(line),
-        }));
-        s.changes = [...items.reverse(), ...s.changes].slice(0, MAX_CHANGES);
+        // A newer research sends the commits as /log does (each with its task
+        // and text); an older one only the lines (the task: whatever runs now).
+        const entries: LiveLogEntry[] = change.entries ?? [{
+            head: change.head, at: change.at || new Date().toISOString(), what: change.what, task: s.working[0]?.task ?? '',
+        }];
+        const known = new Set(s.adds.map(a => a.head));
+        const items: LiveChangeItem[] = [];
+        const adds: LiveAdds[] = [];
+        for (const e of entries) {
+            if (e.head && known.has(e.head)) continue;
+            items.push(...entryItems(e, data, nameOf));
+            adds.push(entryAdds(e));
+        }
+        s.changes = [...items, ...s.changes].slice(0, MAX_CHANGES);
+        s.adds = [...adds, ...s.adds].slice(0, MAX_CHANGES);
         if (DataManager.getCurrentTreeId() === s.treeId) {
             TreeRenderer.setChangedIds(new Set(changedIds));
             // The highlight marks what just came; it goes after a while.
@@ -1526,22 +1572,10 @@ export const researchUiMethods = uiModule({
             const p = id && data ? data.persons[id] : undefined;
             return p ? `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() || null : null;
         };
-        const items: LiveChangeItem[] = [];
-        for (const e of entries) {
-            for (const line of [...e.what].reverse()) {
-                items.push({
-                    text: humanizeChange(line, nameOf, strings.research.changeWords),
-                    at: e.at,
-                    personIds: data ? personsByRefs(data, extractChangedRefs([line])) : [],
-                    kind: changeKind(line),
-                    task: e.task,
-                    head: e.head,
-                    adds: changeAdds(line),
-                });
-            }
-        }
+        const items = entries.flatMap(e => entryItems(e, data, nameOf));
         const fresh = items.length - s.changes.length;
         s.changes = items.slice(0, MAX_CHANGES);
+        s.adds = entries.map(entryAdds);
         // Nothing new to announce on the first load: the history is not news.
         if (!s.logged) {
             s.seenChanges = s.changes.length;

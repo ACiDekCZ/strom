@@ -297,9 +297,9 @@ export const researchOverviewMethods = uiModule({
         }
         if (s.logged) {
             // The research's own history: what it added in the last 24 hours.
-            const recent = recentChanges(s.changes);
-            cell(L.last24h, L.plusPersons(recent.filter(c => c.adds === 'person').length),
-                L.plusSourcesToday(recent.filter(c => c.adds === 'source').length));
+            const recent = s.adds.filter(a => Date.now() - (Date.parse(a.at) || 0) < RECENT_MS);
+            cell(L.last24h, L.plusPersons(recent.reduce((n, a) => n + a.persons, 0)),
+                L.plusSourcesToday(recent.reduce((n, a) => n + a.sources, 0)));
         } else {
             cell(L.sinceWatching, L.plusPersons(Math.max(0, persons - s.startPersons)),
                 L.plusSources(Math.max(0, sources - s.startSources), hhmm(s.startedAt)));
