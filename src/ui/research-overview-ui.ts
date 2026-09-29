@@ -264,8 +264,17 @@ export const researchOverviewMethods = uiModule({
         lastEl?.classList.add('research-overview__cell-sub');
         const hover = s.head ? L.versionTitle(s.head.slice(0, 7)) : '';
         cell(L.state, state, lastEl ?? '', stateCls, [lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
-        cell(L.sinceWatching, L.plusPersons(Math.max(0, persons - s.startPersons)),
-            L.plusSources(Math.max(0, sources - s.startSources), hhmm(s.startedAt)));
+        if (s.logged) {
+            // The research's own history: what it added today.
+            const start = new Date();
+            start.setHours(0, 0, 0, 0);
+            const today = s.changes.filter(c => Date.parse(c.at) >= start.getTime());
+            cell(L.today, L.plusPersons(today.filter(c => c.adds === 'person').length),
+                L.plusSourcesToday(today.filter(c => c.adds === 'source').length));
+        } else {
+            cell(L.sinceWatching, L.plusPersons(Math.max(0, persons - s.startPersons)),
+                L.plusSources(Math.max(0, sources - s.startSources), hhmm(s.startedAt)));
+        }
         if (s.spend && mode !== 'sheet') {
             let amount: string;
             try {

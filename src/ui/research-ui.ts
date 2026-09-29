@@ -40,7 +40,7 @@ import {
     LiveQueueItem, LiveSpend, LiveIntake,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { changeKind, LiveChangeKind } from '../research-link.js';
+import { changeKind, changeAdds, sanitizeLiveLog, LiveChangeKind, LiveLogEntry } from '../research-link.js';
 import { ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import { iconSvg } from '../icons.js';
 import { SettingsManager } from '../settings.js';
@@ -69,6 +69,10 @@ export interface LiveChangeItem {
     kind: LiveChangeKind;
     /** The agent's task when it came ('' = none known). */
     task: string;
+    /** The research version it came with ('' = unknown). */
+    head: string;
+    /** What it adds (today's "+N people, +N sources"). */
+    adds: 'person' | 'source' | null;
 }
 
 /** The panel's sections (each folds on its own). */
@@ -101,6 +105,8 @@ export interface LiveSession {
     startSources: number;
     /** The Research overview is open instead of the small panel. */
     overview: boolean;
+    /** The changes come from the research's own history (/log), not only from following. */
+    logged: boolean;
     changes: LiveChangeItem[];
     ended: boolean;
     collapsed: boolean;
@@ -1316,6 +1322,7 @@ export const researchUiMethods = uiModule({
                 startPersons: Object.values(data.persons).filter(p => !p.isPlaceholder).length,
                 startSources: Object.keys(data.sources ?? {}).length,
                 overview: false,
+                logged: false,
                 changes: [],
                 ended: false,
                 collapsed: isMobile(),
@@ -1332,6 +1339,7 @@ export const researchUiMethods = uiModule({
             this.renderLivePanel();
             this.refreshActionMenuBadges();
             this.connectLiveEvents(live);
+            void this.fetchLiveLog(live);
         });
     },
 
@@ -1355,6 +1363,8 @@ export const researchUiMethods = uiModule({
             s.failures = 0;
             const status = sanitizeLiveStatus(payload(e));
             if (status) this.onLiveStatus(s, status);
+            // After a reconnect: what happened meanwhile, from the research's history.
+            if (s.logged) void this.fetchLiveLog(s);
         });
         es.addEventListener('change', (e) => {
             s.failures = 0;
@@ -1451,12 +1461,19 @@ export const researchUiMethods = uiModule({
         // An older research does not say when it changed: a change says it.
         if (change.at && Date.parse(change.at) > (Date.parse(s.headAt) || 0)) s.headAt = change.at;
         const task = s.working[0]?.task ?? '';
+        // Already there from the research's history.
+        if (change.head && s.changes.some(c => c.head === change.head)) {
+            this.renderLivePanel();
+            return;
+        }
         const items: LiveChangeItem[] = change.what.map((line) => ({
             text: humanizeChange(line, nameOf, strings.research.changeWords),
             at: change.at || new Date().toISOString(),
             personIds: personsByRefs(data, extractChangedRefs([line])),
             kind: changeKind(line),
             task,
+            head: change.head,
+            adds: changeAdds(line),
         }));
         s.changes = [...items.reverse(), ...s.changes].slice(0, MAX_CHANGES);
         if (DataManager.getCurrentTreeId() === s.treeId) {
@@ -1468,6 +1485,54 @@ export const researchUiMethods = uiModule({
                 if (live === s) TreeRenderer.setChangedIds(null);
             }, HIGHLIGHT_MS);
         }
+        this.renderLivePanel();
+    },
+
+    /**
+     * The research's own history (a bridge of Strom Research 1.8+): the
+     * changes as the research made them, not only those seen while following.
+     * Replaces the list; an older bridge (404) leaves following as it was.
+     */
+    async fetchLiveLog(s: LiveSession): Promise<void> {
+        let entries: LiveLogEntry[] | null = null;
+        try {
+            const res = await fetchWithTimeout(s.bridge.log, 10000);
+            if (res.ok) entries = sanitizeLiveLog(await res.json());
+        } catch {
+            return;
+        }
+        if (!entries || s.ended || live !== s) return;
+        const data = DataManager.getCurrentTreeId() === s.treeId ? DataManager.getData() : null;
+        const nameOf = (ref: string): string | null => {
+            const [id] = data ? personsByRefs(data, [ref]) : [];
+            const p = id && data ? data.persons[id] : undefined;
+            return p ? `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() || null : null;
+        };
+        const items: LiveChangeItem[] = [];
+        for (const e of entries) {
+            for (const line of [...e.what].reverse()) {
+                items.push({
+                    text: humanizeChange(line, nameOf, strings.research.changeWords),
+                    at: e.at,
+                    personIds: data ? personsByRefs(data, extractChangedRefs([line])) : [],
+                    kind: changeKind(line),
+                    task: e.task,
+                    head: e.head,
+                    adds: changeAdds(line),
+                });
+            }
+        }
+        const fresh = items.length - s.changes.length;
+        s.changes = items.slice(0, MAX_CHANGES);
+        // Nothing new to announce on the first load: the history is not news.
+        if (!s.logged) {
+            s.seenChanges = s.changes.length;
+            s.seenInSection = s.changes.length;
+        } else if (fresh < 0) {
+            s.seenChanges = Math.min(s.seenChanges, s.changes.length);
+        }
+        s.logged = true;
+        if (entries[0] && (Date.parse(entries[0].at) || 0) > (Date.parse(s.headAt) || 0)) s.headAt = entries[0].at;
         this.renderLivePanel();
     },
 

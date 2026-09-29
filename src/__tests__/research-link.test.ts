@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { changeKind,
+import { changeKind, changeAdds, sanitizeLiveLog,
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
     decideResearchOpen, stabilizeIds, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, extractChangedRefs, personsByRefs, humanizeChange,
@@ -165,13 +165,14 @@ describe('parseLoopbackUrl — only this computer', () => {
 });
 
 describe('parseLiveBridge', () => {
-    it('builds the three endpoints from the bridge address', () => {
+    it('builds the endpoints from the bridge address', () => {
         const b = parseLiveBridge('http://127.0.0.1:5123/0123456789abcdef0123456789abcdef/');
         expect(b).toEqual({
             base: 'http://127.0.0.1:5123/0123456789abcdef0123456789abcdef',
             status: 'http://127.0.0.1:5123/0123456789abcdef0123456789abcdef/status',
             ged: 'http://127.0.0.1:5123/0123456789abcdef0123456789abcdef/tree.ged',
             events: 'http://127.0.0.1:5123/0123456789abcdef0123456789abcdef/events',
+            log: 'http://127.0.0.1:5123/0123456789abcdef0123456789abcdef/log',
         });
     });
 
@@ -674,5 +675,26 @@ describe('headAt in the live status', () => {
         expect(sanitizeLiveStatus({ ...base, headAt: '2026-09-29T14:36:00+02:00' })!.headAt).toBe('2026-09-29T14:36:00+02:00');
         expect(sanitizeLiveStatus({ ...base, headAt: 'yesterday' })!.headAt).toBe('');
         expect(sanitizeLiveStatus(base)!.headAt).toBe('');
+    });
+});
+
+describe('the research history (/log)', () => {
+    it('keeps entries with a time and lines, newest first; drops the rest', () => {
+        const log = sanitizeLiveLog({ entries: [
+            { head: 'a1', at: '2026-09-29T14:36:00+02:00', what: ['+P0006 Karel /Víšek/', ''], task: 'T0134 Úmrtí' },
+            { head: 'a0', at: 'nope', what: ['x'] },
+            { head: 'z', at: '2026-09-29T10:00:00Z', what: [] },
+            'junk',
+        ] })!;
+        expect(log).toEqual([{ head: 'a1', at: '2026-09-29T14:36:00+02:00', what: ['+P0006 Karel /Víšek/'], task: 'T0134 Úmrtí' }]);
+        expect(sanitizeLiveLog({ entries: 'no' })).toBeNull();
+        expect(sanitizeLiveLog(null)).toBeNull();
+    });
+
+    it('changeAdds: a new person or source', () => {
+        expect(changeAdds('+P0006 Karel /Víšek/ · E0006 BIRT 1868')).toBe('person');
+        expect(changeAdds('+S0031 Sčítání lidu 1880')).toBe('source');
+        expect(changeAdds('P0012 E0007 BIRT 1865 ← S0012')).toBeNull();
+        expect(changeAdds('F0001 +child P0006')).toBeNull();
     });
 });

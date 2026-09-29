@@ -303,6 +303,8 @@ export interface LiveBridgeUrls {
     status: string;
     ged: string;
     events: string;
+    /** The research's own history (newest first); a bridge before 1.8 answers 404. */
+    log: string;
 }
 
 /** Endpoints of the bridge at `raw` (`http://127.0.0.1:<port>/<token>`), or null. */
@@ -316,6 +318,7 @@ export function parseLiveBridge(raw: unknown): LiveBridgeUrls | null {
         status: `${base}/status`,
         ged: `${base}/tree.ged`,
         events: `${base}/events`,
+        log: `${base}/log`,
     };
 }
 
@@ -696,6 +699,43 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         spend: sanitizeSpend(r.spend),
         lastIntake: sanitizeIntake(r.lastIntake),
     };
+}
+
+/** One version of the research in its history (a commit): when, what, on which task. */
+export interface LiveLogEntry {
+    head: string;
+    at: string;
+    what: string[];
+    /** The task it was done for ('' = none said). */
+    task: string;
+}
+
+/** Most history entries taken from the bridge. */
+const MAX_LOG = 500;
+
+/** The bridge's /log (`{ entries: [...] }`, newest first). Untrusted input: bad entries are dropped. */
+export function sanitizeLiveLog(value: unknown): LiveLogEntry[] | null {
+    const r = asRecord(value);
+    if (!r || !Array.isArray(r.entries)) return null;
+    const out: LiveLogEntry[] = [];
+    for (const item of r.entries) {
+        if (out.length >= MAX_LOG) break;
+        const e = asRecord(item);
+        if (!e) continue;
+        const at = cleanText(e.at, 40);
+        const what = Array.isArray(e.what) ? e.what.slice(0, MAX_ITEMS).map(w => cleanText(w)).filter(Boolean) : [];
+        if (!Number.isFinite(Date.parse(at)) || what.length === 0) continue;
+        out.push({ head: cleanText(e.head, 80), at, what, task: cleanText(e.task) });
+    }
+    return out;
+}
+
+/** What a change line adds: a person ("+P0006 …"), a source ("+S0031 …"), or nothing new. */
+export function changeAdds(line: string): 'person' | 'source' | null {
+    const t = line.trim();
+    if (/^\+P\d{2,}\b/.test(t)) return 'person';
+    if (/^\+S\d{2,}\b/.test(t)) return 'source';
+    return null;
 }
 
 /** A `change` event. Untrusted input. */

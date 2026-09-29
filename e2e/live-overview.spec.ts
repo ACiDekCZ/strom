@@ -46,10 +46,11 @@ const CHANGE = [
     'F0001 +child P0006',
 ];
 
-interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number }
+interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean }
 
 /** A bridge that sends one change of six lines, then keeps quiet. */
-async function follow(page: Page, size: { width: number; height: number } = { width: 1440, height: 900 }): Promise<Bridge> {
+async function follow(page: Page, size: { width: number; height: number } = { width: 1440, height: 900 },
+    setup: (b: Bridge) => void = () => {}): Promise<Bridge> {
     await page.setViewportSize(size);
     await page.addInitScript((links) => {
         if (sessionStorage.getItem('seeded')) return;
@@ -62,7 +63,10 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
             { id: 'T0005', what: 'Potvrďte otce Jana', at: new Date().toISOString() },
         ],
         gedCalls: 0,
+        log: null,
+        events: true,
     };
+    setup(bridge);
     const status = () => ({
         tree: { id: UUID, name: 'Víškovi' }, head: bridge.gedCalls > 1 ? 'h2' : 'h1', persons: 3,
         working: [{ who: 'agent-matriky', since: new Date(Date.now() - 16 * 60_000).toISOString(), task: 'Sčítání 1921', person: 'P0012' }],
@@ -80,7 +84,11 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
             bridge.gedCalls++;
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: ged(bridge.gedCalls > 1) });
         }
+        if (path.endsWith('/log') && bridge.log) {
+            return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(bridge.log) });
+        }
         if (path.endsWith('/events')) {
+            if (!bridge.events) return new Promise(() => {});
             const body = `event: hello\ndata: ${JSON.stringify(status())}\n\n`
                 + `event: change\ndata: ${JSON.stringify({ head: 'h2', what: CHANGE, at: new Date().toISOString() })}\n\n`;
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body });
@@ -141,6 +149,32 @@ test.describe('small live panel', () => {
         await expect(head(page, '#live-panel', 'Waiting for you · 2')).toHaveAttribute('aria-expanded', 'false');
         bridge.waiting = [...bridge.waiting, { id: 'T0009', what: 'Nový úkol', at: new Date().toISOString() }];
         await expect(head(page, '#live-panel', 'Waiting for you · 3')).toHaveAttribute('aria-expanded', 'true', { timeout: 15000 });
+    });
+});
+
+test.describe('the research history (/log)', () => {
+    test('opening the app shows what really happened, not only what came while watching', async ({ page }) => {
+        const hour = 3600_000;
+        await follow(page, { width: 1440, height: 900 }, (b) => {
+            b.events = false;
+            b.log = { entries: [
+                { head: 'h1', at: new Date(Date.now() - 5 * 60_000).toISOString(), what: ['+S0031 Sčítání lidu 1880', 'P0012 _STORY navrh'], task: 'T0134 Úmrtí Václava' },
+                { head: 'h0', at: new Date(Date.now() - 30 * hour).toISOString(), what: ['+P0099 Starý /Záznam/'], task: '' },
+            ] };
+        });
+        const panel = page.locator('#live-panel');
+        await expect(panel.locator('.live-changes li')).toHaveCount(3);
+        // Newest first; within one version its last line first (as the changes that come live).
+        await expect(panel.locator('.live-changes li')).toContainText(['Jan Víšek', 'Sčítání lidu 1880', 'Starý Záznam']);
+        // The history is not news: no "N new".
+        await expect(panel.locator('.live-section__sum--new')).toHaveCount(0);
+        await panel.locator('.live-panel-expand').click();
+        const ov = page.locator('#research-overview');
+        await expect(ov.locator('.research-overview__cell-label').nth(1)).toHaveText('Today');
+        await expect(ov.locator('.research-overview__cell-value').nth(1)).toHaveText('+0 people');
+        await expect(ov.locator('.research-overview__cell-sub').nth(1)).toHaveText('+1 source');
+        await expect(ov.locator('.research-overview__cell-sub').first()).toHaveText(/^last change 5 min/);
+        await expect(ov.locator('.research-overview__group-title').first()).toHaveText('T0134 Úmrtí Václava');
     });
 });
 
