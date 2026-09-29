@@ -277,6 +277,19 @@ export const evidenceUiMethods = uiModule({
             next.textContent = s.next;
             next.onclick = () => this.evidenceNext();
             pill.append(next);
+            // Going through the people without a (birth) source: cite right here.
+            const current = evidence.index >= 0 ? evidence.ids[evidence.index] : undefined;
+            const kind = evidence.kind;
+            if (current && (kind === 'birthNoSource' || kind === 'noSource') && this.canCiteOnPerson(current)) {
+                const cite = document.createElement('button');
+                cite.type = 'button';
+                cite.className = 'evidence-pill-cite';
+                cite.textContent = s.citeAction;
+                cite.onclick = () => (kind === 'birthNoSource'
+                    ? this.showSourcePickerForPersonFact(current, 'birth')
+                    : this.showSourcePickerForPersonId(current, true));
+                pill.append(cite);
+            }
         }
         const close = document.createElement('button');
         close.type = 'button';

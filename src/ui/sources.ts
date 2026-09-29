@@ -11,10 +11,12 @@
  */
 
 import { DataManager, CitedFact, personCitationField } from '../data.js';
+import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
 import { SettingsManager } from '../settings.js';
 import { PersonId, PartnershipId, Source, SourceExcerpt, MAX_EXCERPTS_UI } from '../types.js';
 import { strings } from '../strings.js';
+import { personEvidence } from '../evidence-level.js';
 import { uiModule } from './module.js';
 import { emptyStateHtml } from './empty-state.js';
 import { autoGrowAll } from './autogrow.js';
@@ -340,7 +342,12 @@ export const sourcesMethods = uiModule({
                 const year = yearOf(ev.date);
                 return `${personName(ref.personId)} — ${eventTypeLabel(ev)}${year !== null ? ` (${year})` : ''}`;
             }
-            return ref.fact ? `${personName(ref.personId)} — ${strings.events.types[ref.fact]}` : personName(ref.personId);
+            if (ref.fact) {
+                const p = DataManager.getPerson(ref.personId);
+                const year = yearOf(ref.fact === 'birth' ? p?.birthDate : p?.deathDate);
+                return `${personName(ref.personId)} — ${strings.events.types[ref.fact]}${year !== null ? ` (${year})` : ''}`;
+            }
+            return personName(ref.personId);
         }).filter(Boolean);
         if (cites.length > 0) {
             chunks.push(`<section><h3 class="viewer-section-title">${esc(s.viewerCites)}</h3>
@@ -992,9 +999,14 @@ export const sourcesMethods = uiModule({
         });
     },
 
-    /** Refresh whichever citation chip lists are currently on screen. */
+    /** Refresh whichever citation chip lists are currently on screen (and the cards: their evidence stripes). */
     refreshCitationChips(): void {
-        if (this.currentId) this.renderPersonSourcesChips();
+        TreeRenderer.render();
+        if (this.currentId) {
+            this.renderPersonSourcesChips();
+            this.renderFactSourcesChips('birth');
+            this.renderFactSourcesChips('death');
+        }
         if (this.currentId && this.editingEventId) this.renderEventSourcesChips();
         if (document.getElementById('person-sources-modal')) this.renderPersonSourcesDialog();
     },
@@ -1012,16 +1024,36 @@ export const sourcesMethods = uiModule({
             { personId: this.currentId, eventId: this.editingEventId });
     },
 
+    /** The chips under the birth or death fields of the person being edited. */
+    renderFactSourcesChips(fact: CitedFact): void {
+        if (!this.currentId) return;
+        const person = DataManager.getPerson(this.currentId);
+        this.renderSourceChips(`${fact}-sources-chips`, person?.[personCitationField(fact)],
+            fact === 'birth' ? 'unciteBirthSource' : 'unciteDeathSource', { personId: this.currentId, fact });
+    },
+
+    unciteBirthSource(sourceId: string): void {
+        if (!this.currentId) return;
+        DataManager.uncitePerson(this.currentId, sourceId, 'birth');
+        this.refreshCitationChips();
+    },
+
+    unciteDeathSource(sourceId: string): void {
+        if (!this.currentId) return;
+        DataManager.uncitePerson(this.currentId, sourceId, 'death');
+        this.refreshCitationChips();
+    },
+
     uncitePersonSource(sourceId: string): void {
         if (!this.currentId) return;
         DataManager.uncitePerson(this.currentId, sourceId);
-        this.renderPersonSourcesChips();
+        this.refreshCitationChips();
     },
 
     unciteEventSource(sourceId: string): void {
         if (!this.currentId || !this.editingEventId) return;
         DataManager.unciteEvent(this.currentId, this.editingEventId, sourceId);
-        this.renderEventSourcesChips();
+        this.refreshCitationChips();
     },
 
     // ==================== SOURCE PICKER ====================
@@ -1031,10 +1063,65 @@ export const sourcesMethods = uiModule({
         this.showSourcePickerForPersonId(this.currentId);
     },
 
-    /** Cite on a person without the edit dialog (the person's "Sources" dialog). */
-    showSourcePickerForPersonId(personId: PersonId): void {
-        this.citationContext = { personId };
+    /**
+     * Cite on a person without the edit dialog (the person's "Sources" dialog,
+     * tree health). `choose`: the picker asks what the source supports — the
+     * person, the birth or the death — starting with the birth while it has none.
+     */
+    showSourcePickerForPersonId(personId: PersonId, choose = false): void {
+        let fact: CitedFact | undefined;
+        if (choose) {
+            const p = DataManager.getPerson(personId);
+            const ev = p ? personEvidence(p, DataManager.getData()) : null;
+            if (ev?.hasBirth && !ev.birthCited) fact = 'birth';
+        }
+        this.citationContext = { personId, ...(fact ? { fact } : {}) };
+        this.openSourcePicker(choose);
+    },
+
+    /** "+ source" under the birth or death fields of the person being edited. */
+    showSourcePickerForFact(fact: CitedFact): void {
+        if (!this.currentId) return;
+        this.citationContext = { personId: this.currentId, fact };
         this.openSourcePicker();
+    },
+
+    /** Cite the birth (or, with a choice, anything) of a person from outside their dialog. */
+    showSourcePickerForPersonFact(personId: PersonId, fact: CitedFact): void {
+        this.citationContext = { personId, fact };
+        this.openSourcePicker();
+    },
+
+    /** The "Supports" segment: person / birth / death (death only with a death). */
+    renderSourcePickerFact(): void {
+        const box = document.getElementById('source-picker-fact');
+        const seg = document.getElementById('source-picker-fact-segment');
+        const ctx = this.citationContext;
+        if (!box || !seg) return;
+        if (!this.citationFactChoice || !ctx || 'partnershipId' in ctx || ctx.eventId) {
+            box.hidden = true;
+            return;
+        }
+        box.hidden = false;
+        const p = DataManager.getPerson(ctx.personId);
+        const ev = p ? personEvidence(p, DataManager.getData()) : null;
+        const choices: { fact: CitedFact | undefined; label: string }[] = [
+            { fact: undefined, label: strings.sources.pickerFactPerson },
+            { fact: 'birth', label: strings.events.types.birth },
+            ...(ev?.hasDeath ? [{ fact: 'death' as const, label: strings.events.types.death }] : []),
+        ];
+        seg.innerHTML = choices.map((c, i) => {
+            const on = (ctx.fact ?? undefined) === c.fact;
+            return `<button type="button" class="segment-btn${on ? ' active' : ''}" role="radio" aria-checked="${on}" data-fact-index="${i}">${esc(c.label)}</button>`;
+        }).join('');
+        seg.querySelectorAll<HTMLElement>('[data-fact-index]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const c = choices[Number(btn.dataset.factIndex)];
+                this.citationContext = { personId: ctx.personId, ...(c.fact ? { fact: c.fact } : {}) };
+                this.renderSourcePickerFact();
+                this.renderSourcePickerList();
+            });
+        });
     },
 
     showSourcePickerForEvent(): void {
@@ -1049,7 +1136,9 @@ export const sourcesMethods = uiModule({
         this.openSourcePicker();
     },
 
-    openSourcePicker(): void {
+    openSourcePicker(choose = false): void {
+        this.citationFactChoice = choose;
+        this.renderSourcePickerFact();
         const search = document.getElementById('source-picker-search') as HTMLInputElement | null;
         if (search) {
             search.value = '';

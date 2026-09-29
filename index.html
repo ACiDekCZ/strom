@@ -8407,13 +8407,13 @@
             box-shadow: var(--shadow-lg); font-size: 13px;
         }
         .evidence-pill-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 4px; }
-        .evidence-pill-next, .evidence-pill-close {
+        .evidence-pill-next, .evidence-pill-cite, .evidence-pill-close {
             flex: none; height: 30px; padding: 0 10px; cursor: pointer; border: 0; border-radius: 999px;
             background: none; color: var(--primary); font: inherit; font-size: 13px; font-weight: 500;
         }
         .evidence-pill-close { width: 30px; padding: 0; color: var(--text-light); font-size: 18px; }
-        .evidence-pill-next:hover, .evidence-pill-close:hover { background: var(--hover-bg); }
-        .evidence-pill-next:focus-visible, .evidence-pill-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .evidence-pill-next:hover, .evidence-pill-cite:hover, .evidence-pill-close:hover { background: var(--hover-bg); }
+        .evidence-pill-next:focus-visible, .evidence-pill-cite:focus-visible, .evidence-pill-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         body[data-view-mode="timeline"] .evidence-pill, body[data-view-mode="map"] .evidence-pill { display: none; }
         /* Tablet: same place, wider margins. */
         @media (max-width: 900px) and (min-width: 500px) {
@@ -8426,7 +8426,7 @@
                 left: 16px; right: 80px; transform: none; max-width: none;
             }
             .evidence-pill-label { flex: 1; }
-            .evidence-pill-next, .evidence-pill-close { height: 40px; min-width: 40px; }
+            .evidence-pill-next, .evidence-pill-cite, .evidence-pill-close { height: 40px; min-width: 40px; }
         }
 
         /* Undo toast — paper pill raised after each single user mutation. */
@@ -9354,6 +9354,16 @@
         .sources-empty.empty-block { font-size: inherit; padding: 28px 16px 24px; }
         /* Citation chips */
         .sources-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+        /* Birth / death: "Source [chip ×] [+ source]" on one line under the fields. */
+        .fact-sources { margin-top: 4px; }
+        .fact-sources-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+        .fact-sources-row .sources-chips { margin-bottom: 0; min-width: 0; max-width: 100%; }
+        .fact-sources-row .sources-empty { display: none; }
+        .fact-cite-btn { padding: 4px 10px; font-size: 13px; }
+        @media (max-width: 499px) {
+            .fact-sources-row { flex-direction: column; align-items: flex-start; }
+            .fact-cite-btn { min-height: 44px; }
+        }
         .source-chip {
             display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
             padding: 3px 6px 3px 10px; border-radius: 999px; font-size: 13px;
@@ -9385,6 +9395,15 @@
         #source-picker-modal, #source-editor-modal { z-index: 250; }
         /* Source picker */
         .source-picker-search { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+        /* "Supports: Person / Birth / Death" — only when citing from the person's sources. */
+        .source-picker-fact { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+        .source-picker-fact[hidden] { display: none; }
+        .source-picker-fact-label { font-size: 13px; color: var(--text-light); }
+        .source-picker-fact .segment-btn { padding: 7px 16px; }
+        @media (max-width: 499px) {
+            .source-picker-fact .segment { display: flex; width: 100%; }
+            .source-picker-fact .segment-btn { flex: 1; min-height: 44px; padding: 7px 8px; }
+        }
         .source-picker-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
         .source-picker-item {
             text-align: left; border: 1px solid var(--border-color, #ddd); border-radius: 6px;
@@ -10570,6 +10589,13 @@
                         <input type="text" id="input-birthplace" autocomplete="off" list="places-datalist">
                     </div>
                 </div>
+                <div class="form-group fact-sources" id="birth-sources-group">
+                    <label data-i18n="sources.factRowLabel"></label>
+                    <div class="fact-sources-row">
+                        <div id="birth-sources-chips" class="sources-chips"></div>
+                        <button type="button" class="secondary fact-cite-btn" onclick="window.Strom.UI.showSourcePickerForFact('birth')" data-i18n="sources.citeAdd"></button>
+                    </div>
+                </div>
                 <div id="duplicate-suggest-person" class="duplicate-suggest" style="display:none;"></div>
             </div>
 
@@ -10628,6 +10654,13 @@
                         <div class="form-group">
                             <label for="input-deathplace" data-i18n="labels.deathPlace"></label>
                             <input type="text" id="input-deathplace" autocomplete="off" list="places-datalist">
+                        </div>
+                    </div>
+                    <div class="form-group fact-sources" id="death-sources-group">
+                        <label data-i18n="sources.factRowLabel"></label>
+                        <div class="fact-sources-row">
+                            <div id="death-sources-chips" class="sources-chips"></div>
+                            <button type="button" class="secondary fact-cite-btn" onclick="window.Strom.UI.showSourcePickerForFact('death')" data-i18n="sources.citeAdd"></button>
                         </div>
                     </div>
                     <div class="form-group" id="input-deceased-group">
@@ -10900,6 +10933,10 @@
             <div class="modal-header">
                 <h2 data-i18n="sources.pickTitle"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeSourcePicker()">&times;</button>
+            </div>
+            <div id="source-picker-fact" class="source-picker-fact" hidden>
+                <span class="source-picker-fact-label" data-i18n="sources.pickerFactLabel"></span>
+                <div class="segment" id="source-picker-fact-segment" role="radiogroup" data-i18n-aria-label="sources.pickerFactLabel"></div>
             </div>
             <input type="text" id="source-picker-search" class="source-picker-search" data-i18n-placeholder="sources.searchPlaceholder" autocomplete="off">
             <div id="source-picker-list" class="source-picker-list"></div>

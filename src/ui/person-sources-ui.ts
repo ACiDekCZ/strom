@@ -156,7 +156,7 @@ export const personSourcesMethods = uiModule({
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
         (overlay.querySelector('#person-sources-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#person-sources-close') as HTMLButtonElement).onclick = close;
-        (overlay.querySelector('#person-sources-cite') as HTMLButtonElement).onclick = () => this.showSourcePickerForPersonId(personId);
+        (overlay.querySelector('#person-sources-cite') as HTMLButtonElement).onclick = () => this.showSourcePickerForPersonId(personId, true);
         // No source yet: the research can look for one (the dialog stays open).
         (overlay.querySelector('#person-sources-find') as HTMLButtonElement).onclick = () => {
             const url = this.personFindSourceUrl(personId);

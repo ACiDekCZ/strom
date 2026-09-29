@@ -211,6 +211,8 @@ export class UIClass {
     editingSourceId: string | null = null;
     /** What a citation applies to (person, or a specific event on that person). */
     citationContext: CitationContext | null = null;
+    /** The picker offers "Supports: person / birth / death" (opened from the person's sources). */
+    citationFactChoice = false;
     /** Excerpts staged in the source editor (saved with the form, one undo step). */
     excerptDrafts: ExcerptDraft[] = [];
     /** Reliability picked in the source editor (QUAY 1–3, 0 kept from import). */

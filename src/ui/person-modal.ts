@@ -477,6 +477,34 @@ export const personModalMethods = uiModule({
         const anyResearch = advanced || Object.values(filled).some(Boolean);
         const research = document.getElementById('pm-section-research');
         if (research) research.style.display = anyResearch ? '' : 'none';
+        this.updateFactSourceRows(person);
+    },
+
+    /**
+     * The "Source" rows under the birth and death fields: like the other
+     * advanced fields (shown with advanced fields on, or when cited), a saved
+     * person only, and the death's only for someone who has died.
+     */
+    updateFactSourceRows(person: Person | null): void {
+        const advanced = SettingsManager.isAdvancedFields();
+        const val = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.value.trim() ?? '';
+        const died = (document.getElementById('input-is-deceased') as HTMLInputElement | null)?.checked
+            || !!val('input-deathdate') || !!val('input-deathplace');
+        const rows: [string, boolean, boolean][] = [
+            ['birth-sources-group', !!person?.birthSourceIds?.length, true],
+            ['death-sources-group', !!person?.deathSourceIds?.length, died],
+        ];
+        for (const [id, cited, applies] of rows) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = person && (cited || (advanced && applies)) ? '' : 'none';
+        }
+        // Follows the death fields as they are filled in.
+        if (person) {
+            for (const id of ['input-is-deceased', 'input-deathdate', 'input-deathplace']) {
+                const input = document.getElementById(id) as HTMLInputElement | null;
+                if (input) input.oninput = input.onchange = () => this.updateFactSourceRows(person);
+            }
+        }
     },
 
     /**
@@ -666,6 +694,11 @@ export const personModalMethods = uiModule({
         const citeBtn = document.getElementById('btn-cite-person');
         if (citeBtn) citeBtn.style.display = DataManager.isPersonLocked(id) ? 'none' : '';
         this.renderPersonSourcesChips();
+        // The birth and death entries have their own "Source" row under the fields.
+        this.renderFactSourcesChips('birth');
+        this.renderFactSourcesChips('death');
+        document.querySelectorAll<HTMLElement>('#person-modal .fact-cite-btn')
+            .forEach(b => { b.style.display = DataManager.isPersonLocked(id) ? 'none' : ''; });
 
         // Attachments section (same lifecycle as events/sources).
         const attachmentsSection = document.getElementById('attachments-section');
