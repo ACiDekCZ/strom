@@ -11,6 +11,7 @@ import { strings } from '../strings.js';
 import { PersonId } from '../types.js';
 import { ActionSignal, CardSignalInfo, ACTION_GLYPH } from '../card-signals.js';
 import { TreeManager } from '../tree-manager.js';
+import { announcedResearchLinks } from '../research-device.js';
 import { uiModule } from './module.js';
 
 const STATE_KEYS: (keyof CardSignals)[] = ['evidence', 'story'];
@@ -99,14 +100,16 @@ export const cardSignalsUiMethods = uiModule({
         if (!host) return;
         const d = strings.cardDensity;
         const on = SettingsManager.getCardSignals();
-        // Waiting and the agent only mean something with a research tree.
+        // Waiting only means something with a research tree; the agent only
+        // with the research connected on this computer (it is followed live).
         const research = TreeManager.getTrees().some(t => !!t.research?.id);
+        const connected = research && announcedResearchLinks().length > 0;
         const box = (key: keyof CardSignals): string => `
             <label class="settings-checkbox card-signal-option">
                 <input type="checkbox" data-signal="${key}"${on[key] ? ' checked' : ''}>
                 <span>${this.escapeHtml(signalLabel(key))}</span>
             </label>`;
-        const actionKeys = ACTION_KEYS.filter(k => research || (k !== 'waiting' && k !== 'agent'));
+        const actionKeys = ACTION_KEYS.filter(k => (k !== 'waiting' || research) && (k !== 'agent' || connected));
         host.innerHTML = `
             <div class="card-signals-options">
                 <div class="settings-name">${this.escapeHtml(d.cardShow)}</div>
@@ -148,10 +151,10 @@ export const cardSignalsUiMethods = uiModule({
         const dot = action ? `<span class="card-signal-dot signal-${action}"></span>` : '';
         const compact = density === 'compact';
         return `
-            <div class="person-card female preview-card${action ? ' has-signal' : ''}" data-density="${density}">
-                ${compact ? '' : `<div class="card-avatar-wrap"><div class="card-avatar"><span class="avatar-initials">AV</span></div>${badge}</div>`}
+            <div class="person-card male preview-card${action ? ' has-signal' : ''}" data-density="${density}">
+                ${compact ? '' : `<div class="card-avatar-wrap"><div class="card-avatar"><span class="avatar-initials">MV</span></div>${badge}</div>`}
                 <div class="card-body">
-                    <div class="name"><span class="name-text">Anna Víšková</span></div>
+                    <div class="name"><span class="name-text">Milan Víšek</span></div>
                     ${compact ? '' : `<div class="birth-date"><span class="meta-text">1842 – ?</span>${icons ? `<span class="card-state">${icons}</span>` : ''}</div>`}
                 </div>
                 ${dot}

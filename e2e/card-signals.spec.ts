@@ -135,6 +135,10 @@ test.describe('card signals', () => {
         await page.evaluate(() => window.Strom.UI.showSettingsDialog());
         const settings = page.locator('#card-signals-settings');
         await expect(settings.locator('.card-signals-preview .person-card')).toBeVisible();
+        await expect(settings.locator('.card-signals-preview .name-text')).toHaveText('Milan Víšek');
+        // A research tree: "Waiting for you" is offered; the agent only with the research connected here.
+        await expect(settings.locator('input[data-signal="waiting"]')).toHaveCount(1);
+        await expect(settings.locator('input[data-signal="agent"]')).toHaveCount(0);
         await settings.locator('input[data-signal="conflict"]').uncheck();
         await settings.locator('input[data-signal="evidence"]').uncheck();
         await expect(settings.locator('.card-signals-preview .ev-circle')).toHaveCount(0);
