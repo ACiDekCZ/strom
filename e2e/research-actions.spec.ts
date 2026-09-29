@@ -249,7 +249,7 @@ test.describe('live research: Waiting for you', () => {
         await expect(panel).toBeVisible();
         await recordLaunches(page);
         // Order of the sections: at work → waiting → changes.
-        const headings = await panel.locator('.live-panel-heading').allTextContents();
+        const headings = await panel.locator('.live-section__title').allTextContents();
         expect(headings).toEqual(['At work', 'Waiting for you · 2', 'Latest changes']);
         await expect(panel.locator('.live-waiting .live-time').first()).toHaveText(/just now|min/);
         await expect(panel).toContainText('You answer in the research.');

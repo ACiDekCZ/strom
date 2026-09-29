@@ -200,6 +200,11 @@ export const contextMenuMethods = uiModule({
             case 'delete':
                 this.confirmDelete(personId);
                 break;
+            case 'signal-waiting':
+            case 'signal-conflict':
+            case 'signal-agent':
+                this.openCardSignal(personId, action.slice('signal-'.length));
+                break;
             case 'research-knows':
                 this.clearDialogStack();
                 this.showPersonResearchDialog(personId);
@@ -243,7 +248,7 @@ export const contextMenuMethods = uiModule({
         // interpolating a `${... ? ... : ...}` directly inside class="context-menu…"
         // confuses the self-export HTML cleaner's regex once minified.
         // Items are text-only here (the mobile bottom sheet keeps the glyphs).
-        menu.innerHTML = header + actions.map(a => {
+        menu.innerHTML = header + this.personSignalsMenuHtml(personId, false, 'context-menu-item') + actions.map(a => {
             const cls = a.danger ? 'context-menu-item danger' : 'context-menu-item';
             const divider = a.divider ? '<div class="context-menu-divider"></div>' : '';
             const header = a.header ? `<div class="menu-section-header" role="presentation">${this.escapeHtml(a.header)}</div>` : '';

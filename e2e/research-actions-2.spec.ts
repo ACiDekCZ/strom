@@ -169,16 +169,18 @@ test.describe('live panel: up next, update, spend', () => {
             spend: { month: '2026-09', sessions: 4, amount: 3.2, currency: 'USD' },
         });
         const panel = page.locator('#live-panel');
-        await expect(panel.locator('.live-queue-toggle')).toHaveText('Up next');
+        await expect(panel.locator('.live-queue-toggle .live-section__title')).toHaveText('Up next');
+        // The heading counts every next task and the rest (4 + 8).
+        await expect(panel.locator('.live-queue-toggle .live-section__sum')).toHaveText('12 tasks');
         const rows = panel.locator('.live-queue-row');
         await expect(rows.locator('.live-queue-text')).toHaveText([
             'Matriky Chlumy 1860–1870', 'Sčítání 1880', 'Pozemková kniha', 'Parked: Oddací matrika',
         ]);
         await expect(panel.locator('.live-queue-num')).toHaveText(['1', '2', '3']);
         await expect(panel.locator('.live-queue-rest')).toHaveText('and 9 more in the research ↗');
-        // Order: at work → up next → latest changes (nobody waits here).
-        const headings = await panel.locator('.live-panel-heading').allTextContents();
-        expect(headings.map(h => h.trim())).toEqual(['At work', 'Up next', 'Latest changes']);
+        // Order: at work → latest changes → up next (nobody waits here).
+        const headings = await panel.locator('.live-section__title').allTextContents();
+        expect(headings.map(h => h.trim())).toEqual(['At work', 'Latest changes', 'Up next']);
         await expect(panel.locator('.live-panel-update')).toContainText('New Strom Research 1.7.0');
         await expect(panel.locator('.live-panel-spend')).toHaveText(/Agent this month: 4 sessions · \$3\.20/);
 
@@ -532,7 +534,7 @@ test.describe('Where evidence is missing (tree health)', () => {
         await page.evaluate(() => window.Strom.UI.showTreeHealthDialog(window.Strom.DataManager.getCurrentTreeId()));
         const block = page.locator('#tree-health-content .health-evidence');
         await expect(block.locator('.health-block-title')).toHaveText('Where evidence is missing');
-        await expect(block.locator('.health-evidence-label')).toHaveText(['People without a source', 'Births without a source', 'Line ends (no parents)']);
+        await expect(block.locator('.health-evidence-label')).toHaveText(['People without a source', 'Births without a source', 'Line ends (no parents)', 'Evidence in tree']);
         await expect(block.locator('.health-evidence-count')).toHaveText(['1 of 4', '1', '2']);
 
         await block.locator('[data-evidence="lineEnds"]').click();

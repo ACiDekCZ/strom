@@ -72,6 +72,8 @@
             --danger-soft: #f5e6e2;   /* error/destructive tint backgrounds */
             --warning-soft: #f6ecd3;  /* warning tint backgrounds */
             --warning-text: #7f5500;  /* warning text on paper / warning-soft (≥4.5:1) */
+            --signal-warn: #a2660f;   /* card action badge (waiting, conflict, question) */
+            --on-signal-warn: #ffffff;
             --on-warning: #2b2100;    /* mark drawn on a --warning fill */
             --info-soft: #e4ebf1;     /* informational tint backgrounds */
             --pending: #d0a23c;       /* unfinished merge state (dashed) */
@@ -153,6 +155,8 @@
             --danger-soft: #3d2b27;
             --warning-soft: #3a3324;
             --warning-text: #e8c47c;
+            --signal-warn: #d19a3a;
+            --on-signal-warn: #1c1a15;
             --on-warning: #1f1a10;
             --info-soft: #2a3139;
             --chart-soft: #3a4a3f;
@@ -5569,13 +5573,113 @@
             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
             overflow: hidden;
         }
-        /* An open question about this person — a small corner marker so the
-           question is findable without opening every card. */
-        .person-card.has-question::after {
-            content: '?';
-            position: absolute; top: 2px; right: 4px;
-            font-size: 11px; font-weight: 700; line-height: 1;
-            color: var(--primary, #4a7c59); opacity: 0.75; pointer-events: none;
+        /* ==================== CARD SIGNALS ====================
+           At a glance (src/card-signals.ts): the person's status at the end of
+           the year row — never beside the name — and one action badge on the
+           avatar's corner (a dot on the card's corner in compact density and
+           when zoomed far out). Shapes, not colour alone, tell them apart. */
+        .person-card .birth-date { display: flex; align-items: center; }
+        .person-card .birth-date .meta-text {
+            min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .card-state {
+            display: inline-flex; align-items: center; gap: 5px;
+            margin-left: auto; padding-left: 4px; flex-shrink: 0;
+        }
+        .ev-circle {
+            display: inline-block; width: 10px; height: 10px; box-sizing: border-box;
+            border-radius: 50%; border: 1.5px solid var(--primary); flex-shrink: 0;
+        }
+        .ev-circle.ev-full { background: var(--primary); }
+        .ev-circle.ev-partial { background: linear-gradient(90deg, var(--primary) 50%, transparent 50%); }
+        .ev-circle.ev-none { border-color: var(--text-faint); }
+        .story-leaf {
+            display: inline-block; width: 8px; height: 10px; box-sizing: border-box;
+            border-radius: 2px; background: var(--text-faint); flex-shrink: 0;
+        }
+        .story-leaf.draft { background: transparent; border: 1.5px dashed var(--text-faint); }
+        .card-avatar-wrap { position: relative; flex: 0 0 auto; display: flex; }
+        .card-signal {
+            position: absolute; top: -6px; right: -6px; z-index: 2;
+            width: 18px; height: 18px; min-width: 0; padding: 0; margin: 0;
+            border-radius: 50%; border: 2px solid var(--surface); box-sizing: border-box;
+            background: var(--signal-warn); color: var(--on-signal-warn);
+            font: 700 11px/1 var(--font-sans, system-ui, sans-serif);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; box-shadow: none;
+        }
+        .card-signal.signal-agent, .card-signal-dot.signal-agent { background: var(--primary); color: var(--on-primary); }
+        /* A 24px hit area around the 18px badge. */
+        .card-signal::before { content: ''; position: absolute; inset: -5px; border-radius: 50%; }
+        .card-signal:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .card-signal-dot {
+            display: none; position: absolute; top: -5px; right: -5px; z-index: 2;
+            width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%;
+            border: 2px solid var(--surface); background: var(--signal-warn); pointer-events: none;
+        }
+        body[data-card-density="compact"] .card-signal-dot { display: block; }
+        /* Compact: the relations / branch pills make way for the dot. */
+        body[data-card-density="compact"] .person-card.has-signal .edge-top-right { margin-right: 8px; }
+        /* Zoomed far out (< 55%): no status icons; the badge becomes a dot that
+           stays at least 8px on screen. */
+        #tree-canvas.zoom-far .card-state { display: none; }
+        #tree-canvas.zoom-far .card-signal { display: none; }
+        #tree-canvas.zoom-far .card-signal-dot {
+            display: block;
+            width: max(12px, calc(8px * var(--zoom-inv, 1)));
+            height: max(12px, calc(8px * var(--zoom-inv, 1)));
+            top: calc(-0.4 * max(12px, calc(8px * var(--zoom-inv, 1))));
+            right: calc(-0.4 * max(12px, calc(8px * var(--zoom-inv, 1))));
+        }
+        /* Tooltip rows: evidence, story, then what waits. */
+        .card-tooltip .tt-signals { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+        .card-tooltip .tt-ev, .card-tooltip .tt-story { display: flex; align-items: center; gap: 6px; }
+        .card-tooltip .tt-action { color: var(--warning-text); }
+        /* Printing the page: never (the poster / image export draws its own cards). */
+        body.view-mode-print .card-state, body.view-mode-print .card-signal, body.view-mode-print .card-signal-dot { display: none !important; }
+        @media print { .card-state, .card-signal, .card-signal-dot { display: none !important; } }
+
+        /* Person menu: the badge's signal leads (and on touch the status line). */
+        .menu-person-state {
+            display: flex; align-items: center; gap: 8px;
+            padding: 0 16px 8px; font-size: 13px; color: var(--text-light);
+        }
+        .context-menu .menu-person-state { padding: 0 12px 6px; }
+        .menu-signal {
+            display: flex; align-items: center; gap: 8px;
+            margin: 4px 8px 6px; padding: 8px 10px; min-height: 36px; box-sizing: border-box;
+            background: var(--warning-soft); color: var(--warning-text);
+            border-radius: 10px; font-size: 13px; text-align: left; width: auto;
+        }
+        .bottom-sheet-items .menu-signal { min-height: 44px; margin: 4px 12px 8px; width: calc(100% - 24px); border: 0; }
+        .menu-signal.menu-signal-agent { background: var(--primary-soft); color: var(--primary-dark); }
+        .menu-signal-glyph {
+            flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: var(--signal-warn); color: var(--on-signal-warn); font-weight: 700; font-size: 11px;
+        }
+        .menu-signal-glyph.signal-agent { background: var(--primary); color: var(--on-primary); }
+        .menu-signal-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .menu-signal-go { flex: 0 0 auto; font-weight: 600; white-space: nowrap; }
+        .context-menu-item.menu-signal:hover, .context-menu-item.menu-signal:focus { background: var(--warning-soft); filter: brightness(0.97); }
+
+        /* Settings → "Show on card": options left, preview card right. */
+        .card-signals-settings { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+        .card-signals-options { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+        .card-signals-group { display: flex; flex-direction: column; gap: 4px; }
+        .card-signals-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent-text); }
+        .card-signal-option { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+        .card-signals-preview-wrap { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; }
+        .card-signals-preview-title { font-size: 13px; color: var(--text-light); }
+        .card-signals-preview {
+            background: var(--surface-2); border-radius: 12px; padding: 16px 18px;
+        }
+        .card-signals-preview .person-card { position: relative; left: auto; top: auto; cursor: default; }
+        .card-signals-preview .person-card[data-density="compact"] { width: 150px; height: 44px; justify-content: center; }
+        .card-signals-preview .person-card[data-density="compact"] .card-signal-dot { display: block; }
+        .card-signals-preview .person-card[data-density="detailed"] { width: 200px; }
+        @media (max-width: 499px) {
+            .card-signals-settings { flex-direction: column; gap: 12px; }
         }
         .person-card.indirect:hover { opacity: 1; }
 
@@ -7964,6 +8068,158 @@
         .research-item-label--two { display: flex; flex-direction: column; gap: 1px; }
         .research-item-sub { font-size: 12px; color: var(--text-light); }
 
+        /* Live panel sections: every heading folds its section (▾/▸, a summary on the right). */
+        .live-section__head {
+            display: flex; align-items: center; gap: 6px; width: 100%; padding: 0; min-height: 22px;
+            border: 0; background: none; cursor: pointer; font-family: inherit; text-align: left;
+        }
+        .live-section__head:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+        .live-section__chevron { flex: none; width: 10px; font-size: 10px; line-height: 1; color: var(--text-faint); }
+        .live-section__title { flex: none; }
+        .live-section__sum {
+            flex: 1; min-width: 0; text-align: right; font-size: 12px; font-weight: 400;
+            letter-spacing: 0; text-transform: none; color: var(--text-light);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .live-section__sum--new { color: var(--primary); font-weight: 600; }
+        .live-section__body[hidden] { display: none; }
+        .live-change-text { font-size: 14px; }
+        .live-person-link {
+            display: inline; padding: 0; margin: 0; border: 0; background: none; font: inherit; color: inherit;
+            text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 2px; cursor: pointer;
+        }
+        .live-person-link:hover { color: var(--primary); }
+        .live-person-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 2px; }
+        .live-all-changes { margin-top: 4px; padding: 0; font-size: 13px; }
+        .live-panel-expand {
+            flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--r-md);
+            background: var(--surface-2); color: var(--text-light); font-size: 15px; cursor: pointer;
+        }
+        .live-panel-expand:hover { color: var(--text); background: var(--hover-bg); }
+        .live-panel-expand:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .live-panel-chip--warn { color: var(--warning-text); background: var(--warning-soft); border-color: transparent; }
+        /* Phone: the panel is a strip; a tap opens the overview sheet. */
+        .live-panel.phone-strip .live-panel-chevron { display: none; }
+        .live-panel.phone-strip .live-panel-toggle { min-height: 40px; }
+
+        /* The card a change row points at, while the row is hovered. */
+        .person-card.overview-hover {
+            outline: 2px solid var(--primary); outline-offset: 2px;
+            box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary) 18%, transparent), var(--shadow-sm);
+        }
+
+        /* ==================== RESEARCH OVERVIEW ==================== */
+        .research-overview {
+            position: fixed; z-index: 95; display: flex; flex-direction: column;
+            background: var(--surface); color: var(--text); font-size: 13px;
+        }
+        body { --overview-w: clamp(420px, 36vw, 560px); }
+        .research-overview--docked {
+            top: 56px; right: 0; bottom: 0; width: var(--overview-w);
+            border-left: 1px solid var(--border);
+            animation: overview-in 180ms ease-out;
+        }
+        @keyframes overview-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+        body.overview-docked #tree-container { right: var(--overview-w); }
+        body.overview-docked .control-block { right: calc(var(--overview-w) + 24px); }
+        body.overview-docked .evidence-pill { left: calc((100vw - var(--overview-w)) / 2); }
+        .research-overview--overlay {
+            top: 64px; right: 12px; bottom: 12px; width: 400px; max-width: calc(100vw - 24px); z-index: 101;
+            border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
+        }
+        .research-overview--sheet { inset: 0; z-index: 1000; }
+        @media (prefers-reduced-motion: reduce) { .research-overview--docked { animation: none; } }
+        .research-overview__head {
+            display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px;
+            border-bottom: 1px solid var(--divider);
+        }
+        .live-dot--still { box-shadow: none; }
+        .research-overview__titles { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+        .research-overview__title { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+        .research-overview__name { min-width: 0; font-size: 13px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .research-overview__close {
+            flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--r-md);
+            background: var(--surface-2); color: var(--text-light); font-size: 16px; cursor: pointer;
+        }
+        .research-overview--sheet .research-overview__close { width: 44px; height: 44px; font-size: 22px; }
+        .research-overview--sheet .research-overview__name { display: none; }
+        .research-overview__close:hover { color: var(--text); background: var(--hover-bg); }
+        .research-overview__close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .research-overview__body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 16px 12px; }
+        .research-overview__body .live-panel-update { margin: 10px -16px 0; padding: 6px 16px; }
+        .research-overview__body .live-section__head { margin-top: 14px; }
+        .research-overview--sheet .research-overview__body .live-section__head { min-height: 48px; margin-top: 4px; }
+        .research-overview__summary {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin: 12px -16px 0;
+            background: var(--divider); border-bottom: 1px solid var(--divider);
+        }
+        .research-overview__summary--two { grid-template-columns: repeat(2, 1fr); }
+        .research-overview__cell { background: var(--surface-2); padding: 10px 14px; min-width: 0; }
+        .research-overview__cell-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent-text); }
+        .research-overview__cell-value { font-size: 16px; font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; }
+        .research-overview__cell.is-working .research-overview__cell-value { color: var(--primary); }
+        .research-overview__cell.is-waiting .research-overview__cell-value { color: var(--warning-text); }
+        .research-overview__cell.is-idle .research-overview__cell-value { color: var(--text-light); }
+        .research-overview__cell-sub { display: block; margin-top: 2px; padding: 0; font-size: 12px; color: var(--text-light); text-align: left; }
+        .research-overview__waiting { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
+        .research-overview--overlay .research-overview__waiting, .research-overview--sheet .research-overview__waiting { grid-template-columns: 1fr; }
+        .research-overview__waiting-card {
+            display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; min-width: 0;
+            background: var(--warning-soft); border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent); border-radius: 10px;
+        }
+        .research-overview__waiting-text { font-size: 14px; overflow-wrap: anywhere; }
+        .research-overview__waiting-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 12px; }
+        .research-overview__waiting-meta .live-time { color: var(--text-faint); font-size: 11px; }
+        .research-overview__waiting-card .live-waiting-answer { align-self: flex-start; }
+        .research-overview__muted { color: var(--text-faint); font-size: 12px; }
+        .research-overview__now-row { display: flex; align-items: center; gap: 8px; }
+        .research-overview__now-text { flex: 1; min-width: 0; }
+        .research-overview__now .live-time { display: block; color: var(--text-faint); font-size: 12px; }
+        .research-overview__timeline-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 4px; }
+        .research-overview__filters { display: flex; gap: 6px; overflow-x: auto; flex: 1 1 auto; min-width: 0; scrollbar-width: none; }
+        .research-overview__filter {
+            flex: none; height: 28px; padding: 0 10px; border-radius: 14px; font-size: 12px; cursor: pointer;
+            border: 1px solid var(--border); background: var(--surface); color: var(--text-light);
+            font-variant-numeric: tabular-nums;
+        }
+        .research-overview__filter[aria-checked="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--text); font-weight: 600; }
+        .research-overview__filter:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .research-overview__show-changed { flex: none; padding: 0; font-size: 13px; }
+        .research-overview__group-head {
+            display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 8px; padding: 6px 0;
+            border: 0; border-bottom: 1px solid var(--divider); background: none; cursor: pointer; text-align: left;
+            font: 600 13px/1.3 inherit; color: var(--text);
+        }
+        .research-overview__group-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .research-overview__group-span { flex: none; font-weight: 400; font-size: 12px; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .research-overview__rows { list-style: none; margin: 0; padding: 0; }
+        .research-overview__row {
+            display: grid; grid-template-columns: minmax(44px, max-content) 1fr; gap: 8px; padding: 6px 4px; border-radius: 6px;
+            border-bottom: 1px solid var(--divider);
+        }
+        .research-overview__row.has-person { cursor: pointer; }
+        .research-overview__row.has-person:hover { background: var(--hover-bg); }
+        .research-overview__row.is-new { animation: overview-row-new 4s ease-out; }
+        @keyframes overview-row-new { from { background: var(--primary-soft); } to { background: transparent; } }
+        @media (prefers-reduced-motion: reduce) { .research-overview__row.is-new { animation: none; } }
+        .research-overview__row-time { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; padding-top: 2px; white-space: nowrap; }
+        .research-overview__row-text { font-size: 14px; overflow-wrap: anywhere; }
+        .research-overview__knows-row {
+            display: block; width: 100%; padding: 4px 0; border: 0; background: none; text-align: left;
+            font: inherit; font-size: 13px; color: var(--text); cursor: pointer; overflow-wrap: anywhere;
+        }
+        .research-overview__knows-row.is-conflict { color: var(--warning-text); }
+        .research-overview__knows-row:hover { text-decoration: underline; }
+        .research-overview__foot {
+            display: flex; align-items: center; gap: 12px; justify-content: space-between;
+            padding: 10px 16px; background: var(--surface-2); border-top: 1px solid var(--divider); font-size: 13px;
+        }
+        .research-overview__foot .link-button { padding: 0; font-size: 13px; }
+        .research-overview__open { margin-left: auto; }
+        @media (max-width: 640px) {
+            .research-overview__summary { grid-template-columns: repeat(2, 1fr); }
+        }
+
         /* Live panel: update strip, "Up next", this month's spend. */
         .live-panel-update {
             display: flex; align-items: center; gap: 8px; padding: 6px 12px;
@@ -8111,6 +8367,21 @@
         .person-card.evidence-dim { opacity: 0.45; }
         .person-card.evidence-hit { outline: 1.5px dashed var(--accent); outline-offset: 2px; }
         .fan-sector.evidence-dim, .fan-focus.evidence-dim { opacity: 0.45; }
+        /* The Evidence mode: every card framed by its level, nothing dimmed. */
+        .person-card.evl-full { outline: 1.5px solid var(--primary); outline-offset: 1px; background: var(--primary-soft); }
+        .person-card.evl-partial { outline: 1.5px dashed var(--primary); outline-offset: 1px; }
+        .person-card.evl-none { outline: 1.5px dotted var(--text-faint); outline-offset: 1px; background: var(--surface-2); }
+        .person-card.evl-none .name-text { color: var(--text-light); }
+        .evidence-pill-level {
+            height: 30px; padding: 0 10px; border-radius: 15px; border: 0; background: transparent;
+            color: var(--text); font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap;
+        }
+        .evidence-pill-level-full, .evidence-pill-level-partial { color: var(--primary); }
+        .evidence-pill-level-none { color: var(--text-faint); }
+        .evidence-pill-level[aria-pressed="true"] { background: var(--primary-soft); font-weight: 600; }
+        .evidence-pill-level:hover:not(:disabled) { background: var(--hover-bg); }
+        .evidence-pill-level:disabled { opacity: 0.5; cursor: default; }
+        .evidence-pill-level:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .fan-sector.evidence-hit path { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
         .evidence-pill {
             position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 95;
@@ -10868,6 +11139,7 @@
                             <option value="detailed" data-i18n="cardDensity.detailed"></option>
                         </select>
                     </div>
+                    <div class="settings-row card-signals-settings" id="card-signals-settings"></div>
                     <label class="settings-checkbox settings-row">
                         <input type="checkbox" id="cross-tree-badges-toggle" onchange="window.Strom.UI.toggleCrossTreeBadges(this.checked)">
                         <span class="settings-text">

@@ -9,6 +9,25 @@ import { initLanguage, Language } from './strings.js';
 /** How many recently cited sources the picker remembers per tree. */
 export const RECENT_SOURCES_MAX = 5;
 
+/** What the card shows at a glance (Settings → "Show on card"). All on by default. */
+export interface CardSignals {
+    /** Person status: the evidence circle. */
+    evidence: boolean;
+    /** Person status: the story leaf. */
+    story: boolean;
+    /** Action badge: the research waits for the user about this person. */
+    waiting: boolean;
+    conflict: boolean;
+    question: boolean;
+    /** Action badge: the agent works on (or has queued) this person, while live. */
+    agent: boolean;
+}
+
+export const CARD_SIGNAL_KEYS: (keyof CardSignals)[] = ['evidence', 'story', 'waiting', 'conflict', 'question', 'agent'];
+
+/** Per device, apart from the other settings. */
+const CARD_SIGNALS_KEY = 'strom-card-signals';
+
 class SettingsManagerClass {
     private settings: AppSettings = { theme: 'system', language: 'system', encryption: false, auditLog: false };
 
@@ -306,6 +325,21 @@ class SettingsManagerClass {
     setCardDensity(density: CardDensity): void {
         this.settings.cardDensity = density;
         this.save();
+    }
+
+    /** What the card shows at a glance, for this device. */
+    getCardSignals(): CardSignals {
+        const out: CardSignals = { evidence: true, story: true, waiting: true, conflict: true, question: true, agent: true };
+        try {
+            const parsed = JSON.parse(localStorage.getItem(CARD_SIGNALS_KEY) ?? '{}') as Record<string, unknown>;
+            for (const k of CARD_SIGNAL_KEYS) if (typeof parsed[k] === 'boolean') out[k] = parsed[k] as boolean;
+        } catch { /* defaults */ }
+        return out;
+    }
+
+    setCardSignal(key: keyof CardSignals, on: boolean): void {
+        const next = { ...this.getCardSignals(), [key]: on };
+        try { localStorage.setItem(CARD_SIGNALS_KEY, JSON.stringify(next)); } catch { /* not kept */ }
     }
 
     /** Toolbar "Add family" button default OFF (opt-in). */

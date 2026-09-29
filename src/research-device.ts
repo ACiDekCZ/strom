@@ -58,7 +58,7 @@ export interface StoredResearchWaiting {
 }
 
 /**
- * Remember the research's "waiting" list (task id, text and time only), the
+ * Remember the research's "waiting" list (task id, text, time and person ref only), the
  * update it announced and its last intake, per research tree.
  */
 export function noteResearchWaiting(
@@ -67,7 +67,7 @@ export function noteResearchWaiting(
     extra: { update?: { version: string } | null; lastIntake?: LiveIntake | null } = {}
 ): void {
     try {
-        const kept = items.map(w => ({ id: w.id, what: w.what, at: w.at }));
+        const kept = items.map(w => ({ id: w.id, what: w.what, at: w.at, ...(w.person ? { person: w.person } : {}) }));
         localStorage.setItem(WAITING_KEY + researchId, JSON.stringify({
             items: kept,
             at: new Date().toISOString(),

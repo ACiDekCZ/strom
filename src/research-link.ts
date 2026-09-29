@@ -518,6 +518,8 @@ export interface LiveWorker {
     who: string;
     since: string;
     task: string;
+    /** The person the work is about (REFN "P12"), when the research says. */
+    person?: string;
 }
 
 /** Something the research waits for from the user. */
@@ -527,6 +529,8 @@ export interface LiveWaiting {
     on: string;
     /** Since when it waits (ISO time; empty when the research does not say). */
     at: string;
+    /** The person it is about (REFN "P12"), when the research says. */
+    person?: string;
 }
 
 /** The bridge's /status (and the `hello` event), checked and cleaned. */
@@ -557,6 +561,8 @@ export interface LiveQueueItem {
     id: string;
     text: string;
     state: 'next' | 'parked';
+    /** The person the task is about (REFN "P12"), when the research says. */
+    person?: string;
 }
 
 /** The agent's sessions and cost this month. */
@@ -597,7 +603,8 @@ export function sanitizeWorking(value: unknown): LiveWorker[] {
         if (!r) continue;
         const who = cleanText(r.who, 80);
         if (!who) continue;
-        out.push({ who, since: cleanText(r.since, 40), task: cleanText(r.task) });
+        const person = researchPersonRef(r.person);
+        out.push({ who, since: cleanText(r.since, 40), task: cleanText(r.task), ...(person ? { person } : {}) });
     }
     return out;
 }
@@ -611,7 +618,8 @@ export function sanitizeWaiting(value: unknown): LiveWaiting[] {
         if (!r) continue;
         const what = cleanText(r.what);
         if (!what) continue;
-        out.push({ id: cleanText(r.id, 40), what, on: cleanText(r.on, 120), at: cleanText(r.at ?? r.since, 40) });
+        const person = researchPersonRef(r.person);
+        out.push({ id: cleanText(r.id, 40), what, on: cleanText(r.on, 120), at: cleanText(r.at ?? r.since, 40), ...(person ? { person } : {}) });
     }
     return out;
 }
@@ -630,7 +638,8 @@ export function sanitizeQueue(value: unknown): LiveQueueItem[] {
         const text = cleanText(r?.text);
         if (!r || !id || !text) continue;
         const state = r.state === 'parked' ? 'parked' : r.state === 'next' ? 'next' : null;
-        if (state) out.push({ id, text, state });
+        const person = researchPersonRef(r.person);
+        if (state) out.push({ id, text, state, ...(person ? { person } : {}) });
     }
     return out;
 }
@@ -760,6 +769,20 @@ export function humanizeChange(line: string, nameOf?: (ref: string) => string | 
     if (m) return `${words.newFamily}: ${facts(m[1])}`;
     // Anything else: people by name, ids and status marks out.
     return facts(plain.replace(/(^|[^\p{L}\p{N}])[+~-]?(P\d{2,})(?![\p{L}\p{N}])/gu, (_, pre, ref) => `${pre}${name(ref)}`));
+}
+
+/** What a change line is about, for the overview's filters ("other": only under All). */
+export type LiveChangeKind = 'persons' | 'sources' | 'stories' | 'other';
+
+export function changeKind(line: string): LiveChangeKind {
+    if (/_STORY\b|\bstory\b/i.test(line)) return 'stories';
+    if (/(^|[^\p{L}\p{N}])[+~-]?S\d{2,}(?![\p{L}\p{N}])|\bSOUR\b/u.test(line)) {
+        // "E0006 BIRT 1905 ← S0012" is a fact about a person, backed by a source.
+        if (/(^|[^\p{L}\p{N}])[+~-]?[PF]\d{2,}(?![\p{L}\p{N}])/u.test(line) && /←\s*S\d{2,}/.test(line)) return 'persons';
+        return 'sources';
+    }
+    if (/(^|[^\p{L}\p{N}])[+~-]?[PF]\d{2,}(?![\p{L}\p{N}])/u.test(line)) return 'persons';
+    return 'other';
 }
 
 /** The words a humanized change line uses (from strings.research). */

@@ -17,6 +17,8 @@ const TAP_THRESHOLD_MS = 200;  // Max time for a tap
 const TAP_THRESHOLD_PX = 10;   // Max movement for a tap
 const MIN_SCALE = 0.15;
 const MAX_SCALE = 4;
+/** Below this scale the card badges become dots and the status icons hide. */
+const ZOOM_FAR = 0.55;
 const ZOOM_BUTTON_FACTOR = 1.3;
 const ZOOM_ANIMATION_DURATION = 200; // ms
 /** Views drawn in their own container over the (hidden) tree canvas. */
@@ -690,6 +692,9 @@ class ZoomPanClass {
         const canvas = document.getElementById('tree-canvas');
         if (canvas) {
             canvas.style.transform = `translate(${this.tx}px, ${this.ty}px) scale(${this.scale})`;
+            // Far out the card badges turn into dots that keep a readable size.
+            canvas.classList.toggle('zoom-far', this.scale < ZOOM_FAR);
+            canvas.style.setProperty('--zoom-inv', String(1 / Math.max(this.scale, 0.05)));
             // Fonts scale naturally with CSS transform - no counter-scaling needed
         }
         for (const cb of this.changeListeners) cb();

@@ -146,6 +146,7 @@ export const researchActionsMethods = uiModule({
             const look: SubmenuItem[] = [];
             if (this.researchLinkAvailable('app')) look.push({ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') });
             if (waiting > 0) look.push({ id: 'research-item-waiting', label: r.waiting, run: call('researchActionWaiting'), count: waiting });
+            if (this.isFollowingActiveResearch()) look.push({ id: 'research-item-overview', label: strings.live.overviewTitle, run: call('researchActionOverview') });
             const known = this.researchWaiting();
             const work: SubmenuItem[] = [
                 { id: 'research-item-send', label: r.sendChanges, run: call('researchActionSend'), ext: this.researchLinkAvailable('send') },
@@ -221,6 +222,11 @@ export const researchActionsMethods = uiModule({
     researchActionWaiting(): void {
         this.closeActionsMenu();
         this.showResearchWaiting();
+    },
+
+    researchActionOverview(): void {
+        this.closeActionsMenu();
+        this.openResearchOverview();
     },
 
     /** "Send changes": one click when the research handles it, else the way there. */

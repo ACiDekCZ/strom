@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
+import { changeKind,
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
     decideResearchOpen, stabilizeIds, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, extractChangedRefs, personsByRefs, humanizeChange,
@@ -635,5 +635,35 @@ describe('research crop ids (_STROM_CLIP)', () => {
         const out = exportToGedcom(data, 'T').content;
         expect(out).toContain('2 _STROM_CLIP c3');
         expect(out.match(/_STROM_CLIP/g)).toHaveLength(1);
+    });
+});
+
+describe('changeKind (the overview filters)', () => {
+    it('sorts change lines into people, sources, stories', () => {
+        expect(changeKind('+P0006 Ludmila /Nováková/ · E0006 BIRT 1905 [lead]')).toBe('persons');
+        expect(changeKind('F0001 +child P0006')).toBe('persons');
+        expect(changeKind('P0012 E0007 BIRT 1865 ← S0012')).toBe('persons');
+        expect(changeKind('+S0031 Sčítání lidu 1880')).toBe('sources');
+        expect(changeKind('P0012 _STORY navrh')).toBe('stories');
+        expect(changeKind('session closed')).toBe('other');
+    });
+
+    it('person and source ids stay the only person / source markers', () => {
+        expect(changeKind('SPS2026 export')).toBe('other');
+        expect(changeKind('~S0031 title')).toBe('sources');
+    });
+});
+
+describe('person refs in the live status (card badges, overview)', () => {
+    it('keeps a valid P-ref on waiting, working and queue items, drops anything else', () => {
+        const status = sanitizeLiveStatus({
+            tree: { id: '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77', name: 'X' }, head: 'h1',
+            working: [{ who: 'agent', task: 'Matriky', person: 'P0012' }, { who: 'agent-2', person: 'Jan Víšek' }],
+            waiting: [{ id: 'T1', what: 'Snímek', person: ' P0013 ' }, { id: 'T2', what: 'Otec', person: 'P12345678' }],
+            queue: [{ id: 'T0101', text: 'Sčítání', state: 'next', person: 'P0004' }, { id: 'T0102', text: 'Kniha', state: 'next', person: 7 }],
+        })!;
+        expect(status.working.map(w => w.person)).toEqual(['P0012', undefined]);
+        expect(status.waiting.map(w => w.person)).toEqual(['P0013', undefined]);
+        expect(status.queue.map(q => q.person)).toEqual(['P0004', undefined]);
     });
 });

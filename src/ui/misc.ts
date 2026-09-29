@@ -277,6 +277,7 @@ export const miscMethods = uiModule({
 
         const densitySelect = document.getElementById('card-density-select') as HTMLSelectElement | null;
         if (densitySelect) densitySelect.value = SettingsManager.getCardDensity();
+        this.renderCardSignalSettings();
         const kekuleToggle = document.getElementById('fan-kekule-toggle') as HTMLInputElement | null;
         if (kekuleToggle) kekuleToggle.checked = SettingsManager.isFanKekuleEnabled();
         const crossTreeToggle = document.getElementById('cross-tree-badges-toggle') as HTMLInputElement | null;
@@ -638,6 +639,14 @@ export const miscMethods = uiModule({
                     && this.dialogStack.length === 0
                     && document.querySelectorAll('.modal-overlay.active').length === 0) {
                     this.endEvidenceHighlight();
+                    return;
+                }
+
+                // The Research overview: Escape shrinks it back to the panel.
+                if (this.isResearchOverviewOpen()
+                    && this.dialogStack.length === 0
+                    && document.querySelectorAll('.modal-overlay.active').length === 0) {
+                    this.closeResearchOverview();
                     return;
                 }
 

@@ -40,6 +40,8 @@ import {
     LiveQueueItem, LiveSpend, LiveIntake,
 } from '../research-link.js';
 import { uiModule } from './module.js';
+import { changeKind, LiveChangeKind } from '../research-link.js';
+import { ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import { iconSvg } from '../icons.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
@@ -63,7 +65,14 @@ export interface LiveChangeItem {
     text: string;
     at: string;
     personIds: PersonId[];
+    /** What it is about (the overview's filters). */
+    kind: LiveChangeKind;
+    /** The agent's task when it came ('' = none known). */
+    task: string;
 }
+
+/** The panel's sections (each folds on its own). */
+export type LiveSectionKey = 'working' | 'waiting' | 'changes' | 'queue';
 
 export interface LiveSession {
     bridge: LiveBridgeUrls;
@@ -78,10 +87,18 @@ export interface LiveSession {
     update: { version: string } | null;
     spend: LiveSpend | null;
     lastIntake: LiveIntake | null;
-    /** The "Up next" section is folded (starts folded in a low window). */
-    queueCollapsed: boolean;
-    /** The user folded or unfolded it: the panel no longer does it by itself. */
-    queueToggled: boolean;
+    /** Sections the panel folded by itself for lack of room (not remembered). */
+    autoCollapsed: Set<LiveSectionKey>;
+    /** Waiting task ids already shown: a new one unfolds "Waiting for you". */
+    seenWaiting: Set<string>;
+    /** Changes seen with the Changes section open (for "N new"). */
+    seenInSection: number;
+    /** When following began, and the tree's people and sources then. */
+    startedAt: number;
+    startPersons: number;
+    startSources: number;
+    /** The Research overview is open instead of the small panel. */
+    overview: boolean;
     changes: LiveChangeItem[];
     ended: boolean;
     collapsed: boolean;
@@ -100,8 +117,101 @@ const RECONNECT_MS = 2000;
 const POLL_MS = 10000;
 /** Failed probes in a row after which the bridge is taken as gone. */
 const MAX_FAILURES = 2;
-/** Most change lines kept in the panel. */
-const MAX_CHANGES = 30;
+/** Most change lines kept while following (the overview lists them all). */
+const MAX_CHANGES = 500;
+/** Change lines in the small panel. */
+const PANEL_CHANGES = 5;
+/** Sections the user folded (true) or unfolded (false), per device. */
+const SECTIONS_KEY = 'strom-live-sections';
+/** The panel folds these by itself, in this order, when it runs out of room. */
+const AUTO_FOLD: LiveSectionKey[] = ['queue', 'changes', 'working'];
+
+/** The user's fold choices of one set of sections (panel or overview). */
+export function storedLiveSections(key: string): Record<string, boolean> {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
+        const out: Record<string, boolean> = {};
+        for (const [k, v] of Object.entries(parsed)) if (typeof v === 'boolean') out[k] = v;
+        return out;
+    } catch {
+        return {};
+    }
+}
+
+export function storeLiveSection(key: string, section: string, collapsed: boolean): void {
+    try {
+        localStorage.setItem(key, JSON.stringify({ ...storedLiveSections(key), [section]: collapsed }));
+    } catch { /* not kept */ }
+}
+
+/** Whether a panel section is folded: the user's choice, else the panel's own. */
+function panelSectionCollapsed(s: LiveSession, key: LiveSectionKey): boolean {
+    const stored = storedLiveSections(SECTIONS_KEY)[key];
+    return stored ?? s.autoCollapsed.has(key);
+}
+
+/** "16 min", "1 h 5 min" since a moment. */
+export function liveDuration(since: number, now = Date.now()): string {
+    const min = Math.max(0, Math.floor((now - since) / 60000));
+    return min < 60 ? strings.live.minutes(min) : strings.live.hoursMinutes(Math.floor(min / 60), min % 60);
+}
+
+/**
+ * A section heading that folds its section: ▾/▸, the title, and a summary
+ * on the right. Returns the section's body (empty and hidden when folded).
+ */
+export function liveSection(host: HTMLElement, o: {
+    id: string; title: string; summary?: string; summaryCls?: string;
+    collapsed: boolean; headCls?: string; onToggle: () => void;
+}): HTMLElement {
+    const head = el('button', `live-panel-heading live-section__head${o.headCls ? ` ${o.headCls}` : ''}`);
+    head.type = 'button';
+    head.setAttribute('aria-expanded', String(!o.collapsed));
+    head.setAttribute('aria-controls', o.id);
+    const chevron = el('span', 'live-section__chevron', o.collapsed ? '▸' : '▾');
+    chevron.setAttribute('aria-hidden', 'true');
+    head.append(chevron, el('span', 'live-section__title', o.title));
+    if (o.summary) head.appendChild(el('span', `live-section__sum${o.summaryCls ? ` ${o.summaryCls}` : ''}`, o.summary));
+    head.onclick = o.onToggle;
+    const body = el('div', 'live-section__body');
+    body.id = o.id;
+    body.hidden = o.collapsed;
+    host.append(head, body);
+    return body;
+}
+
+/** A change's text with the people in it as links (a click shows them in the tree). */
+export function appendChangeText(host: HTMLElement, c: LiveChangeItem, show: (id: PersonId) => void): void {
+    const names: { id: PersonId; name: string }[] = [];
+    for (const id of c.personIds) {
+        const p = DataManager.getPerson(id);
+        const name = p ? `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() : '';
+        if (name && c.text.includes(name)) names.push({ id, name });
+    }
+    let rest = c.text;
+    while (rest) {
+        let first: { id: PersonId; name: string; at: number } | null = null;
+        for (const n of names) {
+            const at = rest.indexOf(n.name);
+            if (at >= 0 && (!first || at < first.at)) first = { ...n, at };
+        }
+        if (!first) {
+            host.appendChild(document.createTextNode(rest));
+            break;
+        }
+        if (first.at > 0) host.appendChild(document.createTextNode(rest.slice(0, first.at)));
+        const link = el('button', 'live-person-link', first.name);
+        link.type = 'button';
+        link.title = strings.research.showInTree;
+        const id = first.id;
+        link.onclick = (e) => {
+            e.stopPropagation();
+            show(id);
+        };
+        host.appendChild(link);
+        rest = rest.slice(first.at + first.name.length);
+    }
+}
 
 /**
  * The followed bridge, kept for a reload of this tab (sessionStorage: survives
@@ -140,6 +250,51 @@ let liveTaskMenuCleanup: (() => void) | null = null;
 let live: LiveSession | null = null;
 /** The "Waiting for you" panel while no research is followed (the research's id). */
 let idlePanel: string | null = null;
+
+/**
+ * The research's word per person REFN for the card badges: what waits for
+ * the user (live, or as last heard within a week) and, while following, what
+ * the agent works on or has queued. Only for the active research tree.
+ */
+function researchCardInfo(): Map<string, ResearchCardInfo> {
+    const out = new Map<string, ResearchCardInfo>();
+    if (DataManager.isViewMode()) return out;
+    const treeId = DataManager.getCurrentTreeId();
+    if (!treeId) return out;
+    const following = live && !live.ended && live.treeId === treeId ? live : null;
+    const researchId = TreeManager.getTreeMetadata(treeId)?.research?.id;
+    const waiting = following?.waiting ?? (researchId ? storedResearchWaiting(researchId)?.items : undefined) ?? [];
+    const note = (ref: string | undefined, what: keyof ResearchCardInfo, text: string): void => {
+        if (!ref || !text) return;
+        const info = out.get(ref) ?? {};
+        info[what] ??= text;
+        out.set(ref, info);
+    };
+    for (const w of waiting) note(w.person, 'waiting', w.what);
+    if (following) {
+        for (const w of following.working) note(w.person, 'agent', w.task || w.who);
+        for (const q of following.queue) if (q.state === 'next') note(q.person, 'agent', q.text);
+    }
+    return out;
+}
+setResearchCardInfoProvider(researchCardInfo);
+
+/** The badges last drawn from the research (a change redraws the cards). */
+let cardInfoKey = '[]';
+let cardInfoPending = false;
+
+/** Redraw the cards once the research's word about people changed. */
+function syncResearchCardInfo(): void {
+    if (cardInfoPending) return;
+    cardInfoPending = true;
+    queueMicrotask(() => {
+        cardInfoPending = false;
+        const key = JSON.stringify([...researchCardInfo()].sort(([a], [b]) => a.localeCompare(b)));
+        if (key === cardInfoKey) return;
+        cardInfoKey = key;
+        TreeRenderer.render();
+    });
+}
 
 /** How long "Load new version" waits for the research to send it. */
 const VERSION_WAIT_MS = 20_000;
@@ -250,6 +405,7 @@ async function fetchStatus(url: string): Promise<LiveStatus | null> {
     // The bridge runs on this computer: what it announces holds here.
     if (status) noteResearchLinks(status.links);
     if (status?.treeId) noteResearchWaiting(status.treeId, status.waiting, status);
+    syncResearchCardInfo();
     return status;
 }
 
@@ -314,7 +470,7 @@ let timeTicker: ReturnType<typeof setInterval> | null = null;
  * A time element of the panel: `ago` = "just now / N min ago / 14:36",
  * `since` = "since 14:36". Refreshed by the ticker from its data-ts.
  */
-function timeEl(value: string, kind: 'ago' | 'since'): HTMLElement | null {
+export function timeEl(value: string, kind: 'ago' | 'since' | 'sincefor'): HTMLElement | null {
     const ts = Date.parse(value);
     if (!Number.isFinite(ts)) return null;
     const node = el('small', 'live-time');
@@ -324,24 +480,33 @@ function timeEl(value: string, kind: 'ago' | 'since'): HTMLElement | null {
     return node;
 }
 
-function liveTimeText(ts: number, kind: 'ago' | 'since'): string {
+function liveTimeText(ts: number, kind: 'ago' | 'since' | 'sincefor'): string {
     const lang = getCurrentLanguage();
+    if (kind === 'sincefor') return strings.live.sinceFor(formatLiveClock(ts, Date.now(), lang), liveDuration(ts));
     return kind === 'since'
         ? strings.research.since(formatLiveClock(ts, Date.now(), lang))
         : formatLiveTime(ts, Date.now(), lang, strings.research.justNow);
 }
 
-/** Keep the panel's times fresh while it is shown. */
+/** Keep the panel's (and the overview's) times fresh while shown. */
 function tickLiveTimes(): void {
-    const panel = document.getElementById('live-panel');
-    if (!panel) {
+    const hosts = [document.getElementById('live-panel'), document.getElementById('research-overview')].filter(Boolean) as HTMLElement[];
+    if (hosts.length === 0) {
         if (timeTicker) clearInterval(timeTicker);
         timeTicker = null;
         return;
     }
-    panel.querySelectorAll<HTMLElement>('.live-time[data-ts]').forEach((node) => {
-        node.textContent = liveTimeText(Number(node.dataset.ts), node.dataset.kind === 'since' ? 'since' : 'ago');
-    });
+    for (const host of hosts) {
+        host.querySelectorAll<HTMLElement>('.live-time[data-ts]').forEach((node) => {
+            const kind = node.dataset.kind === 'since' || node.dataset.kind === 'sincefor' ? node.dataset.kind : 'ago';
+            node.textContent = liveTimeText(Number(node.dataset.ts), kind);
+        });
+    }
+}
+
+/** Start the time ticker (the overview draws times too). */
+export function ensureLiveTicker(): void {
+    if (!timeTicker) timeTicker = setInterval(tickLiveTimes, TIME_TICK_MS);
 }
 
 /** "user" (or nothing) is who the section heading already names. */
@@ -379,11 +544,16 @@ function placeLivePanel(panel: HTMLElement): void {
     panel.style.maxHeight = `min(60vh, 520px, ${Math.max(120, Math.round(bottom - top))}px)`;
 }
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
+export function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
     const node = document.createElement(tag);
     if (className) node.className = className;
     if (text !== undefined) node.textContent = text;
     return node;
+}
+
+/** The followed research (null: none), for the overview. */
+export function liveSession(): LiveSession | null {
+    return live;
 }
 
 export const researchUiMethods = uiModule({
@@ -985,6 +1155,13 @@ export const researchUiMethods = uiModule({
         if (body && heading) body.scrollTop = Math.max(0, heading.offsetTop - body.offsetTop - 4);
     },
 
+    /** A card's agent badge: the followed research's panel, unfolded. */
+    showLiveResearchNow(): void {
+        if (!live || live.ended) return;
+        live.collapsed = false;
+        this.renderLivePanel();
+    },
+
     /** Close the "Waiting for you" panel shown without following. */
     closeResearchIdlePanel(): void {
         if (!idlePanel) return;
@@ -1127,8 +1304,13 @@ export const researchUiMethods = uiModule({
                 update: status.update,
                 spend: status.spend,
                 lastIntake: status.lastIntake,
-                queueCollapsed: window.innerHeight < 700,
-                queueToggled: false,
+                autoCollapsed: new Set(window.innerHeight < 700 ? ['queue'] : []),
+                seenWaiting: new Set(status.waiting.map(w => w.id)),
+                seenInSection: 0,
+                startedAt: Date.now(),
+                startPersons: Object.values(data.persons).filter(p => !p.isPlaceholder).length,
+                startSources: Object.keys(data.sources ?? {}).length,
+                overview: false,
                 changes: [],
                 ended: false,
                 collapsed: isMobile(),
@@ -1138,6 +1320,8 @@ export const researchUiMethods = uiModule({
                 failures: 0,
                 chain: Promise.resolve(),
             };
+            live.overview = this.researchOverviewRemembered();
+            if (live.overview) live.collapsed = false;
             DataManager.setLiveTree(treeId);
             TreeRenderer.render();
             this.renderLivePanel();
@@ -1224,6 +1408,13 @@ export const researchUiMethods = uiModule({
         }
         s.working = status.working;
         s.waiting = status.waiting;
+        // A task that was not there before unfolds "Waiting for you", even when folded.
+        const fresh = status.waiting.filter(w => !s.seenWaiting.has(w.id));
+        if (fresh.length > 0) {
+            for (const w of fresh) s.seenWaiting.add(w.id);
+            if (storedLiveSections(SECTIONS_KEY).waiting === true) storeLiveSection(SECTIONS_KEY, 'waiting', false);
+            s.autoCollapsed.delete('waiting');
+        }
         s.queue = status.queue;
         s.queueMore = status.queueMore;
         s.update = status.update;
@@ -1251,10 +1442,13 @@ export const researchUiMethods = uiModule({
             const p = id ? data.persons[id] : undefined;
             return p ? `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() || null : null;
         };
+        const task = s.working[0]?.task ?? '';
         const items: LiveChangeItem[] = change.what.map((line) => ({
             text: humanizeChange(line, nameOf, strings.research.changeWords),
-            at: change.at,
+            at: change.at || new Date().toISOString(),
             personIds: personsByRefs(data, extractChangedRefs([line])),
+            kind: changeKind(line),
+            task,
         }));
         s.changes = [...items.reverse(), ...s.changes].slice(0, MAX_CHANGES);
         if (DataManager.getCurrentTreeId() === s.treeId) {
@@ -1363,6 +1557,7 @@ export const researchUiMethods = uiModule({
     },
 
     syncLivePanelVisibility(): void {
+        this.renderResearchOverview();
         const panel = document.getElementById('live-panel');
         if (!panel) return;
         if (live) panel.hidden = DataManager.getCurrentTreeId() !== live.treeId;
@@ -1384,12 +1579,22 @@ export const researchUiMethods = uiModule({
     /**
      * The "Waiting for you" section: the tasks, since when, and (while the
      * research runs) "Answer ↗" into the research. Bridge text is text only.
+     * Returns the section's body. Without `fold` the heading does not fold
+     * (the panel shown without following).
      */
-    appendWaitingSection(body: HTMLElement, items: readonly LiveWaiting[], answerable: boolean): void {
+    appendWaitingSection(body: HTMLElement, items: readonly LiveWaiting[], answerable: boolean,
+        fold?: { collapsed: boolean; onToggle: () => void; id: string }): HTMLElement {
         const r = strings.research;
-        body.appendChild(el('h4', 'live-panel-heading live-panel-heading-waiting', `${r.waiting} · ${items.length}`));
+        const title = `${r.waiting} · ${items.length}`;
+        let host: HTMLElement;
+        if (fold) {
+            host = liveSection(body, { id: fold.id, title, collapsed: fold.collapsed, onToggle: fold.onToggle, headCls: 'live-panel-heading-waiting' });
+        } else {
+            body.appendChild(el('h4', 'live-panel-heading live-panel-heading-waiting', title));
+            host = body;
+        }
         const list = el('ul', 'live-panel-list live-waiting');
-        body.appendChild(list);
+        host.appendChild(list);
         const canAnswer = answerable && (this.researchLinkAvailable('task') || this.researchLinkAvailable('open'));
         for (const w of items) {
             const li = el('li', 'live-waiting-row');
@@ -1408,133 +1613,199 @@ export const researchUiMethods = uiModule({
             }
             list.appendChild(li);
         }
+        return host;
+    },
+
+    /** Fold or unfold a section of the small panel (remembered on this device). */
+    toggleLiveSection(key: LiveSectionKey): void {
+        const s = live;
+        if (!s) return;
+        const collapsed = panelSectionCollapsed(s, key);
+        storeLiveSection(SECTIONS_KEY, key, !collapsed);
+        s.autoCollapsed.delete(key);
+        if (key === 'changes' && collapsed) s.seenInSection = s.changes.length;
+        this.renderLivePanel();
+    },
+
+    /** Show a person from a live change: focus them and bring them into view. */
+    showLivePerson(id: PersonId): void {
+        if (!DataManager.getPerson(id)) return;
+        TreeRenderer.setFocus(id);
+        void TreeRenderer.renderAsync().then(() => ZoomPan.centerOnFocusWithContext());
+    },
+
+    /** "Working": who, on what, since when and for how long. */
+    appendWorkingList(host: HTMLElement, s: LiveSession): void {
+        const r = strings.research;
+        const working = el('ul', 'live-panel-list live-working');
+        host.appendChild(working);
+        if (s.working.length === 0) working.appendChild(el('li', 'live-empty', r.nobodyWorking));
+        for (const w of s.working) {
+            const li = el('li');
+            li.appendChild(el('strong', undefined, w.who));
+            if (w.task) li.appendChild(el('span', 'live-task', ` — ${w.task}`));
+            const since = timeEl(w.since, 'sincefor');
+            if (since) li.appendChild(since);
+            working.appendChild(li);
+        }
+    },
+
+    /** Change rows (text with the people as links, then the time). */
+    appendChangeRows(list: HTMLElement, changes: readonly LiveChangeItem[]): void {
+        const r = strings.research;
+        if (changes.length === 0) list.appendChild(el('li', 'live-empty', r.noChanges));
+        for (const c of changes) {
+            const li = el('li');
+            const row = el('div', 'live-change');
+            const text = el('span', 'live-change-text');
+            appendChangeText(text, c, (id) => this.showLivePerson(id));
+            row.appendChild(text);
+            const at = timeEl(c.at, 'ago');
+            if (at) row.appendChild(at);
+            li.appendChild(row);
+            list.appendChild(li);
+        }
     },
 
     /** Draw the "Research now" panel. Bridge text is set as text, never HTML. */
     renderLivePanel(): void {
+        syncResearchCardInfo();
         const s = live;
         if (!s && !idlePanel) {
             document.getElementById('live-panel')?.remove();
+            this.renderResearchOverview();
             return;
         }
         const panel = this.livePanelElement();
         if (!s) {
+            this.renderResearchOverview();
             this.renderIdleResearchPanel(panel);
             return;
         }
         // Following a research: its panel says it all.
         idlePanel = null;
         const r = strings.research;
+        const L = strings.live;
+        // Phones: the panel is a strip (head and a summary); a tap opens the overview sheet.
+        const phone = window.matchMedia?.('(max-width: 640px)').matches === true;
+        const collapsed = s.collapsed || phone;
         panel.setAttribute('aria-label', r.panelLabel);
         panel.classList.remove('idle');
         panel.classList.toggle('ended', s.ended);
-        panel.classList.toggle('collapsed', s.collapsed);
-        panel.hidden = DataManager.getCurrentTreeId() !== s.treeId;
+        panel.classList.toggle('collapsed', collapsed);
+        panel.classList.toggle('phone-strip', phone && !s.ended);
+        // The overview shows the same (a drawn overview hides the panel).
+        panel.hidden = DataManager.getCurrentTreeId() !== s.treeId || (s.overview && !s.ended);
         // A redraw replaces the ⋯ buttons: an open task menu moves to the new one.
         const menuTask = document.getElementById('live-task-menu')?.dataset.task ?? null;
         this.closeLiveTaskMenu();
         panel.replaceChildren();
+        this.renderResearchOverview();
 
         const head = el('div', 'live-panel-head');
         head.appendChild(el('span', 'live-dot'));
         const toggle = el('button', 'live-panel-toggle');
         toggle.type = 'button';
-        toggle.setAttribute('aria-expanded', String(!s.collapsed));
-        toggle.title = s.collapsed ? r.show : r.hide;
-        toggle.onclick = () => this.toggleLivePanel();
+        toggle.setAttribute('aria-expanded', String(!collapsed));
+        toggle.title = phone ? L.openOverview : collapsed ? r.show : r.hide;
+        toggle.onclick = () => (phone && !s.ended ? this.openResearchOverview() : this.toggleLivePanel());
         toggle.appendChild(el('span', 'live-panel-title', s.ended ? r.ended : r.panelTitle));
         const chevron = el('span', 'live-panel-chevron');
         chevron.setAttribute('aria-hidden', 'true');
         chevron.innerHTML = iconSvg('chevron-down', { size: 14 });
         toggle.appendChild(chevron);
         head.appendChild(toggle);
+        if (this.canOpenResearchOverview()) {
+            const expand = el('button', 'live-panel-expand', '⤢');
+            expand.type = 'button';
+            expand.setAttribute('aria-label', L.openOverview);
+            expand.title = L.openOverview;
+            expand.onclick = () => this.openResearchOverview();
+            head.appendChild(expand);
+        }
         const action = el('button', 'live-panel-action', s.ended ? r.close : r.stop);
         action.type = 'button';
         action.onclick = () => (s.ended ? this.closeLivePanel() : this.stopLiveFollow());
         head.appendChild(action);
         panel.appendChild(head);
-        if (!s.ended && s.update) this.appendUpdateStrip(panel, s.update.version);
-        // Collapsed: what the hidden body would say first — new changes, and
-        // that the tree cannot be edited meanwhile.
-        if (s.collapsed) {
-            const fresh = s.changes.length - s.seenChanges;
+        if (!s.ended && s.update && !phone) this.appendUpdateStrip(panel, s.update.version);
+        // Collapsed: what the hidden body would say first. On a phone: the state and what waits.
+        if (collapsed) {
             const summary = el('div', 'live-panel-summary');
+            if (phone && !s.ended) {
+                summary.appendChild(el('span', 'live-panel-chip', s.working.length > 0 ? L.stateWorking : L.stateIdle));
+                if (s.waiting.length > 0) summary.appendChild(el('span', 'live-panel-chip live-panel-chip--warn', `${r.waiting} ${s.waiting.length}`));
+            }
+            const fresh = s.changes.length - s.seenChanges;
             if (fresh > 0) summary.appendChild(el('span', 'live-panel-chip live-panel-new', r.newChanges(fresh)));
-            if (!s.ended) summary.appendChild(el('span', 'live-panel-chip', r.readOnly));
+            if (!s.ended && !phone) summary.appendChild(el('span', 'live-panel-chip', r.readOnly));
             if (summary.childElementCount > 0) panel.appendChild(summary);
         }
 
         const body = el('div', 'live-panel-body');
         body.appendChild(el('p', 'live-panel-state', s.ended ? r.endedText : r.following(s.name)));
-
-        const section = (title: string, cls: string): HTMLUListElement => {
-            body.appendChild(el('h4', 'live-panel-heading', title));
-            const list = el('ul', `live-panel-list ${cls}`);
-            body.appendChild(list);
-            return list;
-        };
+        const fold = (key: LiveSectionKey) => ({
+            id: `live-sec-${key}`,
+            collapsed: panelSectionCollapsed(s, key),
+            onToggle: () => this.toggleLiveSection(key),
+        });
 
         // Once following has ended the bridge's "who is working" is stale —
         // show it only while live.
-        const working = s.ended ? null : section(r.atWork, 'live-working');
-        if (working && s.working.length === 0) working.appendChild(el('li', 'live-empty', r.nobodyWorking));
-        if (working) for (const w of s.working) {
-            const li = el('li');
-            li.appendChild(el('strong', undefined, w.who));
-            if (w.task) li.appendChild(el('span', 'live-task', ` — ${w.task}`));
-            const since = timeEl(w.since, 'since');
-            if (since) li.appendChild(since);
-            working.appendChild(li);
+        if (!s.ended) {
+            const w = s.working[0];
+            const since = w ? Date.parse(w.since) : NaN;
+            const summary = w ? [w.who, Number.isFinite(since) ? liveDuration(since) : ''].filter(Boolean).join(' · ') : L.nobody;
+            const host = liveSection(body, { ...fold('working'), title: r.atWork, summary });
+            this.appendWorkingList(host, s);
         }
 
         // What waits for the user comes before what changed: it needs them.
         if (s.waiting.length > 0) {
-            this.appendWaitingSection(body, s.waiting, !s.ended);
-            if (!s.ended) body.appendChild(el('p', 'live-panel-hint', r.answerWhere));
+            const host = this.appendWaitingSection(body, s.waiting, !s.ended, fold('waiting'));
+            if (!s.ended) host.appendChild(el('p', 'live-panel-hint', r.answerWhere));
+        }
+
+        // What changed: the last few here, all of them in the overview.
+        const changesFold = fold('changes');
+        if (!changesFold.collapsed) s.seenInSection = s.changes.length;
+        const freshInSection = s.changes.length - s.seenInSection;
+        const changesHost = liveSection(body, {
+            ...changesFold, title: r.changes,
+            summary: freshInSection > 0 ? L.newChanges(freshInSection) : undefined, summaryCls: 'live-section__sum--new',
+        });
+        const changes = el('ul', 'live-panel-list live-changes');
+        changesHost.appendChild(changes);
+        this.appendChangeRows(changes, s.changes.slice(0, PANEL_CHANGES));
+        if (s.changes.length > PANEL_CHANGES && this.canOpenResearchOverview()) {
+            const all = el('button', 'link-button live-all-changes', L.allInOverview);
+            all.type = 'button';
+            all.onclick = () => this.openResearchOverview();
+            changesHost.appendChild(all);
         }
 
         // The agent's queue: only while live (an old queue misleads).
-        if (!s.ended) this.appendQueueSection(body, s);
-
-        // Every change row looks the same; one that names a person in the
-        // tree is a button (hover background) that shows that person.
-        const changes = section(r.changes, 'live-changes');
-        if (s.changes.length === 0) changes.appendChild(el('li', 'live-empty', r.noChanges));
-        for (const c of s.changes) {
-            const li = el('li');
-            const target = c.personIds[0];
-            const row = target ? el('button', 'live-change live-change-link') : el('div', 'live-change');
-            row.appendChild(el('span', 'live-change-text', c.text));
-            const at = timeEl(c.at, 'ago');
-            if (at) row.appendChild(at);
-            if (target && row instanceof HTMLButtonElement) {
-                row.type = 'button';
-                row.title = r.showInTree;
-                row.onclick = () => {
-                    if (!DataManager.getPerson(target)) return;
-                    TreeRenderer.setFocus(target);
-                    void TreeRenderer.renderAsync().then(() => ZoomPan.centerOnFocusWithContext());
-                };
-            }
-            li.appendChild(row);
-            changes.appendChild(li);
-        }
+        if (!s.ended) this.appendQueueSection(body, s, fold('queue'), 3);
         panel.appendChild(body);
-        if (!s.ended && s.spend) this.appendSpendFoot(panel, s.spend);
+        if (!s.ended && s.spend && !phone) this.appendSpendFoot(panel, s.spend);
         placeLivePanel(panel);
         const again = menuTask ? panel.querySelector<HTMLElement>(`.live-queue-more[data-task="${menuTask}"]`) : null;
         if (again && menuTask) this.openLiveTaskMenu(again, menuTask);
-        // Too tall for the window: "Up next" folds first (unless the user chose).
-        if (!s.collapsed && !s.queueCollapsed && !s.queueToggled && body.querySelector('.live-queue')
-            && body.scrollHeight > body.clientHeight + 1) {
-            s.queueCollapsed = true;
-            this.renderLivePanel();
-            return;
+        // Too tall for the window: fold Up next, then Changes, then Working (never
+        // Waiting, never what the user chose). Not remembered.
+        if (!collapsed && !panel.hidden && body.scrollHeight > body.clientHeight + 1) {
+            const stored = storedLiveSections(SECTIONS_KEY);
+            const next = AUTO_FOLD.find(k => stored[k] === undefined && !s.autoCollapsed.has(k)
+                && body.querySelector(`#live-sec-${k}`));
+            if (next) {
+                s.autoCollapsed.add(next);
+                this.renderLivePanel();
+                return;
+            }
         }
         if (!timeTicker) timeTicker = setInterval(tickLiveTimes, TIME_TICK_MS);
     },
 
-    /** "New Strom Research 1.7" under the panel heading, with "Update ↗". */
     appendUpdateStrip(panel: HTMLElement, version: string): void {
         const r = strings.research;
         const strip = el('div', 'live-panel-update');
@@ -1550,37 +1821,26 @@ export const researchUiMethods = uiModule({
     },
 
     /**
-     * "Up next": the first three tasks of the agent's queue (⋯ parks or drops
-     * one in the research), parked ones below (Resume ↗), the rest as one
-     * link. Nothing changes here after an action: the next status tells.
+     * "Up next": the first `limit` tasks of the agent's queue (⋯ parks or
+     * drops one in the research), parked ones below (Resume ↗), the rest as
+     * one link. Nothing changes here after an action: the next status tells.
      */
-    appendQueueSection(body: HTMLElement, s: LiveSession): void {
+    appendQueueSection(body: HTMLElement, s: LiveSession,
+        fold: { id: string; collapsed: boolean; onToggle: () => void }, limit: number, title = strings.research.queue): void {
         const r = strings.research;
         const next = s.queue.filter(q => q.state === 'next');
         const parked = s.queue.filter(q => q.state === 'parked');
         if (next.length === 0 && parked.length === 0 && s.queueMore === 0) return;
-        const shownNext = next.slice(0, 3);
-        const shownParked = parked.slice(0, 3);
+        const shownNext = next.slice(0, limit);
+        const shownParked = parked.slice(0, limit);
         const hidden = s.queueMore + (next.length - shownNext.length) + (parked.length - shownParked.length);
 
-        const toggle = el('button', 'live-panel-heading live-queue-toggle');
-        toggle.type = 'button';
-        toggle.setAttribute('aria-expanded', String(!s.queueCollapsed));
-        toggle.appendChild(el('span', undefined, r.queue));
-        const chevron = el('span', 'live-panel-chevron');
-        chevron.setAttribute('aria-hidden', 'true');
-        chevron.innerHTML = iconSvg('chevron-down', { size: 12 });
-        toggle.appendChild(chevron);
-        toggle.onclick = () => {
-            s.queueCollapsed = !s.queueCollapsed;
-            s.queueToggled = true;
-            this.renderLivePanel();
-        };
-        body.appendChild(toggle);
-        if (s.queueCollapsed) return;
-
+        const host = liveSection(body, {
+            ...fold, title, headCls: 'live-queue-toggle',
+            summary: strings.live.queueCount(next.length + s.queueMore),
+        });
         const list = el('ul', 'live-panel-list live-queue');
-        body.appendChild(list);
+        host.appendChild(list);
         const canTask = this.researchLinkAvailable('task');
         shownNext.forEach((q, i) => {
             const li = el('li', 'live-queue-row');
@@ -1762,7 +2022,20 @@ export const researchUiMethods = uiModule({
 
     /** Re-place the panel (window resized, a bar appeared). */
     placeLivePanel(): void {
+        // Across the phone / tablet / desktop widths the panel and the overview change form.
+        const overview = document.getElementById('research-overview');
+        const phone = window.matchMedia?.('(max-width: 640px)').matches === true;
+        const form = `${phone}:${window.innerWidth >= 1280}`;
+        if (overview && overview.dataset.form !== form) {
+            overview.dataset.form = form;
+            this.renderLivePanel();
+            return;
+        }
         const panel = document.getElementById('live-panel');
+        if (panel && live && panel.classList.contains('phone-strip') !== (phone && !live.ended)) {
+            this.renderLivePanel();
+            return;
+        }
         if (panel) placeLivePanel(panel);
     },
 });

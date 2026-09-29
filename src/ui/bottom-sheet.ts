@@ -67,6 +67,7 @@ export const bottomSheetMethods = uiModule({
                 <div class="bottom-sheet-handle"></div>
                 ${personName ? `<div class="bottom-sheet-menu-title">${esc(personName)}</div>` : ''}
                 <div class="bottom-sheet-items">
+                    ${this.personSignalsMenuHtml(personId, true, 'bottom-sheet-item')}
                     ${actions.map(a => {
                         // Keep the class out of the attribute (see context-menu.ts note).
                         const cls = a.danger ? 'bottom-sheet-item danger' : 'bottom-sheet-item';

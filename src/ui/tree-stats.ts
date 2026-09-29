@@ -444,7 +444,7 @@ export const treeStatsMethods = uiModule({
                 if (show) {
                     e.preventDefault();
                     const kind = show.getAttribute('data-evidence');
-                    if (kind === 'noSource' || kind === 'birthNoSource' || kind === 'lineEnds') void this.showEvidenceInTree(kind, treeId);
+                    if (kind === 'noSource' || kind === 'birthNoSource' || kind === 'lineEnds' || kind === 'levels') void this.showEvidenceInTree(kind, treeId);
                     return;
                 }
                 const btn = target.closest('.health-action') as HTMLElement | null;

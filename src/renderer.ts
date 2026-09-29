@@ -19,6 +19,8 @@ import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
 import { CARD_SIZE, ViewMode, STANDALONE_VIEWS } from './types.js';
+import { ACTION_GLYPH, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow } from './card-signals.js';
+import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
 import {
     computeLayout,
     StromLayoutEngine,
@@ -88,6 +90,8 @@ class TreeRendererClass {
     private changedIds: Set<PersonId> | null = null;
     /** "Show in tree" from tree health: these people stand out, the rest dims. Not kept over a reload. */
     private evidenceIds: Set<PersonId> | null = null;
+    /** The Evidence mode: every card framed by its level (null: off). */
+    private evidenceLevelMap: Map<PersonId, EvidenceLevel> | null = null;
     private focusDepthUp: number = 3;
     private focusDepthDown: number = 3;
 
@@ -684,6 +688,12 @@ class TreeRendererClass {
         this.applyEvidenceHighlight();
     }
 
+    /** The Evidence mode: each card framed by its level (full / partial / none); null ends it. */
+    setEvidenceLevels(levels: Map<PersonId, EvidenceLevel> | null): void {
+        this.evidenceLevelMap = levels;
+        this.applyEvidenceHighlight();
+    }
+
     getEvidenceHighlight(): ReadonlySet<PersonId> | null {
         return this.evidenceIds;
     }
@@ -694,9 +704,14 @@ class TreeRendererClass {
             if (!this.evidenceIds || !id) return;
             el.classList.add(this.evidenceIds.has(id as PersonId) ? 'evidence-hit' : 'evidence-dim');
         };
-        document.querySelectorAll<HTMLElement>('.person-card').forEach(card => mark(card, card.dataset.id));
+        document.querySelectorAll<HTMLElement>('.person-card').forEach(card => {
+            mark(card, card.dataset.id);
+            card.classList.remove('evl-full', 'evl-partial', 'evl-none');
+            const level = card.dataset.id ? this.evidenceLevelMap?.get(card.dataset.id as PersonId) : undefined;
+            if (level) card.classList.add(`evl-${level}`);
+        });
         document.querySelectorAll<HTMLElement>('[data-fan-person]').forEach(seg => mark(seg, seg.dataset.fanPerson));
-        document.body.classList.toggle('evidence-mode', !!this.evidenceIds);
+        document.body.classList.toggle('evidence-mode', !!this.evidenceIds || !!this.evidenceLevelMap);
     }
 
     private updateFocusUI(): void {
@@ -952,6 +967,8 @@ class TreeRendererClass {
         }
         // Deceased cue without a death date (same rule as the poster export).
         const presumedDeceased = this.computePresumedDeceased();
+        // At-a-glance signals (evidence, story, action badge): shared context.
+        const signalCtx = this.signalContext();
 
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);
@@ -984,6 +1001,8 @@ class TreeRendererClass {
             }
             if (this.changedIds?.has(id)) classes += ' live-changed';
             if (this.evidenceIds) classes += this.evidenceIds.has(id) ? ' evidence-hit' : ' evidence-dim';
+            const evl = this.evidenceLevelMap?.get(id);
+            if (evl) classes += ` evl-${evl}`;
             // Optional branch colour stripe (focus and placeholders never tagged).
             if (branchMap && !person.isPlaceholder) {
                 const b = branchMap.get(id);
@@ -997,6 +1016,8 @@ class TreeRendererClass {
             if (person.question?.trim() && !person.isPlaceholder) {
                 classes += ' has-question';
             }
+            const signals = cardSignalInfo(person, signalCtx);
+            if (signals.action) classes += ' has-signal';
             card.className = classes;
             card.style.left = pos.x + 'px';
             card.style.top = pos.y + 'px';
@@ -1009,6 +1030,13 @@ class TreeRendererClass {
                 if (target.classList.contains('add-btn') || target.classList.contains('branch-tab')) return;
                 // Don't open context menu when clicking on badge buttons or their children
                 if (target.closest('.hidden-partners-btn') || target.closest('.hidden-families-btn')) return;
+                // The badge opens what it signals (touch: the person menu, which leads with it).
+                const badge = target.closest<HTMLElement>('.card-signal');
+                if (badge && !window.matchMedia?.('(pointer: coarse)').matches) {
+                    e.stopPropagation();
+                    UI.openCardSignal(id, badge.dataset.signal ?? '');
+                    return;
+                }
                 UI.showContextMenu(id, e);
             };
 
@@ -1017,7 +1045,7 @@ class TreeRendererClass {
             // plain text (never parsed as HTML).
             card.tabIndex = 0;
             card.setAttribute('role', 'button');
-            card.setAttribute('aria-label', `${person.firstName} ${person.lastName}`.trim() || '?');
+            card.setAttribute('aria-label', this.cardAriaLabel(person, signals));
             card.addEventListener('keydown', (e) => {
                 if (e.target !== card || (e.key !== 'Enter' && e.key !== ' ')) return;
                 e.preventDefault();
@@ -1198,19 +1226,36 @@ class TreeRendererClass {
                     .filter(Boolean).join(' · ')
                 : [metaYears, metaPlace].filter(Boolean).join(' · ');
 
+            // Person status at the end of the year row (never beside the name):
+            // the evidence circle and the story leaf. Decorative — the card's
+            // aria-label says it.
+            const stateIcons = density === 'compact' ? '' : [
+                signals.showEvidence && signals.evidence ? `<span class="ev-circle ev-${signals.evidence.level}"></span>` : '',
+                signals.showStory ? `<span class="story-leaf${signals.story === 'draft' ? ' draft' : ''}"></span>` : '',
+            ].join('');
+            const stateHtml = stateIcons ? `<span class="card-state" aria-hidden="true">${stateIcons}</span>` : '';
+            // The action badge on the avatar's corner (a dot on the card's
+            // corner where there is no avatar, or when zoomed far out).
+            const signalLabel = signals.action ? this.signalText(signals, signals.action) : '';
+            const badgeHtml = signals.action
+                ? `<button type="button" class="card-signal signal-${signals.action}" data-signal="${signals.action}" aria-label="${this.escapeHtml(signalLabel)}">${ACTION_GLYPH[signals.action]}</button>`
+                : '';
+            const dotHtml = signals.action ? `<span class="card-signal-dot signal-${signals.action}" aria-hidden="true"></span>` : '';
+
             const avatarInner = showPhoto
                 ? `<img src="${this.escapeHtml(person.photo ?? '')}" alt="">`
                 : `<span class="avatar-initials">${this.escapeHtml(initials)}</span>`;
 
             html += `
-                ${showAvatar ? `<div class="card-avatar">${avatarInner}</div>` : ''}
+                ${showAvatar ? `<div class="card-avatar-wrap"><div class="card-avatar">${avatarInner}</div>${badgeHtml}</div>` : ''}
                 <div class="card-body">
                     <div class="name"><span class="name-text" title="${this.escapeHtml(fullName)}" data-given="${this.escapeHtml(displayName)}" data-surname="${this.escapeHtml(displaySurname)}">${this.escapeHtml(fullName)}</span></div>
-                    ${density !== 'compact' && metaText ? `<div class="birth-date" data-years="${this.escapeHtml(metaYears)}">${this.escapeHtml(metaText)}</div>` : ''}
+                    ${density !== 'compact' && (metaText || stateHtml) ? `<div class="birth-date" data-years="${this.escapeHtml(metaYears)}"><span class="meta-text">${this.escapeHtml(metaText)}</span>${stateHtml}</div>` : ''}
                     ${trade ? `<div class="card-trade">${this.escapeHtml(trade)}</div>` : ''}
                     ${density === 'detailed' && metaPlace ? `<div class="card-place">${this.escapeHtml(metaPlace)}</div>` : ''}
                 </div>
                 ${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">${iconSvg('lock', { size: 10 })}</span>` : ''}
+                ${dotHtml}
             `;
 
             // Chain-link "relations" tab — lives in the top-right edge slot,
@@ -1315,12 +1360,14 @@ class TreeRendererClass {
                 ttRelLine = bits.join(' · ');
             }
 
-            if (ttBirthLine || ttDeathLine || ttRelLine) {
+            const ttSignals = this.tooltipSignalRows(signals);
+            if (ttBirthLine || ttDeathLine || ttRelLine || ttSignals) {
                 const rows = [
                     `<div class="tt-name">${this.escapeHtml(fullName)}</div>`,
                     ttBirthLine ? `<div class="tt-line">${this.escapeHtml(ttBirthLine)}</div>` : '',
                     ttDeathLine ? `<div class="tt-line">${this.escapeHtml(ttDeathLine)}</div>` : '',
                     ttRelLine ? `<div class="tt-line tt-rel">${ttRelLine}</div>` : '',
+                    ttSignals ? `<div class="tt-signals">${ttSignals}</div>` : '',
                     `<div class="tt-foot">${strings.tooltip.gestureHint}</div>`,
                 ].filter(Boolean).join('');
                 // A photo (round 9): reuse the SAME thumbnail the card avatar shows
@@ -1461,10 +1508,12 @@ class TreeRendererClass {
             }
             const card = nameEl.closest('.person-card');
             const meta = card?.querySelector<HTMLElement>('.birth-date') ?? null;
-            if (meta) {
+            // The text part only: the status icons after it stay.
+            const metaText = meta?.querySelector<HTMLElement>('.meta-text') ?? meta;
+            if (meta && metaText) {
                 meta.classList.remove('meta-short');
                 if (meta.dataset.full !== undefined) {
-                    meta.textContent = meta.dataset.full;
+                    metaText.textContent = meta.dataset.full;
                     delete meta.dataset.full;
                 }
             }
@@ -1512,14 +1561,86 @@ class TreeRendererClass {
             textEl.appendChild(givenSpan);
             textEl.appendChild(surnameSpan);
             textEl.dataset.split = '1';
-            if (meta && meta.dataset.years !== undefined) {
-                meta.dataset.full = meta.textContent ?? '';
-                meta.textContent = meta.dataset.years;
+            if (meta && metaText && meta.dataset.years !== undefined) {
+                meta.dataset.full = metaText.textContent ?? '';
+                metaText.textContent = meta.dataset.years;
                 meta.classList.add('meta-short');
             }
             // Step 3 (ellipsis on an overflowing line) is handled by the
             // .name-line { text-overflow: ellipsis } CSS.
         });
+    }
+
+    /** What every card's signals are evaluated against (once per render). */
+    private signalContext(): CardSignalContext {
+        const data = DataManager.getData();
+        return {
+            data,
+            unions: unionsByPerson(data),
+            treeHasSources: treeHasAnySource(data),
+            settings: SettingsManager.getCardSignals(),
+            research: researchCardInfoNow(),
+        };
+    }
+
+    /** One person's signals, as their card shows them (the person menu leads with them). */
+    cardSignalsFor(personId: PersonId): CardSignalInfo | null {
+        const person = DataManager.getPerson(personId);
+        return person ? cardSignalInfo(person, this.signalContext()) : null;
+    }
+
+    /** One action signal in words (badge label, tooltip row). */
+    private signalText(s: CardSignalInfo, which: 'waiting' | 'conflict' | 'question' | 'agent'): string {
+        const c = strings.card;
+        const clip = (t: string): string => (t.length > 60 ? `${t.slice(0, 59).trimEnd()}…` : t);
+        if (which === 'waiting') return c.ttWaiting(clip(s.waiting ?? ''));
+        if (which === 'conflict') return c.ttConflicts(s.conflicts);
+        if (which === 'question') return c.ttQuestion(clip(s.question ?? ''));
+        return c.ttAgent(clip(s.agent ?? ''));
+    }
+
+    /** The tooltip's signal rows (HTML): evidence, story and attachments, then what waits. */
+    private tooltipSignalRows(s: CardSignalInfo): string {
+        const c = strings.card;
+        const rows: string[] = [];
+        if (s.evidence) {
+            const ev = s.evidence;
+            const bits = [ev.sources > 0 ? c.ttSources(ev.sources) : c.ariaEv.none];
+            if (ev.sources > 0 && ev.hasBirth) bits.push(ev.birthCited ? c.ttBirthCited : c.ttBirthMissing);
+            if (ev.sources > 0 && ev.hasDeath && !ev.deathCited) bits.push(c.ttDeathMissing);
+            rows.push(`<div class="tt-line tt-ev"><span class="ev-circle ev-${ev.level}" aria-hidden="true"></span>${this.escapeHtml(bits.join(' · '))}</div>`);
+        }
+        if (s.story || s.attachments > 0) {
+            const bits: string[] = [];
+            if (s.story) bits.push(s.story === 'draft' ? c.ttStoryDraft : c.ttStory);
+            if (s.attachments > 0) bits.push(c.ttAttachments(s.attachments));
+            const leaf = s.story ? `<span class="story-leaf${s.story === 'draft' ? ' draft' : ''}" aria-hidden="true"></span>` : '';
+            rows.push(`<div class="tt-line tt-story">${leaf}${this.escapeHtml(bits.join(' · '))}</div>`);
+        }
+        const action = (text: string): string => `<div class="tt-line tt-action">${this.escapeHtml(text)}</div>`;
+        if (s.waiting) rows.push(action(this.signalText(s, 'waiting')));
+        if (s.conflicts > 0 || s.hypotheses > 0) {
+            rows.push(action([
+                s.conflicts > 0 ? c.ttConflicts(s.conflicts) : '',
+                s.hypotheses > 0 ? c.ttHypotheses(s.hypotheses) : '',
+            ].filter(Boolean).join(' · ')));
+        }
+        if (s.question) rows.push(action(this.signalText(s, 'question')));
+        if (s.agent) rows.push(action(this.signalText(s, 'agent')));
+        return rows.join('');
+    }
+
+    /** The card's accessible name: the name, then its status and what waits. */
+    private cardAriaLabel(person: Person, s: CardSignalInfo): string {
+        const c = strings.card;
+        const parts = [`${person.firstName} ${person.lastName}`.trim() || '?'];
+        if (s.showEvidence && s.evidence) parts.push(c.ariaEv[s.evidence.level]);
+        if (s.showStory) parts.push(s.story === 'draft' ? c.ariaStoryDraft : c.ariaStory);
+        if (s.action === 'waiting') parts.push(c.ariaWaiting);
+        else if (s.action === 'conflict') parts.push(c.ariaConflict);
+        else if (s.action === 'question') parts.push(c.ariaQuestion);
+        else if (s.action === 'agent') parts.push(c.ariaAgent);
+        return parts.join(', ');
     }
 
     /** True when the person is currently rendered on the canvas. */
@@ -1927,7 +2048,7 @@ class TreeRendererClass {
             showKekule: SettingsManager.isFanKekuleEnabled(),
             relTypeLabel: (t) => strings.parentRelType[t],
         });
-        if (this.evidenceIds) this.applyEvidenceHighlight();
+        if (this.evidenceIds || this.evidenceLevelMap) this.applyEvidenceHighlight();
 
         // Mobile: the fan keeps a minimum drawing width and overflows the
         // container — start the view centered on the focus person.

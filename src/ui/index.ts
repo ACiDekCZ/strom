@@ -71,6 +71,8 @@ import { researchActionsMethods } from './research-actions-ui.js';
 import { personResearchMethods } from './person-research-ui.js';
 import { researchAdoptMethods } from './research-adopt-ui.js';
 import { evidenceUiMethods } from './evidence-ui.js';
+import { cardSignalsUiMethods } from './card-signals-ui.js';
+import { researchOverviewMethods } from './research-overview-ui.js';
 import { exportImageMethods } from './export-image-ui.js';
 import { bookUiMethods } from './book-ui.js';
 import { snapshotsUiMethods } from './snapshots-ui.js';
@@ -475,6 +477,14 @@ Object.assign(UIClass.prototype, researchAdoptMethods);
 type EvidenceUiMethods = typeof evidenceUiMethods;
 export interface UIClass extends EvidenceUiMethods {}
 Object.assign(UIClass.prototype, evidenceUiMethods);
+
+type CardSignalsUiMethods = typeof cardSignalsUiMethods;
+export interface UIClass extends CardSignalsUiMethods {}
+Object.assign(UIClass.prototype, cardSignalsUiMethods);
+
+type ResearchOverviewMethods = typeof researchOverviewMethods;
+export interface UIClass extends ResearchOverviewMethods {}
+Object.assign(UIClass.prototype, researchOverviewMethods);
 
 type ExportImageMethods = typeof exportImageMethods;
 export interface UIClass extends ExportImageMethods {}

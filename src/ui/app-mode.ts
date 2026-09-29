@@ -738,6 +738,7 @@ export const appModeMethods = uiModule({
     setCardDensity(density: string): void {
         SettingsManager.setCardDensity(density as CardDensity);
         TreeRenderer.render();
+        this.renderCardSignalSettings();
     },
 
     toggleFanKekule(enabled: boolean): void {

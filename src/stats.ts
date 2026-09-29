@@ -8,9 +8,10 @@
  * show sample sizes and hide charts that would be misleading with too little data.
  */
 
-import { StromData, Person, PersonId, Partnership } from './types.js';
+import { StromData, Person, PersonId } from './types.js';
 import { parseFlexDate, ageBetween } from './dates.js';
 import { assignGenerations } from './generations.js';
+import { personEvidence, unionsByPerson } from './evidence-level.js';
 
 export interface NameCount { name: string; count: number; }
 export interface GenLifespan { generation: number; avgYears: number; n: number; }
@@ -198,7 +199,7 @@ export type EvidenceKind = 'noSource' | 'birthNoSource' | 'lineEnds';
  * Where the tree's evidence runs out. Pure. A person counts as cited when a
  * source is on them, on one of their events or on one of their unions (the
  * same as the person's sources). A birth counts as cited by a source on the
- * person or on a baptism. A line end is a person without (real) parents who
+ * person or on a birth or baptism event (src/evidence-level.ts). A line end is a person without (real) parents who
  * is an ancestor of the focus, or who has children and did not marry in (no
  * partner of theirs has parents in the tree).
  */
@@ -206,14 +207,7 @@ export function computeEvidenceGaps(data: StromData, focusId?: PersonId | null):
     const persons = data.persons;
     const real = (id: string): boolean => !!persons[id as PersonId] && !persons[id as PersonId].isPlaceholder;
     const realParents = (p: Person): PersonId[] => p.parentIds.filter(real);
-    const unionsOf = new Map<string, Partnership[]>();
-    for (const u of Object.values(data.partnerships ?? {})) {
-        for (const pid of [u.person1Id, u.person2Id]) {
-            const list = unionsOf.get(pid) ?? [];
-            list.push(u);
-            unionsOf.set(pid, list);
-        }
-    }
+    const unionsOf = unionsByPerson(data);
     // Everyone above the focus (not the focus itself: alone, it ends no line).
     const ancestors = new Set<string>();
     if (focusId && persons[focusId]) {
@@ -227,17 +221,11 @@ export function computeEvidenceGaps(data: StromData, focusId?: PersonId | null):
     }
     const out: EvidenceGaps = { total: 0, noSource: [], birthNoSource: [], lineEnds: [] };
     for (const p of Object.values(persons)) {
-        if (p.isPlaceholder) continue;
+        const ev = personEvidence(p, data, unionsOf);
+        if (!ev) continue;
         out.total++;
-        const personCited = (p.sourceIds?.length ?? 0) > 0;
-        const eventCited = (p.events ?? []).some(e => (e.sourceIds?.length ?? 0) > 0);
-        const unionCited = (unionsOf.get(p.id) ?? []).some(u => (u.sourceIds?.length ?? 0) > 0);
-        if (!personCited && !eventCited && !unionCited) out.noSource.push(p.id);
-
-        const baptisms = (p.events ?? []).filter(e => e.type === 'baptism');
-        const hasBirth = !!p.birthDate || !!p.birthPlace?.trim() || baptisms.length > 0;
-        const birthCited = personCited || baptisms.some(e => (e.sourceIds?.length ?? 0) > 0);
-        if (hasBirth && !birthCited) out.birthNoSource.push(p.id);
+        if (ev.sources === 0) out.noSource.push(p.id);
+        if (ev.hasBirth && !ev.birthCited) out.birthNoSource.push(p.id);
 
         if (realParents(p).length === 0) {
             const partners = (unionsOf.get(p.id) ?? [])
