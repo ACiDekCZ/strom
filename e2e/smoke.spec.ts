@@ -7,6 +7,8 @@ const APP_VERSION = JSON.parse(readFileSync('package.json', 'utf-8')).version;
 test('empty state shows and the first person can be created', async ({ page }) => {
     await openApp(page);
     await expect(page.locator('#empty-state')).toBeVisible();
+    // The window title is the app's name only ("Strom Beta" on the test build).
+    await expect(page).toHaveTitle('Strom');
 
     await createFirstPerson(page, 'Jan', 'Novak');
 

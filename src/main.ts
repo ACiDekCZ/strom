@@ -370,6 +370,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     // The pre-release test build (/beta/) says so next to the wordmark.
     if (isBetaBuild(APP_MODE)) {
+        // The window title too (as the installed app's name, "Strom Beta").
+        document.title = 'Strom Beta';
         const logo = document.querySelector('.app-wordmark');
         if (logo && !logo.querySelector('.beta-badge')) {
             const badge = document.createElement('span');
