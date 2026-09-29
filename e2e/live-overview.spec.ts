@@ -181,6 +181,9 @@ test.describe('the research history (/log)', () => {
         // The session's closing line (no task of its own) joins the task it names.
         await expect(ov.locator('.research-overview__group-head')).toHaveCount(1);
         await expect(ov.locator('.research-overview__older')).toContainText('Older changes are in the research');
+        // From the research's history the highlight says its window, not "while watching".
+        await ov.locator('.research-overview__show-changed').click();
+        await expect(page.locator('#evidence-pill')).toContainText('Changed in the last 24 h · 1');
     });
 
     test('the overview previews at most 20 steps, the rest is in the research', async ({ page }) => {

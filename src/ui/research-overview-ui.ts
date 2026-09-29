@@ -428,13 +428,14 @@ export const researchOverviewMethods = uiModule({
             filters.appendChild(chip);
         }
         bar.appendChild(filters);
-        const changedIds = [...new Set(changes.flatMap(c => c.personIds))].filter(id => DataManager.getPerson(id));
+        // With the research's history: who changed in the last 24 hours; else while watching.
+        const changedIds = [...new Set((s.logged ? recent : changes).flatMap(c => c.personIds))].filter(id => DataManager.getPerson(id));
         if (changedIds.length > 0) {
             const show = el('button', 'link-button research-overview__show-changed', L.showChanged);
             show.type = 'button';
             show.onclick = () => {
                 if (mode === 'sheet') this.closeResearchOverview();
-                this.startPersonHighlight('changed', L.changedTitle, changedIds, null);
+                this.startPersonHighlight('changed', s.logged ? L.changedRecentTitle : L.changedTitle, changedIds, null);
             };
             bar.appendChild(show);
         }
