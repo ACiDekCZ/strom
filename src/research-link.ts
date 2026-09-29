@@ -539,6 +539,8 @@ export interface LiveStatus {
     treeId: string | null;
     name: string;
     head: string;
+    /** When the research last changed (its head commit's time, ISO; '' = not said). */
+    headAt: string;
     persons: number | null;
     families: number | null;
     working: LiveWorker[];
@@ -682,6 +684,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         treeId: normalizeResearchId(tree ? tree.id : r.tree),
         name: cleanText(tree?.name ?? r.name, MAX_NAME),
         head: cleanText(r.head, 80),
+        headAt: Number.isFinite(Date.parse(cleanText(r.headAt, 40))) ? cleanText(r.headAt, 40) : '',
         persons: asCount(r.persons),
         families: asCount(r.families),
         working: sanitizeWorking(r.working),

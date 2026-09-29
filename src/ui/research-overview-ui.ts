@@ -257,11 +257,13 @@ export const researchOverviewMethods = uiModule({
         };
         const [state, stateCls] = s.working.length > 0 ? [L.stateWorking, 'is-working']
             : s.waiting.length > 0 ? [L.stateWaiting, 'is-waiting'] : [L.stateIdle, 'is-idle'];
-        const last = s.changes.length > 0 ? Date.parse(s.changes[0].at) : NaN;
-        // When the last change came, and the research's version (its commit) after it.
-        const lastText = Number.isFinite(last) ? L.lastChange(hhmm(last)) : L.noChangeYet;
-        cell(L.state, state, [lastText, s.head ? s.head.slice(0, 7) : ''].filter(Boolean).join(' · '), stateCls,
-            s.head ? `${lastText} · ${L.versionTitle(s.head.slice(0, 7))}` : '');
+        // When the research last changed (its own time; else the last change
+        // seen; unknown: nothing). The research version (commit) on hover.
+        const lastIso = s.headAt || s.changes[0]?.at || '';
+        const lastEl = timeEl(lastIso, 'lastchange');
+        lastEl?.classList.add('research-overview__cell-sub');
+        const hover = s.head ? L.versionTitle(s.head.slice(0, 7)) : '';
+        cell(L.state, state, lastEl ?? '', stateCls, [lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
         cell(L.sinceWatching, L.plusPersons(Math.max(0, persons - s.startPersons)),
             L.plusSources(Math.max(0, sources - s.startSources), hhmm(s.startedAt)));
         if (s.spend && mode !== 'sheet') {

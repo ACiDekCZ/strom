@@ -173,9 +173,10 @@ test.describe('Research overview', () => {
         expect(Math.abs(midAfter[1] - midBefore[1])).toBeLessThan(2);
 
         await expect(ov.locator('.research-overview__cell-value')).toHaveText(['Working', '+3 people', '$3.20']);
-        // The state says when the last change came, then the research version.
-        await expect(ov.locator('.research-overview__cell-sub').first()).toHaveText(/^last change \d{1,2}:\d{2}.* · h2$/);
-        await expect(ov.locator('.research-overview__cell-sub').first()).toHaveAttribute('title', /Research version h2$/);
+        // The state says when the research last changed; its version only on hover.
+        const stateSub = ov.locator('.research-overview__cell-sub').first();
+        await expect(stateSub).toHaveText(/^last change (just now|\d+ min)/);
+        await expect(stateSub).toHaveAttribute('title', /· Research version h2$/);
         await expect(ov.locator('.research-overview__cell-sub').nth(1)).toHaveText(/^\+1 source · since \d{1,2}:\d{2}/);
         const cards = ov.locator('.research-overview__waiting-card');
         await expect(cards).toHaveCount(2);

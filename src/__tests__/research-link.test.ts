@@ -667,3 +667,12 @@ describe('person refs in the live status (card badges, overview)', () => {
         expect(status.queue.map(q => q.person)).toEqual(['P0004', undefined]);
     });
 });
+
+describe('headAt in the live status', () => {
+    it('keeps a time, drops anything else', () => {
+        const base = { tree: { id: '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77', name: 'X' }, head: 'h1' };
+        expect(sanitizeLiveStatus({ ...base, headAt: '2026-09-29T14:36:00+02:00' })!.headAt).toBe('2026-09-29T14:36:00+02:00');
+        expect(sanitizeLiveStatus({ ...base, headAt: 'yesterday' })!.headAt).toBe('');
+        expect(sanitizeLiveStatus(base)!.headAt).toBe('');
+    });
+});

@@ -80,6 +80,8 @@ export interface LiveSession {
     treeId: TreeId;
     name: string;
     head: string;
+    /** When the research last changed (ISO; '' = unknown). */
+    headAt: string;
     working: LiveWorker[];
     waiting: LiveWaiting[];
     queue: LiveQueueItem[];
@@ -470,7 +472,7 @@ let timeTicker: ReturnType<typeof setInterval> | null = null;
  * A time element of the panel: `ago` = "just now / N min ago / 14:36",
  * `since` = "since 14:36". Refreshed by the ticker from its data-ts.
  */
-export function timeEl(value: string, kind: 'ago' | 'since' | 'sincefor'): HTMLElement | null {
+export function timeEl(value: string, kind: 'ago' | 'since' | 'sincefor' | 'lastchange'): HTMLElement | null {
     const ts = Date.parse(value);
     if (!Number.isFinite(ts)) return null;
     const node = el('small', 'live-time');
@@ -480,8 +482,9 @@ export function timeEl(value: string, kind: 'ago' | 'since' | 'sincefor'): HTMLE
     return node;
 }
 
-function liveTimeText(ts: number, kind: 'ago' | 'since' | 'sincefor'): string {
+function liveTimeText(ts: number, kind: 'ago' | 'since' | 'sincefor' | 'lastchange'): string {
     const lang = getCurrentLanguage();
+    if (kind === 'lastchange') return strings.live.lastChange(formatLiveTime(ts, Date.now(), lang, strings.research.justNow));
     if (kind === 'sincefor') return strings.live.sinceFor(formatLiveClock(ts, Date.now(), lang), liveDuration(ts));
     return kind === 'since'
         ? strings.research.since(formatLiveClock(ts, Date.now(), lang))
@@ -498,7 +501,8 @@ function tickLiveTimes(): void {
     }
     for (const host of hosts) {
         host.querySelectorAll<HTMLElement>('.live-time[data-ts]').forEach((node) => {
-            const kind = node.dataset.kind === 'since' || node.dataset.kind === 'sincefor' ? node.dataset.kind : 'ago';
+            const k = node.dataset.kind;
+            const kind = k === 'since' || k === 'sincefor' || k === 'lastchange' ? k : 'ago';
             node.textContent = liveTimeText(Number(node.dataset.ts), kind);
         });
     }
@@ -1297,6 +1301,7 @@ export const researchUiMethods = uiModule({
                 treeId,
                 name,
                 head: status.head,
+                headAt: status.headAt,
                 working: status.working,
                 waiting: status.waiting,
                 queue: status.queue,
@@ -1406,6 +1411,7 @@ export const researchUiMethods = uiModule({
             this.endLiveFollow(s, 'other');
             return;
         }
+        if (status.headAt) s.headAt = status.headAt;
         s.working = status.working;
         s.waiting = status.waiting;
         // A task that was not there before unfolds "Waiting for you", even when folded.
@@ -1442,6 +1448,8 @@ export const researchUiMethods = uiModule({
             const p = id ? data.persons[id] : undefined;
             return p ? `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() || null : null;
         };
+        // An older research does not say when it changed: a change says it.
+        if (change.at && Date.parse(change.at) > (Date.parse(s.headAt) || 0)) s.headAt = change.at;
         const task = s.working[0]?.task ?? '';
         const items: LiveChangeItem[] = change.what.map((line) => ({
             text: humanizeChange(line, nameOf, strings.research.changeWords),
