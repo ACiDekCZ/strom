@@ -3,7 +3,7 @@
  * Smart heuristics to detect genealogical inconsistencies and data errors
  */
 
-import { StromData, Person, Partnership, PersonId, PartnershipId, Source } from './types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, Source, personSourceIds } from './types.js';
 import { parseFlexDate, FlexDate } from './dates.js';
 import { collectPlaces } from './places.js';
 import { godparentLeads } from './godparents.js';
@@ -941,7 +941,7 @@ function checkSourceIntegrity(data: StromData, addIssue: AddIssue): void {
     for (const [personId, person] of Object.entries(data.persons) as [PersonId, Person][]) {
         const name = getPersonName(person);
 
-        for (const id of missing(person.sourceIds)) {
+        for (const id of missing(personSourceIds(person))) {
             addIssue('warning', 'citationMissingSource',
                 `${name}: citation points to a source that no longer exists`,
                 [personId], undefined, id);

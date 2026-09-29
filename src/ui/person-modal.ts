@@ -41,7 +41,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, personSourceIds } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
@@ -351,7 +351,7 @@ export const personModalMethods = uiModule({
         set('pm-sum-deathevents', deathParts);
 
         const sourceParts: string[] = [];
-        const citeCount = new Set(person.sourceIds ?? []).size;
+        const citeCount = personSourceIds(person).length;
         const scanCount = person.attachments?.length || 0;
         if (citeCount) sourceParts.push(S.sumCitations(citeCount));
         if (scanCount) sourceParts.push(S.sumScans(scanCount));

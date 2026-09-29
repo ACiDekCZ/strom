@@ -5,15 +5,14 @@
  *   full    — the birth (or baptism) is cited and, when the person has a
  *             death in the data (date, place, a death / burial event), so is
  *             the death (or burial).
- * A source on the person itself counts for the birth and the death when the
- * person has one: the GEDCOM import puts the citations of the BIRT / DEAT
- * entries there (the person has no separate birth or death citation). A
- * person with no birth in the data has no documented birth, whatever is cited. Pure; placeholders have
+ * The birth is documented by a citation of the birth fields (birthSourceIds,
+ * GEDCOM BIRT.SOUR) or of a birth / baptism event, the death likewise; a
+ * source on the person as a whole (a name, a residence…) documents neither. Pure; placeholders have
  * no level. Tree health's "Where evidence is missing" counts with the same
  * rules (src/stats.ts).
  */
 
-import { Partnership, Person, PersonId, StromData } from './types.js';
+import { Partnership, Person, PersonId, StromData, personSourceIds } from './types.js';
 
 export type EvidenceLevel = 'none' | 'partial' | 'full';
 
@@ -57,18 +56,16 @@ export function personEvidence(
     if (p.isPlaceholder) return null;
     const events = p.events ?? [];
     const personUnions = unions.get(p.id) ?? [];
-    const personCited = cited(p);
-
-    const sources = new Set<string>();
-    for (const x of [p, ...events, ...personUnions]) for (const s of x.sourceIds ?? []) sources.add(s);
+    const sources = new Set<string>(personSourceIds(p));
+    for (const x of [...events, ...personUnions]) for (const s of x.sourceIds ?? []) sources.add(s);
 
     const birthEvents = events.filter(e => BIRTH_EVENTS.has(e.type));
     const hasBirth = !!p.birthDate || !!p.birthPlace?.trim() || birthEvents.length > 0;
-    const birthCited = (hasBirth && personCited) || birthEvents.some(cited);
+    const birthCited = (p.birthSourceIds?.length ?? 0) > 0 || birthEvents.some(cited);
 
     const deathEvents = events.filter(e => DEATH_EVENTS.has(e.type));
     const hasDeath = !!p.deathDate || !!p.deathPlace?.trim() || deathEvents.length > 0;
-    const deathCited = (hasDeath && personCited) || deathEvents.some(cited);
+    const deathCited = (p.deathSourceIds?.length ?? 0) > 0 || deathEvents.some(cited);
 
     const level: EvidenceLevel = sources.size === 0 ? 'none'
         : birthCited && (!hasDeath || deathCited) ? 'full'
@@ -85,7 +82,7 @@ export function evidenceLevel(p: Person, data: StromData): EvidenceLevel | null 
 export function treeHasAnySource(data: StromData): boolean {
     for (const p of Object.values(data.persons)) {
         if (p.isPlaceholder) continue;
-        if (cited(p) || (p.events ?? []).some(cited)) return true;
+        if (personSourceIds(p).length > 0 || (p.events ?? []).some(cited)) return true;
     }
     return Object.values(data.partnerships ?? {}).some(cited);
 }

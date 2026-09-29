@@ -89,7 +89,7 @@ describe('the published GEDCOM import contract', () => {
 
     it('keeps everything hanging under BIRT, which is the register entry itself', () => {
         const person = groom(imported());
-        expect(person.sourceIds?.length, 'the entry cites the person').toBeGreaterThan(0);
+        expect(person.birthSourceIds?.length, 'the entry cites the birth').toBeGreaterThan(0);
         expect(person.notes, 'a note is labelled by the fact it sat under').toContain('chalupník');
         expect(person.notes, 'RELI says what they were, not that they converted')
             .toContain('Římskokatolické');

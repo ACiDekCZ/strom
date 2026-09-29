@@ -537,7 +537,7 @@ test.describe('Where evidence is missing (tree health)', () => {
                 persons: {
                     gp: p('gp', 'Václav', { partnerships: ['u1'], childIds: ['f'] }),
                     gm: p('gm', 'Marie', { gender: 'female', partnerships: ['u1'], childIds: ['f'] }),
-                    f: p('f', 'Tomáš', { parentIds: ['gp', 'gm'], childIds: ['s'], sourceIds: ['s1'], birthDate: '1900' }),
+                    f: p('f', 'Tomáš', { parentIds: ['gp', 'gm'], childIds: ['s'], birthSourceIds: ['s1'], birthDate: '1900' }),
                     s: p('s', 'Ondřej', { parentIds: ['f'], birthDate: '1930' }),
                 },
                 partnerships: { u1: { id: 'u1', person1Id: 'gp', person2Id: 'gm', childIds: ['f'], status: 'married', sourceIds: ['s1'] } },

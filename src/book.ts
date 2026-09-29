@@ -9,7 +9,7 @@
  * localization, privacy, media dropping and a max-generations limit.
  */
 
-import { StromData, Person, PersonId, Partnership, Source, LifeEvent, Story } from './types.js';
+import { StromData, Person, PersonId, Partnership, Source, LifeEvent, Story, personSourceIds } from './types.js';
 import { applyLivingPrivacy, PrivacyMode } from './privacy.js';
 import { stripMedia } from './attachments.js';
 import { formatFlexDate, yearOf } from './dates.js';
@@ -232,7 +232,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
             const refs = (ev.sourceIds ?? []).map(cite).join('');
             return `<div class="book-person-event">${label}${date}${place}${note}${refs}</div>`;
         }).join('');
-        const personRefs = (p.sourceIds ?? []).map(cite).join('');
+        const personRefs = personSourceIds(p).map(cite).join('');
         return `
         <div class="book-person">
             ${photoImg(p)}

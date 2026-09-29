@@ -21,7 +21,7 @@ function researchGed(): string {
         '1 REFN P0001', '1 FAMS @F0001@',
         '1 _STORY', '2 STAT hotovo', '2 TEXT Josef hospodařil na čp. 12.',
         '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '1 FAMS @F0001@',
-        '0 @P0012@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '2 SOUR @S12@', '1 DEAT', '2 DATE 1932',
+        '0 @P0012@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '2 SOUR @S12@', '1 DEAT', '2 DATE 1932', '2 SOUR @S12@',
         '1 REFN P0012', '1 FAMC @F0001@',
         '1 _STORY', '2 STAT navrh', '2 TEXT Jan se narodil v Chlumech.',
         '1 _STROM_CONFLICT X0007', '2 TYPE BIRT', '2 STAT open', '2 VAL 3 FEB 1865', '3 SOUR @S12@', '2 VAL 1866',
@@ -75,7 +75,7 @@ test.describe('card signals', () => {
     test('status icons, badges by priority, tooltip and aria-label', async ({ page }) => {
         await setup(page);
         // Stripes in the card's corner. Josef: nothing cited (no evidence stripe), a finished story.
-        // Jan: birth cited on the person (two stripes), a draft story (faint).
+        // Jan: birth and death cited (two stripes), a draft story (faint).
         await expect(card(page, 'Josef').locator(':scope > .card-state .st-ev')).toHaveCount(0);
         await expect(card(page, 'Josef').locator(':scope > .card-state .st-story')).not.toHaveClass(/draft/);
         await expect(card(page, 'Jan').locator(':scope > .card-state .st-ev i')).toHaveCount(2);

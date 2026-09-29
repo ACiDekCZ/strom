@@ -38,7 +38,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, personSourceIds } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue, translateValidationType } from '../validation.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
@@ -669,7 +669,7 @@ export const treeStatsMethods = uiModule({
         const totalSources = Object.keys(treeData.sources ?? {}).length;
         // A person is "cited" if it or any of its events references a source.
         const personsCited = persons.filter(p =>
-            (p.sourceIds?.length ?? 0) > 0 || (p.events ?? []).some(e => (e.sourceIds?.length ?? 0) > 0)
+            personSourceIds(p).length > 0 || (p.events ?? []).some(e => (e.sourceIds?.length ?? 0) > 0)
         ).length;
         const totalAttachments = persons.reduce((sum, p) => sum + (p.attachments?.length ?? 0), 0);
         const attachmentBytes = totalAttachmentBytes(treeData);

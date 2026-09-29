@@ -4344,11 +4344,13 @@
            above everything (z-index 250), so with a dialog open it sat right on
            top of that dialog's Save/Cancel row on a phone. While a dialog is
            open the offer has nothing to say — get out of the way. */
-        body:has(.modal-overlay.active) .family-offer { display: none; }
+        body:has(.modal-overlay.active) .family-offer,
+        body:has(.modal-overlay.active) .otd-card { display: none; }
         /* Fallback for browsers without :has() (older Safari): a body class kept
            in sync by JS (see initHasFallback). No effect where :has() works. */
         @supports not (selector(:has(*))) {
-            body.has-active-modal .family-offer { display: none; }
+            body.has-active-modal .family-offer,
+            body.has-active-modal .otd-card { display: none; }
         }
         /* Container spans the width and is click-transparent — it must never
            intercept a canvas drag/click. Only the visible pill inside is live. */
@@ -8474,6 +8476,8 @@
         /* Mobile regime (bottom bar ≤1024px): sit above the bar. */
         @media (max-width: 1024px) {
             .undo-toast { bottom: calc(var(--bottom-bar-h) + 12px); }
+            /* "On this day" never covers the bottom bar (its More tab). */
+            .otd-card { bottom: calc(var(--bottom-bar-h) + 12px); }
             body:has(.undo-toast) .family-offer { bottom: calc(var(--bottom-bar-h) + 72px); }
             @supports not (selector(:has(*))) {
                 body.has-undo-toast .family-offer { bottom: calc(var(--bottom-bar-h) + 72px); }

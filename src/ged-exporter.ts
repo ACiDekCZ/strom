@@ -425,8 +425,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // Sex
         lines.push(`1 SEX ${person.gender === 'male' ? 'M' : 'F'}`);
 
-        // Birth
-        if (person.birthDate || person.birthPlace) {
+        // Birth (with the citations of the birth entry: 2 SOUR)
+        if (person.birthDate || person.birthPlace || person.birthSourceIds?.length) {
             lines.push('1 BIRT');
             if (person.birthDate) {
                 const date = formatGedcomDate(person.birthDate);
@@ -435,11 +435,12 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (person.birthPlace) {
                 pushPlace(lines, 2, person.birthPlace, data.places);
             }
+            for (const srcId of person.birthSourceIds ?? []) pushCitation(2, srcId);
         }
 
-        // Death
-        if (person.deathDate || person.deathPlace) {
-            lines.push('1 DEAT');
+        // Death (a cited death without a date or place is a known death: DEAT Y)
+        if (person.deathDate || person.deathPlace || person.deathSourceIds?.length) {
+            lines.push(person.deathDate || person.deathPlace ? '1 DEAT' : '1 DEAT Y');
             if (person.deathDate) {
                 const date = formatGedcomDate(person.deathDate);
                 if (date) lines.push(`2 DATE ${date}`);
@@ -447,6 +448,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (person.deathPlace) {
                 pushPlace(lines, 2, person.deathPlace, data.places);
             }
+            for (const srcId of person.deathSourceIds ?? []) pushCitation(2, srcId);
         } else if (person.isDeceased === true) {
             // Known to be dead, date unknown: the standard way to say so.
             // Without it the person came back as possibly living.

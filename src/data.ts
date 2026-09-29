@@ -25,7 +25,7 @@ import {
     generatePartnershipId,
     LAST_FOCUSED,
     LastFocusedMarker,
-    STROM_DATA_VERSION,
+    STROM_DATA_VERSION, PERSON_CITATION_FIELDS, PersonCitationField,
     EmbeddedDataEnvelope,
     isEmbeddedEnvelope,
     FamilyWizardSpec,
@@ -93,9 +93,17 @@ export function createEmptyData(): StromData {
     };
 }
 
+/** A person's field cited on its own (null/absent: the person as a whole). */
+export type CitedFact = 'birth' | 'death';
+
+/** The list a person citation goes to. */
+export function personCitationField(fact?: CitedFact | null): PersonCitationField {
+    return fact === 'birth' ? 'birthSourceIds' : fact === 'death' ? 'deathSourceIds' : 'sourceIds';
+}
+
 /** One place that cites a source (see DataManager.listSourceCitations). */
 export type SourceCitationRef =
-    | { kind: 'person'; personId: PersonId }
+    | { kind: 'person'; personId: PersonId; fact?: CitedFact }
     | { kind: 'event'; personId: PersonId; eventId: string }
     | { kind: 'partnership'; partnershipId: PartnershipId };
 
@@ -1816,9 +1824,12 @@ class DataManagerClass {
         delete this.data.sources![sourceId];
         if (Object.keys(this.data.sources!).length === 0) delete this.data.sources;
         for (const person of Object.values(this.data.persons)) {
-            if (person.sourceIds) {
-                person.sourceIds = person.sourceIds.filter(id => id !== sourceId);
-                if (person.sourceIds.length === 0) delete person.sourceIds;
+            for (const field of PERSON_CITATION_FIELDS) {
+                const ids = person[field];
+                if (!ids) continue;
+                const kept = ids.filter(id => id !== sourceId);
+                if (kept.length > 0) person[field] = kept;
+                else delete person[field];
             }
             for (const ev of person.events ?? []) {
                 if (ev.sourceIds) {
@@ -1850,6 +1861,8 @@ class DataManagerClass {
         const out: SourceCitationRef[] = [];
         for (const person of Object.values(this.data.persons)) {
             if (person.sourceIds?.includes(sourceId)) out.push({ kind: 'person', personId: person.id });
+            if (person.birthSourceIds?.includes(sourceId)) out.push({ kind: 'person', personId: person.id, fact: 'birth' });
+            if (person.deathSourceIds?.includes(sourceId)) out.push({ kind: 'person', personId: person.id, fact: 'death' });
             for (const ev of person.events ?? []) {
                 if (ev.sourceIds?.includes(sourceId)) out.push({ kind: 'event', personId: person.id, eventId: ev.id });
             }
@@ -1869,7 +1882,7 @@ class DataManagerClass {
             for (const id of new Set(ids ?? [])) counts.set(id, (counts.get(id) ?? 0) + 1);
         };
         for (const person of Object.values(this.data.persons)) {
-            add(person.sourceIds);
+            for (const field of PERSON_CITATION_FIELDS) add(person[field]);
             for (const ev of person.events ?? []) add(ev.sourceIds);
         }
         for (const partnership of Object.values(this.data.partnerships)) add(partnership.sourceIds);
@@ -1879,7 +1892,7 @@ class DataManagerClass {
     countSourceCitations(sourceId: string): number {
         let count = 0;
         for (const person of Object.values(this.data.persons)) {
-            if (person.sourceIds?.includes(sourceId)) count++;
+            for (const field of PERSON_CITATION_FIELDS) if (person[field]?.includes(sourceId)) count++;
             for (const ev of person.events ?? []) {
                 if (ev.sourceIds?.includes(sourceId)) count++;
             }
@@ -1890,30 +1903,32 @@ class DataManagerClass {
         return count;
     }
 
-    /** Add a citation of `sourceId` on a person. */
-    citePerson(personId: PersonId, sourceId: string): boolean {
+    /** Add a citation of `sourceId` on a person (or on their birth / death). */
+    citePerson(personId: PersonId, sourceId: string, fact?: CitedFact): boolean {
         const person = this.data.persons[personId];
         if (!person || !this.data.sources?.[sourceId]) return false;
         if (this.isPersonLocked(personId)) return false;
-        if (person.sourceIds?.includes(sourceId)) return false;
+        const field = personCitationField(fact);
+        if (person[field]?.includes(sourceId)) return false;
 
         this.beginMutation();
-        if (!person.sourceIds) person.sourceIds = [];
-        person.sourceIds.push(sourceId);
+        person[field] = [...(person[field] ?? []), sourceId];
         this.commitMutation(strings.undo.cite(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'source.cite', strings.auditLog.citedSource(auditPersonName(person)));
         return true;
     }
 
-    /** Remove a citation of `sourceId` from a person. */
-    uncitePerson(personId: PersonId, sourceId: string): boolean {
+    /** Remove a citation of `sourceId` from a person (or from their birth / death). */
+    uncitePerson(personId: PersonId, sourceId: string, fact?: CitedFact): boolean {
         const person = this.data.persons[personId];
-        if (!person?.sourceIds?.includes(sourceId)) return false;
+        const field = personCitationField(fact);
+        if (!person?.[field]?.includes(sourceId)) return false;
         if (this.isPersonLocked(personId)) return false;
 
         this.beginMutation();
-        person.sourceIds = person.sourceIds.filter(id => id !== sourceId);
-        if (person.sourceIds.length === 0) delete person.sourceIds;
+        const kept = person[field]!.filter(id => id !== sourceId);
+        if (kept.length > 0) person[field] = kept;
+        else delete person[field];
         this.commitMutation(strings.undo.uncite(auditPersonName(person)));
         AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(auditPersonName(person)));
         return true;
@@ -3281,8 +3296,9 @@ class DataManagerClass {
                 if (!seen.has(ev.id)) keepPerson.events.push(ev);
             }
         }
-        if (removePerson.sourceIds && removePerson.sourceIds.length > 0) {
-            keepPerson.sourceIds = [...new Set([...(keepPerson.sourceIds ?? []), ...removePerson.sourceIds])];
+        for (const field of PERSON_CITATION_FIELDS) {
+            const ids = removePerson[field];
+            if (ids && ids.length > 0) keepPerson[field] = [...new Set([...(keepPerson[field] ?? []), ...ids])];
         }
         if (removePerson.attachments && removePerson.attachments.length > 0) {
             if (!keepPerson.attachments) keepPerson.attachments = [];

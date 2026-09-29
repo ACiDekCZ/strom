@@ -10,7 +10,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
-import { DataManager } from '../data.js';
+import { DataManager, CitedFact, personCitationField } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { SettingsManager } from '../settings.js';
 import { PersonId, PartnershipId, Source, SourceExcerpt, MAX_EXCERPTS_UI } from '../types.js';
@@ -28,7 +28,8 @@ import { openCropEditor, compressWholeImage, CropRegion } from './crop-editor.js
 import { eventTypeLabel } from './person-events.js';
 
 /** What a citation applies to: a person, one of their events, or a partnership. */
-export type CitationContext = { personId: PersonId; eventId?: string } | { partnershipId: PartnershipId };
+/** What a citation is made on: a person (as a whole, or their birth / death), one of their events, a union. */
+export type CitationContext = { personId: PersonId; eventId?: string; fact?: CitedFact } | { partnershipId: PartnershipId };
 
 /** An excerpt staged in the editor, with what only lives until the editor closes. */
 export interface ExcerptDraft {
@@ -339,7 +340,7 @@ export const sourcesMethods = uiModule({
                 const year = yearOf(ev.date);
                 return `${personName(ref.personId)} — ${eventTypeLabel(ev)}${year !== null ? ` (${year})` : ''}`;
             }
-            return personName(ref.personId);
+            return ref.fact ? `${personName(ref.personId)} — ${strings.events.types[ref.fact]}` : personName(ref.personId);
         }).filter(Boolean);
         if (cites.length > 0) {
             chunks.push(`<section><h3 class="viewer-section-title">${esc(s.viewerCites)}</h3>
@@ -1121,7 +1122,7 @@ export const sourcesMethods = uiModule({
         if (ctx.eventId) {
             return person.events?.find(e => e.id === ctx.eventId)?.sourceIds ?? [];
         }
-        return person.sourceIds ?? [];
+        return person[personCitationField(ctx.fact)] ?? [];
     },
 
     /** Apply a citation of `sourceId` to the active context. */
@@ -1133,7 +1134,7 @@ export const sourcesMethods = uiModule({
         } else if (ctx.eventId) {
             DataManager.citeEvent(ctx.personId, ctx.eventId, sourceId);
         } else {
-            DataManager.citePerson(ctx.personId, sourceId);
+            DataManager.citePerson(ctx.personId, sourceId, ctx.fact);
         }
     },
 
@@ -1181,6 +1182,10 @@ export const sourcesMethods = uiModule({
             return withYear(strings.sources.newTitleMarriage(personName(u.person1Id), personName(u.person2Id)), u.startDate);
         }
         const name = personName(ctx.personId);
+        if (ctx.fact) {
+            const p = DataManager.getPerson(ctx.personId);
+            return withYear(`${strings.events.types[ctx.fact]} – ${name}`, ctx.fact === 'birth' ? p?.birthDate : p?.deathDate);
+        }
         if (!ctx.eventId) return name;
         const ev = DataManager.getPerson(ctx.personId)?.events?.find(e => e.id === ctx.eventId);
         return ev ? withYear(`${eventTypeLabel(ev)} – ${name}`, ev.date) : name;

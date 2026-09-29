@@ -106,3 +106,26 @@ test('"also from my other visible trees": off by default; on, it names the tree 
     await expect(page.locator('.person-card.focused', { hasText: 'Vera' })).toBeVisible();
     await expect(card).toBeHidden();
 });
+
+test('phone: the on-this-day card sits above the bottom bar and steps aside for a dialog', async ({ page }) => {
+    const now = new Date();
+    const today = `1950-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    await page.setViewportSize({ width: 390, height: 800 });
+    await openApp(page);
+    await createFirstPerson(page, 'Vera', 'Old', { gender: 'female', birthDate: today });
+    await waitForPersist(page, 'Vera');
+    await page.evaluate(() => window.Strom.UI.maybeShowOnThisDay());
+    const card = page.locator('#otd-card');
+    await expect(card).toBeVisible();
+    const cardBox = (await card.boundingBox())!;
+    const barBox = (await page.locator('#bottom-bar').boundingBox())!;
+    expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(barBox.y);
+    // The More tab stays reachable.
+    await page.locator('#bb-view-more').click();
+    await expect(page.locator('.bottom-sheet-menu')).toBeVisible();
+    await page.keyboard.press('Escape');
+    // A dialog: the card never covers its buttons.
+    await page.evaluate(() => window.Strom.UI.showAnniversariesDialog());
+    await expect(page.locator('#anniversaries-modal')).toBeVisible();
+    await expect(card).toBeHidden();
+});

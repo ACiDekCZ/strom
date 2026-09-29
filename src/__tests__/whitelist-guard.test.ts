@@ -51,6 +51,8 @@ function person(id: PersonId, firstName: string): Person {
         // citations, so the fixture must actually use both ('kolin', 's1').
         birthPlace: 'Kolín',
         sourceIds: ['s1'],
+        birthSourceIds: ['s1'],
+        deathSourceIds: ['s1'],
     };
 }
 
@@ -304,6 +306,8 @@ type OwnedElsewhere =
     | 'parentRelTypes'      // setParentRelType
     | 'events'              // addLifeEvent / updateLifeEvent / removeLifeEvent
     | 'sourceIds'           // citePerson / uncitePerson
+    | 'birthSourceIds'      // citePerson / uncitePerson with the birth
+    | 'deathSourceIds'      // citePerson / uncitePerson with the death
     | 'attachments'         // addAttachment / removeAttachment
     | 'photoOriginalName'   // set with the photo itself (import / upload)
     | 'refnType'            // GEDCOM import only; updatePerson drops it with a changed refn

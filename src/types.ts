@@ -275,6 +275,10 @@ export interface Person {
     story?: Story;
     /** Ids of Source entries (StromData.sources) citing this person. */
     sourceIds?: string[];
+    /** Sources citing the birth fields (birthDate / birthPlace; GEDCOM BIRT.SOUR). */
+    birthSourceIds?: string[];
+    /** Sources citing the death fields (deathDate / deathPlace; GEDCOM DEAT.SOUR). */
+    deathSourceIds?: string[];
     /** Attached documents (scans, certificates, letters…). */
     attachments?: Attachment[];
     /**
@@ -423,6 +427,15 @@ export interface Partnership {
 export const LAST_FOCUSED = "__last_focused__" as const;
 export type LastFocusedMarker = typeof LAST_FOCUSED;
 
+/** A person's citation lists: the person as a whole, the birth, the death. */
+export const PERSON_CITATION_FIELDS = ['sourceIds', 'birthSourceIds', 'deathSourceIds'] as const;
+export type PersonCitationField = typeof PERSON_CITATION_FIELDS[number];
+
+/** Every source a person's own citations name (the person, the birth, the death), once each. */
+export function personSourceIds(p: Pick<Person, PersonCitationField>): string[] {
+    return [...new Set(PERSON_CITATION_FIELDS.flatMap(f => p[f] ?? []))];
+}
+
 /**
  * Current StromData format version.
  * v2 (2026-07): added optional Person.events (life events).
@@ -435,10 +448,13 @@ export type LastFocusedMarker = typeof LAST_FOCUSED;
  * v7 (2026-09): register entries on sources — Source.transcript / recordDate /
  *   excerpts / refn; Attachment.note / sourceId. An older app keeps them when
  *   it only reads, but its source editor would rebuild a source without them.
+ * v8 (2026-09): Person.birthSourceIds / deathSourceIds — the birth and death
+ *   fields cited on their own (GEDCOM BIRT.SOUR / DEAT.SOUR used to land in
+ *   Person.sourceIds, so a name citation looked like a documented birth).
  * All additive/backward-compatible for reading; the bump makes an older app
  * warn ("newer version") before it silently drops the new fields on re-save.
  */
-export const STROM_DATA_VERSION = 7;
+export const STROM_DATA_VERSION = 8;
 
 /**
  * Coordinates of one place, kept in the tree's own file so a place is looked up

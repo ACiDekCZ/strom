@@ -30,7 +30,7 @@ function tree(): StromData {
     const persons: Record<PersonId, Person> = {
         [id('grandpa')]: person('grandpa', { partnerships: [u1], childIds: [id('father')], birthDate: '1850' }),
         [id('grandma')]: person('grandma', { gender: 'female', partnerships: [u1], childIds: [id('father')] }),
-        [id('father')]: person('father', { partnerships: [u2], parentIds: [id('grandpa'), id('grandma')], childIds: [id('son')], sourceIds: ['s1'], birthDate: '1880' }),
+        [id('father')]: person('father', { partnerships: [u2], parentIds: [id('grandpa'), id('grandma')], childIds: [id('son')], birthSourceIds: ['s1'], birthDate: '1880' }),
         [id('mother')]: person('mother', { gender: 'female', partnerships: [u2], childIds: [id('son')],
             events: [{ id: 'e1', type: 'baptism', date: '1882', sourceIds: ['s1'] }] }),
         [id('son')]: person('son', { parentIds: [id('father'), id('mother')], birthPlace: 'Kolín' }),
@@ -52,7 +52,7 @@ describe('computeEvidenceGaps', () => {
         expect(g.noSource.sort()).toEqual(['son', 'stranger']);
     });
 
-    it('counts births without a source (person or baptism citation covers it)', () => {
+    it('counts births without a source (a birth or baptism citation covers it)', () => {
         const g = computeEvidenceGaps(tree(), id('son'));
         // grandpa: born 1850, cited only on the marriage; son: birth place, nothing cited.
         expect(g.birthNoSource.sort()).toEqual(['grandpa', 'son']);

@@ -10,7 +10,7 @@
  * so the result is internally consistent and passes validation.
  */
 
-import { StromData, Person, PersonId, Partnership, PartnershipId, EventParticipant } from './types.js';
+import { StromData, Person, PersonId, Partnership, PartnershipId, EventParticipant, personSourceIds } from './types.js';
 import { placeKey } from './places.js';
 
 /**
@@ -70,7 +70,7 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
     // 4. Prune the source catalog to citations that still exist.
     const usedSources = new Set<string>();
     for (const p of Object.values(persons)) {
-        p.sourceIds?.forEach(s => usedSources.add(s));
+        personSourceIds(p).forEach(s => usedSources.add(s));
         p.events?.forEach(ev => ev.sourceIds?.forEach(s => usedSources.add(s)));
         p.attachments?.forEach(a => { if (a.sourceId) usedSources.add(a.sourceId); });
     }

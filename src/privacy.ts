@@ -95,6 +95,8 @@ export function stripSources(data: StromData): StromData {
     delete copy.sources;
     for (const person of Object.values(copy.persons)) {
         delete person.sourceIds;
+        delete person.birthSourceIds;
+        delete person.deathSourceIds;
         // The research's conflicts and searches are part of the source apparatus.
         delete person.research;
         for (const ev of person.events ?? []) delete ev.sourceIds;
@@ -230,6 +232,8 @@ function stripDetails(person: Person): void {
     delete person.events;
     // Source citations may point at sensitive references — drop them too.
     delete person.sourceIds;
+    delete person.birthSourceIds;
+    delete person.deathSourceIds;
     // Attachments (scans, letters) are private documents — always drop.
     delete person.attachments;
     // Name variants carry the full real name (e.g. a GEDCOM second NAME line
@@ -279,6 +283,8 @@ export function applyLivingPrivacy(
     delete copy.sources;
     for (const person of Object.values(copy.persons)) {
         delete person.sourceIds;
+        delete person.birthSourceIds;
+        delete person.deathSourceIds;
         delete person.attachments;
         for (const ev of person.events ?? []) delete ev.sourceIds;
     }

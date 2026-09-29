@@ -3,7 +3,7 @@
  * Settings are NOT exported with tree data - they are local preferences
  */
 
-import { AppSettings, ThemeMode, LanguageSetting, CardDensity, SETTINGS_KEY, StromData } from './types.js';
+import { AppSettings, ThemeMode, LanguageSetting, CardDensity, SETTINGS_KEY, StromData, personSourceIds } from './types.js';
 import { initLanguage, Language } from './strings.js';
 
 /** How many recently cited sources the picker remembers per tree. */
@@ -213,7 +213,7 @@ class SettingsManagerClass {
         if (this.settings.advancedFields !== undefined) return;
         const researchInUse = Object.keys(data.sources ?? {}).length > 0
             || Object.values(data.persons).some(p =>
-                (p.sourceIds?.length ?? 0) > 0 || (p.attachments?.length ?? 0) > 0
+                personSourceIds(p).length > 0 || (p.attachments?.length ?? 0) > 0
                 || !!p.refn || !!p.question || (p.nameVariants?.length ?? 0) > 0);
         if (researchInUse) {
             this.settings.advancedFields = true;

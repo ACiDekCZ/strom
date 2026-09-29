@@ -487,6 +487,9 @@ interface GedcomIndividual {
     events: RawEvent[];
     /** GEDCOM ids (@Sx@) of sources cited on this individual. */
     sourceRefs: string[];
+    /** Sources cited under the (first) BIRT / DEAT block — the birth and death fields. */
+    birthSourceRefs: string[];
+    deathSourceRefs: string[];
     /** OBJE media objects (photo / attachments). */
     media: RawMedia[];
     /** A DEAT tag was present (even a bare 'DEAT Y' without a date). */
@@ -1359,6 +1362,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     primaryNameType: '',
                     variantNameTypes: [],
                     sourceRefs: [],
+                    birthSourceRefs: [],
+                    deathSourceRefs: [],
                     media: [],
                     deceased: false,
                     birthSeen: false,
@@ -1826,8 +1831,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                         } else if (tag === 'PLAC') {
                             if (isBirth) indi.birthPlace = value; else indi.deathPlace = value;
                         } else if (tag === 'SOUR' && value) {
-                            // The birth/death entry itself: cited on the person.
-                            indi.sourceRefs.push(value);
+                            // The birth/death entry itself: cited on that field.
+                            (isBirth ? indi.birthSourceRefs : indi.deathSourceRefs).push(value);
                             currentCitationId = value;
                         } else if (tag === 'NOTE' && value) {
                             const line = isBirth
@@ -2355,6 +2360,10 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
 
         const personRefs = mapRefs(indi.sourceRefs);
         if (personRefs.length > 0) person.sourceIds = personRefs;
+        const birthRefs = mapRefs(indi.birthSourceRefs);
+        if (birthRefs.length > 0) person.birthSourceIds = birthRefs;
+        const deathRefs = mapRefs(indi.deathSourceRefs);
+        if (deathRefs.length > 0) person.deathSourceIds = deathRefs;
 
         // OBJE media: a data-URL FILE is either the portrait (Strom marker)
         // or an attachment. External file paths cannot be embedded — counted

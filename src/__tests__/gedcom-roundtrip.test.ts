@@ -57,6 +57,8 @@ function normalize(data: StromData): StromData {
                 })) } : {}),
             })) } : {}),
             ...(person.sourceIds ? { sourceIds: mapSrc(person.sourceIds) } : {}),
+            ...(person.birthSourceIds ? { birthSourceIds: mapSrc(person.birthSourceIds) } : {}),
+            ...(person.deathSourceIds ? { deathSourceIds: mapSrc(person.deathSourceIds) } : {}),
             // parentRelTypes is keyed by parent PersonId — re-key the keys too.
             ...(person.parentRelTypes ? {
                 parentRelTypes: Object.fromEntries(
@@ -1071,14 +1073,17 @@ describe('register entries: what hangs under BIRT, DEAT and MARR', () => {
 0 TRLR
 `;
 
-    it('keeps the citation of the birth and death entry on the person', () => {
+    it('keeps the citation of the birth and death entry on those fields', () => {
         const data = importGed(GED);
         const jan = Object.values(data.persons).find(p => p.firstName === 'Jan')!;
-        // BIRT and DEAT cite the same entry: one citation, not two.
-        expect(jan.sourceIds).toHaveLength(1);
-        expect(data.sources![jan.sourceIds![0]].title).toBe('Matrika narozených Lipany 1840-1870');
+        // BIRT and DEAT cite the same entry: one source, cited by both fields.
+        expect(jan.birthSourceIds).toHaveLength(1);
+        expect(jan.deathSourceIds).toEqual(jan.birthSourceIds);
+        expect(data.sources![jan.birthSourceIds![0]].title).toBe('Matrika narozených Lipany 1840-1870');
         // The PAGE under the citation becomes the source reference.
-        expect(data.sources![jan.sourceIds![0]].reference).toBe('sign. LIP-N5, fol. 123');
+        expect(data.sources![jan.birthSourceIds![0]].reference).toBe('sign. LIP-N5, fol. 123');
+        // …and they go back under BIRT and DEAT.
+        expect(exportGed(data)).toMatch(/1 BIRT\n(?:2 (?!SOUR).*\n)*2 SOUR @S\d+@/);
     });
 
     it('keeps the witnesses named at the wedding', () => {

@@ -176,7 +176,10 @@ describe('GEDCOM: a register entry as a source', () => {
             '0 @S1@ SOUR', '1 TITL Narození: Anna Nová, Týnec 1880',
         ]));
         const person = Object.values(r.data.persons).find(p => p.firstName === 'Anna')!;
-        expect(person.sourceIds).toEqual([onlySource(r.data).id]);
+        // One source; the birth and the death each cite it.
+        expect(person.birthSourceIds).toEqual([onlySource(r.data).id]);
+        expect(person.deathSourceIds).toEqual([onlySource(r.data).id]);
+        expect(person.sourceIds).toBeUndefined();
     });
 
     it('skips a source image that is not an embedded raster image', () => {

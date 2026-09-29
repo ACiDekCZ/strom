@@ -79,6 +79,12 @@ function personSourceRows(personId: PersonId): SourceRow[] {
     };
     const withYear = (label: string, year: number | null) => (year !== null ? `${label} ${year}` : label);
     add(person.sourceIds, { label: strings.personSources.citePerson, ctx: { personId }, year: null });
+    // The birth and death entries (GEDCOM BIRT.SOUR / DEAT.SOUR).
+    for (const fact of ['birth', 'death'] as const) {
+        const year = yearOf(fact === 'birth' ? person.birthDate : person.deathDate);
+        add(fact === 'birth' ? person.birthSourceIds : person.deathSourceIds,
+            { label: withYear(strings.events.types[fact], year), ctx: { personId, fact }, year });
+    }
     for (const ev of sortLifeEvents(person.events ?? [])) {
         const year = yearOf(ev.date);
         add(ev.sourceIds, { label: withYear(eventTypeLabel(ev), year), ctx: { personId, eventId: ev.id }, year });
@@ -95,7 +101,7 @@ function personSourceRows(personId: PersonId): SourceRow[] {
     const list = [...rows.values()];
     for (const row of list) {
         // Collected person → events → marriages: the first is what a click opens.
-        const person = row.cites.filter(c => 'personId' in c.ctx && !c.ctx.eventId);
+        const person = row.cites.filter(c => 'personId' in c.ctx && !c.ctx.eventId && !c.ctx.fact);
         const rest = row.cites.filter(c => !person.includes(c)).sort((a, b) => byYear(a.year, b.year));
         row.cites = [...person, ...rest];
     }

@@ -15,7 +15,8 @@ import {
     Attachment,
     Source,
     generatePersonId,
-    generatePartnershipId
+    generatePartnershipId,
+    PERSON_CITATION_FIELDS,
 } from '../types.js';
 import { addSurnameGroup, surnameKey } from '../surnames.js';
 import {
@@ -637,7 +638,7 @@ function remapSourceReferences(data: StromData, remap: Map<string, string>): voi
     const fix = (ids: string[] | undefined): string[] | undefined =>
         ids ? [...new Set(ids.map(id => remap.get(id) ?? id))] : ids;
     for (const person of Object.values(data.persons)) {
-        if (person.sourceIds) person.sourceIds = fix(person.sourceIds);
+        for (const field of PERSON_CITATION_FIELDS) if (person[field]) person[field] = fix(person[field]);
         for (const ev of person.events ?? []) {
             if (ev.sourceIds) ev.sourceIds = fix(ev.sourceIds);
         }
@@ -819,10 +820,10 @@ export function mergePersonData(
         }
     }
 
-    // Merge source citations: union of source ids.
-    if (incoming.sourceIds && incoming.sourceIds.length > 0) {
-        const merged = new Set([...(existing.sourceIds ?? []), ...incoming.sourceIds]);
-        existing.sourceIds = [...merged];
+    // Merge source citations: union of source ids (the person, the birth, the death).
+    for (const field of PERSON_CITATION_FIELDS) {
+        const ids = incoming[field];
+        if (ids && ids.length > 0) existing[field] = [...new Set([...(existing[field] ?? []), ...ids])];
     }
 
     // Merge written name variants: the spelling that made the match possible

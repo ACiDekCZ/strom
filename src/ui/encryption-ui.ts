@@ -38,7 +38,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, PERSON_CITATION_FIELDS } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
@@ -740,7 +740,7 @@ export const encryptionUiMethods = uiModule({
         const sourcesSlice: unknown[] = [data.sources ?? null];
         for (const person of Object.values(data.persons)) {
             if (person.notes) notesSlice.push(person.notes);
-            if (person.sourceIds) sourcesSlice.push(person.sourceIds);
+            for (const field of PERSON_CITATION_FIELDS) if (person[field]) sourcesSlice.push(person[field]);
             for (const ev of person.events ?? []) {
                 if (ev.note) notesSlice.push(ev.note);
                 if (ev.sourceIds) sourcesSlice.push(ev.sourceIds);
