@@ -50,7 +50,7 @@ let filter: Filter = 'all';
 /** When the overview was opened (changes after it are marked new for a moment). */
 let openedAt = 0;
 /** Older change groups the user unfolded (by group key). */
-const unfoldedGroups = new Set<string>();
+const toggledGroups = new Set<string>();
 /** The card lit up by hovering a change row. */
 let hovered: HTMLElement | null = null;
 
@@ -82,8 +82,6 @@ function hoverCard(id: PersonId | null): void {
 }
 
 interface ChangeGroup {
-    /** Unique per group (a task can come back later as a new run). */
-    key: string;
     /** What joins the run: the task, or the 15 minutes. */
     run: string;
     title: string;
@@ -121,7 +119,7 @@ function groupChanges(changes: readonly LiveChangeItem[]): ChangeGroup[] {
         }
         // Changes outside any task: the head's time span says when.
         const title = task || strings.live.otherChanges;
-        groups.push({ key: `${run}:${Number.isFinite(ts) ? ts : groups.length}`, run, title, items: [c] });
+        groups.push({ run, title, items: [c] });
     }
     return groups;
 }
@@ -457,12 +455,17 @@ export const researchOverviewMethods = uiModule({
             return;
         }
         const groups = groupChanges(shown);
-        const current = s.working[0]?.task ?? '';
+        // Open: what goes on now (a task a run works on); what is done folds.
+        // A click flips that for the group.
+        const running = new Set(s.working.filter(w => !w.paused && w.task).map(w => w.task));
         groups.forEach((g, i) => {
-            const open = i === 0 || unfoldedGroups.has(g.key);
             const newest = Date.parse(g.items[0].at);
             const oldest = Date.parse(g.items[g.items.length - 1].at);
-            const to = i === 0 && current && g.items[0].task === current ? L.groupNow : Number.isFinite(newest) ? hhmm(newest) : '';
+            // Stable while the group grows at its newest end.
+            const key = `${g.run}:${Number.isFinite(oldest) ? oldest : i}`;
+            const now = running.has(g.title);
+            const open = now !== toggledGroups.has(key);
+            const to = i === 0 && now ? L.groupNow : Number.isFinite(newest) ? hhmm(newest) : '';
             const span = [Number.isFinite(oldest) ? hhmm(oldest) : '', to].filter(Boolean).join(' – ');
             const gh = el('button', 'research-overview__group-head');
             gh.type = 'button';
@@ -471,9 +474,8 @@ export const researchOverviewMethods = uiModule({
             chevron.setAttribute('aria-hidden', 'true');
             gh.append(chevron, el('span', 'research-overview__group-title', g.title), el('span', 'research-overview__group-span', `${span} · ${g.items.length}`));
             gh.onclick = () => {
-                if (i === 0) return;
-                if (unfoldedGroups.has(g.key)) unfoldedGroups.delete(g.key);
-                else unfoldedGroups.add(g.key);
+                if (toggledGroups.has(key)) toggledGroups.delete(key);
+                else toggledGroups.add(key);
                 this.renderResearchOverview();
             };
             host.appendChild(gh);

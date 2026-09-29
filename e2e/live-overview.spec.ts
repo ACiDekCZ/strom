@@ -181,6 +181,11 @@ test.describe('the research history (/log)', () => {
         // A preview of the last 24 hours: the older change is left to the research.
         // The session's closing line (no task of its own) joins the task it names.
         await expect(ov.locator('.research-overview__group-head')).toHaveCount(1);
+        // A task nobody works on now is done: folded; a click opens it.
+        await expect(ov.locator('.research-overview__group-head')).toHaveAttribute('aria-expanded', 'false');
+        await expect(ov.locator('.research-overview__row')).toHaveCount(0);
+        await ov.locator('.research-overview__group-head').click();
+        await expect(ov.locator('.research-overview__row')).toHaveCount(3);
         await expect(ov.locator('.research-overview__older')).toContainText('Older changes are in the research');
         // From the research's history the highlight says its window, not "while watching".
         await ov.locator('.research-overview__show-changed').click();
@@ -273,6 +278,8 @@ test.describe('Research overview', () => {
         // Progress: one group (the task), every change; the filters count and filter.
         await expect(ov.locator('.research-overview__group-head')).toHaveCount(1);
         await expect(ov.locator('.research-overview__group-title')).toHaveText('Sčítání 1921');
+        // The task the agent works on now stays open.
+        await expect(ov.locator('.research-overview__group-head')).toHaveAttribute('aria-expanded', 'true');
         await expect(ov.locator('.research-overview__row')).toHaveCount(6);
         await expect(ov.locator('.research-overview__filter')).toHaveText(['All 6', 'People 4', 'Sources 1', 'Stories 1']);
         await ov.locator('.research-overview__filter[data-filter="sources"]').click();
