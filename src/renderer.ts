@@ -1030,6 +1030,14 @@ class TreeRendererClass {
                 if (target.classList.contains('add-btn') || target.classList.contains('branch-tab')) return;
                 // Don't open context menu when clicking on badge buttons or their children
                 if (target.closest('.hidden-partners-btn') || target.closest('.hidden-families-btn')) return;
+                // The status icons open the person's sources / story (touch: the person menu).
+                const stateBtn = target.closest<HTMLElement>('.card-state-btn');
+                if (stateBtn && !window.matchMedia?.('(pointer: coarse)').matches) {
+                    e.stopPropagation();
+                    UI.hideContextMenu();
+                    UI.runPersonMenuAction(id, stateBtn.dataset.open === 'story' ? 'story' : 'sources');
+                    return;
+                }
                 // The badge opens what it signals (touch: the person menu, which leads with it).
                 const badge = target.closest<HTMLElement>('.card-signal');
                 if (badge && !window.matchMedia?.('(pointer: coarse)').matches) {
@@ -1227,13 +1235,16 @@ class TreeRendererClass {
                 : [metaYears, metaPlace].filter(Boolean).join(' · ');
 
             // Person status at the end of the year row (never beside the name):
-            // the evidence circle and the story leaf. Decorative — the card's
-            // aria-label says it.
+            // the evidence circle and the story leaf. A click opens the person's
+            // sources / story (as the person menu does); out of the tab order —
+            // the card's aria-label says the state and its menu has both.
             const stateIcons = density === 'compact' ? '' : [
-                signals.showEvidence && signals.evidence ? `<span class="ev-circle ev-${signals.evidence.level}"></span>` : '',
-                signals.showStory ? `<span class="story-leaf${signals.story === 'draft' ? ' draft' : ''}"></span>` : '',
+                signals.showEvidence && signals.evidence
+                    ? `<button type="button" class="card-state-btn" data-open="sources" tabindex="-1" aria-label="${this.escapeHtml(strings.contextMenu.showSources)}"><span class="ev-circle ev-${signals.evidence.level}"></span></button>` : '',
+                signals.showStory
+                    ? `<button type="button" class="card-state-btn" data-open="story" tabindex="-1" aria-label="${this.escapeHtml(strings.contextMenu.showStory)}"><span class="story-leaf${signals.story === 'draft' ? ' draft' : ''}"></span></button>` : '',
             ].join('');
-            const stateHtml = stateIcons ? `<span class="card-state" aria-hidden="true">${stateIcons}</span>` : '';
+            const stateHtml = stateIcons ? `<span class="card-state">${stateIcons}</span>` : '';
             // The action badge on the avatar's corner (a dot on the card's
             // corner where there is no avatar, or when zoomed far out).
             const signalLabel = signals.action ? this.signalText(signals, signals.action) : '';

@@ -5586,6 +5586,15 @@
             display: inline-flex; align-items: center; gap: 5px;
             margin-left: auto; padding-left: 4px; flex-shrink: 0;
         }
+        .card-state-btn {
+            position: relative; display: inline-flex; align-items: center; justify-content: center;
+            width: auto; min-width: 0; height: auto; padding: 0; margin: 0; border: 0; background: none;
+            box-shadow: none; cursor: pointer; line-height: 0;
+        }
+        /* A 20px hit area around the 10px icons. */
+        .card-state-btn::before { content: ''; position: absolute; inset: -5px; border-radius: 50%; }
+        .card-state-btn:hover .ev-circle, .card-state-btn:hover .story-leaf { transform: scale(1.25); }
+        .ev-circle, .story-leaf { transition: transform 0.12s; }
         .ev-circle {
             display: inline-block; width: 10px; height: 10px; box-sizing: border-box;
             border-radius: 50%; border: 1.5px solid var(--primary); flex-shrink: 0;

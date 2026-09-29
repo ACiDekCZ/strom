@@ -104,6 +104,18 @@ test.describe('card signals', () => {
         await expect(page.locator('.context-menu')).toHaveCount(0);
     });
 
+    test('the evidence circle opens the sources, the story leaf the story', async ({ page }) => {
+        await setup(page);
+        await card(page, 'Jan').locator('.card-state-btn[data-open="sources"]').click();
+        await expect(page.locator('#person-sources-modal')).toBeVisible();
+        await expect(page.locator('.context-menu')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#person-sources-modal')).toBeHidden();
+        await card(page, 'Jan').locator('.card-state-btn[data-open="story"]').click();
+        await expect(page.locator('#person-story-modal')).toBeVisible();
+        await expect(page.locator('#person-story-modal')).toContainText('Jan se narodil v Chlumech.');
+    });
+
     test('the desktop person menu leads with the signal', async ({ page }) => {
         await setup(page);
         await card(page, 'Jan').locator('.name').click();
@@ -123,7 +135,12 @@ test.describe('card signals', () => {
         await expect(card(page, 'Jan').locator('.card-signal')).toBeVisible();
         await expect(card(page, 'Jan').locator('.card-signal-dot')).toBeHidden();
 
-        for (let i = 0; i < 3; i++) await page.evaluate(() => window.Strom.ZoomPan.zoomOut());
+        // Zoom out step by step (each step is animated) until below 55 %.
+        await expect.poll(async () => {
+            await page.evaluate(() => window.Strom.ZoomPan.zoomOut());
+            await page.waitForTimeout(260);
+            return page.evaluate(() => window.Strom.ZoomPan.getScale());
+        }, { timeout: 10000 }).toBeLessThan(0.55);
         await expect(page.locator('#tree-canvas')).toHaveClass(/zoom-far/);
         await expect(card(page, 'Jan').locator('.card-signal')).toBeHidden();
         await expect(card(page, 'Jan').locator('.card-state')).toBeHidden();
