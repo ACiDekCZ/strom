@@ -298,6 +298,8 @@ export const researchOverviewMethods = uiModule({
         if (paused && Number.isFinite(resumes)) {
             cell(L.state, state, L.pausedUntil(formatLiveClock(resumes, Date.now(), getCurrentLanguage())), stateCls,
                 [pausedText(paused), lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
+        } else if (stateCls === 'is-lost') {
+            cell(L.state, state, strings.research.reconnectingShort, stateCls, [lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
         } else {
             cell(L.state, state, lastEl ?? '', stateCls, [paused ? pausedText(paused) : '', lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
         }

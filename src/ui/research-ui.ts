@@ -128,6 +128,8 @@ export interface LiveSession {
     es: EventSource | null;
     timer: ReturnType<typeof setTimeout> | null;
     failures: number;
+    /** Since when the bridge does not answer (null: it does); it may come back (a restart). */
+    lostSince: number | null;
     /** Serialises tree refreshes (a change never overtakes another). */
     chain: Promise<void>;
 }
@@ -136,8 +138,16 @@ export interface LiveSession {
 const RECONNECT_MS = 2000;
 /** Poll interval when the browser has no EventSource. */
 const POLL_MS = 10000;
-/** Failed probes in a row after which the bridge is taken as gone. */
-const MAX_FAILURES = 2;
+/**
+ * How long the bridge may stay silent before following ends: strom can take a
+ * moment to come back (a restart, a busy moment while two runs write), so the
+ * app keeps asking meanwhile and says so. A test may shorten it.
+ */
+function lostGraceMs(): number {
+    return (globalThis as { __LIVE_GRACE_MS?: number }).__LIVE_GRACE_MS ?? 60_000;
+}
+/** The longest wait between two attempts while the bridge is silent. */
+const RETRY_MAX_MS = 5000;
 /** Most change lines kept while following (the overview lists them all). */
 const MAX_CHANGES = 3000;
 /** Change lines in the small panel. */
@@ -597,8 +607,9 @@ function liveTimeText(ts: number, kind: 'ago' | 'since' | 'sincefor' | 'lastchan
 }
 
 /** The research's state in a word: at work, waiting for the user, paused (its runs wait for their gate), idle. */
-export function liveState(s: LiveSession): { label: string; cls: 'is-working' | 'is-waiting' | 'is-paused' | 'is-idle' } {
+export function liveState(s: LiveSession): { label: string; cls: 'is-working' | 'is-waiting' | 'is-paused' | 'is-idle' | 'is-lost' } {
     const L = strings.live;
+    if (s.lostSince !== null && !s.ended) return { label: L.stateLost, cls: 'is-lost' };
     if (s.working.some(w => !w.paused)) return { label: L.stateWorking, cls: 'is-working' };
     if (s.waiting.length > 0) return { label: L.stateWaiting, cls: 'is-waiting' };
     if (s.working.length > 0) return { label: L.statePaused, cls: 'is-paused' };
@@ -1449,6 +1460,7 @@ export const researchUiMethods = uiModule({
                 es: null,
                 timer: null,
                 failures: 0,
+                lostSince: null,
                 chain: Promise.resolve(),
             };
             live.overview = this.researchOverviewRemembered();
@@ -1479,14 +1491,14 @@ export const researchUiMethods = uiModule({
         s.es = es;
         const payload = (e: Event): unknown => parseEventData((e as MessageEvent).data);
         es.addEventListener('hello', (e) => {
-            s.failures = 0;
+            this.liveBridgeBack(s);
             const status = sanitizeLiveStatus(payload(e));
             if (status) this.onLiveStatus(s, status);
             // After a reconnect: what happened meanwhile, from the research's history.
             if (s.logged) void this.fetchLiveLog(s);
         });
         es.addEventListener('change', (e) => {
-            s.failures = 0;
+            this.liveBridgeBack(s);
             const change = sanitizeLiveChange(payload(e));
             if (change) this.enqueueLive(s, () => this.onLiveChange(s, change));
         });
@@ -1510,16 +1522,29 @@ export const researchUiMethods = uiModule({
         try {
             const status = await fetchStatus(s.bridge.status);
             if (!status) throw new Error('bad status');
-            s.failures = 0;
+            this.liveBridgeBack(s);
             this.onLiveStatus(s, status);
             if (s.ended) return;
             if (typeof EventSource === 'function') this.scheduleLive(s, () => this.connectLiveEvents(s), RECONNECT_MS);
             else this.scheduleLive(s, () => this.probeLive(s), POLL_MS);
         } catch {
             s.failures++;
-            if (s.failures >= MAX_FAILURES) this.endLiveFollow(s, 'ended');
-            else this.scheduleLive(s, () => this.probeLive(s), RECONNECT_MS);
+            const now = Date.now();
+            if (s.lostSince === null) {
+                s.lostSince = now;
+                this.renderLivePanel();
+            }
+            if (now - s.lostSince >= lostGraceMs()) this.endLiveFollow(s, 'ended');
+            else this.scheduleLive(s, () => this.probeLive(s), Math.min(RECONNECT_MS * s.failures, RETRY_MAX_MS));
         }
+    },
+
+    /** The bridge answered: following goes on (after a silence: say so by redrawing). */
+    liveBridgeBack(s: LiveSession): void {
+        s.failures = 0;
+        if (s.lostSince === null) return;
+        s.lostSince = null;
+        this.renderLivePanel();
     },
 
     scheduleLive(s: LiveSession, run: () => void, ms: number): void {
@@ -1881,6 +1906,7 @@ export const researchUiMethods = uiModule({
         panel.setAttribute('aria-label', r.panelLabel);
         panel.classList.remove('idle');
         panel.classList.toggle('ended', s.ended);
+        panel.classList.toggle('lost', !s.ended && s.lostSince !== null);
         panel.classList.toggle('collapsed', collapsed);
         panel.classList.toggle('phone-strip', phone && !s.ended);
         // The overview shows the same (a drawn overview hides the panel).
@@ -1937,7 +1963,12 @@ export const researchUiMethods = uiModule({
         }
 
         const body = el('div', 'live-panel-body');
-        body.appendChild(el('p', 'live-panel-state', s.ended ? r.endedText : r.following(s.name)));
+        const stateText = s.ended ? r.endedText : s.lostSince !== null ? r.reconnecting : r.following(s.name);
+        const stateLine = body.appendChild(el('p', 'live-panel-state', stateText));
+        if (!s.ended && s.lostSince !== null) {
+            stateLine.classList.add('is-lost');
+            stateLine.setAttribute('role', 'status');
+        }
         const fold = (key: LiveSectionKey) => ({
             id: `live-sec-${key}`,
             collapsed: panelSectionCollapsed(s, key),

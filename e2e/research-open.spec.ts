@@ -283,6 +283,8 @@ test.describe('live research (?live=)', () => {
             return route.fulfill({ status: 404, headers: cors, body: '' });
         });
 
+        // The bridge may stay silent this long before following ends (60 s in use).
+        await page.addInitScript(() => { (globalThis as { __LIVE_GRACE_MS?: number }).__LIVE_GRACE_MS = 3000; });
         await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
         const panel = page.locator('#live-panel');
         await expect(panel).toBeVisible();
@@ -310,7 +312,12 @@ test.describe('live research (?live=)', () => {
 
         // The bridge goes away → "following ended", last state kept, editable again.
         state.down = true;
+        // First it keeps trying, and says so; the tree stays read-only.
+        await expect(panel).toHaveClass(/lost/, { timeout: 10000 });
+        await expect(panel.locator('.live-panel-state')).toContainText('Trying again');
+        await expect(page.locator('body')).toHaveClass(/tree-locked/);
         await expect(panel).toHaveClass(/ended/, { timeout: 15000 });
+        await expect(panel).not.toHaveClass(/lost/);
         await expect(panel).toContainText('Following ended');
         // Who was working is stale once following ended — not shown any more.
         await expect(panel.locator('.live-working')).toHaveCount(0);
@@ -342,6 +349,49 @@ test.describe('live research (?live=)', () => {
         await panel.getByRole('button', { name: 'Stop following' }).click();
         await expect(panel).toHaveCount(0);
         await expect(page.locator('body')).not.toHaveClass(/tree-locked/);
+    });
+
+    test('a bridge silent for a moment (a restart): trying again, then following goes on', async ({ page }) => {
+        const state = { down: false };
+        const status = { strom: '1.0.0', tree: { id: UUID, name: 'Víškovi', lang: 'cs' }, head: 'h1',
+            researches: [], working: [], open: [], waiting: [] };
+        await page.route(`${BRIDGE}/**`, async (route) => {
+            if (state.down) return route.abort('connectionrefused');
+            const path = new URL(route.request().url()).pathname;
+            if (path.endsWith('/status')) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(status) });
+            }
+            if (path.endsWith('/tree.ged')) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: researchGed() });
+            }
+            if (path.endsWith('/events')) {
+                // The stream ends after hello: the app asks /status and connects again.
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' },
+                    body: `event: hello\ndata: ${JSON.stringify(status)}\n\n` });
+            }
+            return route.fulfill({ status: 404, headers: cors, body: '' });
+        });
+        await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
+        const panel = page.locator('#live-panel');
+        await expect(panel).toBeVisible();
+        await expect(panel.locator('.live-panel-state')).toContainText('Following');
+
+        state.down = true;
+        await expect(panel).toHaveClass(/lost/, { timeout: 10000 });
+        await expect(panel.locator('.live-panel-state')).toContainText('The connection to Strom Research dropped');
+        await expect(page.locator('body')).toHaveClass(/tree-locked/);
+        // The overview says it in its state cell.
+        await page.evaluate(() => window.Strom.UI.openResearchOverview());
+        const cellState = page.locator('#research-overview .research-overview__cell.is-lost');
+        await expect(cellState).toContainText('Connection lost');
+        await expect(cellState).toContainText('trying again…');
+
+        state.down = false;
+        await expect(cellState).toHaveCount(0, { timeout: 15000 });
+        await page.evaluate(() => window.Strom.UI.closeResearchOverview());
+        await expect(panel).not.toHaveClass(/lost|ended/);
+        await expect(panel.locator('.live-panel-state')).toContainText('Following');
+        await expect(page.locator('body')).toHaveClass(/tree-locked/);
     });
 });
 
