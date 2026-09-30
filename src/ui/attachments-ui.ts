@@ -11,7 +11,7 @@ import { Attachment } from '../types.js';
 import { strings } from '../strings.js';
 import { dataUrlByteSize } from '../photo.js';
 import {
-    compressImageAttachment, readFileAsDataUrl, totalAttachmentBytes,
+    compressImageAttachment, readFileAsDataUrl, totalAttachmentBytes, personMedia,
     MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES, ATTACHMENT_WARN_BYTES, pdfBlobFromDataUrl,
 } from '../attachments.js';
 import { uiModule } from './module.js';
@@ -103,16 +103,28 @@ export const attachmentsMethods = uiModule({
             });
         }
 
-        // Total + email-size warning.
+        // What this person brings into the file, each part named; the whole
+        // tree only as a warning when its file grows too big for e-mail.
         if (totalEl) {
-            const bytes = totalAttachmentBytes(DataManager.getData());
-            if (bytes === 0) {
-                totalEl.textContent = '';
-                totalEl.className = 'attachments-total';
-            } else {
-                totalEl.textContent = strings.attachments.total(attachments.length, formatBytes(bytes));
-                totalEl.className = bytes > ATTACHMENT_WARN_BYTES ? 'attachments-total warn' : 'attachments-total';
-            }
+            const data = DataManager.getData();
+            const m = personMedia(person, data);
+            const A = strings.attachments;
+            const parts = [
+                m.photoBytes > 0 ? A.partPhoto(formatBytes(m.photoBytes)) : '',
+                m.attachments > 0 ? A.partAttachments(m.attachments, formatBytes(m.attachmentBytes)) : '',
+                m.excerpts > 0 ? A.partExcerpts(m.excerpts, formatBytes(m.excerptBytes)) : '',
+            ].filter(Boolean);
+            const treeBytes = totalAttachmentBytes(data);
+            const lines: { text: string; warn: boolean }[] = [];
+            if (parts.length > 0) lines.push({ text: A.personTotal(parts.join(' · ')), warn: false });
+            if (treeBytes > ATTACHMENT_WARN_BYTES) lines.push({ text: A.treeWarn(formatBytes(treeBytes)), warn: true });
+            totalEl.replaceChildren(...lines.map(({ text, warn }) => {
+                const line = document.createElement('div');
+                line.textContent = text;
+                if (warn) line.className = 'warn';
+                return line;
+            }));
+            totalEl.className = 'attachments-total';
         }
 
         const addBtn = document.getElementById('btn-add-attachment');

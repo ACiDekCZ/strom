@@ -5,7 +5,7 @@
  * inline so they travel with the single-file export.
  */
 
-import { StromData } from './types.js';
+import { Person, StromData, personSourceIds } from './types.js';
 import { dataUrlByteSize, stripPhotos } from './photo.js';
 
 /** Longest edge (px) an attached image is downscaled to. */
@@ -95,6 +95,40 @@ export function totalAttachmentBytes(data: StromData): number {
         for (const att of person.attachments ?? []) total += att.sizeBytes || dataUrlByteSize(att.dataUrl);
     }
     return total;
+}
+
+/** The images one person brings into the tree file: their photo, attachments, and the excerpts of the sources citing them. */
+export interface PersonMedia {
+    photoBytes: number;
+    attachments: number;
+    attachmentBytes: number;
+    excerpts: number;
+    excerptBytes: number;
+}
+
+export function personMedia(person: Person, data: StromData): PersonMedia {
+    const out: PersonMedia = {
+        photoBytes: person.photo ? dataUrlByteSize(person.photo) : 0,
+        attachments: 0, attachmentBytes: 0, excerpts: 0, excerptBytes: 0,
+    };
+    for (const att of person.attachments ?? []) {
+        out.attachments++;
+        out.attachmentBytes += att.sizeBytes || dataUrlByteSize(att.dataUrl);
+    }
+    // Sources citing the person, their events or their unions (each once).
+    const cited = new Set(personSourceIds(person));
+    for (const ev of person.events ?? []) for (const id of ev.sourceIds ?? []) cited.add(id);
+    for (const u of Object.values(data.partnerships)) {
+        if (u.person1Id !== person.id && u.person2Id !== person.id) continue;
+        for (const id of u.sourceIds ?? []) cited.add(id);
+    }
+    for (const id of cited) {
+        for (const exc of data.sources?.[id]?.excerpts ?? []) {
+            out.excerpts++;
+            out.excerptBytes += exc.sizeBytes || dataUrlByteSize(exc.dataUrl);
+        }
+    }
+    return out;
 }
 
 /** Remove every source excerpt from `data` in place (the text of the source stays). */
