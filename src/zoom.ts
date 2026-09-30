@@ -19,6 +19,10 @@ const MIN_SCALE = 0.15;
 const MAX_SCALE = 4;
 /** Below this scale the card badges become dots and the status icons hide. */
 const ZOOM_FAR = 0.55;
+/** Below this scale the research edge's stub becomes a stretch of the card's top edge. */
+const ZOOM_EDGE_BAR = 0.6;
+/** From this scale on the stub has its word (a hair under 1: a reset lands on 1 exactly). */
+const ZOOM_EDGE_LABELS = 0.999;
 const ZOOM_BUTTON_FACTOR = 1.3;
 const ZOOM_ANIMATION_DURATION = 200; // ms
 /** Views drawn in their own container over the (hidden) tree canvas. */
@@ -731,6 +735,9 @@ class ZoomPanClass {
             canvas.style.transform = `translate(${this.tx}px, ${this.ty}px) scale(${this.scale})`;
             // Far out the card badges turn into dots that keep a readable size.
             canvas.classList.toggle('zoom-far', this.scale < ZOOM_FAR);
+            // The research edge: a stretch of the top edge far out, its words from 100 %.
+            canvas.classList.toggle('zoom-edge-bar', this.scale < ZOOM_EDGE_BAR);
+            canvas.classList.toggle('zoom-edge-labels', this.scale >= ZOOM_EDGE_LABELS);
             canvas.style.setProperty('--zoom-inv', String(1 / Math.max(this.scale, 0.05)));
             // Fonts scale naturally with CSS transform - no counter-scaling needed
         }

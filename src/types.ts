@@ -301,6 +301,103 @@ export interface PersonResearch {
     conflicts?: ResearchConflict[];
     hypotheses?: ResearchHypothesis[];
     searched?: ResearchSearch[];
+    /** The tree ends above this person and the research knows why (GEDCOM _STROM_EDGE). */
+    edge?: ResearchEdge;
+    /** The person belongs to a family nothing links to the tree yet (GEDCOM _STROM_ISLAND). */
+    island?: ResearchIsland;
+}
+
+/** A span of years (inclusive). */
+export interface YearSpan {
+    from: number;
+    to: number;
+}
+
+/**
+ * The edge of the tree above one person: what is missing, how far the
+ * research reaches (scope), what the records say (end) and what comes next.
+ * Values are open vocabularies: an unknown one is kept as written and shown
+ * as "the research knows something here".
+ */
+export interface ResearchEdge {
+    /** parents | father | mother | proof (or a newer word). */
+    missing: string;
+    /** in | limit | paused | done | living | outside | off-tree … */
+    scope?: string;
+    /** The research direction reaching here ("G0001") and its generation. */
+    research?: string;
+    gen?: number;
+    /** What the records say (unnamed, lost, before-records, … no-clue). */
+    end?: string;
+    /** The first year of the known registers (before-records). */
+    records?: number;
+    /** What comes next (working, waiting, queued, held, proposed, decide, none). */
+    next?: string;
+    /** Queue position of the first task (1 = next). */
+    pos?: number;
+    /** The birth the search starts from; `basis` when estimated ("MARR 1810", "child 1811"). */
+    est?: { year: number; place?: string; basis?: string };
+    /** The years searched for the baptism. */
+    window?: YearSpan;
+    /** Known birth registers for the window. */
+    books: ResearchEdgeBook[];
+    /** Years of the window searched in every known book without a result. */
+    covered: YearSpan[];
+    /** Years of the window no book covers. */
+    noRecords: YearSpan[];
+    /** Tasks that can move the tree up, in queue order. */
+    tasks: ResearchEdgeTask[];
+    /** Tasks done or dropped on the same (ids). */
+    tried: string[];
+    searches?: number;
+    sessions?: { n: number; cost?: number; partial?: boolean };
+    /** Last work here (ISO date). */
+    last?: string;
+    /** Open conflicts about the birth or the parents (ids; full text in `conflicts`). */
+    conflicts: string[];
+    /** Open hypotheses naming this person. */
+    hypos: ResearchEdgeHypo[];
+}
+
+export interface ResearchEdgeBook {
+    id: string;
+    title: string;
+    from?: number;
+    to?: number;
+    /** online-free | online-login | onsite | request | lost | unknown */
+    access?: string;
+}
+
+export interface ResearchEdgeTask {
+    id: string;
+    level?: string;
+    stat?: string;
+    title: string;
+    pos?: number;
+    /** Why it waits outside the queue: paused | done | off-tree | parked. */
+    held?: string;
+    /** Parked until (as written). */
+    until?: string;
+    note?: string;
+}
+
+export interface ResearchEdgeHypo {
+    id: string;
+    /** REFN of the person (in the island, or in the tree) it would link to. */
+    join?: string;
+    /** People in the family outside the tree. */
+    island?: number;
+    /** Tasks about it waiting outside the queue. */
+    held?: number;
+    /** Tasks testing it. */
+    tests: string[];
+}
+
+/** A person of a family nothing links to the tree yet. */
+export interface ResearchIsland {
+    size: number;
+    hypos: { id: string; join?: string }[];
+    held?: number;
 }
 
 /** One value a source gives for a fact, with the sources that say so. */
@@ -327,6 +424,8 @@ export interface ResearchConflict {
 
 /** A question the research works with ("Father: Václav, or Jan?"). */
 export interface ResearchHypothesis {
+    /** The research's id ("H0001"), when it wrote one. */
+    id?: string;
     title: string;
     note?: string;
 }
@@ -820,6 +919,10 @@ export interface TreeMetadata {
     autoBackups?: boolean;
     /** The "backups too big for this device" advice was shown (it is shown once). */
     backupsTooBigNoticed?: boolean;
+    /** Research edge above the cards: off / only what waits for the user / all (missing = all). */
+    researchEdges?: ResearchEdgeMode;
+    /** The edge moves while the agent works on it (missing = on; live only). */
+    researchEdgeMotion?: boolean;
     /** Last edit of the user's (ISO). With fileCopyAt: edits no file holds (src/file-copy.ts). */
     changedAt?: string;
     /** Last full copy in a file: a full export, the working file, or the file it was imported from (ISO). */
@@ -827,6 +930,9 @@ export interface TreeMetadata {
     /** The "changes only in the browser" notice was closed for this tree (ISO); it returns after the next file copy. */
     fileCopyNoticeClosedAt?: string;
 }
+
+/** How much of the research edge the tree shows (Settings → Tree). */
+export type ResearchEdgeMode = 'off' | 'mine' | 'all';
 
 /** Link between a local tree and the Strom Research tree it was opened from. */
 export interface ResearchLink {

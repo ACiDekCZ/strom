@@ -18,9 +18,10 @@ import {
 import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
-import { CARD_SIZE, ViewMode, STANDALONE_VIEWS } from './types.js';
+import { CARD_SIZE, ViewMode, STANDALONE_VIEWS, ResearchEdgeMode } from './types.js';
 import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
+import { EdgeView, edgeMoves, edgeView } from './research-edge.js';
 import {
     computeLayout,
     StromLayoutEngine,
@@ -73,6 +74,8 @@ class TreeRendererClass {
 
     // Connections for line rendering from layout engine
     private connections: Connection[] = [];
+    /** The research edge above each drawn person that has one (per render). */
+    private edgeViews = new Map<PersonId, EdgeView>();
 
     // Spouse lines from layout engine (only adjacent partners)
     private spouseLines: SpouseLine[] = [];
@@ -299,6 +302,7 @@ class TreeRendererClass {
         const current = await this.renderCards(canvas, seq);
         if (!current) return;
         this.renderLines(svg);
+        this.renderEdgeLinks(svg, canvas);
         this.updateSVGSize(svg);
         // Fit long names once, after the cards are in the DOM and measurable.
         requestAnimationFrame(() => this.fitCardNames(canvas));
@@ -972,6 +976,10 @@ class TreeRendererClass {
         const presumedDeceased = this.computePresumedDeceased();
         // At-a-glance signals (evidence, story, action badge): shared context.
         const signalCtx = this.signalContext();
+        this.edgeViews = this.computeEdgeViews(signalCtx);
+        const edgeAll = this.researchEdgeMode() === 'all';
+        const edgeMotion = this.researchEdgeMotion();
+        canvas.querySelectorAll('.edge-link-pill').forEach(el => el.remove());
         // The agent's arcs turn in step (one phase for every card, kept across redraws).
         const spinDelay = sharedPhaseDelay(AGENT_SPIN_MS, document.timeline?.currentTime as number ?? performance.now());
         const renderedAt = Date.now();
@@ -1334,6 +1342,17 @@ class TreeRendererClass {
                 // The pill reaches 9 px into the card: the status stripes rise above it.
                 card.classList.add('has-edge-br');
             }
+            // The research edge above the card (a stub, or a label by the dashed line to the parents).
+            const edge = this.edgeViews.get(id);
+            if (edge) {
+                html += this.researchEdgeHtml(id, edge, edgeAll, edgeMotion);
+                card.classList.add('has-research-edge');
+            }
+            const island = edgeAll && !person.isPlaceholder ? person.research?.island : undefined;
+            if (island) {
+                card.classList.add('research-island');
+                html += `<div class="island-caption">${this.escapeHtml(strings.researchEdge.islandCaption(island.size, island.held ?? 0))}</div>`;
+            }
             if (partnerAddHtml) html += `<div class="card-edge edge-right-center">${partnerAddHtml}</div>`;
             if (childAddHtml) html += `<div class="card-edge edge-bottom-center">${childAddHtml}</div>`;
 
@@ -1401,6 +1420,8 @@ class TreeRendererClass {
             }
 
             card.innerHTML = html;
+            const edgeButton = card.querySelector<HTMLElement>('.research-edge');
+            if (edgeButton) UI.bindResearchEdge(id, edgeButton);
 
             // Tooltip flip: the default hover card sits ~30px above the card, but
             // near the top of the viewport it would be clipped. On first hover we
@@ -1590,6 +1611,118 @@ class TreeRendererClass {
             // Step 3 (ellipsis on an overflowing line) is handled by the
             // .name-line { text-overflow: ellipsis } CSS.
         });
+    }
+
+    // ============= Research edge =============
+
+    private researchEdgeMode(): ResearchEdgeMode {
+        const treeId = DataManager.getCurrentTreeId();
+        return treeId ? TreeManager.getResearchEdgeMode(treeId) : 'all';
+    }
+
+    /** Whether a working edge may move now (see edgeMoves). */
+    private researchEdgeMotion(): { live: boolean; motion: boolean; reducedMotion: boolean } {
+        const treeId = DataManager.getCurrentTreeId();
+        return {
+            live: DataManager.isLiveFollowing(),
+            motion: !!treeId && TreeManager.isResearchEdgeMotion(treeId),
+            reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true,
+        };
+    }
+
+    /**
+     * The edge of every drawn person the research wrote one for. A person who
+     * meanwhile got the parents the edge misses (added by hand) has none.
+     */
+    private computeEdgeViews(ctx: CardSignalContext): Map<PersonId, EdgeView> {
+        const out = new Map<PersonId, EdgeView>();
+        const mode = this.researchEdgeMode();
+        if (mode === 'off') return out;
+        for (const id of this.positions.keys()) {
+            const p = DataManager.getPerson(id);
+            const edge = p?.research?.edge;
+            if (!p || !edge || p.isPlaceholder) continue;
+            const parents = p.parentIds.length;
+            if (edge.missing === 'parents' ? parents > 0 : edge.missing !== 'proof' && parents >= 2) continue;
+            const live = p.refn ? ctx.research.get(p.refn) : undefined;
+            const view = edgeView(edge, mode, { working: !!live?.agent, waiting: !!live?.waiting, queued: !!live?.queued });
+            if (view) out.set(id, view);
+        }
+        return out;
+    }
+
+    /** The edge's button above the card: the stub (or the "proof" label) and its short word. */
+    private researchEdgeHtml(id: PersonId, v: EdgeView, all: boolean, motion: ReturnType<TreeRendererClass['researchEdgeMotion']>): string {
+        const cls = ['research-edge', `edge-kind-${v.kind}`, `edge-${v.shape}`, `tone-${v.tone}`, `side-${v.side}`];
+        if (edgeMoves(v, motion)) cls.push('is-moving');
+        const label = v.label && (all || v.kind !== 'proof') ? `<span class="research-edge-label">${this.escapeHtml(v.label)}</span>` : '';
+        return `<button type="button" class="${cls.join(' ')}" data-edge-person="${this.escapeHtml(id)}" aria-label="${this.escapeHtml(v.aria)}">`
+            + `<i class="research-edge-line" aria-hidden="true"></i>${label}</button>`;
+    }
+
+    /** Where a person's stub ends, in canvas coordinates (null: not drawn). */
+    edgeStubTip(id: PersonId): { x: number; y: number } | null {
+        const v = this.edgeViews.get(id);
+        const pos = this.positions.get(id);
+        if (!v || !pos || v.kind === 'proof') return null;
+        const w = this.config.cardWidth;
+        const x = pos.x + (v.side === 'father' ? w * 40 / 188 : v.side === 'mother' ? w * 148 / 188 : w / 2);
+        const h = v.kind === 'muted' ? 14 : v.shape === 'closed' ? 18 : 26;
+        return { x, y: pos.y - h };
+    }
+
+    /**
+     * Possible links of the edge to a family outside the tree (hypotheses
+     * with a person to join; "all" only). The family drawn: a dashed curve
+     * from the stub to its card, "possible link · H0001" in the middle. Not
+     * drawn: "+ family · 29" at the stub's end, which goes to that person.
+     */
+    private renderEdgeLinks(svg: SVGSVGElement, canvas: HTMLElement): void {
+        canvas.querySelectorAll('.edge-link-pill').forEach(el => el.remove());
+        if (this.edgeViews.size === 0 || this.researchEdgeMode() !== 'all') return;
+        const byRefn = new Map<string, PersonId>();
+        for (const p of DataManager.getAllPersons()) if (p.refn) byRefn.set(p.refn, p.id);
+        const re = strings.researchEdge;
+        for (const [id, v] of this.edgeViews) {
+            const person = DataManager.getPerson(id);
+            // The island's own edges point back to the tree: the tree's side draws the link.
+            if (!person || person.research?.island || v.kind === 'proof') continue;
+            const hypo = person.research?.edge?.hypos.find(h => h.join && byRefn.has(h.join));
+            const tip = this.edgeStubTip(id);
+            if (!hypo || !tip) continue;
+            const joinId = byRefn.get(hypo.join!)!;
+            const target = this.positions.get(joinId);
+            const pill = document.createElement(target ? 'div' : 'button');
+            if (target) {
+                const w = this.config.cardWidth, h = this.config.cardHeight;
+                // Into the island card's nearest side (its top when it is above).
+                const above = target.y + h < tip.y;
+                const tx = above ? target.x + w / 2 : (target.x + w / 2 < tip.x ? target.x + w : target.x);
+                const ty = above ? target.y + h : target.y + h / 2;
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                const midY = Math.min(tip.y, ty) - 30;
+                path.setAttribute('d', `M ${tip.x} ${tip.y} C ${tip.x} ${midY}, ${tx} ${midY}, ${tx} ${ty}`);
+                path.setAttribute('class', 'edge-link-curve');
+                path.setAttribute('fill', 'none');
+                svg.appendChild(path);
+                pill.className = 'edge-link-pill edge-link-pill--link';
+                pill.textContent = re.linkPill(hypo.id);
+                // The curve's midpoint (t = 0.5 of the cubic above).
+                pill.style.left = `${(tip.x + tx) / 2}px`;
+                pill.style.top = `${0.125 * tip.y + 0.75 * midY + 0.125 * ty}px`;
+            } else {
+                if (!hypo.island) continue;
+                pill.className = 'edge-link-pill edge-link-pill--family';
+                (pill as HTMLButtonElement).type = 'button';
+                pill.textContent = re.familyPill(hypo.island);
+                pill.setAttribute('aria-label', re.familyPillSr(hypo.island));
+                pill.style.left = `${tip.x}px`;
+                pill.style.top = `${tip.y - 4}px`;
+                pill.onclick = (e) => { e.stopPropagation(); this.setFocus(joinId); };
+            }
+            pill.dataset.edgePerson = id;
+            canvas.appendChild(pill);
+        }
     }
 
     /** What every card's signals are evaluated against (once per render). */
@@ -1873,7 +2006,11 @@ class TreeRendererClass {
             // style reflects the parent→child relationship type (adoptive/step/
             // foster); geometry is unchanged.
             for (const drop of conn.drops) {
-                this.drawLine(svg, drop.x, conn.branchY, drop.x, drop.bottomY, this.getParentRelDropStyle(drop.personId));
+                // Parents no record documents: the drop is dashed (research edge "proof").
+                const style = this.edgeViews.get(drop.personId)?.kind === 'proof'
+                    ? { dashArray: '3,4', className: 'child-drop edge-proof-drop' }
+                    : this.getParentRelDropStyle(drop.personId);
+                this.drawLine(svg, drop.x, conn.branchY, drop.x, drop.bottomY, style);
             }
         }
     }

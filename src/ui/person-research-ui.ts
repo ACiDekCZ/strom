@@ -82,7 +82,7 @@ export const personResearchMethods = uiModule({
     /** "What the research knows" for the person menu, or null when the research wrote nothing. */
     personResearchKnows(personId: PersonId): PersonMenuAction | null {
         const r = DataManager.getPerson(personId)?.research;
-        if (!r || !((r.conflicts?.length ?? 0) + (r.hypotheses?.length ?? 0) + (r.searched?.length ?? 0))) return null;
+        if (!r || !((r.conflicts?.length ?? 0) + (r.hypotheses?.length ?? 0) + (r.searched?.length ?? 0) + (r.edge ? 1 : 0))) return null;
         const open = this.personOpenConflicts(personId).length;
         const label = strings.research.knows;
         return open > 0
@@ -94,8 +94,10 @@ export const personResearchMethods = uiModule({
     /**
      * The dialog. From the edit form it opens above it (the form stays on
      * the dialog stack underneath); from the menu it is the only dialog.
+     * `edge`: opened from the research edge above the card — its "Above the
+     * person" section comes into view and takes the focus.
      */
-    showPersonResearchDialog(personId: PersonId): void {
+    showPersonResearchDialog(personId: PersonId, opts: { edge?: boolean } = {}): void {
         document.getElementById(DIALOG_ID)?.remove();
         const person = DataManager.getPerson(personId);
         const research = person?.research;
@@ -164,6 +166,7 @@ export const personResearchMethods = uiModule({
                     <button type="button" class="close-btn" id="person-research-close-x" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
                 <div class="person-research-body">
+                    ${this.researchEdgeSectionHtml(personId)}
                     ${section(r.conflicts, openHtml + decidedHtml)}
                     ${section(r.hypotheses, hypotheses.map(h => `
                         <div class="person-research-hypo">
@@ -200,8 +203,15 @@ export const personResearchMethods = uiModule({
                 if (url) this.launchResearchLink(url, agent ? 'agent' : 'terminal');
             };
         });
+        this.bindResearchEdgeSection(overlay, personId);
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
-        (overlay.querySelector('#person-research-close') as HTMLButtonElement).focus({ preventScroll: true });
+        const edgeHead = opts.edge ? overlay.querySelector<HTMLElement>('#research-edge-section summary') : null;
+        if (edgeHead) {
+            edgeHead.focus({ preventScroll: true });
+            edgeHead.scrollIntoView({ block: 'start' });
+        } else {
+            (overlay.querySelector('#person-research-close') as HTMLButtonElement).focus({ preventScroll: true });
+        }
     },
 
     closePersonResearchDialog(): void {

@@ -40,6 +40,12 @@ import {
     PlaceGeo,
     PersonResearch,
     ResearchConflictValue,
+    ResearchEdge,
+    ResearchEdgeBook,
+    ResearchEdgeHypo,
+    ResearchEdgeTask,
+    ResearchIsland,
+    YearSpan,
 } from './types';
 import { dateSortKey, formatFlexDate } from './dates';
 import { placeKey } from './places';
@@ -129,8 +135,16 @@ function toStory(raw: RawStory | undefined): Story | undefined {
  */
 interface RawResearch {
     conflicts: { id: string; fact: string; title: string; stat: string; values: RawResearchValue[]; decision?: RawResearchValue }[];
-    hypotheses: { title: string; note: string }[];
+    hypotheses: { id: string; title: string; note: string }[];
     searched: { title: string; date: string; resn: string; at: string }[];
+    /** The _STROM_EDGE / _STROM_ISLAND block: its value and the lines under it (level, tag, value). */
+    edge?: RawResearchBlock;
+    island?: RawResearchBlock;
+}
+
+interface RawResearchBlock {
+    value: string;
+    lines: { level: number; tag: string; value: string }[];
 }
 
 interface RawResearchValue {
@@ -140,7 +154,7 @@ interface RawResearchValue {
 
 /** The research block being read, and the level-2 line inside it. */
 interface OpenResearch {
-    kind: 'conflict' | 'hypo' | 'searched';
+    kind: 'conflict' | 'hypo' | 'searched' | 'edge' | 'island';
     sub: string | null;
 }
 
@@ -188,7 +202,11 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
         .filter(c => c.values.length > 0);
     if (conflicts.length > 0) out.conflicts = conflicts;
     const hypotheses = raw.hypotheses.filter(h => h.title.trim())
-        .map(h => ({ title: h.title.trim(), ...(h.note.trim() ? { note: h.note.trim() } : {}) }));
+        .map(h => ({
+            ...(RESEARCH_ID.H.test(h.id.trim()) ? { id: h.id.trim() } : {}),
+            title: h.title.trim(),
+            ...(h.note.trim() ? { note: h.note.trim() } : {}),
+        }));
     if (hypotheses.length > 0) out.hypotheses = hypotheses;
     const searched = raw.searched.filter(x => x.title.trim()).map(x => {
         const resn = x.resn.trim().toLowerCase();
@@ -201,7 +219,154 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
         };
     });
     if (searched.length > 0) out.searched = searched;
+    const edge = raw.edge ? researchEdgeFromLines(raw.edge) : null;
+    if (edge) out.edge = edge;
+    const island = raw.island ? researchIslandFromLines(raw.island) : null;
+    if (island) out.island = island;
     return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** The research's ids by kind (person REFN, task, direction, hypothesis, conflict, book). */
+const RESEARCH_ID = {
+    P: /^P\d{1,7}$/, T: /^T\d{1,7}$/, G: /^G\d{1,7}$/, H: /^H\d{1,7}$/, X: /^X\d{1,7}$/, B: /^B\d{1,7}$/,
+};
+
+/** A whole number within a range, or undefined. */
+function researchInt(value: string, min: number, max: number): number | undefined {
+    if (!/^\s*-?\d+\s*$/.test(value)) return undefined;
+    const n = parseInt(value, 10);
+    return n >= min && n <= max ? n : undefined;
+}
+
+/** "FROM 1773 TO 1793" → the span; undefined unless both years are there. */
+function researchSpan(value: string): YearSpan | undefined {
+    const { from, to } = researchYears(value);
+    if (from === undefined || to === undefined || from > to) return undefined;
+    return { from, to };
+}
+
+/** A research vocabulary word (end, next, scope …): lower case, letters and dashes only. */
+function researchWord(value: string): string | undefined {
+    const v = value.trim().toLowerCase();
+    return /^[a-z][a-z-]{0,31}$/.test(v) ? v : undefined;
+}
+
+/**
+ * The lines under one `1 _STROM_EDGE` → the edge (null when its value is not
+ * a word). Sub-tags come in a fixed order, but any may be missing and new
+ * ones may appear: unknown tags are skipped, invalid ids and numbers dropped.
+ */
+export function researchEdgeFromLines(block: RawResearchBlock): ResearchEdge | null {
+    const missing = researchWord(block.value);
+    if (!missing) return null;
+    const edge: ResearchEdge = { missing, books: [], covered: [], noRecords: [], tasks: [], tried: [], conflicts: [], hypos: [] };
+    const YEAR = [1000, 2999] as const;
+    // The level-2 item the level-3 lines belong to, and the level-3 line for CONT/CONC.
+    let item: { tag: string; target?: ResearchEdgeBook | ResearchEdgeTask | ResearchEdgeHypo | ResearchEdge['est'] | ResearchEdge['sessions'] } | null = null;
+    let sub = '';
+    for (const { level, tag, value } of block.lines) {
+        const v = value.trim();
+        if (level === 2) {
+            item = { tag };
+            sub = '';
+            switch (tag) {
+                case '_SCOPE': { const w = researchWord(v); if (w) edge.scope = w; break; }
+                case '_RESEARCH': if (RESEARCH_ID.G.test(v)) edge.research = v; break;
+                case '_GEN': { const n = researchInt(v, 1, 99); if (n !== undefined) edge.gen = n; break; }
+                case '_END': { const w = researchWord(v); if (w) edge.end = w; break; }
+                case '_RECORDS': { const n = researchInt(v, ...YEAR); if (n !== undefined) edge.records = n; break; }
+                case '_NEXT': { const w = researchWord(v); if (w) edge.next = w; break; }
+                case '_EST': {
+                    const year = researchInt(v, ...YEAR);
+                    if (year !== undefined) { edge.est = { year }; item.target = edge.est; }
+                    break;
+                }
+                case 'DATE': { const span = researchSpan(v); if (span) edge.window = span; break; }
+                case '_BOOK':
+                    if (RESEARCH_ID.B.test(v)) { const book: ResearchEdgeBook = { id: v, title: '' }; edge.books.push(book); item.target = book; }
+                    break;
+                case '_COVERED': { const span = researchSpan(v); if (span) edge.covered.push(span); break; }
+                case '_NORECORDS': { const span = researchSpan(v); if (span) edge.noRecords.push(span); break; }
+                case '_TASK':
+                    if (RESEARCH_ID.T.test(v)) { const task: ResearchEdgeTask = { id: v, title: '' }; edge.tasks.push(task); item.target = task; }
+                    break;
+                case '_TRIED': if (RESEARCH_ID.T.test(v)) edge.tried.push(v); break;
+                case '_SEARCHES': { const n = researchInt(v, 0, 1e6); if (n !== undefined) edge.searches = n; break; }
+                case '_SESSIONS': {
+                    const n = researchInt(v, 0, 1e6);
+                    if (n !== undefined) { edge.sessions = { n }; item.target = edge.sessions; }
+                    break;
+                }
+                case '_LAST': { const iso = researchIsoDate(v); if (iso) edge.last = iso; break; }
+                case '_CONFLICT': if (RESEARCH_ID.X.test(v)) edge.conflicts.push(v); break;
+                case '_HYPO':
+                    if (RESEARCH_ID.H.test(v)) { const hypo: ResearchEdgeHypo = { id: v, tests: [] }; edge.hypos.push(hypo); item.target = hypo; }
+                    break;
+                default: break;
+            }
+            continue;
+        }
+        const target = item?.target;
+        if (!item || !target) continue;
+        if (level === 3) sub = tag;
+        if (item.tag === '_EST' && level === 3) {
+            const est = target as NonNullable<ResearchEdge['est']>;
+            if (tag === 'PLAC' && v) est.place = v;
+            else if (tag === '_BASIS' && v) est.basis = v;
+        } else if (item.tag === '_BOOK') {
+            const book = target as ResearchEdgeBook;
+            if (level === 3 && tag === 'TITL') book.title = v;
+            else if (level === 3 && tag === 'DATE') Object.assign(book, researchYears(v));
+            else if (level === 3 && tag === '_ACCESS') { const w = researchWord(v); if (w) book.access = w; }
+            else if (level === 4 && sub === 'TITL' && (tag === 'CONC' || tag === 'CONT')) book.title += (tag === 'CONT' ? ' ' : '') + v;
+        } else if (item.tag === '_TASK') {
+            const task = target as ResearchEdgeTask;
+            if (level === 3) {
+                if (tag === '_LEVEL') { const w = researchWord(v); if (w) task.level = w; }
+                else if (tag === 'STAT') { const w = researchWord(v); if (w) task.stat = w; }
+                else if (tag === 'TITL') task.title = v;
+                else if (tag === '_POS') { const n = researchInt(v, 1, 1e6); if (n !== undefined) task.pos = n; }
+                else if (tag === '_HELD') { const w = researchWord(v); if (w) task.held = w; }
+                else if (tag === '_UNTIL' && v) task.until = researchIsoDate(v) || v;
+                else if (tag === 'NOTE') task.note = v;
+            } else if (level === 4 && (tag === 'CONC' || tag === 'CONT')) {
+                if (sub === 'TITL') task.title += (tag === 'CONT' ? ' ' : '') + v;
+                else if (sub === 'NOTE') task.note = (task.note ?? '') + (tag === 'CONT' ? '\n' : '') + v;
+            }
+        } else if (item.tag === '_SESSIONS' && level === 3) {
+            const sessions = target as NonNullable<ResearchEdge['sessions']>;
+            if (tag === '_COST') { const cost = Number(v); if (/^\d+(\.\d+)?$/.test(v) && cost < 1e7) sessions.cost = cost; }
+            else if (tag === '_PARTIAL' && v.toUpperCase() === 'Y') sessions.partial = true;
+        } else if (item.tag === '_HYPO' && level === 3) {
+            const hypo = target as ResearchEdgeHypo;
+            if (tag === '_JOIN' && RESEARCH_ID.P.test(v)) hypo.join = v;
+            else if (tag === '_ISLAND') { const n = researchInt(v, 1, 1e6); if (n !== undefined) hypo.island = n; }
+            else if (tag === '_HELD') { const n = researchInt(v, 0, 1e6); if (n !== undefined) hypo.held = n; }
+            else if (tag === '_TEST' && RESEARCH_ID.T.test(v)) hypo.tests.push(v);
+        }
+    }
+    edge.books = edge.books.filter(b => b.title);
+    edge.tasks = edge.tasks.filter(t => t.title.trim()).map(t => ({ ...t, title: t.title.trim() }));
+    return edge;
+}
+
+/** The lines under one `1 _STROM_ISLAND n` → the island (null without a size). */
+export function researchIslandFromLines(block: RawResearchBlock): ResearchIsland | null {
+    const size = researchInt(block.value, 1, 1e6);
+    if (size === undefined) return null;
+    const island: ResearchIsland = { size, hypos: [] };
+    let hypo: ResearchIsland['hypos'][number] | null = null;
+    for (const { level, tag, value } of block.lines) {
+        const v = value.trim();
+        if (level === 2) {
+            hypo = null;
+            if (tag === '_HYPO' && RESEARCH_ID.H.test(v)) { hypo = { id: v }; island.hypos.push(hypo); }
+            else if (tag === '_HELD') { const n = researchInt(v, 0, 1e6); if (n !== undefined) island.held = n; }
+        } else if (level === 3 && hypo && tag === '_JOIN' && RESEARCH_ID.P.test(v)) {
+            hypo.join = v;
+        }
+    }
+    return island;
 }
 
 /** GEDCOM event tag <-> LifeEvent type. */
@@ -1592,7 +1757,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                             break;
                         case '_STROM_CONFLICT':
                         case '_STROM_HYPO':
-                        case '_STROM_SEARCHED': {
+                        case '_STROM_SEARCHED':
+                        case '_STROM_EDGE':
+                        case '_STROM_ISLAND': {
                             // What Strom Research knows about the person. Only
                             // its own files are trusted with it; elsewhere the
                             // tag is as unknown as it always was.
@@ -1602,8 +1769,14 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 research.conflicts.push({ id: value.trim(), fact: '', title: '', stat: '', values: [] });
                                 currentResearch = { kind: 'conflict', sub: null };
                             } else if (tag === '_STROM_HYPO') {
-                                research.hypotheses.push({ title: '', note: '' });
+                                research.hypotheses.push({ id: value.trim(), title: '', note: '' });
                                 currentResearch = { kind: 'hypo', sub: null };
+                            } else if (tag === '_STROM_EDGE' || tag === '_STROM_ISLAND') {
+                                // A snapshot: one per person (a second replaces the first).
+                                const block = { value, lines: [] };
+                                if (tag === '_STROM_EDGE') research.edge = block;
+                                else research.island = block;
+                                currentResearch = { kind: tag === '_STROM_EDGE' ? 'edge' : 'island', sub: null };
                             } else {
                                 research.searched.push({ title: '', date: '', resn: '', at: '' });
                                 currentResearch = { kind: 'searched', sub: null };
@@ -1735,7 +1908,9 @@ export function parseGedcom(content: string): ParsedGedcom {
             } else if (currentResearch && level >= 2 && currentType === 'INDI') {
                 const research = (currentRecord as GedcomIndividual).research!;
                 const open = currentResearch;
-                if (open.kind === 'conflict') {
+                if (open.kind === 'edge' || open.kind === 'island') {
+                    (open.kind === 'edge' ? research.edge : research.island)?.lines.push({ level, tag, value });
+                } else if (open.kind === 'conflict') {
                     const c = research.conflicts[research.conflicts.length - 1];
                     const lastValue = (): RawResearchValue | undefined =>
                         open.sub === 'DECI' ? c.decision : open.sub === 'VAL' ? c.values[c.values.length - 1] : undefined;

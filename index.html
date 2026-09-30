@@ -135,6 +135,16 @@
             --placeholder-border: var(--border);
             --male-border: color-mix(in srgb, var(--male) 65%, #000);
             --female-border: color-mix(in srgb, var(--female) 65%, #000);
+
+            /* research edge (above the cards where the tree ends) */
+            --edge-held: #d6cdb9;
+            --edge-link: #5c5546;
+            --edge-label-yours: #8a5528;
+            --edge-next-yours: #7f5500;
+            --edge-covered: #8fae98;
+            --edge-rest: #ece5d6;
+            --edge-hatch-bg: #f6f2ea;
+            --island-bg: #fbf8f1;
         }
 
         /* Dark theme — overrides tokens only. */
@@ -192,6 +202,15 @@
 
             --hover-bg: #35322a;
             --shadow: rgba(0,0,0,0.35);
+
+            --edge-held: #5a5446;
+            --edge-link: #a39880;
+            --edge-label-yours: #d9a070;
+            --edge-next-yours: #e0b070;
+            --edge-covered: #4f6e58;
+            --edge-rest: #35322a;
+            --edge-hatch-bg: #2c2a24;
+            --island-bg: #29271f;
         }
 
         body {
@@ -5620,6 +5639,227 @@
            (a margin, not padding: a line's overflow clips at its padding edge). */
         .person-card.has-edge-br .card-state { bottom: 14px; }
         .person-card.has-edge-br .card-body > :last-child { margin-right: 34px; }
+
+        /* ==================== RESEARCH EDGE ==================== */
+        /* Above a card where the tree ends: a stub whose SHAPE says what the
+           records say (closed ⊥ / open ┆), whose COLOUR says what comes next,
+           and a short dotted stub where the research stays away on purpose.
+           The button is the hit area; the line inside it is the drawing. */
+        .research-edge {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 24px;
+            height: 26px;
+            padding: 0;
+            border: 0;
+            background: none;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 5;
+            color: var(--text-ghost);
+            font: inherit;
+        }
+        .research-edge.side-father { left: 21.28%; }
+        .research-edge.side-mother { left: 78.72%; }
+        .research-edge.tone-searching { color: var(--primary); }
+        .research-edge.tone-yours { color: var(--accent); }
+        .research-edge.tone-held { color: var(--edge-held); }
+        .research-edge:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+        .research-edge-line {
+            position: relative;
+            display: block;
+            width: 2px;
+            height: 26px;
+            background: repeating-linear-gradient(to top, currentColor 0 4px, transparent 4px 7px);
+        }
+        .research-edge.edge-closed .research-edge-line { height: 18px; background: currentColor; }
+        .research-edge.edge-closed .research-edge-line::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -6px;
+            width: 14px;
+            height: 2px;
+            border-radius: 1px;
+            background: currentColor;
+        }
+        .research-edge.edge-kind-muted { height: 14px; color: var(--line-color); }
+        .research-edge.edge-kind-muted .research-edge-line {
+            height: 14px;
+            background: repeating-linear-gradient(to top, currentColor 0 2px, transparent 2px 5px);
+        }
+        .research-edge.edge-kind-muted .research-edge-line::after { display: none; }
+        /* "proof": the drop to the parents is dashed (SVG); the button is its label. */
+        .research-edge.edge-kind-proof { height: 22px; }
+        .research-edge.edge-kind-proof .research-edge-line { display: none; }
+        .edge-proof-drop { stroke-dasharray: 3 4; }
+        .research-edge.is-moving .research-edge-line { animation: edge-crawl 0.7s linear infinite; }
+        @keyframes edge-crawl {
+            from { background-position: 0 0; }
+            to { background-position: 0 -7px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .research-edge.is-moving .research-edge-line { animation: none; }
+        }
+        .tree-offscreen .research-edge.is-moving .research-edge-line { animation-play-state: paused; }
+        .research-edge-label {
+            display: none;
+            position: absolute;
+            left: calc(50% + 7px);
+            /* Above the card's edge slots (branch tabs, chain) that straddle the top edge. */
+            bottom: 11px;
+            font-size: 10.5px;
+            line-height: 1.2;
+            color: var(--text-faint);
+            white-space: nowrap;
+            pointer-events: none;
+        }
+        .research-edge.side-father .research-edge-label { left: auto; right: calc(50% + 7px); }
+        .research-edge.tone-yours .research-edge-label { color: var(--edge-label-yours); }
+        .research-edge.edge-kind-proof .research-edge-label { font-size: 11px; left: calc(50% + 6px); bottom: 11px; }
+        .zoom-edge-labels .research-edge-label { display: block; }
+        /* Far out: a stretch of the card's top edge instead of the stub. */
+        .zoom-edge-bar .research-edge { width: 76px; height: 10px; }
+        .zoom-edge-bar .research-edge-line { width: 76px; height: 2px; margin-bottom: -1px; background: repeating-linear-gradient(to right, currentColor 0 4px, transparent 4px 7px); }
+        .zoom-edge-bar .research-edge.edge-closed .research-edge-line { height: 2px; background: currentColor; }
+        .zoom-edge-bar .research-edge.edge-closed .research-edge-line::after { display: none; }
+        .zoom-edge-bar .research-edge.edge-kind-muted .research-edge-line { height: 2px; background: repeating-linear-gradient(to right, currentColor 0 2px, transparent 2px 5px); }
+        .zoom-edge-bar .research-edge.is-moving .research-edge-line { animation: none; }
+        /* The "+ parent" tab wins its corner: the father's stub steps aside. */
+        .person-card:has(.edge-top-left .add-btn:hover) .research-edge.side-father { opacity: 0; pointer-events: none; }
+        /* Pointing at the stub shows its bubble, not the card's hover card. */
+        .person-card:has(.research-edge:hover) .card-tooltip { display: none; }
+        @media (pointer: coarse) {
+            .research-edge { width: 44px; height: 44px; }
+            .research-edge.edge-kind-muted, .research-edge.edge-kind-proof { height: 44px; }
+        }
+
+        /* A person of a family nothing links to the tree yet. */
+        #tree-canvas .person-card.research-island {
+            border-style: dashed;
+            border-width: 1px;
+            border-color: var(--line-color);
+            background: var(--island-bg);
+            box-shadow: none;
+        }
+        .island-caption {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            font-size: 11px;
+            line-height: 1.3;
+            text-align: center;
+            color: var(--text-faint);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            pointer-events: none;
+        }
+        .edge-link-curve { stroke: var(--edge-link); stroke-width: 1.5; stroke-dasharray: 4 4; }
+        .edge-link-pill {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            padding: 1px 8px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--surface);
+            color: var(--text-light);
+            font: 11px/1.5 var(--font-sans);
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 4;
+        }
+        .edge-link-pill--family {
+            transform: translate(-50%, -100%);
+            pointer-events: auto;
+            cursor: pointer;
+            color: var(--text);
+        }
+        .edge-link-pill--family:hover { border-color: var(--primary); }
+        .edge-link-pill--family:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+        /* The bubble over a stub. */
+        .research-edge-bubble {
+            position: fixed;
+            z-index: 3000;
+            width: 320px;
+            max-width: calc(100vw - 16px);
+            box-sizing: border-box;
+            padding: 12px 14px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            box-shadow: var(--shadow-lg);
+            color: var(--text);
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .reb-end { font-size: 14px; font-weight: 600; }
+        .reb-next { display: flex; align-items: center; gap: 6px; margin-top: 3px; color: var(--text-light); }
+        .reb-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+        .reb-next.tone-searching { color: var(--primary); }
+        .reb-next.tone-yours { color: var(--edge-next-yours); }
+        .reb-facts { margin-top: 6px; font-size: 12px; color: var(--text-light); }
+        .reb-hypo { margin-top: 6px; font-size: 12px; color: var(--text-light); }
+        .reb-hypo-label { font-weight: 600; color: var(--text); margin-right: 4px; }
+        .reb-hypo-title { margin-top: 2px; }
+        .reb-more { margin-top: 8px; font-size: 12px; }
+
+        /* "Above the person" in What the research knows. */
+        .research-edge-section details > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 8px; }
+        .research-edge-section details > summary::-webkit-details-marker { display: none; }
+        .research-edge-section details > summary::before { content: '▾'; font-size: 10px; color: var(--edge-label-yours); }
+        .research-edge-section details:not([open]) > summary::before { content: '▸'; }
+        .rep-title { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--edge-label-yours); }
+        .rep-asof { margin-left: auto; font-size: 11px; color: var(--text-faint); }
+        .rep-body { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
+        .rep-end { font-size: 15px; font-weight: 600; }
+        .rep-next { font-size: 13px; color: var(--text-light); margin-top: 2px; }
+        .rep-next.tone-searching { color: var(--primary); }
+        .rep-next.tone-yours { color: var(--edge-next-yours); }
+        .rep-tl-caption { font-size: 12px; color: var(--text-light); margin-bottom: 4px; }
+        .rep-tl-bar { position: relative; height: 12px; border-radius: 3px; overflow: hidden; background: var(--edge-rest); }
+        .rep-tl-seg { position: absolute; top: 0; bottom: 0; }
+        .seg-covered { background: var(--edge-covered); }
+        .seg-norecords { background: repeating-linear-gradient(135deg, var(--edge-held) 0 2px, var(--edge-hatch-bg) 2px 5px); }
+        .seg-rest { background: var(--edge-rest); }
+        .rep-tl-years { position: relative; height: 26px; font-size: 10.5px; color: var(--text-faint); }
+        .rep-tl-y { position: absolute; top: 10px; transform: translateX(-50%); }
+        .rep-tl-y.is-first { transform: none; }
+        .rep-tl-y.is-last { transform: translateX(-100%); }
+        .rep-tl-est { position: absolute; top: 0; transform: translateX(-50%); font-size: 9px; line-height: 1; color: var(--accent); }
+        .rep-tl-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--text-light); }
+        .rep-tl-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; border: 1px solid var(--border); }
+        .rep-sub { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+        .rep-list { margin: 0; padding-left: 18px; font-size: 13px; }
+        .rep-access { color: var(--text-light); }
+        .rep-tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+        .rep-tasks li { display: flex; gap: 6px; }
+        .rep-task-pos { flex: none; min-width: 1.6em; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .rep-task-body { display: flex; flex-direction: column; }
+        .rep-tasks li.is-held .rep-task-title { color: var(--text-light); }
+        .rep-task-held { color: var(--text-faint); font-size: 12px; }
+        .rep-task-note { font-size: 12px; color: var(--text-light); white-space: pre-line; }
+        .rep-tried { margin-top: 6px; font-size: 12px; color: var(--text-light); }
+        .rep-tried summary { cursor: pointer; }
+        .rep-tried-ids { padding-top: 4px; }
+        .rep-work { font-size: 13px; color: var(--text-light); }
+        .rep-hypo { font-size: 13px; padding-bottom: 4px; }
+        .rep-hypo-title { font-weight: 600; }
+        .rep-hypo-meta { font-size: 12px; color: var(--text-light); }
+        .rep-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .rep-actions button { margin: 0; }
+        @media (max-width: 499px) {
+            .rep-actions button { flex: 1 1 100%; }
+        }
+        @media (min-width: 500px) and (max-width: 900px) {
+            .research-edge-bubble { width: 300px; }
+        }
         .st-group { display: inline-flex; gap: 2px; }
         .st-group i { display: block; width: 10px; height: 3px; border-radius: 2px; }
         .st-ev i { background: var(--ev-stripe); }
@@ -11314,6 +11554,7 @@
                             <span class="settings-desc" data-i18n="fanChart.kekuleSettingDesc"></span>
                         </span>
                     </label>
+                    <div class="research-edge-settings" id="research-edge-settings" hidden></div>
                 </div>
             </section>
             <section class="settings-group" aria-labelledby="settings-group-notifications">

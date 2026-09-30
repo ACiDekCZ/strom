@@ -7,6 +7,7 @@ import {
     TreeId,
     TreeMetadata,
     ResearchLink,
+    ResearchEdgeMode,
     TreeIndex,
     StromData,
     PersonId,
@@ -242,6 +243,32 @@ class TreeManagerClass {
         if (!tree) return;
         if (enabled) delete tree.autoBackups;
         else tree.autoBackups = false;
+        this.saveIndex();
+    }
+
+    /** How much of the research edge the tree shows (default: all). */
+    getResearchEdgeMode(id: TreeId): ResearchEdgeMode {
+        const mode = this.index.trees.find(t => t.id === id)?.researchEdges;
+        return mode === 'off' || mode === 'mine' ? mode : 'all';
+    }
+
+    setResearchEdgeMode(id: TreeId, mode: ResearchEdgeMode): void {
+        const tree = this.index.trees.find(t => t.id === id);
+        if (!tree) return;
+        if (mode === 'all') delete tree.researchEdges;
+        else tree.researchEdges = mode;
+        this.saveIndex();
+    }
+
+    isResearchEdgeMotion(id: TreeId): boolean {
+        return this.index.trees.find(t => t.id === id)?.researchEdgeMotion !== false;
+    }
+
+    setResearchEdgeMotion(id: TreeId, on: boolean): void {
+        const tree = this.index.trees.find(t => t.id === id);
+        if (!tree) return;
+        if (on) delete tree.researchEdgeMotion;
+        else tree.researchEdgeMotion = false;
         this.saveIndex();
     }
 
