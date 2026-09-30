@@ -23,6 +23,7 @@ export const STROM_LINKS_TAG = '_STROM_LINKS';
 export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
+    'direction', 'finish',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
@@ -52,6 +53,11 @@ export function researchPersonRef(refn: unknown): string | null {
 /** A task's id in the research ("T0003"), or null. */
 export function researchTaskRef(id: unknown): string | null {
     return typeof id === 'string' && /^T\d{1,7}$/.test(id.trim()) ? id.trim() : null;
+}
+
+/** A research direction's id ("G0002"), or null. */
+export function researchDirectionRef(id: unknown): string | null {
+    return typeof id === 'string' && /^G\d{1,7}$/.test(id.trim()) ? id.trim() : null;
 }
 
 /** A conflict's id in the research ("X0007"), or null. */
@@ -92,6 +98,20 @@ export interface ResearchLinkParams {
     conflictDo?: ResearchConflictDo;
     /** The send to take back ("I0042"). */
     intake?: string;
+    /** A research direction ("G0002"): chat on it, or pause / end / restart it. */
+    research?: string;
+    directionDo?: ResearchDirectionDo;
+    /** The agent's session to finish ("N0132"). */
+    session?: string;
+}
+
+/** What to do with a research direction. */
+export type ResearchDirectionDo = 'pause' | 'done' | 'resume';
+const DIRECTION_DOS: readonly string[] = ['pause', 'done', 'resume'];
+
+/** An agent session's id in the research ("N0132"), or null. */
+export function researchSessionRef(id: unknown): string | null {
+    return typeof id === 'string' && /^N\d{1,7}$/.test(id.trim()) ? id.trim() : null;
 }
 
 /** What to do with a task in the research (nothing: answer it). */
@@ -130,9 +150,21 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             return source && clip ? `${base}&source=${source}&clip=${clip}` : null;
         }
         case 'chat': {
+            if (p.research !== undefined) {
+                const research = researchDirectionRef(p.research);
+                return research ? `${base}&research=${research}` : null;
+            }
             if (p.person === undefined) return base;
             const person = researchPersonRef(p.person);
             return person ? `${base}&person=${person}` : null;
+        }
+        case 'direction': {
+            const id = researchDirectionRef(p.research);
+            return id && p.directionDo && DIRECTION_DOS.includes(p.directionDo) ? `${base}&id=${id}&do=${p.directionDo}` : null;
+        }
+        case 'finish': {
+            const session = researchSessionRef(p.session);
+            return session ? `${base}&session=${session}` : null;
         }
         case 'task': {
             const task = researchTaskRef(p.task);
@@ -526,6 +558,10 @@ export interface LiveWorker {
     person?: string;
     /** The run waits between sessions (its gate said wait, e.g. the usage limit). */
     paused?: { until: string; reason: string };
+    /** The research direction of the task ("G0002"; a newer research). */
+    research?: string;
+    /** The agent's session ("N0132"; a newer research): it can be finished. */
+    session?: string;
 }
 
 /** Something the research waits for from the user. */
@@ -537,6 +573,34 @@ export interface LiveWaiting {
     at: string;
     /** The person it is about (REFN "P12"), when the research says. */
     person?: string;
+    /** The research direction of the task ("G0002"; a newer research). */
+    research?: string;
+}
+
+/** A research direction ("research" in the research, id G…): kinds, state, counts. */
+export type LiveDirectionKind = 'ancestors' | 'descendants' | 'person' | 'question';
+export interface LiveDirection {
+    id: string;
+    name: string;
+    state: 'active' | 'paused' | 'done';
+    /** The fields below come from a newer research only. */
+    direction?: LiveDirectionKind;
+    /** The person it starts from (REFN). */
+    focus?: string;
+    /** Tasks in the queue. */
+    tasks?: number;
+    /** Tasks waiting for the user. */
+    waiting?: number;
+    /** An agent works on it now (not a paused run). */
+    working?: boolean;
+    /** Why it was paused or ended, when the user said. */
+    reason?: string;
+    /** When its state last changed (ISO). */
+    since?: string;
+    /** Ancestors only: known ancestors per generation (parents first). */
+    generations?: number[];
+    /** What its last session did. */
+    last?: { at: string; text: string };
 }
 
 /** The bridge's /status (and the `hello` event), checked and cleaned. */
@@ -562,6 +626,8 @@ export interface LiveStatus {
     spend: LiveSpend | null;
     /** The last send the research took in; null: none. */
     lastIntake: LiveIntake | null;
+    /** The research's directions (empty: an older research, or none said). */
+    researches: LiveDirection[];
 }
 
 /** A task in the agent's queue. */
@@ -571,6 +637,8 @@ export interface LiveQueueItem {
     state: 'next' | 'parked';
     /** The person the task is about (REFN "P12"), when the research says. */
     person?: string;
+    /** The research direction of the task ("G0002"; a newer research). */
+    research?: string;
 }
 
 /** The agent's sessions and cost this month. */
@@ -617,7 +685,12 @@ export function sanitizeWorking(value: unknown): LiveWorker[] {
         const p = asRecord(r.paused);
         const until = p ? cleanText(p.until, 40) : '';
         const paused = p ? { until: Number.isFinite(Date.parse(until)) ? until : '', reason: cleanText(p.reason, 200) } : null;
-        out.push({ who, since: cleanText(r.since, 40), task: cleanText(r.task), ...(person ? { person } : {}), ...(paused ? { paused } : {}) });
+        const research = researchDirectionRef(r.research);
+        const session = researchSessionRef(r.session);
+        out.push({
+            who, since: cleanText(r.since, 40), task: cleanText(r.task), ...(person ? { person } : {}), ...(paused ? { paused } : {}),
+            ...(research ? { research } : {}), ...(session ? { session } : {}),
+        });
     }
     return out;
 }
@@ -632,7 +705,8 @@ export function sanitizeWaiting(value: unknown): LiveWaiting[] {
         const what = cleanText(r.what);
         if (!what) continue;
         const person = researchPersonRef(r.person);
-        out.push({ id: cleanText(r.id, 40), what, on: cleanText(r.on, 120), at: cleanText(r.at ?? r.since, 40), ...(person ? { person } : {}) });
+        const research = researchDirectionRef(r.research);
+        out.push({ id: cleanText(r.id, 40), what, on: cleanText(r.on, 120), at: cleanText(r.at ?? r.since, 40), ...(person ? { person } : {}), ...(research ? { research } : {}) });
     }
     return out;
 }
@@ -652,7 +726,53 @@ export function sanitizeQueue(value: unknown): LiveQueueItem[] {
         if (!r || !id || !text) continue;
         const state = r.state === 'parked' ? 'parked' : r.state === 'next' ? 'next' : null;
         const person = researchPersonRef(r.person);
-        if (state) out.push({ id, text, state, ...(person ? { person } : {}) });
+        const research = researchDirectionRef(r.research);
+        if (state) out.push({ id, text, state, ...(person ? { person } : {}), ...(research ? { research } : {}) });
+    }
+    return out;
+}
+
+const DIRECTION_KINDS: readonly string[] = ['ancestors', 'descendants', 'person', 'question'];
+const DIRECTION_STATES: readonly string[] = ['active', 'paused', 'done'];
+/** Longest direction note taken (a reason, the last session's text). */
+const MAX_DIRECTION_NOTE = 140;
+
+/**
+ * The `researches` list of the status. Untrusted input: a direction needs a
+ * valid id, a name and a state; any other field that is wrong is dropped and
+ * the direction kept.
+ */
+export function sanitizeDirections(value: unknown): LiveDirection[] {
+    if (!Array.isArray(value)) return [];
+    const out: LiveDirection[] = [];
+    for (const item of value.slice(0, MAX_ITEMS)) {
+        const r = asRecord(item);
+        const id = researchDirectionRef(r?.id);
+        const name = cleanText(r?.name, MAX_NAME);
+        const state = typeof r?.state === 'string' && DIRECTION_STATES.includes(r.state) ? r.state as LiveDirection['state'] : null;
+        if (!r || !id || !name || !state) continue;
+        const d: LiveDirection = { id, name, state };
+        if (typeof r.direction === 'string' && DIRECTION_KINDS.includes(r.direction)) d.direction = r.direction as LiveDirectionKind;
+        const focus = researchPersonRef(r.focus);
+        if (focus) d.focus = focus;
+        const tasks = asCount(r.tasks);
+        if (tasks !== null) d.tasks = tasks;
+        const waiting = asCount(r.waiting);
+        if (waiting !== null) d.waiting = waiting;
+        if (typeof r.working === 'boolean') d.working = r.working;
+        const reason = cleanText(r.reason, MAX_DIRECTION_NOTE);
+        if (reason) d.reason = reason;
+        const since = cleanText(r.since, 40);
+        if (Number.isFinite(Date.parse(since))) d.since = since;
+        if (Array.isArray(r.generations) && r.generations.length > 0 && r.generations.length <= 12) {
+            const gens = r.generations.map(asCount);
+            if (gens.every((g): g is number => g !== null)) d.generations = gens;
+        }
+        const last = asRecord(r.last);
+        const lastAt = last ? cleanText(last.at, 40) : '';
+        const lastText = last ? cleanText(last.text, MAX_DIRECTION_NOTE) : '';
+        if (lastText && Number.isFinite(Date.parse(lastAt))) d.last = { at: lastAt, text: lastText };
+        out.push(d);
     }
     return out;
 }
@@ -705,6 +825,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         update: sanitizeUpdate(r.update),
         spend: sanitizeSpend(r.spend),
         lastIntake: sanitizeIntake(r.lastIntake),
+        researches: sanitizeDirections(r.researches),
     };
 }
 
@@ -721,7 +842,14 @@ export interface LiveLogEntry {
      * Absent from an older research (then `what` is shown).
      */
     text?: string[];
+    /** The kind of each `text` line, same order (a newer research; else guessed from `what`). */
+    kinds?: LiveChangeKind[];
+    /** The research direction the commit was for ("G0002"; a newer research). */
+    research?: string;
 }
+
+/** The research's kinds of text lines, as the app's filter kinds. */
+const TEXT_KINDS: Record<string, LiveChangeKind> = { person: 'persons', source: 'sources', story: 'stories', other: 'other' };
 
 /** Most history entries taken from the bridge. */
 const MAX_LOG = 500;
@@ -740,8 +868,20 @@ export function sanitizeLiveLog(value: unknown): LiveLogEntry[] | null {
         const at = cleanText(e.at, 40);
         const what = Array.isArray(e.what) ? e.what.slice(0, MAX_CHANGE_LINES).map(w => cleanText(w)).filter(Boolean) : [];
         if (!Number.isFinite(Date.parse(at)) || what.length === 0) continue;
-        const text = Array.isArray(e.text) ? e.text.slice(0, MAX_CHANGE_LINES).map(t => cleanText(t)).filter(Boolean) : null;
-        out.push({ head: cleanText(e.head, 80), at, what, task: cleanText(e.task), ...(text ? { text } : {}) });
+        // `kinds` pairs with `text` line by line: only a list of the same
+        // length and known values counts, and an empty line goes with its kind.
+        const rawText = Array.isArray(e.text) ? e.text.slice(0, MAX_CHANGE_LINES) : null;
+        const rawKinds = rawText && Array.isArray(e.kinds) && e.kinds.length === (e.text as unknown[]).length
+            && e.kinds.every(k => typeof k === 'string' && k in TEXT_KINDS)
+            ? (e.kinds as string[]).map(k => TEXT_KINDS[k]) : null;
+        const lines = rawText ? rawText.map((t, i) => ({ t: cleanText(t), k: rawKinds?.[i] })).filter(l => l.t) : null;
+        const research = researchDirectionRef(e.research);
+        out.push({
+            head: cleanText(e.head, 80), at, what, task: cleanText(e.task),
+            ...(lines ? { text: lines.map(l => l.t) } : {}),
+            ...(lines && rawKinds ? { kinds: lines.map(l => l.k as LiveChangeKind) } : {}),
+            ...(research ? { research } : {}),
+        });
     }
     return out;
 }

@@ -28,7 +28,7 @@ import { uiModule } from './module.js';
 
 /** A highlighted group of people: what it is, who, and where Next › stands. */
 interface Highlight {
-    kind: EvidenceKind | EvidenceLevel | 'changed';
+    kind: EvidenceKind | EvidenceLevel | 'changed' | 'direction';
     label: string;
     ids: PersonId[];
     index: number;

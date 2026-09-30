@@ -79,6 +79,9 @@
             --story-fold-edge: #b8916a;
             --story-fold-draft: #ecdcc6;
             --story-fold-draft-edge: #dcc5a6;
+            --dir-icon-bg: #f1ece1;   /* research directions: kind icon, state chip, generation track */
+            --dir-icon-fg: #5c5546;
+            --gen-track: #ebe4d6;
             --on-warning: #2b2100;    /* mark drawn on a --warning fill */
             --info-soft: #e4ebf1;     /* informational tint backgrounds */
             --pending: #d0a23c;       /* unfinished merge state (dashed) */
@@ -167,6 +170,9 @@
             --story-fold-edge: #a88560;
             --story-fold-draft: #4a4032;
             --story-fold-draft-edge: #5e513f;
+            --dir-icon-bg: #34302a;
+            --dir-icon-fg: #b3aa98;
+            --gen-track: #3d3930;
             --on-warning: #1f1a10;
             --info-soft: #2a3139;
             --chart-soft: #3a4a3f;
@@ -8347,6 +8353,73 @@
             flex: none; font-size: 11px; font-weight: 600; line-height: 1.4;
             padding: 1px 6px; border-radius: 999px;
             background: var(--warning-soft); color: var(--warning-text);
+        }
+
+        /* Person menu: a direction the person already has. */
+        .menu-item-state { flex: none; font-size: 12px; font-weight: 600; color: var(--primary-dark); }
+        :is(.context-menu-item, .bottom-sheet-item):has(.menu-item-state) .menu-item-label { color: var(--text-light); }
+        .menu-item-note { display: block; font-size: 12px; color: var(--text-light); margin-top: 1px; }
+
+        /* Research overview → Directions (two or more): kind, name, person and counts, ⋯. */
+        .research-directions__list { display: flex; flex-direction: column; }
+        .research-direction {
+            display: grid; grid-template-columns: 20px minmax(0, 1fr) 28px; gap: 10px;
+            padding: 8px 0; border-top: 1px solid var(--border); align-items: start;
+        }
+        .research-direction__icon {
+            width: 20px; height: 20px; border-radius: 6px; margin-top: 1px;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: var(--dir-icon-bg); color: var(--dir-icon-fg); font-size: 12px; font-weight: 600;
+        }
+        .research-direction__icon.is-blank { background: transparent; }
+        .research-direction__main { min-width: 0; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+        .research-direction__head {
+            display: flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: 100%;
+            background: none; border: 0; padding: 0; margin: 0; min-height: 0; box-shadow: none;
+            font: inherit; font-size: 14px; font-weight: 500; color: var(--text); text-align: left; cursor: pointer;
+        }
+        .research-direction__name { overflow-wrap: anywhere; }
+        .research-direction.is-inactive .research-direction__name { color: var(--text-light); }
+        .research-direction__chip {
+            font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 999px;
+            background: var(--dir-icon-bg); color: var(--text-light);
+        }
+        .research-direction__meta {
+            display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px;
+            font-size: 12px; color: var(--text-light);
+        }
+        .research-direction__meta > * + *::before { content: '· '; color: var(--text-light); }
+        .research-direction__meta .live-person-link { font-size: 12px; }
+        .research-direction__waiting { color: var(--warning-text); }
+        .research-direction__do { font-size: 13px; }
+        .research-direction__more { width: 28px; height: 28px; }
+        .research-direction__detail { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; width: 100%; }
+        .research-direction__label { font-size: 12px; color: var(--text-light); }
+        .research-direction__gens { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 10px; }
+        .research-direction__gen { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .research-direction__gen-bar { display: block; height: 4px; border-radius: 2px; background: var(--gen-track); overflow: hidden; }
+        .research-direction__gen-fill { display: block; height: 100%; background: var(--ev-stripe); }
+        .research-direction__gen-text { font-size: 11px; color: var(--text-light); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .research-direction__last { font-size: 13px; color: var(--text); }
+        .research-direction__actions { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; font-weight: 500; }
+        .research-directions__inactive {
+            display: flex; align-items: center; gap: 6px; padding: 8px 0; border: 0; border-top: 1px solid var(--border);
+            background: none; box-shadow: none; font: inherit; font-size: 13px; color: var(--text-light); cursor: pointer; text-align: left;
+            border-radius: 0; min-height: 0; margin: 0; width: 100%;
+        }
+        .research-direction-menu__item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+        .research-direction-menu__hint { font-size: 12px; color: var(--text-light); white-space: normal; max-width: 260px; }
+        /* A task's direction, while two or more run: grey words, no colour. */
+        .research-overview__dir { color: var(--text-light); font-size: 12px; font-weight: 400; }
+        .research-overview__queue-filters { margin: 4px 0 8px; }
+        .agent-mark--spin { animation: agSpin 1.4s linear infinite; }
+        @media (prefers-reduced-motion: reduce) { .agent-mark--spin { animation: none; } }
+        /* Phone: bigger rows, no ⋯ (the grid keeps its third column empty). */
+        .research-overview--sheet .research-direction { min-height: 44px; grid-template-columns: 20px minmax(0, 1fr); }
+        .research-overview--sheet .research-direction__head { font-size: 15px; min-height: 28px; }
+        .research-overview--sheet .research-direction__meta { font-size: 13px; }
+        @media (max-width: 500px) {
+            .research-direction__gens { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
 
         /* "What the research knows". */

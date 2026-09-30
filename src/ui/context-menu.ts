@@ -32,6 +32,10 @@ export interface PersonMenuAction {
     external?: boolean;
     /** A small warm label at the end ("1 conflict"). */
     tag?: string;
+    /** It is already so (quiet look, a green word at the end: "already running"). */
+    state?: string;
+    /** A small line under the label ("Paused · restart"). */
+    note?: string;
 }
 
 /** Label (+ the quiet right-aligned meta, AI label, ↗) of a person menu item, escaped. */
@@ -42,8 +46,10 @@ export function menuItemBody(a: PersonMenuAction): string {
         + (a.badge === 'ai'
             ? `<span class="research-ai-badge menu-item-badge" title="${e(strings.research.aiCostHint)}" aria-hidden="true">${e(strings.research.aiBadge)}</span>`
             : '')
+        + (a.state ? `<span class="menu-item-state">${e(a.state)}</span>` : '')
         + (a.external ? '<span class="menu-item-ext" aria-hidden="true">↗</span>' : '');
-    return tail ? `<span class="menu-item-label">${e(a.label)}</span>${tail}` : e(a.label);
+    const label = a.note ? `${e(a.label)}<span class="menu-item-note">${e(a.note)}</span>` : e(a.label);
+    return tail || a.note ? `<span class="menu-item-label">${label}</span>${tail}` : label;
 }
 
 /** ` aria-label="…"` when the item carries one. */

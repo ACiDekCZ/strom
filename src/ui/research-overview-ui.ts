@@ -27,6 +27,7 @@ import {
     liveSession, storeLiveSection, storedLiveSections, timeEl,
     liveState, pausedText,
 } from './research-ui.js';
+import { taskDirectionName } from './research-directions-ui.js';
 
 /** The overview stays open over a reload / the next following (per device). */
 const OPEN_KEY = 'strom-live-overview-open';
@@ -253,8 +254,9 @@ export const researchOverviewMethods = uiModule({
 
         if (s.waiting.length > 0) this.appendOverviewWaiting(body, s, fold('waiting'), mode);
         this.appendOverviewNow(body, s, fold('now'), mode);
+        this.appendOverviewDirections(body, s, fold('directions'), mode);
         this.appendOverviewTimeline(body, s, fold('timeline'), mode);
-        if (!s.ended) this.appendQueueSection(body, s, fold('queue'), 20, L.queueTitle);
+        if (!s.ended) this.appendQueueSection(body, s, fold('queue'), 20, L.queueTitle, true);
         this.appendOverviewKnows(body, fold('knows'), mode);
         this.appendOverviewFoot(root, s, mode);
         body.scrollTop = scrollTop;
@@ -347,6 +349,8 @@ export const researchOverviewMethods = uiModule({
             } else {
                 meta.appendChild(el('span', 'research-overview__muted', L.wholeResearch));
             }
+            const dir = taskDirectionName(s, w.research);
+            if (dir) meta.appendChild(el('span', 'research-overview__dir', `· ${dir}`));
             const at = timeEl(w.at, 'ago');
             if (at) meta.appendChild(at);
             card.appendChild(meta);
@@ -379,6 +383,8 @@ export const researchOverviewMethods = uiModule({
             const text = el('div', 'research-overview__now-text');
             text.appendChild(el('strong', undefined, w.who));
             if (w.task) text.appendChild(el('span', 'live-task', ` — ${w.task}`));
+            const dir = taskDirectionName(s, w.research);
+            if (dir) text.appendChild(el('span', 'research-overview__dir', ` · ${dir}`));
             if (w.paused) text.appendChild(el('span', 'live-paused', pausedText(w)));
             const since = timeEl(w.since, 'sincefor');
             if (since) text.appendChild(since);
@@ -389,6 +395,15 @@ export const researchOverviewMethods = uiModule({
                 show.type = 'button';
                 show.onclick = () => this.overviewShowPerson(person.id, mode);
                 li.appendChild(show);
+            }
+            // Finish and stop ↗: the agent writes up what it found and closes the session.
+            const finish = mode !== 'sheet' && w.session && !w.paused ? this.activeResearchLink('finish', { session: w.session }) : null;
+            if (finish) {
+                const btn = el('button', 'link-button research-overview__finish', `${L.finishSession} ↗`);
+                btn.type = 'button';
+                btn.title = L.finishHint;
+                btn.onclick = () => this.launchResearchLink(finish);
+                li.appendChild(btn);
             }
             list.appendChild(li);
         }
@@ -475,7 +490,10 @@ export const researchOverviewMethods = uiModule({
             gh.setAttribute('aria-expanded', String(open));
             const chevron = el('span', 'live-section__chevron', open ? '▾' : '▸');
             chevron.setAttribute('aria-hidden', 'true');
-            gh.append(chevron, el('span', 'research-overview__group-title', g.title), el('span', 'research-overview__group-span', `${span} · ${g.items.length}`));
+            const title = el('span', 'research-overview__group-title', g.title);
+            const dir = taskDirectionName(s, g.items.find(c => c.research)?.research);
+            if (dir) title.appendChild(el('span', 'research-overview__dir', ` · ${dir}`));
+            gh.append(chevron, title, el('span', 'research-overview__group-span', `${span} · ${g.items.length}`));
             gh.onclick = () => {
                 if (toggledGroups.has(key)) toggledGroups.delete(key);
                 else toggledGroups.add(key);
@@ -575,6 +593,11 @@ export const researchOverviewMethods = uiModule({
             foot.appendChild(btn);
         }
         if (foot.childElementCount > 0) root.appendChild(foot);
+    },
+
+    /** Unfold one of the overview's sections (remembered like a click on its head). */
+    unfoldOverviewSection(key: string): void {
+        if (sectionCollapsed(key)) storeLiveSection(SECTIONS_KEY, key, false);
     },
 
     /** A person from the overview: centred in the tree (the sheet closes first). */

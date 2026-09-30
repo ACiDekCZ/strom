@@ -247,6 +247,21 @@ test.describe('the research says it in its language (text)', () => {
     });
 });
 
+test.describe('back from another tree', () => {
+    test('the overview open: the small panel stays hidden', async ({ page }) => {
+        await follow(page);
+        await page.locator('#live-panel .live-panel-expand').click();
+        await expect(page.locator('#research-overview')).toBeVisible();
+        await expect(page.locator('#live-panel')).toBeHidden();
+        const research = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId());
+        await page.evaluate(() => window.Strom.DataManager.createNewTree('Jiný'));
+        await expect(page.locator('#research-overview')).toHaveCount(0);
+        await page.evaluate((id) => window.Strom.UI.switchToTree(id as string), research);
+        await expect(page.locator('#research-overview')).toBeVisible();
+        await expect(page.locator('#live-panel')).toBeHidden();
+    });
+});
+
 test.describe('the agent at work', () => {
     test('an arc circles the avatar of whom it works on now; its queue only in the tooltip', async ({ page }) => {
         // Anna (no conflict of her own, which would come first) is worked on; Josef is only queued.

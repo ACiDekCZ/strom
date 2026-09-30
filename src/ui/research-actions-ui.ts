@@ -306,6 +306,17 @@ export const researchActionsMethods = uiModule({
             items.push({ action: 'research-descendants', label: r.findDescendants, external: true,
                 ariaLabel: `${r.findDescendants}, ${r.opensInResearchSr}` });
         }
+        // A direction the person already has: say so instead of starting another.
+        for (let i = 0; i < items.length; i++) {
+            const d = this.personDirection(personId, items[i].action);
+            if (!d) continue;
+            if (d.state === 'active') {
+                items[i] = { ...items[i], external: false, state: r.dirRunning, ariaLabel: `${items[i].label}, ${r.dirRunning}` };
+            } else if (this.researchLinkAvailable('direction')) {
+                const note = r.dirResumeNote(d.state === 'paused' ? r.dirStatePaused : r.dirStateDone);
+                items[i] = { ...items[i], external: true, note, ariaLabel: `${items[i].label}, ${note}, ${r.opensInResearchSr}` };
+            }
+        }
         if (this.researchLinkAvailable('chat')) {
             items.push({ action: 'research-ask', label: r.askAgent, external: true, badge: 'ai',
                 ariaLabel: `${r.askAgent}, ${r.aiBadge}, ${r.opensInResearchSr}` });
@@ -317,6 +328,15 @@ export const researchActionsMethods = uiModule({
     runPersonResearchAction(personId: PersonId, action: string): void {
         const person = this.personResearchRef(personId);
         if (!person) return;
+        const direction = this.personDirection(personId, action);
+        if (direction?.state === 'active') {
+            this.openResearchDirection(direction.id);
+            return;
+        }
+        if (direction && this.researchLinkAvailable('direction')) {
+            this.runDirection(direction.id, 'resume');
+            return;
+        }
         if (action === 'research-review') {
             this.showResearchReviewDialog(personId);
         } else if (action === 'research-ancestors' || action === 'research-descendants') {

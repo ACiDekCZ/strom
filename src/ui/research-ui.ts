@@ -37,11 +37,12 @@ import {
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
-    LiveQueueItem, LiveSpend, LiveIntake,
+    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry } from '../research-link.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
+import { activeDirections, directionsMulti, queueDirectionFilter, setQueueDirectionFilter, taskDirectionName } from './research-directions-ui.js';
 import { iconSvg } from '../icons.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
@@ -71,6 +72,8 @@ export interface LiveChangeItem {
     task: string;
     /** The research version it came with ('' = unknown). */
     head: string;
+    /** The research direction it was for ("G0002"; a newer research). */
+    research?: string;
 }
 
 /** What one research commit added (the "+N people, +N sources" of the last 24 hours). */
@@ -99,6 +102,8 @@ export interface LiveSession {
     update: { version: string } | null;
     spend: LiveSpend | null;
     lastIntake: LiveIntake | null;
+    /** The research's directions (empty: an older research). */
+    researches: LiveDirection[];
     /** Sections the panel folded by itself for lack of room (not remembered). */
     autoCollapsed: Set<LiveSectionKey>;
     /** Waiting task ids already shown: a new one unfolds "Waiting for you". */
@@ -160,6 +165,11 @@ export function storeLiveSection(key: string, section: string, collapsed: boolea
     } catch { /* not kept */ }
 }
 
+/** The small panel hides on another tree and while the overview (which shows the same) is drawn. */
+function livePanelHidden(s: LiveSession): boolean {
+    return DataManager.getCurrentTreeId() !== s.treeId || (s.overview && !s.ended);
+}
+
 /** Whether a panel section is folded: the user's choice, else the panel's own. */
 function panelSectionCollapsed(s: LiveSession, key: LiveSectionKey): boolean {
     const stored = storedLiveSections(SECTIONS_KEY)[key];
@@ -203,12 +213,12 @@ export function liveSection(host: HTMLElement, o: {
  * its `what` lines put into words here.
  */
 function entryItems(e: LiveLogEntry, data: StromData | null, nameOf: (ref: string) => string | null): LiveChangeItem[] {
-    const base = { at: e.at, task: e.task, head: e.head };
+    const base = { at: e.at, task: e.task, head: e.head, ...(e.research ? { research: e.research } : {}) };
     const ids = (refs: string[]): PersonId[] => (data && refs.length > 0 ? personsByRefs(data, refs) : []);
     if (e.text) {
-        return [...e.text].reverse().map(line => ({
-            ...base, text: textWithoutRefs(line), personIds: ids(textPersonRefs(line)), kind: textKind(line, e.what),
-        }));
+        return e.text.map((line, i) => ({
+            ...base, text: textWithoutRefs(line), personIds: ids(textPersonRefs(line)), kind: e.kinds?.[i] ?? textKind(line, e.what),
+        })).reverse();
     }
     return [...e.what].reverse().map(line => ({
         ...base,
@@ -1422,6 +1432,7 @@ export const researchUiMethods = uiModule({
                 update: status.update,
                 spend: status.spend,
                 lastIntake: status.lastIntake,
+                researches: status.researches,
                 autoCollapsed: new Set(window.innerHeight < 700 ? ['queue'] : []),
                 seenWaiting: new Set(status.waiting.map(w => w.id)),
                 seenInSection: 0,
@@ -1541,6 +1552,7 @@ export const researchUiMethods = uiModule({
         }
         s.queue = status.queue;
         s.queueMore = status.queueMore;
+        s.researches = status.researches;
         s.update = status.update;
         s.spend = status.spend;
         s.lastIntake = status.lastIntake;
@@ -1733,7 +1745,8 @@ export const researchUiMethods = uiModule({
         this.renderResearchOverview();
         const panel = document.getElementById('live-panel');
         if (!panel) return;
-        if (live) panel.hidden = DataManager.getCurrentTreeId() !== live.treeId;
+        // The same rule as the panel's own redraw: a drawn overview hides it.
+        if (live) panel.hidden = livePanelHidden(live);
         else if (idlePanel) panel.hidden = this.activeResearchId() !== idlePanel;
     },
 
@@ -1869,7 +1882,7 @@ export const researchUiMethods = uiModule({
         panel.classList.toggle('collapsed', collapsed);
         panel.classList.toggle('phone-strip', phone && !s.ended);
         // The overview shows the same (a drawn overview hides the panel).
-        panel.hidden = DataManager.getCurrentTreeId() !== s.treeId || (s.overview && !s.ended);
+        panel.hidden = livePanelHidden(s);
         // A redraw replaces the ⋯ buttons: an open task menu moves to the new one.
         const menuTask = document.getElementById('live-task-menu')?.dataset.task ?? null;
         this.closeLiveTaskMenu();
@@ -2000,26 +2013,59 @@ export const researchUiMethods = uiModule({
      * one link. Nothing changes here after an action: the next status tells.
      */
     appendQueueSection(body: HTMLElement, s: LiveSession,
-        fold: { id: string; collapsed: boolean; onToggle: () => void }, limit: number, title = strings.research.queue): void {
+        fold: { id: string; collapsed: boolean; onToggle: () => void }, limit: number, title = strings.research.queue,
+        directions = false): void {
         const r = strings.research;
-        const next = s.queue.filter(q => q.state === 'next');
-        const parked = s.queue.filter(q => q.state === 'parked');
-        if (next.length === 0 && parked.length === 0 && s.queueMore === 0) return;
+        // The overview, two or more directions running: each task names its
+        // direction, and pills filter the queue by one.
+        const multi = directions && directionsMulti(s);
+        const dirFilter = multi ? queueDirectionFilter(s) : 'all';
+        const inFilter = (q: LiveQueueItem): boolean => dirFilter === 'all' || q.research === dirFilter;
+        const allNext = s.queue.filter(q => q.state === 'next');
+        const next = allNext.filter(inFilter);
+        const parked = s.queue.filter(q => q.state === 'parked' && inFilter(q));
+        if (s.queue.length === 0 && s.queueMore === 0) return;
         const shownNext = next.slice(0, limit);
         const shownParked = parked.slice(0, limit);
         const hidden = s.queueMore + (next.length - shownNext.length) + (parked.length - shownParked.length);
 
         const host = liveSection(body, {
             ...fold, title, headCls: 'live-queue-toggle',
-            summary: strings.live.queueCount(next.length + s.queueMore),
+            summary: strings.live.queueCount(allNext.length + s.queueMore),
         });
+        if (multi) {
+            const pills = el('div', 'research-overview__filters research-overview__queue-filters');
+            pills.setAttribute('role', 'radiogroup');
+            pills.setAttribute('aria-label', strings.live.dirFilterLabel);
+            const active = activeDirections(s);
+            const options: [string, string, number][] = [
+                ['all', strings.live.filterAll, allNext.length],
+                ...active.map(d => [d.id, d.name, allNext.filter(q => q.research === d.id).length] as [string, string, number]),
+            ];
+            for (const [id, label, n] of options) {
+                const chip = el('button', 'research-overview__filter', `${label} ${n}`);
+                chip.type = 'button';
+                chip.setAttribute('role', 'radio');
+                chip.setAttribute('aria-checked', String(dirFilter === id));
+                chip.dataset.direction = id;
+                chip.onclick = () => {
+                    setQueueDirectionFilter(id);
+                    this.renderResearchOverview();
+                };
+                pills.appendChild(chip);
+            }
+            host.appendChild(pills);
+        }
         const list = el('ul', 'live-panel-list live-queue');
         host.appendChild(list);
         const canTask = this.researchLinkAvailable('task');
         shownNext.forEach((q, i) => {
             const li = el('li', 'live-queue-row');
             li.appendChild(el('span', 'live-queue-num', String(i + 1)));
-            li.appendChild(el('span', 'live-queue-text', q.text));
+            const text = el('span', 'live-queue-text', q.text);
+            const dir = multi ? taskDirectionName(s, q.research) : '';
+            if (dir) text.appendChild(el('span', 'research-overview__dir', ` · ${dir}`));
+            li.appendChild(text);
             if (canTask) {
                 const more = el('button', 'live-queue-more', '⋯');
                 more.type = 'button';

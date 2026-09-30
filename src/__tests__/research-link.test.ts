@@ -738,3 +738,83 @@ describe('the research history (/log)', () => {
         expect(changeAdds('F0001 +child P0006')).toBeNull();
     });
 });
+
+describe('research directions (researches[])', () => {
+    const U = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
+
+    it('keeps a direction with a valid id, name and state; drops wrong fields, not the direction', () => {
+        const s = sanitizeLiveStatus({
+            tree: { id: U, name: 'T' },
+            researches: [
+                { id: 'G0001', name: 'Předci: Jan', state: 'active', direction: 'ancestors', focus: 'P0012', tasks: 5, waiting: 1, working: true,
+                    since: '2026-09-29T20:14:00Z', generations: [2, 4, 7], last: { at: '2026-09-29T20:00:00Z', text: 'sňatek nalezen' }, spend: { amount: 3 } },
+                { id: 'G0002', name: 'Revize', state: 'paused', direction: 'sideways', focus: 'Jan', tasks: -1, reason: 'x'.repeat(300),
+                    generations: Array(13).fill(1), last: { at: 'včera', text: 'nic' } },
+                { id: 'X0003', name: 'Špatné id', state: 'active' },
+                { id: 'G0004', name: 'Bez stavu' },
+                { id: 'G0005', name: '', state: 'done' },
+            ],
+        })!;
+        expect(s.researches).toHaveLength(2);
+        expect(s.researches[0]).toEqual({
+            id: 'G0001', name: 'Předci: Jan', state: 'active', direction: 'ancestors', focus: 'P0012', tasks: 5, waiting: 1, working: true,
+            since: '2026-09-29T20:14:00Z', generations: [2, 4, 7], last: { at: '2026-09-29T20:00:00Z', text: 'sňatek nalezen' },
+        });
+        const bad = s.researches[1];
+        expect(bad).toMatchObject({ id: 'G0002', name: 'Revize', state: 'paused' });
+        expect(bad.direction).toBeUndefined();
+        expect(bad.focus).toBeUndefined();
+        expect(bad.tasks).toBeUndefined();
+        expect(bad.generations).toBeUndefined();
+        expect(bad.last).toBeUndefined();
+        expect(bad.reason!.length).toBeLessThanOrEqual(140);
+    });
+
+    it('an older research: an empty list, and tasks without a direction', () => {
+        const s = sanitizeLiveStatus({ tree: U, queue: [{ id: 'T0001', text: 'a', state: 'next', research: 'G1x' }] })!;
+        expect(s.researches).toEqual([]);
+        expect(s.queue[0].research).toBeUndefined();
+    });
+
+    it('tasks and runs carry their direction; a run its session', () => {
+        const s = sanitizeLiveStatus({
+            tree: U,
+            queue: [{ id: 'T0001', text: 'a', state: 'next', research: 'G0002' }],
+            waiting: [{ id: 'T0002', what: 'b', research: 'G0002' }],
+            working: [{ who: 'agent', task: 'c', research: 'G0001', session: 'N0132' }, { who: 'agent', session: 'S1' }],
+        })!;
+        expect(s.queue[0].research).toBe('G0002');
+        expect(s.waiting[0].research).toBe('G0002');
+        expect(s.working[0]).toMatchObject({ research: 'G0001', session: 'N0132' });
+        expect(s.working[1].session).toBeUndefined();
+    });
+
+    it('links: direction pause / done / resume, chat on a direction, finish a session', () => {
+        expect(researchSchemeUrl('direction', { tree: U, research: 'G0002', directionDo: 'pause' })).toBe(`strom-research://direction?tree=${U}&id=G0002&do=pause`);
+        expect(researchSchemeUrl('direction', { tree: U, research: 'G0002' })).toBeNull();
+        expect(researchSchemeUrl('direction', { tree: U, research: 'P0002', directionDo: 'done' })).toBeNull();
+        expect(researchSchemeUrl('chat', { tree: U, research: 'G0002' })).toBe(`strom-research://chat?tree=${U}&research=G0002`);
+        expect(researchSchemeUrl('chat', { tree: U, research: 'G0002; rm' })).toBeNull();
+        expect(researchSchemeUrl('finish', { tree: U, session: 'N0132' })).toBe(`strom-research://finish?tree=${U}&session=N0132`);
+        expect(researchSchemeUrl('finish', { tree: U, session: 'T0132' })).toBeNull();
+        expect(sanitizeResearchLinks(['direction', 'finish', 'nope'])).toEqual(['direction', 'finish']);
+    });
+});
+
+describe('kinds of text lines (/log)', () => {
+    it('pairs kinds with text line by line, also across an empty line', () => {
+        const [e] = sanitizeLiveLog({ entries: [{
+            head: 'a', at: '2026-09-30T06:00:00Z', what: ['+P0001 Jan', '+S0002 Matrika'], task: '', research: 'G0001',
+            text: ['Nová osoba: Jan', '', 'Nový pramen: Matrika'], kinds: ['person', 'other', 'source'],
+        }] })!;
+        expect(e.text).toEqual(['Nová osoba: Jan', 'Nový pramen: Matrika']);
+        expect(e.kinds).toEqual(['persons', 'sources']);
+        expect(e.research).toBe('G0001');
+    });
+
+    it('ignores kinds of another length or with unknown values (guessed from what then)', () => {
+        const base = { head: 'a', at: '2026-09-30T06:00:00Z', what: ['+P0001 Jan'], task: '', text: ['Nová osoba: Jan'] };
+        expect(sanitizeLiveLog({ entries: [{ ...base, kinds: ['person', 'source'] }] })![0].kinds).toBeUndefined();
+        expect(sanitizeLiveLog({ entries: [{ ...base, kinds: ['people'] }] })![0].kinds).toBeUndefined();
+    });
+});
