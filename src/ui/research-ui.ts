@@ -1857,6 +1857,8 @@ export const researchUiMethods = uiModule({
     /** Draw the "Research now" panel. Bridge text is set as text, never HTML. */
     renderLivePanel(): void {
         syncResearchCardInfo();
+        // Following the agent in the tree reacts to every status and change (after this redraw).
+        queueMicrotask(() => this.syncLiveFollow());
         const s = live;
         if (!s && !idlePanel) {
             document.getElementById('live-panel')?.remove();
@@ -1902,6 +1904,8 @@ export const researchUiMethods = uiModule({
         chevron.innerHTML = iconSvg('chevron-down', { size: 14 });
         toggle.appendChild(chevron);
         head.appendChild(toggle);
+        const followBtn = phone ? null : this.liveFollowButton('panel');
+        if (followBtn) head.appendChild(followBtn);
         if (this.canOpenResearchOverview()) {
             const expand = el('button', 'live-panel-expand', '⤢');
             expand.type = 'button';
@@ -1926,6 +1930,9 @@ export const researchUiMethods = uiModule({
             const fresh = s.changes.length - s.seenChanges;
             if (fresh > 0) summary.appendChild(el('span', 'live-panel-chip live-panel-new', r.newChanges(fresh)));
             if (!s.ended && !phone) summary.appendChild(el('span', 'live-panel-chip', r.readOnly));
+            // Phone: the follow switch at the strip's right end.
+            const phoneFollow = phone ? this.liveFollowButton('phone') : null;
+            if (phoneFollow) summary.appendChild(phoneFollow);
             if (summary.childElementCount > 0) panel.appendChild(summary);
         }
 

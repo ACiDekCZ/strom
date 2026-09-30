@@ -235,7 +235,11 @@ export const researchOverviewMethods = uiModule({
         const stop = el('button', 'live-panel-action', r.stop);
         stop.type = 'button';
         stop.onclick = () => this.stopLiveFollow();
-        head.append(stop, close);
+        // The full-screen sheet covers the tree: no follow switch there.
+        const follow = mode === 'sheet' ? null : this.liveFollowButton('overview');
+        head.append(stop);
+        if (follow) head.appendChild(follow);
+        head.appendChild(close);
         root.appendChild(head);
 
         const body = el('div', 'research-overview__body');
@@ -603,6 +607,8 @@ export const researchOverviewMethods = uiModule({
     /** A person from the overview: centred in the tree (the sheet closes first). */
     overviewShowPerson(id: PersonId, mode: Mode): void {
         if (!DataManager.getPerson(id)) return;
+        // Looking at someone else: the user has the tree.
+        this.pauseLiveFollow();
         if (mode === 'sheet') this.closeResearchOverview();
         if (document.querySelector(`.person-card[data-id="${CSS.escape(id)}"]`)) {
             ZoomPan.centerOnPerson(id);

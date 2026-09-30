@@ -382,7 +382,8 @@ class TreeRendererClass {
     }
 
     // Public Focus Mode API
-    setFocus(personId: PersonId | null, saveToData = true): void {
+    /** `reveal`: instead of centring the focused card after the render, call this (it moves the view itself). */
+    setFocus(personId: PersonId | null, saveToData = true, reveal?: (id: PersonId) => void): void {
         // Always have a focus person
         // If null is passed, find a default person
         if (!personId) {
@@ -423,6 +424,8 @@ class TreeRendererClass {
             this.updateFocusUI();
             if (this.viewMode === 'descendants') {
                 this.centerForViewMode();
+            } else if (focusId && reveal) {
+                reveal(focusId);
             } else if (focusId) {
                 ZoomPan.centerOnPerson(focusId);
             }

@@ -8175,6 +8175,25 @@
         }
         .live-panel-expand:hover { color: var(--text); background: var(--hover-bg); }
         .live-panel-expand:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        /* "Follow the agent in the tree" (◎): off plain, on filled green, paused an outline. */
+        .live-follow-btn {
+            flex: none; width: 28px; height: 28px; padding: 0; margin: 0; min-width: 0; min-height: 0;
+            border: 1px solid transparent; border-radius: 6px; box-shadow: none;
+            background: none; color: var(--text-light); font-size: 15px; line-height: 1; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .live-follow-btn:hover { color: var(--text); background: var(--hover-bg); }
+        .live-follow-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .live-follow-btn.is-on { background: var(--primary-soft); color: var(--primary); }
+        .live-follow-btn.is-on.is-paused { background: none; border: 1px dashed var(--primary); }
+        .live-follow-btn--overview { width: 30px; height: 30px; }
+        .live-follow-btn--phone { width: 44px; height: 44px; margin-left: auto; font-size: 18px; }
+        .live-panel.phone-strip .live-panel-summary { align-items: center; }
+        /* Its pill sits below the highlight pill when both are up. */
+        .evidence-pill ~ .live-follow-pill { top: 112px; }
+        @media (max-width: 640px) {
+            .evidence-pill ~ .live-follow-pill { top: auto; bottom: calc(var(--bottom-bar-h, 64px) + 60px); }
+        }
         .live-panel-chip--warn { color: var(--warning-text); background: var(--warning-soft); border-color: transparent; }
         /* Phone: the panel is a strip; a tap opens the overview sheet. */
         .live-panel.phone-strip .live-panel-chevron { display: none; }
