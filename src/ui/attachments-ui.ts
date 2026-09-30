@@ -11,8 +11,8 @@ import { Attachment } from '../types.js';
 import { strings } from '../strings.js';
 import { dataUrlByteSize } from '../photo.js';
 import {
-    compressImageAttachment, readFileAsDataUrl, totalAttachmentBytes, personMedia,
-    MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES, ATTACHMENT_WARN_BYTES, pdfBlobFromDataUrl,
+    compressImageAttachment, readFileAsDataUrl, personMedia,
+    MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES, pdfBlobFromDataUrl,
 } from '../attachments.js';
 import { uiModule } from './module.js';
 import { openImageViewer, closeImageViewer } from './image-viewer.js';
@@ -103,27 +103,17 @@ export const attachmentsMethods = uiModule({
             });
         }
 
-        // What this person brings into the file, each part named; the whole
-        // tree only as a warning when its file grows too big for e-mail.
+        // What this person brings into the file, each part named (the whole
+        // tree's size belongs to the tree statistics, not to one person).
         if (totalEl) {
-            const data = DataManager.getData();
-            const m = personMedia(person, data);
+            const m = personMedia(person, DataManager.getData());
             const A = strings.attachments;
             const parts = [
                 m.photoBytes > 0 ? A.partPhoto(formatBytes(m.photoBytes)) : '',
                 m.attachments > 0 ? A.partAttachments(m.attachments, formatBytes(m.attachmentBytes)) : '',
                 m.excerpts > 0 ? A.partExcerpts(m.excerpts, formatBytes(m.excerptBytes)) : '',
             ].filter(Boolean);
-            const treeBytes = totalAttachmentBytes(data);
-            const lines: { text: string; warn: boolean }[] = [];
-            if (parts.length > 0) lines.push({ text: A.personTotal(parts.join(' · ')), warn: false });
-            if (treeBytes > ATTACHMENT_WARN_BYTES) lines.push({ text: A.treeWarn(formatBytes(treeBytes)), warn: true });
-            totalEl.replaceChildren(...lines.map(({ text, warn }) => {
-                const line = document.createElement('div');
-                line.textContent = text;
-                if (warn) line.className = 'warn';
-                return line;
-            }));
+            totalEl.textContent = parts.length > 0 ? A.personTotal(parts.join(' · ')) : '';
             totalEl.className = 'attachments-total';
         }
 

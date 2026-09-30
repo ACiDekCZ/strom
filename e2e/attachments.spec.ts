@@ -40,7 +40,7 @@ test('attachments: add an image, it survives a reload, then delete it', async ({
     await expect(modal.locator('#attachments-total')).toHaveText('');
 });
 
-test('the size line is this person\'s: photo, attachments, excerpts of their sources; the whole tree only as a warning', async ({ page }) => {
+test('the size line is this person\'s: photo, attachments, excerpts of their sources; nothing about the whole tree', async ({ page }) => {
     await openApp(page);
     await page.evaluate(async () => {
         window.Strom.UI.toggleAdvancedFields(true);
@@ -58,8 +58,8 @@ test('the size line is this person\'s: photo, attachments, excerpts of their sou
         window.Strom.UI.showEditPersonModal('a' as never);
     });
     const total = page.locator('#attachments-total');
-    await expect(total.locator('div').first()).toHaveText(/^This person: photo \d+ kB · 1 excerpt from sources \d+ kB$/);
-    await expect(total.locator('.warn')).toContainText('Images in the whole tree: 15');
+    // Bedřich's 15 MB scan makes the tree big: that is the statistics' business, not Adam's.
+    await expect(total).toHaveText(/^This person: photo \d+ kB · 1 excerpt from sources \d+ kB$/);
 });
 
 test('attachments: a rejected PDF over the size cap is not added', async ({ page }) => {
