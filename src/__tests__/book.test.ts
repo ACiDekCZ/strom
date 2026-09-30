@@ -189,7 +189,7 @@ describe('narratives in the book', () => {
             u1: {
                 id: 'u1', person1Id: 'h', person2Id: 'w', childIds: ['c'],
                 status: 'married' as const, startDate: '1886',
-                story: { text: 'Vzali se v srpnu 1886.' },
+                story: { text: '## Svatba\nVzali se v srpnu 1886.\n\nDěti:\n- **Josef**, 1890' },
             },
         },
     } as unknown as StromData;
@@ -226,6 +226,12 @@ describe('narratives in the book', () => {
     it('prints the couple’s story in their chapter', () => {
         expect(html).toContain('book-story-couple');
         expect(html).toContain('Vzali se v srpnu 1886.');
+    });
+
+    it('sets the markdown subheadings and lists of a story below its head', () => {
+        expect(html).toContain('<h5 class="story-subhead">Svatba</h5><p>Vzali se v srpnu 1886.</p>');
+        expect(html).toContain('<ul><li><strong>Josef</strong>, 1890</li></ul>');
+        expect(html).not.toContain('## ');
     });
 
     it('keeps the checklist of facts out of the book — it is workshop, not text', () => {

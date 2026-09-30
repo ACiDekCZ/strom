@@ -17,6 +17,7 @@ import { sortLifeEvents } from './events.js';
 import { assignGenerations } from './generations.js';
 import { getStringsForLang } from './strings.js';
 import { personInitials } from './initials.js';
+import { storyProseHtml } from './story-text.js';
 
 export interface BookOptions {
     title?: string;
@@ -43,17 +44,6 @@ function esc(text: string): string {
 }
 
 type Book = ReturnType<typeof getStringsForLang>['book'];
-
-/**
- * Prose as the writer typed it: '\n\n' a paragraph, '\n' a line break and
- * markdown **bold**. Everything is escaped first, so the only markup that
- * survives is what is rendered here (the book and the story reader).
- */
-export function storyProseHtml(text: string): string {
-    return text.split(/\n{2,}/).map(par => par.trim()).filter(Boolean)
-        .map(par => `<p>${esc(par).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-            .replace(/\n/g, '<br>')}</p>`).join('');
-}
 
 /** Generate the complete family-book HTML for `data`. */
 export function buildFamilyBook(data: StromData, options: BookOptions): string {
@@ -169,10 +159,9 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         [src.title, src.repository, src.reference].filter(Boolean).map(x => esc(x!)).join(', ');
 
     /**
-     * A narrative, set as the prose it is: paragraphs, and the markdown
-     * **bold** the writer used (registers-turned-prose lean on it for the
-     * words that carry the point — "nádeník", "domkář"). Everything is escaped
-     * first, so the only markup that survives is the emphasis we render.
+     * A narrative, set as the prose it is: paragraphs and the small markdown
+     * set of src/story-text.ts (subheadings, lists, **bold** — registers-turned-
+     * prose lean on it for the words that carry the point: "nádeník", "domkář").
      *
      * It is deliberately NOT rendered inside the person's medallion: two
      * medallions stand side by side, so a story there came out as a column of
@@ -189,7 +178,8 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     const LONG_NOTE = 140;
     const isLongNote = (person?: Person): boolean => (person?.notes?.length ?? 0) > LONG_NOTE;
 
-    const proseHtml = storyProseHtml;
+    /** Story subheadings sit below the h4 head of the story. */
+    const proseHtml = (text: string, title?: string): string => storyProseHtml(text, { title, headingLevel: 5 });
 
     /** A person's long note, set below the couple like a narrative. */
     const longNoteHtml = (person: Person): string => {
@@ -200,7 +190,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     };
 
     const storyHtml = (story: Story, kind: 'person' | 'couple', who: string, person?: Person): string => {
-        const paragraphs = proseHtml(story.text);
+        const paragraphs = proseHtml(story.text, story.title);
         if (!paragraphs) return '';
         // The draft/approved state is the author's workshop note: it travels in
         // the data and back out to GEDCOM, but a printed book says nothing
@@ -376,6 +366,11 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         hyphens: auto; }
     .book-story p { margin-bottom: 7px; text-indent: 1.2em; }
     .book-story p:first-of-type { text-indent: 0; }
+    .book-story .story-subhead { font-size: 13.5px; font-weight: bold; font-style: italic; text-align: left;
+        margin: 12px 0 4px; break-after: avoid; }
+    .book-story .story-subhead + p { text-indent: 0; }
+    .book-story ul { margin: 0 0 7px 1.4em; text-align: left; }
+    .book-story li { margin-bottom: 2px; }
     .book-story-head { font-size: 13px; font-weight: bold; text-align: left; margin-bottom: 5px;
         padding-bottom: 3px; border-bottom: 1px solid var(--book-rule); }
     .book-story-title { font-weight: normal; font-style: italic; color: var(--book-accent); }

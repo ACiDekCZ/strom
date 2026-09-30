@@ -10,7 +10,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId, Source } from '../types.js';
 import { yearOf } from '../dates.js';
 import { sortLifeEvents } from '../events.js';
-import { storyProseHtml } from '../book.js';
+import { storyProseHtml } from '../story-text.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { eventTypeLabel } from './person-events.js';
@@ -254,7 +254,7 @@ export const personSourcesMethods = uiModule({
                 </div>
                 <div class="story-reader-body" id="person-story-body" tabindex="-1" lang="${getCurrentLanguage()}">
                     ${story.title ? `<h3 class="story-reader-title">${esc(story.title)}</h3>` : ''}
-                    <div class="story-reader-text">${storyProseHtml(story.text)}</div>
+                    <div class="story-reader-text">${storyProseHtml(story.text, { title: story.title })}</div>
                     ${facts.length > 0 || story.note ? `<div class="story-reader-extra">
                         ${facts.length > 0 ? `<div class="menu-section-header">${esc(s.facts)}</div>
                             <ul class="story-reader-facts">${facts.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}

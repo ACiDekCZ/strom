@@ -196,7 +196,7 @@ test('story reader: paragraphs, bold, escaped HTML, Draft tag; Edit lands in the
     await page.evaluate((id) => window.Strom.DataManager.updatePerson(id, {
         story: {
             title: 'Kovar z Lipan', status: 'draft',
-            text: 'Jan byl **kovar**.\n\nPotom <script>window.__x = 1</script> odesel.',
+            text: '# Kovar z Lipan\n\nJan byl **kovar**.\n\nPotom <script>window.__x = 1</script> odesel.\n\n## Deti\n- **Josef**\n- *Anna*',
             facts: ['krest 1865, Lipany'], note: 'Neni to pramen.',
         },
     }), janId!);
@@ -206,7 +206,12 @@ test('story reader: paragraphs, bold, escaped HTML, Draft tag; Edit lands in the
     await expect(reader).toBeVisible();
     const text = reader.locator('.story-reader-text');
     await expect(text.locator('p')).toHaveCount(2);
-    await expect(text.locator('strong')).toHaveText('kovar');
+    await expect(text.locator('strong')).toHaveText(['kovar', 'Josef']);
+    // The markdown set: the # line repeating the title is left out, ## a subheading, - a list.
+    await expect(text.locator('.story-subhead')).toHaveText(['Deti']);
+    await expect(text.locator('li')).toHaveText(['Josef', 'Anna']);
+    await expect(text.locator('em')).toHaveText('Anna');
+    await expect(text).not.toContainText('#');
     await expect(text).toContainText('<script>window.__x = 1</script>');
     expect(await page.evaluate(() => (window as unknown as { __x?: number }).__x)).toBeUndefined();
     await expect(reader.locator('.story-reader-title')).toHaveText('Kovar z Lipan');
