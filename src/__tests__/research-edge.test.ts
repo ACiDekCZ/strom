@@ -9,6 +9,7 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { edgeMoves, edgeView, edgeShape, edgeTone, effectiveNext, edgeEndText, edgeNextText, edgeFactsLine, edgeEstimateText, edgeTimeline } from '../research-edge.js';
 import { getStringsForLang, setLanguage } from '../strings.js';
+import { applyContentOptions } from '../privacy.js';
 import { ResearchEdge, StromData } from '../types.js';
 
 const head = (research: boolean): string => `0 HEAD
@@ -150,6 +151,51 @@ describe('reading _STROM_EDGE and _STROM_ISLAND', () => {
     it('never goes back out in a GEDCOM', () => {
         const ged = exportToGedcom(load(true), 'Test', { research: { id: '0b4c7a52-1c1f-4d7e-9a53-2f4a3c1e8b10' } }).content;
         expect(ged).not.toMatch(/_STROM_EDGE|_STROM_ISLAND|_STROM_HYPO/);
+    });
+});
+
+describe('a copy that leaves the app', () => {
+    it('keeps what the records say, drops how the research works on it', () => {
+        const data = load(true);
+        const out = applyContentOptions(data, false);
+        expect(byRefn(out, 'P0004').research?.edge).toEqual({
+            missing: 'parents',
+            end: 'unsearched',
+            est: { year: 1790, place: 'Lhota' },
+            window: { from: 1787, to: 1793 },
+            books: [{ id: 'B0001', title: 'Lhota, narození 1784–1830', from: 1784, to: 1830, access: 'online-free' }],
+            covered: [],
+            noRecords: [],
+            tasks: [],
+            tried: [],
+            conflicts: [],
+            hypos: [{ id: 'H0001', join: 'P0005', island: 2, tests: [] }],
+        });
+        expect(byRefn(out, 'P0006').research?.island).toEqual({ size: 2, hypos: [{ id: 'H0001', join: 'P0004' }] });
+        expect(byRefn(out, 'P0004').research?.hypotheses?.[0].title).toBe('Byl Matouš otcem Václava?');
+        // The tree itself keeps everything (the research replaces it with the next load).
+        expect(byRefn(data, 'P0004').research?.edge?.next).toBe('queued');
+        expect(byRefn(data, 'P0004').research?.edge?.tasks).toHaveLength(1);
+    });
+
+    it('keeps a scope that is a fact, drops the plan; the copy draws grey', () => {
+        const data = load(true);
+        const edge = byRefn(data, 'P0004').research!.edge!;
+        edge.scope = 'living';
+        edge.sessions = { n: 2, cost: 3.1 };
+        edge.last = '2026-09-12';
+        edge.searches = 5;
+        edge.research = 'G0001';
+        const copied = byRefn(applyContentOptions(data, false), 'P0004').research!.edge!;
+        expect(copied.scope).toBe('living');
+        expect(copied.sessions).toBeUndefined();
+        expect(copied.last).toBeUndefined();
+        expect(copied.searches).toBeUndefined();
+        expect(copied.research).toBeUndefined();
+        edge.scope = 'paused';
+        const plain = byRefn(applyContentOptions(data, false), 'P0004').research!.edge!;
+        expect(plain.scope).toBeUndefined();
+        expect(edgeView(plain, 'all')).toMatchObject({ kind: 'stub', tone: 'none', nextText: '' });
     });
 });
 

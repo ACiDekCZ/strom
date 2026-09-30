@@ -183,6 +183,35 @@ test.describe('research edge', () => {
         await expect(stub(page, 'Josef').locator('.research-edge-line')).toHaveCSS('width', '76px');
     });
 
+    test('a copy passed on: findings only, no "For you", no motion', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(async () => {
+            const data = window.Strom.DataManager.getData();
+            const persons = JSON.parse(JSON.stringify(data.persons));
+            for (const p of Object.values(persons) as Array<{ research?: { edge?: Record<string, unknown> } }>) {
+                const e = p.research?.edge;
+                if (e) { delete e.next; delete e.pos; e.tasks = []; }
+            }
+            await window.Strom.DataManager.importAsNewTree({ ...data, persons }, 'Copy');
+        });
+        await page.evaluate(() => {
+            const jan = window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!;
+            window.Strom.TreeRenderer.setFocus(jan.id);
+        });
+        await expect(stub(page, 'Josef')).toHaveClass(/tone-none/);
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        const host = page.locator('#research-edge-settings');
+        await expect(host).toBeVisible();
+        await expect(host.locator('label.settings-radio')).toHaveCount(2);
+        await expect(host.locator('#research-edge-motion-toggle')).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.closeSettingsDialog());
+        await stub(page, 'Josef').click();
+        const section = page.locator('#research-edge-section');
+        await expect(section.locator('.rep-end')).toHaveText('Not searched yet');
+        await expect(section.locator('.rep-next')).toHaveCount(0);
+        await expect(section.locator('.rep-tasks')).toHaveCount(0);
+    });
+
     test('a tree not from the research has no setting', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await openApp(page);

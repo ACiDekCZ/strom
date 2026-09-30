@@ -348,7 +348,14 @@ export const researchEdgeUiMethods = uiModule({
         host.hidden = !research;
         if (!research || !treeId) { host.innerHTML = ''; return; }
         const re = strings.researchEdge;
-        const mode = TreeManager.getResearchEdgeMode(treeId);
+        // A copy someone passed on has the findings only (no next, no queue):
+        // "for you" and the motion mean nothing there.
+        const work = DataManager.getAllPersons().some(p => {
+            const e = p.research?.edge;
+            return !!e && (e.next !== undefined || e.tasks.length > 0);
+        });
+        const stored = TreeManager.getResearchEdgeMode(treeId);
+        const mode = !work && stored === 'mine' ? 'all' : stored;
         const option = (value: ResearchEdgeMode, label: string): string => `
             <label class="settings-radio">
                 <input type="radio" name="research-edge-mode" value="${value}"${mode === value ? ' checked' : ''}>
@@ -361,16 +368,16 @@ export const researchEdgeUiMethods = uiModule({
                     <span class="settings-desc">${esc(re.settingHint)}</span>
                 </span>
                 <div class="settings-options settings-segment" role="radiogroup" aria-labelledby="research-edge-label">
-                    ${option('off', re.modeOff)}${option('mine', re.modeMine)}${option('all', re.modeAll)}
+                    ${option('off', re.modeOff)}${work ? option('mine', re.modeMine) : ''}${option('all', re.modeAll)}
                 </div>
             </div>
-            <label class="settings-checkbox settings-row settings-row-dependent${mode === 'off' ? ' is-disabled' : ''}">
+            ${work ? `<label class="settings-checkbox settings-row settings-row-dependent${mode === 'off' ? ' is-disabled' : ''}">
                 <input type="checkbox" id="research-edge-motion-toggle"${TreeManager.isResearchEdgeMotion(treeId) ? ' checked' : ''}${mode === 'off' ? ' disabled' : ''}>
                 <span class="settings-text">
                     <span class="settings-name">${esc(re.motionLabel)}</span>
                     <span class="settings-desc">${esc(re.motionHint)}</span>
                 </span>
-            </label>`;
+            </label>` : ''}`;
         host.querySelectorAll<HTMLInputElement>('input[name="research-edge-mode"]').forEach(input => {
             input.onchange = () => {
                 const value = input.value as ResearchEdgeMode;
@@ -381,9 +388,9 @@ export const researchEdgeUiMethods = uiModule({
                 TreeRenderer.render();
             };
         });
-        (host.querySelector('#research-edge-motion-toggle') as HTMLInputElement).onchange = (e) => {
+        host.querySelector<HTMLInputElement>('#research-edge-motion-toggle')?.addEventListener('change', (e) => {
             TreeManager.setResearchEdgeMotion(treeId, (e.target as HTMLInputElement).checked);
             TreeRenderer.render();
-        };
+        });
     },
 });

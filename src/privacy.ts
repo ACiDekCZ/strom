@@ -108,6 +108,45 @@ export function stripSources(data: StromData): StromData {
     return copy;
 }
 
+/** Scopes that are a fact about the person, not the research's plan. */
+const FACT_SCOPES: readonly string[] = ['living', 'off-tree'];
+
+/**
+ * Every copy that leaves the app keeps what the records say about the edge
+ * of the tree (what is missing and why, the window searched, the books, the
+ * estimate, the hypotheses and the family outside the tree) and drops how
+ * the research works on it: what comes next, the queue, tasks, searches,
+ * sessions and their cost, the direction. That is the research's own state,
+ * stale in any copy and meaningless to anyone else; the research tree gets
+ * it back with its next load. Mutates and returns `data` (a fresh copy).
+ */
+export function stripResearchWork(data: StromData): StromData {
+    for (const person of Object.values(data.persons)) {
+        const r = person.research;
+        if (!r) continue;
+        if (r.edge) {
+            const e = r.edge;
+            r.edge = {
+                missing: e.missing,
+                ...(e.scope && FACT_SCOPES.includes(e.scope) ? { scope: e.scope } : {}),
+                ...(e.end ? { end: e.end } : {}),
+                ...(e.records !== undefined ? { records: e.records } : {}),
+                ...(e.est ? { est: e.est } : {}),
+                ...(e.window ? { window: e.window } : {}),
+                books: e.books,
+                covered: e.covered,
+                noRecords: e.noRecords,
+                tasks: [],
+                tried: [],
+                conflicts: e.conflicts,
+                hypos: e.hypos.map(h => ({ id: h.id, ...(h.join ? { join: h.join } : {}), ...(h.island !== undefined ? { island: h.island } : {}), tests: [] })),
+            };
+        }
+        if (r.island) r.island = { size: r.island.size, hypos: r.island.hypos };
+    }
+    return data;
+}
+
 /**
  * Normalise the legacy boolean "drop media" flag into full ContentOptions:
  * `false` keeps everything, `true` drops photos + attachments (the old
@@ -127,7 +166,7 @@ export function resolveContentOptions(content: boolean | ContentOptions): Conten
  */
 export function applyContentOptions(data: StromData, content: boolean | ContentOptions): StromData {
     const opts = resolveContentOptions(content);
-    let out = structuredClone(data);
+    let out = stripResearchWork(structuredClone(data));
     if (!opts.photos) out = stripPhotos(out);
     if (!opts.attachments) out = stripAttachments(out);
     if (!opts.notes) out = stripNotes(out);
