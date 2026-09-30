@@ -1329,7 +1329,11 @@ class TreeRendererClass {
             if (parentAddHtml) html += `<div class="card-edge edge-top-left">${parentAddHtml}</div>`;
             if (chainHtml || branchTabsHtml) html += `<div class="card-edge edge-top-right">${chainHtml}${branchTabsHtml}</div>`;
             if (hiddenIndicatorsHtml) html += `<div class="card-edge edge-bottom-left">${hiddenIndicatorsHtml}</div>`;
-            if (crossTreeHtml) html += `<div class="card-edge edge-bottom-right">${crossTreeHtml}</div>`;
+            if (crossTreeHtml) {
+                html += `<div class="card-edge edge-bottom-right">${crossTreeHtml}</div>`;
+                // The pill reaches 9 px into the card: the status stripes rise above it.
+                card.classList.add('has-edge-br');
+            }
             if (partnerAddHtml) html += `<div class="card-edge edge-right-center">${partnerAddHtml}</div>`;
             if (childAddHtml) html += `<div class="card-edge edge-bottom-center">${childAddHtml}</div>`;
 

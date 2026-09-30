@@ -140,6 +140,47 @@ test.describe('card signals', () => {
         await expect(card(page, 'Jan').locator(':scope > .card-state')).toHaveCSS('pointer-events', 'none');
     });
 
+    test('the ⇄ other-trees pill: the stripes rise above it, the text keeps clear', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        // The same documented Jan in two trees: his card carries the ⇄ pill.
+        await page.evaluate(async () => {
+            const jan = { id: 'j', firstName: 'Jan', lastName: 'Novák', gender: 'male', birthDate: '1900', birthPlace: 'Lipany u Prahy a okolí',
+                birthSourceIds: ['s1'], isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] };
+            const sources = { s1: { id: 's1', title: 'Křest' } };
+            await window.Strom.DataManager.importAsNewTree({ persons: { j: jan }, partnerships: {}, sources } as never, 'Strom A');
+            await window.Strom.DataManager.importAsNewTree({ persons: { j: jan }, partnerships: {}, sources } as never, 'Strom B');
+            window.Strom.TreeRenderer.render();
+        });
+        const jan = card(page, 'Jan');
+        const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+            a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+        for (const density of ['normal', 'compact', 'detailed']) {
+            await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
+            await expect(jan.locator('.cross-tree-badge')).toBeVisible();
+            await expect(jan).toHaveClass(/has-edge-br/);
+            const stripes = jan.locator(':scope > .card-state');
+            await expect(stripes).toHaveCSS('bottom', '14px');
+            const sBox = (await stripes.boundingBox())!;
+            const pill = (await jan.locator('.cross-tree-badge').boundingBox())!;
+            expect(overlap(sBox, pill), `${density}: stripes under the pill`).toBe(false);
+            // The last text line (the name in compact) ends before the stripes.
+            const last = jan.locator('.card-body > :last-child');
+            await expect(last).toHaveCSS('margin-right', '34px');
+            // Text lines clip at their own box: no box reaches under the stripes.
+            for (const sel of ['.name', '.birth-date', '.card-place']) {
+                const t = jan.locator(sel);
+                if (await t.count() === 0 || !(await t.isVisible())) continue;
+                expect(overlap((await t.boundingBox())!, sBox), `${density}: ${sel} under the stripes`).toBe(false);
+            }
+        }
+        // Without the pill: no class, the stripes back at the bottom.
+        await page.evaluate(() => window.Strom.UI.toggleCrossTreeBadges(false));
+        await expect(jan.locator('.cross-tree-badge')).toHaveCount(0);
+        await expect(jan).not.toHaveClass(/has-edge-br/);
+        await expect(jan.locator(':scope > .card-state')).toHaveCSS('bottom', '6px');
+    });
+
     test('the desktop person menu leads with the signal', async ({ page }) => {
         await setup(page);
         await card(page, 'Jan').locator('.name').click();

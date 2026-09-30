@@ -5615,6 +5615,11 @@
             display: flex; align-items: center; gap: 4px; pointer-events: none;
         }
         .card-state.beside-story { right: 18px; }
+        /* A pill in the bottom-right edge slot (⇄ other trees) reaches 9 px into
+           the card: the stripes sit above it, the last text line keeps clear
+           (a margin, not padding: a line's overflow clips at its padding edge). */
+        .person-card.has-edge-br .card-state { bottom: 14px; }
+        .person-card.has-edge-br .card-body > :last-child { margin-right: 34px; }
         .st-group { display: inline-flex; gap: 2px; }
         .st-group i { display: block; width: 10px; height: 3px; border-radius: 2px; }
         .st-ev i { background: var(--ev-stripe); }
