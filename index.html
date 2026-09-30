@@ -75,7 +75,10 @@
             --signal-warn: #a2660f;   /* card action badge (waiting, conflict, question) */
             --on-signal-warn: #ffffff;
             --ev-stripe: #8fae98;     /* card status stripes: evidence */
-            --story-stripe: #c8a27a;  /* card status stripes: story */
+            --story-fold: #d3b48e;    /* card status: the story's folded corner */
+            --story-fold-edge: #b8916a;
+            --story-fold-draft: #ecdcc6;
+            --story-fold-draft-edge: #dcc5a6;
             --on-warning: #2b2100;    /* mark drawn on a --warning fill */
             --info-soft: #e4ebf1;     /* informational tint backgrounds */
             --pending: #d0a23c;       /* unfinished merge state (dashed) */
@@ -160,7 +163,10 @@
             --signal-warn: #d19a3a;
             --on-signal-warn: #1c1a15;
             --ev-stripe: #6f9a7c;
-            --story-stripe: #a88560;
+            --story-fold: #8a6c4c;
+            --story-fold-edge: #a88560;
+            --story-fold-draft: #4a4032;
+            --story-fold-draft-edge: #5e513f;
             --on-warning: #1f1a10;
             --info-soft: #2a3139;
             --chart-soft: #3a4a3f;
@@ -5589,10 +5595,12 @@
         }
         /* ==================== CARD SIGNALS ====================
            At a glance (src/card-signals.ts): the person's status as quiet
-           stripes in the card's bottom-right corner (evidence 0/1/2 on the
-           left, the story on the right) and one action badge on the avatar's
-           corner (a dot on the card's corner in compact density and when
-           zoomed far out). Count and order, not colour alone, tell them apart. */
+           evidence stripes in the card's bottom-right corner and the story as
+           a folded corner; one action badge on the avatar's corner (a dot on
+           the card's corner in compact density and when zoomed far out); the
+           agent at work as an arc circling the avatar (a ring on the card's
+           corner there), the one thing on a card that moves. Count, shape and
+           place, not colour alone, tell them apart. */
         .person-card .birth-date .meta-text {
             min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
@@ -5600,13 +5608,31 @@
             position: absolute; right: 8px; bottom: 6px; z-index: 1;
             display: flex; align-items: center; gap: 4px; pointer-events: none;
         }
+        .card-state.beside-story { right: 18px; }
         .st-group { display: inline-flex; gap: 2px; }
         .st-group i { display: block; width: 10px; height: 3px; border-radius: 2px; }
         .st-ev i { background: var(--ev-stripe); }
-        .st-story i { background: var(--story-stripe); }
-        .st-story.draft i { opacity: 0.45; }
-        /* In the tooltip and the menu: inline, before the words. */
+        /* The story: the card's corner folded over (the card has no overflow
+           clip, so the fold follows the card's radius itself). */
+        .card-story {
+            --fold: var(--story-fold); --fold-edge: var(--story-fold-edge);
+            position: absolute; right: -1px; bottom: -1px; z-index: 0;
+            width: 14px; height: 14px; pointer-events: none;
+            border-bottom-right-radius: var(--r-lg);
+            background: linear-gradient(135deg, transparent 50%, var(--fold) 50%);
+        }
+        .card-story.draft { --fold: var(--story-fold-draft); --fold-edge: var(--story-fold-draft-edge); }
+        .card-story::after {
+            content: ''; position: absolute; right: 7px; bottom: 7px; width: 7px; height: 7px;
+            background: linear-gradient(135deg, transparent 48%, var(--fold-edge) 50%, transparent 56%);
+        }
+        /* In the tooltip and the menu: inline, before the words (a 10px fold). */
         .card-state--inline { position: static; flex-shrink: 0; }
+        .card-story--inline {
+            position: relative; right: auto; bottom: auto; display: inline-block;
+            width: 10px; height: 10px; border-bottom-right-radius: 3px;
+        }
+        .card-story--inline::after { right: 5px; bottom: 5px; width: 5px; height: 5px; }
         .card-avatar-wrap { position: relative; flex: 0 0 auto; display: flex; }
         .card-signal {
             position: absolute; top: -6px; right: -6px; z-index: 2;
@@ -5617,7 +5643,6 @@
             display: flex; align-items: center; justify-content: center;
             cursor: pointer; box-shadow: none;
         }
-        .card-signal.signal-agent, .card-signal-dot.signal-agent { background: var(--primary); color: var(--on-primary); }
         /* A 24px hit area around the 18px badge. */
         .card-signal::before { content: ''; position: absolute; inset: -5px; border-radius: 50%; }
         .card-signal:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
@@ -5627,26 +5652,63 @@
             border: 2px solid var(--surface); background: var(--signal-warn); pointer-events: none;
         }
         body[data-card-density="compact"] .card-signal-dot { display: block; }
+        /* The agent at work: an arc circling the avatar, a ring at the card's
+           corner in compact. Only transform animates (compositor only); every
+           arc gets the same phase from the renderer. */
+        .card-agent, .card-agent-dot {
+            position: absolute; box-sizing: border-box; border-radius: 50%; pointer-events: none;
+            border: 2px solid color-mix(in srgb, var(--primary) 18%, transparent);
+            border-top-color: var(--primary); border-right-color: var(--primary);
+            animation: agSpin 1.4s linear infinite;
+        }
+        .card-agent { inset: -4px; z-index: 1; }
+        .card-agent-dot {
+            display: none; top: -5px; right: -5px; z-index: 2; width: 12px; height: 12px;
+            background: var(--surface);
+        }
+        body[data-card-density="compact"] .card-agent-dot { display: block; }
+        @keyframes agSpin { to { transform: rotate(360deg); } }
+        #tree-container.tree-offscreen .card-agent,
+        #tree-container.tree-offscreen .card-agent-dot { animation-play-state: paused; }
+        @media (prefers-reduced-motion: reduce) {
+            .card-agent, .card-agent-dot { animation: none; }
+        }
+        /* Done with the person: a check for 4 s, then it fades (the renderer
+           sets a negative delay, so a redraw keeps the countdown). */
+        .card-signal.card-done, .card-signal-dot.card-done {
+            background: var(--primary); color: var(--on-primary); font-size: 10px;
+            cursor: default; pointer-events: none;
+            animation: agDone 4.3s linear forwards;
+        }
+        @keyframes agDone { 0%, 93% { opacity: 1; } 100% { opacity: 0; } }
         /* Compact: the relations / branch pills make way for the dot. */
         body[data-card-density="compact"] .person-card.has-signal .edge-top-right { margin-right: 8px; }
-        /* Zoomed far out (< 55%): no status icons; the badge becomes a dot that
-           stays at least 8px on screen. */
-        #tree-canvas.zoom-far .card-state { display: none; }
-        #tree-canvas.zoom-far .card-signal { display: none; }
-        #tree-canvas.zoom-far .card-signal-dot {
+        /* Zoomed far out (< 55%): no status; the badge becomes a dot and the
+           arc a ring, both staying at least 8px on screen. */
+        #tree-canvas.zoom-far .card-state, #tree-canvas.zoom-far .card-story { display: none; }
+        #tree-canvas.zoom-far .card-signal, #tree-canvas.zoom-far .card-agent { display: none; }
+        #tree-canvas.zoom-far .card-signal-dot, #tree-canvas.zoom-far .card-agent-dot {
             display: block;
             width: max(12px, calc(8px * var(--zoom-inv, 1)));
             height: max(12px, calc(8px * var(--zoom-inv, 1)));
             top: calc(-0.4 * max(12px, calc(8px * var(--zoom-inv, 1))));
             right: calc(-0.4 * max(12px, calc(8px * var(--zoom-inv, 1))));
         }
+        /* The agent's mark in the tooltip and the menu: its arc, still. */
+        .agent-mark {
+            flex: 0 0 auto; display: inline-block; width: 10px; height: 10px; box-sizing: border-box;
+            border-radius: 50%; border: 2px solid color-mix(in srgb, var(--primary) 18%, transparent);
+            border-top-color: var(--primary); border-right-color: var(--primary);
+        }
+        .menu-signal .agent-mark { width: 14px; height: 14px; margin: 2px; }
         /* Tooltip rows: evidence, story, then what waits. */
         .card-tooltip .tt-signals { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
-        .card-tooltip .tt-ev, .card-tooltip .tt-story { display: flex; align-items: center; gap: 6px; }
+        .card-tooltip .tt-ev, .card-tooltip .tt-story, .card-tooltip .tt-agent { display: flex; align-items: center; gap: 6px; }
         .card-tooltip .tt-action { color: var(--warning-text); }
+        .card-tooltip .tt-line.tt-agent { color: var(--primary-dark); }
         /* Printing the page: never (the poster / image export draws its own cards). */
-        body.view-mode-print .card-state, body.view-mode-print .card-signal, body.view-mode-print .card-signal-dot { display: none !important; }
-        @media print { .card-state, .card-signal, .card-signal-dot { display: none !important; } }
+        body.view-mode-print :is(.card-state, .card-story, .card-signal, .card-signal-dot, .card-agent, .card-agent-dot) { display: none !important; }
+        @media print { .card-state, .card-story, .card-signal, .card-signal-dot, .card-agent, .card-agent-dot { display: none !important; } }
 
         /* Person menu: the badge's signal leads (and on touch the status line). */
         .menu-person-state {
@@ -5667,7 +5729,6 @@
             display: inline-flex; align-items: center; justify-content: center;
             background: var(--signal-warn); color: var(--on-signal-warn); font-weight: 700; font-size: 11px;
         }
-        .menu-signal-glyph.signal-agent { background: var(--primary); color: var(--on-primary); }
         .menu-signal-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
         .menu-signal-go { flex: 0 0 auto; font-weight: 600; white-space: nowrap; }
         .context-menu-item.menu-signal:hover, .context-menu-item.menu-signal:focus { background: var(--warning-soft); filter: brightness(0.97); }

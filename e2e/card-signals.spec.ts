@@ -2,9 +2,9 @@ import { test, expect, Page } from '@playwright/test';
 import { openApp, card } from './helpers.js';
 
 /**
- * What a card shows at a glance: the evidence circle and the story leaf at
- * the end of the year row, one action badge on the avatar's corner (waiting
- * for you ! > conflict ≠ > question ? > agent ⋯), the tooltip rows, the
+ * What a card shows at a glance: the evidence stripes and the story's folded
+ * corner at the card's bottom-right corner, one action badge on the avatar's
+ * corner (waiting for you ! > conflict ≠ > question ?), the tooltip rows, the
  * aria-label, densities and far zoom, Settings → "Show on card", the person
  * menu leading with the signal, and the Evidence mode in tree health.
  * Invented data only.
@@ -74,14 +74,24 @@ async function plainTree(page: Page, persons: Record<string, Record<string, unkn
 test.describe('card signals', () => {
     test('status icons, badges by priority, tooltip and aria-label', async ({ page }) => {
         await setup(page);
-        // Stripes in the card's corner. Josef: nothing cited (no evidence stripe), a finished story.
-        // Jan: birth and death cited (two stripes), a draft story (faint).
-        await expect(card(page, 'Josef').locator(':scope > .card-state .st-ev')).toHaveCount(0);
-        await expect(card(page, 'Josef').locator(':scope > .card-state .st-story')).not.toHaveClass(/draft/);
+        // Stripes in the card's corner, the story as the folded corner itself.
+        // Josef: nothing cited (no evidence stripe), a finished story.
+        // Jan: birth and death cited (two stripes), a draft story (paler fold).
+        await expect(card(page, 'Josef').locator(':scope > .card-state')).toHaveCount(0);
+        await expect(card(page, 'Josef').locator(':scope > .card-story')).not.toHaveClass(/draft/);
         await expect(card(page, 'Jan').locator(':scope > .card-state .st-ev i')).toHaveCount(2);
-        await expect(card(page, 'Jan').locator(':scope > .card-state .st-story')).toHaveClass(/draft/);
-        await expect(card(page, 'Jan').locator(':scope > .card-state .st-story i')).toHaveCSS('opacity', '0.45');
-        await expect(card(page, 'Anna').locator(':scope > .card-state .st-story')).toHaveCount(0);
+        await expect(card(page, 'Jan').locator(':scope > .card-story')).toHaveClass(/draft/);
+        // The fold covers the card's corner; the stripes move left of it.
+        const fold = await card(page, 'Jan').evaluate((el) => {
+            const c = el.getBoundingClientRect();
+            const foldEl = el.querySelector<HTMLElement>(':scope > .card-story')!;
+            const stEl = el.querySelector<HTMLElement>(':scope > .card-state')!;
+            const f = foldEl.getBoundingClientRect();
+            const st = stEl.getBoundingClientRect();
+            return { right: f.right - c.right, bottom: f.bottom - c.bottom, size: foldEl.offsetWidth, stripesRight: getComputedStyle(stEl).right, stripesClear: st.right <= f.left + 4 };
+        });
+        expect(fold).toMatchObject({ right: 0, bottom: 0, size: 14, stripesRight: '18px', stripesClear: true });
+        await expect(card(page, 'Anna').locator(':scope > .card-story')).toHaveCount(0);
         // The year text itself is unchanged by the stripes.
         await expect(card(page, 'Jan').locator('.birth-date')).toHaveText('1865 – 1932');
 
@@ -157,7 +167,17 @@ test.describe('card signals', () => {
         await expect(page.locator('#tree-canvas')).toHaveClass(/zoom-far/);
         await expect(card(page, 'Jan').locator('.card-signal')).toBeHidden();
         await expect(card(page, 'Jan').locator(':scope > .card-state')).toBeHidden();
+        await expect(card(page, 'Jan').locator(':scope > .card-story')).toBeHidden();
         await expect(card(page, 'Jan').locator('.card-signal-dot')).toBeVisible();
+    });
+
+    test('printing the page: no stripes, fold or badge', async ({ page }) => {
+        await setup(page);
+        await expect(card(page, 'Jan').locator(':scope > .card-story')).toBeVisible();
+        await page.emulateMedia({ media: 'print' });
+        for (const sel of [':scope > .card-state', ':scope > .card-story', '.card-signal']) {
+            await expect(card(page, 'Jan').locator(sel)).toBeHidden();
+        }
     });
 
     test('Settings: switching a signal off hides it on the card, the tooltip keeps it', async ({ page }) => {
@@ -202,7 +222,7 @@ test.describe('card signals', () => {
         }, { s1: { id: 's1', title: 'Matrika' } });
         const k = card(page, 'Kateřina');
         await expect(k.locator(':scope > .card-state .st-ev')).toBeVisible();
-        await expect(k.locator(':scope > .card-state .st-story')).toBeVisible();
+        await expect(k.locator(':scope > .card-story.draft')).toBeVisible();
         const clipped = await k.locator('.name-text').evaluate(el => el.scrollWidth > el.clientWidth + 0.5);
         expect(clipped).toBe(false);
         // The card keeps its width (the focused card is drawn a little larger).

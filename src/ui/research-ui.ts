@@ -41,7 +41,7 @@ import {
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry } from '../research-link.js';
-import { ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
+import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import { iconSvg } from '../icons.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
@@ -301,20 +301,21 @@ let live: LiveSession | null = null;
 let idlePanel: string | null = null;
 
 /**
- * The research's word per person REFN for the card badges: what waits for
- * the user (live, or as last heard within a week) and, while following, what
- * the agent works on right now (its queue stays in the panel: a dozen queued
- * people would all look worked on). Only for the active research tree.
+ * The research's word per person REFN for the cards: what waits for the user
+ * (live, or as last heard within a week) and, while following, whom the agent
+ * works on right now (its arc), who is in its queue (tooltip only: a dozen
+ * queued people would all look worked on) and whom it was just done with (a
+ * short check). Only for the active research tree.
  */
 function researchCardInfo(): Map<string, ResearchCardInfo> {
     const out = new Map<string, ResearchCardInfo>();
     if (DataManager.isViewMode()) return out;
     const treeId = DataManager.getCurrentTreeId();
     if (!treeId) return out;
-    const following = live && !live.ended && live.treeId === treeId ? live : null;
+    const following = followedHere();
     const researchId = TreeManager.getTreeMetadata(treeId)?.research?.id;
     const waiting = following?.waiting ?? (researchId ? storedResearchWaiting(researchId)?.items : undefined) ?? [];
-    const note = (ref: string | undefined, what: keyof ResearchCardInfo, text: string): void => {
+    const note = (ref: string | undefined, what: 'waiting' | 'agent' | 'queued', text: string): void => {
         if (!ref || !text) return;
         const info = out.get(ref) ?? {};
         info[what] ??= text;
@@ -323,10 +324,56 @@ function researchCardInfo(): Map<string, ResearchCardInfo> {
     for (const w of waiting) note(w.person, 'waiting', w.what);
     if (following) {
         for (const w of following.working) if (!w.paused) note(w.person, 'agent', w.task || w.who);
+        for (const q of following.queue) if (q.state === 'next') note(q.person, 'queued', q.text);
+        const now = Date.now();
+        for (const [ref, at] of agentDone) {
+            if (now - at < AGENT_DONE_MS + AGENT_DONE_FADE_MS) out.set(ref, { ...out.get(ref), done: at });
+        }
     }
     return out;
 }
 setResearchCardInfoProvider(researchCardInfo);
+
+/** The live session of the tree on screen (null: not following it). */
+function followedHere(): LiveSession | null {
+    const treeId = DataManager.getCurrentTreeId();
+    return live && !live.ended && live.treeId === treeId ? live : null;
+}
+
+/**
+ * Whom the agent was just done with: REFN → when it left `working[]`.
+ * Only a live change counts (never what a page load finds), so the session
+ * whose `working[]` was last seen is kept alongside.
+ */
+const agentDone = new Map<string, number>();
+let lastWorked: { session: LiveSession; refs: Set<string> } | null = null;
+let agentDoneTimer: ReturnType<typeof setTimeout> | null = null;
+
+function trackAgentDone(): void {
+    const s = followedHere();
+    if (!s) {
+        lastWorked = null;
+        agentDone.clear();
+        return;
+    }
+    // A paused run is still at work on its person.
+    const refs = new Set(s.working.map(w => w.person).filter((r): r is string => !!r));
+    if (lastWorked?.session === s) {
+        const now = Date.now();
+        for (const ref of lastWorked.refs) if (!refs.has(ref)) agentDone.set(ref, now);
+    }
+    for (const ref of refs) agentDone.delete(ref);
+    lastWorked = { session: s, refs };
+    // Redraw once the oldest check has faded, dropping it.
+    const now = Date.now();
+    for (const [ref, at] of agentDone) if (now - at >= AGENT_DONE_MS + AGENT_DONE_FADE_MS) agentDone.delete(ref);
+    if (agentDoneTimer) clearTimeout(agentDoneTimer);
+    agentDoneTimer = null;
+    if (agentDone.size > 0) {
+        const next = Math.min(...agentDone.values()) + AGENT_DONE_MS + AGENT_DONE_FADE_MS - now;
+        agentDoneTimer = setTimeout(() => { agentDoneTimer = null; syncResearchCardInfo(); }, Math.max(0, next) + 20);
+    }
+}
 
 /** The badges last drawn from the research (a change redraws the cards). */
 let cardInfoKey = '[]';
@@ -338,6 +385,7 @@ function syncResearchCardInfo(): void {
     cardInfoPending = true;
     queueMicrotask(() => {
         cardInfoPending = false;
+        trackAgentDone();
         const key = JSON.stringify([...researchCardInfo()].sort(([a], [b]) => a.localeCompare(b)));
         if (key === cardInfoKey) return;
         cardInfoKey = key;

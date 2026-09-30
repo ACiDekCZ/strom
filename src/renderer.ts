@@ -19,7 +19,7 @@ import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
 import { CARD_SIZE, ViewMode, STANDALONE_VIEWS } from './types.js';
-import { ACTION_GLYPH, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, stateStripesHtml } from './card-signals.js';
+import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
 import {
     computeLayout,
@@ -969,6 +969,10 @@ class TreeRendererClass {
         const presumedDeceased = this.computePresumedDeceased();
         // At-a-glance signals (evidence, story, action badge): shared context.
         const signalCtx = this.signalContext();
+        // The agent's arcs turn in step (one phase for every card, kept across redraws).
+        const spinDelay = sharedPhaseDelay(AGENT_SPIN_MS, document.timeline?.currentTime as number ?? performance.now());
+        const renderedAt = Date.now();
+        this.observeTreeOnScreen();
 
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);
@@ -1017,7 +1021,7 @@ class TreeRendererClass {
                 classes += ' has-question';
             }
             const signals = cardSignalInfo(person, signalCtx);
-            if (signals.action) classes += ' has-signal';
+            if (signals.action || signals.showAgent || signals.doneSince !== null) classes += ' has-signal';
             card.className = classes;
             card.style.left = pos.x + 'px';
             card.style.top = pos.y + 'px';
@@ -1232,12 +1236,24 @@ class TreeRendererClass {
                 signals.showEvidence && signals.evidence ? signals.evidence.level : null,
                 signals.showStory ? signals.story : null);
             // The action badge on the avatar's corner (a dot on the card's
-            // corner where there is no avatar, or when zoomed far out).
+            // corner where there is no avatar, or when zoomed far out). Without
+            // a badge: the agent's arc circling the avatar (a small ring at the
+            // card's corner), or the check once it is done with the person.
             const signalLabel = signals.action ? this.signalText(signals, signals.action) : '';
-            const badgeHtml = signals.action
-                ? `<button type="button" class="card-signal signal-${signals.action}" data-signal="${signals.action}" aria-label="${this.escapeHtml(signalLabel)}">${ACTION_GLYPH[signals.action]}</button>`
-                : '';
-            const dotHtml = signals.action ? `<span class="card-signal-dot signal-${signals.action}" aria-hidden="true"></span>` : '';
+            let badgeHtml = '';
+            let dotHtml = '';
+            if (signals.action) {
+                badgeHtml = `<button type="button" class="card-signal signal-${signals.action}" data-signal="${signals.action}" aria-label="${this.escapeHtml(signalLabel)}">${ACTION_GLYPH[signals.action]}</button>`;
+                dotHtml = `<span class="card-signal-dot signal-${signals.action}" aria-hidden="true"></span>`;
+            } else if (signals.showAgent) {
+                badgeHtml = `<span class="card-agent" style="animation-delay:${spinDelay}" aria-hidden="true"></span>`;
+                dotHtml = `<span class="card-agent-dot" style="animation-delay:${spinDelay}" aria-hidden="true"></span>`;
+            } else if (signals.doneSince !== null) {
+                const since = Math.min(renderedAt - signals.doneSince, AGENT_DONE_MS + AGENT_DONE_FADE_MS);
+                const fade = `animation-delay:-${Math.max(0, since)}ms`;
+                badgeHtml = `<span class="card-signal card-done" style="${fade}" aria-hidden="true">✓</span>`;
+                dotHtml = `<span class="card-signal-dot card-done" style="${fade}" aria-hidden="true"></span>`;
+            }
 
             const avatarInner = showPhoto
                 ? `<img src="${this.escapeHtml(person.photo ?? '')}" alt="">`
@@ -1581,6 +1597,23 @@ class TreeRendererClass {
         };
     }
 
+    private treeObserver: IntersectionObserver | null = null;
+
+    /**
+     * The agent's arcs stop turning while the tree is off screen (one
+     * observer on the tree's container, not one per card; a hidden tab
+     * pauses them on its own).
+     */
+    private observeTreeOnScreen(): void {
+        if (this.treeObserver || typeof IntersectionObserver !== 'function') return;
+        const container = document.getElementById('tree-container');
+        if (!container) return;
+        this.treeObserver = new IntersectionObserver((entries) => {
+            for (const e of entries) container.classList.toggle('tree-offscreen', !e.isIntersecting);
+        });
+        this.treeObserver.observe(container);
+    }
+
     /** One person's signals, as their card shows them (the person menu leads with them). */
     cardSignalsFor(personId: PersonId): CardSignalInfo | null {
         const person = DataManager.getPerson(personId);
@@ -1588,12 +1621,13 @@ class TreeRendererClass {
     }
 
     /** One action signal in words (badge label, tooltip row). */
-    private signalText(s: CardSignalInfo, which: 'waiting' | 'conflict' | 'question' | 'agent'): string {
+    private signalText(s: CardSignalInfo, which: 'waiting' | 'conflict' | 'question' | 'agent' | 'queued'): string {
         const c = strings.card;
         const clip = (t: string): string => (t.length > 60 ? `${t.slice(0, 59).trimEnd()}…` : t);
         if (which === 'waiting') return c.ttWaiting(clip(s.waiting ?? ''));
         if (which === 'conflict') return c.ttConflicts(s.conflicts);
         if (which === 'question') return c.ttQuestion(clip(s.question ?? ''));
+        if (which === 'queued') return c.ttQueued(clip(s.queued ?? ''));
         return c.ttAgent(clip(s.agent ?? ''));
     }
 
@@ -1623,7 +1657,11 @@ class TreeRendererClass {
             ].filter(Boolean).join(' · ')));
         }
         if (s.question) rows.push(action(this.signalText(s, 'question')));
-        if (s.agent) rows.push(action(this.signalText(s, 'agent')));
+        // The agent: a still arc as its mark (it turns on the card only).
+        const agent = (text: string): string =>
+            `<div class="tt-line tt-agent"><span class="agent-mark" aria-hidden="true"></span>${this.escapeHtml(text)}</div>`;
+        if (s.agent) rows.push(agent(this.signalText(s, 'agent')));
+        else if (s.queued) rows.push(agent(this.signalText(s, 'queued')));
         return rows.join('');
     }
 
@@ -1636,7 +1674,7 @@ class TreeRendererClass {
         if (s.action === 'waiting') parts.push(c.ariaWaiting);
         else if (s.action === 'conflict') parts.push(c.ariaConflict);
         else if (s.action === 'question') parts.push(c.ariaQuestion);
-        else if (s.action === 'agent') parts.push(c.ariaAgent);
+        else if (s.showAgent) parts.push(c.ariaAgent);
         return parts.join(', ');
     }
 

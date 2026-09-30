@@ -57,14 +57,18 @@ export const cardSignalsUiMethods = uiModule({
             html += `<div class="menu-person-state">${stripes}${this.escapeHtml(bits.join(' · '))}</div>`;
         }
         if (s.action) html += this.personSignalBlockHtml(s, s.action, touch, itemClass);
+        else if (s.showAgent) html += this.personSignalBlockHtml(s, 'agent', touch, itemClass);
         return html;
     },
 
     /** The action block of the person menu: what waits, and where it leads. */
-    personSignalBlockHtml(s: CardSignalInfo, action: ActionSignal, touch: boolean, itemClass: string): string {
+    personSignalBlockHtml(s: CardSignalInfo, action: ActionSignal | 'agent', touch: boolean, itemClass: string): string {
         const c = strings.card;
         const r = strings.research;
-        const glyph = `<span class="menu-signal-glyph signal-${action}" aria-hidden="true">${ACTION_GLYPH[action]}</span>`;
+        // The agent's mark is its arc, still (it turns on the card only).
+        const glyph = action === 'agent'
+            ? '<span class="agent-mark" aria-hidden="true"></span>'
+            : `<span class="menu-signal-glyph signal-${action}" aria-hidden="true">${ACTION_GLYPH[action]}</span>`;
         let text = '';
         let go = '';
         if (action === 'waiting') {

@@ -46,7 +46,7 @@ const CHANGE = [
     'F0001 +child P0006',
 ];
 
-interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean; paused: Record<string, unknown> | null; workPerson: string; changeEntries: Record<string, unknown>[] | null }
+interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean; paused: Record<string, unknown> | null; workPerson: string; workDone: boolean; changeEntries: Record<string, unknown>[] | null }
 
 /** A bridge that sends one change of six lines, then keeps quiet. */
 async function follow(page: Page, size: { width: number; height: number } = { width: 1440, height: 900 },
@@ -67,12 +67,13 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
         events: true,
         paused: null,
         workPerson: 'P0012',
+        workDone: false,
         changeEntries: null,
     };
     setup(bridge);
     const status = () => ({
         tree: { id: UUID, name: 'Víškovi' }, head: bridge.gedCalls > 1 ? 'h2' : 'h1', persons: 3,
-        working: [{ who: 'agent-matriky', since: new Date(Date.now() - 16 * 60_000).toISOString(), ...(bridge.paused ? { paused: bridge.paused } : { task: 'Sčítání 1921', person: bridge.workPerson }) }],
+        working: bridge.workDone ? [] : [{ who: 'agent-matriky', since: new Date(Date.now() - 16 * 60_000).toISOString(), ...(bridge.paused ? { paused: bridge.paused } : { task: 'Sčítání 1921', person: bridge.workPerson }) }],
         waiting: bridge.waiting, links: ALL,
         queue: [{ id: 'T0101', text: 'Matriky Chlumy', state: 'next', person: 'P0001' }, { id: 'T0102', text: 'Pozemková kniha', state: 'next' }],
         queueMore: 3,
@@ -246,17 +247,90 @@ test.describe('the research says it in its language (text)', () => {
     });
 });
 
-test.describe('the agent badge', () => {
-    test('marks whom the agent works on now, not the people of its queue', async ({ page }) => {
+test.describe('the agent at work', () => {
+    test('an arc circles the avatar of whom it works on now; its queue only in the tooltip', async ({ page }) => {
         // Anna (no conflict of her own, which would come first) is worked on; Josef is only queued.
         await follow(page, { width: 1440, height: 900 }, (b) => { b.waiting = []; b.workPerson = 'P0002'; });
-        await expect(card(page, 'Anna').locator('.card-signal.signal-agent')).toHaveCount(1);
-        await expect(card(page, 'Josef').locator('.card-signal')).toHaveCount(0);
+        const anna = card(page, 'Anna');
+        const arc = anna.locator('.card-avatar-wrap .card-agent');
+        await expect(arc).toHaveCount(1);
+        await expect(arc).toHaveCSS('animation-name', 'agSpin');
+        await expect(anna.locator('.card-signal')).toHaveCount(0);
+        await expect(anna).toHaveAttribute('aria-label', /research is working on this person$/);
+        await expect(anna.locator('.card-tooltip .tt-agent')).toHaveText('Research working: Sčítání 1921');
+        const josef = card(page, 'Josef');
+        await expect(josef.locator('.card-agent')).toHaveCount(0);
+        await expect(josef.locator('.card-tooltip .tt-agent')).toHaveText('Queued: Matriky Chlumy');
+        // Every arc turns in the same phase: the delay comes from one clock.
+        expect(await arc.evaluate(el => (el as HTMLElement).style.animationDelay)).toMatch(/^-\d+ms$/);
+    });
+
+    test('the amber badge comes first: no arc, the agent in the tooltip', async ({ page }) => {
+        // Jan has an open conflict.
+        await follow(page, { width: 1440, height: 900 }, (b) => { b.waiting = []; });
+        const jan = card(page, 'Jan');
+        await expect(jan.locator('.card-tooltip .tt-agent')).toHaveText('Research working: Sčítání 1921');
+        await expect(jan.locator('.card-signal')).toHaveText('≠');
+        await expect(jan.locator('.card-agent')).toHaveCount(0);
+    });
+
+    test('reduced motion: the arc stands still but stays', async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await follow(page, { width: 1440, height: 900 }, (b) => { b.waiting = []; b.workPerson = 'P0002'; });
+        const arc = card(page, 'Anna').locator('.card-agent');
+        await expect(arc).toBeVisible();
+        await expect(arc).toHaveCSS('animation-name', 'none');
+    });
+
+    test('done: a check for a few seconds, then gone; none after a reload', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, (b) => { b.waiting = []; b.workPerson = 'P0002'; });
+        const anna = card(page, 'Anna');
+        await expect(anna.locator('.card-agent')).toHaveCount(1);
+        bridge.workDone = true;
+        const check = anna.locator('.card-signal.card-done');
+        await expect(check).toHaveText('✓', { timeout: 6000 });
+        await expect(anna.locator('.card-agent')).toHaveCount(0);
+        await expect(check).toHaveCount(0, { timeout: 7000 });
+        await page.reload();
+        await expect(page.locator('#live-panel')).toBeVisible();
+        await expect(card(page, 'Anna')).toBeVisible();
+        await page.waitForTimeout(500);
+        await expect(page.locator('.card-done')).toHaveCount(0);
+    });
+
+    test('done with a question for the user: straight to the amber badge', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, (b) => { b.waiting = []; b.workPerson = 'P0002'; });
+        const anna = card(page, 'Anna');
+        await expect(anna.locator('.card-agent')).toHaveCount(1);
+        bridge.waiting = [{ id: 'T0009', what: 'Potvrďte Annin rok narození', person: 'P0002', at: new Date().toISOString() }];
+        bridge.workDone = true;
+        await expect(anna.locator('.card-signal')).toHaveText('!', { timeout: 6000 });
+        await expect(anna.locator('.card-done')).toHaveCount(0);
+    });
+
+    test('compact and far zoom: a ring on the card corner, at least 8px on screen', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 }, (b) => { b.waiting = []; b.workPerson = 'P0002'; });
+        await page.evaluate(() => window.Strom.UI.setCardDensity('compact'));
+        const ring = card(page, 'Anna').locator('.card-agent-dot');
+        await expect(ring).toBeVisible();
+        // (Its own box: the turning ring's bounding box grows with the rotation.)
+        const onScreen = () => ring.evaluate(el => (el as HTMLElement).offsetWidth * window.Strom.ZoomPan.getScale());
+        // (Polled: a redraw may swap the card between two reads.)
+        await expect.poll(() => ring.evaluate(el => (el as HTMLElement).offsetWidth)).toBe(12);
+        await page.evaluate(() => window.Strom.UI.setCardDensity('normal'));
+        await expect.poll(async () => {
+            await page.evaluate(() => window.Strom.ZoomPan.zoomOut());
+            await page.waitForTimeout(260);
+            return page.evaluate(() => window.Strom.ZoomPan.getScale());
+        }, { timeout: 10000 }).toBeLessThan(0.55);
+        await expect(card(page, 'Anna').locator('.card-agent')).toBeHidden();
+        await expect(ring).toBeVisible();
+        await expect.poll(onScreen).toBeGreaterThanOrEqual(7.9);
     });
 });
 
 test.describe('a run waiting for its gate', () => {
-    test('is paused, not working: when it goes on, and no agent badge (a queued person gets none either)', async ({ page }) => {
+    test('is paused, not working: when it goes on, and no agent arc (a queued person gets none either)', async ({ page }) => {
         const until = new Date(Date.now() + 90 * 60_000);
         await follow(page, { width: 1440, height: 900 }, (b) => {
             b.waiting = [];
@@ -269,7 +343,8 @@ test.describe('a run waiting for its gate', () => {
         await expect(ov.locator('.research-overview__cell').first()).toHaveClass(/is-paused/);
         await expect(ov.locator('.research-overview__cell-value').first()).toHaveText('Paused');
         await expect(ov.locator('.research-overview__cell-sub').first()).toHaveText(/^resumes at /);
-        await expect(page.locator('.person-card .card-signal.signal-agent')).toHaveCount(0);
+        await expect(page.locator('.person-card .card-agent')).toHaveCount(0);
+        await expect(page.locator('.person-card .card-done')).toHaveCount(0);
     });
 });
 
