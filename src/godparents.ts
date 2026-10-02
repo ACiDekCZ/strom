@@ -117,6 +117,10 @@ export function recurringParticipants(data: StromData): RecurringParticipant[] {
         const subject = data.persons[union.person1Id] ?? data.persons[union.person2Id];
         if (!subject) continue;
         for (const part of union.participants ?? []) note(part, subject);
+        // The couple's events (banns, a contract) the same way: each event once.
+        for (const ev of union.events ?? []) {
+            for (const part of ev.participants ?? []) note(part, subject);
+        }
     }
 
     const out: RecurringParticipant[] = [];

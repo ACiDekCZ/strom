@@ -25,7 +25,7 @@
 import { researchHeaderLines } from './research-link.js';
 import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType } from './types.js';
 import { strings } from './strings.js';
-import { eventValueIsOnTag } from './events.js';
+import { COUPLE_EVENT_TAG, eventValueIsOnTag, sortCoupleEvents } from './events.js';
 import { placeKey } from './places.js';
 import { gedcomAge } from './recorded-age.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
@@ -704,6 +704,42 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 if (date) lines.push(`2 DATE ${date}`);
             }
             if (partnership.endPlace) pushPlace(lines, 2, partnership.endPlace, data.places);
+        }
+
+        // The couple's own events, each under its own tag (1 MARB, 1 CENS,
+        // 1 EVEN + 2 TYPE …) — never as lines of the note, so another program
+        // and the research read them as facts.
+        for (const event of sortCoupleEvents(partnership.events ?? [])) {
+            lines.push(`1 ${COUPLE_EVENT_TAG[event.type]}`);
+            if (event.type === 'custom') {
+                pushLongValue(lines, 2, 'TYPE', event.customLabel || strings.gedcomNotes.genericEvent);
+            }
+            if (event.date) {
+                const date = formatGedcomDate(event.date);
+                if (date) lines.push(`2 DATE ${date}`);
+            }
+            if (event.place) pushPlace(lines, 2, event.place, data.places);
+            pushDetails(lines, { cause: event.cause, address: event.address });
+            for (const [role, pid] of [['HUSB', husbId], ['WIFE', wifeId]] as const) {
+                const age = event.ages?.[pid]?.trim();
+                if (!age) continue;
+                lines.push(`2 ${role}`);
+                pushWrapped(lines, 3, 'AGE', gedcomAge(age));
+            }
+            if (event.note) pushNote(lines, 2, event.note);
+            for (const part of event.participants ?? []) {
+                const xref = part.personId ? personIdMap.get(part.personId) : undefined;
+                if (xref) {
+                    lines.push(`2 ASSO ${xref}`);
+                } else if (part.name) {
+                    pushWrapped(lines, 2, '_WITN', part.name);
+                } else {
+                    continue;
+                }
+                lines.push(`3 RELA ${GEDCOM_RELA[part.role]}`);
+                if (part.note) pushNote(lines, 3, part.note);
+            }
+            for (const srcId of event.sourceIds ?? []) pushCitation(2, srcId);
         }
 
         // A status MARR/DIV cannot say (partners, separated).

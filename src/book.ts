@@ -13,7 +13,7 @@ import { StromData, Person, PersonId, Partnership, Source, LifeEvent, Story, per
 import { applyLivingPrivacy, PrivacyMode } from './privacy.js';
 import { stripMedia } from './attachments.js';
 import { formatFlexDate, yearOf } from './dates.js';
-import { sortLifeEvents } from './events.js';
+import { sortCoupleEvents, sortLifeEvents } from './events.js';
 import { assignGenerations } from './generations.js';
 import { getStringsForLang } from './strings.js';
 import { personInitials } from './initials.js';
@@ -295,6 +295,35 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         return esc(line);
     };
 
+    // The couple's other events under the wedding: "22. 1. 1888 | Banns, Dolní
+    // Lhota. Witnesses Josef Kříž and Václav Dvořák (neighbour)." In date
+    // order, undated last; citations as footnotes. Nothing without events.
+    const coupleEventsHtml = (u: Partnership, cite: (sourceId: string) => string): string => {
+        const events = sortCoupleEvents(u.events ?? []);
+        if (events.length === 0) return '';
+        const rows = events.map(ev => {
+            const label = ev.type === 'custom' && ev.customLabel?.trim()
+                ? ev.customLabel.trim() : S.partnerEvents.types[ev.type];
+            const where = [ev.place?.trim(), ev.address?.trim()].filter(Boolean).join(' ');
+            const people = (ev.participants ?? []).map(part => {
+                const linked = part.personId ? persons[part.personId] : undefined;
+                const who = linked ? `${linked.firstName} ${linked.lastName}`.trim() : (part.name ?? '').trim();
+                return who ? (part.note?.trim() ? `${who} (${part.note.trim()})` : who) : '';
+            }).filter(Boolean);
+            const list = people.length > 1
+                ? `${people.slice(0, -1).join(', ')} ${B.and} ${people[people.length - 1]}` : people.join('');
+            const text = [
+                `${[label, where].filter(Boolean).join(', ')}.`,
+                list ? B.eventWitnesses(list) : '',
+                ev.note?.trim() ? (/[.!?…]$/.test(ev.note.trim()) ? ev.note.trim() : `${ev.note.trim()}.`) : '',
+            ].filter(Boolean).join(' ');
+            const refs = (ev.sourceIds ?? []).map(cite).join('');
+            const date = ev.date ? formatFlexDate(ev.date, lang) : S.partnerEvents.noDate;
+            return `<div class="book-couple-event"><span class="book-couple-event-date${ev.date ? '' : ' book-muted'}">${esc(date)}</span><span>${esc(text)}${refs}</span></div>`;
+        }).join('');
+        return `<div class="book-couple-events"><h3>${esc(S.partnerEvents.bookTitle)}</h3>${rows}</div>`;
+    };
+
     // Non-biological tie of a child to this couple (adopted, stepchild,
     // foster), naming the parent when only one of the two holds it.
     const childRelation = (c: Person, u: Partnership): string => {
@@ -329,6 +358,8 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
 
         const married = marriageLine(u);
         const coupleHtml = `${p1 ? personBlock(p1, cite) : ''}${p2 ? personBlock(p2, cite) : ''}`;
+        // After the couple, so the partners' own citations keep the first footnote numbers.
+        const coupleEvents = coupleEventsHtml(u, cite);
         const children = u.childIds.map(cid => {
             const c = persons[cid];
             if (!c) return '';
@@ -358,6 +389,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
             <h2><span class="book-chapter-num">${n}</span> ${name(p1)}${p2 ? ` <span class="book-amp">&amp;</span> ${name(p2)}` : ''}</h2>
             ${married ? `<div class="book-marriage-line">${married}</div>` : ''}
             ${u.note ? `<div class="book-marriage-note">${esc(u.note)}</div>` : ''}
+            ${coupleEvents}
             <div class="book-couple">${coupleHtml}</div>
             ${stories}
             ${children ? `<div class="book-children"><h3>${esc(B.children)}</h3><ul>${children}</ul></div>` : ''}
@@ -441,6 +473,10 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     .book-amp { color: var(--book-accent); }
     .book-marriage-line { font-size: 13.5px; color: #6b6154; margin: 4px 0 2px 30px; }
     .book-marriage-note { font-size: 13px; font-style: italic; color: #6b6154; margin: 2px 0 0 30px; }
+    .book-couple-events { margin: 10px 0 0 30px; }
+    .book-couple-events h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .14em; color: var(--book-accent); font-weight: normal; margin-bottom: 4px; }
+    .book-couple-event { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; font-size: 13.5px; line-height: 1.55; }
+    @media (max-width: 499px) { .book-couple-event { grid-template-columns: minmax(0, 1fr); gap: 0; margin-bottom: 4px; } }
     .book-couple { display: flex; gap: 24px; margin: 14px 0 0 30px; }
     .book-person { flex: 1; display: flex; gap: 10px; min-width: 0; }
     .book-portrait { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; flex: none; border: 1px solid var(--book-rule); }

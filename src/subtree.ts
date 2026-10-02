@@ -10,7 +10,7 @@
  * so the result is internally consistent and passes validation.
  */
 
-import { StromData, Person, PersonId, Partnership, PartnershipId, EventParticipant, personSourceIds } from './types.js';
+import { StromData, Person, PersonId, Partnership, PartnershipId, EventParticipant, personSourceIds, partnershipSourceIds } from './types.js';
 import { placeKey } from './places.js';
 
 /**
@@ -62,6 +62,7 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
         copy.childIds = copy.childIds.filter(c => kept.has(c));
         // Wedding witnesses follow the same rule as event participants.
         snapshotDepartedParticipants(copy.participants, kept, data);
+        for (const ev of copy.events ?? []) snapshotDepartedParticipants(ev.participants, kept, data);
         partnerships[uid] = copy;
         persons[union.person1Id]?.partnerships.push(uid);
         persons[union.person2Id]?.partnerships.push(uid);
@@ -75,7 +76,7 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
         p.attachments?.forEach(a => { if (a.sourceId) usedSources.add(a.sourceId); });
     }
     for (const u of Object.values(partnerships)) {
-        u.sourceIds?.forEach(s => usedSources.add(s));
+        partnershipSourceIds(u).forEach(s => usedSources.add(s));
     }
     const result: StromData = {
         persons: persons as StromData['persons'],
@@ -152,6 +153,7 @@ function collectSubtreePlaceKeys(data: StromData): Set<string> {
     for (const u of Object.values(data.partnerships)) {
         add(u.startPlace);
         add(u.endPlace);
+        u.events?.forEach(ev => add(ev.place));
     }
     return keys;
 }

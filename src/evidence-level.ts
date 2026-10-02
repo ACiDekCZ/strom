@@ -12,7 +12,7 @@
  * rules (src/stats.ts).
  */
 
-import { Partnership, Person, PersonId, StromData, personSourceIds } from './types.js';
+import { Partnership, Person, PersonId, StromData, personSourceIds, partnershipSourceIds } from './types.js';
 
 export type EvidenceLevel = 'none' | 'partial' | 'full';
 
@@ -57,7 +57,8 @@ export function personEvidence(
     const events = p.events ?? [];
     const personUnions = unions.get(p.id) ?? [];
     const sources = new Set<string>(personSourceIds(p));
-    for (const x of [...events, ...personUnions]) for (const s of x.sourceIds ?? []) sources.add(s);
+    for (const x of events) for (const s of x.sourceIds ?? []) sources.add(s);
+    for (const u of personUnions) for (const s of partnershipSourceIds(u)) sources.add(s);
 
     const birthEvents = events.filter(e => BIRTH_EVENTS.has(e.type));
     const hasBirth = !!p.birthDate || !!p.birthPlace?.trim() || birthEvents.length > 0;
@@ -84,7 +85,7 @@ export function treeHasAnySource(data: StromData): boolean {
         if (p.isPlaceholder) continue;
         if (personSourceIds(p).length > 0 || (p.events ?? []).some(cited)) return true;
     }
-    return Object.values(data.partnerships ?? {}).some(cited);
+    return Object.values(data.partnerships ?? {}).some(u => partnershipSourceIds(u).length > 0);
 }
 
 /** Every real person's level, for the Evidence mode's counts. */

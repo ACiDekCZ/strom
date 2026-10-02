@@ -27,11 +27,12 @@ import { dataUrlByteSize } from '../photo.js';
 import { totalExcerptBytes } from '../attachments.js';
 import { excerptFromDataUrl } from '../excerpts.js';
 import { openCropEditor, compressWholeImage, CropRegion } from './crop-editor.js';
+import { coupleEventLabel } from '../events.js';
 import { eventTypeLabel } from './person-events.js';
 
 /** What a citation applies to: a person, one of their events, or a partnership. */
 /** What a citation is made on: a person (as a whole, or their birth / death), one of their events, a union. */
-export type CitationContext = { personId: PersonId; eventId?: string; fact?: CitedFact } | { partnershipId: PartnershipId };
+export type CitationContext = { personId: PersonId; eventId?: string; fact?: CitedFact } | { partnershipId: PartnershipId; eventId?: string };
 
 /** An excerpt staged in the editor, with what only lives until the editor closes. */
 export interface ExcerptDraft {
@@ -335,6 +336,14 @@ export const sourcesMethods = uiModule({
             if (ref.kind === 'partnership') {
                 const u = DataManager.getData().partnerships[ref.partnershipId];
                 return u ? s.citedPartnership(personName(u.person1Id), personName(u.person2Id)) : '';
+            }
+            if (ref.kind === 'coupleEvent') {
+                const u = DataManager.getData().partnerships[ref.partnershipId];
+                const ev = DataManager.getCoupleEvent(ref.partnershipId, ref.eventId);
+                if (!u || !ev) return '';
+                const year = yearOf(ev.date);
+                return strings.partnerEvents.cited(`${coupleEventLabel(ev)}${year !== null ? ` (${year})` : ''}`,
+                    strings.partnerEvents.couple(personName(u.person1Id), personName(u.person2Id)));
             }
             if (ref.kind === 'event') {
                 const ev = DataManager.getPerson(ref.personId)?.events?.find(e => e.id === ref.eventId);
@@ -1007,7 +1016,7 @@ export const sourcesMethods = uiModule({
             this.renderFactSourcesChips('birth');
             this.renderFactSourcesChips('death');
         }
-        if (this.currentId && this.editingEventId) this.renderEventSourcesChips();
+        if (this.editingEventId && (this.currentId || this.coupleEventPartnershipId)) this.renderEventSourcesChips();
         if (document.getElementById('person-sources-modal')) this.renderPersonSourcesDialog();
     },
 
@@ -1018,6 +1027,13 @@ export const sourcesMethods = uiModule({
     },
 
     renderEventSourcesChips(): void {
+        const pid = this.coupleEventPartnershipId;
+        if (pid && this.editingEventId) {
+            const coupleEvent = DataManager.getCoupleEvent(pid, this.editingEventId);
+            this.renderSourceChips('event-sources-chips', coupleEvent?.sourceIds, 'unciteEventSource',
+                { partnershipId: pid, eventId: this.editingEventId });
+            return;
+        }
         if (!this.currentId || !this.editingEventId) return;
         const ev = DataManager.getPerson(this.currentId)?.events?.find(e => e.id === this.editingEventId);
         this.renderSourceChips('event-sources-chips', ev?.sourceIds, 'unciteEventSource',
@@ -1051,6 +1067,11 @@ export const sourcesMethods = uiModule({
     },
 
     unciteEventSource(sourceId: string): void {
+        if (this.coupleEventPartnershipId && this.editingEventId) {
+            DataManager.unciteCoupleEvent(this.coupleEventPartnershipId, this.editingEventId, sourceId);
+            this.refreshCitationChips();
+            return;
+        }
         if (!this.currentId || !this.editingEventId) return;
         DataManager.unciteEvent(this.currentId, this.editingEventId, sourceId);
         this.refreshCitationChips();
@@ -1125,6 +1146,11 @@ export const sourcesMethods = uiModule({
     },
 
     showSourcePickerForEvent(): void {
+        if (this.coupleEventPartnershipId && this.editingEventId) {
+            this.citationContext = { partnershipId: this.coupleEventPartnershipId, eventId: this.editingEventId };
+            this.openSourcePicker();
+            return;
+        }
         if (!this.currentId || !this.editingEventId) return;
         this.citationContext = { personId: this.currentId, eventId: this.editingEventId };
         this.openSourcePicker();
@@ -1204,6 +1230,7 @@ export const sourcesMethods = uiModule({
         const ctx = this.citationContext;
         if (!ctx) return [];
         if ('partnershipId' in ctx) {
+            if (ctx.eventId) return DataManager.getCoupleEvent(ctx.partnershipId, ctx.eventId)?.sourceIds ?? [];
             return DataManager.getData().partnerships[ctx.partnershipId]?.sourceIds ?? [];
         }
         const person = DataManager.getPerson(ctx.personId);
@@ -1219,7 +1246,8 @@ export const sourcesMethods = uiModule({
         const ctx = this.citationContext;
         if (!ctx) return;
         if ('partnershipId' in ctx) {
-            DataManager.citePartnership(ctx.partnershipId, sourceId);
+            if (ctx.eventId) DataManager.citeCoupleEvent(ctx.partnershipId, ctx.eventId, sourceId);
+            else DataManager.citePartnership(ctx.partnershipId, sourceId);
         } else if (ctx.eventId) {
             DataManager.citeEvent(ctx.personId, ctx.eventId, sourceId);
         } else {
@@ -1268,6 +1296,11 @@ export const sourcesMethods = uiModule({
         if ('partnershipId' in ctx) {
             const u = DataManager.getData().partnerships[ctx.partnershipId];
             if (!u) return '';
+            const coupleEvent = ctx.eventId ? DataManager.getCoupleEvent(ctx.partnershipId, ctx.eventId) : null;
+            if (coupleEvent) {
+                return withYear(`${coupleEventLabel(coupleEvent)} – ${strings.partnerEvents.couple(
+                    personName(u.person1Id), personName(u.person2Id))}`, coupleEvent.date);
+            }
             return withYear(strings.sources.newTitleMarriage(personName(u.person1Id), personName(u.person2Id)), u.startDate);
         }
         const name = personName(ctx.personId);

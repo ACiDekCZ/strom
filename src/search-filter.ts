@@ -9,6 +9,7 @@ import { yearOf } from './dates.js';
 import { isLivingPerson, inferBirthUpperBounds } from './privacy.js';
 import { normalizeName } from './merge/matching.js';
 import { nameMatchesQuery, surnameMatchesQuery } from './name-search.js';
+import { coupleEventLabel } from './events.js';
 
 export interface SearchCriteria {
     /** Free text matched against the full name. */
@@ -44,14 +45,18 @@ export interface DetailMatch {
     place?: string;
     /** The matching value as written ("cholera", "čp. 13"). */
     value: string;
+    /** A couple's event: its name in place of `type` ("Banns"). */
+    label?: string;
 }
 
 /**
  * The first cause or house of a person's events that contains `query`
  * (normalized, see normalizeName) — "cholera" finds everyone who died of it.
+ * With `data`, the person's couples' events count too: their name, place,
+ * house and note ("ohlášky", "čp. 13" find both partners).
  * Null when nothing matches or the query is shorter than three letters.
  */
-export function detailMatch(person: Person, query: string): DetailMatch | null {
+export function detailMatch(person: Person, query: string, data?: StromData | null): DetailMatch | null {
     if (query.length < 3) return null;
     const hit = (v?: string): boolean => !!v && normalizeName(v).includes(query);
     if (hit(person.deathCause)) return { type: 'death', date: person.deathDate, place: person.deathPlace, value: person.deathCause! };
@@ -62,6 +67,13 @@ export function detailMatch(person: Person, query: string): DetailMatch | null {
     if (hit(person.birthAddress)) return { type: 'birth', date: person.birthDate, place: person.birthPlace, value: person.birthAddress! };
     for (const ev of person.events ?? []) {
         if (hit(ev.address)) return { type: ev.type, date: ev.date, place: ev.place, value: ev.address! };
+    }
+    for (const unionId of data ? person.partnerships : []) {
+        for (const ev of data!.partnerships[unionId]?.events ?? []) {
+            const label = coupleEventLabel(ev);
+            const value = [label, ev.place, ev.address, ev.cause, ev.note].find(hit);
+            if (value) return { type: 'custom', label, date: ev.date, place: ev.place, value: value.trim() };
+        }
     }
     return null;
 }
@@ -89,7 +101,7 @@ export function filterPersons(data: StromData, criteria: SearchCriteria, current
     for (const person of Object.values(data.persons)) {
         if (person.isPlaceholder) continue;
 
-        if (q && !nameMatchesQuery(person, q, data) && !detailMatch(person, q)) continue;
+        if (q && !nameMatchesQuery(person, q, data) && !detailMatch(person, q, data)) continue;
         if (last && !surnameMatchesQuery(person, last, data)) continue;
         if (place && !personPlaces(person).some(pl => normalizeName(pl).includes(place))) continue;
         if (criteria.gender && person.gender !== criteria.gender) continue;

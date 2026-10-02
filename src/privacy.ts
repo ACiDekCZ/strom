@@ -80,6 +80,10 @@ export function stripNotes(data: StromData): StromData {
     for (const partnership of Object.values(copy.partnerships)) {
         delete partnership.note;
         delete partnership.story;
+        for (const ev of partnership.events ?? []) {
+            delete ev.note;
+            for (const part of ev.participants ?? []) delete part.note;
+        }
     }
     return copy;
 }
@@ -104,6 +108,7 @@ export function stripSources(data: StromData): StromData {
     }
     for (const partnership of Object.values(copy.partnerships)) {
         delete partnership.sourceIds;
+        for (const ev of partnership.events ?? []) delete ev.sourceIds;
     }
     return copy;
 }
@@ -229,8 +234,10 @@ export function inferBirthUpperBounds(data: StromData): Map<string, number> {
         for (const ev of p.events ?? []) tighten(p.id, yearOf(ev.date));
     }
     for (const u of Object.values(data.partnerships)) {
-        const wy = yearOf(u.startDate);
-        if (wy !== null) {
+        // The banns, a census of the household: dated like the wedding.
+        for (const date of [u.startDate, ...(u.events ?? []).map(e => e.date)]) {
+            const wy = yearOf(date);
+            if (wy === null) continue;
             tighten(u.person1Id, wy - MIN_MARRIAGE_AGE);
             tighten(u.person2Id, wy - MIN_MARRIAGE_AGE);
         }
@@ -312,6 +319,8 @@ function stripPartnershipDetails(partnership: Partnership, mode: PrivacyMode): v
     delete partnership.participants;
     delete partnership.story;
     delete partnership.sourceIds;
+    // The banns, the household at a census: dates, places, witnesses.
+    delete partnership.events;
     if (startYear !== null) partnership.startDate = String(startYear);
 }
 
@@ -340,6 +349,7 @@ export function applyLivingPrivacy(
     }
     for (const partnership of Object.values(copy.partnerships)) {
         delete partnership.sourceIds;
+        for (const ev of partnership.events ?? []) delete ev.sourceIds;
     }
 
     // Decide liveness BEFORE any transformation (the loop below strips the

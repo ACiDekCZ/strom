@@ -7,7 +7,7 @@
  * omitted. A living person's bar runs to `todayYear`.
  */
 
-import { StromData, Gender, LifeEventType } from './types.js';
+import { StromData, Gender, LifeEventType, CoupleEventType, PartnershipId } from './types.js';
 import { yearOf, parseFlexDate } from './dates.js';
 import { eventValueIsOnTag } from './events.js';
 import { isLivingPerson } from './privacy.js';
@@ -122,7 +122,7 @@ export function computeTimelineModel(
 // ==================== PERSON LIFELINE (R2) ====================
 
 /** The kinds of dated point on a single person's life timeline. */
-export type LifelineKind = 'birth' | 'death' | 'marriage' | 'child' | 'event';
+export type LifelineKind = 'birth' | 'death' | 'marriage' | 'child' | 'event' | 'coupleEvent';
 
 /**
  * One dated point on a person's life timeline (R2). Structured, not localized —
@@ -137,6 +137,12 @@ export interface LifelinePoint {
     kind: LifelineKind;
     /** Underlying life-event type (kind === 'event'). */
     eventType?: LifeEventType;
+    /** A couple's event (kind === 'coupleEvent'): its type and where it lives. */
+    coupleType?: CoupleEventType;
+    partnershipId?: PartnershipId;
+    eventId?: string;
+    /** The year column's text when it is not just `year` — a range ("1890–1900"). */
+    yearLabel?: string;
     /** Custom event label (eventType === 'custom'). */
     customLabel?: string;
     /**
@@ -146,7 +152,7 @@ export interface LifelinePoint {
      * out the only thing it was recorded for.
      */
     detail?: string;
-    /** Related person's name — the partner (marriage) or the child (child). */
+    /** Related person's name — the partner (marriage, couple event) or the child (child). */
     relatedName?: string;
     /** Participant names for an event (godparents, witnesses, the officiant…). */
     participants?: string[];
@@ -237,6 +243,34 @@ export function computePersonLifeline(data: StromData, personId: string): Lifeli
             ...(u.startPlace ? { place: u.startPlace } : {}),
             ...detailsOf({ address: u.address, age: u.ages?.[personId] }),
         });
+    }
+
+    // The couple's own events (banns, a census…), the other partner named.
+    for (const unionId of person.partnerships) {
+        const u = data.partnerships[unionId];
+        if (!u) continue;
+        const otherId = u.person1Id === personId ? u.person2Id : u.person1Id;
+        for (const ev of u.events ?? []) {
+            const d = parseFlexDate(ev.date);
+            if (!d) continue;
+            const participants = (ev.participants ?? [])
+                .map(part => personName(data, part.personId) ?? part.name?.trim())
+                .filter((n): n is string => !!n);
+            points.push({
+                year: d.year,
+                sortKey: d.year + yearFraction(ev.date),
+                kind: 'coupleEvent',
+                coupleType: ev.type,
+                partnershipId: u.id,
+                eventId: ev.id,
+                ...(d.end && d.end.year !== d.year ? { yearLabel: `${d.year}–${d.end.year}` } : {}),
+                ...(ev.customLabel ? { customLabel: ev.customLabel } : {}),
+                ...(personName(data, otherId) ? { relatedName: personName(data, otherId) } : {}),
+                ...(participants.length ? { participants } : {}),
+                ...(ev.place ? { place: ev.place } : {}),
+                ...detailsOf({ address: ev.address, age: ev.ages?.[personId] }),
+            });
+        }
     }
 
     // Each child's birth.

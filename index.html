@@ -2042,7 +2042,8 @@
         .partnership-grid input.invalid { border-color: var(--danger); }
         .partnership-grid .pg-links { display: flex; flex-wrap: wrap; gap: 4px 14px; }
         .partnership-grid .pg-links .detail-more,
-        .partnership-grid .pg-links .pg-add-end {
+        .partnership-grid .pg-links .pg-add-end,
+        .partnership-grid .pg-links .pg-add-event {
             background: none;
             border: none;
             padding: 2px 0;
@@ -2062,7 +2063,90 @@
             .partnership-grid .pg-ages { grid-template-columns: minmax(0, 1fr); }
             .partnership-grid input { padding: 10px; font-size: 16px; }
             .partnership-grid .pg-links .detail-more,
-            .partnership-grid .pg-links .pg-add-end { min-height: 44px; }
+            .partnership-grid .pg-links .pg-add-end,
+            .partnership-grid .pg-links .pg-add-event { min-height: 44px; }
+        }
+        /* The couple's own events under the wedding (banns, a census…): rows
+           like a person's events; on a phone one row that expands in place. */
+        .couple-events { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+        .couple-events-title { font-size: 12px; font-weight: 600; color: var(--text-light); }
+        .couple-events-list { display: flex; flex-direction: column; gap: 6px; }
+        .couple-events-toggle { display: none; }
+        .modal .couple-event-row {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+            width: 100%;
+            text-align: left;
+            padding: 7px 12px;
+            border: 1px solid var(--divider);
+            border-radius: 8px;
+            background: var(--surface);
+            color: var(--text);
+            font: inherit;
+            cursor: pointer;
+        }
+        .modal .couple-event-row:hover { background: var(--hover-bg); }
+        .modal .couple-event-row.readonly { cursor: default; }
+        .modal .couple-event-row.readonly:hover { background: var(--surface); }
+        .couple-event-main { font-size: 14px; line-height: 1.35; }
+        .couple-event-type { font-weight: 600; }
+        .couple-event-meta, .couple-event-dash { color: var(--text-light); }
+        .couple-event-sub { font-size: 12px; color: var(--text-faint); line-height: 1.35; }
+        .modal .couple-events .couple-event-add {
+            align-self: flex-start;
+            background: none;
+            border: none;
+            padding: 2px 0;
+            font: inherit;
+            font-size: 13px;
+            color: var(--primary);
+            text-decoration: underline dotted;
+            text-underline-offset: 3px;
+            cursor: pointer;
+        }
+        @media (max-width: 499px) {
+            .couple-events-title { display: none; }
+            .modal .couple-events-toggle {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                width: 100%;
+                min-height: 44px;
+                padding: 0 12px;
+                border: none;
+                border-radius: 8px;
+                background: var(--surface-2);
+                color: var(--text);
+                font: inherit;
+                text-align: left;
+                cursor: pointer;
+            }
+            .couple-events-toggle-title { font-size: 14px; font-weight: 600; flex: none; }
+            .couple-events-toggle-summary {
+                font-size: 13px; color: var(--text-light);
+                flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            }
+            .couple-events-toggle-chev { flex: none; color: var(--text-light); }
+            .couple-events-list { display: none; }
+            .couple-events.expanded .couple-events-list { display: flex; }
+            .couple-event-main { display: flex; flex-direction: column; font-size: 15px; }
+            .couple-event-meta { font-size: 14px; }
+            .couple-event-dash { display: none; }
+            .modal .couple-events .couple-event-add { min-height: 44px; }
+        }
+        /* The event editor holding a couple's event: the couple under the
+           title, each partner's age in its own field. */
+        #event-editor-modal .modal-header { flex-wrap: wrap; }
+        .event-editor-subtitle { flex-basis: 100%; margin: 2px 0 0; font-size: 13px; color: var(--text-light); }
+        .event-editor-subtitle[hidden], .event-status-note[hidden] { display: none; }
+        .event-status-note { margin: 6px 0 0; font-size: 12px; color: var(--text-light); line-height: 1.4; }
+        .event-couple-ages { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+        .event-couple-ages[hidden], .event-couple-ages .pg-age[hidden], .event-person-age[hidden] { display: none; }
+        .event-couple-ages .age-check { margin-top: 4px; }
+        @media (max-width: 499px) {
+            .event-couple-ages { grid-template-columns: minmax(0, 1fr); }
         }
         .partnership-primary-label {
             display: flex;
@@ -3252,6 +3336,11 @@
             line-height: 1.4;
         }
         .pm-lifeline-place { color: var(--text-light, #5c5546); }
+        /* A range ("1890–1900", a couple's residence) needs a wider year column. */
+        .pm-lifeline-body.has-ranges .pm-lifeline-year { min-width: 76px; }
+        .pm-lifeline-row.is-link { cursor: pointer; border-radius: var(--r-md); }
+        .pm-lifeline-row.is-link:hover { background: var(--hover-bg); }
+        .pm-lifeline-row.is-link:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .pm-lifeline-glyph.k-birth { color: var(--male, #5b7f9e); }
         .pm-lifeline-glyph.k-death { color: var(--text-light, #5c5546); }
         .pm-lifeline-glyph.k-marriage { color: #d4a017; }
@@ -9988,6 +10077,10 @@
         /* Source picker + editor open ABOVE whatever dialog cited them
            (person modal, relationships panel) — DOM order is not enough. */
         #source-picker-modal, #source-editor-modal { z-index: 250; }
+        /* The event editor opens above the relationships panel too (a couple's
+           event), and the person picker it opens above the editor. */
+        #event-editor-modal { z-index: 210; }
+        #participant-picker-modal { z-index: 220; }
         /* Source picker */
         .source-picker-search { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
         /* "Supports: Person / Birth / Death" — only when citing from the person's sources. */
@@ -11495,10 +11588,12 @@
             <div class="modal-header">
                 <h2 id="event-editor-title" data-i18n="events.addTitle"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeEventEditor()">&times;</button>
+                <p class="event-editor-subtitle" id="event-editor-subtitle" hidden></p>
             </div>
             <div class="form-group">
                 <label for="input-event-type" data-i18n="events.type"></label>
                 <select id="input-event-type"></select>
+                <p class="event-status-note" id="event-status-note" hidden></p>
             </div>
             <div class="form-group" id="event-custom-label-group" style="display:none;">
                 <label for="input-event-custom-label" data-i18n="events.customLabel"></label>
@@ -11521,9 +11616,22 @@
                 </div>
                 <div class="form-grid detail-row">
                     <div class="form-group detail-field" data-detail="age">
-                        <label for="input-event-age" data-i18n="fields.age"></label>
-                        <input type="text" id="input-event-age" autocomplete="off" data-i18n-placeholder="fields.agePh" aria-describedby="event-age-check">
-                        <div class="age-check" id="event-age-check" hidden></div>
+                        <label for="input-event-age" id="event-age-label" data-i18n="fields.age"></label>
+                        <div class="event-person-age">
+                            <input type="text" id="input-event-age" autocomplete="off" data-i18n-placeholder="fields.agePh" aria-describedby="event-age-check">
+                            <div class="age-check" id="event-age-check" hidden></div>
+                        </div>
+                        <!-- A couple's event: each partner's age, the partner named under the field. -->
+                        <div class="event-couple-ages pg-ages" hidden>
+                            <div class="pg-age">
+                                <input type="text" id="input-event-age-1" class="event-couple-age" autocomplete="off" data-i18n-placeholder="fields.agePh" aria-describedby="event-age-check-1">
+                                <div class="age-check" id="event-age-check-1" hidden></div>
+                            </div>
+                            <div class="pg-age">
+                                <input type="text" id="input-event-age-2" class="event-couple-age" autocomplete="off" data-i18n-placeholder="fields.agePh" aria-describedby="event-age-check-2">
+                                <div class="age-check" id="event-age-check-2" hidden></div>
+                            </div>
+                        </div>
                     </div>
                     <div class="form-group detail-field" data-detail="address">
                         <label for="input-event-address" data-i18n="fields.address"></label>
@@ -11537,8 +11645,8 @@
                 <textarea id="input-event-note" rows="2" autocomplete="off"></textarea>
             </div>
             <div class="form-group" id="event-participants-section">
-                <label data-i18n="events.participants"></label>
-                <p class="field-hint" data-i18n="events.participantsHint"></p>
+                <label id="event-participants-label" data-i18n="events.participants"></label>
+                <p class="field-hint" id="event-participants-hint" data-i18n="events.participantsHint"></p>
                 <div id="event-participants-list" class="participants-list"></div>
                 <button type="button" class="secondary" onclick="window.Strom.UI.addEventParticipantRow()" data-i18n="events.addParticipant"></button>
             </div>
@@ -11548,6 +11656,7 @@
                 <button type="button" class="secondary" id="btn-cite-event" onclick="window.Strom.UI.showSourcePickerForEvent()" data-i18n="sources.cite"></button>
             </div>
             <div class="buttons">
+                <button type="button" class="pm-delete-link" id="btn-delete-event" onclick="window.Strom.UI.deleteEventFromEditor()" data-i18n="events.delete" hidden></button>
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeEventEditor()" data-i18n="buttons.cancel"></button>
                 <button class="primary" onclick="window.Strom.UI.saveEventFromModal()" data-i18n="buttons.save"></button>
             </div>

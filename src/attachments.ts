@@ -5,7 +5,7 @@
  * inline so they travel with the single-file export.
  */
 
-import { Person, StromData, personSourceIds } from './types.js';
+import { Person, StromData, personSourceIds, partnershipSourceIds } from './types.js';
 import { dataUrlByteSize, stripPhotos } from './photo.js';
 
 /** Longest edge (px) an attached image is downscaled to. */
@@ -120,7 +120,7 @@ export function personMedia(person: Person, data: StromData): PersonMedia {
     for (const ev of person.events ?? []) for (const id of ev.sourceIds ?? []) cited.add(id);
     for (const u of Object.values(data.partnerships)) {
         if (u.person1Id !== person.id && u.person2Id !== person.id) continue;
-        for (const id of u.sourceIds ?? []) cited.add(id);
+        for (const id of partnershipSourceIds(u)) cited.add(id);
     }
     for (const id of cited) {
         for (const exc of data.sources?.[id]?.excerpts ?? []) {

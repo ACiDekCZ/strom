@@ -605,9 +605,10 @@ describe('MyHeritage export quirks (M1, real-export shapes)', () => {
         expect(jana.events!.find(e => e.type === 'residence')!.note).toBe('E-mail: jana@example.com');
     });
 
-    it('ENGA becomes a partnership note', () => {
+    it('ENGA becomes the couple\'s engagement event', () => {
         const u = Object.values(importGed(MH).partnerships)[0];
-        expect(u.note).toContain('Engagement: 1964-01-01');
+        expect(u.events?.find(e => e.type === 'engagement')?.date).toBe('1964-01-01');
+        expect(u.note ?? '').not.toContain('1964');
     });
 
     it('URL media refs: primary portrait first, url flag set, query stripped from name', () => {
@@ -1000,14 +1001,13 @@ describe('standard facts with no field of their own are kept as notes', () => {
         expect(jan.notes).toContain('Volná poznámka ze souboru.');
     });
 
-    it('puts what was recorded about the couple on the couple', () => {
+    it('puts what was recorded about the couple on the couple, as its events', () => {
         const union = Object.values(importGed(GED).partnerships)[0];
-        expect(union.note).toMatch(/18|4/);          // the banns date, formatted
-        expect(union.note).toContain('Lučice');
-        // A fact with nothing but its own tag still earns its line: the
-        // register said it happened, and that is the fact.
-        expect(union.note!.split('\n').some(l => l.trim().length > 0
-            && !l.includes('Lučice'))).toBe(true);
+        expect(union.events?.find(e => e.type === 'banns')).toMatchObject({ date: '1886-04-18', place: 'Lučice' });
+        // An event with nothing but its own tag is still kept: the register
+        // said it happened, and that is the fact.
+        expect(union.events?.some(e => e.type === 'annulment')).toBe(true);
+        expect(union.note ?? '').not.toContain('Lučice');
     });
 
     it('leaves the platform bookkeeping alone', () => {

@@ -137,8 +137,8 @@ describe('the published GEDCOM import contract', () => {
         expect(union(imported()).participants?.length).toBeGreaterThan(0);
     });
 
-    it('folds a fact with no field of its own into the couple\'s note, labelled', () => {
-        expect(union(imported()).note ?? '').toContain('1886');
+    it('reads the banns as an event of the couple', () => {
+        expect(union(imported()).events?.[0]).toMatchObject({ type: 'banns', date: '1886-04-18' });
     });
 
     it('survives the round-trip the document tells exporters to check', () => {
@@ -150,6 +150,7 @@ describe('the published GEDCOM import contract', () => {
         expect(groom(twice).birthDate).toBe(groom(once).birthDate);
         expect(groom(twice).notes).toBe(groom(once).notes);
         expect(union(twice).note).toBe(union(once).note);
+        expect(union(twice).events?.map(({ id: _, ...e }) => e)).toEqual(union(once).events?.map(({ id: _, ...e }) => e));
         expect(groom(twice).story).toEqual(groom(once).story);
 
         const trade = (e: Person) => (e.events ?? []).find(x => x.type === 'occupation')?.note;

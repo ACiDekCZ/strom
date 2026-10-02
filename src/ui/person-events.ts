@@ -269,12 +269,16 @@ export const personEventsMethods = uiModule({
         // An event that names someone shows the field whatever its type is —
         // re-check here, because the rows are what decides it.
         const typeSelect = document.getElementById('input-event-type') as HTMLSelectElement | null;
-        this.updateEventParticipantsVisibility((typeSelect?.value || 'custom') as LifeEventType);
+        if (!this.coupleEventPartnershipId) {
+            this.updateEventParticipantsVisibility((typeSelect?.value || 'custom') as LifeEventType);
+        }
     },
 
     addEventParticipantRow(): void {
-        // Baptism is the common case, so godparent is the useful default.
-        this.eventParticipants.push({ id: generateParticipantId(), role: 'godparent', name: '' });
+        // Baptism is the common case, so godparent is the useful default; at
+        // a couple's banns or contract it is a witness.
+        this.eventParticipants.push({ id: generateParticipantId(),
+            role: this.coupleEventPartnershipId ? 'witness' : 'godparent', name: '' });
         this.renderEventParticipants();
         (document.querySelector('.participant-row:last-child .participant-name') as HTMLInputElement | null)?.focus();
     },
@@ -290,7 +294,8 @@ export const personEventsMethods = uiModule({
             this.renderEventParticipants();
             return;
         }
-        const personId = await this.pickPerson(strings.events.participantLink, this.currentId ?? undefined);
+        const personId = await this.pickPerson(strings.events.participantLink,
+            this.coupleEventPartnershipId ? undefined : this.currentId ?? undefined);
         if (!personId) return;
         row.personId = personId;
         // Keep a name snapshot beside the link: the display prefers the live
@@ -322,6 +327,8 @@ export const personEventsMethods = uiModule({
     showAddEventModal(): void {
         if (!this.currentId) return;
         if (DataManager.isPersonLocked(this.currentId)) return;
+        this.coupleEventPartnershipId = null;
+        this.setCoupleEditorMode(null);
         this.editingEventId = null;
         this.eventParticipants = [];
         this.eventParticipantsPinned = false;
@@ -340,6 +347,8 @@ export const personEventsMethods = uiModule({
         const person = DataManager.getPerson(this.currentId);
         const event = person?.events?.find(e => e.id === eventId);
         if (!event) return;
+        this.coupleEventPartnershipId = null;
+        this.setCoupleEditorMode(null);
         this.editingEventId = eventId;
         // A copy: editing the rows must not touch the stored event until Save.
         this.eventParticipants = (event.participants ?? []).map(p => ({ ...p }));
@@ -491,6 +500,7 @@ export const personEventsMethods = uiModule({
             val('input-event-type'), val('input-event-custom-label'), val('input-event-date'),
             val('input-event-place'), val('input-event-note'), this.collectEventParticipants(),
             ...DETAIL_KEYS.map(k => val(`input-event-${k}`)),
+            val('input-event-age-1'), val('input-event-age-2'),
         ]);
     },
 
@@ -518,11 +528,13 @@ export const personEventsMethods = uiModule({
             this.dialogStack.pop();
         }
         this.editingEventId = null;
+        this.coupleEventPartnershipId = null;
         this.eventEditorSnapshot = null;
     },
 
     /** Validate and persist the event editor, then refresh the list. */
     saveEventFromModal(): void {
+        if (this.coupleEventPartnershipId) { this.saveCoupleEventFromModal(); return; }
         if (!this.currentId) return;
         const typeSelect = document.getElementById('input-event-type') as HTMLSelectElement | null;
         const labelInput = document.getElementById('input-event-custom-label') as HTMLInputElement | null;

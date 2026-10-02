@@ -4,8 +4,9 @@
  * read-only in the UI, synthesized from those fields.
  */
 
-import { LifeEvent, LifeEventType } from './types.js';
-import { yearOf } from './dates.js';
+import { CoupleEvent, CoupleEventType, LifeEvent, LifeEventType } from './types.js';
+import { dateSortKey, yearOf } from './dates.js';
+import { strings } from './strings.js';
 
 /**
  * Event types a user can add (birth/death excluded — they are first-class),
@@ -93,4 +94,75 @@ export function sortLifeEvents(events: LifeEvent[]): LifeEvent[] {
         if (ya !== yb) return ya - yb;
         return a.id.localeCompare(b.id);
     });
+}
+
+// ==================== COUPLE EVENTS ====================
+
+/** The groups of the couple event editor's type list, in the order a marriage runs. */
+export type CoupleEventGroup = 'before' | 'during' | 'end' | 'other';
+export const COUPLE_EVENT_GROUPS: readonly { group: CoupleEventGroup; types: readonly CoupleEventType[] }[] = [
+    { group: 'before', types: ['engagement', 'banns', 'marriageLicence', 'marriageContract', 'marriageSettlement'] },
+    { group: 'during', types: ['residence', 'census'] },
+    { group: 'end', types: ['divorceFiled', 'annulment'] },
+    { group: 'other', types: ['custom'] },
+];
+
+/** Every couple event type, in the editor's order (also the tie-break of sorting). */
+export const COUPLE_EVENT_TYPES: readonly CoupleEventType[] = COUPLE_EVENT_GROUPS.flatMap(g => g.types);
+
+/** What a couple's event is called: its own label when custom, else the type's name. */
+export function coupleEventLabel(event: Pick<CoupleEvent, 'type' | 'customLabel'>): string {
+    if (event.type === 'custom' && event.customLabel?.trim()) return event.customLabel.trim();
+    return strings.partnerEvents.types[event.type];
+}
+
+/** The GEDCOM tag under FAM each type is written as ('custom' rides on EVEN + TYPE). */
+export const COUPLE_EVENT_TAG: Readonly<Record<CoupleEventType, string>> = {
+    engagement: 'ENGA', banns: 'MARB', marriageLicence: 'MARL', marriageContract: 'MARC',
+    marriageSettlement: 'MARS', residence: 'RESI', census: 'CENS',
+    divorceFiled: 'DIVF', annulment: 'ANUL', custom: 'EVEN',
+};
+
+/** The couple event type a FAM tag reads as, or null. */
+export function coupleEventTypeOfTag(tag: string): CoupleEventType | null {
+    for (const type of COUPLE_EVENT_TYPES) if (COUPLE_EVENT_TAG[type] === tag) return type;
+    return null;
+}
+
+export function isCoupleEventType(value: unknown): value is CoupleEventType {
+    return typeof value === 'string' && (COUPLE_EVENT_TYPES as readonly string[]).includes(value);
+}
+
+/**
+ * Which details a couple event offers behind the quiet link (a filled one
+ * shows whatever the type): a cause only where something ended, each
+ * partner's age where a record states it (banns, a census), a house always.
+ */
+export function coupleEventDetails(type: CoupleEventType): ('cause' | 'ages' | 'address')[] {
+    switch (type) {
+        case 'custom': return ['cause', 'ages', 'address'];
+        case 'divorceFiled':
+        case 'annulment': return ['cause', 'address'];
+        case 'banns':
+        case 'census': return ['ages', 'address'];
+        default: return ['address'];
+    }
+}
+
+/**
+ * Chronological order: by the start of the date, equal dates in the order of
+ * the type list, undated events last in the order they were written down.
+ */
+export function sortCoupleEvents(events: readonly CoupleEvent[]): CoupleEvent[] {
+    const order = (e: CoupleEvent) => COUPLE_EVENT_TYPES.indexOf(e.type);
+    return events
+        .map((event, index) => ({ event, index }))
+        .sort((a, b) => {
+            const ka = dateSortKey(a.event.date);
+            const kb = dateSortKey(b.event.date);
+            if (!ka || !kb) return !ka && !kb ? a.index - b.index : (ka ? -1 : 1);
+            if (ka !== kb) return ka < kb ? -1 : 1;
+            return order(a.event) - order(b.event) || a.index - b.index;
+        })
+        .map(x => x.event);
 }

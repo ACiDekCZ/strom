@@ -23,7 +23,7 @@ import {
     LAST_FOCUSED,
     LastFocusedMarker
 } from '../types.js';
-import { newestLifeEvent } from '../events.js';
+import { coupleEventLabel, newestLifeEvent } from '../events.js';
 import { strings } from '../strings.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import { compressPhoto, dataUrlByteSize, rotatePhotoDataUrl } from '../photo.js';
@@ -789,16 +789,33 @@ export const personModalMethods = uiModule({
         const head = document.getElementById('pm-lifeline-head');
         if (head) head.setAttribute('aria-expanded', 'true');
 
+        // A couple's event opens its editor (over this dialog) unless the tree is locked.
+        const editable = !DataManager.isTreeLocked();
+        body.classList.toggle('has-ranges', points.some(pt => pt.yearLabel));
         body.innerHTML = points.map(pt => {
             const desc = this.lifelineDescription(pt);
-            const extra = eventDetailLine(pt.details, true);
-            return `<div class="pm-lifeline-row">`
-                + `<span class="pm-lifeline-year">${pt.year}</span>`
+            let extra = eventDetailLine(pt.details, true);
+            if (pt.kind === 'coupleEvent' && pt.participants?.length) {
+                extra = [extra, strings.partnerEvents.witnesses(pt.participants.join(', '))].filter(Boolean).join(' · ');
+            }
+            const link = pt.kind === 'coupleEvent' && editable && pt.partnershipId && pt.eventId
+                ? ` is-link" role="button" tabindex="0" data-partnership-id="${this.escapeHtml(pt.partnershipId)}" data-event-id="${this.escapeHtml(pt.eventId)}`
+                : '';
+            return `<div class="pm-lifeline-row${link}">`
+                + `<span class="pm-lifeline-year">${this.escapeHtml(pt.yearLabel ?? String(pt.year))}</span>`
                 + `<span class="pm-lifeline-glyph k-${pt.kind}">${this.lifelineGlyph(pt)}</span>`
                 + `<span class="pm-lifeline-desc">${desc}${extra
                     ? `<span class="event-details-line">${this.escapeHtml(extra)}</span>` : ''}</span>`
                 + `</div>`;
         }).join('');
+        body.querySelectorAll<HTMLElement>('.pm-lifeline-row.is-link').forEach(row => {
+            const open = () => this.showEditCoupleEventModal(
+                row.dataset.partnershipId as PartnershipId, row.dataset.eventId ?? '');
+            row.addEventListener('click', open);
+            row.addEventListener('keydown', (e: KeyboardEvent) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+            });
+        });
     },
 
     /** Collapse / expand the life-timeline section (R2). */
@@ -823,6 +840,11 @@ export const personModalMethods = uiModule({
                 return `${pt.relatedName ? pm.lifelineMarried(this.escapeHtml(pt.relatedName)) : pm.lifelineMarriedUnknown}${place}`;
             case 'child':
                 return pt.relatedName ? pm.lifelineChild(this.escapeHtml(pt.relatedName)) : pm.lifelineChildUnknown;
+            case 'coupleEvent': {
+                // "Banns — Marie Dvořáková · Dolní Lhota"; witnesses and house go below.
+                const label = this.escapeHtml(coupleEventLabel({ type: pt.coupleType ?? 'custom', customLabel: pt.customLabel }));
+                return `${pt.relatedName ? pm.lifelinePartnerEvent(label, this.escapeHtml(pt.relatedName)) : label}${place}`;
+            }
             default: {
                 const label = pt.eventType === 'custom'
                     ? (pt.customLabel || strings.events.types.custom)
@@ -852,6 +874,9 @@ export const personModalMethods = uiModule({
                 return svg('<circle cx="9" cy="13" r="5"/><circle cx="15" cy="13" r="5"/>');
             case 'child':
                 return svg('<circle cx="12" cy="7" r="3"/><path d="M7 21c0-3 2.2-5 5-5s5 2 5 5"/>');
+            case 'coupleEvent':
+                // Only the wedding carries the rings; the couple's other events no mark.
+                return svg('');
             default:
                 switch (pt.eventType) {
                     case 'baptism':

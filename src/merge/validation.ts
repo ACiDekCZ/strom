@@ -195,6 +195,15 @@ function cleanDanglingReferences(data: StromData): string[] {
             if (!personIds.has(childId)) warnings.push(`invalidPartnershipChildRef:${id}:${childId}`);
         }
         partnership.childIds = partnership.childIds.filter(cid => personIds.has(cid));
+        // A couple's events name people the same way (witnesses at the banns).
+        for (const event of partnership.events ?? []) {
+            for (const part of event.participants ?? []) {
+                if (part.personId && !personIds.has(part.personId)) {
+                    warnings.push(`invalidParticipantRef:${id}:${part.personId}`);
+                    delete part.personId;
+                }
+            }
+        }
     }
 
     return warnings;

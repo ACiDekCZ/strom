@@ -751,6 +751,11 @@ export const encryptionUiMethods = uiModule({
         for (const partnership of Object.values(data.partnerships)) {
             if (partnership.note) notesSlice.push(partnership.note);
             if (partnership.sourceIds) sourcesSlice.push(partnership.sourceIds);
+            for (const ev of partnership.events ?? []) {
+                if (ev.note) notesSlice.push(ev.note);
+                if (ev.sourceIds) sourcesSlice.push(ev.sourceIds);
+                for (const part of ev.participants ?? []) if (part.note) notesSlice.push(part.note);
+            }
         }
         const base = this.byteLength(JSON.stringify(
             applyContentOptions(data, { photos: false, attachments: false, notes: false, sources: false })));

@@ -12,6 +12,9 @@ import {
     StromData,
     LifeEvent,
     EventParticipant,
+    CoupleEvent,
+    generateLifeEventId,
+    partnershipParticipants,
     Attachment,
     Source,
     generatePersonId,
@@ -430,6 +433,10 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                     newPartnership.ages = Object.fromEntries(Object.entries(newPartnership.ages)
                         .map(([pid, age]) => [mapping.persons.get(pid as PersonId) ?? pid, age]));
                 }
+                // The couple's events: their people and ages too.
+                for (const ev of newPartnership.events ?? []) {
+                    remapCoupleEvent(ev, mapping.persons, state.incomingData.persons);
+                }
 
                 mergedData.partnerships[newPshipId] = newPartnership;
 
@@ -463,7 +470,7 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             }
         }
         for (const partnership of Object.values(mergedData.partnerships)) {
-            for (const part of partnership.participants ?? []) {
+            for (const part of partnershipParticipants(partnership)) {
                 if (part.personId && !mergedData.persons[part.personId]) delete part.personId;
             }
         }
@@ -653,7 +660,24 @@ function remapSourceReferences(data: StromData, remap: Map<string, string>): voi
     }
     for (const partnership of Object.values(data.partnerships)) {
         if (partnership.sourceIds) partnership.sourceIds = fix(partnership.sourceIds);
+        for (const ev of partnership.events ?? []) {
+            if (ev.sourceIds) ev.sourceIds = fix(ev.sourceIds);
+        }
     }
+}
+
+/** A couple's event from the incoming tree: its people and its ages keyed by the merged tree's ids. */
+function remapCoupleEvent(ev: CoupleEvent, idMap: Map<PersonId, PersonId>, incomingPersons: Record<PersonId, Person>): void {
+    if (ev.participants) remapParticipants(ev.participants, idMap, incomingPersons);
+    if (ev.ages) {
+        ev.ages = Object.fromEntries(Object.entries(ev.ages)
+            .map(([pid, age]) => [idMap.get(pid as PersonId) ?? pid, age]));
+    }
+}
+
+/** What makes two couple events the same record (see eventKey). */
+function coupleEventKey(ev: CoupleEvent): string {
+    return [ev.type, ev.date ?? '', contentKey(ev.place), contentKey(ev.customLabel), contentKey(ev.note)].join('\u0001');
 }
 
 /**
@@ -963,6 +987,27 @@ export function mergePartnershipData(
             if (have.has(who(part))) continue;
             list.push(part);
             have.add(who(part));
+        }
+    }
+
+    // The couple's events: union by what they say (the same banns imported
+    // twice stay one); a twin keeps the citations of both.
+    if (incoming.events && incoming.events.length > 0) {
+        const list = (existing.events ??= []);
+        const byContent = new Map(list.map(e => [coupleEventKey(e), e] as const));
+        const ids = new Set(list.map(e => e.id));
+        for (const event of incoming.events) {
+            const twin = byContent.get(coupleEventKey(event));
+            if (twin) {
+                if (event.sourceIds?.length) twin.sourceIds = [...new Set([...(twin.sourceIds ?? []), ...event.sourceIds])];
+                continue;
+            }
+            const cloned = structuredClone(event);
+            if (ids.has(cloned.id)) cloned.id = generateLifeEventId();
+            if (personIdMap) remapCoupleEvent(cloned, personIdMap, incomingPersons ?? {});
+            list.push(cloned);
+            ids.add(cloned.id);
+            byContent.set(coupleEventKey(cloned), cloned);
         }
     }
 

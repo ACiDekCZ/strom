@@ -554,9 +554,50 @@ export interface Partnership {
     participants?: EventParticipant[];
     /** The couple's chapter in the family book (GEDCOM _STORY on FAM). */
     story?: Story;
+    /**
+     * What a record says about the couple besides the wedding and the divorce
+     * (which stay fields above): banns, a contract, a census of the household…
+     */
+    events?: CoupleEvent[];
     // Primary partnership flag - when person has multiple partnerships,
     // this one is shown by default (unless viewing from child's perspective)
     isPrimary?: boolean;
+}
+
+/**
+ * Kinds of event recorded about a couple. The wedding and the divorce are not
+ * here: they are the partnership's own fields (startDate, endDate…).
+ */
+export type CoupleEventType =
+    | 'engagement' | 'banns' | 'marriageLicence' | 'marriageContract' | 'marriageSettlement'
+    | 'residence' | 'census'
+    | 'divorceFiled' | 'annulment'
+    | 'custom';
+
+/**
+ * One event of a couple — a life event of two people. The same shape as a
+ * person's LifeEvent, except the age: a record gives each partner's age, so
+ * it is kept by person id, like Partnership.ages.
+ */
+export interface CoupleEvent {
+    id: string;
+    type: CoupleEventType;
+    /** Label for type === 'custom' (GEDCOM EVEN > TYPE). */
+    customLabel?: string;
+    /** Flex date (see src/dates.ts). */
+    date?: string;
+    place?: string;
+    /** Cause as the record gives it (CAUS), e.g. of an annulment. */
+    cause?: string;
+    /** Each partner's age as recorded, by person id (HUSB / WIFE > AGE). */
+    ages?: Record<string, string>;
+    /** House or address (ADDR). */
+    address?: string;
+    note?: string;
+    /** Ids of Source entries citing this event. */
+    sourceIds?: string[];
+    /** Witnesses and others the record names. */
+    participants?: EventParticipant[];
 }
 
 /** The partnership fields the relationships panel edits (DataManager.updatePartnership). */
@@ -578,6 +619,16 @@ export function personSourceIds(p: Pick<Person, PersonCitationField>): string[] 
     return [...new Set(PERSON_CITATION_FIELDS.flatMap(f => p[f] ?? []))];
 }
 
+/** Every source a couple's citations name (the union itself and each of its events), once each. */
+export function partnershipSourceIds(u: Pick<Partnership, 'sourceIds' | 'events'>): string[] {
+    return [...new Set([...(u.sourceIds ?? []), ...(u.events ?? []).flatMap(e => e.sourceIds ?? [])])];
+}
+
+/** Everyone a couple's records name: the wedding witnesses and the people at each of its events. */
+export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'events'>): EventParticipant[] {
+    return [...(u.participants ?? []), ...(u.events ?? []).flatMap(e => e.participants ?? [])];
+}
+
 /**
  * Current StromData format version.
  * v2 (2026-07): added optional Person.events (life events).
@@ -597,10 +648,13 @@ export function personSourceIds(p: Pick<Person, PersonCitationField>): string[] 
  *   deathAge / deathAddress; LifeEvent.cause / age / address;
  *   Partnership.address / ages / endPlace (the divorce place); the waiting
  *   new version of an approved story (Story.draft).
+ * v10 (2026-10): the couple's own events — Partnership.events (banns, a
+ *   marriage contract, a census of the household…), which used to be folded
+ *   into the couple's note as text lines.
  * All additive/backward-compatible for reading; the bump makes an older app
  * warn ("newer version") before it silently drops the new fields on re-save.
  */
-export const STROM_DATA_VERSION = 9;
+export const STROM_DATA_VERSION = 10;
 
 /**
  * Coordinates of one place, kept in the tree's own file so a place is looked up

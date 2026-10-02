@@ -74,7 +74,9 @@ export function refreshDetailGroup(group: HTMLElement, offered: DetailKey[], rea
         group.dataset.open = '1';
         refreshDetailGroup(group, offered, readOnly);
         const first = hidden.map(k => fieldOf(group, k)).find(Boolean);
-        first?.querySelector<HTMLInputElement>('input, textarea')?.focus();
+        // The first input on screen (a couple's event hides the single age input).
+        const inputs = [...(first?.querySelectorAll<HTMLInputElement>('input, textarea') ?? [])];
+        (inputs.find(i => !i.closest('[hidden]')) ?? inputs[0])?.focus();
     };
 }
 

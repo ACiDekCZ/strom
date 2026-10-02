@@ -163,8 +163,10 @@ describe('GEDCOM from a research tool', () => {
         expect(informant).toMatchObject({ role: 'other', note: 'Informant' });
     });
 
-    it("records the family's residence in the couple's note", () => {
-        expect(union(data).note).toContain(`${g.factLabels.RESI}: čp. 12`);
+    it("records the family's residence as the couple's residence event", () => {
+        const residence = union(data).events?.find(e => e.type === 'residence');
+        expect(residence?.address).toBe('čp. 12');
+        expect(union(data).note ?? '').not.toContain('čp. 12');
     });
 
     it('reads a stepfather and an own mother from _FREL/_MREL', () => {

@@ -3,7 +3,7 @@
  * Smart heuristics to detect genealogical inconsistencies and data errors
  */
 
-import { StromData, Person, Partnership, PersonId, PartnershipId, Source, personSourceIds } from './types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, Source, personSourceIds, partnershipSourceIds, partnershipParticipants } from './types.js';
 import { parseFlexDate, FlexDate } from './dates.js';
 import { collectPlaces } from './places.js';
 import { godparentLeads } from './godparents.js';
@@ -415,7 +415,7 @@ function checkOrphanedReferences(
         }
         // Wedding witnesses linked to a person who no longer exists (same
         // class as the event participants above; review S6).
-        for (const part of partnership.participants ?? []) {
+        for (const part of partnershipParticipants(partnership)) {
             if (part.personId && !personIds.has(part.personId)) {
                 const couple = `${getPersonName(data.persons[partnership.person1Id])} & ${getPersonName(data.persons[partnership.person2Id])}`;
                 const who = part.name?.trim()
@@ -931,7 +931,7 @@ function checkSourceIntegrity(data: StromData, addIssue: AddIssue): void {
     const missing = (ids?: string[]) => (ids ?? []).filter(id => !sourceIds.has(id));
 
     for (const partnership of Object.values(data.partnerships)) {
-        for (const id of missing(partnership.sourceIds)) {
+        for (const id of missing(partnershipSourceIds(partnership))) {
             addIssue('warning', 'citationMissingSource',
                 `partnership citation points to a source that no longer exists`,
                 [partnership.person1Id, partnership.person2Id], undefined, id);

@@ -51,6 +51,7 @@ import { bottomSheetMethods } from './bottom-sheet.js';
 
 import { personModalMethods } from './person-modal.js';
 import { personEventsMethods } from './person-events.js';
+import { coupleEventsMethods } from './couple-events-ui.js';
 import { sourcesMethods, CitationContext, ExcerptDraft } from './sources.js';
 import { attachmentsMethods } from './attachments-ui.js';
 import { duplicateSuggestMethods } from './duplicate-suggest.js';
@@ -205,6 +206,14 @@ export class UIClass {
 
     // Life-events editor state: the event being edited, or null when adding.
     editingEventId: string | null = null;
+    /**
+     * Set while the editor holds a couple's event (banns, a census…) instead
+     * of a person's: the partnership it belongs to. editingEventId is then the
+     * couple event's id.
+     */
+    coupleEventPartnershipId: PartnershipId | null = null;
+    /** Partnerships whose events list is expanded on a phone (until the panel closes). */
+    expandedCoupleEvents: Set<string> = new Set();
     /** Participants being edited; held here until the event is saved. */
     eventParticipants: EventParticipant[] = [];
     /**
@@ -398,6 +407,10 @@ Object.assign(UIClass.prototype, personModalMethods);
 type PersonEventsMethods = typeof personEventsMethods;
 export interface UIClass extends PersonEventsMethods {}
 Object.assign(UIClass.prototype, personEventsMethods);
+
+type CoupleEventsMethods = typeof coupleEventsMethods;
+export interface UIClass extends CoupleEventsMethods {}
+Object.assign(UIClass.prototype, coupleEventsMethods);
 
 type SourcesMethods = typeof sourcesMethods;
 export interface UIClass extends SourcesMethods {}

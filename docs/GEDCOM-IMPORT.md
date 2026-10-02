@@ -277,8 +277,50 @@ not its label, and is kept in the event's note:
   `DIV`, the only place other programs look for them.
 - `SOUR` on the family (with `PAGE`, `QUAY`) cites the couple — a family known
   only from a grandchild's baptism is cited this way.
-- `RESI` on the family becomes a line in the couple's note, `ADDR` included:
-  "Residence: čp. 12 · 1910 · Kamenice nad Lipou".
+
+### The couple's other events
+
+Everything recorded about the couple besides the wedding and the divorce is an
+event of the couple, with the same parts as a person's event:
+
+```
+1 MARB
+2 DATE 22 JAN 1888
+2 PLAC Dolní Lhota
+2 ADDR čp. 7
+2 HUSB
+3 AGE 24y
+2 WIFE
+3 AGE 19y
+2 _WITN Josef Kříž
+3 RELA Witness
+2 SOUR @S12@
+3 PAGE fol. 3
+2 NOTE Ohlášky třikrát.
+1 EVEN
+2 TYPE Křest dítěte manželů
+2 SOUR @S13@
+3 PAGE rubrika matky
+```
+
+| Tag | Event |
+|---|---|
+| `ENGA` | engagement |
+| `MARB` | banns |
+| `MARL` | marriage licence |
+| `MARC` | marriage contract |
+| `MARS` | marriage settlement |
+| `RESI` | the couple's residence |
+| `CENS` | a census of the household |
+| `DIVF` | divorce filed |
+| `ANUL` | annulment (the couple's status is not changed by it) |
+| `EVEN` + `TYPE` | anything else, `TYPE` as its name |
+
+Under each: `DATE`, `PLAC`, `ADDR`, `CAUS`, each partner's age as
+`HUSB` / `WIFE` > `AGE`, `NOTE`, witnesses as `_WITN` / `ASSO` (with `RELA`),
+citations as `SOUR` (with `PAGE`, `QUAY`). Strom writes them back the same way,
+never as lines of the couple's note. `NCHI` on the family is the only couple
+fact still kept as a note line.
 
 ## Sources
 
@@ -409,7 +451,7 @@ only by case, accents or punctuation, and it can carry coordinates:
 ## What Strom does with the rest
 
 Facts with no field of their own are **not dropped**. They join the person's or
-the couple's note as a labelled line — "Banns: 18. 4. 1886 · Lučice".
+the couple's note as a labelled line — "Number of children: 4".
 
 **Which record a tag hangs on decides whether it is read at all.** Each of
 these is understood in one place only:
@@ -417,10 +459,11 @@ these is understood in one place only:
 | Under | Tags |
 |---|---|
 | `INDI` | `BLES` `RETI` `CAST` `DSCR` `IDNO` `NCHI` `NMR` `PROP` `SSN` `FACT` `ALIA` |
-| `FAM` | `MARB` `MARC` `MARL` `MARS` `ANUL` `DIVF` `CENS` `NCHI` `RESI` |
+| `FAM` | `NCHI` |
 
-So write the banns as `MARB` **inside the family**: on a person the tag is not
-recognised and the fact is lost. The same holds for the events above — `MARR`
+The couple's events (above) are read only **inside the family** too: write the
+banns as `MARB` under the `FAM` — on a person the tag is not recognised and the
+fact is lost. The same holds for the events above — `MARR`
 and `DIV` are read on a `FAM`, `OCCU`, `RESI` and `RELI` on an `INDI`. If you
 are marrying someone whose spouse is not in the data, do not give them a
 `MARR`; write an `EVEN` with a `TYPE` instead.

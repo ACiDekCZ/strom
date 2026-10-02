@@ -577,7 +577,7 @@ function reconcileRelations(data: StromData): void {
             }
             return child.parentIds.includes(u.person1Id) || child.parentIds.includes(u.person2Id);
         }))];
-        for (const part of u.participants ?? []) {
+        for (const part of [...(u.participants ?? []), ...(u.events ?? []).flatMap(e => e.participants ?? [])]) {
             if (part.personId && !persons[part.personId]) delete part.personId;
         }
     }

@@ -51,8 +51,8 @@ function byName(data: StromData, firstName: string): Person {
 }
 
 describe('data version 9: register details', () => {
-    it('is the current version', () => {
-        expect(STROM_DATA_VERSION).toBe(9);
+    it('is part of the current version', () => {
+        expect(STROM_DATA_VERSION).toBeGreaterThanOrEqual(9);
     });
 
     describe('GEDCOM export → import', () => {

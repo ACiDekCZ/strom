@@ -25,6 +25,8 @@ import {
     PartnershipStatus,
     StromData,
     LifeEvent,
+    CoupleEvent,
+    CoupleEventType,
     EventParticipant,
     Story,
     LifeEventType,
@@ -51,7 +53,7 @@ import { dateSortKey, formatFlexDate, normalizeDateInput } from './dates';
 import { readDateWords } from './date-words';
 import { localAge } from './recorded-age';
 import { placeKey } from './places';
-import { eventValueIsOnTag } from './events';
+import { coupleEventTypeOfTag, eventValueIsOnTag } from './events';
 import { strings, getStringsForLang } from './strings';
 import { SURNAME_GROUPS_MARKER, SURNAME_GROUP_SEP } from './ged-exporter';
 import { excerptFromDataUrl } from './excerpts';
@@ -437,8 +439,9 @@ function isMilitaryLabel(label: string): boolean {
  */
 const NOTED_INDI_TAGS = new Set(['BLES', 'RETI', 'CAST', 'DSCR', 'IDNO', 'NCHI',
     'NMR', 'PROP', 'SSN', 'FACT', 'ALIA']);
-const NOTED_FAM_TAGS = new Set(['MARB', 'MARC', 'MARL', 'MARS', 'ANUL', 'DIVF',
-    'CENS', 'EVEN', 'NCHI', 'RESI']);
+// The couple's events (banns, a contract, a census…) are events of their own
+// since data version 10 (see coupleEventTypeOfTag); only the count is left.
+const NOTED_FAM_TAGS = new Set(['NCHI']);
 
 /** A fact being read: its value on the tag line, its date and place below it. */
 interface RawNoteFact {
@@ -571,6 +574,24 @@ interface RawEvent {
     /** GEDCOM ids (@Sx@) of sources cited on this event. */
     sourceRefs?: string[];
     /** Godparents / witnesses: ASSO (a person ref) or _WITN (a bare name). */
+    participants?: RawParticipant[];
+    /** `1 EVEN value`: the value on the tag line, kept when a TYPE takes the label. */
+    tagValue?: string;
+}
+
+/** An event of the couple under FAM (MARB, CENS, EVEN…), as the file gave it. */
+interface RawCoupleEvent {
+    type: CoupleEventType;
+    customLabel?: string;
+    date?: string;
+    place?: string;
+    cause?: string;
+    /** HUSB / WIFE > AGE. */
+    husbAge?: string;
+    wifeAge?: string;
+    address?: string;
+    note?: string;
+    sourceRefs?: string[];
     participants?: RawParticipant[];
     /** `1 EVEN value`: the value on the tag line, kept when a TYPE takes the label. */
     tagValue?: string;
@@ -726,8 +747,8 @@ interface GedcomIndividual {
 /** Raw GEDCOM family record */
 interface GedcomFamily {
     id: string;
-    /** ENGA date (engagement) — lands in the partnership note. */
-    engagementDate: string;
+    /** The couple's events besides the wedding and the divorce (ENGA, MARB, CENS, EVEN…). */
+    events: RawCoupleEvent[];
     husb: string | null;
     wife: string | null;
     children: string[];
@@ -1393,6 +1414,9 @@ export function parseGedcom(content: string): ParsedGedcom {
     let currentEvent: RawEvent | null = null;
     /** Level-2 tag inside the current event (for level-3 NOTE continuations). */
     let currentEventSubTag: string | null = null;
+    /** The couple's event currently open under a FAM, and the level-2 tag inside it. */
+    let currentFamEvent: RawCoupleEvent | null = null;
+    let currentFamEventSubTag: string | null = null;
     /** The 1 _STORY block currently open, and the level-2 tag inside it. */
     let currentStory: RawStory | null = null;
     let currentStorySubTag: string | null = null;
@@ -1437,8 +1461,11 @@ export function parseGedcom(content: string): ParsedGedcom {
             }
             if (currentSubTag === 'BIRT') return line => { indi.notes = join(indi.notes, strings.gedcomNotes.birthNote(line)); };
             if (currentSubTag === 'DEAT') return line => { indi.notes = join(indi.notes, strings.gedcomNotes.deathNote(line)); };
+        } else if (currentType === 'FAM' && currentFamEvent) {
+            const ev = currentFamEvent;
+            return line => { ev.note = join(ev.note ?? '', line); };
         } else if (currentType === 'FAM' && currentRecord
-            && (currentSubTag === 'MARR' || currentSubTag === 'DIV' || currentSubTag === 'ENGA')) {
+            && (currentSubTag === 'MARR' || currentSubTag === 'DIV')) {
             const fam = currentRecord as GedcomFamily;
             return line => { fam.note = join(fam.note, line); };
         }
@@ -1466,6 +1493,13 @@ export function parseGedcom(content: string): ParsedGedcom {
                 const field = key === 'cause' ? 'deathCause' : key === 'age' ? 'deathAge' : 'deathAddress';
                 return { get: () => indi[field], set: v => { indi[field] = v; } };
             }
+        } else if (currentType === 'FAM' && currentFamEvent) {
+            const ev = currentFamEvent;
+            if (partner) {
+                const field = partner === 'HUSB' ? 'husbAge' : 'wifeAge';
+                return { get: () => ev[field], set: v => { ev[field] = v; } };
+            }
+            if (key !== 'age') return { get: () => ev[key], set: v => { ev[key] = v; } };
         } else if (currentType === 'FAM' && currentRecord && currentSubTag === 'MARR') {
             const fam = currentRecord as GedcomFamily;
             if (partner) {
@@ -1595,6 +1629,11 @@ export function parseGedcom(content: string): ParsedGedcom {
             // 1 MARR / 2 HUSB / 3 AGE 25y — each partner's age at the wedding.
             const done = detailTarget(tag, currentFactSubTag);
             if (done) openDetail = { level, text: value, done, sep: ' ' };
+        } else if (level === 3 && tag === 'AGE' && currentType === 'FAM' && currentFamEvent
+            && (currentFamEventSubTag === 'HUSB' || currentFamEventSubTag === 'WIFE')) {
+            // 1 MARB / 2 HUSB / 3 AGE 25y — each partner's age at the banns.
+            const done = detailTarget(tag, currentFamEventSubTag);
+            if (done) openDetail = { level, text: value, done, sep: ' ' };
         }
 
         if (level === 0) {
@@ -1673,7 +1712,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     divorced: false,
                     unionEvents: [],
                     note: '',
-                    engagementDate: '',
+                    events: [],
                     sourceRefs: [],
                     marriageParticipants: [],
                     childRels: new Map(),
@@ -1691,6 +1730,8 @@ export function parseGedcom(content: string): ParsedGedcom {
             currentSubTag = null;
             currentEvent = null;
             currentEventSubTag = null;
+            currentFamEvent = null;
+            currentFamEventSubTag = null;
             currentFactSubTag = null;
             currentStory = null;
             currentStorySubTag = null;
@@ -1795,6 +1836,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentSubTag = tag;
                 currentEvent = null;
                 currentEventSubTag = null;
+                currentFamEvent = null;
+                currentFamEventSubTag = null;
                 currentFactSubTag = null;
                 currentStory = null;
                 currentStorySubTag = null;
@@ -1998,16 +2041,31 @@ export function parseGedcom(content: string): ParsedGedcom {
                             fam.story = newStory();
                             currentStory = fam.story;
                             break;
-                        case 'ENGA':
-                            fam.engagementDate = value === 'Y' ? '?' : '';
-                            break;
-                        default:
+                        default: {
+                            const coupleType = coupleEventTypeOfTag(tag);
+                            if (coupleType) {
+                                // Banns, a contract, a census, a custom event:
+                                // an event of the couple, with its date, place,
+                                // witnesses and citations like a person's.
+                                const ev: RawCoupleEvent = { type: coupleType };
+                                const lineValue = value && value !== 'Y' ? value : '';
+                                if (coupleType === 'custom') {
+                                    ev.customLabel = lineValue || strings.gedcomNotes.genericEvent;
+                                    if (lineValue) ev.tagValue = lineValue;
+                                } else if (lineValue) {
+                                    ev.note = lineValue;
+                                }
+                                fam.events.push(ev);
+                                currentFamEvent = ev;
+                                break;
+                            }
                             if (NOTED_FAM_TAGS.has(tag)) {
                                 fam.noteFacts.push({ tag, value, date: '', place: '' });
                             } else if (!KNOWN_FAM_TAGS.has(tag) && !IGNORED_BOOKKEEPING_TAGS.has(tag)) {
                                 drop(tag);
                             }
                             break;
+                        }
                     }
                 }
             } else if (currentResearch && level >= 2 && currentType === 'INDI') {
@@ -2301,8 +2359,31 @@ export function parseGedcom(content: string): ParsedGedcom {
                             fam.divorceDate = parseGedcomDate(value);
                             lastUnionEvent(fam, 'divorce', fam.divorceDate);
                         }
-                    } else if (currentSubTag === 'ENGA') {
-                        if (tag === 'DATE') fam.engagementDate = parseGedcomDate(value);
+                    } else if (currentFamEvent) {
+                        const ev = currentFamEvent;
+                        currentFamEventSubTag = tag;
+                        if (tag === 'DATE') ev.date = parseGedcomDate(value);
+                        else if (tag === 'PLAC') { if (value && !ev.place) ev.place = value; }
+                        else if (tag === 'TYPE' && ev.type === 'custom' && value) {
+                            // 1 EVEN / 2 TYPE Křest dítěte manželů — the TYPE is
+                            // the label; a value on the EVEN line is the content.
+                            ev.customLabel = value;
+                            if (ev.tagValue) {
+                                ev.note = ev.note ? `${ev.tagValue}\n${ev.note}` : ev.tagValue;
+                                delete ev.tagValue;
+                            }
+                        } else if (tag === 'SOUR' && value) {
+                            (ev.sourceRefs ??= []).push(value);
+                            currentCitationId = value;
+                        } else if (tag === 'NOTE') {
+                            ev.note = ev.note ? `${ev.note}\n${value}` : value;
+                        } else if (tag === 'CONC' || tag === 'CONT') {
+                            ev.note = (ev.note ?? '') + (tag === 'CONT' ? '\n' : '') + value;
+                        } else if (tag === 'ASSO' && value) {
+                            (ev.participants ??= []).push({ ref: value });
+                        } else if ((tag === '_WITN' || tag === 'WITN') && value) {
+                            (ev.participants ??= []).push({ name: value, rela: WITNESS_RELA });
+                        }
                     } else if (currentSubTag === 'NOTE') {
                         if (tag === 'CONT') fam.note += '\n' + value;
                         else if (tag === 'CONC') fam.note += value;
@@ -2359,6 +2440,26 @@ export function parseGedcom(content: string): ParsedGedcom {
                 if (last) {
                     if (tag === 'RELA') last.rela = value;
                     else if (tag === 'NOTE') last.note = value;
+                }
+            } else if (level === 3 && currentType === 'FAM' && currentFamEvent) {
+                // Under a couple's event: a note's continuation, a witness's
+                // role, a citation's page and quality.
+                const ev = currentFamEvent;
+                const sub = currentFamEventSubTag;
+                if (sub === 'NOTE' && (tag === 'CONT' || tag === 'CONC')) {
+                    ev.note = (ev.note ?? '') + (tag === 'CONT' ? '\n' : '') + value;
+                } else if (sub === 'ASSO' || sub === '_WITN' || sub === 'WITN') {
+                    const last = ev.participants?.[ev.participants.length - 1];
+                    if (last) {
+                        if (tag === 'RELA') last.rela = value;
+                        else if (tag === 'NOTE') last.note = value;
+                    }
+                } else if (sub === 'SOUR' && currentCitationId) {
+                    if (tag === 'PAGE') {
+                        if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
+                    } else if (tag === 'QUAY') {
+                        noteQuay(currentCitationId, value);
+                    }
                 }
             } else if (level === 3 && currentMedia && currentMediaSubTag === 'FILE' && tag === 'CONC') {
                 // Data-URL payloads are CONC-wrapped (255-char physical lines).
@@ -2819,13 +2920,30 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (fam.note) partnership.note = fam.note;
         applyUnionOutcome(partnership, fam);
 
-        if (fam.engagementDate && fam.engagementDate !== '?') {
-            const line = strings.gedcomNotes.engagement(fam.engagementDate);
-            partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
+        // Banns, a contract, a census…: the couple's own events.
+        if (fam.events.length > 0) {
+            partnership.events = fam.events.map((ev): CoupleEvent => {
+                const out: CoupleEvent = { id: generateLifeEventId(), type: ev.type };
+                if (ev.customLabel) out.customLabel = ev.customLabel;
+                if (ev.date) out.date = ev.date;
+                if (ev.place) out.place = ev.place;
+                if (ev.cause) out.cause = ev.cause;
+                const evAges: Record<string, string> = {};
+                if (ev.husbAge) evAges[husbId] = ev.husbAge;
+                if (ev.wifeAge && wifeId !== husbId) evAges[wifeId] = ev.wifeAge;
+                if (Object.keys(evAges).length > 0) out.ages = evAges;
+                if (ev.address) out.address = ev.address;
+                if (ev.note) out.note = ev.note;
+                const refs = mapRefs(ev.sourceRefs);
+                if (refs.length > 0) out.sourceIds = refs;
+                const parts = (ev.participants ?? []).map(toWitness)
+                    .filter((p): p is EventParticipant => !!p);
+                if (parts.length > 0) out.participants = parts;
+                return out;
+            });
         }
 
-        // Banns, a marriage contract, an annulment: recorded about the couple,
-        // with no field of their own (see NOTED_FAM_TAGS).
+        // The number of children as the file states it: no field of its own.
         for (const fact of fam.noteFacts) {
             const line = factToNoteLine(fact);
             partnership.note = partnership.note ? `${partnership.note}\n${line}` : line;
@@ -2867,6 +2985,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             }
         }
         if (!into.story && from.story) into.story = from.story;
+        if (from.events?.length) into.events = [...(into.events ?? []), ...from.events];
     };
     const unionOfCouple = new Map<string, PartnershipId>();
 

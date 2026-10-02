@@ -9,7 +9,7 @@ import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId, Source } from '../types.js';
 import { yearOf } from '../dates.js';
-import { sortLifeEvents } from '../events.js';
+import { coupleEventLabel, sortCoupleEvents, sortLifeEvents } from '../events.js';
 import { storyProseHtml } from '../story-text.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
@@ -97,6 +97,15 @@ function personSourceRows(personId: PersonId): SourceRow[] {
             label: strings.personSources.citeUnion(year), ctx: { partnershipId: u.id }, year,
             title: strings.sources.citedPartnership(fullName(u.person1Id), fullName(u.person2Id)),
         });
+        // The couple's events (banns, a census): "Banns 1888".
+        for (const ev of sortCoupleEvents(u.events ?? [])) {
+            const evYear = yearOf(ev.date);
+            add(ev.sourceIds, {
+                label: withYear(coupleEventLabel(ev), evYear), ctx: { partnershipId: u.id, eventId: ev.id }, year: evYear,
+                title: strings.partnerEvents.cited(coupleEventLabel(ev),
+                    strings.partnerEvents.couple(fullName(u.person1Id), fullName(u.person2Id))),
+            });
+        }
     }
     const byYear = (a: number | null, b: number | null) => (a ?? Infinity) - (b ?? Infinity);
     const list = [...rows.values()];

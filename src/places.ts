@@ -68,7 +68,10 @@ export function collectPlaces(data: StromData, personFilter?: ReadonlySet<Person
         // A wedding place belongs to both partners; one of them being on screen
         // is enough for the wedding to belong on the map.
         const couple = [union.person1Id, union.person2Id].filter(kept);
-        if (couple.length > 0) add(union.startPlace, couple);
+        if (couple.length === 0) continue;
+        add(union.startPlace, couple);
+        add(union.endPlace, couple);
+        for (const ev of union.events ?? []) add(ev.place, couple);
     }
 
     // The display spelling is the one used most (stable tiebreak: alphabetical).
@@ -123,6 +126,10 @@ export function renamePlace(data: StromData, fromKey: string, to: string): { dat
         person.deathPlace = swap(person.deathPlace);
         for (const ev of person.events ?? []) ev.place = swap(ev.place);
     }
-    for (const union of Object.values(copy.partnerships)) union.startPlace = swap(union.startPlace);
+    for (const union of Object.values(copy.partnerships)) {
+        union.startPlace = swap(union.startPlace);
+        union.endPlace = swap(union.endPlace);
+        for (const ev of union.events ?? []) ev.place = swap(ev.place);
+    }
     return { data: copy, changed };
 }

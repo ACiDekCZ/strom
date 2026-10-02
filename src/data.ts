@@ -15,6 +15,8 @@ import {
     generatePersonId,
     generateLifeEventId,
     LifeEvent,
+    CoupleEvent,
+    partnershipParticipants,
     generateSourceId,
     generateParticipantId,
     ParticipantRole,
@@ -33,6 +35,7 @@ import {
     PlaceGeo,
     PartnershipUpdates,
 } from './types.js';
+import { isCoupleEventType } from './events.js';
 import { strings, getCurrentLanguage, getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
 import { TreeManager } from './tree-manager.js';
 import { isEncrypted, EncryptedData, decrypt } from './crypto.js';
@@ -105,7 +108,8 @@ export function personCitationField(fact?: CitedFact | null): PersonCitationFiel
 export type SourceCitationRef =
     | { kind: 'person'; personId: PersonId; fact?: CitedFact }
     | { kind: 'event'; personId: PersonId; eventId: string }
-    | { kind: 'partnership'; partnershipId: PartnershipId };
+    | { kind: 'partnership'; partnershipId: PartnershipId }
+    | { kind: 'coupleEvent'; partnershipId: PartnershipId; eventId: string };
 
 /**
  * Drop the re-crop link (fromAttachmentId + region) of every excerpt cut from
@@ -1851,9 +1855,10 @@ class DataManagerClass {
             }
         }
         for (const partnership of Object.values(this.data.partnerships)) {
-            if (partnership.sourceIds) {
-                partnership.sourceIds = partnership.sourceIds.filter(id => id !== sourceId);
-                if (partnership.sourceIds.length === 0) delete partnership.sourceIds;
+            for (const holder of [partnership, ...(partnership.events ?? [])]) {
+                if (!holder.sourceIds) continue;
+                holder.sourceIds = holder.sourceIds.filter(id => id !== sourceId);
+                if (holder.sourceIds.length === 0) delete holder.sourceIds;
             }
         }
         this.commitMutation(strings.undo.removeSource(src.title));
@@ -1880,6 +1885,11 @@ class DataManagerClass {
             if (partnership.sourceIds?.includes(sourceId)) {
                 out.push({ kind: 'partnership', partnershipId: partnership.id });
             }
+            for (const ev of partnership.events ?? []) {
+                if (ev.sourceIds?.includes(sourceId)) {
+                    out.push({ kind: 'coupleEvent', partnershipId: partnership.id, eventId: ev.id });
+                }
+            }
         }
         return out;
     }
@@ -1894,7 +1904,10 @@ class DataManagerClass {
             for (const field of PERSON_CITATION_FIELDS) add(person[field]);
             for (const ev of person.events ?? []) add(ev.sourceIds);
         }
-        for (const partnership of Object.values(this.data.partnerships)) add(partnership.sourceIds);
+        for (const partnership of Object.values(this.data.partnerships)) {
+            add(partnership.sourceIds);
+            for (const ev of partnership.events ?? []) add(ev.sourceIds);
+        }
         return counts;
     }
 
@@ -1908,6 +1921,9 @@ class DataManagerClass {
         }
         for (const partnership of Object.values(this.data.partnerships)) {
             if (partnership.sourceIds?.includes(sourceId)) count++;
+            for (const ev of partnership.events ?? []) {
+                if (ev.sourceIds?.includes(sourceId)) count++;
+            }
         }
         return count;
     }
@@ -2059,6 +2075,92 @@ class DataManagerClass {
         return true;
     }
 
+    // ==================== COUPLE EVENTS ====================
+
+    /** A couple's event by id. */
+    getCoupleEvent(partnershipId: PartnershipId, eventId: string): CoupleEvent | null {
+        return this.data.partnerships[partnershipId]?.events?.find(e => e.id === eventId) ?? null;
+    }
+
+    /** Add an event to a couple (banns, a census…). A custom one needs its label. */
+    addCoupleEvent(partnershipId: PartnershipId, event: Omit<CoupleEvent, 'id'>): CoupleEvent | null {
+        const partnership = this.data.partnerships[partnershipId];
+        if (!partnership || this.isTreeLocked()) return null;
+        if (!isCoupleEventType(event.type)) return null;
+        if (event.type === 'custom' && !event.customLabel?.trim()) return null;
+
+        this.beginMutation();
+        const created: CoupleEvent = { ...event, id: generateLifeEventId() };
+        dropUndefinedKeys(created);
+        (partnership.events ??= []).push(created);
+        const names = this.partnershipNames(partnership);
+        this.commitMutation(strings.undo.addEvent(names));
+        AuditLogManager.log(this.currentTreeId, 'event.add', strings.auditLog.addedEvent(names));
+        return created;
+    }
+
+    /** Change a couple's event. An explicit undefined empties a field; an empty list of people or ages drops it. */
+    updateCoupleEvent(partnershipId: PartnershipId, eventId: string, updates: Partial<Omit<CoupleEvent, 'id'>>): boolean {
+        const partnership = this.data.partnerships[partnershipId];
+        const ev = partnership?.events?.find(e => e.id === eventId);
+        if (!partnership || !ev || this.isTreeLocked()) return false;
+        const nextType = updates.type ?? ev.type;
+        if (!isCoupleEventType(nextType)) return false;
+        if (nextType === 'custom' && !(updates.customLabel ?? ev.customLabel)?.trim()) return false;
+
+        this.beginMutation();
+        Object.assign(ev, updates);
+        dropUndefinedKeys(ev);
+        if (ev.participants?.length === 0) delete ev.participants;
+        if (ev.ages && Object.keys(ev.ages).length === 0) delete ev.ages;
+        const names = this.partnershipNames(partnership);
+        this.commitMutation(strings.undo.editEvent(names));
+        AuditLogManager.log(this.currentTreeId, 'event.update', strings.auditLog.updatedEvent(names));
+        return true;
+    }
+
+    removeCoupleEvent(partnershipId: PartnershipId, eventId: string): boolean {
+        const partnership = this.data.partnerships[partnershipId];
+        if (!partnership?.events?.some(e => e.id === eventId) || this.isTreeLocked()) return false;
+
+        this.beginMutation();
+        partnership.events = partnership.events.filter(e => e.id !== eventId);
+        if (partnership.events.length === 0) delete partnership.events;
+        const names = this.partnershipNames(partnership);
+        this.commitMutation(strings.undo.removeEvent(names));
+        AuditLogManager.log(this.currentTreeId, 'event.remove', strings.auditLog.removedEvent(names));
+        return true;
+    }
+
+    /** Cite a source on a couple's event (the banns entry, a census sheet). */
+    citeCoupleEvent(partnershipId: PartnershipId, eventId: string, sourceId: string): boolean {
+        const partnership = this.data.partnerships[partnershipId];
+        const ev = partnership?.events?.find(e => e.id === eventId);
+        if (!partnership || !ev || !this.data.sources?.[sourceId] || this.isTreeLocked()) return false;
+        if (ev.sourceIds?.includes(sourceId)) return false;
+
+        this.beginMutation();
+        (ev.sourceIds ??= []).push(sourceId);
+        const names = this.partnershipNames(partnership);
+        this.commitMutation(strings.undo.cite(names));
+        AuditLogManager.log(this.currentTreeId, 'source.cite', strings.auditLog.citedSource(names));
+        return true;
+    }
+
+    unciteCoupleEvent(partnershipId: PartnershipId, eventId: string, sourceId: string): boolean {
+        const partnership = this.data.partnerships[partnershipId];
+        const ev = partnership?.events?.find(e => e.id === eventId);
+        if (!partnership || !ev?.sourceIds?.includes(sourceId) || this.isTreeLocked()) return false;
+
+        this.beginMutation();
+        ev.sourceIds = ev.sourceIds.filter(id => id !== sourceId);
+        if (ev.sourceIds.length === 0) delete ev.sourceIds;
+        const names = this.partnershipNames(partnership);
+        this.commitMutation(strings.undo.uncite(names));
+        AuditLogManager.log(this.currentTreeId, 'source.uncite', strings.auditLog.uncitedSource(names));
+        return true;
+    }
+
     // ==================== ATTACHMENTS ====================
 
     /** Attach a document to a person. Returns the created attachment, or null. */
@@ -2188,9 +2290,10 @@ class DataManagerClass {
                 for (const part of event.participants ?? []) unlinkParticipant(part);
             }
         }
-        // Wedding witnesses of other couples, likewise (review S6).
+        // Wedding witnesses of other couples and the people at their events,
+        // likewise (review S6).
         for (const union of Object.values(this.data.partnerships)) {
-            for (const part of union.participants ?? []) unlinkParticipant(part);
+            for (const part of partnershipParticipants(union)) unlinkParticipant(part);
         }
 
         delete this.data.persons[id];
@@ -3272,6 +3375,10 @@ class DataManagerClass {
                         if (!existingPartnership.note && removePartnership.note) {
                             existingPartnership.note = removePartnership.note;
                         }
+                        // The couple's events (banns, a census…) come along.
+                        if (removePartnership.events?.length) {
+                            existingPartnership.events = [...(existingPartnership.events ?? []), ...removePartnership.events];
+                        }
                     }
                     // Delete the duplicate partnership
                     const partner = this.data.persons[partnerId];
@@ -3301,6 +3408,18 @@ class DataManagerClass {
                     keepPerson.partnerships.push(removePartnershipId);
                 }
             }
+        }
+
+        // 4b. Ages recorded by person (the wedding, a couple's events) of the
+        // removed person are the kept one's now.
+        const rekeyAges = (ages: Record<string, string> | undefined): void => {
+            if (!ages || ages[removeId] === undefined) return;
+            if (ages[keepId] === undefined) ages[keepId] = ages[removeId];
+            delete ages[removeId];
+        };
+        for (const partnership of Object.values(this.data.partnerships)) {
+            rekeyAges(partnership.ages);
+            for (const ev of partnership.events ?? []) rekeyAges(ev.ages);
         }
 
         // 5. Update all partnership childIds that reference removeId
@@ -3358,17 +3477,19 @@ class DataManagerClass {
         // the removed person to the kept one. If the kept person already stands
         // in the same event with the same role, drop the now-duplicate row
         // instead of listing them twice.
-        for (const p of Object.values(this.data.persons)) {
-            for (const event of p.events ?? []) {
-                const parts = event.participants;
-                if (!parts) continue;
-                for (let i = parts.length - 1; i >= 0; i--) {
-                    if (parts[i].personId !== removeId) continue;
-                    const dupe = parts.some((q, j) =>
-                        j !== i && q.personId === keepId && q.role === parts[i].role);
-                    if (dupe) parts.splice(i, 1);
-                    else parts[i].personId = keepId;
-                }
+        // Wedding witnesses and the people at a couple's events likewise.
+        const participantLists = [
+            ...Object.values(this.data.persons).flatMap(p => (p.events ?? []).map(e => e.participants)),
+            ...Object.values(this.data.partnerships).flatMap(u => [u.participants, ...(u.events ?? []).map(e => e.participants)]),
+        ];
+        for (const parts of participantLists) {
+            if (!parts) continue;
+            for (let i = parts.length - 1; i >= 0; i--) {
+                if (parts[i].personId !== removeId) continue;
+                const dupe = parts.some((q, j) =>
+                    j !== i && q.personId === keepId && q.role === parts[i].role);
+                if (dupe) parts.splice(i, 1);
+                else parts[i].personId = keepId;
             }
         }
 
@@ -3552,7 +3673,8 @@ class DataManagerClass {
                 // A wedding witness (the issue names the partnership instead).
                 const unionId = issue.partnershipIds?.[0];
                 if (unionId) {
-                    for (const part of this.data.partnerships[unionId]?.participants ?? []) {
+                    const union = this.data.partnerships[unionId];
+                    for (const part of union ? partnershipParticipants(union) : []) {
                         if (part.personId && !this.data.persons[part.personId]) {
                             delete part.personId;
                             repaired = true;

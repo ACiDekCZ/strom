@@ -162,6 +162,9 @@ export const relationshipsPanelMethods = uiModule({
             });
         });
 
+        // The couple's own events: rows open the editor, "+ couple event" adds one.
+        this.bindCoupleEvents(content);
+
         // Partnership citations: cite opens the source picker, the remove cross uncites.
         content.querySelectorAll('.partnership-cite-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -403,8 +406,14 @@ export const relationshipsPanelMethods = uiModule({
                 <div class="pg-links">
                     <button type="button" class="pg-add-end" hidden></button>
                     <button type="button" class="detail-more" hidden></button>
+                    ${this.coupleEventAddLinkHtml(partnership, this.coupleEventsReadOnly(currentPersonId))}
                 </div>
             </div>`;
+    },
+
+    /** A couple's events are edited unless the person or the tree is locked. */
+    coupleEventsReadOnly(personId: PersonId): boolean {
+        return DataManager.isPersonLocked(personId) || DataManager.isTreeLocked();
     },
 
     /** Both partners, husband (or first partner) first — the order of HUSB and WIFE. */
@@ -526,6 +535,7 @@ export const relationshipsPanelMethods = uiModule({
 
                     partnershipDetailsHtml = `
                         ${this.partnershipGridHtml(partnership, currentPersonId, startDateLabel, endDateLabel)}
+                        ${this.coupleEventsBlockHtml(partnership, this.coupleEventsReadOnly(currentPersonId))}
                         ${primaryCheckboxHtml}
                         <textarea class="partnership-note" data-partnership-id="${this.escapeHtml(partnership.id)}"
                             placeholder="${strings.labels.note}...">${this.escapeHtml(partnership.note || '')}</textarea>
@@ -926,6 +936,8 @@ export const relationshipsPanelMethods = uiModule({
 
         this.relationshipsPanelPersonId = null;
         this.returnToEditPersonId = null;
+        // A phone's expanded couple-event lists start collapsed next time.
+        this.expandedCoupleEvents.clear();
 
         // Return to parent dialog via stack
         // Remove relationships-modal from stack

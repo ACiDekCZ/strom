@@ -82,6 +82,11 @@ the table honest.
 | Family wizard (batch add + single undo) | `family-wizard.spec.ts` | covered | parents+partner+children in one form; one Ctrl+Z removes the whole family |
 | Link existing person (no duplicate) | `relations-extra.spec.ts` | covered | relation modal "link existing" via person picker |
 | Partnership status / note change + remove | `relations-extra.spec.ts` | covered | relationships panel; divorced + note persist; removal |
+| Couple's events: none → nothing new; advanced mode → "+ couple event" last of the quiet links, editor in couple mode (subtitle with both names, only the couple's types in four groups, Banns first) | `couple-events.spec.ts` | covered | Anna Kubátová (no events), then with `toggleAdvancedFields(true)` |
+| Couple's events list: date order, undated last, the quiet second line (house · witnesses · sources · note), "+ couple event" under it without the advanced mode; a second partner without events shows nothing | `couple-events.spec.ts` | covered | invented GEDCOM with MARB / RESI (range) / CENS / EVEN+TYPE |
+| Couple event editor: details by type (age + address / address / cause + address), the status sentence for a divorce filed or an annulment, each partner's age with its check, a filled field kept on a type change, a new participant is a witness; custom needs its name, no date is fine; Delete in the footer after a question naming the event; the panel's Cancel discards, Save keeps | `couple-events.spec.ts` | covered | |
+| Couple's events on the life timeline (other partner named, range as its span, undated left out, click opens the editor over the person dialog) | `couple-events.spec.ts` | covered | |
+| Couple's events on a phone (one 44 px row naming the types, expanded in place, no horizontal overflow) and wider screens (no toggle) | `couple-events.spec.ts` | covered | 360×640, 768, 1440 |
 | Undo / redo (Ctrl+Z / Ctrl+Shift+Z) | `edit-undo-lock.spec.ts` | covered | delete → restore → delete again |
 | Lock person (read-only edit form) | `edit-undo-lock.spec.ts` | covered | inputs read-only, Save hidden |
 | Lock whole tree | `settings-lock.spec.ts` | covered | `body.tree-locked`, add blocked, unlock restores |

@@ -53,7 +53,7 @@ function calculateMatchScore(person: Person, query: string, data: StromData | nu
     if (birthYear && birthYear.includes(query)) return 30;
 
     // A cause of death or a house ("cholera", "čp. 13") — the toolbar search only.
-    if (details && detailMatch(person, query)) return 20;
+    if (details && detailMatch(person, query, data)) return 20;
 
     return 0;  // No match
 }
@@ -465,10 +465,14 @@ export class PersonPicker {
         if (!this.options.searchDetails) return '';
         const query = normalizeText(this.input.value.trim());
         if (!query || calculateMatchScore(person, query, this.searchData()) > 0) return '';
-        const m = detailMatch(person, query);
+        const m = detailMatch(person, query, this.searchData());
         if (!m) return '';
-        const mark = m.type === 'death' ? '†' : m.type === 'birth' ? '*' : strings.events.types[m.type];
-        const head = [mark, displayYear(m.date), m.place?.trim() ?? ''].filter(Boolean).join(' ');
+        // A couple's event found by its name: the name is the marked part.
+        const mark = m.label !== undefined
+            ? (m.label === m.value ? '' : m.label)
+            : m.type === 'death' ? '†' : m.type === 'birth' ? '*' : strings.events.types[m.type];
+        const head = [mark, displayYear(m.date), m.place?.trim() === m.value ? '' : m.place?.trim() ?? '']
+            .filter(Boolean).join(' ');
         return `<div class="person-picker-match">${this.escapeHtml(head)} · <mark>${this.escapeHtml(m.value)}</mark></div>`;
     }
 

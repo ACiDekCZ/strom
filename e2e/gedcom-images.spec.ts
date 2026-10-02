@@ -40,7 +40,7 @@ function bytesOf(dataUrl: string): number {
 /** The comprehensive fixture with images on its first person and a cited source. */
 function treeWithImages(img: Images): { json: string; first: string; last: string } {
     const data = JSON.parse(readFileSync('test/comprehensive.json', 'utf-8'));
-    data.version = 9;
+    data.version = 10;
     const person = Object.values(data.persons)[0] as Record<string, unknown>;
     person.photo = img.photo;
     person.photoOriginalName = 'jan.jpg';
