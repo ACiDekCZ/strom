@@ -21,8 +21,15 @@ test('a single backup can be deleted, and the tree is not touched', async ({ pag
     expect(before).toBeGreaterThan(1);
 
     await page.locator('.snapshot-delete').first().click();
-    // The confirm names the verb, never a bare "Yes".
+    // The confirm names the verb, never a bare "Yes"…
+    await expect(page.locator('#confirmation-modal')).toHaveClass(/active/);
     await expect(page.locator('#confirm-ok-btn')).toHaveText('Delete backup');
+    // …and says which backup: what is in it, and WHEN it was taken, as a
+    // person says it — "today 14:36" ("1 person" alone would satisfy any bare
+    // \d+ pattern).
+    const confirmText = `${await page.locator('#confirm-title').innerText()}\n${await page.locator('#confirm-message').innerText()}`;
+    expect(confirmText).toContain('1 person');
+    expect(confirmText).toMatch(/today \d{1,2}:\d{2}/);
     await page.locator('#confirm-ok-btn').click();
 
     await expect(rows).toHaveCount(before - 1);
@@ -31,18 +38,7 @@ test('a single backup can be deleted, and the tree is not touched', async ({ pag
     expect(await page.evaluate(() => window.Strom.DataManager.getAllPersons().length)).toBe(1);
 });
 
-test('backups say they are not a substitute for exporting', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1900' });
-    await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
-
-    // Someone who reads these as their safety net and then reinstalls their
-    // laptop loses everything — the dialog has to say so.
-    await expect(page.locator('.snapshots-note')).toContainText('this browser');
-    await expect(page.locator('.snapshots-note')).toContainText('Export');
-});
-
-test('backups never end up inside the tree file', async ({ page }) => {
+test('one backup of one person reads as "1 person", stays out of the tree file, and is no substitute for exporting', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1900' });
     await page.evaluate(async () => {
@@ -52,18 +48,15 @@ test('backups never end up inside the tree file', async ({ page }) => {
     // The exported data is what the user carries away; backups inside it would
     // grow the file every day, each one holding the ones before it.
     const data = await page.evaluate(() => JSON.stringify(window.Strom.DataManager.getData()));
-    expect(Object.keys(JSON.parse(data))).not.toContain('snapshots');
+    expect(Object.keys(JSON.parse(data)), 'no backups inside the tree data').not.toContain('snapshots');
     expect(data).not.toContain('gzip');
-});
 
-test('one backup of one person reads as "1 person"', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1900' });
-    await page.evaluate(async () => {
-        await window.Strom.DataManager.snapshotNow('manual');
-    });
     await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
-
     await expect(page.locator('.snapshot-meta').first()).toContainText('1 person');
     await expect(page.locator('.snapshot-meta').first()).not.toContainText('1 people');
+
+    // Someone who reads these as their safety net and then reinstalls their
+    // laptop loses everything — the dialog has to say so.
+    await expect(page.locator('.snapshots-note')).toContainText('this browser');
+    await expect(page.locator('.snapshots-note')).toContainText('Export');
 });

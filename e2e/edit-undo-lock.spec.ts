@@ -25,33 +25,7 @@ test('editing: a valid flex date is accepted and normalized; nonsense is rejecte
     await expect(modal).toBeVisible();
 });
 
-test('undo/redo: delete then Ctrl+Z restores, Ctrl+Shift+Z deletes again', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak');
-    await cardAction(page, 'Jan', 'partner');
-    const rel = page.locator('#relation-modal');
-    await rel.locator('#rel-firstname').fill('Marie');
-    await rel.locator('#rel-lastname').fill('Novak');
-    await rel.locator('#rel-gender').selectOption('female');
-    await rel.locator('#rel-submit-btn').click();
-    await expect(card(page, 'Marie')).toBeVisible();
-
-    // Focus Jan so deleting Marie doesn't remove the current focus person.
-    await cardAction(page, 'Jan', 'focus');
-    await cardAction(page, 'Marie', 'delete');
-    const confirm = page.locator('#confirmation-modal');
-    await expect(confirm).toBeVisible();
-    await confirm.locator('#confirm-ok-btn').click();
-    await expect(confirm).toBeHidden();
-    await expect(card(page, 'Marie')).toBeHidden();
-
-    await page.locator('#tree-container').click();
-    await page.keyboard.press('Control+z');
-    await expect(card(page, 'Marie')).toBeVisible();
-
-    await page.keyboard.press('Control+Shift+z');
-    await expect(card(page, 'Marie')).toBeHidden();
-});
+// Delete → Ctrl+Z → Ctrl+Shift+Z: person-crud.spec.ts (deleting a person via the context menu).
 
 test('locking a person makes the edit form read-only', async ({ page }) => {
     await openApp(page);

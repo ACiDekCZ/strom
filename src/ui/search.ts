@@ -55,6 +55,7 @@ export const searchMethods = uiModule({
 
         this.toolbarSearchPicker = new PersonPicker({
             containerId: 'toolbar-search-picker',
+            openOnFocus: true,
             onSelect: (personId) => {
                 TreeRenderer.setFocus(personId);
                 ZoomPan.centerOnPerson(personId);

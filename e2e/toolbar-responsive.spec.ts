@@ -263,7 +263,9 @@ test.describe('view switcher — monotonic, in-viewport, ghost ⋯ (cs-CZ, stres
         expect(await bg(), 'resting ⋯ is not primary-green').not.toBe(green);
         await dots.hover();
         expect(await bg(), 'hovered ⋯ is not primary-green').not.toBe(green);
-        await dots.click();  // opens the More sheet
+        await dots.click();
+        // The top bar ⋯ opens the same "More" sheet as the bottom bar.
+        await expect(page.locator('.bottom-sheet-menu')).toBeVisible();
         await page.waitForTimeout(50);
         expect(await bg(), 'open-state ⋯ is not primary-green').not.toBe(green);
     });

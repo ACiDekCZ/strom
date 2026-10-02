@@ -21,7 +21,16 @@ the table honest.
 | Standalone-HTML app export → open in view mode | `export-app-viewmode.spec.ts` | covered | opened via `file://`; read-only (edit controls hidden) |
 | Encrypted export → open, wrong vs right password | `export-app-viewmode.spec.ts` | covered | encrypted HTML-app open flow (supports retry) |
 | Encrypted JSON import, wrong password → retry | `data-import-export.spec.ts` | covered | retry bug fixed in review; error shown, same prompt accepts the right password |
-| Tree merge (two trees, shared person) | `merge.spec.ts` | partial | target-picker + wizard opens + shared match detected + shown in review list; the multi-step execute is not driven through the UI (unstable to script) |
+| Tree merge (two trees, shared person) | `merge.spec.ts` | covered | target-picker + wizard opens + shared match detected + shown in review list |
+| Tree merge execute (two trees → filters → confirm → execute → new tree) | `merge-execute.spec.ts` | covered | review filters (New/High/Conflicts/All), explicit confirm, name prompt, switch offer; merged tree has the shared person once with both trees' facts + relations; both input trees unchanged, exactly one new tree |
+| Tree merge conflict resolution (person + union) | `merge-execute.spec.ts` | covered | per-field answers kept on reopen; the chosen value wins, a one-sided value is filled in |
+| Tree merge manual match | `merge-execute.spec.ts` | covered | "Match to existing" (the picker list stays shut until asked for — fixed: it opened over Cancel / Save), side-by-side preview (Escape closes it — fixed: the wizard swallowed the key); the source person's child ends up under the chosen person |
+| Tree merge save for later / resume / discard | `merge-execute.spec.ts` | covered | Save for later (button + close dialog) survives a reload; resume from the tree manager and from Pending merges keeps decisions; an auto-saved merge interrupted by a reload is offered at startup (fixed: nothing offered it); discard leaves both trees intact |
+| Person merge with partnerships on both sides | `merge-execute.spec.ts` | covered | preview (single + compare), field + partnership conflicts; "Merge" collapses the shared union (fixed: the answer was keyed by the kept union and looked up by the removed one, so it always kept both); "Keep both" |
+| GEDCOM result "Merge with existing" | `import-extra.spec.ts` | covered | 1 match + 2 new in the wizard; executed merge → named tree, original unchanged |
+| Exported HTML app / password-protected HTML app → "From HTML file" | `import-extra.spec.ts` | covered | real file picker; counts in the import dialog; wrong password → retry; local encryption stays off |
+| Password-protected "Export all" JSON restore | `import-extra.spec.ts` | covered | decrypt → "2 trees" confirm → every tree restored |
+| GEDCOM result "Save as JSON" | `import-extra.spec.ts` | covered | family-tree.json with persons/relations; no tree added |
 | Person merge (within a tree) | `merge.spec.ts` | covered | two persons → one, undo restores; relations unified |
 | PNG poster export | `export-poster.spec.ts` | covered | PNG magic number + non-trivial size |
 | SVG poster export | `export-poster.spec.ts` | covered | valid XML, contains a name |
@@ -31,9 +40,11 @@ the table honest.
 | Invalid JSON import | `data-import-export.spec.ts` | covered | validation dialog, existing data intact |
 | Invalid/garbage GEDCOM import | `data-import-export.spec.ts` | covered | lenient parser → empty result dialog, app stays alive |
 | Demo → export → import | `data-import-export.spec.ts` | covered | person count matches |
-| Local encryption across reload | `data-safety.spec.ts` | covered | enable in settings, IndexedDB holds ciphertext only, reload → password prompt → tree intact |
 | Cancelled startup unlock | `data-safety.spec.ts` | covered | "Unlock" banner (`storage-notice`); an edit while locked is refused with a toast and never overwrites the encrypted tree; banner reopens the prompt |
-| Wrong password then right one | `data-safety.spec.ts` | covered | 2 trees encrypted; error shown, retry unlocks; both trees' persons identical to before |
+| Local encryption across reload, wrong password then right one | `data-safety.spec.ts` | covered | 2 trees encrypted, IndexedDB holds ciphertext only; no card while locked; error shown, retry unlocks; both trees' persons identical to before |
+| Password setup validation; turning local encryption OFF | `encryption-extra.spec.ts` | covered | too short / mismatch refused, Cancel leaves it off; off: wrong password refused, right one → trees + backups plaintext, reload asks nothing |
+| Tree encrypted under another key (per-tree prompt) | `encryption-extra.spec.ts` | covered | another tab changes the password; the tree-key prompt refuses the session password, accepts the new one, the tree is re-keyed and saves |
+| Edit during the startup load | `startup-race.spec.ts` | covered | slowed IndexedDB read; the toolbar takes no click until the tree is in (fixed: a person added in that window was overwritten by the load) |
 | Two tabs on the same tree | `data-safety.spec.ts` | covered | save in tab B → tab A shows the other-tab notice; its Reload brings in B's change; B does not warn itself |
 | "Export all" JSON → import | `data-safety.spec.ts` | covered | via `#file-input`; confirm "Import all trees" restores both trees with 2/3 persons |
 | "Export all" HTML → import | `data-safety.spec.ts` | covered | via `#html-input`; same checks as JSON |
@@ -74,7 +85,7 @@ the table honest.
 | Timeline view (third mode) | `timeline.spec.ts` | covered | segment switches to life-bars on a year axis; back restores the tree |
 | Family book generation | `book.spec.ts` | covered | dialog → new window with chapters + index |
 | Flex date accepted/normalized/rejected | `edit-undo-lock.spec.ts` | covered | `about 1880` → `~1880`; nonsense rejected |
-| Delete person (context menu) + undo | `person-crud.spec.ts` | covered | confirm dialog, undo restores |
+| Delete person (context menu) + undo / redo | `person-crud.spec.ts` | covered | confirm dialog, undo restores, Ctrl+Shift+Z deletes again |
 | Delete person (Delete key) | `person-crud.spec.ts` | covered | deletes the focused person after confirm |
 | Delete last person → empty state | `person-crud.spec.ts` | covered | empty state returns |
 | Add partner / child / parent | `relations.spec.ts` | covered | cards render |
@@ -86,8 +97,9 @@ the table honest.
 | Couple's events list: date order, undated last, the quiet second line (house · witnesses · sources · note), "+ couple event" under it without the advanced mode; a second partner without events shows nothing | `couple-events.spec.ts` | covered | invented GEDCOM with MARB / RESI (range) / CENS / EVEN+TYPE |
 | Couple event editor: details by type (age + address / address / cause + address), the status sentence for a divorce filed or an annulment, each partner's age with its check, a filled field kept on a type change, a new participant is a witness; custom needs its name, no date is fine; Delete in the footer after a question naming the event; the panel's Cancel discards, Save keeps | `couple-events.spec.ts` | covered | |
 | Couple's events on the life timeline (other partner named, range as its span, undated left out, click opens the editor over the person dialog) | `couple-events.spec.ts` | covered | |
-| Couple's events on a phone (one 44 px row naming the types, expanded in place, no horizontal overflow) and wider screens (no toggle) | `couple-events.spec.ts` | covered | 360×640, 768, 1440 |
-| Undo / redo (Ctrl+Z / Ctrl+Shift+Z) | `edit-undo-lock.spec.ts` | covered | delete → restore → delete again |
+| Couple's events on a phone (one 44 px row naming the types, expanded in place, no horizontal overflow) and wider screens (no toggle) | `couple-events.spec.ts` | covered | 360×640, 768, 1440 (1440 inside the list test) |
+| Couple event sources | `couple-event-sources.spec.ts` | covered | cite an existing / new source (title from the event) from the editor; chips; panel row count (fixed: stale after × then Cancel); both partners' Sources dialogs; register count; viewer; delete from the register or from "Manage sources" in the open editor clears it |
+| Undo / redo (Ctrl+Z / Ctrl+Shift+Z) | `person-crud.spec.ts`, `undo-toast.spec.ts` | covered | delete → restore → delete again; toolbar pair disabled at start, follows the stack |
 | Lock person (read-only edit form) | `edit-undo-lock.spec.ts` | covered | inputs read-only, Save hidden |
 | Lock whole tree | `settings-lock.spec.ts` | covered | `body.tree-locked`, add blocked, unlock restores |
 | Keyboard: Ctrl+F, +, 0, Esc | `interaction.spec.ts` | covered | search focus, zoom in, reset, close modal |
@@ -100,10 +112,10 @@ the table honest.
 | Runtime language switch (CS ↔ EN) | `settings-lock.spec.ts`, `cs.spec.ts` | covered | settings radios; about labels switch without reload |
 | German UI smoke (no English leaks) | `de.spec.ts` | covered | locale de-DE → `<html lang="de">`; add/edit person, relationships panel, export + privacy step, context menu, anniversaries, tree manager, settings, stats, kinship, book dialog scanned for common English words (text + placeholders) |
 | Tree stats dialog | `settings-lock.spec.ts` | covered | shows the person count |
-| Family statistics (visual charts) | `stats.spec.ts` | covered | collapsible section renders inline-SVG bar charts |
+| Family statistics (visual charts) | `stats.spec.ts` | covered | inline-SVG bars and vertical columns (by generation, by month) |
 | Anniversaries panel + "on this day" | `anniversaries.spec.ts` | covered | today's birthday triggers the once-a-day card (gone after dismiss+reload); panel lists it |
 | Audit log | `settings-lock.spec.ts` | covered | records a mutation when enabled |
-| Search focuses a person | `search-kinship-archives.spec.ts` | covered | toolbar search picker |
+| Search focuses a person | `helpers.ts` (`focusViaSearch`) | covered | asserted by the helper in every spec that uses it |
 | Relationship (kinship) calculator | `search-kinship-archives.spec.ts` | covered | shows a kinship term |
 | Archive search gating (Czech relevance) | `search-kinship-archives.spec.ts` | covered | Czech portals gated by place |
 | Photo upload / remove | `photo.spec.ts` | covered | avatar shows / clears |
@@ -112,7 +124,7 @@ the table honest.
 | Demo tree loads | `demo.spec.ts` | covered | focus + hint toast |
 | Interactive tour (offer / steps / Escape / mobile) | `tour.spec.ts` | covered | offered once after demo; steps advance; Escape ends; second demo load doesn't re-offer; bubble fits mobile |
 | Backups: create / restore / undo restore | `backups.spec.ts` | covered | manual snapshot survives a delete; restore is undoable |
-| About dialog version | `smoke.spec.ts`, `cs.spec.ts` | covered | matches `package.json` |
+| About dialog version | `about.spec.ts`, `cs.spec.ts` | covered | matches `package.json` |
 | PWA offline indicator | `pwa.spec.ts` | covered | toolbar badge toggles with `context.setOffline` |
 | PWA service-worker registration | — (`pwa.test.ts` unit) | partial | registration gate is unit-tested per AppMode; the SW is only served on the PWA host (`stromapp.info/run/`), which the localhost e2e server cannot emulate, so live register/offline-serve is not driven end-to-end |
 | Search filter panel position + Escape close | `search-filter.spec.ts` | covered | regression: panel used to overflow above the viewport |
@@ -146,6 +158,18 @@ the table honest.
 | "Deceased" on create + no-op Save adds no undo step | `editing-review.spec.ts` | covered | card shows †; unchanged Save leaves the undo description and top step as is |
 | Family wizard keeps the anchor's existing parent | `editing-review.spec.ts` | covered | mother row fixed/read-only; father fills the free slot; exactly 3 persons, 1 union (untouched surname-prefilled rows add nobody — bug fixed) |
 | Keyboard only: first person + child from the empty state | `editing-review.spec.ts` | covered | Tab/Enter/arrows/typing only; card menu → Add child |
+
+| Sources: delete (confirm counts places, cascade, Undo); cite on a person's event; suggested titles; × under the birth | `sources-extra.spec.ts` | covered | person, birth, event, partnership and couple event citations; "Manage sources" from the event editor / relationships panel opens on top (fixed: it opened beneath them) |
+| Excerpts: cut from an attachment, re-crop, Replace, continuation, "Paste from clipboard", "Another entry from the same register" | `sources-extra.spec.ts` | covered | `fromAttachmentId`/`region` in data; clipboard via granted permissions; crop editor pointer, zoom, rotate, Tab trap |
+| Source viewer; attachments (PDF blob, image overlay, unsupported type, fake PDF) | `sources-extra.spec.ts` | covered | `window.open` stubbed |
+| Duplicate tree; ⋯ → Tree: Rename / Tree health / Merge into / Hide | `tree-manager-extra.spec.ts` | covered | the copy is independent after a reload; Cancel / blank / Escape create nothing |
+| Tree's default (start) person; New tree → "From current view" | `tree-manager-extra.spec.ts` | covered | specific / last focused / first person → focus after reload; set for a non-active tree; exactly the on-screen persons |
+| Map: toasts and offers above the status bar (1280 / 390) | `map.spec.ts` | covered | undo toast + "add family" offer end above `#map-status`; its Look up takes the click at once |
+| Tree switcher inside an "Export all" HTML file; validation links and Fix | `tree-manager-extra.spec.ts` | covered | `file://` view mode switches trees; Fix on a non-active tree switches to it and repairs it (fixed: it repaired the active tree) |
+| Backups: download, auto-off "Keep backups" | `tree-manager-extra.spec.ts` | partial | trim / too-big notices not driven (need the storage budget to run out) |
+| Child of a person with several partners; link an existing person as a child | `partner-choice.spec.ts` | covered | chosen partner = second parent in the right union; "New person (unknown)" → placeholder union; no duplicate, cycles excluded, Escape returns to the form |
+| Change history (audit log) | `audit-log.spec.ts` | covered | Today / Yesterday / date headers (fixed clock); Export TXT content; Clear after confirmation, empty after reload |
+| Share change packet with edits on both sides; reply as a new tree; reply file opened as the app | `share-packets.spec.ts` | covered | empty packet toast; preview names the changed fields; Accept keeps the owner's edits; re-open = already applied |
 
 ## Opening from outside (Strom Research)
 
@@ -216,5 +240,3 @@ settings (`seedResearchPromoSeen`); `research-promo.spec.ts` opts out with
 | Print / poster print CSS | printing cannot be driven headlessly; SVG/PNG/PDF export paths cover the render |
 | Card tooltips / badge tooltips | pure hover cosmetics, no data effect |
 | Debug panels / `__*_DEBUG` flags | developer-only, not user-facing |
-| Cross-tree presence badge navigation | requires a specific multi-tree layout; low data-loss risk |
-| Mobile-only controls (`.add-person-round`) | responsive; the suite runs at desktop width |

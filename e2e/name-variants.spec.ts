@@ -29,7 +29,7 @@ test('search finds a person under the spelling the register used', async ({ page
     }
 });
 
-test('a person whose only extra detail is a variant opens with it visible', async ({ page }) => {
+test('a variant alone reopens visible; clearing the field removes the variants', async ({ page }) => {
     await openApp(page);
     // Name variants / reference numbers are research fields — off by default.
     await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
@@ -39,24 +39,11 @@ test('a person whose only extra detail is a variant opens with it visible', asyn
     await modal.locator('#input-name-variants').fill('Wischek');
     await modal.getByRole('button', { name: 'Save' }).click();
 
-    // Reopen: the value must be on screen, not hidden behind "More info".
+    // Reopen: a person whose only extra detail is a variant shows it on screen,
+    // not hidden behind "More info" (the form auto-expands for extended data).
     await cardAction(page, 'Josef', 'edit');
     await expect(modal.locator('#input-name-variants')).toBeVisible();
     await expect(modal.locator('#input-name-variants')).toHaveValue('Wischek');
-});
-
-test('clearing the field removes the variants', async ({ page }) => {
-    await openApp(page);
-    // Name variants / reference numbers are research fields — off by default.
-    await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
-    await createFirstPerson(page, 'Josef', 'Víšek');
-    await cardAction(page, 'Josef', 'edit');
-    const modal = personModal(page);
-    await modal.locator('#input-name-variants').fill('Wischek');
-    await modal.getByRole('button', { name: 'Save' }).click();
-
-    // Reopening auto-expands now that there IS extended data.
-    await cardAction(page, 'Josef', 'edit');
     await modal.locator('#input-name-variants').fill('');
     await modal.getByRole('button', { name: 'Save' }).click();
 

@@ -18,10 +18,20 @@ test('a plain person form does not open with an archive of fields', async ({ pag
     for (const sel of ADVANCED) {
         await expect(modal.locator(sel), sel).toBeHidden();
     }
-    // What everyone needs is still right there.
+    // What everyone needs is still right there — editing shows the whole
+    // record, no "More details" to hunt behind. (This used to depend on a
+    // hand-written list of "fields that count as extended data" — miss one and
+    // its value was invisible until you expanded by hand, which happened twice.)
+    await expect(modal.locator('#expand-details'), 'no expander when editing').toBeHidden();
     await expect(modal.locator('#input-deathdate')).toBeVisible();
     await expect(modal.locator('#input-notes')).toBeVisible();
+    await expect(modal.locator('#events-section')).toBeVisible();
     await expect(modal.locator('#btn-add-event')).toBeVisible();
+    // A short hint is quicker to read than to open: the date formats stay put,
+    // with no "?" toggle (field-hints.spec.ts covers the long ones).
+    const dateHint = modal.locator('[data-i18n="personModal.dateHint"]');
+    await expect(dateHint, 'the short date hint is shown in place').toBeVisible();
+    await expect(dateHint.locator('.hint-toggle')).toHaveCount(0);
 });
 
 test('turning research fields on brings them back', async ({ page }) => {

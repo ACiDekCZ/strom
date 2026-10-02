@@ -5,6 +5,8 @@ import { openApp, createFirstPerson, cardAction } from './helpers.js';
  * A confirmation has to say WHAT it is about to destroy. The app already does
  * this for a person and for a tree; events, attachments and backups asked
  * "Delete this event?" and left the user guessing which row they had hit.
+ * (The attachment and backup cases are asserted in attachments.spec.ts and
+ * snapshots.spec.ts, inside their delete flows.)
  */
 /** The confirm can open a tick late (some paths read storage first).
  *  Title and message together: the title names the object. */
@@ -39,31 +41,10 @@ test('deleting an event says which event', async ({ page }) => {
     expect(left).toEqual(['baptism']);
 });
 
-test('deleting an attachment says which file', async ({ page }) => {
-    await openApp(page);
-    await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
-    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
-    await cardAction(page, 'Jan', 'edit');
-    await page.locator('#input-attachment').setInputFiles('e2e/fixtures/avatar.png');
-    await expect(page.locator('.attachment-row')).toHaveCount(1);
+// Deleting an attachment says which file: attachments.spec.ts (add, reload, delete).
 
-    await page.locator('.attachment-row button[title="Delete"], .attachment-delete').first().click();
-    expect(await confirmText(page)).toContain('avatar.png');
-});
-
-test('deleting a backup says which backup', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
-    await page.evaluate(async () => { await window.Strom.DataManager.snapshotNow('manual'); });
-    await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
-
-    await page.locator('.snapshot-delete').first().click();
-    const text = await confirmText(page);
-    expect(text).toContain('1 person');        // what is in it
-    // …and WHEN it was taken, as a person says it: "today 14:36"
-    // ("1 person" alone would satisfy any bare \d+ pattern).
-    expect(text).toMatch(/today \d{1,2}:\d{2}/);
-});
+// Deleting a backup says which backup (what is in it, when it was taken):
+// snapshots.spec.ts (a single backup can be deleted).
 
 /**
  * Destructive confirmations (round 14, V1): the confirm button is painted in

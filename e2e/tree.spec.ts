@@ -345,13 +345,6 @@ test('export dialog: view-scoped tiles are gated to the active tree; title names
     await page.evaluate(() => window.Strom.UI.closeExportDialog());
 });
 
-test('actions menu: Export… opens the export dialog with the whole tree / current view switch', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak');
-
-    await page.locator('.actions-menu-btn').click();
-    await page.locator('#actions-export-row').click();
-    await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
-    await expect(page.locator('#export-modal')).toBeVisible();
-    await expect(page.locator('#export-scope .segment-btn')).toHaveText(['Whole tree', 'Current view only (1 person)']);
-});
+// ⋯ → Export… opening the one export dialog with its whole tree / current view
+// switch: export-settings-structure.spec.ts (the English "(1 person)" label in
+// the first test, the ⋯ path and the switch in "one Export…").

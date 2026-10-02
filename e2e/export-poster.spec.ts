@@ -31,7 +31,7 @@ test('export dialog: privacy select applies; JSON download hides living names wi
     expect(names).toContain('A.');
 });
 
-test('poster dialog opens above the export dialog; SVG download is valid XML', async ({ page }) => {
+test('poster dialog opens above the export dialog with a truthful family-view label; SVG download is valid XML', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
@@ -47,6 +47,11 @@ test('poster dialog opens above the export dialog; SVG download is valid XML', a
     // Format / orientation options are offered (print is not exercised).
     await expect(poster.locator('#poster-format')).toBeVisible();
     await expect(poster.locator('#poster-orientation')).toBeVisible();
+    // A truthful label: it names the view, the focus person and the depth.
+    const label = poster.locator('#poster-view-label');
+    await expect(label).toContainText('Prints the current view:');
+    await expect(label).toContainText('Family');
+    await expect(label).toContainText('Jan Novak');
 
     const [download] = await Promise.all([
         page.waitForEvent('download'),
@@ -93,20 +98,6 @@ test('poster SVG applies the living-privacy filter', async ({ page }) => {
     const svg = readFileSync(await download.path(), 'utf-8');
     expect(svg).not.toContain('Alice');
     expect(svg).toContain('A.');
-});
-
-test('poster dialog shows a truthful view label for the family view', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak');
-
-    await page.evaluate(() => window.Strom.UI.showPosterDialog());
-    const poster = page.locator('#poster-modal');
-    await expect(poster).toBeVisible();
-    // The line names the view, the focus person and the depth.
-    const label = poster.locator('#poster-view-label');
-    await expect(label).toContainText('Prints the current view:');
-    await expect(label).toContainText('Family');
-    await expect(label).toContainText('Jan Novak');
 });
 
 test('fan view: poster downloads an SVG containing fan sectors', async ({ page }) => {
@@ -223,11 +214,11 @@ test('map view: poster export is honestly blocked and buttons are disabled', asy
     }
 });
 
-test('tiled print fires only after the tile image is decoded (empty-pages fix)', async ({ page }) => {
+test('tiled print fires only after the tile image is decoded, adds an assembly guide and skips blank sheets', async ({ page }) => {
     await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak');
-
-    // Capture the state at the moment print() is invoked.
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(page.locator('.person-card').first()).toBeVisible();
+    // Capture the state at the moment print() is invoked (empty-pages fix).
     await page.evaluate(() => {
         (window as unknown as { __printState?: unknown }).__printState = null;
         (window as unknown as { print: () => void }).print = () => {
@@ -235,7 +226,6 @@ test('tiled print fires only after the tile image is decoded (empty-pages fix)',
             (window as unknown as { __printState?: unknown }).__printState = {
                 called: true,
                 imgComplete: img?.complete ?? false,
-                pages: document.querySelectorAll('#poster-print .poster-page').length,
             };
         };
     });
@@ -245,19 +235,9 @@ test('tiled print fires only after the tile image is decoded (empty-pages fix)',
     await expect.poll(() => page.evaluate(() =>
         (window as unknown as { __printState?: { called?: boolean } }).__printState?.called ?? false
     )).toBe(true);
-    const state = await page.evaluate(() =>
-        (window as unknown as { __printState?: { imgComplete: boolean; pages: number } }).__printState!);
-    expect(state.pages).toBeGreaterThan(0);
-    expect(state.imgComplete).toBe(true);   // print never fires on undecoded tiles
-});
-
-test('tiled print adds an assembly guide and skips blank sheets', async ({ page }) => {
-    await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(page.locator('.person-card').first()).toBeVisible();
-    await page.evaluate(() => { (window as unknown as { print: () => void }).print = () => {}; });
-    await page.evaluate(() => window.Strom.UI.showPosterDialog());
-    await page.evaluate(() => window.Strom.UI.printPosterPdf());
+    const printed = await page.evaluate(() =>
+        (window as unknown as { __printState?: { imgComplete: boolean } }).__printState!);
+    expect(printed.imgComplete, 'print never fires on undecoded tiles').toBe(true);
 
     await expect.poll(() => page.evaluate(() =>
         document.querySelectorAll('#poster-print .poster-page').length)).toBeGreaterThan(0);

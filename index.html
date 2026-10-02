@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="app-booting">
+<html lang="en" class="app-booting app-loading">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -3491,6 +3491,12 @@
         /* Until the first render decides (data still loading), the welcome
            must not flash: it shows only for a tree that is really empty. */
         html.app-booting #empty-state { visibility: hidden; }
+        /* Until the startup tree is read (main.ts), nothing may edit: a person
+           added in that window was overwritten by the tree the load returned. */
+        html.app-loading .toolbar,
+        html.app-loading .bottom-bar,
+        html.app-loading #tree-container { pointer-events: none; }
+        html.app-loading body { cursor: progress; }
         .empty-state {
             position: absolute;
             top: 50%;
@@ -9167,6 +9173,23 @@
                 body.has-undo-toast .family-offer { bottom: calc(var(--bottom-bar-h) + 72px); }
             }
         }
+        /* Map view: its status bar (Look up, Places) and time bar sit
+           bottom-centre too, so the floating notes rise above them.
+           --map-floor = their reach from the viewport bottom (map-ui.ts). */
+        body.map-view .toast,
+        body.map-view .undo-toast,
+        body.map-view .family-offer,
+        body.map-view .tour-offer { bottom: max(24px, calc(var(--map-floor, 0px) + 12px)); }
+        body.map-view:has(.undo-toast) .family-offer { bottom: calc(max(24px, calc(var(--map-floor, 0px) + 12px)) + 60px); }
+        body.map-view.has-undo-toast .family-offer { bottom: calc(max(24px, calc(var(--map-floor, 0px) + 12px)) + 60px); }
+        @media (max-width: 1024px) {
+            body.map-view .toast,
+            body.map-view .undo-toast,
+            body.map-view .family-offer,
+            body.map-view .tour-offer { bottom: max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)); }
+            body.map-view:has(.undo-toast) .family-offer { bottom: calc(max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)) + 60px); }
+            body.map-view.has-undo-toast .family-offer { bottom: calc(max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)) + 60px); }
+        }
         /* Phone (<500px): full width minus 24px, no centre transform. */
         @media (max-width: 499px) {
             .undo-toast {
@@ -9382,6 +9405,9 @@
             /* Floating elements clear the bar too. */
             .tree-legend { bottom: calc(var(--bottom-bar-h) + 12px); }
             .family-offer { bottom: calc(var(--bottom-bar-h) + 16px); }
+            /* The tour offer and plain toasts never cover the bar's tabs. */
+            .tour-offer { bottom: calc(var(--bottom-bar-h) + 16px); }
+            .toast { bottom: calc(var(--bottom-bar-h) + 12px); }
         }
 
         @media (max-width: 640px) {
@@ -10074,9 +10100,11 @@
             color: var(--text-secondary, #777);
         }
         .partnership-witness-btn:hover { border-color: var(--primary, #4a7c59); color: var(--primary, #4a7c59); }
-        /* Source picker + editor open ABOVE whatever dialog cited them
-           (person modal, relationships panel) — DOM order is not enough. */
-        #source-picker-modal, #source-editor-modal { z-index: 250; }
+        /* Source picker, editor and catalog ("Manage sources") open ABOVE
+           whatever dialog cited them (person modal, relationships panel, event
+           editor) — DOM order is not enough. The catalog comes first in the
+           DOM, so an editor or picker it opens still lands on top of it. */
+        #source-picker-modal, #source-editor-modal, #sources-modal { z-index: 250; }
         /* The event editor opens above the relationships panel too (a couple's
            event), and the person picker it opens above the editor. */
         #event-editor-modal { z-index: 210; }
@@ -13014,38 +13042,6 @@
             <div class="buttons">
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeDefaultPersonDialog()" data-i18n="buttons.cancel">Cancel</button>
                 <button class="primary" onclick="window.Strom.UI.confirmDefaultPerson()" data-i18n="buttons.save">Save</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Default Tree Dialog -->
-    <div class="modal-overlay" id="default-tree-modal">
-        <div class="modal modal--sm" role="dialog" data-dialog-kind="form" aria-modal="true">
-            <div class="modal-header">
-                <h2 data-i18n="treeManager.defaultTree">Default tree</h2>
-                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeDefaultTreeDialog()">&times;</button>
-            </div>
-            <p class="modal-description" data-i18n="treeManager.defaultTreeDesc">When opening app, load:</p>
-            <div class="default-options">
-                <label class="radio-option">
-                    <input type="radio" name="default-tree-option" id="default-tree-first" value="first">
-                    <span id="default-tree-first-label">First tree</span>
-                </label>
-                <label class="radio-option">
-                    <input type="radio" name="default-tree-option" id="default-tree-last" value="last">
-                    <span data-i18n="treeManager.defaultTreeLastFocused">Last focused</span>
-                </label>
-                <label class="radio-option">
-                    <input type="radio" name="default-tree-option" id="default-tree-specific" value="specific">
-                    <span data-i18n="treeManager.defaultTreeSpecific">Specific tree:</span>
-                </label>
-                <div id="default-tree-select-container" class="picker-container" style="display: none;">
-                    <select id="default-tree-select" class="tree-select"></select>
-                </div>
-            </div>
-            <div class="buttons">
-                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeDefaultTreeDialog()" data-i18n="buttons.cancel">Cancel</button>
-                <button class="primary" onclick="window.Strom.UI.confirmDefaultTree()" data-i18n="buttons.save">Save</button>
             </div>
         </div>
     </div>

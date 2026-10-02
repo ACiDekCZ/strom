@@ -195,11 +195,15 @@ class MergerUIClass {
      * Handle escape key press
      */
     private handleEscapePress(): void {
-        // Check if tree preview/compare is open - let it handle its own ESC
-        const previewOverlay = document.querySelector('.tree-preview-overlay');
-        const compareOverlay = document.querySelector('.tree-compare-overlay');
-        if (previewOverlay || compareOverlay) {
-            // Preview has its own ESC handler, don't interfere
+        // A tree preview / comparison opened from the wizard sits above it:
+        // close that first. This capture handler stops the key, so the central
+        // cascade (misc.ts) that closes them elsewhere never sees it.
+        if (TreePreview.isOpen()) {
+            TreePreview.close();
+            return;
+        }
+        if (TreeCompare.isOpen()) {
+            TreeCompare.close();
             return;
         }
 

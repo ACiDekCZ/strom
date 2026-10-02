@@ -27,7 +27,8 @@ async function insets(page: import('@playwright/test').Page) {
     });
 }
 
-for (const [label, width] of [['mobile', 420], ['tablet', 700], ['desktop', 1200]] as const) {
+// Desktop is checked in "the confirm dialog is the small width…" below.
+for (const [label, width] of [['mobile', 420], ['tablet', 700]] as const) {
     test(`dialog title lines up with the dialog body (${label})`, async ({ page }) => {
         await page.setViewportSize({ width, height: 760 });
         await openApp(page);
@@ -197,10 +198,13 @@ for (const id of ['storage-status-modal', 'tree-manager-modal'] as const) {
     });
 }
 
-test('the confirm dialog is the small width and its title keeps the 20px/24px inset', async ({ page }) => {
+test('the confirm dialog is the small width and its title keeps the 20px/24px inset, lined up with the body (desktop)', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await openApp(page);
-    await page.evaluate(() => { void window.Strom.UI.showConfirm('m', 't'); });
+    await page.evaluate(() => {
+        void window.Strom.UI.showConfirm('Zkontrolovali jsme data.', 'Kontrola dat',
+            { ok: 'Zobrazit', cancel: 'Zavrit' });
+    });
     await expect(page.locator('#confirmation-modal')).toHaveClass(/active/);
     const m = await page.evaluate(() => {
         const modal = document.querySelector('#confirmation-modal .modal') as HTMLElement;
@@ -209,6 +213,11 @@ test('the confirm dialog is the small width and its title keeps the 20px/24px in
     });
     expect(m.width).toBe(440);
     expect(m.pad).toBe('20px 24px 0px 24px');
+
+    const i = await insets(page);
+    expect(i.title, 'title text starts at the same inset as the body').toBe(i.message);
+    expect(i.title, 'and is not flush against the panel edge').toBeGreaterThan(8);
+    expect(i.titleTop, 'nor against the top edge').toBeGreaterThan(8);
 });
 
 test('tree manager: New tree is the only primary, rows offer "Open at startup"', async ({ page }) => {

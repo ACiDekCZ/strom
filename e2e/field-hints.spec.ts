@@ -34,18 +34,8 @@ test('a long field explanation opens as a popup from the "?"', async ({ page }) 
     await expect(group.locator('.field-hint')).toBeHidden();
 });
 
-/**
- * A short hint is quicker to read than to open — the date formats stay put.
- */
-test('a short hint keeps showing itself', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
-    await cardAction(page, 'Jan', 'edit');
-
-    const dateHint = personModal(page).locator('[data-i18n="personModal.dateHint"]');
-    await expect(dateHint).toBeVisible();
-    await expect(dateHint.locator('.hint-toggle')).toHaveCount(0);
-});
+// A short hint keeps showing itself (the date formats): advanced-fields.spec.ts,
+// in the plain person form test.
 
 /**
  * Godparents and witnesses belong to the acts a parish book records them for.
@@ -76,30 +66,8 @@ test('godparents/witnesses are offered for a baptism, not for a residence', asyn
     await expect(participants).toBeVisible();
 });
 
-/**
- * A dialog opened on top of another closes alone. The event editor was not on
- * the dialog stack, so Escape fell through to the "close everything" fallback
- * and took the person modal underneath with it.
- */
-test('Escape in the event editor leaves the person form open', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
-    await cardAction(page, 'Jan', 'edit');
-
-    const modal = personModal(page);
-    const editor = page.locator('#event-editor-modal');
-
-    await modal.locator('#btn-add-event').click();
-    await expect(editor).toBeVisible();
-
-    await page.keyboard.press('Escape');
-    await expect(editor).toBeHidden();
-    await expect(modal, 'the form it was opened from stays').toBeVisible();
-
-    // And a second Escape closes the form, as it would have on its own.
-    await page.keyboard.press('Escape');
-    await expect(modal).toBeHidden();
-});
+// Escape in the event editor leaves the person form open (and a second one
+// closes it): dialogs-keyboard.spec.ts, the event editor test.
 
 /**
  * A research note runs to paragraphs; the box follows it instead of scrolling

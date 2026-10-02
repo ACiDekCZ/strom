@@ -21,19 +21,7 @@ test('the add-person modal opens without a horizontal scrollbar', async ({ page 
     expect(overflow).toBeLessThanOrEqual(1);
 });
 
-test('a created person persists across a page reload', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak');
-    await expect(card(page, 'Jan')).toBeVisible();
-
-    await waitForPersist(page, 'Jan');
-    await page.reload();
-    await expect(page.locator('.toolbar')).toBeVisible();
-    await expect(card(page, 'Jan')).toBeVisible();
-    expect(await realPersonCount(page)).toBe(1);
-});
-
-test('editing every person field survives a reload', async ({ page }) => {
+test('a created person and every edited field survive a reload', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
@@ -54,6 +42,9 @@ test('editing every person field survives a reload', async ({ page }) => {
     await waitForPersist(page, 'Johann');
     await page.reload();
     await expect(page.locator('.toolbar')).toBeVisible();
+    // The created person came back once — no duplicate, no loss.
+    await expect(card(page, 'Johann')).toBeVisible();
+    expect(await realPersonCount(page)).toBe(1);
     await cardAction(page, 'Johann', 'edit');
     await expect(modal.locator('#input-firstname')).toHaveValue('Johann');
     await expect(modal.locator('#input-lastname')).toHaveValue('Neumann');
@@ -66,7 +57,7 @@ test('editing every person field survives a reload', async ({ page }) => {
     await expect(modal.locator('#input-is-deceased')).toBeChecked();
 });
 
-test('deleting a person via the context menu asks for confirmation and undo restores it', async ({ page }) => {
+test('deleting a person via the context menu asks for confirmation; undo restores it, redo deletes again', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
@@ -85,6 +76,11 @@ test('deleting a person via the context menu asks for confirmation and undo rest
     await page.keyboard.press('Control+z');
     await expect(card(page, 'Petr')).toBeVisible();
     expect(await realPersonCount(page)).toBe(2);
+
+    // Ctrl+Shift+Z replays the delete.
+    await page.keyboard.press('Control+Shift+z');
+    await expect(card(page, 'Petr')).toBeHidden();
+    expect(await realPersonCount(page)).toBe(1);
 });
 
 test('the Delete key removes the focused person after confirmation', async ({ page }) => {
@@ -182,26 +178,9 @@ test('reference number and open question persist and mark the card (K12/F3)', as
     await expect(card(page, 'Marie')).not.toHaveClass(/has-question/);
 });
 
-test('editing shows the whole record; adding starts short', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
-
-    // Adding: the short form, with the rest a click away.
-    await page.evaluate(() => window.Strom.UI.showAddPersonModal());
-    const modal = personModal(page);
-    await expect(modal.locator('#expand-details')).toBeVisible();
-    await expect(modal.locator('#input-deathdate')).toBeHidden();
-    await modal.getByRole('button', { name: 'Cancel' }).click();
-
-    // Editing: everything, no hunting. This used to depend on a hand-written
-    // list of "fields that count as extended data" — miss one and its value was
-    // invisible until you expanded by hand, which happened twice.
-    await cardAction(page, 'Jan', 'edit');
-    await expect(modal.locator('#expand-details')).toBeHidden();
-    await expect(modal.locator('#input-deathdate')).toBeVisible();
-    await expect(modal.locator('#input-notes')).toBeVisible();
-    await expect(modal.locator('#events-section')).toBeVisible();
-});
+// "Editing shows the whole record" lives in advanced-fields.spec.ts (a plain
+// person form); "adding starts short" in new-person-form.spec.ts ("More
+// details" disclosure) and advanced-fields.spec.ts.
 
 test('a person added from the modal is findable in search right away', async ({ page }) => {
     await openApp(page);

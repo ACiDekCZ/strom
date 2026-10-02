@@ -39,6 +39,13 @@ test('undo toast auto-dismisses on Escape', async ({ page }) => {
 
 test('Undo / Redo live in the toolbar, not in the ⋯ menu: description and disabled states', async ({ page }) => {
     await openApp(page);
+    const undo = page.locator('#toolbar-undo-btn');
+    const redo = page.locator('#toolbar-redo-btn');
+    // Nothing done yet: both visible and disabled.
+    await expect(undo).toBeVisible();
+    await expect(undo).toBeDisabled();
+    await expect(redo).toBeDisabled();
+
     await createFirstPerson(page, 'Jan', 'Novak');
 
     await page.locator('.actions-menu-btn').click();
@@ -46,11 +53,11 @@ test('Undo / Redo live in the toolbar, not in the ⋯ menu: description and disa
     await expect(page.locator('#actions-menu-dropdown')).not.toContainText('Undo');
     await page.keyboard.press('Escape');
 
-    // The toolbar Undo carries the last change; Redo is disabled (nothing to replay yet).
-    const undo = page.locator('#toolbar-undo-btn');
-    const redo = page.locator('#toolbar-redo-btn');
+    // The toolbar Undo carries the last change and the platform shortcut;
+    // Redo is disabled (nothing to replay yet).
     await expect(undo).toBeEnabled();
     await expect(undo).toHaveAttribute('title', /^Undo: .*Jan/);
+    await expect(undo).toHaveAttribute('title', /Ctrl\+Z|⌘Z/);
     await expect(redo).toBeDisabled();
 
     // Undo: the stack is now empty, so Undo greys out and Redo becomes available.
@@ -58,4 +65,9 @@ test('Undo / Redo live in the toolbar, not in the ⋯ menu: description and disa
     await expect(card(page, 'Jan')).toBeHidden();
     await expect(undo).toBeDisabled();
     await expect(redo).toBeEnabled();
+
+    // Redo brings the person back and re-enables Undo.
+    await redo.click();
+    await expect(card(page, 'Jan')).toBeVisible();
+    await expect(undo).toBeEnabled();
 });

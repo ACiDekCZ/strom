@@ -7,7 +7,7 @@ import { openApp, card } from './helpers.js';
  * longer offers it (localStorage flag). Mobile smoke checks the bubble fits.
  */
 test('tour is offered, walks through steps, and Escape ends it', async ({ page }) => {
-    await openApp(page);
+    await openApp(page, { tourOffer: true });
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
 
@@ -49,11 +49,18 @@ test('tour is offered, walks through steps, and Escape ends it', async ({ page }
     await expect(page.locator('.tour-offer')).toHaveCount(0);
 });
 
-test('mobile: the tour bubble fits within the viewport', async ({ page }) => {
+test('mobile: the offer clears the bottom bar, the tour bubble fits within the viewport', async ({ page }) => {
     await page.setViewportSize({ width: 400, height: 780 });
-    await openApp(page);
+    await openApp(page, { tourOffer: true });
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(page.locator('.tour-offer')).toBeVisible();
+    // The offer stays up for 15 s: it must sit above the bottom bar, not over
+    // its tabs (it used to block them for exactly that long).
+    const bar = await page.locator('.bottom-bar').boundingBox();
+    await expect.poll(async () => {
+        const offer = await page.locator('.tour-offer').boundingBox();
+        return offer ? offer.y + offer.height : Infinity;
+    }).toBeLessThanOrEqual(bar!.y);
     await page.locator('.tour-offer-btn').click();
 
     const bubble = page.locator('#tour-bubble');
@@ -65,7 +72,7 @@ test('mobile: the tour bubble fits within the viewport', async ({ page }) => {
 });
 
 test('tour reveals the hover-only card buttons during the card-buttons step', async ({ page }) => {
-    await openApp(page);
+    await openApp(page, { tourOffer: true });
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await page.locator('.tour-offer .tour-offer-btn').click();
     await expect(page.locator('#tour-overlay')).toHaveClass(/active/);
@@ -101,7 +108,7 @@ async function tourGeometry(page: import('@playwright/test').Page) {
 for (const [w, h] of [[1440, 900], [1024, 768], [550, 900], [390, 844]] as const) {
     test(`every step at ${w}px spotlights a real target and the bubble never covers it`, async ({ page }) => {
         await page.setViewportSize({ width: w, height: h });
-        await openApp(page);
+        await openApp(page, { tourOffer: true });
         await page.getByRole('button', { name: 'Try a sample tree' }).click();
         await page.locator('.tour-offer .tour-offer-btn').click();
         const overlay = page.locator('#tour-overlay');
@@ -134,7 +141,7 @@ for (const [w, h] of [[1440, 900], [1024, 768], [550, 900], [390, 844]] as const
 
 test('the spotlight follows its card when the canvas is panned or zoomed', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 850 });
-    await openApp(page);
+    await openApp(page, { tourOffer: true });
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await page.locator('.tour-offer .tour-offer-btn').click();
     await expect(page.locator('#tour-overlay')).toHaveClass(/active/);

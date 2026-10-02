@@ -1070,6 +1070,8 @@ export const sourcesMethods = uiModule({
         if (this.coupleEventPartnershipId && this.editingEventId) {
             DataManager.unciteCoupleEvent(this.coupleEventPartnershipId, this.editingEventId, sourceId);
             this.refreshCitationChips();
+            // The event's row in the panel counts its sources.
+            this.refreshRelationshipsPanel();
             return;
         }
         if (!this.currentId || !this.editingEventId) return;

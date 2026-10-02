@@ -40,6 +40,9 @@ export interface MappedPlace {
 /** Which people the map covers. */
 export type MapScope = 'view' | 'tree';
 
+/** Recomputes --map-floor for the current map canvas (see watchMapFloor). */
+let mapFloorUpdate: (() => void) | null = null;
+
 export const mapMethods = uiModule({
     /**
      * Places the map should show: everything with coordinates, for the chosen
@@ -105,6 +108,7 @@ export const mapMethods = uiModule({
             this.bindMapGestures(container);
             this.bindMapClicks(container);
             this.bindMapTime(container);
+            this.watchMapFloor(container);
         }
 
         document.getElementById('map-scope-view')?.classList.toggle('active', this.mapScope !== 'tree');
@@ -129,6 +133,31 @@ export const mapMethods = uiModule({
         this.drawMapTiles(container);
         this.drawMapMarkers(container, places);
         this.renderMapStatus(places);
+    },
+
+    /**
+     * Toasts and offers sit bottom-centre, where the map keeps its status bar
+     * and time bar: publish how far up those reach (--map-floor) so the notes
+     * rise above them instead of covering "Look up" and "Places".
+     */
+    watchMapFloor(container: HTMLElement): void {
+        if (typeof ResizeObserver === 'undefined') return;
+        const bars = ['.map-status', '.map-timebar']
+            .map(sel => container.querySelector(sel))
+            .filter((el): el is HTMLElement => el !== null);
+        const update = () => {
+            let floor = 0;
+            for (const el of bars) {
+                const r = el.getBoundingClientRect();
+                if (r.height > 0) floor = Math.max(floor, window.innerHeight - r.top);
+            }
+            document.documentElement.style.setProperty('--map-floor', `${Math.round(floor)}px`);
+        };
+        const ro = new ResizeObserver(update);
+        bars.forEach(el => ro.observe(el));
+        // The canvas can be rebuilt: one window listener, pointing at the latest.
+        if (!mapFloorUpdate) window.addEventListener('resize', () => mapFloorUpdate?.());
+        mapFloorUpdate = update;
     },
 
     /**

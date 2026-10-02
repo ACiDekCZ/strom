@@ -105,6 +105,9 @@ test.describe("couple's events", () => {
         // Under the list even without the advanced mode: the couple has events.
         await expect(coupleEvents(page).locator('.couple-event-add')).toHaveText('+ couple event');
         await expect(page.locator('#relationships-modal .pg-add-event')).toHaveCount(0);
+        // Desktop shows the list itself, without the phone's toggle.
+        await expect(coupleEvents(page).locator('.couple-events-toggle')).toBeHidden();
+        await expect(rows(page).first()).toBeVisible();
     });
 
     test('a person with two partners: the list only at the marriage that has events', async ({ page }) => {
@@ -236,12 +239,11 @@ test.describe("couple's events", () => {
         expect(overflow).toBeLessThanOrEqual(0);
     });
 
-    test('tablet and desktop show the list without a toggle', async ({ page }) => {
-        for (const width of [768, 1440]) {
-            await setup(page, width);
-            await openPanel(page, 'Marie');
-            await expect(coupleEvents(page).locator('.couple-events-toggle')).toBeHidden();
-            await expect(rows(page).first()).toBeVisible();
-        }
+    // Desktop (1440) is checked in "the list under the wedding".
+    test('tablet shows the list without a toggle', async ({ page }) => {
+        await setup(page, 768);
+        await openPanel(page, 'Marie');
+        await expect(coupleEvents(page).locator('.couple-events-toggle')).toBeHidden();
+        await expect(rows(page).first()).toBeVisible();
     });
 });

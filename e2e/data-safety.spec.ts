@@ -109,27 +109,6 @@ async function submitPassword(page: Page, password: string): Promise<void> {
 }
 
 test.describe('Local encryption', () => {
-    test('encrypted tree survives a reload: password prompt, right password shows the tree', async ({ page }) => {
-        await openApp(page);
-        await createFirstPerson(page, 'Jan', 'Novak');
-        await addRelation(page, 'Jan', 'partner', 'Marie', 'Novak', 'female');
-        await waitForPersist(page, 'Marie');
-
-        await enableEncryption(page, ['Jan', 'Marie']);
-
-        await page.reload();
-        const prompt = passwordPrompt(page);
-        await expect(prompt).toBeVisible();
-        // Nothing of the tree is shown while locked.
-        await expect(card(page, 'Jan')).toHaveCount(0);
-
-        await submitPassword(page, PASSWORD);
-        await expect(prompt).toBeHidden();
-        await expect(card(page, 'Jan')).toBeVisible();
-        await expect(card(page, 'Marie')).toBeVisible();
-        await expect(page.locator('#locked-data-notice')).toHaveCount(0);
-    });
-
     test('cancelled unlock leaves an Unlock banner and a read-only app; unlocking restores editing', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
@@ -228,7 +207,7 @@ test.describe('Local encryption', () => {
         await expect(card(page, 'Jan')).toBeVisible();
     });
 
-    test('wrong password, then the right one: all trees intact', async ({ page }) => {
+    test('encrypted trees survive a reload: wrong password, then the right one; all trees intact', async ({ page }) => {
         await openApp(page);
         await buildTwoTrees(page);
         const before = await treeSummaries(page);
@@ -239,6 +218,8 @@ test.describe('Local encryption', () => {
         await page.reload();
         const prompt = passwordPrompt(page);
         await expect(prompt).toBeVisible();
+        // Nothing of the tree is shown while locked.
+        await expect(card(page, 'Karel')).toHaveCount(0);
 
         await submitPassword(page, 'not-the-password');
         await expect(prompt.locator('#password-prompt-error')).toHaveText('Incorrect password');
@@ -246,9 +227,10 @@ test.describe('Local encryption', () => {
 
         await submitPassword(page, PASSWORD);
         await expect(prompt).toBeHidden();
-        // The active tree (the second one) renders.
+        // The active tree (the second one) renders; no locked-data banner.
         await expect(card(page, 'Karel')).toBeVisible();
         await expect(card(page, 'Ota')).toBeVisible();
+        await expect(page.locator('#locked-data-notice')).toHaveCount(0);
 
         const after = await treeSummaries(page);
         expect(after).toEqual(before);

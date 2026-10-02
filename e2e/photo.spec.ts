@@ -30,20 +30,27 @@ test('photo: uploading shows an avatar on the card; removing it clears the avata
     await expect(card(page, 'Jan').locator('.card-avatar .avatar-initials')).toBeVisible();
 });
 
-test('photo: rotate buttons are available and the photo survives rotation + save', async ({ page }) => {
+// The 90-degree pixel transform is exercised on an ASYMMETRIC image (top half
+// black, bottom half white) so a real rotation is observable (avatar.png is
+// symmetric → its bytes wouldn't change).
+test('photo: rotate buttons turn the image for real, and the photo survives rotation + save', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
     await cardAction(page, 'Jan', 'edit');
     const modal = personModal(page);
     // The photo editor lives in the collapsible "More info" section.
-    await modal.locator('#input-photo').setInputFiles('e2e/fixtures/avatar.png');
+    await modal.locator('#input-photo').setInputFiles('e2e/fixtures/asymmetric.png');
     await expect(modal.locator('#photo-preview img')).toHaveCount(1);
 
-    // Rotate buttons appear once a photo is present and rotate without error.
+    // Rotate buttons appear once a photo is present.
     await expect(modal.locator('#photo-rotate-right')).toBeVisible();
     await expect(modal.locator('#photo-rotate-left')).toBeVisible();
+    // A 90-degree turn actually changes the image.
+    const before = await modal.locator('#photo-preview img').getAttribute('src');
     await modal.locator('#photo-rotate-right').click();
+    await expect.poll(() => modal.locator('#photo-preview img').getAttribute('src'))
+        .not.toBe(before);
     await modal.locator('#photo-rotate-left').click();
     // Still a valid JPEG portrait after rotating.
     await expect.poll(() => modal.locator('#photo-preview img').getAttribute('src'))
@@ -55,21 +62,4 @@ test('photo: rotate buttons are available and the photo survives rotation + save
     const stored = await page.evaluate(() =>
         window.Strom.DataManager.getAllPersons()[0].photo);
     expect(stored).toMatch(/^data:image\/jpeg/);
-});
-
-// The actual 90-degree pixel transform is exercised on an ASYMMETRIC image
-// (top half black, bottom half white) so a real rotation is observable
-// (avatar.png is symmetric → its bytes wouldn't change).
-test('photo: a 90-degree rotation actually changes an asymmetric image', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak');
-    await cardAction(page, 'Jan', 'edit');
-    const modal = personModal(page);
-    await modal.locator('#input-photo').setInputFiles('e2e/fixtures/asymmetric.png');
-    await expect(modal.locator('#photo-preview img')).toHaveCount(1);
-
-    const before = await modal.locator('#photo-preview img').getAttribute('src');
-    await modal.locator('#photo-rotate-right').click();
-    await expect.poll(() => modal.locator('#photo-preview img').getAttribute('src'))
-        .not.toBe(before);
 });

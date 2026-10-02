@@ -127,32 +127,7 @@ test('a bottom-bar tab switches the view and lights up copper', async ({ page })
     await expect(page.locator('#timeline-container')).toBeVisible();
 });
 
-test('the "More" sheet exposes the remaining views and one Export…', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak');
-
-    // Open the More sheet from the bottom bar.
-    await page.locator('#bb-view-more').tap();
-    const sheet = page.locator('.bottom-sheet-menu');
-    await expect(sheet).toBeVisible();
-
-    // Fan / Map side by side under "View"; one Export… with its second line.
-    await expect(sheet.locator('.bottom-sheet-section', { hasText: /^View$/ })).toBeVisible();
-    const views = sheet.locator('.bottom-sheet-pair').last();
-    await expect(views.locator('.bottom-sheet-item')).toHaveText(['Fan', 'Map']);
-    const fan = (await views.locator('.bottom-sheet-item').first().boundingBox())!;
-    expect(fan.height).toBeGreaterThanOrEqual(44);
-    const exports = sheet.locator('.bottom-sheet-item', { hasText: 'Export' });
-    await expect(exports).toHaveCount(1);
-    await expect(exports).toHaveText('Export…whole tree or current view');
-
-    // Poster… opens the view-aware poster dialog and closes the sheet.
-    await sheet.locator('.bottom-sheet-item', { hasText: 'Poster' }).click();
-    await expect(page.locator('#poster-modal')).toBeVisible();
-    await expect(page.locator('.bottom-sheet-menu')).toHaveCount(0);
-});
-
-test('the "More" sheet mirrors the desktop actions menu: Undo/Redo pair, content, outputs, views, the Tree row', async ({ page }) => {
+test('the "More" sheet mirrors the desktop actions menu: Undo/Redo pair, content, outputs, one Export…, the views, the Tree row', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
@@ -181,6 +156,21 @@ test('the "More" sheet mirrors the desktop actions menu: Undo/Redo pair, content
 
     // "Manage trees" lives only in the second-level tree sheet.
     await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Manage trees' })).toHaveCount(0);
+
+    // Fan / Map side by side under "View"; one Export… with its second line.
+    await expect(sheet.locator('.bottom-sheet-section', { hasText: /^View$/ })).toBeVisible();
+    const views = sheet.locator('.bottom-sheet-pair').last();
+    await expect(views.locator('.bottom-sheet-item')).toHaveText(['Fan', 'Map']);
+    const fan = (await views.locator('.bottom-sheet-item').first().boundingBox())!;
+    expect(fan.height).toBeGreaterThanOrEqual(44);
+    const exports = sheet.locator('.bottom-sheet-item', { hasText: 'Export' });
+    await expect(exports).toHaveCount(1);
+    await expect(exports).toHaveText('Export…whole tree or current view');
+
+    // Poster… opens the view-aware poster dialog and closes the sheet.
+    await sheet.locator('.bottom-sheet-item', { hasText: 'Poster' }).click();
+    await expect(page.locator('#poster-modal')).toBeVisible();
+    await expect(page.locator('.bottom-sheet-menu')).toHaveCount(0);
 });
 
 test('tapping the Tree row opens the second-level tree sheet in the desktop submenu\'s order', async ({ page }) => {
@@ -207,13 +197,8 @@ test('tapping the Tree row opens the second-level tree sheet in the desktop subm
     await expect(page.locator('#tree-manager-modal')).toHaveClass(/active/);
 });
 
-test('the top bar ⋯ opens the same "More" sheet', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak');
-
-    await page.locator('.mobile-more-btn').tap();
-    await expect(page.locator('.bottom-sheet-menu')).toBeVisible();
-});
+// The top bar ⋯ opening the same "More" sheet: toolbar-responsive.spec.ts
+// (the mobile ⋯ stays ghost … when its sheet is open).
 
 test('bottom-bar tabs, the FAB and sheet rows meet the 44px touch target', async ({ page }) => {
     await openApp(page);

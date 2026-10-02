@@ -238,7 +238,7 @@ function registerAppListeners(): void {
 /** IndexedDB could not be opened: say so instead of a blank page (S22). */
 function showStartupError(err: unknown): void {
     console.error('Startup failed', err);
-    document.documentElement.classList.remove('app-booting');
+    document.documentElement.classList.remove('app-booting', 'app-loading');
     void UI.showAlert(strings.storageSafety.storageInitFailed, 'error');
 }
 
@@ -323,6 +323,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         showStartupError(err);
         return;
     }
+    // The startup tree is in memory: editing may begin (see .app-loading).
+    document.documentElement.classList.remove('app-loading');
     document.getElementById('storage-blocked-notice')?.remove();
 
     // ---- Shell: everything that does not need readable data ----
@@ -479,6 +481,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         ZoomPan.centerOnFocusWithContext();
 
         afterFirstRender();
+
+        // A tree merge interrupted mid-review (reload, crash) is offered back.
+        if (!DataManager.isViewMode()) void UI.checkPendingMerges();
     };
 
     // Local data unlocked (startup prompt, the "Unlock" banner, or before an

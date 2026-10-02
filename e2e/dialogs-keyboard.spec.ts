@@ -1,53 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { openApp, createFirstPerson, card, cardAction, personModal, addRelation } from './helpers.js';
+import { openApp, createFirstPerson, card, cardAction, personModal } from './helpers.js';
 
 /**
- * Review S9 / S37: the relationships dialog is staged as a whole, the event
- * and source editors ask before discarding edits, dialogs take and give back
- * focus, and the click-only controls work from the keyboard.
+ * Review S9 / S37: the event and source editors ask before discarding edits,
+ * dialogs take and give back focus, and the click-only controls work from the
+ * keyboard.
  */
 
-const relType = (page: import('@playwright/test').Page, parentName: string) =>
-    page.evaluate((name) => {
-        const persons = Object.values(window.Strom.DataManager.getData().persons) as Array<{
-            id: string; firstName: string; parentRelTypes?: Record<string, string>;
-        }>;
-        const parent = persons.find(p => p.firstName === name)!;
-        const child = persons.find(p => p.firstName === 'Petr')!;
-        return child.parentRelTypes?.[parent.id] ?? 'biological';
-    }, parentName);
-
-test('relationships dialog: an immediate change is rolled back without Save and is one undo step with it', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak');
-    await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
-    const janId = await card(page, 'Jan').getAttribute('data-id');
-    const panel = page.locator('#relationships-modal');
-    const confirm = page.locator('#confirmation-modal');
-
-    // Change the relation type (applied live), then Escape → asked; Discard.
-    await page.evaluate((id) => window.Strom.UI.showRelationshipsPanel(id), janId);
-    await expect(panel).toBeVisible();
-    await panel.locator('.parent-rel-type-select').first().selectOption('adoptive');
-    expect(await relType(page, 'Jan')).toBe('adoptive');
-    const undoBefore = await page.evaluate(() => window.Strom.DataManager.lastUndoDescription());
-    await page.keyboard.press('Escape');
-    await expect(confirm).toBeVisible();
-    await confirm.locator('#confirm-discard-btn').click();
-    await expect(panel).toBeHidden();
-    expect(await relType(page, 'Jan')).toBe('biological');
-    // A rollback records nothing.
-    expect(await page.evaluate(() => window.Strom.DataManager.lastUndoDescription())).toBe(undoBefore);
-
-    // Change again, then Save: kept, and one Undo reverts the whole dialog.
-    await page.evaluate((id) => window.Strom.UI.showRelationshipsPanel(id), janId);
-    await panel.locator('.parent-rel-type-select').first().selectOption('step');
-    await panel.getByRole('button', { name: 'Save' }).click();
-    await expect(panel).toBeHidden();
-    expect(await relType(page, 'Jan')).toBe('step');
-    await page.evaluate(() => window.Strom.UI.performUndo());
-    expect(await relType(page, 'Jan')).toBe('biological');
-});
+// The relationships dialog staged as a whole (a live change rolled back on
+// Escape → Discard, Save as one undo step): editing-review.spec.ts.
 
 test('event editor asks before discarding edits; Stay keeps them', async ({ page }) => {
     await openApp(page);
@@ -78,7 +39,11 @@ test('event editor asks before discarding edits; Stay keeps them', async ({ page
     await expect(confirm).toBeVisible();
     await confirm.locator('#confirm-discard-btn').click();
     await expect(editor).toBeHidden();
+    await expect(modal, 'the person form the editor was opened from stays').toBeVisible();
     await expect(modal.locator('#events-list')).not.toContainText('Kladno');
+    // A second Escape closes the form itself, as it would on its own.
+    await page.keyboard.press('Escape');
+    await expect(modal).toBeHidden();
 });
 
 test('source editor asks before discarding edits', async ({ page }) => {

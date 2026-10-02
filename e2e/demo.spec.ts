@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { openApp, card } from './helpers.js';
 
-test('empty state offers a demo tree that loads with a focus and a hint', async ({ page }) => {
+test('empty state offers a demo tree that loads with a focus, a hint, the fullest card and its drawn pictures', async ({ page }) => {
     await openApp(page);
     await expect(page.locator('#empty-state')).toBeVisible();
 
@@ -15,12 +15,8 @@ test('empty state offers a demo tree that loads with a focus and a hint', async 
     expect(await page.locator('.person-card').count()).toBeGreaterThan(3);
     // Hint toast appears.
     await expect(page.locator('.toast')).toBeVisible();
-});
 
-test('the sample opens with the fullest card and its drawn pictures', async ({ page }) => {
-    await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Johan')).toBeVisible();
+    // It opens with the fullest card and its drawn pictures.
     await expect.poll(() => page.evaluate(() => document.body.dataset.cardDensity)).toBe('custom');
     await expect(card(page, 'Johan').locator('.card-line')).not.toHaveCount(0);
     // Portraits, the register page and its crops are drawn on load, not shipped.

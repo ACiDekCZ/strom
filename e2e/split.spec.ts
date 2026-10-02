@@ -19,7 +19,7 @@ async function twoUnrelatedFamilies(page: import('@playwright/test').Page): Prom
     });
 }
 
-test('a tree with two unrelated families can be split into two trees', async ({ page }) => {
+test('a tree with two unrelated families can be split into two trees, the original left alone', async ({ page }) => {
     await openApp(page);
     await twoUnrelatedFamilies(page);
 
@@ -40,7 +40,10 @@ test('a tree with two unrelated families can be split into two trees', async ({ 
 
     await rows.nth(1).locator('.split-check').check();
     await page.getByRole('button', { name: 'Split off 1' }).click();
+    await expect(page.locator('#split-modal')).toHaveCount(0);
 
+    // The split copies, it does not move: the open tree still shows everyone.
+    await expect(card(page, 'Jan')).toBeVisible();
     const trees = await page.evaluate(() => window.Strom.TreeManager.getTrees()
         .map((t: { name: string; personCount: number }) => [t.name, t.personCount]));
     // The new tree holds the Svobodas...
@@ -63,21 +66,6 @@ test('a connected tree offers nothing to split', async ({ page }) => {
     await expect(page.locator('#split-modal')).toContainText('one family here');
     await expect(page.locator('.split-row')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Split off/ })).toHaveCount(0);
-});
-
-test('the split leaves the original alone, so a wrong pick costs a delete', async ({ page }) => {
-    await openApp(page);
-    await twoUnrelatedFamilies(page);
-    const before = await page.evaluate(() => window.Strom.DataManager.getAllPersons().length);
-
-    await page.evaluate(() => window.Strom.UI.showSplitDialog());
-    await page.locator('.split-check').first().check();
-    await page.getByRole('button', { name: 'Split off 1' }).click();
-    await expect(page.locator('#split-modal')).toHaveCount(0);
-
-    // Still everyone: the split copies, it does not move.
-    expect(await page.evaluate(() => window.Strom.DataManager.getAllPersons().length)).toBe(before);
-    await expect(card(page, 'Jan')).toBeVisible();
 });
 
 test('importing a file with several families offers to split it', async ({ page }) => {

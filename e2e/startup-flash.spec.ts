@@ -32,8 +32,4 @@ test('opening a tree with people never flashes the welcome screen', async ({ pag
     expect(await page.evaluate(() => (window as unknown as { __welcomeSeen?: boolean }).__welcomeSeen)).toBe(false);
 });
 
-test('an empty app still shows the welcome once loaded', async ({ page }) => {
-    await openApp(page);
-    await expect(page.locator('#empty-state')).toBeVisible();
-    await expect(page.locator('html')).not.toHaveClass(/app-booting/);
-});
+// An empty app still shows the welcome once loaded: smoke.spec.ts.

@@ -49,14 +49,11 @@ export const mergeUiMethods = uiModule({
      * Check for pending merges and show dialog if found
      */
     async checkPendingMerges(): Promise<void> {
-        const currentMerge = await getCurrentMergeInfo();
-        const savedSessions = await listMergeSessionsInfo();
-
-        if (!currentMerge && savedSessions.length === 0) {
-            return;
-        }
-
-        this.showPendingMergeDialog();
+        // Only a merge the wizard auto-saved and never closed (a reload or a
+        // crash mid-review) is offered at startup; sessions saved on purpose
+        // ("Save for later") wait in the tree manager.
+        if (!await getCurrentMergeInfo()) return;
+        void this.showPendingMergeDialog();
     },
 
     /**
@@ -79,7 +76,7 @@ export const mergeUiMethods = uiModule({
             html += `
                 <div class="pending-merge-item" data-session-id="current">
                     <div class="pending-merge-info">
-                        <div class="pending-merge-name">${this.escapeHtml(currentMerge.incomingFileName || 'Auto-saved merge')}</div>
+                        <div class="pending-merge-name">${this.escapeHtml(currentMerge.incomingFileName || strings.merge.pendingMergeLabel)}</div>
                         <div class="pending-merge-meta">${date} • ${progress}</div>
                     </div>
                     <div class="pending-merge-actions">
@@ -97,7 +94,7 @@ export const mergeUiMethods = uiModule({
             html += `
                 <div class="pending-merge-item" data-session-id="${session.id}">
                     <div class="pending-merge-info">
-                        <div class="pending-merge-name">${this.escapeHtml(session.incomingFileName || 'Saved merge')}</div>
+                        <div class="pending-merge-name">${this.escapeHtml(session.incomingFileName || strings.merge.pendingMergeLabel)}</div>
                         <div class="pending-merge-meta">${date} • ${progress}</div>
                     </div>
                     <div class="pending-merge-actions">

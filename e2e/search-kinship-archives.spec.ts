@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, card, cardAction } from './helpers.js';
+import { openApp, createFirstPerson, cardAction } from './helpers.js';
 
 async function addChild(page: Page, fromName: string, first: string, last: string): Promise<void> {
     await cardAction(page, fromName, 'child');
@@ -10,17 +10,9 @@ async function addChild(page: Page, fromName: string, first: string, last: strin
     await expect(rel).toBeHidden();
 }
 
-test('search focuses the found person', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak');
-    await addChild(page, 'Jan', 'Petr', 'Novak'); // Petr becomes the focus
-
-    const input = page.locator('#toolbar-search-picker .person-picker-input');
-    await input.fill('Jan');
-    await page.locator('#toolbar-search-picker .person-picker-item', { hasText: 'Jan' }).first().click();
-
-    await expect(card(page, 'Jan')).toHaveClass(/focused/);
-});
+// "Search focuses the found person" is asserted by the focusViaSearch helper
+// (helpers.ts) in every test that navigates by search (interaction.spec.ts,
+// new-person-form.spec.ts, data-import-export.spec.ts…).
 
 test('relationship calculator shows a kinship term', async ({ page }) => {
     await openApp(page);

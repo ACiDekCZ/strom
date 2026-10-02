@@ -356,6 +356,8 @@ export const miscMethods = uiModule({
         // the tree focus chip does not apply there and must not overlap them.
         document.body.classList.toggle('standalone-view',
             mode === 'map' || mode === 'timeline' || mode === 'fan');
+        // The map's bottom bars lift the toasts and offers (index.html).
+        document.body.classList.toggle('map-view', mode === 'map');
         for (const m of ['family', 'descendants', 'timeline', 'fan', 'map']) {
             document.getElementById(`view-mode-${m}`)?.classList.toggle('active', mode === m);
         }

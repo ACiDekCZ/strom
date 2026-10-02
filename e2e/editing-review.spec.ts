@@ -15,8 +15,8 @@ import {
  *   - "Deceased" on create is saved; Save without changes records nothing,
  *   - the family wizard keeps the anchor's existing parent,
  *   - first person + child can be added from the keyboard alone.
- * dialogs-keyboard.spec.ts covers the single relation-type rollback and the
- * add-event / add-source questions; these tests extend, not repeat, them.
+ * dialogs-keyboard.spec.ts covers the add-event / add-source questions; these
+ * tests extend, not repeat, them.
  */
 
 interface P {
@@ -88,7 +88,7 @@ test.describe('relationships dialog is staged as a whole (S9)', () => {
         };
     }
 
-    test('Cancel → Discard rolls back status, relation type and witness', async ({ page }) => {
+    test('Escape / Cancel → Discard rolls back status, relation type and witness', async ({ page }) => {
         const janId = await setup(page);
         const panel = page.locator('#relationships-modal');
         const before = await state(page);
@@ -97,9 +97,19 @@ test.describe('relationships dialog is staged as a whole (S9)', () => {
         await page.evaluate((id) => window.Strom.UI.showRelationshipsPanel(id), janId);
         await expect(panel).toBeVisible();
         await makeThreeChanges(page);
+        // The relation type is applied live while the dialog is open.
+        expect((await state(page)).relType).toBe('adoptive');
+
+        // Escape asks too; staying keeps the dialog and its pending changes.
+        const confirm = page.locator('#confirmation-modal');
+        await page.keyboard.press('Escape');
+        await expect(confirm.locator('#confirm-stay-btn')).toBeVisible();
+        await confirm.locator('#confirm-stay-btn').click();
+        await expect(confirm).toBeHidden();
+        await expect(panel).toBeVisible();
+        await expect(panel.locator('.rel-status-select').first()).toHaveValue('divorced');
 
         await panel.getByRole('button', { name: 'Cancel' }).click();
-        const confirm = page.locator('#confirmation-modal');
         await expect(confirm.locator('#confirm-discard-btn')).toBeVisible();
         await confirm.locator('#confirm-discard-btn').click();
         await expect(panel).toBeHidden();

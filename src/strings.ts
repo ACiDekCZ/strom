@@ -1660,12 +1660,6 @@ const stringsEN = {
         reencodeFailed: (count: number) => `${count} stored ${count === 1 ? 'item' : 'items'} (backups, logs) could not be converted and keep their previous form.`
     },
 
-    // Partner selection dialog
-    partnerSelection: {
-        title: 'Select partner',
-        description: (name: string) => `Show relationship branch for ${name}:`
-    },
-
     // Add child - parent selection
     addChild: {
         selectParent: 'Select the other parent',
@@ -2171,11 +2165,6 @@ const stringsEN = {
         defaultPersonLastFocused: 'Last focused',
         defaultPersonSpecific: 'Specific person:',
         // Default tree dialog
-        defaultTree: 'Default tree',
-        defaultTreeDesc: 'When opening app, load:',
-        defaultTreeFirstTree: 'First tree',
-        defaultTreeLastFocused: 'Last focused',
-        defaultTreeSpecific: 'Specific tree:',
         // New Tree Menu
         newTreeMenu: 'New tree',
         emptyTree: 'Empty tree',
@@ -4435,12 +4424,6 @@ const stringsCZ: StringsType = {
         reencodeFailed: (count: number) => `Některé uložené položky (zálohy, záznamy změn) se nepodařilo převést a zůstaly v původní podobě (${count}).`
     },
 
-    // Partner selection dialog
-    partnerSelection: {
-        title: 'Vybrat partnera',
-        description: (name: string) => `Zobrazit větev vztahů pro ${name}:`
-    },
-
     // Add child - parent selection
     addChild: {
         selectParent: 'Vyberte druhého rodiče',
@@ -4954,11 +4937,6 @@ const stringsCZ: StringsType = {
         defaultPersonLastFocused: 'Naposledy zobrazená',
         defaultPersonSpecific: 'Konkrétní osoba:',
         // Default tree dialog
-        defaultTree: 'Výchozí strom',
-        defaultTreeDesc: 'Při spuštění aplikace načíst:',
-        defaultTreeFirstTree: 'První strom',
-        defaultTreeLastFocused: 'Naposledy zobrazený',
-        defaultTreeSpecific: 'Konkrétní strom:',
         // New Tree Menu
         newTreeMenu: 'Nový strom',
         emptyTree: 'Prázdný strom',
@@ -7179,12 +7157,6 @@ const stringsDE: StringsType = {
         reencodeFailed: (count: number) => `${count} gespeicherte ${count === 1 ? 'Element' : 'Elemente'} (Sicherungen, Protokolle) konnten nicht umgewandelt werden und bleiben unverändert.`
     },
 
-    // Partner selection dialog
-    partnerSelection: {
-        title: 'Partner auswählen',
-        description: (name: string) => `Beziehungszweig für ${name} anzeigen:`
-    },
-
     // Add child - parent selection
     addChild: {
         selectParent: 'Anderen Elternteil auswählen',
@@ -7668,11 +7640,6 @@ const stringsDE: StringsType = {
         defaultPersonFirstPerson: 'Erste Person',
         defaultPersonLastFocused: 'Zuletzt fokussiert',
         defaultPersonSpecific: 'Bestimmte Person:',
-        defaultTree: 'Standard-Stammbaum',
-        defaultTreeDesc: 'Beim Öffnen der App laden:',
-        defaultTreeFirstTree: 'Erster Stammbaum',
-        defaultTreeLastFocused: 'Zuletzt fokussiert',
-        defaultTreeSpecific: 'Bestimmter Stammbaum:',
         newTreeMenu: 'Neuer Stammbaum',
         emptyTree: 'Leerer Stammbaum',
         emptyTreeDesc: 'Mit einem leeren Stammbaum beginnen',

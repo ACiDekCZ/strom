@@ -17,7 +17,7 @@ async function twoSpellings(page: import('@playwright/test').Page): Promise<void
     });
 }
 
-test('one entry makes both spellings findable, in both directions', async ({ page }) => {
+test('one entry makes both spellings findable, in both directions; unlinking puts it back', async ({ page }) => {
     await openApp(page);
     await twoSpellings(page);
 
@@ -33,8 +33,14 @@ test('one entry makes both spellings findable, in both directions', async ({ pag
     await page.getByRole('button', { name: 'Link them', exact: true }).click();
 
     // One entry, and it works whichever way you search.
+    await expect(page.locator('.surname-group')).toHaveCount(1);
     expect(await page.evaluate(() => window.Strom.DataManager.searchPersons('Víšek').length)).toBe(2);
     expect(await page.evaluate(() => window.Strom.DataManager.searchPersons('Vyšek').length)).toBe(2);
+
+    // Unlinking puts it back.
+    await page.getByRole('button', { name: 'Unlink' }).click();
+    await expect(page.locator('.surname-group')).toHaveCount(0);
+    expect(await page.evaluate(() => window.Strom.DataManager.searchPersons('Víšek').length)).toBe(1);
 });
 
 test('a spelling the tree has never seen can be typed in', async ({ page }) => {
@@ -64,20 +70,6 @@ test('it holds for people added afterwards — the point of doing it once', asyn
         dm.createPerson({ firstName: 'Frantisek', lastName: 'Vyšek', gender: 'male' });
     });
     expect(await page.evaluate(() => window.Strom.DataManager.searchPersons('Víšek').length)).toBe(3);
-});
-
-test('linking is undoable, and unlinking puts it back', async ({ page }) => {
-    await openApp(page);
-    await twoSpellings(page);
-    await page.evaluate(() => window.Strom.UI.showSurnamesDialog());
-    await page.locator('.surname-chip', { hasText: 'Víšek' }).click();
-    await page.locator('.surname-chip', { hasText: 'Vyšek' }).click();
-    await page.getByRole('button', { name: 'Link them', exact: true }).click();
-    await expect(page.locator('.surname-group')).toHaveCount(1);
-
-    await page.getByRole('button', { name: 'Unlink' }).click();
-    await expect(page.locator('.surname-group')).toHaveCount(0);
-    expect(await page.evaluate(() => window.Strom.DataManager.searchPersons('Víšek').length)).toBe(1);
 });
 
 test('the spellings survive a reload — they belong to the tree', async ({ page }) => {

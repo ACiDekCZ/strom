@@ -234,16 +234,8 @@ test.describe('mobile', () => {
         await expect(page.locator('#focus-controls')).toBeVisible();
     });
 
-    test('bottom bar: the selected view tab carries .active', async ({ page }) => {
-        await openApp(page);
-        await createFirstPerson(page, 'Jan', 'Novak');
-        await cardAction(page, 'Jan', 'focus');
-
-        // Pick a view from the bottom bar; the tab lights up.
-        await page.locator('#bb-view-timeline').click();
-        await expect(page.locator('#bb-view-timeline')).toHaveClass(/active/);
-        await expect(page.locator('#bb-view-family')).not.toHaveClass(/active/);
-    });
+    // The bottom-bar tab carrying .active: mobile.spec.ts ("a bottom-bar tab
+    // switches the view and lights up copper").
 });
 
 test.describe('mobile: descendants framing (no left clip)', () => {

@@ -29,23 +29,17 @@ async function threeTreesSharingJan(page: import('@playwright/test').Page) {
     await addTreeWithJan(page, 'Tree C');
 }
 
-test('cross-tree badge shows a shared person and the setting hides it', async ({ page }) => {
+test('one match: the badge shows, the setting hides it, a click switches directly (no chooser)', async ({ page }) => {
     await twoTreesSharingJan(page);
+    await expect(page.locator('#current-tree-name')).toHaveText('Tree B');
     // Badge appears on Jan (found in the other tree).
     await expect(page.locator('.cross-tree-badge').first()).toBeVisible();
 
-    // Turn the setting off → badges disappear.
+    // Turn the setting off → badges disappear; back on → they return.
     await page.evaluate(() => window.Strom.UI.toggleCrossTreeBadges(false));
     await expect(page.locator('.cross-tree-badge')).toHaveCount(0);
-
-    // Back on → they return.
     await page.evaluate(() => window.Strom.UI.toggleCrossTreeBadges(true));
     await expect(page.locator('.cross-tree-badge').first()).toBeVisible();
-});
-
-test('one match: clicking the badge switches directly (no chooser)', async ({ page }) => {
-    await twoTreesSharingJan(page);
-    await expect(page.locator('#current-tree-name')).toHaveText('Tree B');
 
     await page.locator('.cross-tree-badge').first().click();
 
@@ -55,26 +49,9 @@ test('one match: clicking the badge switches directly (no chooser)', async ({ pa
     await expect(card(page, 'Jan')).toBeVisible();
 });
 
-test('multiple matches: badge opens a chooser and a row switches the tree', async ({ page }) => {
+test('multiple matches: badge opens a chooser that Escape and an outside click close; a row switches the tree', async ({ page }) => {
     await threeTreesSharingJan(page);
     await expect(page.locator('#current-tree-name')).toHaveText('Tree C');
-
-    await page.locator('.cross-tree-badge').first().click();
-
-    const chooser = page.locator('.cross-tree-chooser');
-    await expect(chooser).toBeVisible();
-    // One row per other tree (My Family Tree + Tree B).
-    await expect(chooser.locator('.cross-tree-chooser-item')).toHaveCount(2);
-    await expect(chooser.locator('.cross-tree-chooser-tree', { hasText: 'Tree B' })).toBeVisible();
-
-    // Choosing a row switches to that tree and closes the chooser.
-    await chooser.locator('.cross-tree-chooser-item', { hasText: 'Tree B' }).click();
-    await expect(page.locator('.cross-tree-chooser')).toHaveCount(0);
-    await expect(page.locator('#current-tree-name')).toHaveText('Tree B');
-});
-
-test('chooser closes on Escape and on outside click', async ({ page }) => {
-    await threeTreesSharingJan(page);
     const badge = page.locator('.cross-tree-badge').first();
     const chooser = page.locator('.cross-tree-chooser');
 
@@ -91,4 +68,15 @@ test('chooser closes on Escape and on outside click', async ({ page }) => {
     await page.locator('.toolbar').click({ position: { x: 5, y: 5 } });
     await expect(chooser).toHaveCount(0);
     await expect(page.locator('#current-tree-name')).toHaveText('Tree C');
+
+    await badge.click();
+    await expect(chooser).toBeVisible();
+    // One row per other tree (My Family Tree + Tree B).
+    await expect(chooser.locator('.cross-tree-chooser-item')).toHaveCount(2);
+    await expect(chooser.locator('.cross-tree-chooser-tree', { hasText: 'Tree B' })).toBeVisible();
+
+    // Choosing a row switches to that tree and closes the chooser.
+    await chooser.locator('.cross-tree-chooser-item', { hasText: 'Tree B' }).click();
+    await expect(page.locator('.cross-tree-chooser')).toHaveCount(0);
+    await expect(page.locator('#current-tree-name')).toHaveText('Tree B');
 });

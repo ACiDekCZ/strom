@@ -3339,7 +3339,10 @@ class DataManagerClass {
 
             if (existingPartnershipId) {
                 // Conflict - partnership with same partner exists
-                const resolution = partnershipResolutions.get(removePartnershipId);
+                // Keyed by either side's union: the person-merge dialog keys its
+                // answer by the kept union, other callers by the removed one.
+                const resolution = partnershipResolutions.get(removePartnershipId)
+                    ?? partnershipResolutions.get(existingPartnershipId);
 
                 if (resolution === 'merge') {
                     // Merge partnerships - transfer children and data

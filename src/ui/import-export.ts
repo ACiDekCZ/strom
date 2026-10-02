@@ -1177,24 +1177,6 @@ export const importExportMethods = uiModule({
         if (skipped > 0) this.showToast(strings.storageSafety.backupSkipped(skipped), 5000);
     },
 
-    /**
-     * Extract embedded data from Strom HTML file
-     */
-    extractDataFromHtml(html: string): StromData | null {
-        // Single-tree envelope first; else the first tree of an "Export all"
-        // bundle. Encrypted payloads return null (importHtmlContent prompts).
-        const content = readEmbeddedHtml(html);
-        const envData = content.envelope?.data;
-        if (envData && typeof envData === 'object' && !isEncrypted(envData)) {
-            return envData as StromData;
-        }
-        if (content.allTrees && !isEncrypted(content.allTrees)) {
-            const first = Object.values(content.allTrees)[0];
-            if (first?.data) return first.data;
-        }
-        return null;
-    },
-
     // ---- IMPORT AS NEW TREE ----
     /**
      * Show import tree dialog (for creating new tree from import)

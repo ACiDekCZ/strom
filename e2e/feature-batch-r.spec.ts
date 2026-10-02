@@ -6,7 +6,7 @@ import { openApp, createFirstPerson, card } from './helpers.js';
  * Focused coverage for the July-2026 feature batch:
  *   R1 — descendants poster export
  *   R2 — life timeline section in the person modal
- *   R3 — visible desktop Undo/Redo toolbar buttons
+ *   R3 — desktop Undo/Redo toolbar buttons after a silent bulk flow
  *   R4 — tree-health dashboard
  */
 
@@ -127,35 +127,8 @@ test('R2: the life timeline hides for a sparse person (fewer than two dated poin
 
 // ==================== R3: desktop Undo/Redo buttons ====================
 
-test('R3: the desktop toolbar Undo/Redo buttons follow the can-undo/redo flow', async ({ page }) => {
-    await openApp(page);
-    const undoBtn = page.locator('#toolbar-undo-btn');
-    const redoBtn = page.locator('#toolbar-redo-btn');
-    await expect(undoBtn).toBeVisible();
-
-    // Nothing done yet → both disabled.
-    await expect(undoBtn).toBeDisabled();
-    await expect(redoBtn).toBeDisabled();
-
-    // A mutation enables Undo (Redo still disabled).
-    await createFirstPerson(page, 'Jan', 'Novak');
-    await expect(card(page, 'Jan')).toBeVisible();
-    await expect(undoBtn).toBeEnabled();
-    await expect(redoBtn).toBeDisabled();
-    // Tooltip carries the platform shortcut.
-    await expect(undoBtn).toHaveAttribute('title', /Ctrl\+Z|⌘Z/);
-
-    // Clicking Undo reverts and flips the states.
-    await undoBtn.click();
-    await expect(card(page, 'Jan')).toBeHidden();
-    await expect(undoBtn).toBeDisabled();
-    await expect(redoBtn).toBeEnabled();
-
-    // Redo brings the person back.
-    await redoBtn.click();
-    await expect(card(page, 'Jan')).toBeVisible();
-    await expect(undoBtn).toBeEnabled();
-});
+// The basic Undo/Redo button flow (disabled states, title, redo) lives in
+// undo-toast.spec.ts; this file keeps the silent-flow regression.
 
 test('R3: a silent bulk flow clears the redo stack AND greys the Redo button', async ({ page }) => {
     // Regression: after Undo leaves a redo pending, a SILENT mutation (import /

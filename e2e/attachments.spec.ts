@@ -29,10 +29,13 @@ test('attachments: add an image, it survives a reload, then delete it', async ({
     await expect(modal.locator('#attachments-list .attachment-row')).toHaveCount(1);
     await expect(modal.locator('.attachment-note-input')).toHaveValue('Birth certificate');
 
-    // Delete it.
+    // Delete it — the confirmation says which file.
     await modal.locator('.attachment-actions button').click();
     const confirm = page.locator('#confirmation-modal');
     await expect(confirm).toBeVisible();
+    await expect(confirm).toHaveClass(/active/);
+    const confirmText = `${await confirm.locator('#confirm-title').innerText()}\n${await confirm.locator('#confirm-message').innerText()}`;
+    expect(confirmText).toContain('avatar.png');
     await confirm.locator('#confirm-ok-btn').click();
     await expect(modal.locator('#attachments-list')).not.toContainText('avatar');
     await expect(modal.locator('#attachments-list .attachment-row')).toHaveCount(0);

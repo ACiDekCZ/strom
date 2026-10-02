@@ -204,38 +204,7 @@ export const treeStatsMethods = uiModule({
             const result = validateTreeData(treeData);
             content.innerHTML = this.generateTreeValidationHtml(result, treeData, treeId);
 
-            // Add click handler for person links and fix buttons using event delegation
-            content.onclick = (e) => {
-                const target = e.target as HTMLElement;
-                if (target.classList.contains('validation-person-link')) {
-                    e.preventDefault();
-                    const treeIdAttr = target.getAttribute('data-tree-id');
-                    const personIdAttr = target.getAttribute('data-person-id');
-                    if (treeIdAttr && personIdAttr) {
-                        void this.focusPersonFromValidation(treeIdAttr, personIdAttr);
-                    }
-                } else if (target.classList.contains('validation-fix-btn')) {
-                    e.preventDefault();
-                    const issueIdx = target.getAttribute('data-issue-idx');
-                    if (issueIdx !== null) {
-                        const issue = result.issues[parseInt(issueIdx, 10)];
-                        if (issue) {
-                            DataManager.repairValidationIssue(issue);
-                            // Re-render with fresh validation
-                            this.refreshTreeValidationDialog(treeId);
-                        }
-                    }
-                } else if (target.classList.contains('validation-fix-all-btn')) {
-                    e.preventDefault();
-                    const fixable = result.issues.filter(i => DataManager.isFixableIssue(i));
-                    const count = DataManager.repairAllFixableIssues(fixable);
-                    if (count > 0) {
-                        this.showAlert(strings.treeManager.valFixed(count), 'info');
-                    }
-                    // Re-render with fresh validation
-                    this.refreshTreeValidationDialog(treeId);
-                }
-            };
+            this.bindTreeValidationActions(content, result, treeId);
         }
 
         // Handle dialog stack for ESC navigation
@@ -267,7 +236,22 @@ export const treeStatsMethods = uiModule({
         const result = validateTreeData(treeData);
         content.innerHTML = this.generateTreeValidationHtml(result, treeData, treeId);
 
-        // Re-attach click handler
+        this.bindTreeValidationActions(content, result, treeId);
+    },
+
+    /**
+     * Person links and Fix buttons of the validation dialog. The repairs edit
+     * the loaded tree, so a Fix on another tree switches to it first —
+     * otherwise it would "repair" the active tree (person ids of a duplicated
+     * tree even match) and leave the checked one as it was.
+     */
+    bindTreeValidationActions(content: HTMLElement, result: TreeValidationResult, treeId: string): void {
+        const repairIn = async (repair: () => void): Promise<void> => {
+            if (TreeManager.getActiveTreeId() !== treeId) await this.switchToTree(treeId as TreeId);
+            if (TreeManager.getActiveTreeId() !== treeId) return;
+            repair();
+            void this.refreshTreeValidationDialog(treeId);
+        };
         content.onclick = (e) => {
             const target = e.target as HTMLElement;
             if (target.classList.contains('validation-person-link')) {
@@ -275,26 +259,20 @@ export const treeStatsMethods = uiModule({
                 const treeIdAttr = target.getAttribute('data-tree-id');
                 const personIdAttr = target.getAttribute('data-person-id');
                 if (treeIdAttr && personIdAttr) {
-                    this.focusPersonFromValidation(treeIdAttr, personIdAttr);
+                    void this.focusPersonFromValidation(treeIdAttr, personIdAttr);
                 }
             } else if (target.classList.contains('validation-fix-btn')) {
                 e.preventDefault();
                 const issueIdx = target.getAttribute('data-issue-idx');
-                if (issueIdx !== null) {
-                    const issue = result.issues[parseInt(issueIdx, 10)];
-                    if (issue) {
-                        DataManager.repairValidationIssue(issue);
-                        this.refreshTreeValidationDialog(treeId);
-                    }
-                }
+                const issue = issueIdx !== null ? result.issues[parseInt(issueIdx, 10)] : undefined;
+                if (issue) void repairIn(() => { DataManager.repairValidationIssue(issue); });
             } else if (target.classList.contains('validation-fix-all-btn')) {
                 e.preventDefault();
                 const fixable = result.issues.filter(i => DataManager.isFixableIssue(i));
-                const count = DataManager.repairAllFixableIssues(fixable);
-                if (count > 0) {
-                    this.showAlert(strings.treeManager.valFixed(count), 'info');
-                }
-                this.refreshTreeValidationDialog(treeId);
+                void repairIn(() => {
+                    const count = DataManager.repairAllFixableIssues(fixable);
+                    if (count > 0) this.showAlert(strings.treeManager.valFixed(count), 'info');
+                });
             }
         };
     },

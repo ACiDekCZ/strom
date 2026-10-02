@@ -38,6 +38,9 @@ test('export menu: groups in order with result-named rows (EN, CS, DE)', async (
     expect(descs.length).toBeGreaterThanOrEqual(7);
     for (const d of descs) expect(d.trim().length).toBeGreaterThan(0);
 
+    // The whole tree / current view switch, singular for one person.
+    await expect(page.locator('#export-scope .segment-btn')).toHaveText(['Whole tree', 'Current view only (1 person)']);
+
     // Rows have no fill and no frame.
     const row = page.locator('#export-modal .menu-option').first();
     expect(await row.evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('0px');

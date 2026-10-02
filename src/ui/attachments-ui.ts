@@ -15,7 +15,7 @@ import {
     MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES, pdfBlobFromDataUrl,
 } from '../attachments.js';
 import { uiModule } from './module.js';
-import { openImageViewer, closeImageViewer } from './image-viewer.js';
+import { openImageViewer } from './image-viewer.js';
 import { emptyStateHtml } from './empty-state.js';
 
 import { iconSvg } from '../icons.js';
@@ -184,10 +184,6 @@ export const attachmentsMethods = uiModule({
     /** Fullscreen preview of an image (attachment, source excerpt): zoom and pan. */
     showAttachmentImage(dataUrl: string): void {
         openImageViewer(dataUrl);
-    },
-
-    closeAttachmentOverlay(): void {
-        closeImageViewer();
     },
 
     updateAttachmentNoteFromInput(attachmentId: string, note: string): void {

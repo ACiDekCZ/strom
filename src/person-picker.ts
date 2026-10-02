@@ -96,6 +96,8 @@ export interface PersonPickerOptions {
     data?: StromData;
     /** Also find people by a cause of death or a house, and say where it matched. */
     searchDetails?: boolean;
+    /** Open the list as soon as the field gets focus (the toolbar search); otherwise on a click, typing or ArrowDown. */
+    openOnFocus?: boolean;
 }
 
 const BATCH_SIZE = 50;
@@ -166,7 +168,11 @@ export class PersonPicker {
 
         // Event listeners
         this.input.addEventListener('input', () => this.handleInput());
-        this.input.addEventListener('focus', () => this.show());
+        // Open on a deliberate gesture (click/tap, typing, ArrowDown), not on
+        // focus alone: a dialog that focuses this field on opening would drop
+        // the list over its own buttons.
+        this.input.addEventListener('click', () => { if (!this.isOpen) this.show(); });
+        if (this.options.openOnFocus) this.input.addEventListener('focus', () => this.show());
         this.input.addEventListener('keydown', (e) => this.handleKeydown(e));
         this.toggleBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -296,6 +302,7 @@ export class PersonPicker {
         switch (e.key) {
             case 'ArrowDown':
                 e.preventDefault();
+                if (!this.isOpen) { this.show(); break; }
                 this.navigateList(1);
                 break;
             case 'ArrowUp':

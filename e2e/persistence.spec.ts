@@ -99,28 +99,39 @@ test('edits no file holds: an information-only notice, the indicator until the n
     await expect(dialog).toContainText('Changes made since then are only in the browser');
 });
 
-test('reminders off: no notice, the indicator still shows', async ({ page }) => {
-    await stubPersistence(page, false);
-    await openApp(page);
-    await importBigTree(page, 'Quiet');
-    await addPerson(page, 'First');
-    await expect(page.locator('#unsaved-copy-indicator')).toBeVisible();
-    await expect(page.locator('#file-copy-notice')).toHaveCount(0);
-});
-
-test('phones: the "More" tab wears a warning triangle, not a dot; gone after a save', async ({ page }) => {
+test('bottom-bar regime: the state rides the More tab as a warning triangle and tops its sheet; gone after a save', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await stubPersistence(page, false);
     await openApp(page);
     await importBigTree(page, 'Triangle');
-    await addPerson(page, 'First');
     const badge = page.locator('#bottom-bar-more-storage-dot');
+
+    // No state yet: no badge, and no storage row in the More sheet.
+    await expect(badge).toBeHidden();
+    await page.locator('#bb-view-more').click();
+    await expect(page.locator('.bottom-sheet-menu')).toBeVisible();
+    await expect(page.locator('.bottom-sheet-storage-row')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.bottom-sheet-menu')).toHaveCount(0);
+
+    // An edit: the More tab carries the state (a triangle, not a dot), the
+    // toolbar pill stays out of this regime.
+    await addPerson(page, 'First');
+    await expect(page.locator('#unsaved-copy-indicator')).toBeHidden();
     await expect(badge).toBeVisible();
     await expect(badge.locator('svg path.tri')).toHaveCount(1);
-    await expect(page.locator('#bb-view-more')).toHaveAttribute('aria-label', /changes are not saved/);
+    await expect(page.locator('#bb-view-more')).toHaveAttribute('aria-label', 'More – changes are not saved');
+
+    // The sheet is topped by the state row, which opens "Where your data is".
     await page.locator('#bb-view-more').click();
+    const row = page.locator('.bottom-sheet-storage-row');
+    await expect(row).toContainText('Only in browser');
     await expect(page.locator('.bottom-sheet-storage-title')).toHaveText('Only in browser – not saved');
-    await page.locator('.bottom-sheet-storage-row').click();
+    await row.click();
+    await expect(page.locator('#storage-status-modal')).toBeVisible();
+    await expect(page.locator('#storage-status-modal .storage-pill')).toHaveClass(/is-unsaved/);
+
+    // Saving clears the badge.
     await page.locator('#storage-status-save').click();
     await expect(badge).toBeHidden();
 });
@@ -149,47 +160,21 @@ test('persistent storage: no notice, no icon, and the backups dialog says so', a
     await expect(page.locator('#snapshots-persistence')).toContainText('keeps the storage for good');
 });
 
-test('wide screens: a labelled pill, "Saved to file" after an export', async ({ page }) => {
+test('wide screens: a labelled pill, "Saved to file" after an export; reminders off: no notice', async ({ page }) => {
     await stubPersistence(page, false);
     await page.setViewportSize({ width: 1440, height: 800 });
+    // openApp turns the file-copy reminders off by default.
     await openApp(page);
     await importBigTree(page, 'Wide');
     await addPerson(page, 'First');
     const pill = page.locator('#unsaved-copy-indicator');
     await expect(pill).toBeVisible();
+    // With reminders off the indicator still shows, the notice never does.
+    await expect(page.locator('#file-copy-notice')).toHaveCount(0);
     await expect(pill.locator('.storage-pill-label')).toHaveText('Only in browser');
     await exportTreeJson(page);
     await expect(pill.locator('.storage-pill-label')).toHaveText('Saved to file');
     await expect(pill).toBeHidden({ timeout: 6000 });
-});
-
-test('bottom-bar regime: the state rides the More tab and tops its sheet', async ({ page }) => {
-    await stubPersistence(page, false);
-    await page.setViewportSize({ width: 390, height: 800 });
-    await openApp(page);
-    await importBigTree(page, 'Phone');
-    const dot = page.locator('#bottom-bar-more-storage-dot');
-    await expect(dot).toBeHidden();
-    await addPerson(page, 'First');
-    await expect(page.locator('#unsaved-copy-indicator')).toBeHidden();
-    await expect(dot).toBeVisible();
-    await expect(page.locator('#bb-view-more')).toHaveAttribute('aria-label', 'More – changes are not saved');
-    await page.locator('#bb-view-more').click();
-    const row = page.locator('.bottom-sheet-storage-row');
-    await expect(row).toContainText('Only in browser');
-    await row.click();
-    await expect(page.locator('#storage-status-modal')).toBeVisible();
-    await expect(page.locator('#storage-status-modal .storage-pill')).toHaveClass(/is-unsaved/);
-});
-
-test('no state, no row in the More sheet', async ({ page }) => {
-    await stubPersistence(page, false);
-    await page.setViewportSize({ width: 390, height: 800 });
-    await openApp(page);
-    await importBigTree(page, 'Clean');
-    await page.locator('#bb-view-more').click();
-    await expect(page.locator('.bottom-sheet-menu')).toBeVisible();
-    await expect(page.locator('.bottom-sheet-storage-row')).toHaveCount(0);
 });
 
 test('reduced motion: the first-edit highlight does not animate', async ({ page }) => {

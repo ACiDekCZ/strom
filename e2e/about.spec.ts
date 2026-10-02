@@ -1,12 +1,20 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'fs';
 import { openApp } from './helpers.js';
 
-/** About: the support link is a plain link to the author's page (no widget script). */
-test('About offers "Buy me a coffee" as a plain link in a new tab', async ({ page }) => {
+const APP_VERSION = JSON.parse(readFileSync('package.json', 'utf-8')).version;
+
+/**
+ * About: the logo opens it, it shows the package.json version, and the support
+ * link is a plain link to the author's page (no widget script). The Czech
+ * labels are checked in cs.spec.ts.
+ */
+test('About shows the version and offers "Buy me a coffee" as a plain link in a new tab', async ({ page }) => {
     await openApp(page);
-    await page.evaluate(() => window.Strom.UI.showAboutDialog());
+    await page.locator('.app-logo').click();
     const about = page.locator('#about-modal');
     await expect(about).toBeVisible();
+    await expect(about.locator('#about-version')).toHaveText(APP_VERSION);
     await expect(about.locator('.about-support p')).toContainText('free and open source');
     const link = about.getByRole('link', { name: 'Buy me a coffee' });
     await expect(link).toBeVisible();
@@ -15,11 +23,3 @@ test('About offers "Buy me a coffee" as a plain link in a new tab', async ({ pag
     await expect(link).toHaveAttribute('rel', /noopener/);
 });
 
-test.describe('Czech', () => {
-    test.use({ locale: 'cs-CZ' });
-    test('About says it in Czech (formal)', async ({ page }) => {
-        await openApp(page);
-        await page.evaluate(() => window.Strom.UI.showAboutDialog());
-        await expect(page.locator('#about-modal').getByRole('link', { name: 'Kupte mi kávu' })).toBeVisible();
-    });
-});

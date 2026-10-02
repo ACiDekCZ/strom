@@ -158,7 +158,9 @@ test('a locked person: Unlock on the first level (a submenu of one is no submenu
  * like the "More" menu: a floating menu there ended up under the bottom bar
  * and the add button. Every row must be reachable and clickable.
  */
-for (const width of [600, 924, 1024]) {
+// One width per bottom-navigation band: 600 (≤ 640, phone chrome) and 1024
+// (641–1024, the regime's upper boundary).
+for (const width of [600, 1024]) {
     test(`card menu is a bottom sheet with every row clickable at ${width}px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 720 });
         await openApp(page);

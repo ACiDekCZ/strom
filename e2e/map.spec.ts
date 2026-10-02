@@ -46,6 +46,19 @@ async function stubGeocoder(page: Page, answers: Record<string, [number, number]
 }
 
 /**
+ * Toasts and the "add family" offer sit bottom-centre, right over the map's
+ * status bar (Look up, Places): a click there would wait them out, the undo
+ * toast even longer (hovering it pauses its countdown). Clear the ones the
+ * test's own seeding or a previous step raised before clicking the bar.
+ */
+async function clearToasts(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        window.Strom.UI.dismissUndoToast();
+        document.querySelectorAll('.toast, .family-offer').forEach(t => t.remove());
+    });
+}
+
+/**
  * Give the sample tree exactly these places and nothing else. The tree ships
  * with places AND their coordinates (that is the point of it), so a test that
  * wants to control what is on the map must clear them first — otherwise it is
@@ -67,6 +80,7 @@ async function setPlaces(page: Page, places: Record<string, string>): Promise<vo
         }
         window.Strom.TreeRenderer.render();
     }, places);
+    await clearToasts(page);
 }
 
 /** The usual two: Johan in Greenwich, his father Peter in Pembroke. */
@@ -165,6 +179,7 @@ test('coordinates are stored in the tree, so the map needs no second lookup', as
     await seedPlaces(page);
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
     await page.getByRole('button', { name: 'Look them up' }).click();
     await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
@@ -193,6 +208,7 @@ test('the map never scrolls out from under its own controls', async ({ page }) =
     await seedPlaces(page);
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
     await page.getByRole('button', { name: 'Look them up' }).click();
     await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
@@ -226,6 +242,7 @@ test('coordinates survive a reload — they are part of the tree', async ({ page
     });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
     await page.getByRole('button', { name: 'Look them up' }).click();
     await expect(page.locator('.map-marker')).toHaveCount(1, { timeout: 15000 });
@@ -253,6 +270,7 @@ test('a marker tells you who belongs to the place and takes you to them', async 
     await seedPlaces(page);
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
     await page.getByRole('button', { name: 'Look them up' }).click();
     await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
@@ -279,6 +297,7 @@ test('two places close together stay separately clickable', async ({ page }) => 
     await setPlaces(page, { 'Johan': 'Greenwich', 'Peter': 'Westminster' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
     await page.getByRole('button', { name: 'Look them up' }).click();
     await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
@@ -360,6 +379,7 @@ test('offline, the map says so instead of showing a blank canvas', async ({ page
     await seedPlaces(page);
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
     await page.getByRole('button', { name: 'Look them up' }).click();
     await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
@@ -402,6 +422,7 @@ test('a place the map cannot find can be matched by hand', async ({ page }) => {
     await setPlaces(page, { 'Johan': 'Praha', 'Peter': 'Kravaře u Č. Lípy' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
     await page.getByRole('button', { name: 'Look them up' }).click();
 
@@ -409,6 +430,7 @@ test('a place the map cannot find can be matched by hand', async ({ page }) => {
     await expect(page.locator('.map-marker')).toHaveCount(1, { timeout: 15000 });
     expect(asked).toContain('Kravaře u Č. Lípy');
 
+    await clearToasts(page);
     await page.getByRole('button', { name: 'Places', exact: true }).click();
     const row = page.locator('.place-row[data-key="kravare u c lipy"]');
     await expect(row).toBeVisible();
@@ -444,6 +466,7 @@ test('a hand search that finds nothing says so and keeps the place', async ({ pa
     await setPlaces(page, { 'Johan': 'Lhota u Nikde' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
     await page.getByRole('button', { name: 'Places', exact: true }).click();
     const row = page.locator('.place-row[data-key="lhota u nikde"]');
     await row.getByRole('button', { name: 'Find on the map' }).click();
@@ -469,6 +492,7 @@ test('a pin in the wrong place can be fixed from the map', async ({ page }) => {
     await setPlaces(page, { 'Johan': 'Boston' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
     await page.getByRole('button', { name: 'Look them up' }).click();
     await expect(page.locator('.map-marker')).toHaveCount(1, { timeout: 15000 });
@@ -543,10 +567,12 @@ test('a pin can be removed, and the place stays', async ({ page }) => {
     await seedPlaces(page);
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
     await page.getByRole('button', { name: 'Look them up' }).click();
     await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
 
+    await clearToasts(page);
     await page.getByRole('button', { name: 'Places', exact: true }).click();
     await page.locator('.place-row[data-key="greenwich"]').getByRole('button', { name: 'Remove' }).click();
 
@@ -572,10 +598,12 @@ test('renaming a place fixes it everywhere and keeps its pin', async ({ page }) 
     await setPlaces(page, { 'Johan': 'Grenwich', 'Peter': 'Grenwich' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
     await page.getByRole('button', { name: 'Look them up' }).click();
     await expect(page.locator('.map-marker')).toHaveCount(1, { timeout: 15000 });
 
+    await clearToasts(page);
     await page.getByRole('button', { name: 'Places', exact: true }).click();
     const row = page.locator('.place-row[data-key="grenwich"]');
     await row.locator('.place-name').fill('Greenwich');
@@ -605,6 +633,7 @@ test('nothing is sent when the user declines', async ({ page }) => {
     await seedPlaces(page);
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
     await page.getByRole('button', { name: 'Cancel' }).click();
 
@@ -613,6 +642,37 @@ test('nothing is sent when the user declines', async ({ page }) => {
     // The offer is still there — declining is not a permanent no.
     await expect(page.getByRole('button', { name: /Look up \d+ places?/ })).toBeVisible();
 });
+
+for (const size of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
+    test(`toasts and the family offer rise above the map's status bar at ${size.width}px`, async ({ page }) => {
+        await page.setViewportSize(size);
+        await stubTiles(page);
+        await stubGeocoder(page, { 'Kolín': [50.0281, 15.2003] });
+        await openApp(page);
+        // A first person raises the "add family" offer; an edit the undo toast.
+        await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1900' });
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            dm.updatePerson(dm.getAllPersons()[0].id, { birthPlace: 'Kolín' });
+        });
+        await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
+        const status = page.locator('#map-status');
+        await expect(status.getByRole('button', { name: /Look up/ })).toBeVisible();
+
+        const statusTop = (await status.boundingBox())!.y;
+        for (const sel of ['.undo-toast.show', '.family-offer.show']) {
+            const note = page.locator(sel);
+            await expect(note).toBeVisible();
+            await expect.poll(async () => {
+                const b = await note.boundingBox();
+                return b ? b.y + b.height : Infinity;
+            }, { message: `${sel} bottom edge` }).toBeLessThanOrEqual(statusTop);
+        }
+        // So the bar's button takes the click at once, nothing cleared first.
+        await status.getByRole('button', { name: /Look up/ }).click({ timeout: 2000 });
+        await expect(page.getByRole('button', { name: 'Look them up' })).toBeVisible();
+    });
+}
 
 test('the scope switch covers the whole tree, not just the view', async ({ page }) => {
     await stubTiles(page);
@@ -638,6 +698,7 @@ test('the scope switch covers the whole tree, not just the view', async ({ page 
     // The lookup covers the scope in use: only Jan is on screen, so only his
     // place is asked about.
     await page.getByRole('button', { name: 'Map', exact: true }).click();
+    await clearToasts(page);
     await page.getByRole('button', { name: 'Look up 1 place', exact: true }).click();
     await page.getByRole('button', { name: 'Look them up' }).click();
     await expect(page.locator('.map-marker')).toHaveCount(1, { timeout: 15000 });
@@ -647,6 +708,7 @@ test('the scope switch covers the whole tree, not just the view', async ({ page 
     // play — the one nobody has looked up yet is offered, not silently skipped.
     await page.getByRole('button', { name: 'Whole tree' }).click();
     await expect(page.locator('.map-marker')).toHaveCount(1);
+    await clearToasts(page);
     await page.getByRole('button', { name: 'Look up 1 place', exact: true }).click();
     await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
     expect(asked).toEqual(['Kolín', 'Beroun']);

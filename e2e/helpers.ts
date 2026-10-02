@@ -42,13 +42,29 @@ export async function seedSetting(page: Page, name: string, value: unknown): Pro
  * Load the app and wait until the toolbar is interactive. By default the
  * Strom Research promotion counts as already seen (see seedResearchPromoSeen);
  * `{ researchPromo: true }` keeps the first-run state for suites testing it;
- * the "changes only in the browser" notice is off unless `{ fileCopyReminders: true }`.
+ * the "changes only in the browser" notice is off unless `{ fileCopyReminders: true }`;
+ * the one-time tour offer after the sample tree counts as already made unless
+ * `{ tourOffer: true }` — it sits over the bottom of the screen for 15 s and
+ * would make every click there wait it out.
  */
-export async function openApp(page: Page, opts: { researchPromo?: boolean; fileCopyReminders?: boolean } = {}): Promise<void> {
+export async function openApp(
+    page: Page,
+    opts: { researchPromo?: boolean; fileCopyReminders?: boolean; tourOffer?: boolean } = {},
+): Promise<void> {
     if (!opts.researchPromo) await seedResearchPromoSeen(page);
     if (!opts.fileCopyReminders) await seedSetting(page, 'fileCopyReminders', false);
+    if (!opts.tourOffer) {
+        await page.addInitScript(() => {
+            try {
+                if (localStorage.getItem('strom-tour-offered') === null) localStorage.setItem('strom-tour-offered', '1');
+            } catch { /* no storage: nothing to seed */ }
+        });
+    }
     await page.goto('/strom.html');
     await expect(page.locator('.toolbar')).toBeVisible();
+    // The toolbar is static HTML: wait until the startup tree is read and
+    // editing is allowed (html.app-loading, main.ts).
+    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
 }
 
 /** The visible person modal (add/edit). */
