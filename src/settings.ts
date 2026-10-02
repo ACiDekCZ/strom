@@ -3,7 +3,8 @@
  * Settings are NOT exported with tree data - they are local preferences
  */
 
-import { AppSettings, ThemeMode, LanguageSetting, CardDensity, SETTINGS_KEY, StromData, personSourceIds } from './types.js';
+import { AppSettings, ThemeMode, LanguageSetting, CardDensity, SETTINGS_KEY, StromData, personSourceIds, CARD_SIZE } from './types.js';
+import { CardFieldSettings, normalizeCardFields, customCardSize } from './card-fields.js';
 import { initLanguage, Language } from './strings.js';
 
 /** How many recently cited sources the picker remembers per tree. */
@@ -325,6 +326,22 @@ class SettingsManagerClass {
     setCardDensity(density: CardDensity): void {
         this.settings.cardDensity = density;
         this.save();
+    }
+
+    /** The custom card's lines (src/card-fields.ts), repaired to a valid set. */
+    getCardFields(): CardFieldSettings {
+        return normalizeCardFields(this.settings.cardFields);
+    }
+
+    setCardFields(fields: CardFieldSettings): void {
+        this.settings.cardFields = normalizeCardFields(fields);
+        this.save();
+    }
+
+    /** The card box for the current density (the layout spaces cards by it). */
+    getCardSize(): { cardWidth: number; cardHeight: number } {
+        const density = this.getCardDensity();
+        return density === 'custom' ? customCardSize(this.getCardFields().on.length) : CARD_SIZE[density];
     }
 
     /** What the card shows at a glance, for this device. */

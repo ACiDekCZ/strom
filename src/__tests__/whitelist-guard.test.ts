@@ -289,7 +289,8 @@ describe('validateJsonImport on the real devel-demo fixture', () => {
  */
 type EditedByUpdatePerson =
     | 'firstName' | 'lastName' | 'gender' | 'nameVariants'
-    | 'birthDate' | 'birthPlace' | 'deathDate' | 'deathPlace'
+    | 'birthDate' | 'birthPlace' | 'birthAddress' | 'deathDate' | 'deathPlace'
+    | 'deathCause' | 'deathAge' | 'deathAddress'
     | 'notes' | 'refn' | 'question' | 'isDeceased' | 'isLocked' | 'photo' | 'story';
 
 /**
@@ -357,8 +358,12 @@ describe('updatePerson applies every field it owns', () => {
         nameVariants: ['Wischek', 'u Kováře'],
         birthDate: '1901-02-03',
         birthPlace: 'Kolín',
+        birthAddress: 'čp. 13',
         deathDate: '1980-04-05',
         deathPlace: 'Beroun',
+        deathCause: 'souchotiny',
+        deathAge: '79 let',
+        deathAddress: 'čp. 7',
         notes: 'Kept bees.',
         refn: 'box 12/1880',
         question: 'Who were her parents?',

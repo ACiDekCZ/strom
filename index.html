@@ -2001,24 +2001,69 @@
         .partnership-note::placeholder {
             color: #aaa;
         }
-        .partnership-dates {
+        /* The couple's dates as a labelled grid (relationships panel):
+           Marriage / Divorce rows of date + place, then the wedding house and
+           each partner's age, empty ones behind "+ age, address". */
+        .partnership-grid {
             display: flex;
+            flex-direction: column;
             gap: 8px;
-            margin-top: 8px;
-            flex-wrap: wrap;
+            margin-top: 10px;
         }
-        .partnership-dates input {
-            flex: 1;
-            min-width: 100px;
-            padding: 6px 8px;
+        .partnership-grid .pg-row {
+            display: grid;
+            grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1.4fr);
+            gap: 8px;
+            align-items: center;
+        }
+        .partnership-grid .pg-row[hidden],
+        .partnership-grid .pg-links button[hidden] { display: none !important; }
+        .partnership-grid .pg-row-ages { align-items: start; }
+        .partnership-grid .pg-row-ages .pg-label { padding-top: 9px; }
+        .partnership-grid .pg-label { font-size: 12px; color: var(--text-light); }
+        .partnership-grid .pg-span { grid-column: span 2; min-width: 0; }
+        .partnership-grid .pg-ages { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+        .partnership-grid .pg-age .age-check { margin-top: 4px; }
+        .partnership-grid input {
+            width: 100%;
+            box-sizing: border-box;
+            min-width: 0;
+            padding: 7px 9px;
             border: 1px solid var(--border);
-            border-radius: 6px;
-            font-size: 12px;
+            border-radius: var(--r-md);
+            font-size: 13px;
+            background: var(--surface);
+            color: var(--text);
         }
-        .partnership-dates input:focus {
+        .partnership-grid input:focus {
             outline: none;
             border-color: var(--primary);
             box-shadow: var(--shadow-focus);
+        }
+        .partnership-grid input.invalid { border-color: var(--danger); }
+        .partnership-grid .pg-links { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+        .partnership-grid .pg-links .detail-more,
+        .partnership-grid .pg-links .pg-add-end {
+            background: none;
+            border: none;
+            padding: 2px 0;
+            margin: 0;
+            font: inherit;
+            font-size: 13px;
+            color: var(--primary);
+            text-decoration: underline dotted;
+            text-underline-offset: 3px;
+            cursor: pointer;
+        }
+        @media (max-width: 499px) {
+            /* Labels above their fields, the fields below each other. */
+            .partnership-grid .pg-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+            .partnership-grid .pg-span { grid-column: auto; }
+            .partnership-grid .pg-row-ages .pg-label { padding-top: 0; }
+            .partnership-grid .pg-ages { grid-template-columns: minmax(0, 1fr); }
+            .partnership-grid input { padding: 10px; font-size: 16px; }
+            .partnership-grid .pg-links .detail-more,
+            .partnership-grid .pg-links .pg-add-end { min-height: 44px; }
         }
         .partnership-primary-label {
             display: flex;
@@ -3254,6 +3299,49 @@
         .segment-btn.active { background: var(--primary); color: var(--on-primary); }
         .segment-btn:disabled { cursor: default; opacity: 0.6; }
 
+        /* Register details under an event's date and place (cause, age as
+           recorded, house): filled fields show, empty ones wait behind one
+           quiet link (src/ui/event-details-ui.ts). */
+        .detail-group .detail-field[hidden],
+        .detail-group .detail-row[hidden],
+        .detail-group .detail-more[hidden] { display: none !important; }
+        .detail-group .detail-field { margin-bottom: 12px; }
+        .detail-group .detail-row .detail-field { margin-bottom: 0; }
+        .detail-group > .detail-row { margin-bottom: 12px; }
+        .detail-group .detail-more {
+            display: inline-block;
+            background: none;
+            border: none;
+            padding: 2px 0;
+            margin: -4px 0 12px;
+            min-height: 0;
+            font: inherit;
+            font-size: 13px;
+            color: var(--primary);
+            text-decoration: underline dotted;
+            text-underline-offset: 3px;
+            cursor: pointer;
+            box-shadow: none;
+        }
+        .detail-group .detail-more:hover { color: var(--primary-dark); background: none; }
+        /* Cause · age · house under an event (events list, life timeline). */
+        .event-details-line { display: block; font-size: 12px; line-height: 1.4; color: var(--text-faint); }
+        /* Toolbar search: a person found by a cause or a house says so. */
+        .person-picker-match { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
+        .person-picker-match mark { background: var(--warning-soft); color: inherit; border-radius: 2px; padding: 0 1px; }
+        .age-check {
+            font-size: 12px;
+            line-height: 1.4;
+            color: var(--text-faint);
+            margin-top: 5px;
+        }
+        .age-check strong { font-weight: 600; }
+        .age-check--warn { color: var(--warning-text); }
+        @media (max-width: 499px) {
+            .detail-group .detail-spacer { display: none; }
+            /* A tap target, not a hairline of text. */
+            .detail-group .detail-more { min-height: 44px; margin: -8px 0 4px; }
+        }
         .pm-date-hint {
             font-size: 11px;
             /* --text-light (not --text-faint) to keep the hint ≥4.5:1 on the
@@ -5618,6 +5706,26 @@
             width: 44px; height: 44px; margin-top: 1px;
         }
         body[data-card-density="detailed"] .avatar-initials { font-size: 16px; }
+        /* Custom density (src/card-fields.ts): the avatar and the name on one
+           row, then one 17px line per chosen event. Height = 56 + 17 × lines,
+           set by the renderer in --card-custom-h (the layout spaces by it).
+           Lines pack upwards; who lacks a detail has free space at the bottom. */
+        body[data-card-density="custom"] .person-card {
+            width: 200px; height: var(--card-custom-h, 107px); padding: 10px 12px;
+            flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 0;
+        }
+        .card-body--custom { flex: 0 0 auto; justify-content: flex-start; gap: 6px; }
+        .card-body--custom .card-head { display: flex; align-items: center; gap: 8px; min-width: 0; height: 30px; }
+        .card-body--custom .card-head .name { flex: 1 1 auto; }
+        body[data-card-density="custom"] .card-avatar { width: 30px; height: 30px; border-width: 1.5px; }
+        .card-lines { display: flex; flex-direction: column; min-width: 0; }
+        .card-line {
+            display: flex; gap: 6px; min-width: 0;
+            font-size: 12px; line-height: 17px; color: var(--text-light);
+            white-space: nowrap; overflow: hidden;
+        }
+        .card-line-mark { flex: 0 0 11px; text-align: center; color: var(--text-faint); }
+        .card-line-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .card-trade {
             font-size: 10px; line-height: 1.3; font-style: italic;
             color: var(--text-light);
@@ -6014,6 +6122,53 @@
         .card-signals-preview .person-card[data-density="detailed"] { width: 200px; }
         @media (max-width: 499px) {
             .card-signals-settings { flex-direction: column; gap: 12px; }
+        }
+        /* The preview right under the density select (one for both). */
+        .card-preview-settings { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+        .card-preview-head { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; width: 100%; max-width: 280px; }
+        .card-preview-size { font-size: 12px; color: var(--text-faint); }
+        .card-signals-preview .person-card[data-density="custom"] { width: 200px; height: var(--card-custom-h, 107px); }
+
+        /* "Details on the card" (custom density): a row per event — checkbox,
+           mark, name, the toggles for what the line adds, arrows to reorder. */
+        .card-fields-settings { display: flex; flex-direction: column; gap: 8px; }
+        .card-fields-settings[hidden] { display: none; }
+        .card-fields-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .card-fields-date .segment-btn { padding: 5px 12px; font-size: 13px; }
+        .card-fields-list { border: 1px solid var(--divider); border-radius: var(--r-md); overflow: hidden; }
+        .card-field-row {
+            display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
+            padding: 7px 10px;
+        }
+        .card-field-row + .card-field-row { border-top: 1px solid var(--divider); }
+        .card-field-row.is-disabled { opacity: 0.45; }
+        .card-field-main { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; font-size: 14px; cursor: pointer; }
+        .card-field-row.is-disabled .card-field-main { cursor: default; }
+        .card-field-mark { width: 14px; text-align: center; color: var(--text-faint); }
+        .card-field-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+        .card-fields-settings .card-field-chip {
+            font: inherit; font-size: 12px; line-height: 1.2;
+            padding: 3px 9px; border-radius: var(--r-pill);
+            border: 1px solid var(--border); background: transparent; color: var(--text-light);
+            cursor: pointer; min-height: 0;
+        }
+        .card-fields-settings .card-field-chip[aria-pressed="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary-dark); }
+        .card-field-move { display: flex; gap: 2px; }
+        .card-fields-settings .card-field-move button {
+            width: 28px; height: 28px; min-width: 0; padding: 0;
+            border: none; border-radius: var(--r-sm); background: transparent; color: var(--text-light);
+            font-size: 14px; cursor: pointer;
+        }
+        .card-field-move button:hover:not(:disabled) { background: var(--hover-bg); }
+        .card-field-move button:disabled { opacity: 0.3; cursor: default; }
+        .card-fields-status { font-size: 12px; color: var(--text-faint); }
+        .card-fields-status.is-full { color: var(--warning-text); }
+        @media (max-width: 499px) {
+            /* The toggles go under the name, the arrows grow to a thumb. */
+            .card-field-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+            .card-field-chips { grid-column: 1 / -1; grid-row: 2; padding-left: 52px; }
+            .card-fields-settings .card-field-chip { font-size: 13px; padding: 6px 12px; }
+            .card-fields-settings .card-field-move button { width: 44px; height: 44px; }
         }
         .person-card.indirect:hover { opacity: 1; }
 
@@ -10425,6 +10580,7 @@
         }
         .card-tooltip .tt-line { color: var(--text-light); }
         .card-tooltip .tt-rel { color: var(--text-faint); }
+        .card-tooltip .tt-warn { color: var(--warning-text); font-size: 12px; }
         .card-tooltip .tt-foot {
             margin-top: 6px;
             padding-top: 5px;
@@ -11056,6 +11212,18 @@
                         <input type="text" id="input-birthplace" autocomplete="off" list="places-datalist">
                     </div>
                 </div>
+                <!-- What the register adds: shown when filled, otherwise behind
+                     the quiet "+ address" link (src/ui/event-details-ui.ts). -->
+                <div class="detail-group" id="birth-details">
+                    <div class="form-grid detail-row">
+                        <div class="detail-spacer"></div>
+                        <div class="form-group detail-field" data-detail="address">
+                            <label for="input-birth-address" data-i18n="fields.address"></label>
+                            <input type="text" id="input-birth-address" autocomplete="off" data-i18n-placeholder="fields.addressPh">
+                        </div>
+                    </div>
+                    <button type="button" class="detail-more" hidden></button>
+                </div>
                 <div class="form-group fact-sources" id="birth-sources-group">
                     <label data-i18n="sources.factRowLabel"></label>
                     <div class="fact-sources-row">
@@ -11122,6 +11290,24 @@
                             <label for="input-deathplace" data-i18n="labels.deathPlace"></label>
                             <input type="text" id="input-deathplace" autocomplete="off" list="places-datalist">
                         </div>
+                    </div>
+                    <div class="detail-group" id="death-details">
+                        <div class="form-group detail-field" data-detail="cause">
+                            <label for="input-death-cause" data-i18n="fields.cause"></label>
+                            <input type="text" id="input-death-cause" autocomplete="off" data-i18n-placeholder="fields.causePh">
+                        </div>
+                        <div class="form-grid detail-row">
+                            <div class="form-group detail-field" data-detail="age">
+                                <label for="input-death-age" data-i18n="fields.age"></label>
+                                <input type="text" id="input-death-age" autocomplete="off" data-i18n-placeholder="fields.agePh" aria-describedby="death-age-check">
+                                <div class="age-check" id="death-age-check" hidden></div>
+                            </div>
+                            <div class="form-group detail-field" data-detail="address">
+                                <label for="input-death-address" data-i18n="fields.address"></label>
+                                <input type="text" id="input-death-address" autocomplete="off" data-i18n-placeholder="fields.addressPh">
+                            </div>
+                        </div>
+                        <button type="button" class="detail-more" hidden></button>
                     </div>
                     <div class="form-group fact-sources" id="death-sources-group">
                         <label data-i18n="sources.factRowLabel"></label>
@@ -11257,6 +11443,24 @@
                     <label for="input-event-place" data-i18n="events.place"></label>
                     <input type="text" id="input-event-place" autocomplete="off" list="places-datalist">
                 </div>
+            </div>
+            <div class="detail-group" id="event-details">
+                <div class="form-group detail-field" data-detail="cause">
+                    <label for="input-event-cause" id="event-cause-label" data-i18n="fields.cause"></label>
+                    <input type="text" id="input-event-cause" autocomplete="off" data-i18n-placeholder="fields.causePh">
+                </div>
+                <div class="form-grid detail-row">
+                    <div class="form-group detail-field" data-detail="age">
+                        <label for="input-event-age" data-i18n="fields.age"></label>
+                        <input type="text" id="input-event-age" autocomplete="off" data-i18n-placeholder="fields.agePh" aria-describedby="event-age-check">
+                        <div class="age-check" id="event-age-check" hidden></div>
+                    </div>
+                    <div class="form-group detail-field" data-detail="address">
+                        <label for="input-event-address" data-i18n="fields.address"></label>
+                        <input type="text" id="input-event-address" autocomplete="off" data-i18n-placeholder="fields.addressPh">
+                    </div>
+                </div>
+                <button type="button" class="detail-more" hidden></button>
             </div>
             <div class="form-group">
                 <label for="input-event-note" id="event-note-label" data-i18n="events.note"></label>
@@ -11664,8 +11868,11 @@
                             <option value="compact" data-i18n="cardDensity.compact"></option>
                             <option value="normal" data-i18n="cardDensity.normal"></option>
                             <option value="detailed" data-i18n="cardDensity.detailed"></option>
+                            <option value="custom" data-i18n="cardDensity.custom"></option>
                         </select>
                     </div>
+                    <div class="settings-row card-preview-settings" id="card-preview-settings"></div>
+                    <div class="settings-row card-fields-settings" id="card-fields-settings" hidden></div>
                     <div class="settings-row card-signals-settings" id="card-signals-settings"></div>
                     <label class="settings-checkbox settings-row">
                         <input type="checkbox" id="cross-tree-badges-toggle" onchange="window.Strom.UI.toggleCrossTreeBadges(this.checked)">

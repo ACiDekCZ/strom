@@ -353,6 +353,36 @@ const stringsEN = {
         addSpelling: 'Add',
     },
 
+    // What a record adds to an event beyond its date and place (GEDCOM CAUS,
+    // AGE, ADDR), the divorce place and the partners' ages at a wedding.
+    fields: {
+        cause: 'Cause of death',
+        causeGeneric: 'Cause',
+        causeShort: 'cause',
+        causePh: 'as recorded, e.g. consumption',
+        age: 'Age as recorded',
+        ageShort: 'age',
+        agePh: '54 years, 3 months…',
+        ageComputed: (range: string) => `Calculated ${range}`,
+        ageDiffersLead: 'Differs from calculation',
+        ageDiffers: (range: string, diff: string) => `(${range}) by ${diff}`,
+        ageRecorded: (age: string) => `recorded as ${age}`,
+        address: 'House / address',
+        addressShort: 'address',
+        addressPh: 'e.g. No. 13, Mill Lane',
+        addMore: (list: string[]) => `+ ${list.join(', ')}`,
+        addDivorce: '+ divorce',
+        addEnd: '+ end',
+        startRow: 'Start',
+        endRow: 'End',
+        marriageRow: 'Marriage',
+        divorceRow: 'Divorce',
+        addressRow: 'Address',
+        ageRow: 'Age',
+        divorcePlace: 'Place of divorce',
+        partnerAge: (name: string, range: string) => range ? `${name} · calculated ${range}` : name,
+    },
+
     events: {
         occupationLabel: 'Occupation / trade',
         occupationHint: 'The trade itself — "blacksmith", not "worked in Kladno as a blacksmith". It goes out as the occupation in GEDCOM.',
@@ -1340,6 +1370,12 @@ const stringsEN = {
 
     // Buttons
     card: {
+        // The custom card's lines (src/card-fields.ts).
+        dateAbout: 'c.',
+        dateAfter: 'after',
+        dateBefore: 'before',
+        moreMarriages: (n: number) => `+${n}`,
+        ttBaptized: (d: string, _female: boolean) => `baptized ${d}`,
         // At-a-glance signals (tooltip, aria): evidence, story, what waits.
         ttSources: (n: number) => nEn(n, 'source', 'sources'),
         ttBirthCited: 'birth documented',
@@ -1666,8 +1702,8 @@ const stringsEN = {
          * fact's note — there is no field for them, and a line is all it takes.
          */
         age: (text: string) => `Age: ${text}`,
-        ageUnit: (n: number, unit: 'y' | 'm' | 'd') =>
-            `${n} ${{ y: n === 1 ? 'year' : 'years', m: n === 1 ? 'month' : 'months', d: n === 1 ? 'day' : 'days' }[unit]}`,
+        ageUnit: (n: number, unit: 'y' | 'm' | 'w' | 'd') =>
+            `${n} ${{ y: n === 1 ? 'year' : 'years', m: n === 1 ? 'month' : 'months', w: n === 1 ? 'week' : 'weeks', d: n === 1 ? 'day' : 'days' }[unit]}`,
         ageWords: { INFANT: 'infant', STILLBORN: 'stillborn', CHILD: 'child' } as Record<string, string>,
         husbandAge: (text: string) => `Age of the husband: ${text}`,
         wifeAge: (text: string) => `Age of the wife: ${text}`,
@@ -2425,6 +2461,22 @@ const stringsEN = {
         compact: 'Compact — names only',
         normal: 'Normal — names and years',
         detailed: 'Detailed — + place and age',
+        custom: 'Custom — choose details',
+        fieldsTitle: 'Details on the card',
+        yearOnly: 'Year only',
+        fullDate: 'Full date',
+        optPlace: 'place',
+        optCause: 'cause',
+        optBaptism: 'else baptism',
+        optBurial: 'else burial',
+        count: (n: number) => `${n} of 5 lines. People without a detail get empty space.`,
+        max: '5 lines at most. Untick one to add another.',
+        size: (w: number, h: number) => `card ${w} × ${h} px`,
+        moveUp: 'Move up',
+        moveDown: 'Move down',
+        sameEverywhere: 'Screen, image export and poster show the same.',
+        sampleCause: 'consumption',
+        sampleOccupation: 'miller',
     },
 
     fanChart: {
@@ -2993,6 +3045,34 @@ const stringsCZ: StringsType = {
         introShort: 'Řekněte jednou, že tvary příjmení znamenají tentýž rod, a hledání i slučování je najdou všechny.',
         more: 'Více',
         addSpelling: 'Přidat',
+    },
+
+    fields: {
+        cause: 'Příčina úmrtí',
+        causeGeneric: 'Příčina',
+        causeShort: 'příčina',
+        causePh: 'jak je zapsaná, např. souchotiny',
+        age: 'Věk podle zápisu',
+        ageShort: 'věk',
+        agePh: '54 let, 3 měsíce…',
+        ageComputed: (range: string) => `Vypočteno ${range}`,
+        ageDiffersLead: 'Liší se od výpočtu',
+        ageDiffers: (range: string, diff: string) => `(${range}) o ${diff}`,
+        ageRecorded: (age: string) => `podle zápisu ${age}`,
+        address: 'Dům / adresa',
+        addressShort: 'dům',
+        addressPh: 'např. čp. 13',
+        addMore: (list: string[]) => `+ ${list.join(', ')}`,
+        addDivorce: '+ rozvod',
+        addEnd: '+ konec',
+        startRow: 'Začátek',
+        endRow: 'Konec',
+        marriageRow: 'Sňatek',
+        divorceRow: 'Rozvod',
+        addressRow: 'Dům',
+        ageRow: 'Věk',
+        divorcePlace: 'Místo rozvodu',
+        partnerAge: (name: string, range: string) => range ? `${name} · vypočteno ${range}` : name,
     },
 
     events: {
@@ -3986,6 +4066,12 @@ const stringsCZ: StringsType = {
 
     // Buttons
     card: {
+        // The custom card's lines (src/card-fields.ts).
+        dateAbout: 'kolem',
+        dateAfter: 'po',
+        dateBefore: 'před',
+        moreMarriages: (n: number) => `+${n}`,
+        ttBaptized: (d: string, female: boolean) => `${female ? 'pokřtěna' : 'pokřtěn'} ${d}`,
         // At-a-glance signals (tooltip, aria): evidence, story, what waits.
         ttSources: (n: number) => nCs(n, 'pramen', 'prameny', 'pramenů'),
         ttBirthCited: 'narození doloženo',
@@ -4312,11 +4398,12 @@ const stringsCZ: StringsType = {
          * fact's note — there is no field for them, and a line is all it takes.
          */
         age: (text: string) => `Věk: ${text}`,
-        ageUnit: (n: number, unit: 'y' | 'm' | 'd') => {
+        ageUnit: (n: number, unit: 'y' | 'm' | 'w' | 'd') => {
             const few = n >= 2 && n <= 4;
             const words = {
                 y: n === 1 ? 'rok' : few ? 'roky' : 'let',
                 m: n === 1 ? 'měsíc' : few ? 'měsíce' : 'měsíců',
+                w: n === 1 ? 'týden' : few ? 'týdny' : 'týdnů',
                 d: n === 1 ? 'den' : few ? 'dny' : 'dní',
             };
             return `${n} ${words[unit]}`;
@@ -5078,6 +5165,22 @@ const stringsCZ: StringsType = {
         compact: 'Kompaktní — jen jména',
         normal: 'Normální — jména a roky',
         detailed: 'Podrobné — + místo a věk',
+        custom: 'Vlastní — vyberte údaje',
+        fieldsTitle: 'Údaje na kartě',
+        yearOnly: 'Jen rok',
+        fullDate: 'Celé datum',
+        optPlace: 'místo',
+        optCause: 'příčina',
+        optBaptism: 'jinak křest',
+        optBurial: 'jinak pohřeb',
+        count: (n: number) => `${n} z 5 řádků. Kdo údaj nemá, má na kartě volné místo.`,
+        max: 'Nejvýš 5 řádků. Pro další údaj nejdřív jiný odškrtněte.',
+        size: (w: number, h: number) => `karta ${w} × ${h} px`,
+        moveUp: 'Posunout výš',
+        moveDown: 'Posunout níž',
+        sameEverywhere: 'Obrazovka, export obrázku i plakát ukazují totéž.',
+        sampleCause: 'souchotiny',
+        sampleOccupation: 'mlynář',
     },
 
     fanChart: {
@@ -5628,6 +5731,34 @@ const stringsDE: StringsType = {
         introShort: 'Sagen Sie einmal, dass Schreibweisen dieselbe Familie meinen, und Suche und Zusammenführen finden sie alle.',
         more: 'Mehr',
         addSpelling: 'Hinzufügen',
+    },
+
+    fields: {
+        cause: 'Todesursache',
+        causeGeneric: 'Ursache',
+        causeShort: 'Ursache',
+        causePh: 'wie eingetragen, z. B. Schwindsucht',
+        age: 'Alter laut Eintrag',
+        ageShort: 'Alter',
+        agePh: '54 Jahre, 3 Monate…',
+        ageComputed: (range: string) => `Berechnet ${range}`,
+        ageDiffersLead: 'Weicht von der Berechnung ab',
+        ageDiffers: (range: string, diff: string) => `(${range}) um ${diff}`,
+        ageRecorded: (age: string) => `laut Eintrag ${age}`,
+        address: 'Haus / Adresse',
+        addressShort: 'Adresse',
+        addressPh: 'z. B. Haus Nr. 13',
+        addMore: (list: string[]) => `+ ${list.join(', ')}`,
+        addDivorce: '+ Scheidung',
+        addEnd: '+ Ende',
+        startRow: 'Beginn',
+        endRow: 'Ende',
+        marriageRow: 'Heirat',
+        divorceRow: 'Scheidung',
+        addressRow: 'Adresse',
+        ageRow: 'Alter',
+        divorcePlace: 'Ort der Scheidung',
+        partnerAge: (name: string, range: string) => range ? `${name} · berechnet ${range}` : name,
     },
 
     events: {
@@ -6604,6 +6735,12 @@ const stringsDE: StringsType = {
 
     // Buttons
     card: {
+        // The custom card's lines (src/card-fields.ts).
+        dateAbout: 'um',
+        dateAfter: 'nach',
+        dateBefore: 'vor',
+        moreMarriages: (n: number) => `+${n}`,
+        ttBaptized: (d: string, _female: boolean) => `getauft ${d}`,
         // At-a-glance signals (tooltip, aria): evidence, story, what waits.
         ttSources: (n: number) => nDe(n, 'Quelle', 'Quellen'),
         ttBirthCited: 'Geburt belegt',
@@ -6925,8 +7062,8 @@ const stringsDE: StringsType = {
          * fact's note — there is no field for them, and a line is all it takes.
          */
         age: (text: string) => `Alter: ${text}`,
-        ageUnit: (n: number, unit: 'y' | 'm' | 'd') =>
-            `${n} ${{ y: n === 1 ? 'Jahr' : 'Jahre', m: n === 1 ? 'Monat' : 'Monate', d: n === 1 ? 'Tag' : 'Tage' }[unit]}`,
+        ageUnit: (n: number, unit: 'y' | 'm' | 'w' | 'd') =>
+            `${n} ${{ y: n === 1 ? 'Jahr' : 'Jahre', m: n === 1 ? 'Monat' : 'Monate', w: n === 1 ? 'Woche' : 'Wochen', d: n === 1 ? 'Tag' : 'Tage' }[unit]}`,
         ageWords: { INFANT: 'Säugling', STILLBORN: 'totgeboren', CHILD: 'Kind' } as Record<string, string>,
         husbandAge: (text: string) => `Alter des Bräutigams: ${text}`,
         wifeAge: (text: string) => `Alter der Braut: ${text}`,
@@ -7657,6 +7794,22 @@ const stringsDE: StringsType = {
         compact: 'Kompakt — nur Namen',
         normal: 'Normal — Namen und Jahre',
         detailed: 'Detailliert — + Ort und Alter',
+        custom: 'Eigene — Angaben wählen',
+        fieldsTitle: 'Angaben auf der Karte',
+        yearOnly: 'Nur Jahr',
+        fullDate: 'Ganzes Datum',
+        optPlace: 'Ort',
+        optCause: 'Ursache',
+        optBaptism: 'sonst Taufe',
+        optBurial: 'sonst Begräbnis',
+        count: (n: number) => `${n} von 5 Zeilen. Fehlt eine Angabe, bleibt Platz frei.`,
+        max: 'Höchstens 5 Zeilen. Für eine weitere zuerst eine abwählen.',
+        size: (w: number, h: number) => `Karte ${w} × ${h} px`,
+        moveUp: 'Nach oben',
+        moveDown: 'Nach unten',
+        sameEverywhere: 'Bildschirm, Bildexport und Poster zeigen dasselbe.',
+        sampleCause: 'Schwindsucht',
+        sampleOccupation: 'Müller',
     },
 
     fanChart: {

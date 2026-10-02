@@ -112,7 +112,7 @@ export const cardSignalsUiMethods = uiModule({
             : `<div class="${cls}" role="menuitem" tabindex="-1" data-action="signal-${action}">${body}</div>`;
     },
 
-    /** Settings → "Show on card": two groups of checkboxes and a preview card. */
+    /** Settings → "Show on card": two groups of checkboxes (the preview card is above, see card-fields-ui). */
     renderCardSignalSettings(): void {
         const host = document.getElementById('card-signals-settings');
         if (!host) return;
@@ -139,41 +139,20 @@ export const cardSignalsUiMethods = uiModule({
                     <div class="card-signals-group-title">${this.escapeHtml(d.cardGroupAction)}</div>
                     ${actionKeys.map(box).join('')}
                 </div>
-                <div class="settings-desc">${this.escapeHtml(d.cardShowHint)}</div>
-            </div>
-            <div class="card-signals-preview-wrap">
-                <div class="card-signals-preview-title">${this.escapeHtml(d.cardPreview)}</div>
-                <div class="card-signals-preview" aria-hidden="true">${this.cardSignalsPreviewHtml(on)}</div>
+                <div class="settings-desc">${this.escapeHtml(`${d.cardShowHint} ${d.sameEverywhere}`)}</div>
             </div>`;
+        // One preview for the density and the signals, under the density
+        // select; the custom density's details below it.
+        this.renderCardPreview();
+        this.renderCardFieldsSettings();
         host.querySelectorAll<HTMLInputElement>('input[data-signal]').forEach(input => {
             input.onchange = () => {
                 const key = input.dataset.signal as keyof CardSignals;
                 if (!CARD_SIGNAL_KEYS.includes(key)) return;
                 SettingsManager.setCardSignal(key, input.checked);
-                const preview = host.querySelector('.card-signals-preview');
-                if (preview) preview.innerHTML = this.cardSignalsPreviewHtml(SettingsManager.getCardSignals());
+                this.renderCardPreview();
                 TreeRenderer.render();
             };
         });
-    },
-
-    /** A made-up card in the current density with the chosen signals. */
-    cardSignalsPreviewHtml(on: CardSignals): string {
-        const density = SettingsManager.getCardDensity();
-        const stripes = stateStripesHtml(on.evidence ? 'partial' : null, on.story ? 'draft' : null);
-        const action: ActionSignal | null = on.waiting ? 'waiting' : on.conflict ? 'conflict' : on.question ? 'question' : null;
-        const badge = action ? `<span class="card-signal signal-${action}">${ACTION_GLYPH[action]}</span>` : '';
-        const dot = action ? `<span class="card-signal-dot signal-${action}"></span>` : '';
-        const compact = density === 'compact';
-        return `
-            <div class="person-card male preview-card${action ? ' has-signal' : ''}" data-density="${density}">
-                ${compact ? '' : `<div class="card-avatar-wrap"><div class="card-avatar"><span class="avatar-initials">MV</span></div>${badge}</div>`}
-                <div class="card-body">
-                    <div class="name"><span class="name-text">Milan Víšek</span></div>
-                    ${compact ? '' : '<div class="birth-date"><span class="meta-text">1842 – ?</span></div>'}
-                </div>
-                ${stripes}
-                ${dot}
-            </div>`;
     },
 });

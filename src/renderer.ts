@@ -18,7 +18,9 @@ import {
 import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
-import { CARD_SIZE, ViewMode, STANDALONE_VIEWS, ResearchEdgeMode } from './types.js';
+import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode } from './types.js';
+import { cardLines } from './card-fields.js';
+import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
 import { EdgeView, edgeMoves, edgeView } from './research-edge.js';
@@ -40,7 +42,7 @@ import { debugPanel } from './debug-panel.js';
 import { yearOf, displayYear, formatFlexDate, ageBetween } from './dates.js';
 import { computeTimelineModel } from './timeline.js';
 import { buildTimelineSvg } from './timeline-chart.js';
-import { newestLifeEvent } from './events.js';
+import { newestLifeEvent, sortLifeEvents } from './events.js';
 import { classifyBranches, Branch } from './branch-colors.js';
 import { presumedDeceasedSet, isLivingPerson } from './privacy.js';
 import { placeList } from './places.js';
@@ -205,8 +207,11 @@ class TreeRendererClass {
         // The layout engine spaces cards from the config size — keep it in sync
         // with the density (and the CSS box) or cards overlap / drift apart.
         const density = SettingsManager.getCardDensity();
-        this.config = { ...this.config, ...CARD_SIZE[density] };
+        const size = SettingsManager.getCardSize();
+        this.config = { ...this.config, ...size };
         document.body.dataset.cardDensity = density;
+        // The custom card's height follows how many lines it shows.
+        document.body.style.setProperty('--card-custom-h', `${size.cardHeight}px`);
         this.updatePlacesDatalist();
         const request: LayoutRequest = {
             data: DataManager.getData(),
@@ -1212,6 +1217,13 @@ class TreeRendererClass {
             // Density decides what fits: compact = names only (no avatar/meta),
             // normal = avatar + name + life-year meta, detailed = + occupation & age.
             const density = SettingsManager.getCardDensity();
+            const customLines = density === 'custom'
+                ? (person.isPlaceholder ? [] : cardLines(person, DataManager.getData(), SettingsManager.getCardFields()))
+                : null;
+            if (customLines?.length) {
+                card.setAttribute('aria-label',
+                    [this.cardAriaLabel(person, signals), ...customLines.map(l => l.spoken)].join(', '));
+            }
             // Placeholders are a dashed frame with no avatar (nothing to depict).
             const showAvatar = density !== 'compact' && !person.isPlaceholder;
             const showPhoto = showAvatar && !!person.photo;
@@ -1269,11 +1281,21 @@ class TreeRendererClass {
             const avatarInner = showPhoto
                 ? `<img src="${this.escapeHtml(person.photo ?? '')}" alt="">`
                 : `<span class="avatar-initials">${this.escapeHtml(initials)}</span>`;
+            const avatarHtml = showAvatar
+                ? `<div class="card-avatar-wrap"><div class="card-avatar">${avatarInner}</div>${badgeHtml}</div>` : '';
+            const nameHtml = `<div class="name"><span class="name-text" title="${this.escapeHtml(fullName)}" data-given="${this.escapeHtml(displayName)}" data-surname="${this.escapeHtml(displaySurname)}">${this.escapeHtml(fullName)}</span></div>`;
 
-            html += `
-                ${showAvatar ? `<div class="card-avatar-wrap"><div class="card-avatar">${avatarInner}</div>${badgeHtml}</div>` : ''}
+            // Custom: the avatar and the name on one row, then one line per
+            // chosen event (src/card-fields.ts) — the lines carry the years.
+            html += customLines ? `
+                <div class="card-body card-body--custom">
+                    <div class="card-head">${avatarHtml}${nameHtml}</div>
+                    <div class="card-lines">${customLines.map(l =>
+                        `<div class="card-line card-line--${l.key}"><span class="card-line-mark" aria-hidden="true">${this.escapeHtml(l.mark)}</span><span class="card-line-text">${this.escapeHtml(l.text)}</span></div>`).join('')}</div>
+                </div>` : `
+                ${avatarHtml}
                 <div class="card-body">
-                    <div class="name"><span class="name-text" title="${this.escapeHtml(fullName)}" data-given="${this.escapeHtml(displayName)}" data-surname="${this.escapeHtml(displaySurname)}">${this.escapeHtml(fullName)}</span></div>
+                    ${nameHtml}
                     ${density !== 'compact' && metaText ? `<div class="birth-date" data-years="${this.escapeHtml(metaYears)}"><span class="meta-text">${this.escapeHtml(metaText)}</span></div>` : ''}
                     ${trade ? `<div class="card-trade">${this.escapeHtml(trade)}</div>` : ''}
                     ${density === 'detailed' && metaPlace ? `<div class="card-place">${this.escapeHtml(metaPlace)}</div>` : ''}
@@ -1371,6 +1393,13 @@ class TreeRendererClass {
             let ttBirthLine = '';
             if (ttBirthDate || ttBirthPlace) {
                 ttBirthLine = `* ${[ttBirthDate, ttBirthPlace].filter(Boolean).join(', ')}`;
+            } else {
+                // No birth recorded, only the baptism (the register's own entry).
+                const baptism = sortLifeEvents((person.events ?? []).filter(e => e.type === 'baptism' && (e.date || e.place)))[0];
+                if (baptism) {
+                    const bits = [baptism.date ? this.formatDateFull(baptism.date) : '', baptism.place?.trim() ?? ''];
+                    ttBirthLine = `≈ ${strings.card.ttBaptized(bits.filter(Boolean).join(', '), person.gender === 'female')}`;
+                }
             }
 
             const ttDeathDate = person.deathDate ? this.formatDateFull(person.deathDate) : '';
@@ -1381,6 +1410,13 @@ class TreeRendererClass {
                 const agePart = ttAge !== null ? ` ${strings.tooltip.yearsOld(ttAge)}` : '';
                 ttDeathLine = `† ${[ttDeathDate, ttDeathPlace].filter(Boolean).join(', ')}${agePart}`;
             }
+            // The cause after a dot; the age the register gave only when it
+            // differs from the dates — a lead worth seeing (src/recorded-age.ts).
+            const ttCause = person.deathCause?.trim() ?? '';
+            if (ttCause) ttDeathLine = ttDeathLine ? `${ttDeathLine} · ${ttCause}` : `† ${ttCause}`;
+            const ttRecorded = person.deathAge?.trim()
+                && checkRecordedAge(person.deathAge, ageBirthDate(person), person.deathDate)?.differs
+                ? strings.fields.ageRecorded(person.deathAge.trim()) : '';
 
             // Relationship summary: the primary (first) partnership's partner and
             // the person's total children count. Either alone is enough to show.
@@ -1406,6 +1442,7 @@ class TreeRendererClass {
                     `<div class="tt-name">${this.escapeHtml(fullName)}</div>`,
                     ttBirthLine ? `<div class="tt-line">${this.escapeHtml(ttBirthLine)}</div>` : '',
                     ttDeathLine ? `<div class="tt-line">${this.escapeHtml(ttDeathLine)}</div>` : '',
+                    ttRecorded ? `<div class="tt-line tt-warn">${this.escapeHtml(ttRecorded)}</div>` : '',
                     ttRelLine ? `<div class="tt-line tt-rel">${ttRelLine}</div>` : '',
                     ttSignals ? `<div class="tt-signals">${ttSignals}</div>` : '',
                     `<div class="tt-foot">${strings.tooltip.gestureHint}</div>`,
@@ -1588,7 +1625,8 @@ class TreeRendererClass {
             // step does not apply. Once the 12.5px floor still overflows, the base
             // ellipsis takes over (the compact-scoped .name-fit-* CSS shrinks to
             // that floor at matching specificity).
-            if (SettingsManager.getCardDensity() === 'compact') return;
+            // The custom card has one name row above its lines: no two-line step either.
+            if (SettingsManager.getCardDensity() === 'compact' || SettingsManager.getCardDensity() === 'custom') return;
 
             // Step 2: two lines (break between given name and surname) + years-only meta.
             nameEl.classList.remove('name-fit-13');

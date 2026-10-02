@@ -4,7 +4,7 @@
  * (reusing normalizeName from the merge engine). No mutations, no DOM.
  */
 
-import { StromData, PersonId, Person, Gender } from './types.js';
+import { StromData, PersonId, Person, Gender, LifeEventType } from './types.js';
 import { yearOf } from './dates.js';
 import { isLivingPerson, inferBirthUpperBounds } from './privacy.js';
 import { normalizeName } from './merge/matching.js';
@@ -36,6 +36,36 @@ function personPlaces(person: Person): string[] {
     return places;
 }
 
+/** Where a search found a person outside the name: a cause or a house on one of their events. */
+export interface DetailMatch {
+    /** The event, as its type ('birth' / 'death' for the person's own fields). */
+    type: LifeEventType;
+    date?: string;
+    place?: string;
+    /** The matching value as written ("cholera", "čp. 13"). */
+    value: string;
+}
+
+/**
+ * The first cause or house of a person's events that contains `query`
+ * (normalized, see normalizeName) — "cholera" finds everyone who died of it.
+ * Null when nothing matches or the query is shorter than three letters.
+ */
+export function detailMatch(person: Person, query: string): DetailMatch | null {
+    if (query.length < 3) return null;
+    const hit = (v?: string): boolean => !!v && normalizeName(v).includes(query);
+    if (hit(person.deathCause)) return { type: 'death', date: person.deathDate, place: person.deathPlace, value: person.deathCause! };
+    for (const ev of person.events ?? []) {
+        if (hit(ev.cause)) return { type: ev.type, date: ev.date, place: ev.place, value: ev.cause! };
+    }
+    if (hit(person.deathAddress)) return { type: 'death', date: person.deathDate, place: person.deathPlace, value: person.deathAddress! };
+    if (hit(person.birthAddress)) return { type: 'birth', date: person.birthDate, place: person.birthPlace, value: person.birthAddress! };
+    for (const ev of person.events ?? []) {
+        if (hit(ev.address)) return { type: ev.type, date: ev.date, place: ev.place, value: ev.address! };
+    }
+    return null;
+}
+
 /** True when at least one criterion is set (i.e. the search is "active"). */
 export function hasSearchCriteria(c: SearchCriteria): boolean {
     return !!(c.query?.trim() || c.lastName?.trim() || c.place?.trim()
@@ -59,7 +89,7 @@ export function filterPersons(data: StromData, criteria: SearchCriteria, current
     for (const person of Object.values(data.persons)) {
         if (person.isPlaceholder) continue;
 
-        if (q && !nameMatchesQuery(person, q, data)) continue;
+        if (q && !nameMatchesQuery(person, q, data) && !detailMatch(person, q)) continue;
         if (last && !surnameMatchesQuery(person, last, data)) continue;
         if (place && !personPlaces(person).some(pl => normalizeName(pl).includes(place))) continue;
         if (criteria.gender && person.gender !== criteria.gender) continue;

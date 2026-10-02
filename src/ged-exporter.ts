@@ -27,6 +27,7 @@ import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType,
 import { strings } from './strings.js';
 import { eventValueIsOnTag } from './events.js';
 import { placeKey } from './places.js';
+import { gedcomAge } from './recorded-age.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
@@ -293,6 +294,17 @@ function pushNote(lines: string[], level: number, text: string): void {
 }
 
 /**
+ * What a record adds to a fact beyond its date and place, as level-2 lines
+ * under it: CAUS, AGE, ADDR. An age the app can read goes out the standard way
+ * ("54 let" → 54y, "kojenec" → INFANT), anything else as written.
+ */
+function pushDetails(lines: string[], d: { cause?: string; age?: string; address?: string }): void {
+    if (d.cause?.trim()) pushLongValue(lines, 2, 'CAUS', d.cause.trim());
+    if (d.age?.trim()) pushWrapped(lines, 2, 'AGE', gedcomAge(d.age));
+    if (d.address?.trim()) pushLongValue(lines, 2, 'ADDR', d.address.trim());
+}
+
+/**
  * Emit a _STORY structure — the narrative written about a person or a couple.
  *
  * A non-standard tag, deliberately: a story is prose built on top of the
@@ -426,7 +438,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         lines.push(`1 SEX ${person.gender === 'male' ? 'M' : 'F'}`);
 
         // Birth (with the citations of the birth entry: 2 SOUR)
-        if (person.birthDate || person.birthPlace || person.birthSourceIds?.length) {
+        if (person.birthDate || person.birthPlace || person.birthAddress || person.birthSourceIds?.length) {
             lines.push('1 BIRT');
             if (person.birthDate) {
                 const date = formatGedcomDate(person.birthDate);
@@ -435,12 +447,14 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (person.birthPlace) {
                 pushPlace(lines, 2, person.birthPlace, data.places);
             }
+            pushDetails(lines, { address: person.birthAddress });
             for (const srcId of person.birthSourceIds ?? []) pushCitation(2, srcId);
         }
 
         // Death (a cited death without a date or place is a known death: DEAT Y)
-        if (person.deathDate || person.deathPlace || person.deathSourceIds?.length) {
-            lines.push(person.deathDate || person.deathPlace ? '1 DEAT' : '1 DEAT Y');
+        const deathDetail = person.deathCause || person.deathAge || person.deathAddress;
+        if (person.deathDate || person.deathPlace || deathDetail || person.deathSourceIds?.length) {
+            lines.push(person.deathDate || person.deathPlace || deathDetail ? '1 DEAT' : '1 DEAT Y');
             if (person.deathDate) {
                 const date = formatGedcomDate(person.deathDate);
                 if (date) lines.push(`2 DATE ${date}`);
@@ -448,6 +462,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (person.deathPlace) {
                 pushPlace(lines, 2, person.deathPlace, data.places);
             }
+            pushDetails(lines, { cause: person.deathCause, age: person.deathAge, address: person.deathAddress });
             for (const srcId of person.deathSourceIds ?? []) pushCitation(2, srcId);
         } else if (person.isDeceased === true) {
             // Known to be dead, date unknown: the standard way to say so.
@@ -512,6 +527,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (event.place) {
                 pushPlace(lines, 2, event.place, data.places);
             }
+            pushDetails(lines, event);
             if (event.note && !eventValueIsOnTag(event.type)) {
                 pushNote(lines, 2, event.note);
             }
@@ -646,7 +662,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
         // Marriage event (for married or divorced status)
         if (partnership.status === 'married' || partnership.status === 'divorced' ||
-            partnership.startDate || partnership.startPlace) {
+            partnership.startDate || partnership.startPlace || partnership.address
+            || Object.values(partnership.ages ?? {}).some(a => a.trim())) {
             lines.push('1 MARR');
             if (partnership.startDate) {
                 const date = formatGedcomDate(partnership.startDate);
@@ -654,6 +671,14 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             if (partnership.startPlace) {
                 pushPlace(lines, 2, partnership.startPlace, data.places);
+            }
+            pushDetails(lines, { address: partnership.address });
+            // Each partner's age at the wedding, under HUSB / WIFE.
+            for (const [role, pid] of [['HUSB', husbId], ['WIFE', wifeId]] as const) {
+                const age = partnership.ages?.[pid]?.trim();
+                if (!age) continue;
+                lines.push(`2 ${role}`);
+                pushWrapped(lines, 3, 'AGE', gedcomAge(age));
             }
             // Witnesses at the wedding, written like the ones on an event: in
             // the tree → ASSO at their record, otherwise _WITN with the name.
@@ -672,12 +697,13 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
 
         // Divorce event
-        if (partnership.status === 'divorced' || partnership.endDate) {
+        if (partnership.status === 'divorced' || partnership.endDate || partnership.endPlace) {
             lines.push('1 DIV');
             if (partnership.endDate) {
                 const date = formatGedcomDate(partnership.endDate);
                 if (date) lines.push(`2 DATE ${date}`);
             }
+            if (partnership.endPlace) pushPlace(lines, 2, partnership.endPlace, data.places);
         }
 
         // A status MARR/DIV cannot say (partners, separated).

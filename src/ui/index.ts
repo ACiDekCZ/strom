@@ -13,6 +13,7 @@ import {
     PersonId,
     PartnershipId,
     PartnershipStatus,
+    PartnershipUpdates,
     Gender,
     RelationType,
     RelationContext,
@@ -69,6 +70,7 @@ import { archivesUiMethods } from './archives-ui.js';
 import { personSourcesMethods } from './person-sources-ui.js';
 import { researchActionsMethods } from './research-actions-ui.js';
 import { storyCompareMethods } from './story-compare-ui.js';
+import { cardFieldsUiMethods } from './card-fields-ui.js';
 import { personResearchMethods } from './person-research-ui.js';
 import { researchAdoptMethods } from './research-adopt-ui.js';
 import { evidenceUiMethods } from './evidence-ui.js';
@@ -190,6 +192,8 @@ export class UIClass {
         deceased: boolean;
         /** Photo data URL in the preview when the form opened ('' = none). */
         photo: string;
+        /** House, cause and age of the birth and death, joined (personDetailsSnapshot). */
+        details: string;
     } | null = null;
 
     // Debounce timer for the live search filter/highlight.
@@ -329,14 +333,7 @@ export class UIClass {
     /** One-time registration of the panel's data-changed listener. */
     relSessionListener = false;
     // Pending changes for relationships (not saved until user clicks Save)
-    pendingPartnershipChanges: Map<PartnershipId, {
-        status?: PartnershipStatus;
-        startDate?: string;
-        startPlace?: string;
-        endDate?: string;
-        note?: string;
-        isPrimary?: boolean;
-    }> = new Map();
+    pendingPartnershipChanges: Map<PartnershipId, PartnershipUpdates> = new Map();
 
     // Custom dialog promise resolver
     dialogResolve: ((value: boolean) => void) | null = null;
@@ -475,6 +472,10 @@ Object.assign(UIClass.prototype, researchActionsMethods);
 type StoryCompareMethods = typeof storyCompareMethods;
 export interface UIClass extends StoryCompareMethods {}
 Object.assign(UIClass.prototype, storyCompareMethods);
+
+type CardFieldsUiMethods = typeof cardFieldsUiMethods;
+export interface UIClass extends CardFieldsUiMethods {}
+Object.assign(UIClass.prototype, cardFieldsUiMethods);
 
 type PersonResearchMethods = typeof personResearchMethods;
 export interface UIClass extends PersonResearchMethods {}

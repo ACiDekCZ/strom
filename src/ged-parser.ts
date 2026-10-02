@@ -47,7 +47,9 @@ import {
     ResearchIsland,
     YearSpan,
 } from './types';
-import { dateSortKey, formatFlexDate } from './dates';
+import { dateSortKey, formatFlexDate, normalizeDateInput } from './dates';
+import { readDateWords } from './date-words';
+import { localAge } from './recorded-age';
 import { placeKey } from './places';
 import { eventValueIsOnTag } from './events';
 import { strings, getStringsForLang } from './strings';
@@ -561,6 +563,10 @@ interface RawEvent {
     customLabel?: string;
     date?: string;
     place?: string;
+    /** 2 CAUS / 2 AGE / 2 ADDR under the event (see LifeEvent). */
+    cause?: string;
+    age?: string;
+    address?: string;
     note?: string;
     /** GEDCOM ids (@Sx@) of sources cited on this event. */
     sourceRefs?: string[];
@@ -665,6 +671,11 @@ interface GedcomIndividual {
     birthPlace: string;
     deathDate: string;
     deathPlace: string;
+    /** BIRT > ADDR, DEAT > CAUS / AGE / ADDR (the first BIRT/DEAT block). */
+    birthAddress?: string;
+    deathCause?: string;
+    deathAge?: string;
+    deathAddress?: string;
     notes: string;
     /** User reference number (1 REFN) — id in a paper archive / other program. */
     refn: string;
@@ -722,7 +733,13 @@ interface GedcomFamily {
     children: string[];
     marriageDate: string;
     marriagePlace: string;
+    /** MARR > ADDR, MARR > HUSB / WIFE > AGE (the first marriage that gives them). */
+    marriageAddress?: string;
+    husbAge?: string;
+    wifeAge?: string;
     divorceDate: string;
+    /** DIV > PLAC. */
+    divorcePlace?: string;
     /** A DIV tag was present, even without a date (divorce date unknown). */
     divorced: boolean;
     /**
@@ -857,6 +874,17 @@ export function gedcomDatePhrase(dateStr: string): string | null {
 
 const YEAR_RE = /^\d{3,4}$/;
 
+/**
+ * A date with no words around it, for readDateWords: a GEDCOM one read whole
+ * ("3 MAR 1919", "1919") or a dotted day-first one ("12. 3. 1919").
+ */
+function bareDate(s: string): string | null {
+    const read = readGedcomDate(s);
+    if (read.date && !read.lossy && !read.phrase) return read.date;
+    if (s.includes('/')) return null;   // 5/3/1919: day and month order unknown
+    return normalizeDateInput(s.replace(/\.\s+/g, '.'), 'de') || null;
+}
+
 function readGedcomDate(dateStr: string): { date: string; lossy: boolean; phrase: string } {
     if (!dateStr || !dateStr.trim()) return { date: '', lossy: false, phrase: '' };
 
@@ -899,6 +927,12 @@ function readGedcomDate(dateStr: string): { date: string; lossy: boolean; phrase
         return { date: d.date, lossy: true, phrase };
     }
 
+    // Words of a local language another program wrote instead of the GEDCOM
+    // keywords ("Po 1919", "kolem r. 1850", "zwischen 1850 und 1855"). The
+    // meaning is kept whole, so no "as written" note is needed.
+    const local = readDateWords(dateStr, bareDate);
+    if (local) return { date: local, lossy: false, phrase };
+
     // Qualifier prefixes map to flex-date qualifiers instead of being dropped.
     // INT (interpreted) is an approximation of what the phrase says.
     let qualifier = '';
@@ -938,7 +972,10 @@ function readGedcomDate(dateStr: string): { date: string; lossy: boolean; phrase
     } else if (lastIsYear) {
         // A day or month that is not a GEDCOM one ("3 XYZ 1900"): the year is
         // certain, the rest is not — keep the year, never invent a month.
-        return { date: `${qualifier}${parts[parts.length - 1]}`, lossy: true, phrase };
+        // A word in front of the date that is not known at all ("Nejspíš
+        // 1919") may say "after" or "before": the year is only an estimate.
+        const wordFirst = !qualifier && /^\p{L}/u.test(parts[0]) && !monthOf(parts[0]);
+        return { date: `${wordFirst ? '~' : qualifier}${parts[parts.length - 1]}`, lossy: true, phrase };
     }
     return { date: '', lossy: parts.length > 0, phrase };
 }
@@ -1408,14 +1445,60 @@ export function parseGedcom(content: string): ParsedGedcom {
         return null;
     };
     /**
+     * The field a detail line fills (CAUS, AGE, ADDR under a fact), where the
+     * model has one: on any life event, ADDR of the birth, all three of the
+     * death, ADDR and each partner's AGE of a wedding. Null where it has none
+     * (the cause of a birth, the age at a divorce): such a line keeps going to
+     * the note. A field already filled — a second marriage of the same couple
+     * — leaves the line to the note too, so neither value is lost.
+     */
+    type DetailField = { get: () => string | undefined; set: (v: string) => void };
+    const factDetailField = (tag: string, partner?: 'HUSB' | 'WIFE'): DetailField | null => {
+        const key = tag === 'CAUS' ? 'cause' : tag === 'AGE' ? 'age' : 'address';
+        if (currentType === 'INDI' && currentRecord) {
+            const indi = currentRecord as GedcomIndividual;
+            const ev = currentEvent;
+            if (ev) return { get: () => ev[key], set: v => { ev[key] = v; } };
+            if (currentSubTag === 'BIRT' && key === 'address') {
+                return { get: () => indi.birthAddress, set: v => { indi.birthAddress = v; } };
+            }
+            if (currentSubTag === 'DEAT') {
+                const field = key === 'cause' ? 'deathCause' : key === 'age' ? 'deathAge' : 'deathAddress';
+                return { get: () => indi[field], set: v => { indi[field] = v; } };
+            }
+        } else if (currentType === 'FAM' && currentRecord && currentSubTag === 'MARR') {
+            const fam = currentRecord as GedcomFamily;
+            if (partner) {
+                const field = partner === 'HUSB' ? 'husbAge' : 'wifeAge';
+                return { get: () => fam[field], set: v => { fam[field] = v; } };
+            }
+            if (key === 'address') return { get: () => fam.marriageAddress, set: v => { fam.marriageAddress = v; } };
+        }
+        return null;
+    };
+    /**
      * A detail line being read (AGE, CAUS, ADDR under a fact), open until the
      * next line at its own level or above, so its CONT/CONC lines join it.
      */
-    let openDetail: { level: number; text: string; format: (text: string) => string; sink: (line: string) => void; sep: string } | null = null;
+    let openDetail: { level: number; text: string; done: (text: string) => void; sep: string } | null = null;
     const flushDetail = (): void => {
         const text = openDetail?.text.trim();
-        if (openDetail && text) openDetail.sink(openDetail.format(text));
+        if (openDetail && text) openDetail.done(text);
         openDetail = null;
+    };
+    /** Where a finished detail goes: its field (an age in the UI language), else the fact's note, labelled. */
+    const detailTarget = (tag: string, partner?: 'HUSB' | 'WIFE'): ((text: string) => void) | null => {
+        const sink = factDetailSink();
+        const field = factDetailField(tag, partner);
+        if (!sink && !field) return null;
+        const g = strings.gedcomNotes;
+        return text => {
+            const value = tag === 'AGE' ? localAge(text) : text;
+            if (field && !field.get()) { field.set(value); return; }
+            if (!sink) return;
+            if (partner) sink((partner === 'HUSB' ? g.husbandAge : g.wifeAge)(value));
+            else sink(tag === 'AGE' ? g.age(value) : tag === 'CAUS' ? g.cause(value) : g.address(value));
+        };
     };
     /** Coordinates gathered from PLAC > MAP > LATI/LONG, keyed by placeKey(). */
     const placeCoords = new Map<string, PlaceGeo>();
@@ -1501,21 +1584,17 @@ export function parseGedcom(content: string): ParsedGedcom {
                 // census)", "3 XYZ 1900") stay with the fact, as written.
                 const phrase = gedcomDatePhrase(value);
                 if (phrase) sink(strings.gedcomNotes.datePhrase(phrase));
-            } else if (sink) {
+            } else if (tag !== 'DATE') {
                 // ADDR: only its own value and CONT lines. ADR1/CITY/POST
                 // repeat the place or carry junk ("ADR1 Email", MyHeritage).
-                const g = strings.gedcomNotes;
-                const format = tag === 'AGE' ? (t: string) => g.age(formatGedcomAge(t))
-                    : tag === 'CAUS' ? g.cause : g.address;
-                openDetail = { level, text: value, format, sink, sep: tag === 'ADDR' ? ', ' : '\n' };
+                const done = detailTarget(tag);
+                if (done) openDetail = { level, text: value, done, sep: tag === 'ADDR' ? ', ' : '\n' };
             }
         } else if (level === 3 && tag === 'AGE' && currentType === 'FAM' && currentSubTag === 'MARR'
             && (currentFactSubTag === 'HUSB' || currentFactSubTag === 'WIFE')) {
             // 1 MARR / 2 HUSB / 3 AGE 25y — each partner's age at the wedding.
-            const sink = factDetailSink();
-            const g = strings.gedcomNotes;
-            const label = currentFactSubTag === 'HUSB' ? g.husbandAge : g.wifeAge;
-            if (sink) openDetail = { level, text: value, format: t => label(formatGedcomAge(t)), sink, sep: ' ' };
+            const done = detailTarget(tag, currentFactSubTag);
+            if (done) openDetail = { level, text: value, done, sep: ' ' };
         }
 
         if (level === 0) {
@@ -2217,6 +2296,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             fam.marriageParticipants.push({ name: value, rela: WITNESS_RELA });
                         }
                     } else if (currentSubTag === 'DIV') {
+                        if (tag === 'PLAC' && value && !fam.divorcePlace) fam.divorcePlace = value;
                         if (tag === 'DATE') {
                             fam.divorceDate = parseGedcomDate(value);
                             lastUnionEvent(fam, 'divorce', fam.divorceDate);
@@ -2478,6 +2558,10 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         // liveness heuristic would treat the person as possibly living.
         if (indi.deceased && !indi.deathDate) person.isDeceased = true;
         if (indi.deathPlace) person.deathPlace = indi.deathPlace;
+        if (indi.birthAddress) person.birthAddress = indi.birthAddress;
+        if (indi.deathCause) person.deathCause = indi.deathCause;
+        if (indi.deathAge) person.deathAge = indi.deathAge;
+        if (indi.deathAddress) person.deathAddress = indi.deathAddress;
         // Facts with no field of their own join the note, labelled, ahead of
         // whatever free text the file wrote (see NOTED_INDI_TAGS).
         const factLines = indi.noteFacts.map(factToNoteLine);
@@ -2514,6 +2598,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 if (ev.customLabel) out.customLabel = ev.customLabel;
                 if (ev.date) out.date = ev.date;
                 if (ev.place) out.place = ev.place;
+                if (ev.cause) out.cause = ev.cause;
+                if (ev.age) out.age = ev.age;
+                if (ev.address) out.address = ev.address;
                 if (ev.note) out.note = ev.note;
                 const evRefs = mapRefs(ev.sourceRefs);
                 if (evRefs.length > 0) out.sourceIds = evRefs;
@@ -2719,6 +2806,16 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
      */
     const fillUnion = (partnership: Partnership, fam: GedcomFamily): void => {
         if (fam.marriagePlace) partnership.startPlace = fam.marriagePlace;
+        if (fam.marriageAddress) partnership.address = fam.marriageAddress;
+        if (fam.divorcePlace) partnership.endPlace = fam.divorcePlace;
+        // Ages by person: HUSB is the first partner, WIFE the second, unless
+        // the file's own ids say otherwise (a parent with a placeholder).
+        const husbId = (fam.husb && personIdMap.get(fam.husb)) || partnership.person1Id;
+        const wifeId = (fam.wife && personIdMap.get(fam.wife)) || partnership.person2Id;
+        const ages: Record<string, string> = {};
+        if (fam.husbAge) ages[husbId] = fam.husbAge;
+        if (fam.wifeAge && wifeId !== husbId) ages[wifeId] = fam.wifeAge;
+        if (Object.keys(ages).length > 0) partnership.ages = ages;
         if (fam.note) partnership.note = fam.note;
         applyUnionOutcome(partnership, fam);
 
@@ -2755,6 +2852,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (!into.startDate && from.startDate) into.startDate = from.startDate;
         if (!into.startPlace && from.startPlace) into.startPlace = from.startPlace;
         if (!into.endDate && from.endDate) into.endDate = from.endDate;
+        if (!into.endPlace && from.endPlace) into.endPlace = from.endPlace;
+        if (!into.address && from.address) into.address = from.address;
+        if (from.ages) into.ages = { ...from.ages, ...(into.ages ?? {}) };
         if (from.note && !(into.note ?? '').includes(from.note)) {
             into.note = into.note ? `${into.note}\n${from.note}` : from.note;
         }

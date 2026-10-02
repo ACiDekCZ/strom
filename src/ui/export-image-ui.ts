@@ -21,6 +21,7 @@ import { classifyBranches } from '../branch-colors.js';
 import { computeIndirectIds } from '../indirect.js';
 import { SettingsManager } from '../settings.js';
 import { safeFileName } from '../filenames.js';
+import { cardLines } from '../card-fields.js';
 
 /** Browsers cap canvas dimensions; keep well under the common ~16k limit. */
 const MAX_CANVAS_PX = 15000;
@@ -171,19 +172,30 @@ function buildCurrentPoster(): PosterBuild | null {
     const dimmedIds = (focusId && (mode === 'descendants' || mode === 'family'))
         ? computeIndirectIds(data, focusId, mode, [...layout.positions.keys()] as unknown as string[]) as unknown as Set<string>
         : undefined;
+    // The custom card is drawn as on screen: its size and its lines.
+    const custom = SettingsManager.getCardDensity() === 'custom';
+    const cardConfig = custom ? { ...DEFAULT_LAYOUT_CONFIG, ...SettingsManager.getCardSize() } : DEFAULT_LAYOUT_CONFIG;
+    const fields = SettingsManager.getCardFields();
+    const cardLinesMap = custom
+        ? new Map([...layout.positions.keys()].map(id => {
+            const p = data.persons[id];
+            return [id as string, p && !p.isPlaceholder ? cardLines(p, data, fields) : []];
+        }))
+        : undefined;
     const options: PosterOptions = {
         ...meta,
         branchMap,
         deceasedSet: presumedDeceasedSet(data),
         ...(dimmedIds ? { dimmedIds } : {}),
+        ...(custom ? { config: cardConfig, cardLines: cardLinesMap } : {}),
     };
     const svg = buildTreeSvg(data, layout, options);
 
     // Occupied rectangles in poster-px space (cards + footer strip). Sheets
     // that intersect NOTHING are skipped, so a sparse tree corner no longer
     // prints near-blank paper.
-    const bounds = computeBounds(layout);
-    const cfg = DEFAULT_LAYOUT_CONFIG;
+    const bounds = computeBounds(layout, cardConfig);
+    const cfg = cardConfig;
     const widthPx = bounds.width + POSTER_PADDING * 2;
     const heightPx = bounds.height + POSTER_PADDING * 2 + FOOTER_HEIGHT;
     const occupied: Array<{ x: number; y: number; w: number; h: number }> = [];

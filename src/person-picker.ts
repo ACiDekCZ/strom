@@ -7,6 +7,8 @@ import { Person, PersonId, StromData } from './types.js';
 import { strings } from './strings.js';
 import { DataManager } from './data.js';
 import { normalizeSearchText as normalizeText, alternateNames, nameMatchesQuery } from './name-search.js';
+import { detailMatch } from './search-filter.js';
+import { displayYear } from './dates.js';
 
 /**
  * Sort persons by name (lastName, firstName)
@@ -21,7 +23,7 @@ function sortByName(a: Person, b: Person): number {
  * Calculate match score for a person against a query
  * Higher score = better match
  */
-function calculateMatchScore(person: Person, query: string, data: StromData | null): number {
+function calculateMatchScore(person: Person, query: string, data: StromData | null, details = false): number {
     const firstName = normalizeText(person.firstName);
     const lastName = normalizeText(person.lastName);
     const fullName = `${firstName} ${lastName}`;
@@ -50,13 +52,16 @@ function calculateMatchScore(person: Person, query: string, data: StromData | nu
     const birthYear = person.birthDate?.split('-')[0] || '';
     if (birthYear && birthYear.includes(query)) return 30;
 
+    // A cause of death or a house ("cholera", "čp. 13") — the toolbar search only.
+    if (details && detailMatch(person, query)) return 20;
+
     return 0;  // No match
 }
 
 /**
  * Filter and sort persons based on search query
  */
-export function filterAndSort(query: string, persons: Person[], data: StromData | null): Person[] {
+export function filterAndSort(query: string, persons: Person[], data: StromData | null, details = false): Person[] {
     const normalized = normalizeText(query.trim());
 
     if (!normalized) {
@@ -68,7 +73,7 @@ export function filterAndSort(query: string, persons: Person[], data: StromData 
     return persons
         .map(p => ({
             person: p,
-            score: calculateMatchScore(p, normalized, data)
+            score: calculateMatchScore(p, normalized, data, details)
         }))
         .filter(item => item.score > 0)
         .sort((a, b) => {
@@ -89,6 +94,8 @@ export interface PersonPickerOptions {
     persons?: Person[];
     /** Tree the persons belong to (surname groups); defaults to the active tree. */
     data?: StromData;
+    /** Also find people by a cause of death or a house, and say where it matched. */
+    searchDetails?: boolean;
 }
 
 const BATCH_SIZE = 50;
@@ -373,7 +380,7 @@ export class PersonPicker {
      */
     private renderDropdown(): void {
         const query = this.input.value.trim();
-        this.filteredPersons = filterAndSort(query, this.allPersons, this.searchData());
+        this.filteredPersons = filterAndSort(query, this.allPersons, this.searchData(), !!this.options.searchDetails);
         this.selectedIndex = -1;
         this.displayedCount = BATCH_SIZE;
 
@@ -445,9 +452,24 @@ export class PersonPicker {
         return `
             <div class="person-picker-item${index === this.selectedIndex ? ' selected' : ''}"
                  data-id="${this.escapeHtml(person.id)}">
-                ${this.escapeHtml(name)} ${birthYear}
+                ${this.escapeHtml(name)} ${birthYear}${this.detailMatchHtml(person)}
             </div>
         `;
+    }
+
+    /**
+     * Found by a cause or a house rather than the name: say so under the name,
+     * the matching words marked — "† 1866 Horní Lhota · cholera".
+     */
+    private detailMatchHtml(person: Person): string {
+        if (!this.options.searchDetails) return '';
+        const query = normalizeText(this.input.value.trim());
+        if (!query || calculateMatchScore(person, query, this.searchData()) > 0) return '';
+        const m = detailMatch(person, query);
+        if (!m) return '';
+        const mark = m.type === 'death' ? '†' : m.type === 'birth' ? '*' : strings.events.types[m.type];
+        const head = [mark, displayYear(m.date), m.place?.trim() ?? ''].filter(Boolean).join(' ');
+        return `<div class="person-picker-match">${this.escapeHtml(head)} · <mark>${this.escapeHtml(m.value)}</mark></div>`;
     }
 
     /**

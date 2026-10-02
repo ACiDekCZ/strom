@@ -101,6 +101,18 @@ A date with a day or month that is not a GEDCOM one (`3 XYZ 1900`) keeps only
 its year — never an invented January — and gets the same line. Use the
 English month abbreviations (`JAN` … `DEC`).
 
+Words another program wrote instead of the GEDCOM keywords are understood in
+Czech, Slovak, Polish, German, Russian and Ukrainian, compared without case and
+diacritics: `Po 1919` is after 1919 (`AFT`), `před 1900` before (`BEF`),
+`kolem r. 1850` / `cca 1850` / `um 1850` about (`ABT`), `mezi 1850 a 1855` /
+`zwischen … und …` a range (`BET … AND …`), `od 1850 do 1855` / `von … bis …` a
+period (`FROM … TO …`), `ab 1850` after. Words that say nothing about the date
+are skipped (`po roce 1919`, `im Jahr 1850`, `1870 г.`). A valid date must
+follow the word — `po válce` ("after the war") stays text. Such a date keeps
+its meaning, so it gets no "Date as written" line; it is written back with the
+GEDCOM keyword. A year after a word Strom does not know (`Nejspíš 1919`) is
+taken as an estimate (about 1919) and keeps the "Date as written" line.
+
 ### What hangs under BIRT, DEAT and MARR
 
 These blocks carry the register entry itself, and all of it is read:
@@ -129,10 +141,7 @@ These blocks carry the register entry itself, and all of it is read:
 ### Age, cause, address and calendar
 
 Detail the register gives about a fact beyond its date and place is read under
-`BIRT`, `DEAT`, `MARR` and every event above. The model has no field for any of
-it, so each becomes **one labelled line in the note of that fact** — the event's
-note, or for birth and death the person's note labelled "Birth:" / "Death:",
-for a marriage the couple's note.
+`BIRT`, `DEAT`, `MARR`, `DIV` and every event above, into fields of that fact:
 
 ```
 1 DEAT
@@ -143,23 +152,29 @@ for a marriage the couple's note.
 2 CAUS tuberkulóza
 ```
 
-- `AGE` — `61y`, `27y 3m`, `3m 12d`, `<1y`, `INFANT`, `STILLBORN`, `CHILD`, and a
-  bare number as years; written out in words ("Age: 61 years").
-- `CAUS` — the cause, as written.
+- `AGE` — the age as recorded: `61y`, `27y 3m`, `3m 12d`, `<1y`, `INFANT`,
+  `STILLBORN`, `CHILD`, and a bare number as years. It is stored in words of the
+  UI language ("61 let") and the app compares it with the age the dates give.
+  Written back the standard way when it can be read (`54 let` → `54y`,
+  `kojenec` → `INFANT`), as written otherwise.
+- `CAUS` — the cause, as written (on any event; the app offers it for a death).
 - `ADDR` — the house or address **on the `ADDR` line itself**, with `CONT`
   lines. `ADR1`, `CITY` and the other address parts are not read: `CITY`
   repeats the place, and some programs fill `ADR1` with noise. Keep only the
   municipality in `PLAC` — `2 PLAC Vavřinec` with `2 ADDR čp. 13`, never
   `2 PLAC Vavřinec 13` — or every house becomes a place and a pin of its own.
 - `2 HUSB` / `2 WIFE` with a `3 AGE` under `MARR` — each partner's age at the
-  wedding.
+  wedding; `ADDR` under `MARR` — the house of the wedding (usually the bride's).
+- `PLAC` under `DIV` — the place of the divorce.
 - A date in another calendar (`@#DJULIAN@`, `@#DHEBREW@`, `@#DFRENCH R@`) keeps
   its numbers as the date and adds a line saying which calendar they are in.
   Convert to Gregorian yourself if you want the date field to be exact.
 
-On export these come back as the same lines in a `NOTE`, not as `AGE` / `CAUS` /
-`ADDR`. Nothing is lost on a round-trip, but a program reading Strom's export
-finds them as text.
+A detail the model has no field for — the cause of a birth, the age at a
+divorce, a second marriage of the same couple giving its own house — becomes
+one labelled line in the note of that fact, so nothing is lost. On export the
+fields come back as the same tags (`AGE`, `CAUS`, `ADDR`, `HUSB`/`WIFE` >
+`AGE`, `DIV` > `PLAC`), never as a `NOTE`.
 
 ### Participants' roles
 

@@ -152,6 +152,17 @@ export interface LifelinePoint {
     participants?: string[];
     /** Place recorded for the point, if any. */
     place?: string;
+    /** What the record adds: cause, age as recorded, house (this person's age at a wedding). */
+    details?: { cause?: string; age?: string; address?: string };
+}
+
+/** The details worth a line, or nothing when none is filled. */
+function detailsOf(d: { cause?: string; age?: string; address?: string }): { details?: LifelinePoint['details'] } {
+    const out: NonNullable<LifelinePoint['details']> = {};
+    if (d.cause?.trim()) out.cause = d.cause.trim();
+    if (d.age?.trim()) out.age = d.age.trim();
+    if (d.address?.trim()) out.address = d.address.trim();
+    return Object.keys(out).length ? { details: out } : {};
 }
 
 /** Intra-year fraction (0.02..0.98) from a flex date, so points order by month/day. */
@@ -184,7 +195,8 @@ export function computePersonLifeline(data: StromData, personId: string): Lifeli
 
     const birthY = yearOf(person.birthDate);
     if (birthY !== null) {
-        points.push({ year: birthY, sortKey: birthY + 0.001, kind: 'birth', place: person.birthPlace || undefined });
+        points.push({ year: birthY, sortKey: birthY + 0.001, kind: 'birth', place: person.birthPlace || undefined,
+            ...detailsOf({ address: person.birthAddress }) });
     }
 
     for (const ev of person.events ?? []) {
@@ -206,6 +218,7 @@ export function computePersonLifeline(data: StromData, personId: string): Lifeli
                 ? { detail: ev.note.trim() } : {}),
             ...(participants.length ? { participants } : {}),
             ...(ev.place ? { place: ev.place } : {}),
+            ...detailsOf(ev),
         });
     }
 
@@ -221,6 +234,8 @@ export function computePersonLifeline(data: StromData, personId: string): Lifeli
             sortKey: y + yearFraction(u.startDate),
             kind: 'marriage',
             ...(personName(data, otherId) ? { relatedName: personName(data, otherId) } : {}),
+            ...(u.startPlace ? { place: u.startPlace } : {}),
+            ...detailsOf({ address: u.address, age: u.ages?.[personId] }),
         });
     }
 
@@ -240,7 +255,8 @@ export function computePersonLifeline(data: StromData, personId: string): Lifeli
 
     const deathY = yearOf(person.deathDate);
     if (deathY !== null) {
-        points.push({ year: deathY, sortKey: deathY + 0.999, kind: 'death', place: person.deathPlace || undefined });
+        points.push({ year: deathY, sortKey: deathY + 0.999, kind: 'death', place: person.deathPlace || undefined,
+            ...detailsOf({ cause: person.deathCause, age: person.deathAge, address: person.deathAddress }) });
     }
 
     points.sort((a, b) => a.sortKey - b.sortKey);

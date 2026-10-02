@@ -120,6 +120,12 @@ export interface LifeEvent {
     /** Flex date (see src/dates.ts): [~|<|>]YYYY[-MM[-DD]]. */
     date?: string;
     place?: string;
+    /** Cause as the record gives it (GEDCOM CAUS), mostly of a death. */
+    cause?: string;
+    /** Age the record gives, as written ("54 let", "kojenec"; GEDCOM AGE, see src/recorded-age.ts). */
+    age?: string;
+    /** House or address, e.g. a house number (GEDCOM ADDR). */
+    address?: string;
     note?: string;
     /** Ids of Source entries (StromData.sources) citing this event. */
     sourceIds?: string[];
@@ -226,8 +232,16 @@ export interface Person {
     // Extended info
     birthDate?: string;
     birthPlace?: string;
+    /** House or address of the birth (GEDCOM BIRT > ADDR). */
+    birthAddress?: string;
     deathDate?: string;
     deathPlace?: string;
+    /** Cause of death as recorded (DEAT > CAUS). */
+    deathCause?: string;
+    /** Age at death as recorded, as written (DEAT > AGE). */
+    deathAge?: string;
+    /** House or address of the death (DEAT > ADDR). */
+    deathAddress?: string;
     notes?: string;
     /**
      * User reference number (GEDCOM REFN): the person's id in a paper archive
@@ -523,6 +537,12 @@ export interface Partnership {
     startDate?: string;
     startPlace?: string;
     endDate?: string;
+    /** Place of the divorce (DIV > PLAC). */
+    endPlace?: string;
+    /** House or address of the wedding, usually the bride's (MARR > ADDR). */
+    address?: string;
+    /** Each partner's age at the wedding as recorded, by person id (MARR > HUSB/WIFE > AGE). */
+    ages?: Record<string, string>;
     note?: string;
     /** Ids of Source entries citing this partnership (marriage record etc.). */
     sourceIds?: string[];
@@ -538,6 +558,10 @@ export interface Partnership {
     // this one is shown by default (unless viewing from child's perspective)
     isPrimary?: boolean;
 }
+
+/** The partnership fields the relationships panel edits (DataManager.updatePartnership). */
+export type PartnershipUpdates = Partial<Pick<Partnership,
+    'status' | 'startDate' | 'startPlace' | 'endDate' | 'endPlace' | 'address' | 'ages' | 'note' | 'isPrimary'>>;
 
 // ==================== LAST FOCUSED MARKER ====================
 
@@ -706,7 +730,7 @@ export interface LayoutConfig {
  * How much a person card shows. The card SIZE differs per density, so the
  * layout engine must be told (CARD_SIZE) — spacing is computed from it.
  */
-export type CardDensity = 'compact' | 'normal' | 'detailed';
+export type CardDensity = 'compact' | 'normal' | 'detailed' | 'custom';
 
 /**
  * Card box per density. Keys match LayoutConfig on purpose so the values can be
@@ -714,7 +738,7 @@ export type CardDensity = 'compact' | 'normal' | 'detailed';
  * nothing and the engine kept spacing for the default card.
  * MUST match the CSS for .person-card at each density.
  */
-export const CARD_SIZE: Record<CardDensity, Pick<LayoutConfig, 'cardWidth' | 'cardHeight'>> = {
+export const CARD_SIZE: Record<Exclude<CardDensity, 'custom'>, Pick<LayoutConfig, 'cardWidth' | 'cardHeight'>> = {
     // "Letopis" card: a 38px avatar + a two-row text column (name + meta).
     // compact drops the avatar and meta (names only), so it is shorter and
     // narrower; detailed keeps the extra occupation/age lines, so it is taller.
@@ -797,7 +821,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.7.0-beta.1';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.7.0-beta.2';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -868,6 +892,8 @@ export interface AppSettings {
     crossTreeBadges?: boolean;  // default: true - show cross-tree connection badges
     fanKekule?: boolean;  // default: false - show Kekule (ahnentafel) numbers in the fan chart
     cardDensity?: CardDensity;  // default: 'normal' - how much detail a card shows
+    /** The custom density's lines (src/card-fields.ts); set the first time "Custom" is chosen. */
+    cardFields?: import('./card-fields.js').CardFieldSettings;
     familyButton?: boolean;  // default: false - toolbar shortcut to the family wizard
     descendantsFullFamilies?: boolean;  // default: false - descendants view shows partners' other families
     advancedFields?: boolean;  // default: false (basic mode) - sources/attachments/refn/name variants/question on a person

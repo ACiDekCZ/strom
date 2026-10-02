@@ -293,6 +293,33 @@ export function formatDateForInput(value?: string): string {
 }
 
 /**
+ * The ages a person can have been at an event, in whole years, from the
+ * precision of both dates: born "1862" and dead "12. 3. 1919" is 56 (born late
+ * in 1862) to 57 (born early). Null when a date is missing or only an estimate
+ * (~, <, >) — an estimate says too little to compare a recorded age with.
+ * A range date ('1850..1855') counts with its whole span.
+ */
+export function ageRangeBetween(birth?: string, end?: string): { min: number; max: number } | null {
+    const b = parseFlexDate(birth);
+    const e = parseFlexDate(end);
+    if (!b || !e || b.qualifier || e.qualifier) return null;
+    type Ymd = [number, number, number];
+    const first = (d: { year: number; month?: number; day?: number }): Ymd =>
+        [d.year, d.month ?? 1, d.day ?? 1];
+    const last = (d: { year: number; month?: number; day?: number }): Ymd =>
+        [d.year, d.month ?? 12, d.day ?? (d.month === undefined ? 31 : daysInMonth(d.year, d.month))];
+    const years = (from: Ymd, to: Ymd): number => {
+        let n = to[0] - from[0];
+        if (to[1] < from[1] || (to[1] === from[1] && to[2] < from[2])) n--;
+        return n;
+    };
+    const min = years(last(b.end ?? b), first(e));
+    const max = years(first(b), last(e.end ?? e));
+    if (max < 0) return null;
+    return { min: Math.max(0, min), max };
+}
+
+/**
  * Age in years between two flex dates (end omitted = today).
  * `approx` is true when either side is qualified or lacks full precision.
  */

@@ -124,13 +124,16 @@ describe('GEDCOM from a research tool', () => {
         expect(sourceTitled(data, 'Oddací').repository).toBe('Státní oblastní archiv v Třeboni');
     });
 
-    it('writes age, cause and house number into the note of their fact, in words', () => {
-        const notes = josef.notes ?? '';
-        expect(notes).toContain(g.deathNote(g.age(`${g.ageUnit(60, 'y')} ${g.ageUnit(8, 'm')}`)));
-        expect(notes).toContain(g.deathNote(g.cause('tuberkulóza\nplic')));
+    it('reads age, cause and house number into fields of their fact, the age in words', () => {
+        expect(josef.deathAge).toBe(`${g.ageUnit(60, 'y')} ${g.ageUnit(8, 'm')}`);
+        expect(josef.deathCause).toBe('tuberkulóza\nplic');
         // Only the ADDR value: CITY repeats the place and is left out.
-        expect(notes).toContain(g.birthNote(g.address('čp. 13')));
-        expect(notes).not.toContain(g.address('čp. 13, Vavřinec'));
+        expect(josef.birthAddress).toBe('čp. 13');
+        // Nothing of it is repeated in the note any more.
+        const notes = josef.notes ?? '';
+        expect(notes).not.toContain(g.age(''));
+        expect(notes).not.toContain(g.cause(''));
+        expect(notes).not.toContain(g.address(''));
     });
 
     it('keeps the house number out of the place, so the village stays one place', () => {
@@ -139,9 +142,10 @@ describe('GEDCOM from a research tool', () => {
     });
 
     it("gives each partner's age at the wedding", () => {
-        const note = union(data).note ?? '';
-        expect(note).toContain(g.husbandAge(g.ageUnit(25, 'y')));
-        expect(note).toContain(g.wifeAge(g.ageUnit(22, 'y')));
+        const u = union(data);
+        expect(u.ages?.[u.person1Id]).toBe(g.ageUnit(25, 'y'));
+        expect(u.ages?.[u.person2Id]).toBe(g.ageUnit(22, 'y'));
+        expect(u.note ?? '').not.toContain(g.husbandAge(''));
     });
 
     it('says when a date was written in the Julian calendar', () => {

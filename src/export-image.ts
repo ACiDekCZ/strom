@@ -30,6 +30,8 @@ const COLORS = {
     spouse: '#8a8272',
     text: '#2b2822',
     textLight: '#5c5546',
+    textFaint: '#746c5c',
+    printBorder: '#b8ad98',
     footer: '#8a8272',
     background: '#ffffff',
 };
@@ -82,7 +84,7 @@ function estWidth(text: string, fontSize: number, bold: boolean): number {
  */
 function fittedText(
     text: string, x: number, y: number, maxW: number,
-    sizes: number[], bold: boolean, fill: string
+    sizes: number[], bold: boolean, fill: string, anchor: 'middle' | 'start' = 'middle'
 ): string {
     let fs = sizes[0];
     for (const size of sizes) {
@@ -92,7 +94,15 @@ function fittedText(
     const clamp = estWidth(text, fs, bold) > maxW
         ? ` textLength="${maxW.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
     const weight = bold ? ' font-weight="600"' : '';
-    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="${fs}"${weight} fill="${fill}"${clamp}>${escapeXml(text)}</text>`;
+    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" font-size="${fs}"${weight} fill="${fill}"${clamp}>${escapeXml(text)}</text>`;
+}
+
+/** Cut a line to a width with an ellipsis, as the on-screen card does. */
+function ellipsized(text: string, maxW: number, fontSize: number): string {
+    if (estWidth(text, fontSize, false) <= maxW) return text;
+    let cut = text;
+    while (cut.length > 1 && estWidth(`${cut}…`, fontSize, false) > maxW) cut = cut.slice(0, -1);
+    return `${cut.trimEnd()}…`;
 }
 
 export interface SvgBounds {
@@ -121,6 +131,50 @@ export interface PosterOptions {
      * on-screen `indirect` class in the descendants / family views.
      */
     dimmedIds?: Set<string>;
+    /**
+     * The custom card density (src/card-fields.ts): each person's lines. When
+     * set, a card is the avatar and the name on one row and these lines under
+     * them, at the size in `config` — what the screen shows.
+     */
+    cardLines?: Map<string, { mark: string; text: string }[]>;
+}
+
+/**
+ * A custom-density card's content (src/card-fields.ts), in the on-screen
+ * geometry: 10/12px padding, a 30px avatar and the name on the first row,
+ * then 17px lines of 12px text with the mark in an 11px column.
+ */
+function customCardSvg(
+    person: StromData['persons'][keyof StromData['persons']], pos: { x: number; y: number }, cw: number,
+    lines: { mark: string; text: string }[], ring: string, clipId: string,
+): string {
+    const out: string[] = [];
+    const left = pos.x + 12;
+    let textX = left;
+    if (!person.isPlaceholder) {
+        const cx = left + 15;
+        const cy = pos.y + 10 + 15;
+        if (person.photo) {
+            out.push(`<clipPath id="${clipId}"><circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="15"/></clipPath>`);
+            out.push(`<image href="${escapeXml(person.photo)}" x="${(cx - 15).toFixed(1)}" y="${(cy - 15).toFixed(1)}" width="30" height="30" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
+            out.push(`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="15" fill="none" stroke="${ring}" stroke-width="1.5"/>`);
+        } else {
+            const initials = personInitials(person.firstName, person.lastName) || '?';
+            out.push(`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="15" fill="${COLORS.avatarBg}" stroke="${ring}" stroke-width="1.5"/>`);
+            out.push(`<text x="${cx.toFixed(1)}" y="${(cy + 4).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="600" fill="${COLORS.initials}">${escapeXml(initials)}</text>`);
+        }
+        textX = left + 30 + 8;
+    }
+    const name = `${person.firstName || '?'} ${person.lastName || ''}`.trim();
+    const nameW = pos.x + cw - 12 - textX;
+    out.push(fittedText(name, textX, pos.y + 10 + 20, nameW, [15, 14, 13], true, COLORS.text, 'start'));
+    const lineW = cw - 24 - 17;
+    lines.forEach((l, i) => {
+        const y = pos.y + 10 + 30 + 6 + 17 * i + 12.5;
+        if (l.mark) out.push(`<text x="${(left + 5.5).toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="12" fill="${COLORS.textFaint}">${escapeXml(l.mark)}</text>`);
+        out.push(`<text x="${(left + 17).toFixed(1)}" y="${y.toFixed(1)}" font-size="12" fill="${COLORS.textLight}">${escapeXml(ellipsized(l.text, lineW, 12))}</text>`);
+    });
+    return out.join('');
 }
 
 /** Fields the shared poster footer needs (a subset of PosterOptions). */
@@ -281,8 +335,10 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
         if (dimmed) out.push('<g opacity="0.5">');
 
         // "Letopis" card: neutral surface, hairline border (dashed for placeholders).
+        // Custom cards are made to be printed: a firmer border on paper.
         const borderDash = isPlaceholder ? ' stroke-dasharray="4,3"' : '';
-        out.push(`<rect x="${pos.x.toFixed(1)}" y="${pos.y.toFixed(1)}" width="${cw}" height="${ch}" rx="8" fill="${COLORS.cardBg}" stroke="${COLORS.cardBorder}" stroke-width="1"${borderDash}/>`);
+        const border = options.cardLines ? COLORS.printBorder : COLORS.cardBorder;
+        out.push(`<rect x="${pos.x.toFixed(1)}" y="${pos.y.toFixed(1)}" width="${cw}" height="${ch}" rx="8" fill="${COLORS.cardBg}" stroke="${border}" stroke-width="1"${borderDash}/>`);
 
         // Branch colour stripe (matches the on-screen ::before bar)
         const branch = options.branchMap?.get(personId);
@@ -291,7 +347,9 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             out.push(`<rect x="${(pos.x + 1).toFixed(1)}" y="${(pos.y + 4).toFixed(1)}" width="4" height="${(ch - 8).toFixed(0)}" rx="2" fill="${stripeColor}"/>`);
         }
 
-        if (person && !isPlaceholder) {
+        if (person && options.cardLines) {
+            out.push(customCardSvg(person, pos, cw, options.cardLines.get(personId) ?? [], ring, `av${clipCounter++}`));
+        } else if (person && !isPlaceholder) {
             // Avatar: gender-ring circle with a photo or initials (like on
             // screen). 34px avatar (r=17), 10px left padding — matches the CSS.
             const cxAv = pos.x + 10 + 17;

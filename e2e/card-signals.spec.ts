@@ -225,14 +225,16 @@ test.describe('card signals', () => {
         await setup(page);
         await page.evaluate(() => window.Strom.UI.showSettingsDialog());
         const settings = page.locator('#card-signals-settings');
-        await expect(settings.locator('.card-signals-preview .person-card')).toBeVisible();
-        await expect(settings.locator('.card-signals-preview .name-text')).toHaveText('Milan Víšek');
+        // One preview for the density and the signals, under the density select.
+        const preview = page.locator('#card-preview-settings .card-signals-preview');
+        await expect(preview.locator('.person-card')).toBeVisible();
+        await expect(preview.locator('.name-text')).toHaveText('Jan Vlk');
         // A research tree: "Waiting for you" is offered; the agent only with the research connected here.
         await expect(settings.locator('input[data-signal="waiting"]')).toHaveCount(1);
         await expect(settings.locator('input[data-signal="agent"]')).toHaveCount(0);
         await settings.locator('input[data-signal="conflict"]').uncheck();
         await settings.locator('input[data-signal="evidence"]').uncheck();
-        await expect(settings.locator('.card-signals-preview .st-ev')).toHaveCount(0);
+        await expect(preview.locator('.st-ev')).toHaveCount(0);
         await expect(card(page, 'Jan').locator('.card-signal')).toHaveCount(0);
         await expect(card(page, 'Jan').locator(':scope > .card-state .st-ev')).toHaveCount(0);
         await expect(card(page, 'Jan').locator('.card-tooltip .tt-ev')).toHaveCount(1);

@@ -425,6 +425,11 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
                 if (newPartnership.participants) {
                     remapParticipants(newPartnership.participants, mapping.persons, state.incomingData.persons);
                 }
+                // Ages at the wedding are keyed by the incoming tree's person ids.
+                if (newPartnership.ages) {
+                    newPartnership.ages = Object.fromEntries(Object.entries(newPartnership.ages)
+                        .map(([pid, age]) => [mapping.persons.get(pid as PersonId) ?? pid, age]));
+                }
 
                 mergedData.partnerships[newPshipId] = newPartnership;
 
@@ -717,6 +722,9 @@ export function mergePersonData(
     if (!existing.deathPlace && incoming.deathPlace) {
         existing.deathPlace = incoming.deathPlace;
     }
+    for (const key of ['birthAddress', 'deathCause', 'deathAge', 'deathAddress'] as const) {
+        if (!existing[key] && incoming[key]) existing[key] = incoming[key];
+    }
 
     // Photo: fill only when we have none. photoOriginalName always rides along
     // with the photo it names — never on its own. When BOTH sides have a
@@ -912,6 +920,13 @@ export function mergePartnershipData(
     }
     if (!existing.endDate && incoming.endDate) {
         existing.endDate = incoming.endDate;
+    }
+    if (!existing.endPlace && incoming.endPlace) existing.endPlace = incoming.endPlace;
+    if (!existing.address && incoming.address) existing.address = incoming.address;
+    // Ages are keyed by person: incoming ids become the merged tree's ids.
+    for (const [pid, age] of Object.entries(incoming.ages ?? {})) {
+        const key = personIdMap?.get(pid as PersonId) ?? pid;
+        if (!existing.ages?.[key]) existing.ages = { ...(existing.ages ?? {}), [key]: age };
     }
     if (!existing.note && incoming.note) {
         existing.note = incoming.note;

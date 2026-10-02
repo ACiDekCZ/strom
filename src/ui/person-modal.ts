@@ -51,6 +51,15 @@ import { isValidDateInput, normalizeDateInput, formatDateForInput } from '../dat
 import { autoGrowAll } from './autogrow.js';
 import { computePersonLifeline, LifelinePoint } from '../timeline.js';
 import { storyWithDraft } from './story-compare-ui.js';
+import { offeredDetails, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
+
+/** The person dialog's detail inputs and the Person fields they edit. */
+const PERSON_DETAIL_FIELDS = [
+    ['input-birth-address', 'birthAddress'],
+    ['input-death-cause', 'deathCause'],
+    ['input-death-age', 'deathAge'],
+    ['input-death-address', 'deathAddress'],
+] as const;
 
 export const personModalMethods = uiModule({
     showAddPersonModal(): void {
@@ -96,6 +105,7 @@ export const personModalMethods = uiModule({
         if (deathDateInput) deathDateInput.value = '';
         if (deathPlaceInput) deathPlaceInput.value = '';
         if (notesInput) notesInput.value = '';
+        this.fillPersonDetails(null);
         const variantsClear = document.getElementById('input-name-variants') as HTMLInputElement | null;
         if (variantsClear) variantsClear.value = '';
         const refnClear = document.getElementById('input-refn') as HTMLInputElement | null;
@@ -126,7 +136,7 @@ export const personModalMethods = uiModule({
             nameVariants: '', refn: '', question: '',
             occupation: '', residence: '',
             storyTitle: '', storyText: '',
-            deceased: false, photo: '',
+            deceased: false, photo: '', details: this.personDetailsSnapshot(),
         };
 
         // Setup gender change listener for dynamic labels
@@ -176,7 +186,8 @@ export const personModalMethods = uiModule({
     setPersonFormReadOnly(readOnly: boolean): void {
         for (const id of ['input-firstname', 'input-lastname', 'input-birthdate', 'input-birthplace',
             'input-deathdate', 'input-deathplace', 'input-notes', 'input-name-variants', 'input-refn',
-            'input-question', 'input-occupation', 'input-residence', 'input-story-title', 'input-story']) {
+            'input-question', 'input-occupation', 'input-residence', 'input-story-title', 'input-story',
+            ...PERSON_DETAIL_FIELDS.map(([inputId]) => inputId)]) {
             const el = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
             if (el) el.readOnly = readOnly;
         }
@@ -610,6 +621,7 @@ export const personModalMethods = uiModule({
         if (birthPlaceInput) birthPlaceInput.value = person.birthPlace || '';
         if (deathDateInput) deathDateInput.value = formatDateForInput(person.deathDate);
         if (deathPlaceInput) deathPlaceInput.value = person.deathPlace || '';
+        this.fillPersonDetails(person);
         if (notesInput) notesInput.value = person.notes || '';
         const variantsInput = document.getElementById('input-name-variants') as HTMLInputElement | null;
         if (variantsInput) variantsInput.value = (person.nameVariants ?? []).join(', ');
@@ -667,6 +679,7 @@ export const personModalMethods = uiModule({
             ...this.storySnapshot(),
             deceased: deceasedInput?.checked ?? false,
             photo: person.photo || '',
+            details: this.personDetailsSnapshot(),
         };
 
         // Setup gender change listener for dynamic labels
@@ -778,10 +791,12 @@ export const personModalMethods = uiModule({
 
         body.innerHTML = points.map(pt => {
             const desc = this.lifelineDescription(pt);
+            const extra = eventDetailLine(pt.details, true);
             return `<div class="pm-lifeline-row">`
                 + `<span class="pm-lifeline-year">${pt.year}</span>`
                 + `<span class="pm-lifeline-glyph k-${pt.kind}">${this.lifelineGlyph(pt)}</span>`
-                + `<span class="pm-lifeline-desc">${desc}</span>`
+                + `<span class="pm-lifeline-desc">${desc}${extra
+                    ? `<span class="event-details-line">${this.escapeHtml(extra)}</span>` : ''}</span>`
                 + `</div>`;
         }).join('');
     },
@@ -805,7 +820,7 @@ export const personModalMethods = uiModule({
             case 'death':
                 return `${pm.lifelineDied}${place}`;
             case 'marriage':
-                return pt.relatedName ? pm.lifelineMarried(this.escapeHtml(pt.relatedName)) : pm.lifelineMarriedUnknown;
+                return `${pt.relatedName ? pm.lifelineMarried(this.escapeHtml(pt.relatedName)) : pm.lifelineMarriedUnknown}${place}`;
             case 'child':
                 return pt.relatedName ? pm.lifelineChild(this.escapeHtml(pt.relatedName)) : pm.lifelineChildUnknown;
             default: {
@@ -992,6 +1007,52 @@ export const personModalMethods = uiModule({
         }
     },
 
+    /**
+     * The house, cause and age of the birth and death (src/ui/event-details-ui.ts):
+     * filled from the person, each group starting closed, the computed age
+     * following the dates as they are typed.
+     */
+    fillPersonDetails(person: Person | null): void {
+        for (const [inputId, key] of PERSON_DETAIL_FIELDS) {
+            const input = document.getElementById(inputId) as HTMLInputElement | null;
+            if (input) input.value = person?.[key] ?? '';
+        }
+        const readOnly = !!person && DataManager.isPersonLocked(person.id);
+        resetDetailGroup(document.getElementById('birth-details'), offeredDetails('birth'), readOnly);
+        resetDetailGroup(document.getElementById('death-details'), offeredDetails('death'), readOnly);
+        for (const id of ['input-death-age', 'input-birthdate', 'input-deathdate']) {
+            const input = document.getElementById(id);
+            if (!input || input.dataset.ageCheck) continue;
+            input.dataset.ageCheck = '1';
+            input.addEventListener('input', () => this.updateDeathAgeCheck());
+        }
+        this.updateDeathAgeCheck();
+    },
+
+    /** "Calculated 56–57 years" under the age at death, from the dates in the form. */
+    updateDeathAgeCheck(): void {
+        const val = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.value ?? '';
+        const person = this.currentId ? DataManager.getPerson(this.currentId) : null;
+        const birth = normalizeDateInput(val('input-birthdate'));
+        const death = normalizeDateInput(val('input-deathdate'));
+        renderAgeCheck(document.getElementById('death-age-check'), val('input-death-age'),
+            ageBirthDate(person, birth === null ? undefined : birth || null), death || undefined);
+    },
+
+    personDetailsSnapshot(): string {
+        return PERSON_DETAIL_FIELDS
+            .map(([inputId]) => (document.getElementById(inputId) as HTMLInputElement | null)?.value ?? '')
+            .join('\u0000');
+    },
+
+    collectPersonDetails(): Pick<Person, typeof PERSON_DETAIL_FIELDS[number][1]> {
+        const out: Partial<Record<typeof PERSON_DETAIL_FIELDS[number][1], string>> = {};
+        for (const [inputId, key] of PERSON_DETAIL_FIELDS) {
+            out[key] = (document.getElementById(inputId) as HTMLInputElement | null)?.value.trim() ?? '';
+        }
+        return out;
+    },
+
     savePerson(): void {
         const firstNameInput = document.getElementById('input-firstname') as HTMLInputElement;
         const lastNameInput = document.getElementById('input-lastname') as HTMLInputElement;
@@ -1059,6 +1120,7 @@ export const personModalMethods = uiModule({
                     birthPlace,
                     deathDate,
                     deathPlace,
+                    ...this.collectPersonDetails(),
                     notes,
                     nameVariants,
                     refn,
@@ -1084,13 +1146,16 @@ export const personModalMethods = uiModule({
             const newPerson = DataManager.runBatch(null, () => {
                 const created = DataManager.createPerson({ firstName, lastName, gender });
                 // Update with extended info if provided
+                const details = this.collectPersonDetails();
                 if (birthDate || birthPlace || deathDate || deathPlace || notes || refn || question
-                    || photo || story || nameVariants.length > 0 || (deceasedChecked && !deathDate)) {
+                    || photo || story || nameVariants.length > 0 || (deceasedChecked && !deathDate)
+                    || Object.values(details).some(Boolean)) {
                     DataManager.updatePerson(created.id, {
                         birthDate,
                         birthPlace,
                         deathDate,
                         deathPlace,
+                        ...details,
                         notes,
                         nameVariants,
                         refn,
@@ -1219,7 +1284,8 @@ export const personModalMethods = uiModule({
             || notes !== s.notes || refn !== s.refn || question !== s.question
             || occupation !== s.occupation || residence !== s.residence
             || nameVariants !== s.nameVariants || deceased !== s.deceased || photo !== s.photo
-            || story.storyTitle !== s.storyTitle || story.storyText !== s.storyText;
+            || story.storyTitle !== s.storyTitle || story.storyText !== s.storyText
+            || this.personDetailsSnapshot() !== s.details;
     },
 
     /**

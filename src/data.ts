@@ -31,6 +31,7 @@ import {
     FamilyWizardSpec,
     FamilyWizardMember,
     PlaceGeo,
+    PartnershipUpdates,
 } from './types.js';
 import { strings, getCurrentLanguage, getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
 import { TreeManager } from './tree-manager.js';
@@ -50,7 +51,6 @@ import { applyLivingPrivacy, applyContentOptions, resolveContentOptions, Content
 import { safeFileName } from './filenames.js';
 
 /** Extended updates for Partnership */
-type PartnershipUpdates = Partial<Pick<Partnership, 'status' | 'startDate' | 'startPlace' | 'endDate' | 'note' | 'isPrimary'>>;
 
 /**
  * Normalize text for search - removes diacritics and converts to lowercase
@@ -1658,6 +1658,10 @@ class DataManagerClass {
         if (updates.birthPlace !== undefined && (updates.birthPlace || undefined) !== person.birthPlace) diff(strings.labels.birthPlace, person.birthPlace, updates.birthPlace);
         if (updates.deathDate !== undefined && (updates.deathDate || undefined) !== person.deathDate) diff(strings.labels.deathDate, person.deathDate, updates.deathDate);
         if (updates.deathPlace !== undefined && (updates.deathPlace || undefined) !== person.deathPlace) diff(strings.labels.deathPlace, person.deathPlace, updates.deathPlace);
+        if (updates.birthAddress !== undefined && (updates.birthAddress.trim() || undefined) !== person.birthAddress) diff(strings.fields.address, person.birthAddress, updates.birthAddress);
+        if (updates.deathCause !== undefined && (updates.deathCause.trim() || undefined) !== person.deathCause) diff(strings.fields.cause, person.deathCause, updates.deathCause);
+        if (updates.deathAge !== undefined && (updates.deathAge.trim() || undefined) !== person.deathAge) diff(strings.fields.age, person.deathAge, updates.deathAge);
+        if (updates.deathAddress !== undefined && (updates.deathAddress.trim() || undefined) !== person.deathAddress) diff(strings.fields.address, person.deathAddress, updates.deathAddress);
         if (updates.notes !== undefined && (updates.notes || undefined) !== person.notes) diff(strings.labels.notes, person.notes, updates.notes);
         if (updates.refn !== undefined && (updates.refn || undefined) !== person.refn) diff(strings.labels.refn, person.refn, updates.refn);
         if (updates.question !== undefined && (updates.question || undefined) !== person.question) diff(strings.labels.question, person.question, updates.question);
@@ -1684,6 +1688,11 @@ class DataManagerClass {
         if (updates.birthPlace !== undefined) person.birthPlace = updates.birthPlace || undefined;
         if (updates.deathDate !== undefined) person.deathDate = updates.deathDate || undefined;
         if (updates.deathPlace !== undefined) person.deathPlace = updates.deathPlace || undefined;
+        // What the register adds to the birth and the death (GEDCOM ADDR, CAUS, AGE).
+        for (const key of ['birthAddress', 'deathCause', 'deathAge', 'deathAddress'] as const) {
+            const v = updates[key];
+            if (v !== undefined) person[key] = v.trim() || undefined;
+        }
         if (updates.notes !== undefined) person.notes = updates.notes || undefined;
         if (updates.refn !== undefined) {
             // The number's issuer (GEDCOM REFN > TYPE) describes the number it
@@ -2257,6 +2266,17 @@ class DataManagerClass {
         if (updates.startDate !== undefined && (updates.startDate || undefined) !== partnership.startDate) { partnership.startDate = updates.startDate || undefined; changed = true; }
         if (updates.startPlace !== undefined && (updates.startPlace || undefined) !== partnership.startPlace) { partnership.startPlace = updates.startPlace || undefined; changed = true; }
         if (updates.endDate !== undefined && (updates.endDate || undefined) !== partnership.endDate) { partnership.endDate = updates.endDate || undefined; changed = true; }
+        if (updates.endPlace !== undefined && (updates.endPlace.trim() || undefined) !== partnership.endPlace) { partnership.endPlace = updates.endPlace.trim() || undefined; changed = true; }
+        if (updates.address !== undefined && (updates.address.trim() || undefined) !== partnership.address) { partnership.address = updates.address.trim() || undefined; changed = true; }
+        if (updates.ages !== undefined) {
+            // Each partner's age: an empty one is none; no ages at all, no map.
+            const ages: Record<string, string> = { ...(partnership.ages ?? {}) };
+            for (const [pid, age] of Object.entries(updates.ages)) {
+                if (age.trim()) ages[pid] = age.trim(); else delete ages[pid];
+            }
+            const next = Object.keys(ages).length > 0 ? ages : undefined;
+            if (JSON.stringify(next) !== JSON.stringify(partnership.ages)) { partnership.ages = next; changed = true; }
+        }
         if (updates.note !== undefined && (updates.note || undefined) !== partnership.note) { partnership.note = updates.note || undefined; changed = true; }
         if (updates.isPrimary !== undefined && (updates.isPrimary || undefined) !== partnership.isPrimary) { partnership.isPrimary = updates.isPrimary || undefined; changed = true; }
 
@@ -3138,6 +3158,11 @@ class DataManagerClass {
         if (resolvedFields.birthPlace !== undefined) keepPerson.birthPlace = resolvedFields.birthPlace || undefined;
         if (resolvedFields.deathDate !== undefined) keepPerson.deathDate = resolvedFields.deathDate || undefined;
         if (resolvedFields.deathPlace !== undefined) keepPerson.deathPlace = resolvedFields.deathPlace || undefined;
+        // What the register adds to the birth and death: the kept person's own
+        // wins, the removed one's fills a gap.
+        for (const key of ['birthAddress', 'deathCause', 'deathAge', 'deathAddress'] as const) {
+            if (!keepPerson[key] && removePerson[key]) keepPerson[key] = removePerson[key];
+        }
 
         // Clear placeholder status if we have a real name now
         if (keepPerson.firstName && keepPerson.firstName !== '?') {
@@ -3232,6 +3257,17 @@ class DataManagerClass {
                         }
                         if (!existingPartnership.endDate && removePartnership.endDate) {
                             existingPartnership.endDate = removePartnership.endDate;
+                        }
+                        if (!existingPartnership.endPlace && removePartnership.endPlace) {
+                            existingPartnership.endPlace = removePartnership.endPlace;
+                        }
+                        if (!existingPartnership.address && removePartnership.address) {
+                            existingPartnership.address = removePartnership.address;
+                        }
+                        // The removed person's age at the wedding is the kept one's now.
+                        for (const [pid, age] of Object.entries(removePartnership.ages ?? {})) {
+                            const key = pid === removeId ? keepId : pid;
+                            if (!existingPartnership.ages?.[key]) existingPartnership.ages = { ...(existingPartnership.ages ?? {}), [key]: age };
                         }
                         if (!existingPartnership.note && removePartnership.note) {
                             existingPartnership.note = removePartnership.note;

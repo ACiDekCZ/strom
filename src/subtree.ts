@@ -151,6 +151,7 @@ function collectSubtreePlaceKeys(data: StromData): Set<string> {
     }
     for (const u of Object.values(data.partnerships)) {
         add(u.startPlace);
+        add(u.endPlace);
     }
     return keys;
 }

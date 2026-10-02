@@ -265,6 +265,10 @@ function stripDetails(person: Person): void {
     delete person.birthPlace;
     delete person.deathDate;
     delete person.deathPlace;
+    delete person.birthAddress;
+    delete person.deathCause;
+    delete person.deathAge;
+    delete person.deathAddress;
     delete person.notes;
     // A narrative is the most personal text in the file — never about a living
     // person under a privacy mode.
@@ -301,6 +305,9 @@ function stripPartnershipDetails(partnership: Partnership, mode: PrivacyMode): v
     delete partnership.startDate;
     delete partnership.startPlace;
     delete partnership.endDate;
+    delete partnership.endPlace;
+    delete partnership.address;
+    delete partnership.ages;
     delete partnership.note;
     delete partnership.participants;
     delete partnership.story;

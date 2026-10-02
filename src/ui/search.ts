@@ -68,7 +68,8 @@ export const searchMethods = uiModule({
                 this.applySearchFilter();
             },
             placeholder: strings.search.placeholder,
-            filter: (p) => !p.isPlaceholder
+            filter: (p) => !p.isPlaceholder,
+            searchDetails: true,
         });
 
         // Live-highlight matches in the tree as the name query changes.

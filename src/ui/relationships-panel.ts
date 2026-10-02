@@ -13,6 +13,7 @@ import {
     PersonId,
     PartnershipId,
     PartnershipStatus,
+    PartnershipUpdates,
     ParentChildRelType,
     Gender,
     RelationType,
@@ -20,7 +21,8 @@ import {
     StromData,
     TreeId,
     LAST_FOCUSED,
-    LastFocusedMarker
+    LastFocusedMarker,
+    Partnership,
 } from '../types.js';
 import { strings } from '../strings.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
@@ -48,6 +50,7 @@ import { onAllDialogsClosed } from './dialog-focus.js';
 
 import { iconSvg } from '../icons.js';
 import { sourceChipOpenHtml } from './sources.js';
+import { offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate } from './event-details-ui.js';
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
         // Setup dialog stack for standalone mode (when opened directly from card, not from edit dialog)
@@ -142,7 +145,9 @@ export const relationshipsPanelMethods = uiModule({
                 const target = e.target as HTMLSelectElement;
                 const partnershipId = target.dataset.partnershipId as PartnershipId;
                 const status = target.value as PartnershipStatus;
-                this.setPendingPartnershipChange(partnershipId, { status });
+                this.setPartnershipUpdates(partnershipId, { status });
+                const grid = content.querySelector<HTMLElement>(`.partnership-grid[data-partnership-id="${CSS.escape(partnershipId)}"]`);
+                if (grid) this.syncPartnershipGrid(grid, status, false);
             });
         });
 
@@ -206,7 +211,7 @@ export const relationshipsPanelMethods = uiModule({
             textarea.addEventListener('input', (e) => {
                 const target = e.target as HTMLTextAreaElement;
                 const partnershipId = target.dataset.partnershipId as PartnershipId;
-                this.setPendingPartnershipChange(partnershipId, { note: target.value });
+                this.setPartnershipUpdates(partnershipId, { note: target.value });
             });
         });
         // A register note runs to paragraphs; let the box show them.
@@ -222,7 +227,7 @@ export const relationshipsPanelMethods = uiModule({
                 if (normalized === null) return;
                 // Keep the locale's input form (15.5.1880), not raw ISO.
                 target.value = formatDateForInput(normalized);
-                this.setPendingPartnershipChange(partnershipId, { startDate: normalized });
+                this.setPartnershipUpdates(partnershipId, { startDate: normalized });
             });
         });
 
@@ -231,7 +236,7 @@ export const relationshipsPanelMethods = uiModule({
             input.addEventListener('input', (e) => {
                 const target = e.target as HTMLInputElement;
                 const partnershipId = target.dataset.partnershipId as PartnershipId;
-                this.setPendingPartnershipChange(partnershipId, { startPlace: target.value });
+                this.setPartnershipUpdates(partnershipId, { startPlace: target.value });
             });
         });
 
@@ -244,8 +249,39 @@ export const relationshipsPanelMethods = uiModule({
                 target.classList.toggle('invalid', normalized === null);
                 if (normalized === null) return;
                 target.value = formatDateForInput(normalized);
-                this.setPendingPartnershipChange(partnershipId, { endDate: normalized });
+                this.setPartnershipUpdates(partnershipId, { endDate: normalized });
             });
+        });
+
+        // The divorce place, the wedding house and each partner's age.
+        content.querySelectorAll<HTMLInputElement>('.partnership-end-place, .partnership-address').forEach(input => {
+            input.addEventListener('input', () => {
+                const partnershipId = input.dataset.partnershipId as PartnershipId;
+                this.setPartnershipUpdates(partnershipId,
+                    input.classList.contains('partnership-address') ? { address: input.value } : { endPlace: input.value });
+            });
+        });
+        content.querySelectorAll<HTMLInputElement>('.partnership-age').forEach(input => {
+            input.addEventListener('input', () => {
+                const partnershipId = input.dataset.partnershipId as PartnershipId;
+                this.setPartnershipUpdates(partnershipId, { ages: { [input.dataset.personId ?? '']: input.value } });
+                this.updatePartnershipAgeChecks(partnershipId);
+            });
+        });
+        content.querySelectorAll<HTMLElement>('.partnership-grid').forEach(grid => {
+            const partnershipId = grid.dataset.partnershipId as PartnershipId;
+            const partnership = DataManager.getData().partnerships[partnershipId];
+            if (!partnership) return;
+            this.syncPartnershipGrid(grid, partnership.status || 'married', true);
+            grid.querySelector<HTMLButtonElement>('.pg-add-end')?.addEventListener('click', () => {
+                grid.dataset.endOpen = '1';
+                this.syncPartnershipGrid(grid, this.partnershipGridStatus(grid), false);
+                grid.querySelector<HTMLInputElement>('.partnership-end-date')?.focus();
+            });
+            this.updatePartnershipAgeChecks(partnershipId);
+        });
+        content.querySelectorAll<HTMLInputElement>('.partnership-start-date').forEach(input => {
+            input.addEventListener('input', () => this.updatePartnershipAgeChecks(input.dataset.partnershipId as PartnershipId));
         });
 
         // Attach event listeners for isPrimary checkbox (pending change)
@@ -262,12 +298,12 @@ export const relationshipsPanelMethods = uiModule({
                     if (person) {
                         for (const otherPartnershipId of person.partnerships) {
                             if (otherPartnershipId !== partnershipId) {
-                                this.setPendingPartnershipChange(otherPartnershipId, { isPrimary: false });
+                                this.setPartnershipUpdates(otherPartnershipId, { isPrimary: false });
                             }
                         }
                     }
                     // Set this one as primary (in pending state)
-                    this.setPendingPartnershipChange(partnershipId, { isPrimary: true });
+                    this.setPartnershipUpdates(partnershipId, { isPrimary: true });
                     // Update other checkboxes in the UI
                     content.querySelectorAll('.partnership-primary-checkbox').forEach(cb => {
                         if (cb !== target) {
@@ -275,7 +311,7 @@ export const relationshipsPanelMethods = uiModule({
                         }
                     });
                 } else {
-                    this.setPendingPartnershipChange(partnershipId, { isPrimary: false });
+                    this.setPartnershipUpdates(partnershipId, { isPrimary: false });
                 }
             });
         });
@@ -304,6 +340,126 @@ export const relationshipsPanelMethods = uiModule({
         });
 
         modal.classList.add('active');
+    },
+
+    /**
+     * The couple's dates as a labelled grid: the wedding (date, place), the
+     * divorce (date, place — shown with a divorced or separated status, or a
+     * date, otherwise behind "+ divorce"), then the wedding house and each
+     * partner's age as the marriage entry gives them, empty ones behind
+     * "+ age, address" (src/ui/event-details-ui.ts). The husband (or the first
+     * partner of a same-sex couple) stands left, as in the GEDCOM.
+     */
+    partnershipGridHtml(partnership: Partnership, currentPersonId: PersonId, startLabel: string, endLabel: string): string {
+        const id = this.escapeHtml(partnership.id);
+        const f = strings.fields;
+        const [left, right] = this.partnersInGedcomOrder(partnership);
+        const ageCell = (person: Person | null) => person ? `
+            <div class="pg-age">
+                <input type="text" class="partnership-age" autocomplete="off" data-partnership-id="${id}"
+                    data-person-id="${this.escapeHtml(person.id)}" value="${this.escapeHtml(partnership.ages?.[person.id] ?? '')}"
+                    placeholder="${this.escapeHtml(f.agePh)}" aria-label="${this.escapeHtml(`${f.age} — ${person.firstName || '?'}`)}"
+                    aria-describedby="pg-age-${id}-${this.escapeHtml(person.id)}">
+                <div class="age-check" id="pg-age-${id}-${this.escapeHtml(person.id)}" hidden></div>
+            </div>` : '';
+        return `
+            <div class="partnership-grid detail-group" data-partnership-id="${id}" data-current-person="${this.escapeHtml(currentPersonId)}">
+                <div class="pg-row">
+                    <span class="pg-label pg-label-start">${this.escapeHtml(f.marriageRow)}</span>
+                    <input type="text" class="partnership-start-date flex-date" autocomplete="off"
+                        placeholder="${strings.placeholders.flexDate}"
+                        data-partnership-id="${id}"
+                        value="${this.escapeHtml(formatDateForInput(partnership.startDate))}"
+                        title="${startLabel}" aria-label="${startLabel}">
+                    <input type="text" class="partnership-start-place" list="places-datalist"
+                        data-partnership-id="${id}"
+                        value="${this.escapeHtml(partnership.startPlace || '')}"
+                        placeholder="${strings.labels.startPlace}" aria-label="${strings.labels.startPlace}">
+                </div>
+                <div class="pg-row pg-end">
+                    <span class="pg-label pg-label-end">${this.escapeHtml(f.divorceRow)}</span>
+                    <input type="text" class="partnership-end-date flex-date" autocomplete="off"
+                        placeholder="${strings.placeholders.flexDate}"
+                        data-partnership-id="${id}"
+                        value="${this.escapeHtml(formatDateForInput(partnership.endDate))}"
+                        title="${endLabel}" aria-label="${endLabel}">
+                    <input type="text" class="partnership-end-place" list="places-datalist"
+                        data-partnership-id="${id}"
+                        value="${this.escapeHtml(partnership.endPlace || '')}"
+                        placeholder="${this.escapeHtml(f.divorcePlace)}" aria-label="${this.escapeHtml(f.divorcePlace)}">
+                </div>
+                <div class="pg-row detail-row">
+                    <span class="pg-label">${this.escapeHtml(f.addressRow)}</span>
+                    <div class="detail-field pg-span" data-detail="address">
+                        <input type="text" class="partnership-address" autocomplete="off" data-partnership-id="${id}"
+                            value="${this.escapeHtml(partnership.address ?? '')}"
+                            placeholder="${this.escapeHtml(f.addressPh)}" aria-label="${this.escapeHtml(f.address)}">
+                    </div>
+                </div>
+                <div class="pg-row pg-row-ages detail-row">
+                    <span class="pg-label">${this.escapeHtml(f.ageRow)}</span>
+                    <div class="detail-field pg-span pg-ages" data-detail="age">${ageCell(left)}${ageCell(right)}</div>
+                </div>
+                <div class="pg-links">
+                    <button type="button" class="pg-add-end" hidden></button>
+                    <button type="button" class="detail-more" hidden></button>
+                </div>
+            </div>`;
+    },
+
+    /** Both partners, husband (or first partner) first — the order of HUSB and WIFE. */
+    partnersInGedcomOrder(partnership: Partnership): [Person | null, Person | null] {
+        const p1 = DataManager.getPerson(partnership.person1Id);
+        const p2 = DataManager.getPerson(partnership.person2Id);
+        if (p1 && p2 && p1.gender !== p2.gender && p2.gender === 'male') return [p2, p1];
+        return [p1, p2];
+    },
+
+    partnershipGridStatus(grid: HTMLElement): PartnershipStatus {
+        const select = document.querySelector<HTMLSelectElement>(
+            `.rel-status-select[data-partnership-id="${CSS.escape(grid.dataset.partnershipId ?? '')}"]`);
+        return (select?.value || 'married') as PartnershipStatus;
+    },
+
+    /**
+     * Labels and rows for the status: a marriage reads Marriage / Divorce, a
+     * relationship Start / End; the end row shows for an ended status, a date
+     * or place already there, or after "+ divorce". `reset` starts the details
+     * closed (a fresh render).
+     */
+    syncPartnershipGrid(grid: HTMLElement, status: PartnershipStatus, reset: boolean): void {
+        const f = strings.fields;
+        const married = status === 'married' || status === 'divorced';
+        const startLabel = grid.querySelector('.pg-label-start');
+        const endLabel = grid.querySelector('.pg-label-end');
+        if (startLabel) startLabel.textContent = married ? f.marriageRow : f.startRow;
+        if (endLabel) endLabel.textContent = married ? f.divorceRow : f.endRow;
+        const val = (sel: string) => grid.querySelector<HTMLInputElement>(sel)?.value.trim() ?? '';
+        const ended = status === 'divorced' || status === 'separated';
+        const showEnd = ended || !!val('.partnership-end-date') || !!val('.partnership-end-place') || grid.dataset.endOpen === '1';
+        const endRow = grid.querySelector<HTMLElement>('.pg-end');
+        if (endRow) endRow.hidden = !showEnd;
+        const locked = DataManager.isPersonLocked((grid.dataset.currentPerson ?? '') as PersonId);
+        const addEnd = grid.querySelector<HTMLButtonElement>('.pg-add-end');
+        if (addEnd) {
+            addEnd.hidden = showEnd || locked;
+            addEnd.textContent = married ? f.addDivorce : f.addEnd;
+        }
+        const offered = offeredDetails(married ? 'marriage' : 'residence').filter(k => married || k !== 'address');
+        if (reset) resetDetailGroup(grid, offered, locked);
+        else refreshDetailGroup(grid, offered, locked);
+    },
+
+    /** "Jan · calculated 25–26 years" under each partner's age at the wedding. */
+    updatePartnershipAgeChecks(partnershipId: PartnershipId): void {
+        const grid = document.querySelector<HTMLElement>(`.partnership-grid[data-partnership-id="${CSS.escape(partnershipId)}"]`);
+        if (!grid) return;
+        const wedding = normalizeDateInput(grid.querySelector<HTMLInputElement>('.partnership-start-date')?.value ?? '');
+        grid.querySelectorAll<HTMLInputElement>('.partnership-age').forEach(input => {
+            const person = DataManager.getPerson((input.dataset.personId ?? '') as PersonId);
+            const check = input.parentElement?.querySelector<HTMLElement>('.age-check') ?? null;
+            renderAgeCheck(check, input.value, ageBirthDate(person), wedding || undefined, person?.firstName || '?');
+        });
     },
 
     buildRelSection(type: string, title: string, persons: import('../types.js').Person[], currentPersonId: PersonId, canAdd: boolean, isLocked: boolean = false): string {
@@ -369,22 +525,7 @@ export const relationshipsPanelMethods = uiModule({
                     ` : '';
 
                     partnershipDetailsHtml = `
-                        <div class="partnership-dates">
-                            <input type="text" class="partnership-start-date flex-date" autocomplete="off"
-                                placeholder="${strings.placeholders.flexDate}"
-                                data-partnership-id="${this.escapeHtml(partnership.id)}"
-                                value="${this.escapeHtml(formatDateForInput(partnership.startDate))}"
-                                title="${startDateLabel}">
-                            <input type="text" class="partnership-start-place" list="places-datalist"
-                                data-partnership-id="${this.escapeHtml(partnership.id)}"
-                                value="${this.escapeHtml(partnership.startPlace || '')}"
-                                placeholder="${strings.labels.startPlace}">
-                            <input type="text" class="partnership-end-date flex-date" autocomplete="off"
-                                placeholder="${strings.placeholders.flexDate}"
-                                data-partnership-id="${this.escapeHtml(partnership.id)}"
-                                value="${this.escapeHtml(formatDateForInput(partnership.endDate))}"
-                                title="${endDateLabel}">
-                        </div>
+                        ${this.partnershipGridHtml(partnership, currentPersonId, startDateLabel, endDateLabel)}
                         ${primaryCheckboxHtml}
                         <textarea class="partnership-note" data-partnership-id="${this.escapeHtml(partnership.id)}"
                             placeholder="${strings.labels.note}...">${this.escapeHtml(partnership.note || '')}</textarea>
@@ -601,16 +742,11 @@ export const relationshipsPanelMethods = uiModule({
     /**
      * Helper to set pending partnership change (merges with existing pending changes)
      */
-    setPendingPartnershipChange(partnershipId: PartnershipId, changes: {
-        status?: PartnershipStatus;
-        startDate?: string;
-        startPlace?: string;
-        endDate?: string;
-        note?: string;
-        isPrimary?: boolean;
-    }): void {
+    setPartnershipUpdates(partnershipId: PartnershipId, changes: PartnershipUpdates): void {
         const existing = this.pendingPartnershipChanges.get(partnershipId) || {};
-        this.pendingPartnershipChanges.set(partnershipId, { ...existing, ...changes });
+        // Ages are per partner: one partner's edit must not drop the other's.
+        const ages = changes.ages ? { ...(existing.ages ?? {}), ...changes.ages } : existing.ages;
+        this.pendingPartnershipChanges.set(partnershipId, { ...existing, ...changes, ...(ages ? { ages } : {}) });
     },
 
     /**
@@ -836,14 +972,7 @@ export const relationshipsPanelMethods = uiModule({
     /**
      * Apply pending partnership changes back to form elements after a refresh
      */
-    applyPendingToForm(partnershipId: PartnershipId, changes: {
-        status?: PartnershipStatus;
-        startDate?: string;
-        startPlace?: string;
-        endDate?: string;
-        note?: string;
-        isPrimary?: boolean;
-    }): void {
+    applyPendingToForm(partnershipId: PartnershipId, changes: PartnershipUpdates): void {
         const content = document.getElementById('relationships-content');
         if (!content) return;
 
@@ -871,5 +1000,18 @@ export const relationshipsPanelMethods = uiModule({
             const checkbox = content.querySelector(`.partnership-primary-checkbox[data-partnership-id="${partnershipId}"]`) as HTMLInputElement;
             if (checkbox) checkbox.checked = changes.isPrimary;
         }
+        const grid = content.querySelector<HTMLElement>(`.partnership-grid[data-partnership-id="${CSS.escape(partnershipId)}"]`);
+        if (!grid) return;
+        const set = (sel: string, value: string | undefined) => {
+            const input = grid.querySelector<HTMLInputElement>(sel);
+            if (input && value !== undefined) input.value = value;
+        };
+        set('.partnership-end-place', changes.endPlace);
+        set('.partnership-address', changes.address);
+        for (const [pid, age] of Object.entries(changes.ages ?? {})) {
+            set(`.partnership-age[data-person-id="${CSS.escape(pid)}"]`, age);
+        }
+        this.syncPartnershipGrid(grid, changes.status ?? this.partnershipGridStatus(grid), true);
+        this.updatePartnershipAgeChecks(partnershipId);
     },
 });

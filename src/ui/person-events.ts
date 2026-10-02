@@ -20,6 +20,7 @@ import { formatFlexDate, normalizeDateInput, formatDateForInput } from '../dates
 import { chainLinkSvg, iconSvg } from '../icons.js';
 import { uiModule } from './module.js';
 import { autoGrowAll } from './autogrow.js';
+import { DETAIL_KEYS, offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
 
 /** HTML-escape a user string for safe innerHTML insertion. */
 function esc(text: string): string {
@@ -86,7 +87,8 @@ export const personEventsMethods = uiModule({
         // Read-only birth / death rows (never editable as events).
         if (person.birthDate || person.birthPlace) {
             rows.push(this.eventRowHtml(strings.events.types.birth,
-                eventMeta(person.birthDate, person.birthPlace), null));
+                eventMeta(person.birthDate, person.birthPlace), null, '',
+                eventDetailLine({ address: person.birthAddress })));
         }
 
         const events = sortLifeEvents(person.events ?? []);
@@ -94,12 +96,13 @@ export const personEventsMethods = uiModule({
             rows.push(this.eventRowHtml(eventTypeLabel(event),
                 eventMeta(event.date, event.place, eventOwnSubject(event)),
                 locked ? null : event.id,
-                this.participantsSummary(event)));
+                this.participantsSummary(event), eventDetailLine(event)));
         }
 
         if (person.deathDate || person.deathPlace) {
             rows.push(this.eventRowHtml(strings.events.types.death,
-                eventMeta(person.deathDate, person.deathPlace), null));
+                eventMeta(person.deathDate, person.deathPlace), null, '',
+                eventDetailLine({ cause: person.deathCause, age: person.deathAge, address: person.deathAddress })));
         }
 
         if (rows.length === 0) {
@@ -138,7 +141,7 @@ export const personEventsMethods = uiModule({
         }).join('  ·  ');
     },
 
-    eventRowHtml(typeLabel: string, meta: string, eventId: string | null, participants = ''): string {
+    eventRowHtml(typeLabel: string, meta: string, eventId: string | null, participants = '', details = ''): string {
         const actions = eventId === null ? '' : `
             <div class="event-actions">
                 <button type="button" class="event-edit-btn" title="${esc(strings.events.edit)}" aria-label="${esc(strings.events.edit)}"
@@ -149,10 +152,13 @@ export const personEventsMethods = uiModule({
         const metaHtml = meta ? `<span class="event-meta"> — ${esc(meta)}</span>` : '';
         const peopleHtml = participants
             ? `<div class="event-participants">${esc(participants)}</div>` : '';
+        // Cause · age · house, quietly under the event (src/ui/event-details-ui.ts).
+        const detailsHtml = details ? `<div class="event-details-line">${esc(details)}</div>` : '';
         return `
             <div class="event-row${eventId === null ? ' readonly' : ''}">
                 <div class="event-main">
                     <div><span class="event-type">${esc(typeLabel)}</span>${metaHtml}</div>
+                    ${detailsHtml}
                     ${peopleHtml}
                 </div>
                 ${actions}
@@ -340,7 +346,7 @@ export const personEventsMethods = uiModule({
         this.eventParticipantsPinned = this.eventParticipants.length > 0;
         this.populateEventTypeSelect();
         this.setEventEditorFields(event.type, event.customLabel ?? '',
-            formatDateForInput(event.date), event.place ?? '', event.note ?? '');
+            formatDateForInput(event.date), event.place ?? '', event.note ?? '', event);
         this.renderEventParticipants();
         // Citations available for an existing event — but they are a research
         // field, so the same rule as everywhere: only when asked for, unless this
@@ -372,6 +378,38 @@ export const personEventsMethods = uiModule({
         group.style.display = select.value === 'custom' ? '' : 'none';
         this.updateEventNoteLabel(select.value as LifeEventType);
         this.updateEventParticipantsVisibility(select.value as LifeEventType);
+        this.updateEventDetails(select.value as LifeEventType, false);
+    },
+
+    /**
+     * Cause, age and house under the date and place, offered by type (a
+     * baptism only the house). Changing the type keeps what is filled in, and
+     * a filled field stays shown whatever the type.
+     */
+    updateEventDetails(type: LifeEventType, reset: boolean): void {
+        const group = document.getElementById('event-details');
+        if (!group) return;
+        const label = document.getElementById('event-cause-label');
+        if (label) label.textContent = type === 'death' ? strings.fields.cause : strings.fields.causeGeneric;
+        const readOnly = !!this.currentId && DataManager.isPersonLocked(this.currentId);
+        if (reset) resetDetailGroup(group, offeredDetails(type), readOnly);
+        else refreshDetailGroup(group, offeredDetails(type), readOnly);
+        for (const id of ['input-event-age', 'input-event-date']) {
+            const input = document.getElementById(id);
+            if (!input || input.dataset.ageCheck) continue;
+            input.dataset.ageCheck = '1';
+            input.addEventListener('input', () => this.updateEventAgeCheck());
+        }
+        this.updateEventAgeCheck();
+    },
+
+    /** "Calculated …" under the event's age, counted from the person's birth (or baptism). */
+    updateEventAgeCheck(): void {
+        const val = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.value ?? '';
+        const person = this.currentId ? DataManager.getPerson(this.currentId) : null;
+        const date = normalizeDateInput(val('input-event-date'));
+        renderAgeCheck(document.getElementById('event-age-check'), val('input-event-age'),
+            ageBirthDate(person), date || undefined);
     },
 
     /** Offer godparents/witnesses only where a register would name them. */
@@ -411,7 +449,8 @@ export const personEventsMethods = uiModule({
         }
     },
 
-    setEventEditorFields(type: LifeEventType, customLabel: string, date: string, place: string, note: string): void {
+    setEventEditorFields(type: LifeEventType, customLabel: string, date: string, place: string, note: string,
+        details: Pick<LifeEvent, 'cause' | 'age' | 'address'> = {}): void {
         const typeSelect = document.getElementById('input-event-type') as HTMLSelectElement | null;
         const labelInput = document.getElementById('input-event-custom-label') as HTMLInputElement | null;
         const dateInput = document.getElementById('input-event-date') as HTMLInputElement | null;
@@ -422,7 +461,12 @@ export const personEventsMethods = uiModule({
         if (dateInput) dateInput.value = date;
         if (placeInput) placeInput.value = place;
         if (noteInput) noteInput.value = note;
+        for (const key of DETAIL_KEYS) {
+            const input = document.getElementById(`input-event-${key}`) as HTMLInputElement | null;
+            if (input) input.value = details[key] ?? '';
+        }
         this.updateEventCustomLabelVisibility();
+        this.updateEventDetails(type, true);
     },
 
     openEventEditor(title: string): void {
@@ -446,6 +490,7 @@ export const personEventsMethods = uiModule({
         return JSON.stringify([
             val('input-event-type'), val('input-event-custom-label'), val('input-event-date'),
             val('input-event-place'), val('input-event-note'), this.collectEventParticipants(),
+            ...DETAIL_KEYS.map(k => val(`input-event-${k}`)),
         ]);
     },
 
@@ -506,6 +551,11 @@ export const personEventsMethods = uiModule({
         if (date) payload.date = date;
         if (place) payload.place = place;
         if (note) payload.note = note;
+        for (const key of DETAIL_KEYS) {
+            const v = (document.getElementById(`input-event-${key}`) as HTMLInputElement | null)?.value.trim() ?? '';
+            if (v) payload[key] = v;
+            else if (this.editingEventId) payload[key] = undefined;
+        }
         const participants = this.collectEventParticipants();
 
         if (this.editingEventId) {
@@ -528,6 +578,7 @@ export const personEventsMethods = uiModule({
 
         this.forceCloseEventEditor();
         this.renderEventsList();
+        this.renderPersonLifeline(this.currentId);
         // The quick occupation/residence fields mirror the newest such event.
         this.refreshQuickFieldsFromEvents();
     },
@@ -548,6 +599,7 @@ export const personEventsMethods = uiModule({
         if (!confirmed) return;
         DataManager.removeLifeEvent(this.currentId, eventId);
         this.renderEventsList();
+        this.renderPersonLifeline(this.currentId);
         this.refreshQuickFieldsFromEvents();
     },
 });
