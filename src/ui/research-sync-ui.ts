@@ -291,9 +291,11 @@ export const researchSyncMethods = uiModule({
      * way through the terminal. `thenLoad`: load the research's new version
      * once the send is written there.
      */
-    async researchSendNow(opts: { thenLoad?: boolean } = {}): Promise<void> {
+    async researchSendNow(opts: { thenLoad?: boolean; treeId?: TreeId } = {}): Promise<void> {
         const ctx = this.researchSyncLink();
         if (!ctx || sending) return;
+        // Asked for one tree: never send another (the open tree changed meanwhile).
+        if (opts.treeId && ctx.treeId !== opts.treeId) return;
         const { treeId, link } = ctx;
         const s = strings.sync;
         if (!this.researchSyncCapable(link.id) || !await this.researchBridgeReady(link.id)) {
@@ -369,7 +371,7 @@ export const researchSyncMethods = uiModule({
     },
 
     /** Tree menus' "Send changes": the same send for any tree (switched to first when a running research takes it straight). */
-    async researchSendTree(treeId: TreeId): Promise<void> {
+    async researchSendTree(treeId: TreeId, opts: { thenLoad?: boolean } = {}): Promise<void> {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (!link) return;
         if (!this.researchSyncCapable(link.id)) {
@@ -380,7 +382,7 @@ export const researchSyncMethods = uiModule({
             await this.switchToTree(treeId);
             if (DataManager.getCurrentTreeId() !== treeId) return;
         }
-        await this.researchSendNow();
+        await this.researchSendNow({ ...opts, treeId });
     },
 
     /** The bridge refused the send: say why, offer to try again. */

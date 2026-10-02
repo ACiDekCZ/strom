@@ -330,6 +330,46 @@ test.describe('updating over changes the research does not have', () => {
         expect(meta.research.head).toBe('aa11bb22cc33');
     });
 
+    test('another tree open: the research tree is switched to before the question; neither answer touches the other tree', async ({ page }) => {
+        await openResearch(page, { edit: true });
+        const researchTreeId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
+        const bridge = await fakeBridge(page, { head: NEW_HEAD, treeGed: researchGed(NEW_HEAD) });
+        await poll(page);
+        // The user's own tree is open (as when ?live= starts on the last active tree).
+        const otherId = await page.evaluate(async () => {
+            const id = await window.Strom.DataManager.importAsNewTree({ version: 11, persons: {}, partnerships: {} } as never, 'Konopáskovi');
+            const dm = window.Strom.DataManager;
+            dm.createPerson({ firstName: 'Václav', lastName: 'Konopásek', gender: 'male' } as never);
+            return id;
+        });
+        await page.evaluate((id) => window.Strom.UI.switchToTree(id), otherId);
+        const otherBefore = await page.evaluate((id) => window.Strom.TreeManager.getTreeData(id).then(d => JSON.stringify(d)), otherId);
+
+        await page.evaluate((u) => { void window.Strom.UI.importResearchFromUrl(u); }, `${BRIDGE}/tree.ged`);
+        const dialog = page.locator('#confirmation-modal');
+        await expect(dialog).toContainText("You have changes the research doesn't have");
+        // Behind the question: the research tree, not the user's other tree.
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).toBe(researchTreeId);
+        await expect(card(page, 'Jan')).toBeVisible();
+
+        // "Send, then load" sends the research tree.
+        await dialog.getByRole('button', { name: 'Send, then load' }).click();
+        await expect.poll(() => bridge.posts.length).toBe(1);
+        expect(bridge.posts[0]).toContain(`1 _STROM_APP_TREE ${researchTreeId}`);
+        expect(bridge.posts[0]).not.toContain('Konopásek');
+
+        // "Load without changes" replaces the research tree only.
+        await page.evaluate((id) => window.Strom.UI.switchToTree(id), otherId);
+        await page.evaluate((u) => { void window.Strom.UI.importResearchFromUrl(u); }, `${BRIDGE}/tree.ged`);
+        await expect(dialog).toContainText("You have changes the research doesn't have");
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).toBe(researchTreeId);
+        await dialog.locator('.confirm-aside-btn').click();
+        await expect(page.locator('.toast')).toContainText('Updated the research');
+        const otherAfter = await page.evaluate((id) => window.Strom.TreeManager.getTreeData(id).then(d => JSON.stringify(d)), otherId);
+        expect(otherAfter).toBe(otherBefore);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata().research.head)).toBe(NEW_HEAD);
+    });
+
     test('the bridge not running: the copy is the advice, overwriting set apart', async ({ page }) => {
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page);

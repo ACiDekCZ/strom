@@ -1011,6 +1011,14 @@ export const researchUiMethods = uiModule({
             const sent = existing.research?.sent;
             const holdsChanges = action === 'ask' && !!previous
                 && sent?.state === 'written' && contentFingerprint(previous) === sent.fingerprint;
+            // The question is about that tree: show it behind the dialog, never
+            // whichever tree was open (the user must see what they decide on).
+            if (action === 'ask' && previous && !unreadable && !holdsChanges && DataManager.getCurrentTreeId() !== existing.id) {
+                if (existing.isHidden) TreeManager.setTreeVisibility(existing.id, false);
+                await this.switchToTree(existing.id);
+                if (DataManager.getCurrentTreeId() !== existing.id) return null;
+                window.dispatchEvent(new CustomEvent('strom:tree-switched'));
+            }
             if (unreadable || !previous) {
                 // Cannot be read with this session's key: never overwrite it.
                 asCopy = true;
@@ -1022,7 +1030,8 @@ export const researchUiMethods = uiModule({
                 const choice = await this.showResearchUpdateConflict(existing.id, existing.name, data, includeImages);
                 if (choice === null) return null;
                 if (choice === 'sendThenLoad') {
-                    void this.researchSendNow({ thenLoad: true });
+                    // That tree, named — never the one that happens to be open.
+                    void this.researchSendTree(existing.id, { thenLoad: true });
                     return null;
                 }
                 asCopy = choice === 'copy';
