@@ -50,6 +50,7 @@ import { uiModule } from './module.js';
 import { isValidDateInput, normalizeDateInput, formatDateForInput } from '../dates.js';
 import { autoGrowAll } from './autogrow.js';
 import { computePersonLifeline, LifelinePoint } from '../timeline.js';
+import { storyWithDraft } from './story-compare-ui.js';
 
 export const personModalMethods = uiModule({
     showAddPersonModal(): void {
@@ -368,6 +369,14 @@ export const personModalMethods = uiModule({
             if (person.story.status === 'draft') storyParts.push(strings.story.statusDraft);
         }
         set('pm-sum-story', storyParts);
+        // A new version waits beside the approved story: amber, after the words.
+        const sumStory = document.getElementById('pm-sum-story');
+        if (sumStory && storyWithDraft({ personId: person.id })) {
+            const nv = document.createElement('span');
+            nv.className = 'story-nv-sum';
+            nv.textContent = strings.story.nvSummary;
+            sumStory.append(' · ', nv);
+        }
     },
 
     /**
@@ -390,6 +399,19 @@ export const personModalMethods = uiModule({
             const lines = [...(story?.facts ?? []), ...(story?.note ? [story.note] : [])];
             facts.innerHTML = lines.map(f => `<div>${this.escapeHtml(f)}</div>`).join('');
             factsGroup.style.display = lines.length > 0 ? '' : 'none';
+        }
+
+        // The research has a new version: editing here does not discard it.
+        // "Compare" sets the new version against what the fields hold now.
+        const nvBanner = document.getElementById('story-nv-edit');
+        if (nvBanner) {
+            const personId = person?.id;
+            const waiting = personId ? storyWithDraft({ personId }) : null;
+            nvBanner.style.display = waiting ? '' : 'none';
+            const compare = document.getElementById('story-nv-edit-compare') as HTMLButtonElement | null;
+            if (compare && personId) {
+                compare.onclick = () => this.showStoryCompare({ personId }, { title: title?.value.trim(), text: text?.value ?? '' });
+            }
         }
 
         // Same rule as the research fields: out of the way until asked for, but
@@ -429,6 +451,8 @@ export const personModalMethods = uiModule({
             text,
             ...(existing?.facts?.length ? { facts: existing.facts } : {}),
             ...(existing?.note ? { note: existing.note } : {}),
+            // The research's waiting new version: its state, not the form's.
+            ...(existing?.draft ? { draft: existing.draft } : {}),
         };
     },
 

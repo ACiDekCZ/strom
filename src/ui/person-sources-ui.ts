@@ -13,6 +13,7 @@ import { sortLifeEvents } from '../events.js';
 import { storyProseHtml } from '../story-text.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
+import { storyWithDraft, draftDate } from './story-compare-ui.js';
 import { eventTypeLabel } from './person-events.js';
 import { CitationContext, qualityLabel, sourceThumbHtml, hydrateThumbs } from './sources.js';
 
@@ -238,6 +239,8 @@ export const personSourcesMethods = uiModule({
         const facts = (story.facts ?? []).filter(f => f.trim());
         // A research draft can be approved there (the label changes with the next version).
         const approveUrl = this.storyApproveUrl(personId);
+        // An approved story with a new version waiting: say so and offer the comparison.
+        const waiting = storyWithDraft({ personId });
 
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
@@ -247,12 +250,14 @@ export const personSourcesMethods = uiModule({
                 <div class="modal-header">
                     <div class="audit-log-heading">
                         <h2 id="person-story-heading">${esc(s.readerTitle)}</h2>
-                        <div class="audit-log-subtitle">${esc(personSubtitle(personId))}${story.status === 'draft'
-                            ? ` <span class="story-draft-tag">${esc(s.statusDraft)}</span>` : ''}</div>
+                        <div class="audit-log-subtitle">${esc(personSubtitle(personId))}${waiting
+                            ? ` <span class="story-nv-tag">${esc(s.nvBadge)}</span>`
+                            : story.status === 'draft' ? ` <span class="story-draft-tag">${esc(s.statusDraft)}</span>` : ''}</div>
                     </div>
                     <button type="button" class="close-btn" id="person-story-close-x" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
                 <div class="story-reader-body" id="person-story-body" tabindex="-1" lang="${getCurrentLanguage()}">
+                    ${waiting ? `<div class="story-nv-banner"><span>${esc(s.nvReader(draftDate(waiting)))}</span><button type="button" class="story-nv-compare" id="person-story-compare">${esc(s.compare)}</button></div>` : ''}
                     ${story.title ? `<h3 class="story-reader-title">${esc(story.title)}</h3>` : ''}
                     <div class="story-reader-text">${storyProseHtml(story.text, { title: story.title })}</div>
                     ${facts.length > 0 || story.note ? `<div class="story-reader-extra">
@@ -273,6 +278,7 @@ export const personSourcesMethods = uiModule({
         (overlay.querySelector('#person-story-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#person-story-close') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#person-story-edit') as HTMLButtonElement | null)?.addEventListener('click', () => this.editPersonStory(personId));
+        (overlay.querySelector('#person-story-compare') as HTMLButtonElement | null)?.addEventListener('click', () => this.showStoryCompare({ personId }));
         (overlay.querySelector('#person-story-approve') as HTMLButtonElement | null)?.addEventListener('click', () => {
             if (approveUrl) this.launchResearchLink(approveUrl);
         });

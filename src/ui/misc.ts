@@ -767,6 +767,10 @@ export const miscMethods = uiModule({
                         this.closePersonSourcesDialog();
                         return;
                     }
+                    if (currentDialog === 'story-compare-modal') {
+                        this.closeStoryCompare();
+                        return;
+                    }
                     if (currentDialog === 'person-story-modal') {
                         this.closePersonStoryDialog();
                         return;

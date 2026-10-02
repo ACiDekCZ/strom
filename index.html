@@ -145,6 +145,13 @@
             --edge-rest: #ece5d6;
             --edge-hatch-bg: #f6f2ea;
             --island-bg: #fbf8f1;
+
+            /* story versions compared (added underlined, removed struck through) */
+            --diff-add-bg: #e3eee5;
+            --diff-add-text: #24452f;
+            --diff-add-line: #3f6b4f;
+            --diff-del-bg: #f4e1dc;
+            --diff-del-text: #8a3f33;
         }
 
         /* Dark theme — overrides tokens only. */
@@ -211,6 +218,12 @@
             --edge-rest: #35322a;
             --edge-hatch-bg: #2c2a24;
             --island-bg: #29271f;
+
+            --diff-add-bg: rgba(127,174,142,0.2);
+            --diff-add-text: #cfe3d5;
+            --diff-add-line: #7fae8e;
+            --diff-del-bg: rgba(214,120,104,0.2);
+            --diff-del-text: #e8b6ab;
         }
 
         body {
@@ -8331,6 +8344,7 @@
         .live-panel-list li.live-waiting-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; }
         .live-waiting-text { flex: 1; min-width: 0; }
         .live-waiting-what { font-size: 14px; color: var(--text); }
+        .live-waiting-text > .live-waiting-who { display: block; margin-top: 2px; font-size: 12px; color: var(--text-light); }
         .live-waiting-answer {
             flex: none; margin-top: 1px;
             border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
@@ -10007,6 +10021,53 @@
             .story-reader-text .story-subhead { font-size: 17px; }
         }
 
+        /* A new version of an approved story waits (story.draft): amber like
+           everything else waiting for the user; never printed. */
+        .story-nv-tag {
+            display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px;
+            font-size: 11px; font-weight: 600; background: var(--warning-soft); color: var(--warning-text);
+            vertical-align: 1px;
+        }
+        .story-nv-banner {
+            display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 10px 14px;
+            border-radius: var(--r-md); background: var(--warning-soft); color: var(--warning-text);
+            font-family: var(--font-sans); font-size: 13px; line-height: 1.45;
+        }
+        .story-nv-banner > span { flex: 1; min-width: 200px; }
+        .story-reader-body > .story-nv-banner { max-width: none; margin-bottom: 18px; }
+        .modal .story-nv-banner button.story-nv-compare {
+            padding: 6px 12px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--text);
+            background: var(--surface); border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border));
+        }
+        .modal .story-nv-banner button.story-nv-compare:hover { background: var(--hover-bg); }
+        .story-nv-banner--edit { margin-bottom: 10px; padding: 9px 12px; }
+        .story-nv-banner .link-button { color: var(--text); text-decoration: underline; font-weight: 500; padding: 0; }
+        .story-nv-sum { color: var(--warning-text); font-weight: 500; }
+        @media print { .story-nv-tag, .story-nv-banner { display: none !important; } }
+
+        /* The comparison dialog (body: src/story-compare.ts, STORY_COMPARE_CSS). */
+        .modal.story-compare { width: 720px; max-width: min(720px, 92vw); }
+        @media (max-width: 499px) { .modal.story-compare { width: 100%; max-width: 100vw; } }
+        /* The switch stays put while the body scrolls (pinned under the header). */
+        .story-compare .sc-bar { position: sticky; top: -16px; z-index: 1; margin: -16px -24px 20px; padding: 12px 24px; background: var(--surface-modal, var(--surface)); }
+        .story-compare-foot .story-compare-gap { flex: 1; }
+        .story-compare-foot--note { justify-content: space-between; }
+        .story-compare-msg { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .story-compare-msg strong { color: var(--text); font-weight: 600; }
+        @media (max-width: 499px) {
+            .story-compare .sc-bar { top: -14px; margin: -14px -16px 16px; padding: 10px 16px; }
+            .story-compare-foot .story-compare-gap { display: none; }
+            .story-compare-msg { text-align: center; }
+        }
+
+        /* "Waiting for you": a story's new version is not a task. */
+        .live-kind-story {
+            display: inline-block; margin-right: 8px; padding: 1px 7px; border-radius: 999px;
+            font-size: 11px; font-weight: 600; line-height: 1.5; vertical-align: 1px;
+            background: var(--surface); color: var(--warning-text);
+            border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border));
+        }
+
         /* Source viewer */
         #source-viewer-modal { z-index: 250; }
         .source-viewer { max-width: 720px; }
@@ -11118,6 +11179,10 @@
                     <div class="pm-section-head">
                         <span class="pm-section-title" data-i18n="story.section"></span>
                         <span class="pm-section-summary" id="pm-sum-story"></span>
+                    </div>
+                    <div class="story-nv-banner story-nv-banner--edit" id="story-nv-edit" style="display:none">
+                        <span data-i18n="story.nvEdit"></span>
+                        <button type="button" class="link-button" id="story-nv-edit-compare" data-i18n="story.compare"></button>
                     </div>
                     <div class="form-group">
                         <label for="input-story-title" data-i18n="story.titleField"></label>

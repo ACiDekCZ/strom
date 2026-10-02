@@ -344,6 +344,19 @@ export const researchOverviewMethods = uiModule({
         const canAnswer = mode !== 'sheet' && (this.researchLinkAvailable('task') || this.researchLinkAvailable('open'));
         for (const w of s.waiting) {
             const card = el('div', 'research-overview__waiting-card');
+            if (w.kind === 'story') {
+                // A story's new version: the comparison opens here (no ↗).
+                const text = el('div', 'research-overview__waiting-text');
+                const compare = this.appendStoryWaiting(text, w, (id) => this.overviewShowPerson(id, mode));
+                const who = text.querySelector('.live-waiting-who');
+                const meta = el('div', 'research-overview__waiting-meta');
+                if (who) meta.appendChild(who);
+                const at = timeEl(w.at, 'ago');
+                if (at) meta.appendChild(at);
+                card.append(text, meta, compare);
+                grid.appendChild(card);
+                continue;
+            }
             card.appendChild(el('div', 'research-overview__waiting-text', w.what));
             const meta = el('div', 'research-overview__waiting-meta');
             const person = personByRefn(w.person);

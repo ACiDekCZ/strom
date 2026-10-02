@@ -18,6 +18,7 @@ import { assignGenerations } from './generations.js';
 import { getStringsForLang } from './strings.js';
 import { personInitials } from './initials.js';
 import { storyProseHtml } from './story-text.js';
+import { storyCompareHtml, STORY_COMPARE_CSS } from './story-compare.js';
 
 export interface BookOptions {
     title?: string;
@@ -35,6 +36,14 @@ export interface BookOptions {
      * Shown on screen under the draft, never printed.
      */
     approveStoryUrl?: (person: Person) => string | null;
+    /**
+     * An approved story with a new version waiting (Story.draft): the links
+     * that take it or keep the approved one ({} without links: the comparison
+     * is read-only). Supplied by the UI — without it the book says nothing
+     * about new versions. On screen only: a banner above the story and the
+     * comparison in a dialog of the book's own window; never printed.
+     */
+    storyDraftUrls?: (owner: { person: Person } | { couple: Partnership }) => { final?: string; keep?: string };
 }
 
 function esc(text: string): string {
@@ -189,9 +198,39 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
             : '';
     };
 
-    const storyHtml = (story: Story, kind: 'person' | 'couple', who: string, person?: Person): string => {
+    /** The comparison dialogs of new versions, set at the end of the body (outside the pages). */
+    const compareDialogs: string[] = [];
+    const plainName = (p?: Person): string => p ? ([p.firstName, p.lastName].filter(Boolean).join(' ') || '?') : '?';
+
+    /** The banner above a story whose new version waits, and its comparison dialog. */
+    const newVersionHtml = (story: Story, owner: { person: Person } | { couple: Partnership }): string => {
+        const draft = story.draft;
+        if (!options.storyDraftUrls || story.status !== 'final' || !draft?.text.trim()) return '';
+        const n = compareDialogs.length + 1;
+        const id = `bc-${n}`;
+        const L = S.story;
+        const day = draft.at ? formatFlexDate(draft.at, lang) || undefined : undefined;
+        const who = 'person' in owner ? plainName(owner.person)
+            : L.couple(plainName(persons[owner.couple.person1Id]), plainName(persons[owner.couple.person2Id]));
+        const urls = options.storyDraftUrls(owner);
+        const close = `<button type="button" class="bc-btn" data-compare-close>${esc(S.buttons.close)}</button>`;
+        const foot = urls.final && urls.keep
+            ? `${close}<span class="bc-gap"></span><a class="bc-btn" href="${esc(urls.keep)}" data-compare-do="keep">${esc(L.keepOld)}</a><a class="bc-btn bc-btn--primary" href="${esc(urls.final)}" data-compare-do="final">${esc(L.takeNew)}</a>`
+            : `<div class="bc-msg">${esc(L.decideOnDesktop)}</div>${close}`;
+        const target = 'person' in owner ? `data-story-person="${esc(owner.person.id)}"` : `data-story-couple="${esc(owner.couple.id)}"`;
+        compareDialogs.push(`<dialog class="book-compare" id="${id}" ${target} aria-labelledby="${id}-h">
+            <div class="bc-head"><div><h2 id="${id}-h">${esc(L.compareTitle)}</h2><div class="bc-sub">${esc(L.compareSub(who, day))}</div></div><button type="button" class="bc-x" data-compare-close aria-label="${esc(S.buttons.close)}">&times;</button></div>
+            <div class="bc-body">${storyCompareHtml({ approved: story, draft }, L, { idPrefix: id, prose: proseHtml })}</div>
+            <div class="bc-foot${urls.final && urls.keep ? '' : ' bc-foot--note'}">${foot}</div>
+        </dialog>`);
+        const sentence = esc(L.nvBook(day)).replace(/\*\*(?=\S)([^*]+?)\*\*/g, '<strong>$1</strong>');
+        return `<div class="book-nv"><span>${sentence}</span><button type="button" class="book-nv-compare" data-story-compare="${id}">${esc(L.compare)}</button></div>`;
+    };
+
+    const storyHtml = (story: Story, kind: 'person' | 'couple', who: string, person?: Person, couple?: Partnership): string => {
         const paragraphs = proseHtml(story.text, story.title);
         if (!paragraphs) return '';
+        const nv = person ? newVersionHtml(story, { person }) : couple ? newVersionHtml(story, { couple }) : '';
         // The draft/approved state is the author's workshop note: it travels in
         // the data and back out to GEDCOM, but a printed book says nothing
         // about it — a page of prose is either worth printing or it is not.
@@ -202,7 +241,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         const approve = story.status === 'draft' && person ? options.approveStoryUrl?.(person) : null;
         const approveHtml = approve
             ? `<p class="book-story-approve"><a href="${esc(approve)}">${esc(S.research.approveStory)}</a></p>` : '';
-        return `<div class="book-story book-story-${kind}">${head}${paragraphs}${approveHtml}</div>`;
+        return `<div class="book-story book-story-${kind}">${nv}${head}${paragraphs}${approveHtml}</div>`;
     };
 
     // Photo (circular) or initials.
@@ -306,7 +345,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
             ...(isLongNote(p2) ? [longNoteHtml(p2!)] : []),
             ...(p2?.story ? [storyHtml(p2.story, 'person', name(p2), p2)] : []),
             ...(u.story ? [storyHtml(u.story, 'couple',
-                `${name(p1)}${p2 ? ` <span class="book-amp">&amp;</span> ${name(p2)}` : ''}`)] : []),
+                `${name(p1)}${p2 ? ` <span class="book-amp">&amp;</span> ${name(p2)}` : ''}`, undefined, u)] : []),
         ].join('');
 
         // Footnotes are collected during coupleHtml rendering above.
@@ -439,11 +478,47 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     }
     .book-toolbar button:hover { background: #fff; }
 
+    /* A new version of an approved story waits: on screen only. */
+    .book-nv { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 12px; padding: 10px 14px;
+        border-radius: 8px; background: #f6ecd3; color: #7f5500; font-family: system-ui, sans-serif; font-size: 13px;
+        line-height: 1.45; text-align: left; }
+    .book-nv > span { flex: 1; min-width: 200px; }
+    .book-nv-compare, .bc-btn { padding: 6px 12px; border-radius: 7px; border: 1px solid #e2cf9f; background: #fffdf8;
+        color: #2b2822; font: 500 13px system-ui, sans-serif; cursor: pointer; text-decoration: none; }
+    .book-compare { width: min(720px, 92vw); max-height: 88vh; padding: 0; border: 0; border-radius: 14px;
+        box-shadow: 0 12px 40px rgba(20,16,8,0.3); background: #fffdf8; color: #2b2822; font-family: system-ui, sans-serif; }
+    .book-compare[open] { display: flex; flex-direction: column; }
+    .book-compare::backdrop { background: rgba(20,16,8,0.45); }
+    .bc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 24px 14px; border-bottom: 1px solid #ece5d6; }
+    .bc-head h2 { margin: 0; font-family: Georgia, serif; font-size: 19px; }
+    .bc-sub { margin-top: 2px; font-size: 13px; color: #5c5546; }
+    .bc-x { width: 32px; height: 32px; border: 0; background: none; font-size: 22px; color: #5c5546; cursor: pointer; }
+    .bc-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 24px 24px; }
+    .bc-body .sc-bar { position: sticky; top: -16px; z-index: 1; margin: -16px -24px 20px; padding: 12px 24px; background: #fffdf8; }
+    .bc-foot { display: flex; align-items: center; gap: 8px; padding: 14px 24px; background: #f6f2ea; border-top: 1px solid #ece5d6; }
+    .bc-foot .bc-btn { padding: 9px 16px; border-color: #ddd4c2; font-size: 14px; }
+    .bc-btn--primary { background: #3f6b4f; border-color: #3f6b4f !important; color: #fff; font-weight: 600; }
+    .bc-gap { flex: 1; }
+    .bc-msg { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.45; color: #5c5546; }
+    .bc-msg strong { color: #2b2822; }
+    @media (max-width: 499px) {
+        .book-compare { width: 100vw; max-width: 100vw; max-height: 94vh; margin: auto 0 0; border-radius: 14px 14px 0 0; }
+        .bc-head, .bc-foot { padding-left: 16px; padding-right: 16px; }
+        .bc-body { padding: 14px 16px 20px; }
+        .bc-body .sc-bar { top: -14px; margin: -14px -16px 16px; padding: 10px 16px; }
+        .bc-foot { flex-direction: column-reverse; align-items: stretch; }
+        .bc-foot .bc-btn { text-align: center; }
+        .bc-gap { display: none; }
+        .bc-foot [data-compare-close] { order: -1; }
+        .bc-msg { text-align: center; }
+    }
+${STORY_COMPARE_CSS}
     @page { size: A4; margin: 18mm 16mm; }
     .book-story-approve { margin: 6px 0 0; font-family: system-ui, sans-serif; font-size: 13px; }
     .book-story-approve a { color: #8a5a2b; }
     @media print {
         .book-story-approve { display: none; }
+        .book-nv, .book-compare { display: none !important; }
         .book-toolbar { display: none; }
         body { background: #fff; }
         .book-page { max-width: none; box-shadow: none; margin: 0; padding: 0; background: #fff; }
@@ -489,6 +564,6 @@ ${options.treeSvg ? `<div class="book-page book-tree-page book-page-break">
     <h2>${esc(B.index)}</h2>
     ${indexRows}
 </div>
-
+${compareDialogs.join('\n')}
 </body></html>`;
 }

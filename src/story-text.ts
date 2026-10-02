@@ -32,7 +32,7 @@ function inline(text: string): string {
 }
 
 /** Compare a heading with the title: case, emphasis marks and edge punctuation aside. */
-function sameText(a: string, b: string): boolean {
+export function sameText(a: string, b: string): boolean {
     const norm = (s: string): string => s.replace(/[*_]/g, '').replace(/\s+/g, ' ')
         .replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '').toLocaleLowerCase();
     return norm(a) !== '' && norm(a) === norm(b);

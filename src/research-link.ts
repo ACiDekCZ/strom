@@ -103,7 +103,15 @@ export interface ResearchLinkParams {
     directionDo?: ResearchDirectionDo;
     /** The agent's session to finish ("N0132"). */
     session?: string;
+    /** A story: approve it (or its waiting new version), or keep the approved one. */
+    storyDo?: ResearchStoryDo;
+    /** A couple's story: the other partner (with `person`). */
+    partner?: string;
 }
+
+/** A story: approve (the draft, or the new version in place of the approved one) / keep the approved one. */
+export type ResearchStoryDo = 'final' | 'keep';
+const STORY_DOS: readonly string[] = ['final', 'keep'];
 
 /** What to do with a research direction. */
 export type ResearchDirectionDo = 'pause' | 'done' | 'resume';
@@ -179,7 +187,11 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
         }
         case 'story': {
             const person = researchPersonRef(p.person);
-            return person ? `${base}&person=${person}&do=final` : null;
+            const what = p.storyDo ?? 'final';
+            if (!person || !STORY_DOS.includes(what)) return null;
+            if (p.partner === undefined) return `${base}&person=${person}&do=${what}`;
+            const partner = researchPersonRef(p.partner);
+            return partner && partner !== person ? `${base}&person=${person}&partner=${partner}&do=${what}` : null;
         }
         case 'sync-undo': {
             const intake = researchIntakeRef(p.intake);
@@ -575,6 +587,10 @@ export interface LiveWaiting {
     person?: string;
     /** The research direction of the task ("G0002"; a newer research). */
     research?: string;
+    /** 'story': a new version of an approved story (the person's, or with `partner` the couple's), not a task. */
+    kind?: 'story';
+    /** A couple's story: the other partner (REFN). */
+    partner?: string;
 }
 
 /** A research direction ("research" in the research, id G…): kinds, state, counts. */
@@ -706,7 +722,14 @@ export function sanitizeWaiting(value: unknown): LiveWaiting[] {
         if (!what) continue;
         const person = researchPersonRef(r.person);
         const research = researchDirectionRef(r.research);
-        out.push({ id: cleanText(r.id, 40), what, on: cleanText(r.on, 120), at: cleanText(r.at ?? r.since, 40), ...(person ? { person } : {}), ...(research ? { research } : {}) });
+        // A story names whose it is; without the person it is just a line.
+        const story = r.kind === 'story' && person;
+        const partner = story ? researchPersonRef(r.partner) : null;
+        out.push({
+            id: cleanText(r.id, 40), what, on: cleanText(r.on, 120), at: cleanText(r.at ?? r.since, 40),
+            ...(person ? { person } : {}), ...(research ? { research } : {}),
+            ...(story ? { kind: 'story' as const } : {}), ...(partner && partner !== person ? { partner } : {}),
+        });
     }
     return out;
 }

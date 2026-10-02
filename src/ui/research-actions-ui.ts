@@ -10,9 +10,9 @@
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatLiveClock } from '../live-time.js';
-import { PersonId } from '../types.js';
+import { PersonId, PartnershipId } from '../types.js';
 import { yearOf } from '../dates.js';
-import { RESEARCH_LINK_ACTIONS, ResearchReviewScope, researchPersonRef } from '../research-link.js';
+import { RESEARCH_LINK_ACTIONS, ResearchReviewScope, ResearchStoryDo, researchPersonRef } from '../research-link.js';
 import { uiModule } from './module.js';
 import { onComputer } from './research-ui.js';
 import { PersonMenuAction } from './context-menu.js';
@@ -424,6 +424,25 @@ export const researchActionsMethods = uiModule({
         if (DataManager.getPerson(personId)?.story?.status !== 'draft') return null;
         const person = this.personResearchRef(personId);
         return person ? this.activeResearchLink('story', { person }) : null;
+    },
+
+    /**
+     * A person's approved story has a new version waiting: "take the new one"
+     * (final) or "keep the original" (keep) in the research, or null.
+     */
+    storyDraftUrl(personId: PersonId, how: ResearchStoryDo): string | null {
+        if (!DataManager.getPerson(personId)?.story?.draft) return null;
+        const person = this.personResearchRef(personId);
+        return person ? this.activeResearchLink('story', { person, storyDo: how }) : null;
+    },
+
+    /** The same for a couple's story: the research finds the family by both partners. */
+    coupleStoryDraftUrl(partnershipId: PartnershipId, how: ResearchStoryDo): string | null {
+        const u = DataManager.getPartnership(partnershipId);
+        if (!u?.story?.draft) return null;
+        const person = this.personResearchRef(u.person1Id);
+        const partner = this.personResearchRef(u.person2Id);
+        return person && partner ? this.activeResearchLink('story', { person, partner, storyDo: how }) : null;
     },
 
     // ==================== PERSON SOURCES: FIND A SOURCE ====================

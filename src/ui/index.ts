@@ -68,6 +68,7 @@ import { kinshipUiMethods } from './kinship-ui.js';
 import { archivesUiMethods } from './archives-ui.js';
 import { personSourcesMethods } from './person-sources-ui.js';
 import { researchActionsMethods } from './research-actions-ui.js';
+import { storyCompareMethods } from './story-compare-ui.js';
 import { personResearchMethods } from './person-research-ui.js';
 import { researchAdoptMethods } from './research-adopt-ui.js';
 import { evidenceUiMethods } from './evidence-ui.js';
@@ -470,6 +471,10 @@ Object.assign(UIClass.prototype, personSourcesMethods);
 type ResearchActionsMethods = typeof researchActionsMethods;
 export interface UIClass extends ResearchActionsMethods {}
 Object.assign(UIClass.prototype, researchActionsMethods);
+
+type StoryCompareMethods = typeof storyCompareMethods;
+export interface UIClass extends StoryCompareMethods {}
+Object.assign(UIClass.prototype, storyCompareMethods);
 
 type PersonResearchMethods = typeof personResearchMethods;
 export interface UIClass extends PersonResearchMethods {}

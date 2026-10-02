@@ -82,6 +82,8 @@ export const bookUiMethods = uiModule({
             treeSvg,
             dateLabel: strings.book.compiled(new Date().toLocaleDateString()),
             approveStoryUrl: (p) => this.storyApproveUrl(p.id),
+            storyDraftUrls: (owner) => this.storyCompareUrls('person' in owner
+                ? { personId: owner.person.id } : { partnershipId: owner.couple.id }),
         });
 
         this.closeBookDialog();
@@ -92,5 +94,7 @@ export const bookUiMethods = uiModule({
         win.document.open();
         win.document.write(html);
         win.document.close();
+        // "Compare" above a story with a new version: its dialog in the book's window.
+        this.wireBookStoryCompare(win.document);
     },
 });

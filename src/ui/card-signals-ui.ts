@@ -13,6 +13,8 @@ import { ActionSignal, CardSignalInfo, ACTION_GLYPH, stateStripesHtml } from '..
 import { TreeManager } from '../tree-manager.js';
 import { announcedResearchLinks } from '../research-device.js';
 import { uiModule } from './module.js';
+import { DataManager } from '../data.js';
+import { storyWaitingTarget, storyWithDraft } from './story-compare-ui.js';
 
 const STATE_KEYS: (keyof CardSignals)[] = ['evidence', 'story'];
 const ACTION_KEYS: (keyof CardSignals)[] = ['waiting', 'conflict', 'question', 'agent'];
@@ -29,6 +31,7 @@ export const cardSignalsUiMethods = uiModule({
     /** A click on a card's badge (desktop): open what it signals. */
     openCardSignal(personId: PersonId, signal: string): void {
         this.hideContextMenu();
+        if (signal === 'waiting' && this.openWaitingStoryCompare(personId)) return;
         if (signal === 'waiting') this.showResearchWaiting();
         else if (signal === 'conflict') this.showPersonResearchDialog(personId);
         else if (signal === 'agent') this.showLiveResearchNow();
@@ -37,6 +40,21 @@ export const cardSignalsUiMethods = uiModule({
             const card = document.querySelector<HTMLElement>(`.person-card[data-id="${CSS.escape(personId)}"]`);
             card?.click();
         }
+    },
+
+    /**
+     * The badge of a story's new version (kind "story" in Waiting for you):
+     * the comparison of that story — the person's, or their couple's. False
+     * when there is none to open (then the badge opens Waiting for you).
+     */
+    openWaitingStoryCompare(personId: PersonId): boolean {
+        if (!TreeRenderer.cardSignalsFor(personId)?.waitingStory) return false;
+        const refn = DataManager.getPerson(personId)?.refn;
+        const item = this.researchWaiting()?.items.find(w => w.kind === 'story' && (w.person === refn || w.partner === refn));
+        const target = item ? storyWaitingTarget(item) : null;
+        if (!target || !storyWithDraft(target)) return false;
+        this.showStoryCompare(target);
+        return true;
     },
 
     /**
@@ -73,7 +91,9 @@ export const cardSignalsUiMethods = uiModule({
         let go = '';
         if (action === 'waiting') {
             text = c.ttWaiting(s.waiting ?? '');
-            if (!touch) go = r.answer;
+            // A story's new version is compared here, on touch too.
+            if (s.waitingStory) go = strings.story.compare;
+            else if (!touch) go = r.answer;
         } else if (action === 'conflict') {
             text = [c.ttConflicts(s.conflicts), s.hypotheses > 0 ? c.ttHypotheses(s.hypotheses) : ''].filter(Boolean).join(' · ');
             go = `${r.knows} ›`;

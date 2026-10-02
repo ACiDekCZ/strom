@@ -119,6 +119,10 @@ function toStory(raw: RawStory | undefined): Story | undefined {
     const stat = raw.stat.trim().toLowerCase();
     const status = (stat === 'navrh' || stat === 'draft') ? 'draft'
         : (stat === 'hotovo' || stat === 'final') ? 'final' : undefined;
+    // A new version waits only beside an approved story: a draft is simply
+    // rewritten, so a _DRAFT under one means nothing.
+    const d = status === 'final' && raw.draft?.text.trim() ? raw.draft : undefined;
+    const facts = d?.facts.filter(f => f.trim());
     return {
         ...(raw.kind ? { kind: raw.kind } : {}),
         ...(raw.title ? { title: raw.title } : {}),
@@ -126,6 +130,15 @@ function toStory(raw: RawStory | undefined): Story | undefined {
         text: raw.text,
         ...(raw.facts.length > 0 ? { facts: raw.facts } : {}),
         ...(raw.note ? { note: raw.note } : {}),
+        ...(d ? {
+            draft: {
+                ...(d.title ? { title: d.title } : {}),
+                text: d.text,
+                ...(facts && facts.length > 0 ? { facts } : {}),
+                ...(d.note ? { note: d.note } : {}),
+                ...(d.at.trim() ? { at: d.at.trim() } : {}),
+            },
+        } : {}),
     };
 }
 
@@ -572,6 +585,17 @@ interface RawStory {
     text: string;
     facts: string[];
     note: string;
+    /** `2 _DRAFT`: the new version waiting beside an approved story (research files only). */
+    draft?: RawStoryDraft;
+}
+
+/** A `2 _DRAFT` block: the same fields one level deeper, plus `3 _AT`. */
+interface RawStoryDraft {
+    title: string;
+    text: string;
+    facts: string[];
+    note: string;
+    at: string;
 }
 
 const newStory = (): RawStory =>
@@ -1335,6 +1359,8 @@ export function parseGedcom(content: string): ParsedGedcom {
     /** The 1 _STORY block currently open, and the level-2 tag inside it. */
     let currentStory: RawStory | null = null;
     let currentStorySubTag: string | null = null;
+    /** The level-3 tag inside a story's `2 _DRAFT`. */
+    let currentDraftSubTag: string | null = null;
     /**
      * Level-2 tag inside a BIRT/DEAT (INDI) or MARR (FAM) block — the facts the
      * model stores as fields rather than events, so they have no RawEvent to
@@ -1954,15 +1980,51 @@ export function parseGedcom(content: string): ParsedGedcom {
             } else if (currentStory && level >= 2) {
                 // 2 TYPE / TITL / STAT / TEXT / DATA / NOTE, each continued by
                 // 3 CONC (same line) or 3 CONT (a real line break).
+                const draft = currentStory.draft;
                 if (level === 2) {
                     currentStorySubTag = tag;
+                    currentDraftSubTag = null;
                     switch (tag) {
+                        case '_DRAFT':
+                            // The research's new version beside an approved
+                            // story: trusted from its own files only.
+                            if (stromResearch) currentStory.draft = { title: '', text: '', facts: [], note: '', at: '' };
+                            else drop(tag);
+                            break;
                         case 'TYPE': currentStory.kind = value; break;
                         case 'TITL': currentStory.title = value; break;
                         case 'STAT': currentStory.stat = value; break;
                         case 'TEXT': currentStory.text = value; break;
                         case 'DATA': currentStory.facts.push(value); break;
                         case 'NOTE': currentStory.note = value; break;
+                    }
+                } else if (currentStorySubTag === '_DRAFT') {
+                    // 3 TITL / TEXT / DATA / NOTE / _AT, continued at level 4 —
+                    // the story's own shape, one level deeper. No draft: the
+                    // block was dropped above (not a research file).
+                    if (draft && level === 3) {
+                        currentDraftSubTag = tag;
+                        switch (tag) {
+                            case 'TITL': draft.title = value; break;
+                            case 'TEXT': draft.text = value; break;
+                            case 'DATA': draft.facts.push(value); break;
+                            case 'NOTE': draft.note = value; break;
+                            case '_AT': draft.at = value; break;
+                        }
+                    } else if (draft && level === 4 && tag === 'TEXT' && currentDraftSubTag === 'DATA') {
+                        const facts = draft.facts;
+                        if (facts.length > 0 && facts[facts.length - 1] === '') facts[facts.length - 1] = value;
+                        else facts.push(value);
+                    } else if (draft && level === 4 && (tag === 'CONC' || tag === 'CONT')) {
+                        const glue = tag === 'CONT' ? '\n' + value : value;
+                        switch (currentDraftSubTag) {
+                            case 'TITL': draft.title += glue; break;
+                            case 'TEXT': draft.text += glue; break;
+                            case 'NOTE': draft.note += glue; break;
+                            case 'DATA':
+                                if (draft.facts.length > 0) draft.facts[draft.facts.length - 1] += glue;
+                                break;
+                        }
                     }
                 } else if (level === 3 && tag === 'TEXT' && currentStorySubTag === 'DATA') {
                     // `2 DATA` / `3 TEXT <fact>` — the shape GEDCOM uses for a

@@ -30,6 +30,8 @@ export const AGENT_DONE_FADE_MS = 300;
 export interface ResearchCardInfo {
     /** A task waits for the user about this person (its text). */
     waiting?: string;
+    /** That waiting item is a story's new version (kind "story"), not a task. */
+    waitingStory?: boolean;
     /** The agent works on this person right now (the task's text; live only). */
     agent?: string;
     /** The person is in the agent's queue (the task's text; tooltip only). */
@@ -67,8 +69,12 @@ export interface CardSignalInfo {
     /** The evidence (null: placeholder, or no source anywhere in the tree). */
     evidence: PersonEvidence | null;
     story: 'final' | 'draft' | null;
+    /** The approved story has a new version waiting beside it (Story.draft). */
+    storyNew: boolean;
     attachments: number;
     waiting: string | null;
+    /** The waiting item is a story's new version: the badge opens the comparison. */
+    waitingStory: boolean;
     conflicts: number;
     hypotheses: number;
     question: string | null;
@@ -94,8 +100,10 @@ export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInf
     const info: CardSignalInfo = {
         evidence,
         story,
+        storyNew: story === 'final' && !!p.story?.draft?.text?.trim(),
         attachments: p.attachments?.length ?? 0,
         waiting: research?.waiting ?? null,
+        waitingStory: !!research?.waitingStory,
         conflicts,
         hypotheses: p.research?.hypotheses?.length ?? 0,
         question: p.question?.trim() || null,

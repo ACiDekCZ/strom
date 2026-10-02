@@ -116,12 +116,16 @@ const FACT_SCOPES: readonly string[] = ['living', 'off-tree'];
  * of the tree (what is missing and why, the window searched, the books, the
  * estimate, the hypotheses and the family outside the tree) and drops how
  * the research works on it: what comes next, the queue, tasks, searches,
- * sessions and their cost, the direction. That is the research's own state,
- * stale in any copy and meaningless to anyone else; the research tree gets
- * it back with its next load. Mutates and returns `data` (a fresh copy).
+ * sessions and their cost, the direction, a story's waiting new version.
+ * That is the research's own state, stale in any copy and meaningless to
+ * anyone else; the research tree gets it back with its next load. Mutates and returns `data` (a fresh copy).
  */
 export function stripResearchWork(data: StromData): StromData {
+    // A new version of a story waiting for the user is the research's
+    // workshop too: the copy carries the approved story only.
+    for (const partnership of Object.values(data.partnerships)) delete partnership.story?.draft;
     for (const person of Object.values(data.persons)) {
+        delete person.story?.draft;
         const r = person.research;
         if (!r) continue;
         if (r.edge) {

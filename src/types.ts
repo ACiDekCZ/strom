@@ -490,6 +490,25 @@ export interface Story {
     facts?: string[];
     /** The author's caveat, kept verbatim ("not a source, proves nothing"). */
     note?: string;
+    /**
+     * A newer version of an APPROVED story waiting for the user (Strom Research
+     * _STORY > _DRAFT). The approved text above stays the story — the book and
+     * the person's panel show it — until the user takes the new version or
+     * keeps the old one in the research. A snapshot of the research's state:
+     * the next load replaces it, and no copy leaving the app carries it.
+     */
+    draft?: StoryDraft;
+}
+
+/** The waiting new version of an approved story (_STORY > _DRAFT). */
+export interface StoryDraft {
+    title?: string;
+    /** Same form as Story.text. */
+    text: string;
+    facts?: string[];
+    note?: string;
+    /** When it was written (YYYY-MM-DD as the research sends it). */
+    at?: string;
 }
 
 export interface Partnership {

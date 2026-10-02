@@ -1784,7 +1784,7 @@ class TreeRendererClass {
         }
         if (s.story || s.attachments > 0) {
             const bits: string[] = [];
-            if (s.story) bits.push(s.story === 'draft' ? c.ttStoryDraft : c.ttStory);
+            if (s.story) bits.push(s.story === 'draft' ? c.ttStoryDraft : s.storyNew ? c.ttStoryNew : c.ttStory);
             if (s.attachments > 0) bits.push(c.ttAttachments(s.attachments));
             rows.push(`<div class="tt-line tt-story">${stateStripesHtml(null, s.story, true)}${this.escapeHtml(bits.join(' · '))}</div>`);
         }
@@ -1810,7 +1810,7 @@ class TreeRendererClass {
         const c = strings.card;
         const parts = [`${person.firstName} ${person.lastName}`.trim() || '?'];
         if (s.showEvidence && s.evidence) parts.push(c.ariaEv[s.evidence.level]);
-        if (s.showStory) parts.push(s.story === 'draft' ? c.ariaStoryDraft : c.ariaStory);
+        if (s.showStory) parts.push(s.story === 'draft' ? c.ariaStoryDraft : s.storyNew ? c.ariaStoryNew : c.ariaStory);
         if (s.action === 'waiting') parts.push(c.ariaWaiting);
         else if (s.action === 'conflict') parts.push(c.ariaConflict);
         else if (s.action === 'question') parts.push(c.ariaQuestion);

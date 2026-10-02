@@ -341,7 +341,15 @@ function researchCardInfo(): Map<string, ResearchCardInfo> {
         info[what] ??= text;
         out.set(ref, info);
     };
-    for (const w of waiting) note(w.person, 'waiting', w.what);
+    for (const w of waiting) {
+        if (w.kind !== 'story') { note(w.person, 'waiting', w.what); continue; }
+        // A story's new version: the app's own words, on both partners of a couple.
+        for (const ref of [w.person, w.partner]) {
+            if (!ref || out.get(ref)?.waiting) continue;
+            note(ref, 'waiting', strings.story.nvWaitingItem);
+            out.get(ref)!.waitingStory = true;
+        }
+    }
     if (following) {
         for (const w of following.working) if (!w.paused) note(w.person, 'agent', w.task || w.who);
         for (const q of following.queue) if (q.state === 'next') note(q.person, 'queued', q.text);
@@ -1313,6 +1321,13 @@ export const researchUiMethods = uiModule({
 
     /** "Answer ↗" at a waiting task: that task in the research, else the research itself. */
     answerResearchTask(w: LiveWaiting): void {
+        // A story's new version: the research shows both and asks (take it is the default).
+        if (w.kind === 'story' && w.person) {
+            const url = this.activeResearchLink('story', { person: w.person, ...(w.partner ? { partner: w.partner } : {}) })
+                ?? this.activeResearchLink('open');
+            if (url) this.launchResearchLink(url);
+            return;
+        }
         const task = researchTaskRef(w.id);
         const url = (task ? this.activeResearchLink('task', { task }) : null) ?? this.activeResearchLink('open');
         if (url) this.launchResearchLink(url);
@@ -1810,6 +1825,15 @@ export const researchUiMethods = uiModule({
         for (const w of items) {
             const li = el('li', 'live-waiting-row');
             const text = el('div', 'live-waiting-text');
+            if (w.kind === 'story') {
+                // A story's new version: compared here, not answered there.
+                const compare = this.appendStoryWaiting(text, w, (id) => this.showLivePerson(id));
+                const at = timeEl(w.at, 'ago');
+                if (at) text.appendChild(at);
+                li.append(text, compare);
+                list.appendChild(li);
+                continue;
+            }
             text.appendChild(el('span', 'live-waiting-what', w.what));
             // "on" is the agent's free text; "user" only repeats the heading.
             if (!waitsOnUser(w.on)) text.appendChild(el('small', 'live-time', r.waitingOn(w.on!)));
