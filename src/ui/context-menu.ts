@@ -12,6 +12,7 @@ import { PersonId, RelationType } from '../types.js';
 import { uiModule } from './module.js';
 import { isCoarsePointer } from './bottom-sheet.js';
 import { isToolbarCompact } from '../breakpoints.js';
+import { fitFlyout, FLYOUT_MARGIN } from './flyout.js';
 
 /** One entry in the person action menu (context menu / bottom sheet). */
 export interface PersonMenuAction {
@@ -36,6 +37,28 @@ export interface PersonMenuAction {
     state?: string;
     /** A small line under the label ("Paused · restart"). */
     note?: string;
+    /** Opens a second level (desktop flyout, bottom-sheet page). */
+    submenu?: PersonMenuAction[];
+    /** A grid of buttons instead of a row (the "Add" group). */
+    chips?: PersonMenuAction[];
+}
+
+/**
+ * A second level of the person menu, or what stands in for it: nothing for
+ * no items, the item itself for one (a submenu of one is not worth the
+ * click), else a row that opens them — carrying the tag of "What the
+ * research knows", so the count does not hide behind the chevron.
+ */
+export function submenuRow(action: string, label: string, items: PersonMenuAction[]): PersonMenuAction[] {
+    if (items.length === 0) return [];
+    if (items.length === 1) return [{ ...items[0], divider: false, header: undefined }];
+    const tag = items.find(i => i.action === 'research-knows')?.tag;
+    return [{ action, label, submenu: items, tag, ariaLabel: tag ? `${label}, ${tag}` : undefined }];
+}
+
+/** A group of rows: a divider before the first. */
+function group(items: PersonMenuAction[]): PersonMenuAction[] {
+    return items.map((a, i) => (i === 0 ? { ...a, divider: true } : a));
 }
 
 /** Label (+ the quiet right-aligned meta, AI label, ↗) of a person menu item, escaped. */
@@ -47,7 +70,8 @@ export function menuItemBody(a: PersonMenuAction): string {
             ? `<span class="research-ai-badge menu-item-badge" title="${e(strings.research.aiCostHint)}" aria-hidden="true">${e(strings.research.aiBadge)}</span>`
             : '')
         + (a.state ? `<span class="menu-item-state">${e(a.state)}</span>` : '')
-        + (a.external ? '<span class="menu-item-ext" aria-hidden="true">↗</span>' : '');
+        + (a.external ? '<span class="menu-item-ext" aria-hidden="true">↗</span>' : '')
+        + (a.submenu ? '<span class="menu-item-chev" aria-hidden="true">›</span>' : '');
     const label = a.note ? `${e(a.label)}<span class="menu-item-note">${e(a.note)}</span>` : e(a.label);
     return tail || a.note ? `<span class="menu-item-label">${label}</span>${tail}` : label;
 }
@@ -62,11 +86,13 @@ export const contextMenuMethods = uiModule({
      * The per-person actions, depending on view/lock state. Both the desktop
      * context menu and the bottom sheet build their markup from this.
      * Groups: the person itself (focus / edit / sources / story / descendants)
-     * → add relatives → everything else (kinship, archives, lock, merge, delete).
+     * → "Add" (a grid of buttons) → kinship and archives → "Research ›" and
+     * "More ›" (lock, merge, delete) — about ten rows on the first level.
      */
     getPersonMenuActions(personId: PersonId): PersonMenuAction[] {
         const person = DataManager.getPerson(personId);
         if (!person) return [];
+        const c = strings.contextMenu;
         // Read-only: an embedded file's view mode or locked local data.
         const isViewMode = DataManager.isReadOnly();
         const isPersonLocked = DataManager.isPersonLocked(personId);
@@ -76,67 +102,80 @@ export const contextMenuMethods = uiModule({
         // form. Read-only / locked: only when there is something to show; in
         // normal mode "Sources" always (its dialog is the quick way to cite).
         const sourceCount = this.personSourceCount(personId);
-        // "In the research" closes every variant of the menu.
-        const research = this.personResearchActions(personId);
         const hasStory = !!person.story?.text?.trim();
         const readItems = (always: boolean): PersonMenuAction[] => {
             const out: PersonMenuAction[] = [];
             if (always || sourceCount > 0) {
                 out.push({
-                    action: 'sources', label: strings.contextMenu.showSources,
+                    action: 'sources', label: c.showSources,
                     meta: sourceCount > 0 ? String(sourceCount) : undefined,
                     ariaLabel: sourceCount > 0 ? strings.personSources.countSr(sourceCount) : undefined,
                 });
             }
-            // What the research knows sits with the sources: it is about them.
-            const knows = this.personResearchKnows(personId);
-            if (knows) out.push(knows);
-            if (hasStory) out.push({ action: 'story', label: strings.contextMenu.showStory });
+            if (hasStory) out.push({ action: 'story', label: c.showStory });
             return out;
         };
 
+        // "Research ›": what the research knows, then its actions — on every
+        // variant of the menu (nothing there changes the app).
+        const knows = this.personResearchKnows(personId);
+        const researchActions = this.personResearchActions(personId);
+        const research = submenuRow('research', strings.research.personSection, [
+            ...(knows ? [knows] : []),
+            ...researchActions.map((a, i) => (i === 0 && knows ? { ...a, divider: true } : a)),
+        ]);
+
         if (isViewMode) {
             return [
-                { action: 'focus', label: strings.contextMenu.focus },
+                { action: 'focus', label: c.focus },
                 ...readItems(false),
-                { action: 'relationship', label: strings.contextMenu.relationship, divider: true },
-                { action: 'archives', label: strings.contextMenu.archives },
-                ...research,
+                ...group([
+                    { action: 'relationship', label: c.relationship },
+                    { action: 'archives', label: c.archives },
+                ]),
+                ...group(research),
             ];
         }
         if (isPersonLocked) {
-            const items: PersonMenuAction[] = [
-                { action: 'focus', label: strings.contextMenu.focus },
+            return [
+                { action: 'focus', label: c.focus },
                 // Read-only look at the record (the edit form in its locked mode).
-                { action: 'view', label: strings.contextMenu.view },
+                { action: 'view', label: c.view },
                 ...readItems(false),
+                ...group([
+                    ...research,
+                    ...(isTreeLocked ? [] : [{ action: 'toggle-lock', label: strings.lock.unlockPerson }]),
+                ]),
             ];
-            if (!isTreeLocked) {
-                items.push({ action: 'toggle-lock', label: strings.lock.unlockPerson, divider: true });
-            }
-            return [...items, ...research];
         }
-        const items: PersonMenuAction[] = [
-            { action: 'focus', label: strings.contextMenu.focus },
-            { action: 'edit', label: strings.contextMenu.edit },
+        const chip = (action: string, label: string, ariaLabel: string): PersonMenuAction => ({ action, label, ariaLabel });
+        return [
+            { action: 'focus', label: c.focus },
+            { action: 'edit', label: c.edit },
             ...readItems(true),
-            { action: 'descendants', label: strings.contextMenu.showDescendants },
+            { action: 'descendants', label: c.showDescendants },
+            {
+                action: 'add', label: c.addSection, header: c.addSection, divider: true, chips: [
+                    ...(person.parentIds.length < 2 ? [chip('parent', c.chipParent, c.addParent)] : []),
+                    chip('partner', c.chipPartner, c.addPartner),
+                    chip('child', c.chipChild, c.addChild),
+                    chip('sibling', c.chipSibling, c.addSibling),
+                    chip('add-family', c.chipFamily, strings.familyWizard.menu),
+                ],
+            },
+            ...group([
+                { action: 'relationship', label: c.relationship },
+                { action: 'archives', label: c.archives },
+            ]),
+            ...group([
+                ...research,
+                ...submenuRow('more', c.more, [
+                    { action: 'toggle-lock', label: strings.lock.lockPerson },
+                    { action: 'merge', label: `${strings.personMerge.mergeWith}...` },
+                    { action: 'delete', label: c.delete, danger: true, divider: true },
+                ]),
+            ]),
         ];
-        // Add… group
-        if (person.parentIds.length < 2) {
-            items.push({ action: 'parent', label: strings.contextMenu.addParent, divider: true });
-        }
-        items.push({ action: 'partner', label: strings.contextMenu.addPartner, divider: person.parentIds.length >= 2 });
-        items.push({ action: 'child', label: strings.contextMenu.addChild });
-        items.push({ action: 'sibling', label: strings.contextMenu.addSibling });
-        items.push({ action: 'add-family', label: strings.familyWizard.menu });
-        // Everything else
-        items.push({ action: 'relationship', label: strings.contextMenu.relationship, divider: true });
-        items.push({ action: 'archives', label: strings.contextMenu.archives });
-        items.push({ action: 'toggle-lock', label: strings.lock.lockPerson });
-        items.push({ action: 'merge', label: `${strings.personMerge.mergeWith}...` });
-        items.push({ action: 'delete', label: strings.contextMenu.delete, danger: true });
-        return [...items, ...research];
     },
 
     /** Run a person menu action (shared by context menu + bottom sheet). */
@@ -224,6 +263,31 @@ export const contextMenuMethods = uiModule({
         }
     },
 
+    /**
+     * Markup of person menu rows for the desktop menu and its flyouts: plain
+     * rows, the "Add" grid, and rows that open a flyout (data-submenu = the
+     * row's index in `items`).
+     */
+    contextMenuItemsHtml(items: PersonMenuAction[]): string {
+        return items.map((a, i) => {
+            const divider = a.divider ? '<div class="context-menu-divider"></div>' : '';
+            const header = a.header ? `<div class="menu-section-header" role="presentation">${this.escapeHtml(a.header)}</div>` : '';
+            if (a.chips) {
+                return `${divider}${header}<div class="menu-chip-grid" role="group" aria-label="${this.escapeHtml(a.label)}">`
+                    + a.chips.map(ch => `<button type="button" class="context-menu-item menu-chip" role="menuitem" tabindex="-1" data-action="${ch.action}"${menuItemAria(ch)}>${this.escapeHtml(ch.label)}</button>`).join('')
+                    + '</div>';
+            }
+            if (a.submenu) {
+                return `${divider}${header}<div class="context-menu-item menu-submenu-row" role="menuitem" tabindex="-1" aria-haspopup="menu" aria-expanded="false" data-submenu="${i}" data-menu="${a.action}"${menuItemAria(a)}>${menuItemBody(a)}</div>`;
+            }
+            // NB: keep the class value out of the attribute as a whole variable —
+            // interpolating a `${... ? ... : ...}` directly inside class="context-menu…"
+            // confuses the self-export HTML cleaner's regex once minified.
+            const cls = a.danger ? 'context-menu-item danger' : 'context-menu-item';
+            return `${divider}${header}<div class="${cls}" role="menuitem" tabindex="-1" data-action="${a.action}"${menuItemAria(a)}>${menuItemBody(a)}</div>`;
+        }).join('');
+    },
+
     showContextMenu(personId: PersonId, event: MouseEvent): void {
         event.preventDefault();
         event.stopPropagation();
@@ -242,7 +306,7 @@ export const contextMenuMethods = uiModule({
         if (actions.length === 0) return;
 
         const menu = document.createElement('div');
-        menu.className = 'context-menu';
+        menu.className = 'context-menu person-menu';
         menu.setAttribute('role', 'menu');
         // Header names the person the menu acts on (serif, per the Letopis design).
         const person = DataManager.getPerson(personId);
@@ -250,27 +314,92 @@ export const contextMenuMethods = uiModule({
         const header = personName
             ? `<div class="context-menu-header">${this.escapeHtml(personName)}</div>`
             : '';
-        // NB: keep the class value out of the attribute as a whole variable —
-        // interpolating a `${... ? ... : ...}` directly inside class="context-menu…"
-        // confuses the self-export HTML cleaner's regex once minified.
         // Items are text-only here (the mobile bottom sheet keeps the glyphs).
-        menu.innerHTML = header + this.personSignalsMenuHtml(personId, false, 'context-menu-item') + actions.map(a => {
-            const cls = a.danger ? 'context-menu-item danger' : 'context-menu-item';
-            const divider = a.divider ? '<div class="context-menu-divider"></div>' : '';
-            const header = a.header ? `<div class="menu-section-header" role="presentation">${this.escapeHtml(a.header)}</div>` : '';
-            return `${divider}${header}<div class="${cls}" role="menuitem" tabindex="-1" data-action="${a.action}"${menuItemAria(a)}>${menuItemBody(a)}</div>`;
-        }).join('');
+        menu.innerHTML = header + this.personSignalsMenuHtml(personId, false, 'context-menu-item') + this.contextMenuItemsHtml(actions);
 
         // Position menu near click (adjusted after DOM insert)
         const rect = (event.target as HTMLElement).closest('.person-card')?.getBoundingClientRect();
         menu.style.left = `${rect ? rect.right + 10 : event.clientX}px`;
         menu.style.top = `${rect ? rect.top : event.clientY}px`;
 
-        menu.querySelectorAll('.context-menu-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const action = (item as HTMLElement).dataset.action;
-                this.hideContextMenu();
-                if (action) this.runPersonMenuAction(personId, action);
+        const run = (item: HTMLElement): void => {
+            const action = item.dataset.action;
+            this.hideContextMenu();
+            if (action) this.runPersonMenuAction(personId, action);
+        };
+        menu.querySelectorAll<HTMLElement>('.context-menu-item[data-action]').forEach(item => {
+            item.addEventListener('click', () => run(item));
+        });
+
+        // Rows with a second level ("Research ›", "More ›"): a flyout beside
+        // the menu, like "Tree:" in the ⋯ menu — on hover (after a moment),
+        // click, Enter or →; ← or Esc closes it again.
+        let hoverTimer: ReturnType<typeof setTimeout> | null = null;
+        const clearHover = (): void => { if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; } };
+        const openSubmenu = (row: HTMLElement, focusFirst: boolean): void => {
+            clearHover();
+            const items = actions[Number(row.dataset.submenu)]?.submenu;
+            if (!items) return;
+            if (row.classList.contains('submenu-open') && this.contextSubmenu) {
+                if (focusFirst) this.contextSubmenu.querySelector<HTMLElement>('.context-menu-item')?.focus();
+                return;
+            }
+            this.closeContextSubmenu();
+            const sub = document.createElement('div');
+            sub.className = 'context-menu context-submenu';
+            sub.setAttribute('role', 'menu');
+            sub.setAttribute('aria-label', row.textContent?.replace('›', '').trim() ?? '');
+            sub.innerHTML = this.contextMenuItemsHtml(items);
+            sub.querySelectorAll<HTMLElement>('.context-menu-item[data-action]').forEach(item => {
+                item.addEventListener('click', () => run(item));
+            });
+            sub.addEventListener('mouseenter', clearHover);
+            sub.addEventListener('keydown', (e) => {
+                if (e.key !== 'ArrowLeft' && e.key !== 'Escape') return;
+                // Only the flyout closes; the menu stays (a second Esc closes it).
+                e.preventDefault();
+                e.stopPropagation();
+                this.closeContextSubmenu();
+                row.focus();
+            });
+            row.classList.add('submenu-open');
+            row.setAttribute('aria-expanded', 'true');
+            document.body.appendChild(sub);
+            this.contextSubmenu = sub;
+            // Beside the menu (left of it when the right has no room), level
+            // with the row, fitted into the window.
+            const menuRect = menu.getBoundingClientRect();
+            const rowRect = row.getBoundingClientRect();
+            const width = sub.offsetWidth;
+            const left = menuRect.right + 4 + width <= window.innerWidth - FLYOUT_MARGIN
+                ? menuRect.right + 4 : Math.max(FLYOUT_MARGIN, menuRect.left - 4 - width);
+            const top = rowRect.top - 8;
+            const { shift, maxHeight } = fitFlyout(top, sub.offsetHeight, window.innerHeight);
+            sub.style.maxHeight = `${maxHeight}px`;
+            sub.style.left = `${left}px`;
+            sub.style.top = `${Math.max(FLYOUT_MARGIN, top - shift)}px`;
+            if (focusFirst) sub.querySelector<HTMLElement>('.context-menu-item')?.focus();
+        };
+        menu.querySelectorAll<HTMLElement>('.context-menu-item').forEach(item => {
+            const isRow = item.dataset.submenu !== undefined;
+            item.addEventListener('mouseenter', () => {
+                clearHover();
+                if (isRow) {
+                    if (!item.classList.contains('submenu-open')) hoverTimer = setTimeout(() => openSubmenu(item, false), 150);
+                } else if (this.contextSubmenu) {
+                    hoverTimer = setTimeout(() => this.closeContextSubmenu(), 150);
+                }
+            });
+            if (!isRow) return;
+            item.addEventListener('click', () => openSubmenu(item, true));
+            item.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openSubmenu(item, true);
+                } else if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    this.closeContextSubmenu();
+                }
             });
         });
 
@@ -315,6 +444,7 @@ export const contextMenuMethods = uiModule({
         this.contextMenuCloseHandler = (e: Event) => {
             const target = e.target as Node;
             if (this.contextMenu && this.contextMenu.contains(target)) return;
+            if (this.contextSubmenu && this.contextSubmenu.contains(target)) return;
             if ((target as Element).closest?.('.person-card')) return;
             this.hideContextMenu();
         };
@@ -324,7 +454,20 @@ export const contextMenuMethods = uiModule({
         }, 10);
     },
 
+    /** Close the person menu's open flyout (the menu stays). False when none was open. */
+    closeContextSubmenu(): boolean {
+        if (!this.contextSubmenu) return false;
+        this.contextSubmenu.remove();
+        this.contextSubmenu = null;
+        this.contextMenu?.querySelectorAll('.menu-submenu-row.submenu-open').forEach(row => {
+            row.classList.remove('submenu-open');
+            row.setAttribute('aria-expanded', 'false');
+        });
+        return true;
+    },
+
     hideContextMenu(): void {
+        this.closeContextSubmenu();
         if (this.contextMenuCloseHandler) {
             document.removeEventListener('mousedown', this.contextMenuCloseHandler, true);
             document.removeEventListener('touchstart', this.contextMenuCloseHandler, true);

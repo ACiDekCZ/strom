@@ -104,6 +104,8 @@ export class UIClass {
     relationContext: RelationContext | null = null;
     contextMenu: HTMLElement | null = null;
     contextMenuCloseHandler: ((e: Event) => void) | null = null;
+    /** The open flyout of a person menu row ("Research ›", "More ›"). */
+    contextSubmenu: HTMLElement | null = null;
     crossTreeChooser: HTMLElement | null = null;
     crossTreeChooserCloseHandler: ((e: Event) => void) | null = null;
     bottomSheet: HTMLElement | null = null;

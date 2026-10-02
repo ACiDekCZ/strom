@@ -1,7 +1,7 @@
 /**
  * The research's actions from the app — a Strom Research tree, on a
- * computer: the ⋯ "Research" submenu, the person menu's "In the research"
- * section, the "Review again" dialog and "Find a source in the research".
+ * computer: the ⋯ "Research" submenu, the person menu's "Research ›", the
+ * "Review again" dialog and "Find a source in the research".
  * Every action is a strom-research:// link the research announced (see
  * research-ui.ts, section F); the work itself happens in the research, which
  * asks the user there before it writes or spends anything.
@@ -289,9 +289,10 @@ export const researchActionsMethods = uiModule({
     },
 
     /**
-     * "In the research" at the end of the person menu: a person of a research
-     * tree, on a computer, with the links announced. Nothing here changes the
-     * app, so it is offered on locked people and read-only trees too.
+     * The research's actions for the person menu's "Research ›" (after "What
+     * the research knows"): a person of a research tree, on a computer, with
+     * the links announced. Nothing here changes the app, so it is offered on
+     * locked people and read-only trees too.
      */
     personResearchActions(personId: PersonId): PersonMenuAction[] {
         if (!this.personResearchRef(personId)) return [];
@@ -321,7 +322,6 @@ export const researchActionsMethods = uiModule({
             items.push({ action: 'research-ask', label: r.askAgent, external: true, badge: 'ai',
                 ariaLabel: `${r.askAgent}, ${r.aiBadge}, ${r.opensInResearchSr}` });
         }
-        if (items.length > 0) items[0] = { ...items[0], divider: true, header: r.personSection };
         return items;
     },
 

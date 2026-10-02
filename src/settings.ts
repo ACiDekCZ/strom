@@ -328,6 +328,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** The export dialog's scope: the whole tree or only the current view. */
+    getExportScope(): 'tree' | 'view' {
+        return this.settings.exportScope === 'view' ? 'view' : 'tree';
+    }
+
+    setExportScope(scope: 'tree' | 'view'): void {
+        this.settings.exportScope = scope;
+        this.save();
+    }
+
     /** Whether the user ever picked a density (the sample tree picks one only if not). */
     hasCardDensity(): boolean {
         return this.settings.cardDensity !== undefined;

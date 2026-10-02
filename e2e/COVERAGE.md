@@ -58,6 +58,9 @@ the table honest.
 | Crop editor keyboard; phone layout (360 px, DE) | `source-excerpts.spec.ts` | covered | arrows / Alt+arrows / Enter; no horizontal overflow |
 | Import without images: GEDCOM result, research update dialog | `source-excerpts.spec.ts` | covered | text of sources kept; the choice does not change the setting. JSON import checkbox only when the validation dialog is shown anyway |
 | Sources catalog in the tree actions menu | `menus.spec.ts` | covered | hidden in plain mode, shown with research fields or once a source exists |
+| Person menu: first level (~10 rows), Add grid, Research › / More › flyouts, keyboard, read-only / locked | `card-menu.spec.ts` | covered | a submenu of one is its item on the first level; the Research row carries the conflict tag |
+| Person bottom sheet: tiles, Add grid, second page with ‹ Back, 560 px at most, notice two lines | `card-menu.spec.ts` | covered | 360 × 640 with a notice: no scrolling; tablet 1366: centred |
+| Actions menu by intent: content, outputs, Research, Tree:; one Export… with the whole tree / view switch | `menus.spec.ts`, `export-settings-structure.spec.ts` | covered | no Undo/Redo rows (toolbar); view + JSON = the shown people; the switch is remembered |
 | Parent relationship type (adoptive) | `parent-rel-type.spec.ts` | covered | select sets adoptive, child drop dashed, persists |
 | Duplicate suggestion in new-person modal | `duplicate-suggest.spec.ts` | covered | hint appears, "Go to person" focuses existing |
 | Duplicate "use existing" in add-relation | `duplicate-suggest.spec.ts` | covered | links existing person, no duplicate created |
@@ -172,7 +175,7 @@ settings (`seedResearchPromoSeen`); `research-promo.spec.ts` opts out with
 | One-time 3.0 card on an existing tree: desktop card anchored under Actions (14px gap, 384px, arrow on the button centre, ≥16px from the edge); shown once (also when just ignored) | `research-promo.spec.ts` | covered | "Learn more" opens the site; reload shows nothing |
 | "Not now" / "Learn more" / Esc / backdrop tap put the dot and the label out | `research-promo.spec.ts` | covered | desktop, phone sheet, 1024px tablet sheet |
 | Dot on Actions (desktop) and on the bottom-bar More tab (≤1024px); none on the top ⋯; red anniversaries dot wins | `research-promo.spec.ts` | covered | `aria-label` "Actions, new item" / "More, new item" while lit |
-| Menu item (desktop menu below "Strom:", More sheet below the tree row) → explanation dialog; dialog puts "New" out; item stays; primary opens the site; Close / outside click close | `research-promo.spec.ts` | covered | ≤499px: stacked full-width buttons, primary on top, ≥48px |
+| Menu item (desktop menu and More sheet right above "Strom:") → explanation dialog; dialog puts "New" out; item stays; primary opens the site; Close / outside click close | `research-promo.spec.ts` | covered | ≤499px: stacked full-width buttons, primary on top, ≥48px |
 | "New" out after 30 days | `research-promo.spec.ts` | covered | `researchNewFirstSeen` moved 31 days back |
 | Hidden: view mode (exported HTML with data), exported app from disk, locked data / password prompt, research tree (card + label, item stays), command-line open (card; "New" stays) | `research-promo.spec.ts` | covered | CLI open simulated with `?open=file` |
 | Keyboard: ArrowUp / Tab reach the item, Enter opens the dialog, Esc closes card and dialog, focus back to the trigger / the tree | `research-promo.spec.ts` | covered | |

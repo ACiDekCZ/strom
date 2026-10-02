@@ -86,7 +86,59 @@ export const importExportMethods = uiModule({
         }
         this.pushDialog('export-modal');
 
+        this.renderExportScope();
         document.getElementById('export-modal')?.classList.add('active');
+    },
+
+    /**
+     * The export dialog's "Whole tree · Current view only (N people)" switch
+     * (remembered). The view exists for the active tree only, and only when
+     * it shows anyone (the fan / timeline views lay out no people); in the
+     * view scope the formats that cannot export a view are disabled.
+     */
+    renderExportScope(): void {
+        const modal = document.getElementById('export-modal');
+        if (!modal) return;
+        const isActive = this.exportTargetTreeId === TreeManager.getActiveTreeId();
+        const count = isActive ? TreeRenderer.getVisiblePersonIds().size : 0;
+        const scope = count > 0 ? SettingsManager.getExportScope() : 'tree';
+        modal.classList.toggle('scope-view', scope === 'view');
+        const viewBtn = document.getElementById('export-scope-view') as HTMLButtonElement | null;
+        if (viewBtn) {
+            viewBtn.textContent = strings.exportMenu.scopeView(count);
+            viewBtn.disabled = count === 0;
+        }
+        modal.querySelectorAll<HTMLButtonElement>('.export-scope .segment-btn').forEach(btn => {
+            const on = btn.dataset.scope === scope;
+            btn.classList.toggle('active', on);
+            btn.setAttribute('aria-checked', String(on));
+        });
+        modal.querySelectorAll<HTMLButtonElement>('.menu-options .menu-option').forEach(option => {
+            if (option.hasAttribute('data-view-ok')) return;
+            const text = option.querySelector('.option-text');
+            let note = text?.querySelector('.option-scope-note');
+            if (text && !note) {
+                note = document.createElement('span');
+                note.className = 'option-desc option-scope-note';
+                text.appendChild(note);
+            }
+            if (note) note.textContent = strings.exportMenu.scopeWholeOnly;
+            option.disabled = scope === 'view';
+        });
+    },
+
+    setExportScope(scope: 'tree' | 'view'): void {
+        SettingsManager.setExportScope(scope);
+        this.renderExportScope();
+    },
+
+    /** The export dialog's JSON backup: the whole tree, or only the people the view shows. */
+    exportBackupFromDialog(): void {
+        if (document.getElementById('export-modal')?.classList.contains('scope-view')) {
+            void this.exportFocusedJSON();
+        } else {
+            void this.exportTargetTreeJSON();
+        }
     },
 
     /**
@@ -251,7 +303,8 @@ export const importExportMethods = uiModule({
     },
 
     /**
-     * Export focused data as JSON (from main export dialog)
+     * Export the people the view shows as JSON (the export dialog's JSON
+     * backup in the "Current view only" scope).
      */
     async exportFocusedJSON(): Promise<void> {
         this.closeExportDialog();

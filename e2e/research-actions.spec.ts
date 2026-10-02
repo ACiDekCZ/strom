@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card } from './helpers.js';
+import { openApp, card, openPersonSubmenu } from './helpers.js';
 
 /**
  * The research's actions from the app (a Strom Research tree, on a computer):
@@ -275,19 +275,26 @@ test.describe('live research: Waiting for you', () => {
     });
 });
 
-test.describe('person menu: In the research', () => {
-    test('at the end with its heading, AI label at "Ask the agent"; none without REFN', async ({ page }) => {
+test.describe('person menu: Research ›', () => {
+    test('a row at the end opening the research\'s actions, AI label at "Ask the agent"; none without REFN', async ({ page }) => {
         await setup(page);
         const actions = await personMenu(page, 'Jan');
-        expect(actions.slice(-4)).toEqual(['research-review', 'research-ancestors', 'research-descendants', 'research-ask']);
-        const menu = page.locator('.context-menu');
-        await expect(menu.locator('.menu-section-header')).toHaveText('In the research');
-        const ask = menu.locator('[data-action="research-ask"]');
+        expect(actions).not.toContain('research-review');
+        const row = page.locator('.context-menu [data-menu="research"]');
+        await expect(row.locator('.menu-item-label')).toHaveText('Research');
+        await expect(row).toHaveAttribute('aria-haspopup', 'menu');
+        const sub = await openPersonSubmenu(page, 'research');
+        expect(await sub.locator('[data-action]').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action)))
+            .toEqual(['research-review', 'research-ancestors', 'research-descendants', 'research-ask']);
+        // No heading any more: the row names the research.
+        await expect(sub.locator('.menu-section-header')).toHaveCount(0);
+        const ask = sub.locator('[data-action="research-ask"]');
         await expect(ask.locator('.research-ai-badge')).toHaveText('AI');
         await expect(ask).toHaveAttribute('aria-label', 'Ask the agent, AI, opens in the research');
-        await menu.locator('[data-action="research-ancestors"]').click();
+        await sub.locator('[data-action="research-ancestors"]').click();
         await personMenu(page, 'Jan');
-        await page.locator('.context-menu [data-action="research-ask"]').click();
+        await openPersonSubmenu(page, 'research');
+        await page.locator('.context-submenu [data-action="research-ask"]').click();
         await expect(page.locator('.toast')).toContainText('Opening the agent…');
         expect(await launched(page)).toEqual([
             `strom-research://research?tree=${UUID}&person=P0012&direction=ancestors`,
@@ -296,13 +303,14 @@ test.describe('person menu: In the research', () => {
         await page.keyboard.press('Escape');
 
         expect(await personMenu(page, 'Karel')).not.toContain('research-review');
-        await expect(page.locator('.context-menu .menu-section-header')).toHaveCount(0);
+        await expect(page.locator('.context-menu [data-menu="research"]')).toHaveCount(0);
     });
 
     test('"Review again": person by default, the choice is remembered, the link carries the scope', async ({ page }) => {
         await setup(page);
         await personMenu(page, 'Jan');
-        await page.locator('.context-menu [data-action="research-review"]').click();
+        await openPersonSubmenu(page, 'research');
+        await page.locator('.context-submenu [data-action="research-review"]').click();
         const dialog = page.locator('#research-review-modal');
         await expect(dialog).toBeVisible();
         await expect(dialog.locator('.modal')).toHaveAttribute('data-dialog-kind', 'choice');
@@ -315,7 +323,8 @@ test.describe('person menu: In the research', () => {
         await expect(page.locator('.toast')).toContainText('Opening the research…');
 
         await personMenu(page, 'Jan');
-        await page.locator('.context-menu [data-action="research-review"]').click();
+        await openPersonSubmenu(page, 'research');
+        await page.locator('.context-submenu [data-action="research-review"]').click();
         await expect(dialog.getByRole('radio', { name: /With family/ })).toBeChecked();
         await dialog.getByRole('button', { name: 'Cancel' }).click();
         await expect(dialog).toHaveCount(0);
@@ -323,7 +332,8 @@ test.describe('person menu: In the research', () => {
 
         // Someone who may be living: the research asks first — said here.
         await personMenu(page, 'Eva');
-        await page.locator('.context-menu [data-action="research-review"]').click();
+        await openPersonSubmenu(page, 'research');
+        await page.locator('.context-submenu [data-action="research-review"]').click();
         await expect(dialog.locator('.research-review-living')).toHaveText('This person may be living. The research will ask first.');
         await page.keyboard.press('Escape');
         await expect(dialog).toHaveCount(0);

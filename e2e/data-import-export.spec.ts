@@ -329,8 +329,10 @@ test('make a tree from the current view creates a separate tree of the shown peo
     const treesBefore = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
     const shown = await page.evaluate(() => window.Strom.TreeRenderer.getVisiblePersonIds().size);
 
-    await page.evaluate(() => window.Strom.UI.showExportDialog());
-    await page.locator('#make-tree-from-view-btn').click();
+    // ⋯ → Tree: → From the current view → Make a new tree.
+    await page.locator('.actions-menu-btn').click();
+    await page.locator('#actions-tree-row').click();
+    await page.locator('#actions-tree-submenu .tree-switcher-action', { hasText: 'Make a new tree' }).click();
     const importDialog = page.locator('#import-tree-modal');
     await expect(importDialog).toBeVisible();
     // Name is pre-filled from the focus person.

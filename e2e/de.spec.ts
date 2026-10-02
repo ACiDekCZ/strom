@@ -103,7 +103,7 @@ test('German UI: html lang and the main dialogs are free of English words', asyn
     const exportModal = page.locator('#export-modal');
     await expectNoEnglish(exportModal, 'Export dialog');
     // …and its password/privacy step (privacy mode options included).
-    await exportModal.locator('.menu-option[onclick*="exportTargetTreeJSON"]').click();
+    await exportModal.locator('#export-backup-btn').click();
     const pwd = page.locator('#export-password-modal');
     await expectNoEnglish(pwd, 'Export password/privacy dialog');
     await closeWithEscape(page, pwd);

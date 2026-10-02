@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { openApp, createFirstPerson, addRelation, card, cardAction, personModal } from './helpers.js';
 
 /**
- * Person menu → "Show sources" / "Show story": a look at a person's sources
+ * Person menu → "Sources" / "Story": a look at a person's sources
  * and narrative without opening the edit form.
  */
 
@@ -43,7 +43,7 @@ async function seedCitations(page: Page): Promise<string> {
     });
 }
 
-test('menu: Focus first, Edit second; Show sources with its count, Show story only with a story', async ({ page }) => {
+test('menu: Focus first, Edit second; Sources with its count, Story only with a story', async ({ page }) => {
     await openApp(page);
     const janId = await seedCitations(page);
 
@@ -52,10 +52,11 @@ test('menu: Focus first, Edit second; Show sources with its count, Show story on
     expect(actions.slice(0, 4)).toEqual(['focus', 'edit', 'sources', 'descendants']);
     const item = page.locator('.context-menu [data-action="sources"]');
     await expect(item.locator('.menu-item-meta')).toHaveText('2');
-    await expect(item).toHaveAttribute('aria-label', 'Show sources, 2');
+    await expect(item).toHaveText('Sources2');
+    await expect(item).toHaveAttribute('aria-label', 'Sources, 2');
     await closeMenu(page);
 
-    // No story → no story item; with a story it sits right under "Show sources".
+    // No story → no story item; with a story it sits right under "Sources".
     expect(actions).not.toContain('story');
     await page.evaluate((id) => window.Strom.DataManager.updatePerson(id, { story: { text: 'Kovar z Lipan.' } }), janId);
     await openMenu(page, 'Jan');
@@ -236,7 +237,8 @@ test('360px: both items in the bottom sheet, dialogs without sideways scrolling'
 
     await openMenu(page, 'Jan');
     const sheet = page.locator('.bottom-sheet-person');
-    await expect(sheet.locator('[data-action="sources"] .menu-item-meta')).toHaveText('2');
+    // Tiles on a phone: the count under the label.
+    await expect(sheet.locator('[data-action="sources"] .sheet-tile-meta')).toHaveText('2');
     await expect(sheet.locator('[data-action="story"]')).toBeVisible();
     await sheet.locator('[data-action="sources"]').click();
     const dialog = page.locator('#person-sources-modal');

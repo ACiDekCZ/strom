@@ -56,14 +56,43 @@ test.describe('menus are mutually exclusive', () => {
 });
 
 /**
- * The "Tree: {name}" submenu at the bottom of the ⋯ actions menu: it names the
- * active tree and opens a flyout carrying EVERY whole-tree action (all except
- * Delete, which stays in the tree manager). Hide belongs here too.
+ * The ⋯ actions menu, ordered by what the user wants to do: the tree's content
+ * (book, sources, anniversaries), the outputs (one Export…, poster, the
+ * fly-through), the research and "Tree: {name}" — about the tree and its
+ * management (all except Delete, which stays in the tree manager).
  */
 test.describe('actions menu "Tree:" submenu', () => {
     test.use({ viewport: { width: 1280, height: 800 } });
 
-    test('names the active tree and carries the whole-tree actions; Delete is absent', async ({ page }) => {
+    test('the first level by intent: no Undo / Redo, one Export…, the anniversaries count on its row', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+
+        await page.locator('.actions-menu-btn').click();
+        const dropdown = page.locator('#actions-menu-dropdown');
+        await expect(dropdown).toHaveClass(/active/);
+        const rows = await dropdown.locator(':scope > .tree-switcher-action:visible, :scope > .actions-tree-wrap:visible > .actions-tree-row')
+            .evaluateAll(els => els.map(el => (el as HTMLElement).innerText.replace(/\s+/g, ' ').trim()));
+        expect(rows[0]).toBe('Family book');
+        expect(rows[1]).toBe('Sources');
+        expect(rows[2]).toMatch(/^Anniversaries/);
+        expect(rows[3]).toBe('Export… whole tree or current view');
+        expect(rows.slice(4, 6)).toEqual(['Poster…', 'Slideshow (TV mode)']);
+        expect(rows[6]).toMatch(/^(Research|AI ancestor research)/);
+        expect(rows[7]).toMatch(/^Tree:/);
+        expect(rows[8]).toBe('Settings');
+        expect(rows).toHaveLength(9);
+        // Undo / Redo are in the toolbar, not here.
+        await expect(dropdown.locator('#actions-undo-row, #actions-redo-row')).toHaveCount(0);
+        // Exactly one "Export", and no two "Merge into…" with the same text.
+        const all = await dropdown.locator('.tree-switcher-action').evaluateAll(els => els.map(el => (el as HTMLElement).textContent!.replace(/\s+/g, ' ').trim()));
+        expect(all.filter(t => t.includes('Export'))).toHaveLength(1);
+        const merges = all.filter(t => t.startsWith('Merge'));
+        expect(new Set(merges).size).toBe(merges.length);
+    });
+
+    test('names the active tree and carries the tree\'s actions in order; Delete is absent', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
 
@@ -78,17 +107,20 @@ test.describe('actions menu "Tree:" submenu', () => {
         await row.hover();
         await expect(submenu).toBeVisible();
 
-        // The whole-tree actions moved in: tree health, book and split are here…
-        await expect(submenu.locator('.tree-switcher-action', { hasText: 'Tree health' })).toBeVisible();
-        await expect(submenu.locator('.tree-switcher-action', { hasText: 'Family book' })).toBeVisible();
-        await expect(submenu.locator('.tree-switcher-action', { hasText: 'Split into families' })).toBeVisible();
-        // …Hide is now offered here too…
-        await expect(submenu.locator('.tree-switcher-action', { hasText: 'Hide' })).toBeVisible();
-        // …but Delete stays in the tree manager only.
+        const items = (await submenu.locator('.tree-switcher-action:visible, .menu-section-header:visible').allInnerTexts()).map(t => t.trim());
+        expect(items.filter(t => t !== 'Save to file…')).toEqual([
+            'Statistics', 'Tree health',
+            'Rename', 'Duplicate', 'Hide',
+            'FROM THE CURRENT VIEW', 'Make a new tree', 'Merge view into…',
+            'Merge into another tree…', 'Split into families…',
+            'Manage trees',
+        ]);
+        // Delete stays in the tree manager only; no standalone "Validate".
         await expect(submenu).not.toContainText('Delete');
-        // The standalone "Validate" row is gone — validation now lives behind
-        // Tree health → Validation details (single entry point).
         await expect(submenu).not.toContainText('Validate');
+        // Book, sources, anniversaries and export moved up to the first level.
+        await expect(submenu).not.toContainText('Family book');
+        await expect(submenu).not.toContainText('Export');
     });
 
     test('the mouse crosses from the row to the flyout without losing it', async ({ page }) => {
@@ -191,16 +223,14 @@ test.describe('tree manager row menu: Escape', () => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
 
-        const sourcesRow = page.locator('#actions-tree-sources-row');
+        const sourcesRow = page.locator('#actions-sources-row');
         await page.locator('.actions-menu-btn').click();
-        await page.locator('#actions-tree-row').hover();
         await expect(sourcesRow).toBeHidden();
         await page.keyboard.press('Escape');
         await page.keyboard.press('Escape');
 
         await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
         await page.locator('.actions-menu-btn').click();
-        await page.locator('#actions-tree-row').hover();
         await expect(sourcesRow).toBeVisible();
         await sourcesRow.click();
         await expect(page.locator('#sources-modal')).toHaveClass(/active/);
@@ -213,8 +243,7 @@ test.describe('tree manager row menu: Escape', () => {
         await page.evaluate(() => window.Strom.DataManager.addSource({ title: 'Matrika N 1861' }));
 
         await page.locator('.actions-menu-btn').click();
-        await page.locator('#actions-tree-row').hover();
-        await expect(page.locator('#actions-tree-sources-row')).toBeVisible();
+        await expect(page.locator('#actions-sources-row')).toBeVisible();
     });
 
     test('the actions menu stays inside the window at every desktop width', async ({ page }) => {

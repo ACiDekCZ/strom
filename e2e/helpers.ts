@@ -113,9 +113,23 @@ export function card(page: Page, firstName: string): Locator {
  */
 export async function cardAction(page: Page, firstName: string, action: string): Promise<void> {
     await card(page, firstName).click();
-    const menu = page.locator('.context-menu, .bottom-sheet-person');
+    const menu = page.locator('.context-menu:not(.context-submenu), .bottom-sheet-person');
     await expect(menu).toBeVisible();
-    await menu.locator(`[data-action="${action}"]`).click();
+    // Lock / merge / delete live under "More ›", the research's actions under "Research ›".
+    const more = ['toggle-lock', 'merge', 'delete'].includes(action);
+    const research = action.startsWith('research-');
+    const row = page.locator(`.context-menu [data-menu="${more ? 'more' : 'research'}"], .bottom-sheet-person [data-menu="${more ? 'more' : 'research'}"]`);
+    if ((more || research) && await row.count() > 0) await row.click();
+    await page.locator(`.context-menu [data-action="${action}"], .bottom-sheet-person [data-action="${action}"]`)
+        .filter({ visible: true }).click();
+}
+
+/** Open the person menu's "More ›" or "Research ›" (desktop flyout / the sheet's second page). */
+export async function openPersonSubmenu(page: Page, which: 'more' | 'research'): Promise<Locator> {
+    await page.locator(`.context-menu [data-menu="${which}"], .bottom-sheet-person [data-menu="${which}"]`).click();
+    const level = page.locator('.context-submenu, .bottom-sheet-person .sheet-page-sub');
+    await expect(level).toBeVisible();
+    return level;
 }
 
 /**

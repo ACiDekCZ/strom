@@ -1,7 +1,7 @@
 /**
- * Read-only looks at one person from the person menu: "Show sources" (every
+ * Read-only looks at one person from the person menu: "Sources" (every
  * source cited on the person, their events and marriages, plus a quick
- * "Cite a source") and "Show story" (the narrative set as prose). Both are
+ * "Cite a source") and "Story" (the narrative set as prose). Both are
  * info dialogs built per open; editing stays in the person dialog.
  */
 

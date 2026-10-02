@@ -606,8 +606,10 @@ export const miscMethods = uiModule({
                     this.hideBottomSheet();
                     return;
                 }
-                // The person menu (a floating menu) closes first and only itself.
+                // The person menu (a floating menu) closes first and only itself
+                // — its open flyout ("Research ›", "More ›") before that.
                 if (this.contextMenu) {
+                    if (this.closeContextSubmenu()) return;
                     this.hideContextMenu();
                     return;
                 }

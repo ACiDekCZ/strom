@@ -892,6 +892,7 @@ export interface AppSettings {
     crossTreeBadges?: boolean;  // default: true - show cross-tree connection badges
     fanKekule?: boolean;  // default: false - show Kekule (ahnentafel) numbers in the fan chart
     cardDensity?: CardDensity;  // default: 'normal' - how much detail a card shows
+    exportScope?: 'tree' | 'view';  // default: 'tree' - the export dialog's whole tree / current view switch
     /** The custom density's lines (src/card-fields.ts); set the first time "Custom" is chosen. */
     cardFields?: import('./card-fields.js').CardFieldSettings;
     familyButton?: boolean;  // default: false - toolbar shortcut to the family wizard

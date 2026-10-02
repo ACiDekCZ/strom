@@ -127,7 +127,7 @@ test('a bottom-bar tab switches the view and lights up copper', async ({ page })
     await expect(page.locator('#timeline-container')).toBeVisible();
 });
 
-test('the "More" sheet exposes the remaining views and the current-view actions', async ({ page }) => {
+test('the "More" sheet exposes the remaining views and one Export…', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
@@ -136,12 +136,15 @@ test('the "More" sheet exposes the remaining views and the current-view actions'
     const sheet = page.locator('.bottom-sheet-menu');
     await expect(sheet).toBeVisible();
 
-    // Section headers (grouped, no emoji) and key items are present.
-    await expect(sheet.locator('.bottom-sheet-section', { hasText: 'Current view' })).toBeVisible();
+    // Fan / Map side by side under "View"; one Export… with its second line.
     await expect(sheet.locator('.bottom-sheet-section', { hasText: /^View$/ })).toBeVisible();
-    await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Fan' })).toBeVisible();
-    await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Map' })).toBeVisible();
-    await expect(sheet.locator('.bottom-sheet-item', { hasText: /^Export$/ })).toBeVisible();
+    const views = sheet.locator('.bottom-sheet-pair').last();
+    await expect(views.locator('.bottom-sheet-item')).toHaveText(['Fan', 'Map']);
+    const fan = (await views.locator('.bottom-sheet-item').first().boundingBox())!;
+    expect(fan.height).toBeGreaterThanOrEqual(44);
+    const exports = sheet.locator('.bottom-sheet-item', { hasText: 'Export' });
+    await expect(exports).toHaveCount(1);
+    await expect(exports).toHaveText('Export…whole tree or current view');
 
     // Poster… opens the view-aware poster dialog and closes the sheet.
     await sheet.locator('.bottom-sheet-item', { hasText: 'Poster' }).click();
@@ -149,7 +152,7 @@ test('the "More" sheet exposes the remaining views and the current-view actions'
     await expect(page.locator('.bottom-sheet-menu')).toHaveCount(0);
 });
 
-test('the "More" sheet mirrors the desktop actions menu: Undo/Redo pair, then Current view, then the prominent Tree row', async ({ page }) => {
+test('the "More" sheet mirrors the desktop actions menu: Undo/Redo pair, content, outputs, views, the Tree row', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
@@ -158,33 +161,29 @@ test('the "More" sheet mirrors the desktop actions menu: Undo/Redo pair, then Cu
     await expect(sheet).toBeVisible();
 
     // The Undo/Redo pair is the compact first group (no section header above it).
-    const pair = sheet.locator('.bottom-sheet-pair');
+    const pair = sheet.locator('.bottom-sheet-pair').first();
     await expect(pair).toBeVisible();
     await expect(pair.locator('.bottom-sheet-item', { hasText: 'Undo' })).toBeVisible();
     await expect(pair.locator('.bottom-sheet-item', { hasText: 'Redo' })).toBeVisible();
 
-    // Section headers appear in the desktop order: Current view, then View, Edits, App.
-    const headers = await sheet.locator('.bottom-sheet-section').allTextContents();
-    expect(headers).toEqual(['Current view', 'View', 'Edits', 'App']);
+    // One section header only: the views.
+    expect(await sheet.locator('.bottom-sheet-section').allTextContents()).toEqual(['View']);
+    const rows = (await sheet.locator('.bottom-sheet-items > .bottom-sheet-item:not(.bottom-sheet-storage-row)').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
+    expect(rows.slice(0, 6)).toEqual(['Family book', 'Anniversaries', 'Export… whole tree or current view', 'Poster…', 'Slideshow (TV mode)', 'AI ancestor research']);
+    expect(rows.slice(-2)).toEqual(['Add family…', 'Settings']);
 
-    // The prominent "Tree: {name}" row sits directly after the Current view group,
-    // carries the active tree's name and a trailing chevron (a submenu opener).
+    // The prominent "Tree: {name}" row carries the active tree's name and a
+    // trailing chevron (a submenu opener).
     const treeRow = sheet.locator('.bottom-sheet-tree-row');
     await expect(treeRow).toBeVisible();
     await expect(treeRow.locator('.bottom-sheet-tree-name')).toHaveText('My Family Tree');
     await expect(treeRow.locator('.bottom-sheet-tree-chevron')).toBeVisible();
 
-    // It is above the fold on a 390x844 phone (visible without scrolling) —
-    // wait for the slide-up transition to settle before measuring.
-    await page.waitForTimeout(350);
-    await expect(treeRow).toBeInViewport({ ratio: 1 });
-
-    // The old top-level "Manage trees" duplicate is gone — it now lives only in
-    // the second-level tree sheet.
+    // "Manage trees" lives only in the second-level tree sheet.
     await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Manage trees' })).toHaveCount(0);
 });
 
-test('tapping the Tree row opens the second-level tree sheet with the full desktop submenu', async ({ page }) => {
+test('tapping the Tree row opens the second-level tree sheet in the desktop submenu\'s order', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
@@ -196,14 +195,11 @@ test('tapping the Tree row opens the second-level tree sheet with the full deskt
     await expect(tree).toBeVisible();
     await expect(tree.locator('.bottom-sheet-menu-title')).toContainText('My Family Tree');
 
-    // Every whole-tree action from the desktop submenu is present (all except
-    // Delete, which stays in the tree manager).
-    for (const label of ['Rename', 'Duplicate', 'Merge into', 'Split into families',
-        'Statistics', 'Family book', 'Export', 'Anniversaries', 'Hide', 'Manage trees']) {
-        await expect(tree.locator('.bottom-sheet-item', { hasText: label }).first()).toBeVisible();
-    }
-    // The standalone "Validate" row is gone — validation now lives behind the
-    // Tree health dashboard (single entry point).
+    // The desktop submenu's order (all except Delete, which stays in the tree manager).
+    const rows = (await tree.locator('.bottom-sheet-item').allInnerTexts()).map(t => t.trim()).filter(t => t !== 'Save to file…');
+    expect(rows).toEqual(['Statistics', 'Tree health', 'Rename', 'Duplicate', 'Hide',
+        'Make a new tree', 'Merge view into…', 'Merge into another tree…', 'Split into families…', 'Manage trees']);
+    await expect(tree.locator('.bottom-sheet-section')).toHaveText('From the current view');
     await expect(tree).not.toContainText('Validate');
 
     // Manage Trees opens the tree manager (proves the second-level rows dispatch).

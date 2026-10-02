@@ -287,16 +287,16 @@ test.describe('existing tree on desktop', () => {
         const badge = menuRow(page).locator('.research-new-badge');
         await expect(badge).toBeVisible();
         await expect(badge).toHaveText('New');
-        // Right below the "Strom:" row, above Settings.
-        // (The "Research" submenu of research trees sits between them, hidden here.)
-        const after = await page.evaluate(() => {
+        // Right above the "Strom:" row, below the outputs.
+        // (The "Research" submenu of research trees takes its place, hidden here.)
+        const before = await page.evaluate(() => {
             const out: string[] = [];
-            for (let n = document.getElementById('actions-tree-wrap')!.nextElementSibling; n && out.length < 2; n = n.nextElementSibling) {
+            for (let n = document.getElementById('actions-tree-wrap')!.previousElementSibling; n && out.length < 2; n = n.previousElementSibling) {
                 if (n.getClientRects().length > 0) out.push(n.id || n.className);
             }
             return out;
         });
-        expect(after).toEqual(['tree-switcher-divider research-menu-divider', 'research-menu-row']);
+        expect(before).toEqual(['research-menu-row', 'tree-switcher-divider']);
 
         await menuRow(page).click();
         const dialog = infoDialog(page);
@@ -333,16 +333,20 @@ test.describe('existing tree on desktop', () => {
         expect((await readSettings(page)).researchNewDismissed).toBe(true);
         expect(await page.evaluate(() => document.activeElement?.classList.contains('person-card'))).toBe(true);
 
-        // Arrows: from the trigger, ArrowUp lands on the last row — the item (1440px: no Settings row).
+        // Arrows: from the trigger, ArrowUp lands on the last row — "Strom:" (1440px:
+        // no Settings row) — and once more on the item above it.
         const trigger = page.locator('.actions-menu-btn');
         await trigger.focus();
         await page.keyboard.press('Enter');
         await expect(page.locator('#actions-menu-dropdown')).toHaveClass(/active/);
         await page.keyboard.press('ArrowUp');
+        await expect(page.locator('#actions-tree-row')).toBeFocused();
+        await page.keyboard.press('ArrowUp');
         await expect(menuRow(page)).toBeFocused();
-        // Tab: from the "Strom:" row the next stop is the item.
-        await page.locator('#actions-tree-row').focus();
+        // Tab: from the item the next stop is the "Strom:" row, Shift+Tab back.
         await page.keyboard.press('Tab');
+        await expect(page.locator('#actions-tree-row')).toBeFocused();
+        await page.keyboard.press('Shift+Tab');
         await expect(menuRow(page)).toBeFocused();
 
         await page.keyboard.press('Enter');
@@ -457,7 +461,7 @@ test.describe('existing tree on a phone', () => {
         await expect(row.locator('.research-new-badge')).toHaveCount(0);
     });
 
-    test('while new: the More sheet row right below the "Strom:" row carries the label; it opens the dialog', async ({ page }) => {
+    test('while new: the More sheet row right above the "Strom:" row carries the label; it opens the dialog', async ({ page }) => {
         await existingTreeFirstRun(page);
         await expect(whatsNew(page)).toBeVisible();
         // A tap on the backdrop = "Not now" — reset the marker to test the row while new.
@@ -472,8 +476,8 @@ test.describe('existing tree on a phone', () => {
         const items = page.locator('.bottom-sheet-menu .bottom-sheet-items > *');
         const classes = await items.evaluateAll(els => els.map(e => e.className + '|' + (e.textContent || '').trim()));
         const treeIdx = classes.findIndex(c => c.includes('bottom-sheet-tree-row'));
-        expect(classes[treeIdx + 1]).toContain('bottom-sheet-divider');
-        expect(classes[treeIdx + 2]).toContain('AI ancestor research');
+        expect(classes[treeIdx - 1]).toContain('AI ancestor research');
+        expect(classes[treeIdx - 2]).toContain('bottom-sheet-divider');
         const row = page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'AI ancestor research' });
         await expect(row).toHaveAttribute('aria-label', 'AI ancestor research, new');
         await expect(row.locator('.research-new-badge')).toHaveText('New');

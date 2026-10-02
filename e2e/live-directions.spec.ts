@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { card } from './helpers.js';
+import { card, openPersonSubmenu } from './helpers.js';
 
 /**
  * Research directions in the Research overview: the Directions section after
@@ -194,13 +194,15 @@ test.describe('research directions', () => {
     test('person menu: a running direction says so and opens it; a paused one restarts', async ({ page }) => {
         await follow(page);
         await card(page, 'Jan').click();
-        const item = page.locator('.context-menu [data-action="research-ancestors"]');
+        await openPersonSubmenu(page, 'research');
+        const item = page.locator('.context-submenu [data-action="research-ancestors"]');
         await expect(item.locator('.menu-item-state')).toHaveText('already running');
         await item.click();
         await expect(row(page, 'G0001').locator('.research-direction__detail')).toBeVisible();
         await page.keyboard.press('Escape');
         await card(page, 'Anna').click();
-        const anna = page.locator('.context-menu [data-action="research-ancestors"]');
+        await openPersonSubmenu(page, 'research');
+        const anna = page.locator('.context-submenu [data-action="research-ancestors"]');
         await expect(anna.locator('.menu-item-note')).toHaveText('Paused · restart');
         await anna.click();
         expect(await launched(page)).toEqual([`strom-research://direction?tree=${UUID}&id=G0004&do=resume`]);

@@ -41,6 +41,7 @@ import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
+import { fitFlyout } from './flyout.js';
 import { uiModule } from './module.js';
 
 import { iconSvg } from '../icons.js';
@@ -221,9 +222,8 @@ export const treeManagementMethods = uiModule({
     refreshActionMenuBadges(): void {
         const count = this.anniversaryBadgeCount();
         // Small dot on the triggers so the signal survives the menu move — the ⋯
-        // button, the mobile "More" tab, and the "Strom:" submenu row (so a
-        // pending anniversary is visible even while the submenu is closed).
-        for (const id of ['actions-menu-dot', 'bottom-bar-more-dot', 'actions-tree-row-dot']) {
+        // button and the mobile "More" tab.
+        for (const id of ['actions-menu-dot', 'bottom-bar-more-dot']) {
             const dot = document.getElementById(id);
             if (dot) dot.style.display = count > 0 ? 'block' : 'none';
         }
@@ -232,8 +232,8 @@ export const treeManagementMethods = uiModule({
             const dot = document.getElementById('actions-menu-dot');
             if (dot) dot.style.display = 'block';
         }
-        // Count badge on the Anniversaries row inside the "Strom:" submenu.
-        const badge = document.getElementById('actions-tree-ann-badge');
+        // Count badge on the Anniversaries row.
+        const badge = document.getElementById('actions-ann-badge');
         if (badge) {
             badge.textContent = count > 0 ? String(count) : '';
             badge.style.display = count > 0 ? 'inline-flex' : 'none';
@@ -241,42 +241,10 @@ export const treeManagementMethods = uiModule({
         // "Change history" row is only offered when the audit log is enabled.
         const auditRow = document.getElementById('actions-tree-audit-row');
         if (auditRow) auditRow.style.display = SettingsManager.isAuditLogEnabled() ? '' : 'none';
-        const sourcesRow = document.getElementById('actions-tree-sources-row');
+        const sourcesRow = document.getElementById('actions-sources-row');
         if (sourcesRow) sourcesRow.style.display = this.isSourcesMenuOffered() ? '' : 'none';
         // Strom Research "New" marker (its dot yields to the anniversaries dot).
         this.refreshResearchNewMarker(count);
-        this.refreshActionsUndoRedo();
-    },
-
-    /**
-     * Refresh the ⋯ menu's Undo / Redo rows: the Undo label carries the last
-     * change's description (grey "Undo" with no description when the stack is
-     * empty); Redo greys out when there is nothing to replay. Shortcut hints
-     * follow the platform. Called whenever the menu opens.
-     */
-    refreshActionsUndoRedo(): void {
-        const s = strings.actions;
-        const undoRow = document.getElementById('actions-undo-row');
-        const undoLabel = document.getElementById('actions-undo-label');
-        const undoHint = document.getElementById('actions-undo-hint');
-        const redoRow = document.getElementById('actions-redo-row');
-        const redoHint = document.getElementById('actions-redo-hint');
-
-        const canUndo = DataManager.canUndo();
-        const desc = canUndo ? DataManager.lastUndoDescription() : null;
-        if (undoLabel) undoLabel.textContent = desc ? s.undoLabel(desc) : s.undoDisabled;
-        if (undoHint) undoHint.textContent = this.shortcutHint('undo');
-        if (undoRow) {
-            undoRow.classList.toggle('menu-row-disabled', !canUndo);
-            undoRow.setAttribute('aria-disabled', String(!canUndo));
-        }
-
-        const canRedo = DataManager.canRedo();
-        if (redoHint) redoHint.textContent = this.shortcutHint('redo');
-        if (redoRow) {
-            redoRow.classList.toggle('menu-row-disabled', !canRedo);
-            redoRow.setAttribute('aria-disabled', String(!canRedo));
-        }
         this.refreshUndoRedoToolbar();
     },
 
@@ -284,7 +252,7 @@ export const treeManagementMethods = uiModule({
      * R3: refresh the desktop toolbar's visible Undo / Redo icon buttons — the
      * disabled state follows canUndo()/canRedo(), and the tooltip carries the
      * platform shortcut (plus the last change's description for Undo). Called on
-     * every mutation / undo / redo, the same beats the toast and menu rows use.
+     * every mutation / undo / redo, the same beats the toast uses.
      */
     refreshUndoRedoToolbar(): void {
         const undoBtn = document.getElementById('toolbar-undo-btn') as HTMLButtonElement | null;
@@ -375,14 +343,12 @@ export const treeManagementMethods = uiModule({
         const sub = document.getElementById(id);
         if (!sub) return;
         sub.style.top = '';
-        const margin = 8;
         const viewport = window.innerHeight;
-        sub.style.maxHeight = `${Math.max(120, viewport - 2 * margin)}px`;
+        sub.style.maxHeight = `${fitFlyout(0, 0, viewport).maxHeight}px`;
         const rect = sub.getBoundingClientRect();
         if (rect.height === 0 || getComputedStyle(sub).visibility === 'hidden') return;   // not shown (hover already left)
-        const overflow = rect.bottom - (viewport - margin);
-        if (overflow <= 0) return;
-        const shift = Math.min(overflow, Math.max(0, rect.top - margin));
+        const { shift } = fitFlyout(rect.top, rect.height, viewport);
+        if (shift <= 0) return;
         const baseTop = parseFloat(getComputedStyle(sub).top) || 0;
         sub.style.top = `${baseTop - shift}px`;
     },
@@ -445,9 +411,8 @@ export const treeManagementMethods = uiModule({
         this.showBookDialog();
     },
     treeActionExport(): void {
-        // The whole-tree export hub for the active tree (JSON / App / GEDCOM /
-        // CSV / Poster / Book / Share). The current-view "Export" in the section
-        // above stays view-scoped; context tells them apart.
+        // The one export hub for the active tree (JSON / App / GEDCOM / CSV /
+        // Poster / Book / Share); its switch picks the whole tree or the view.
         this.closeActionsMenu();
         this.showExportDialog();
     },

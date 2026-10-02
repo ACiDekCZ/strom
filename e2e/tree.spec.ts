@@ -258,7 +258,7 @@ test('cancelling the file picker returns to the New Tree menu, not to nowhere', 
     await expect(page.locator('#tree-manager-modal')).toBeHidden();
 });
 
-test('actions menu: current-view actions (poster, export selection) live in the ⋯ menu', async ({ page }) => {
+test('actions menu: poster and the one Export… live in the ⋯ menu', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
@@ -272,17 +272,15 @@ test('actions menu: current-view actions (poster, export selection) live in the 
     await expect(switcher.locator('.tree-switcher-action', { hasText: 'Manage trees' })).toBeVisible();
     await page.keyboard.press('Escape');
 
-    // Actions live in the desktop ⋯ menu, grouped under section headers.
+    // Actions live in the desktop ⋯ menu, by intent: content, outputs, the tree.
     await page.locator('.actions-menu-btn').click();
     const dropdown = page.locator('#actions-menu-dropdown');
     await expect(dropdown).toHaveClass(/active/);
-    await expect(dropdown.locator('.menu-section-header', { hasText: 'Current view' })).toBeVisible();
-    // The old "Tree" section is gone — its actions live behind the "Tree:" row.
+    await expect(dropdown.locator(':scope > .menu-section-header')).toHaveCount(0);
     await expect(page.locator('#actions-tree-row')).toBeVisible();
-    await expect(dropdown.locator('.tree-switcher-action', { hasText: 'Make a tree' })).toBeVisible();
-    await expect(dropdown.locator('.tree-switcher-action', { hasText: 'Poster' })).toBeVisible();
-    // Current-view "Export" (a direct child of the dropdown, not the submenu one).
-    await expect(page.locator('#actions-menu-dropdown > .tree-switcher-action', { hasText: 'Export' })).toBeVisible();
+    await expect(dropdown.locator(':scope > .tree-switcher-action', { hasText: 'Poster' })).toBeVisible();
+    // One Export…: the whole tree or the current view, chosen in its dialog.
+    await expect(page.locator('#actions-menu-dropdown > .tree-switcher-action', { hasText: 'Export' })).toHaveCount(1);
 
     // Poster… opens the view-aware poster dialog with its "prints the current view" label.
     await dropdown.locator('.tree-switcher-action', { hasText: 'Poster' }).click();
@@ -323,16 +321,14 @@ test('export dialog: view-scoped tiles are gated to the active tree; title names
     const modal = page.locator('#export-modal');
     const treeName = modal.locator('#export-modal-tree-name');
     const poster = modal.locator('.menu-option', { hasText: 'Poster' });
-    const exportView = modal.locator('#export-focus-btn');
-    const makeTree = modal.locator('#make-tree-from-view-btn');
+    const scope = modal.locator('#export-scope');
 
     // Opened for the ACTIVE tree: the view-scoped actions are offered.
     await page.evaluate(() => window.Strom.UI.showExportDialog());
     await expect(modal).toBeVisible();
     await expect(treeName).toHaveText(': Archived');
     await expect(poster).toBeVisible();
-    await expect(exportView).toBeVisible();
-    await expect(makeTree).toBeVisible();
+    await expect(scope).toBeVisible();
     await page.evaluate(() => window.Strom.UI.closeExportDialog());
     await expect(modal).toBeHidden();
 
@@ -345,22 +341,17 @@ test('export dialog: view-scoped tiles are gated to the active tree; title names
     await expect(modal).toBeVisible();
     await expect(treeName).toHaveText(`: ${firstTreeName}`);
     await expect(poster).toBeHidden();
-    await expect(exportView).toBeHidden();
-    await expect(makeTree).toBeHidden();
+    await expect(scope).toBeHidden();
     await page.evaluate(() => window.Strom.UI.closeExportDialog());
 });
 
-test('actions menu: Export (current view) opens the export/privacy dialog for the current view', async ({ page }) => {
+test('actions menu: Export… opens the export dialog with the whole tree / current view switch', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
     await page.locator('.actions-menu-btn').click();
-    // The current-view "Export" is a direct child of the dropdown (the submenu's
-    // whole-tree "Export" is nested inside the "Tree:" flyout).
-    await page.locator('#actions-menu-dropdown > .tree-switcher-action', { hasText: 'Export' }).click();
-
-    // No silent export with defaults: the privacy/password dialog opens focused
-    // on the current view, offering the same options as the export dialog path.
-    await expect(page.locator('#export-password-modal')).toBeVisible();
-    await expect(page.locator('#export-privacy-mode')).toBeVisible();
+    await page.locator('#actions-export-row').click();
+    await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
+    await expect(page.locator('#export-modal')).toBeVisible();
+    await expect(page.locator('#export-scope .segment-btn')).toHaveText(['Whole tree', 'Current view only (1 person)']);
 });

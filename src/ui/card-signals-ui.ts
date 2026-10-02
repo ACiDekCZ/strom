@@ -102,7 +102,8 @@ export const cardSignalsUiMethods = uiModule({
         } else {
             text = c.ttAgent(s.agent ?? '');
         }
-        const body = `${glyph}<span class="menu-signal-text">${this.escapeHtml(text)}</span>${go ? `<span class="menu-signal-go">${this.escapeHtml(go)}</span>` : ''}`;
+        // Two lines at most (CSS); the whole text in the tooltip and behind the link.
+        const body = `${glyph}<span class="menu-signal-text" title="${this.escapeHtml(text)}">${this.escapeHtml(text)}</span>${go ? `<span class="menu-signal-go">${this.escapeHtml(go)}</span>` : ''}`;
         // Only a block that leads somewhere is a menu item (keyboard reaches it);
         // it runs through the menu's own action dispatch ("signal-…").
         if (!go && action !== 'agent') return `<div class="menu-signal menu-signal-${action}" role="note">${body}</div>`;

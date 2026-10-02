@@ -13,7 +13,7 @@ import { SettingsManager } from '../settings.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
-import { menuItemBody, menuItemAria } from './context-menu.js';
+import { menuItemBody, menuItemAria, PersonMenuAction } from './context-menu.js';
 
 /** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
 interface MenuRow {
@@ -22,10 +22,12 @@ interface MenuRow {
     isNew?: boolean;
     /** Accessible name when it differs from the visible label. */
     ariaLabel?: string;
+    /** A quiet second line under the label ("whole tree or current view"). */
+    sub?: string;
 }
 /** The prominent "Strom: {name}" row that opens the second-level tree sheet
  *  (serif name + chevron + tinted background — mirrors the desktop submenu row). */
-interface TreeRow { prefix: string; name: string; run: () => void; badge?: number; }
+interface TreeRow { prefix: string; name: string; run: () => void; }
 /** The "Only in browser" state row on top of the "More" sheet. */
 interface StorageRow { title: string; sub: string; run: () => void; }
 interface MenuBlock { header?: string; rows: MenuRow[]; pair?: MenuRow[]; treeRow?: TreeRow; divider?: boolean; storageRow?: StorageRow; }
@@ -44,13 +46,17 @@ function esc(text: string): string {
 const LONG_PRESS_MS = 500;
 const MOVE_CANCEL_PX = 10;
 const SWIPE_CLOSE_PX = 80;
+const SWIPE_BACK_PX = 60;
+/** The person sheet's tiles, in this order (each when the menu offers it). */
+const TILE_ACTIONS = ['edit', 'focus', 'view', 'sources', 'story'];
 
 export const bottomSheetMethods = uiModule({
     /**
      * Open the person action sheet (touch, and every viewport in the
-     * bottom-navigation regime). Built from the shared action list, with the
-     * same chrome as the "More" sheet: serif title naming the person, text-only
-     * rows, a divider between action groups.
+     * bottom-navigation regime). Built from the shared action list: the
+     * person's own four (edit, focus, sources, story) as tiles on top, the
+     * "Add" grid, then the rows; a row with a second level ("Research ›",
+     * "More ›") turns the sheet into that page (‹ Back returns).
      */
     showPersonBottomSheet(personId: PersonId): void {
         this.hideBottomSheet();
@@ -60,22 +66,51 @@ export const bottomSheetMethods = uiModule({
         const person = DataManager.getPerson(personId);
         const personName = person ? `${person.firstName} ${person.lastName}`.trim() : '';
 
+        // The tiles: in this order, each when the menu offers it.
+        const tiles = TILE_ACTIONS.map(t => actions.find(a => a.action === t)).filter((a): a is PersonMenuAction => !!a);
+        const add = actions.find(a => a.chips);
+        // Under the tiles: "Add" first, then the rows — those about the person
+        // as one group, the last group ("Research ›", "More ›") on its own.
+        const rest = actions.map((a, index) => ({ a, index })).filter(({ a }) => !TILE_ACTIONS.includes(a.action) && !a.chips);
+        const lastGroup = rest.map(r => !!r.a.divider).lastIndexOf(true);
+        rest.forEach((r, i) => { if (i < lastGroup || lastGroup === -1) r.a = { ...r.a, divider: i === 0 && !!add }; });
+
+        const itemHtml = (a: PersonMenuAction, index: number): string => {
+            const divider = a.divider ? '<div class="bottom-sheet-divider" role="separator"></div>' : '';
+            const header = a.header ? `<div class="bottom-sheet-section" role="presentation">${esc(a.header)}</div>` : '';
+            if (a.submenu) {
+                return `${divider}${header}<button type="button" class="bottom-sheet-item sheet-submenu-row" role="menuitem" aria-haspopup="menu" data-submenu="${index}" data-menu="${esc(a.action)}"${menuItemAria(a)}>${menuItemBody(a)}</button>`;
+            }
+            // Keep the class out of the attribute (see context-menu.ts note).
+            const cls = a.danger ? 'bottom-sheet-item danger' : 'bottom-sheet-item';
+            return `${divider}${header}<button type="button" class="${cls}" role="menuitem" data-action="${esc(a.action)}"${menuItemAria(a)}>${menuItemBody(a)}</button>`;
+        };
+        const tilesHtml = tiles.length === 0 ? '' : `<div class="sheet-tiles" style="--tiles: ${tiles.length}">`
+            + tiles.map(t => `<button type="button" class="bottom-sheet-item sheet-tile" role="menuitem" data-action="${esc(t.action)}"${menuItemAria(t)}>`
+                + `<span class="sheet-tile-label">${esc(t.label)}</span>`
+                + (t.meta ? `<span class="sheet-tile-meta" aria-hidden="true">${esc(t.meta)}</span>` : '')
+                + '</button>').join('')
+            + '</div>';
+        const addHtml = add?.chips ? `<div class="bottom-sheet-section" role="presentation">${esc(add.label)}</div>`
+            + `<div class="menu-chip-grid sheet-chip-grid" role="group" aria-label="${esc(add.label)}">`
+            + add.chips.map(ch => `<button type="button" class="bottom-sheet-item menu-chip" role="menuitem" data-action="${esc(ch.action)}"${menuItemAria(ch)}>${esc(ch.label)}</button>`).join('')
+            + '</div>' : '';
+
         const overlay = document.createElement('div');
         overlay.className = 'bottom-sheet-overlay';
         overlay.innerHTML = `
             <div class="bottom-sheet bottom-sheet-person" role="menu"${personName ? ` aria-label="${esc(personName)}"` : ''}>
                 <div class="bottom-sheet-handle"></div>
-                ${personName ? `<div class="bottom-sheet-menu-title">${esc(personName)}</div>` : ''}
-                <div class="bottom-sheet-items">
-                    ${this.personSignalsMenuHtml(personId, true, 'bottom-sheet-item')}
-                    ${actions.map(a => {
-                        // Keep the class out of the attribute (see context-menu.ts note).
-                        const cls = a.danger ? 'bottom-sheet-item danger' : 'bottom-sheet-item';
-                        const divider = a.divider ? '<div class="bottom-sheet-divider" role="separator"></div>' : '';
-                        const header = a.header ? `<div class="bottom-sheet-section" role="presentation">${esc(a.header)}</div>` : '';
-                        return `${divider}${header}<button type="button" class="${cls}" role="menuitem" data-action="${esc(a.action)}"${menuItemAria(a)}>${menuItemBody(a)}</button>`;
-                    }).join('')}
+                <div class="sheet-page sheet-page-root">
+                    ${personName ? `<div class="bottom-sheet-menu-title">${esc(personName)}</div>` : ''}
+                    <div class="bottom-sheet-items">
+                        ${this.personSignalsMenuHtml(personId, true, 'bottom-sheet-item')}
+                        ${tilesHtml}
+                        ${addHtml}
+                        ${rest.map(r => itemHtml(r.a, r.index)).join('')}
+                    </div>
                 </div>
+                <div class="sheet-page sheet-page-sub" hidden></div>
             </div>
         `;
 
@@ -85,18 +120,66 @@ export const bottomSheetMethods = uiModule({
         });
 
         const sheet = overlay.querySelector('.bottom-sheet') as HTMLElement;
-        sheet.querySelectorAll('.bottom-sheet-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const action = (item as HTMLElement).dataset.action;
-                this.hideBottomSheet();
-                if (action) this.runPersonMenuAction(personId, action);
-            });
+        const root = sheet.querySelector('.sheet-page-root') as HTMLElement;
+        const sub = sheet.querySelector('.sheet-page-sub') as HTMLElement;
+        let openRow: HTMLElement | null = null;
+
+        // One page replaces the other in place: the content slides in from
+        // the side and the sheet's height follows smoothly (no jump).
+        const switchPage = (show: HTMLElement, hide: HTMLElement, from: 1 | -1): void => {
+            const before = sheet.offsetHeight;
+            hide.hidden = true;
+            show.hidden = false;
+            const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduced || typeof sheet.animate !== 'function') return;
+            const after = sheet.offsetHeight;
+            const timing = { duration: 200, easing: 'ease' };
+            sheet.animate([{ height: `${before}px` }, { height: `${after}px` }], timing);
+            show.animate([{ transform: `translateX(${from * 100}%)` }, { transform: 'none' }], timing);
+        };
+        const openSubmenu = (row: HTMLElement): void => {
+            const a = actions[Number(row.dataset.submenu)];
+            if (!a?.submenu) return;
+            openRow = row;
+            sub.innerHTML = `<div class="sheet-subhead">`
+                + `<button type="button" class="sheet-back">‹ ${esc(strings.contextMenu.back)}</button>`
+                + `<span class="sheet-subhead-title">${esc(a.label)}</span></div>`
+                + `<div class="bottom-sheet-items">${a.submenu.map((x, i) => itemHtml(x, i)).join('')}</div>`;
+            switchPage(sub, root, 1);
+            sub.querySelector<HTMLElement>('.bottom-sheet-item')?.focus({ preventScroll: true });
+        };
+        const back = (): void => {
+            if (sub.hidden) return;
+            switchPage(root, sub, -1);
+            openRow?.focus({ preventScroll: true });
+        };
+
+        sheet.addEventListener('click', (e) => {
+            const target = e.target as HTMLElement;
+            if (target.closest('.sheet-back')) { back(); return; }
+            const row = target.closest<HTMLElement>('[data-submenu]');
+            if (row) { openSubmenu(row); return; }
+            const item = target.closest<HTMLElement>('[data-action]');
+            if (!item || !sheet.contains(item)) return;
+            const action = item.dataset.action;
+            this.hideBottomSheet();
+            if (action) this.runPersonMenuAction(personId, action);
+        });
+        sheet.addEventListener('keydown', (e) => {
+            // Esc / ← on the second page: back to the first (a second Esc closes).
+            if ((e.key === 'Escape' || e.key === 'ArrowLeft') && !sub.hidden) {
+                e.preventDefault();
+                e.stopPropagation();
+                back();
+            }
         });
 
-        // Swipe-down to dismiss.
+        // Swipe down to dismiss; on the second page a swipe right goes back.
+        let dragStartX = 0;
         let dragStartY = 0;
         let dragging = false;
         sheet.addEventListener('touchstart', (e) => {
+            dragStartX = e.touches[0].clientX;
             dragStartY = e.touches[0].clientY;
             dragging = true;
             sheet.style.transition = 'none';
@@ -104,14 +187,20 @@ export const bottomSheetMethods = uiModule({
         sheet.addEventListener('touchmove', (e) => {
             if (!dragging) return;
             const dy = e.touches[0].clientY - dragStartY;
-            if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
+            const dx = e.touches[0].clientX - dragStartX;
+            if (dy > 0 && dy > Math.abs(dx)) sheet.style.transform = `translateY(${dy}px)`;
         }, { passive: true });
         sheet.addEventListener('touchend', (e) => {
             dragging = false;
             sheet.style.transition = '';
             const dy = e.changedTouches[0].clientY - dragStartY;
-            if (dy > SWIPE_CLOSE_PX) this.hideBottomSheet();
-            else sheet.style.transform = '';
+            const dx = e.changedTouches[0].clientX - dragStartX;
+            if (dy > SWIPE_CLOSE_PX && dy > Math.abs(dx)) {
+                this.hideBottomSheet();
+                return;
+            }
+            sheet.style.transform = '';
+            if (!sub.hidden && dx > SWIPE_BACK_PX && Math.abs(dy) < dx / 2) back();
         });
 
         document.body.appendChild(overlay);
@@ -130,15 +219,14 @@ export const bottomSheetMethods = uiModule({
     /**
      * The mobile "More" (Více) navigation sheet — the successor to the removed
      * hamburger menu. It MIRRORS the desktop ⋯ actions menu (index.html
-     * #actions-menu-dropdown): a compact Undo/Redo pair on top, the "Current
-     * view" section, then the prominent "Strom: {name}" row that opens the
-     * second-level tree sheet (the counterpart of the desktop submenu), and
-     * finally the global rows. Two mobile-only groups have no desktop actions-
-     * menu equivalent because desktop reaches them elsewhere: the extra views
-     * (Fan/Map — no bottom-bar tab) and Add family (no toolbar button on the
-     * bar); they sit below the tree row so the important rows stay above the
-     * fold. Opened from the bottom-bar "More" tab and the top bar's ⋯ button.
-     * Gating mirrors the desktop menu (edit-only rows drop in read-only view).
+     * #actions-menu-dropdown), ordered by what the user wants to do: the
+     * tree's content (book, sources, anniversaries), the outputs (one Export…,
+     * poster, fly-through), then the "Strom: {name}" row that opens the
+     * second-level tree sheet (the counterpart of the desktop submenu). Mobile
+     * only: the Undo/Redo pair on top (desktop has it in the toolbar), the
+     * extra views (Fan/Map — no bottom-bar tab) and Add family (no toolbar
+     * button on the bar). Opened from the bottom-bar "More" tab and the top
+     * bar's ⋯ button. Edit-only rows drop in read-only view.
      */
     showMoreMenuSheet(): void {
         this.hideBottomSheet();
@@ -161,8 +249,7 @@ export const bottomSheetMethods = uiModule({
             } });
         }
 
-        // 1) Undo / Redo — compact first group, like the top of the desktop menu
-        //    (edit-only; the sheet is the mobile home for these beyond the toast).
+        // 1) Undo / Redo — the mobile home for these beyond the toast.
         if (!isView) {
             blocks.push({ rows: [], pair: [
                 { label: s.undo.undo, run: () => this.performUndo() },
@@ -170,55 +257,48 @@ export const bottomSheetMethods = uiModule({
             ] });
         }
 
-        // 2) Current view actions (mirrors the desktop "Current view" section).
-        const current: MenuRow[] = [
+        // 2) The tree's content (a manageable tree only, like the desktop menu).
+        const active = isView ? null : TreeManager.getActiveTreeMetadata();
+        if (active) {
+            blocks.push({ divider: blocks.length > 0, rows: [
+                { label: s.book.menu, run: () => this.showBookDialog() },
+                ...(this.isSourcesMenuOffered() ? [{ label: s.sources.menu, run: () => this.showSourcesDialog() }] : []),
+                { label: s.anniversaries.menu, run: () => this.showAnniversariesDialog(), badge: this.anniversaryBadgeCount() },
+            ] });
+        }
+
+        // 3) Outputs: one Export… (whole tree or the current view, chosen in
+        //    its dialog; a read-only view exports what it shows), poster, fly-through.
+        blocks.push({ divider: blocks.length > 0, rows: [
+            active
+                ? { label: s.menu.exportAll, sub: s.menu.exportAllSub, run: () => this.showExportDialog() }
+                : { label: s.menu.exportAll, run: () => this.exportFocusedJSON() },
             { label: s.menu.poster, run: () => this.showPosterDialog() },
-            { label: s.menu.exportSelection, run: () => this.exportFocusedJSON() },
-        ];
-        if (!isView) {
-            current.push({ label: s.menu.makeTree, run: () => this.makeTreeFromCurrentView() });
-            current.push({ label: s.menu.mergeViewInto, run: () => this.mergeViewInto() });
-        }
-        current.push({ label: s.slideshow.menu, run: () => this.startSlideshow() });
-        blocks.push({ header: s.menu.sectionCurrentView, rows: current });
+            { label: s.slideshow.menu, run: () => this.startSlideshow() },
+        ] });
 
-        // 3) The prominent "Strom: {name}" row — every whole-tree action lives
-        //    behind it (the mobile counterpart of the desktop submenu, incl. the
-        //    anniversaries badge). Nothing to manage per-tree in read-only view.
-        if (!isView) {
-            const active = TreeManager.getActiveTreeMetadata();
-            if (active) {
-                blocks.push({ rows: [], treeRow: {
-                    prefix: s.menu.treeActions,
-                    name: active.name,
-                    run: () => this.showTreeActionsSheet(),
-                    // The dot rides the top row so a pending notice shows
-                    // without opening the second level.
-                    badge: this.anniversaryBadgeCount(),
-                } });
-            }
-        }
-
-        // 3b) Strom Research — right below the tree row, above the fold on a
-        //     phone (never in read-only views or exported files).
-        const research = this.researchMenuSheetRow();
-        if (research) blocks.push({ divider: true, rows: [research] });
-
-        // 4) Extra views (Fan/Map) — no bottom-bar tab of their own.
-        blocks.push({ header: s.menu.sectionView, rows: [
+        // 4) Extra views (Fan/Map — no bottom-bar tab of their own), side by side.
+        blocks.push({ divider: true, header: s.menu.sectionView, rows: [], pair: [
             { label: s.viewModeSwitch.fan, run: () => this.setDisplayViewMode('fan'), active: mode === 'fan' },
             { label: s.viewModeSwitch.map, run: () => this.setDisplayViewMode('map'), active: mode === 'map' },
         ] });
 
-        // 5) Edits with no bottom-bar home (dropped in read-only view mode).
-        if (!isView) {
-            blocks.push({ header: s.menu.sectionEdits, rows: [
-                { label: s.familyWizard.title, run: () => this.startFamilyWizardFromToolbar() },
-            ] });
+        // 5) Strom Research, then the "Strom: {name}" row — every whole-tree
+        //    action lives behind it (never in read-only views).
+        const research = this.researchMenuSheetRow();
+        const managed: MenuBlock = { divider: true, rows: research ? [research] : [] };
+        if (active) {
+            managed.treeRow = {
+                prefix: s.menu.treeActions,
+                name: active.name,
+                run: () => this.showTreeActionsSheet(),
+            };
         }
+        if (managed.rows.length > 0 || managed.treeRow) blocks.push(managed);
 
-        // 6) App / global rows.
-        blocks.push({ header: s.menu.sectionApp, rows: [
+        // 6) Add family (no bottom-bar home; edit-only) and the settings.
+        blocks.push({ divider: true, rows: [
+            ...(isView ? [] : [{ label: s.familyWizard.menu, run: () => this.startFamilyWizardFromToolbar() }]),
             { label: s.settings.title, run: () => this.showSettingsDialog() },
         ] });
 
@@ -227,9 +307,9 @@ export const bottomSheetMethods = uiModule({
 
     /**
      * The second-level "Strom: {name}" sheet (mobile counterpart of the desktop
-     * ⋯ actions submenu): every whole-tree action, mirroring the desktop submenu
-     * — all except Delete, which stays in the tree manager. Reuses the shared
-     * menu-sheet chrome; gating (fsa / audit) matches the desktop rows.
+     * ⋯ "Tree:" submenu, same order): about the tree, its management, the
+     * actions on the current view, merging / splitting, the tree manager.
+     * Delete stays in the tree manager; gating (fsa / audit) matches the desktop rows.
      */
     showTreeActionsSheet(): void {
         const s = strings;
@@ -238,28 +318,30 @@ export const bottomSheetMethods = uiModule({
         if (!active || !id || DataManager.isReadOnly()) return;
         const isFsa = document.body.classList.contains('fsa-supported');
 
-        const rows: MenuRow[] = [
-            { label: s.treeManager.rename, run: () => this.showRenameTreeDialog(id) },
-            { label: s.treeManager.duplicate, run: () => this.duplicateTree(id) },
-            { label: s.treeManager.mergeInto, run: () => this.showMergeTreesDialog(id) },
-            // WYSIWYG: the active tree IS the live view, so no person picker.
-            { label: s.menu.splitFamilies, run: () => this.showSplitFamiliesDialog() },
-            { label: s.treeManager.stats, run: () => this.showActiveTreeStats() },
-            { label: s.treeHealth.menu, run: () => void this.showTreeHealthDialog(id) },
-            ...(this.isSourcesMenuOffered()
-                ? [{ label: s.sources.menu, run: () => this.showSourcesDialog() }]
-                : []),
-            { label: s.book.menu, run: () => this.showBookDialog() },
-            { label: s.menu.export, run: () => this.showExportDialog() },
-        ];
-        if (isFsa) rows.push({ label: s.fileAccess.saveToFile, run: () => this.attachSaveToFile() });
-        rows.push({ label: s.anniversaries.menu, run: () => this.showAnniversariesDialog(), badge: this.anniversaryBadgeCount() });
-        if (SettingsManager.isAuditLogEnabled()) rows.push({ label: s.auditLog.viewLog, run: () => this.showAuditLogDialog() });
-        rows.push({ label: s.treeManager.hide, run: () => void this.toggleTreeVisibility(id) });
-        rows.push({ label: s.treeManager.manageTreesTitle, run: () => this.showTreeManagerDialog() });
-
         this.presentMenuSheet(`${s.menu.treeActions} ${active.name}`, [
-            { header: s.menu.sectionTree, rows },
+            { rows: [
+                { label: s.treeManager.stats, run: () => this.showActiveTreeStats() },
+                { label: s.treeHealth.menu, run: () => void this.showTreeHealthDialog(id) },
+                ...(SettingsManager.isAuditLogEnabled() ? [{ label: s.auditLog.viewLog, run: () => this.showAuditLogDialog() }] : []),
+            ] },
+            { divider: true, rows: [
+                { label: s.treeManager.rename, run: () => this.showRenameTreeDialog(id) },
+                { label: s.treeManager.duplicate, run: () => this.duplicateTree(id) },
+                { label: s.treeManager.hide, run: () => void this.toggleTreeVisibility(id) },
+            ] },
+            { divider: true, header: s.menu.sectionFromView, rows: [
+                { label: s.menu.makeTree, run: () => this.makeTreeFromCurrentView() },
+                { label: s.menu.mergeViewInto, run: () => this.mergeViewInto() },
+            ] },
+            { divider: true, rows: [
+                { label: s.menu.mergeIntoTree, run: () => this.showMergeTreesDialog(id) },
+                // WYSIWYG: the active tree IS the live view, so no person picker.
+                { label: s.menu.splitFamilies, run: () => this.showSplitFamiliesDialog() },
+                ...(isFsa ? [{ label: s.fileAccess.saveToFile, run: () => this.attachSaveToFile() }] : []),
+            ] },
+            { divider: true, rows: [
+                { label: s.treeManager.manageTreesTitle, run: () => this.showTreeManagerDialog() },
+            ] },
         ]);
     },
 
@@ -295,6 +377,12 @@ export const bottomSheetMethods = uiModule({
             const label = document.createElement('span');
             label.className = 'bottom-sheet-label';
             label.textContent = row.label;
+            if (row.sub) {
+                const sub = document.createElement('span');
+                sub.className = 'bottom-sheet-sub';
+                sub.textContent = row.sub;
+                label.appendChild(sub);
+            }
             btn.appendChild(label);
             if (row.badge && row.badge > 0) {
                 const badge = document.createElement('span');
@@ -330,12 +418,6 @@ export const bottomSheetMethods = uiModule({
             name.textContent = row.name;
             btn.appendChild(prefix);
             btn.appendChild(name);
-            if (row.badge && row.badge > 0) {
-                const badge = document.createElement('span');
-                badge.className = 'tree-switcher-badge';
-                badge.textContent = String(row.badge);
-                btn.appendChild(badge);
-            }
             const chevron = document.createElement('span');
             chevron.className = 'bottom-sheet-tree-chevron';
             chevron.setAttribute('aria-hidden', 'true');

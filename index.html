@@ -617,20 +617,6 @@
             content: ''; position: absolute; top: 0; bottom: 0; right: 100%; width: 16px;
         }
 
-        /* Keyboard-shortcut chip inside menu rows (same pill as the search "/"). */
-        .menu-shortcut-hint {
-            margin-left: auto; flex-shrink: 0;
-            font-family: var(--font-sans); font-size: 11px;
-            color: var(--text-light); background: var(--surface-2);
-            border: 1px solid var(--border); border-radius: var(--r-sm);
-            padding: 1px 6px; line-height: 1.5; text-align: center;
-        }
-        /* Disabled Undo / Redo rows: greyed, inert, no hover affordance. */
-        .tree-switcher-action.menu-row-disabled {
-            color: var(--text-faint); cursor: default; pointer-events: none;
-        }
-        .tree-switcher-action.menu-row-disabled .menu-shortcut-hint { opacity: 0.5; }
-        .actions-undo-row #actions-undo-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         /* ==================== SEARCH ==================== */
         .search-container {
@@ -1758,7 +1744,9 @@
         }
         .bottom-sheet-overlay.active { opacity: 1; }
         .bottom-sheet {
-            width: 100%; box-sizing: border-box;
+            /* Never wider than 560px: on a tablet the sheet would span the
+               whole window (the numbers far from their labels). */
+            width: 100%; max-width: 560px; margin: 0 auto; box-sizing: border-box;
             background: var(--card-bg, #fff); color: var(--text, #222);
             border-radius: 14px 14px 0 0; padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
             box-shadow: var(--shadow-lg);
@@ -1795,15 +1783,26 @@
         .bottom-sheet-menu .bottom-sheet-item.active { color: var(--primary); font-weight: 600; }
         /* Person action sheet (card menu under 1024px / touch): same rows as
            the "More" sheet; a hairline separates the action groups. */
-        .bottom-sheet-person .bottom-sheet-item { font-size: 15px; min-height: 48px; }
+        .bottom-sheet-person .bottom-sheet-item { font-size: 15px; min-height: 44px; }
+        /* The person sheet may take the window's height (less a strip of the
+           tree above it): on a 360×640 phone it then needs no scrolling. */
+        .bottom-sheet.bottom-sheet-person { max-height: calc(100dvh - 16px); }
+        .bottom-sheet-person .bottom-sheet-handle { margin-bottom: 6px; }
+        .bottom-sheet-person .bottom-sheet-section { padding-top: 8px; }
+        .bottom-sheet-person .menu-person-state { padding-bottom: 4px; }
+        .bottom-sheet-person .bottom-sheet-items .menu-signal { margin: 2px 12px 6px; }
         .bottom-sheet-person .bottom-sheet-item:hover { background: var(--hover-bg); }
         .bottom-sheet-person .bottom-sheet-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .bottom-sheet-divider { height: 1px; background: var(--divider); margin: 6px 16px; }
         .bottom-sheet-person .bottom-sheet-menu-title {
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            /* The hairline under the name spans the sheet edge to edge. */
+            margin: 0 -8px 6px; padding: 2px 24px 8px; border-bottom: 1px solid var(--divider);
         }
+        .bottom-sheet-sub { display: block; font-size: 12px; color: var(--text-faint); font-weight: 400; }
         .bottom-sheet-menu .bottom-sheet-label { flex: 1; }
         .bottom-sheet-pair { display: flex; gap: 8px; padding: 0 8px; }
+        .bottom-sheet-pair .bottom-sheet-label { flex: none; }
         .bottom-sheet-pair .bottom-sheet-item {
             flex: 1; justify-content: center;
             background: var(--surface-2); border-radius: var(--r-md);
@@ -3548,12 +3547,11 @@
         }
 
         /* Menu item in the desktop ⋯ actions menu. */
-        .research-menu-divider, .research-menu-row { display: none; }
-        body.research-menu .research-menu-divider { display: block; }
+        .research-menu-row { display: none; }
         body.research-menu .research-menu-row { display: flex; }
-        body.data-locked .research-menu-divider, body.data-locked .research-menu-row { display: none; }
+        body.data-locked .research-menu-row { display: none; }
         /* A research tree on a computer: the "Research" submenu replaces the entry. */
-        body.research-actions .research-menu-divider, body.research-actions .research-menu-row { display: none; }
+        body.research-actions .research-menu-row { display: none; }
         body.data-locked .actions-research-wrap { display: none !important; }
         .actions-research-label { flex: 1; min-width: 0; color: var(--text); }
         .actions-research-badge { background: var(--accent); }
@@ -4211,6 +4209,21 @@
            active-tree-only action (higher specificity than the fsa rules above,
            so it also wins for the Save-to-file / Unlink tiles). */
         #export-modal.non-active-tree .active-tree-only { display: none !important; }
+        /* Whole tree · current view: a segment on top of the export dialog. In
+           the view scope the formats that cannot do a view are disabled, each
+           saying so in place of its description. */
+        .export-scope { margin: 0 0 14px; }
+        .export-scope .segment { display: flex; width: 100%; }
+        .export-scope .segment-btn { flex: 1; padding: 8px 10px; font-size: 13px; }
+        .option-desc-view, .option-scope-note { display: none; }
+        #export-modal.scope-view .option-desc-view { display: block; }
+        #export-modal.scope-view .option-desc-tree { display: none; }
+        #export-modal.scope-view .menu-option:not([data-view-ok]) .option-desc { display: none; }
+        #export-modal.scope-view .menu-option:not([data-view-ok]) .option-scope-note { display: block; }
+        #export-modal.scope-view .menu-option:disabled { opacity: 0.55; cursor: default; }
+        @media (max-width: 499px) {
+            .export-scope .segment-btn { min-height: 44px; }
+        }
         .file-link-indicator {
             display: inline-flex;
             align-items: center;
@@ -4292,6 +4305,9 @@
         .actions-storage-title { font-size: 13px; font-weight: 600; color: var(--warning-text); }
         .actions-storage-icon { color: var(--warning-text); }
         .actions-storage-sub { font-size: 12px; color: var(--text-secondary); }
+        /* Export… with its quiet second line ("whole tree or current view"). */
+        .actions-row-text { display: flex; flex-direction: column; gap: 1px; }
+        .actions-row-sub { font-size: 11px; color: var(--text-faint); }
         @media (max-width: 1280px) {
             .toolbar .storage-pill .storage-pill-label { display: none; }
         }
@@ -6101,8 +6117,18 @@
             display: inline-flex; align-items: center; justify-content: center;
             background: var(--signal-warn); color: var(--on-signal-warn); font-weight: 700; font-size: 11px;
         }
-        .menu-signal-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        /* Two lines at most; the whole text is in the tooltip and behind the link. */
+        .menu-signal-text {
+            flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere;
+            display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+        }
         .menu-signal-go { flex: 0 0 auto; font-weight: 600; white-space: nowrap; }
+        /* In the person menu (one width) the link goes under the text, level with it. */
+        .person-menu .menu-signal, .bottom-sheet-person .menu-signal {
+            display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: 8px; row-gap: 2px; align-items: start;
+        }
+        .person-menu .menu-signal > :first-child, .bottom-sheet-person .menu-signal > :first-child { grid-row: span 2; margin-top: 1px; }
+        .person-menu .menu-signal-go, .bottom-sheet-person .menu-signal-go { grid-column: 2; justify-self: start; }
         .context-menu-item.menu-signal:hover, .context-menu-item.menu-signal:focus { background: var(--warning-soft); filter: brightness(0.97); }
 
         /* Settings → "Show on card": options left, preview card right. */
@@ -10094,6 +10120,59 @@
         .menu-item-ext { flex: none; margin-left: 8px; color: var(--text-faint); }
         .context-menu .menu-section-header { padding: 6px 16px 2px; }
 
+        /* Person menu: the "Add" group as a grid of buttons (2 columns). */
+        .menu-chip-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+            padding: 4px 16px 8px;
+        }
+        .context-menu .menu-chip-grid .menu-chip,
+        .bottom-sheet-person .menu-chip-grid .menu-chip {
+            display: flex; align-items: center; justify-content: center;
+            min-height: 30px; padding: 4px 8px; margin: 0;
+            border: 1px solid var(--border); border-radius: var(--r-sm, 6px);
+            background: var(--surface); color: var(--primary);
+            font: inherit; font-size: 13px; text-align: center; cursor: pointer;
+        }
+        .context-menu .menu-chip-grid .menu-chip:hover,
+        .bottom-sheet-person .menu-chip-grid .menu-chip:hover { background: var(--hover-bg); }
+        .context-menu .menu-chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        /* A row that opens a second level: chevron at the end; tinted while open. */
+        .menu-item-chev { flex: none; margin-left: 10px; color: var(--text-light); font-size: 15px; line-height: 1; }
+        .context-menu-item.menu-submenu-row.submenu-open { background: var(--surface-2); }
+        .context-submenu { min-width: 190px; padding: 6px 0; z-index: 301; }
+        /* The person menu keeps one width: a long notice wraps (two lines at
+           most) instead of stretching it. */
+        .context-menu.person-menu { width: 272px; }
+        .context-menu.person-menu .context-menu-header { max-width: none; }
+
+        /* Person sheet: the person's own actions as tiles on top. */
+        .sheet-tiles {
+            display: grid; grid-template-columns: repeat(var(--tiles, 4), minmax(0, 1fr)); gap: 8px;
+            padding: 2px 8px 6px;
+        }
+        .bottom-sheet-person .bottom-sheet-item.sheet-tile {
+            flex-direction: column; justify-content: center; gap: 2px;
+            min-height: 64px; padding: 8px 4px; margin: 0;
+            background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md, 10px);
+            font-size: 14px; text-align: center;
+        }
+        .sheet-tile-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+        .sheet-tile-meta { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .bottom-sheet-person .menu-chip-grid { padding: 4px 8px 8px; gap: 8px; }
+        .bottom-sheet-person .menu-chip-grid .menu-chip { min-height: 44px; font-size: 15px; }
+        /* The second page of the sheet ("Research", "More"): ‹ Back + title. */
+        .sheet-subhead {
+            display: flex; align-items: center; gap: 10px;
+            padding: 0 8px 8px; margin: 0 -8px 4px; border-bottom: 1px solid var(--divider);
+        }
+        .sheet-back {
+            min-height: 44px; padding: 0 8px 0 16px; border: none; background: none;
+            color: var(--primary); font: inherit; font-size: 15px; cursor: pointer;
+        }
+        .sheet-back:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; border-radius: 6px; }
+        .sheet-subhead-title { font-family: var(--font-serif); font-size: 18px; font-weight: 600; color: var(--text); }
+        .sheet-page[hidden] { display: none; }
+
         /* "Review again" (research): whole rows clickable, ≥ 48px. */
         #research-review-modal { z-index: 190; }
         .research-review-intro { margin: 0 0 12px; font-size: 14px; line-height: 1.5; color: var(--text); }
@@ -10823,97 +10902,37 @@
                     <span class="actions-storage-icon" aria-hidden="true"></span>
                     <span class="actions-storage-text"><span class="actions-storage-title" data-i18n="fileCopy.menuUnsaved"></span><span class="actions-storage-sub" data-i18n="fileCopy.moreRowSub"></span></span>
                 </div>
-                <div id="actions-undo-row" class="tree-switcher-action edit-only actions-undo-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.performUndo()" tabindex="0" role="menuitem">
-                    <span id="actions-undo-label"></span>
-                    <span id="actions-undo-hint" class="menu-shortcut-hint" aria-hidden="true"></span>
+                <!-- Ordered by what the user wants to do: the tree's content, the
+                     outputs, then the research and the tree itself. Undo / Redo
+                     live in the toolbar (#toolbar-undo-group). -->
+                <div class="tree-switcher-action" id="actions-book-row" onclick="window.Strom.UI.treeActionBook()" tabindex="0" role="menuitem">
+                    <span data-i18n="book.menu"></span>
                 </div>
-                <div id="actions-redo-row" class="tree-switcher-action edit-only actions-undo-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.performRedo()" tabindex="0" role="menuitem">
-                    <span data-i18n="actions.redo"></span>
-                    <span id="actions-redo-hint" class="menu-shortcut-hint" aria-hidden="true"></span>
+                <!-- Source catalog: shown with advanced fields on, or once the tree has a source. -->
+                <div class="tree-switcher-action edit-only" id="actions-sources-row" style="display:none;" onclick="window.Strom.UI.treeActionSources()" tabindex="0" role="menuitem">
+                    <span data-i18n="sources.menu"></span>
                 </div>
-                <div class="tree-switcher-divider edit-only actions-undo-divider"></div>
-                <div class="menu-section-header" data-i18n="menu.sectionCurrentView"></div>
+                <div class="tree-switcher-action" id="actions-ann-row" onclick="window.Strom.UI.treeActionAnniversaries()" tabindex="0" role="menuitem">
+                    <span data-i18n="anniversaries.menu"></span>
+                    <span id="actions-ann-badge" class="tree-switcher-badge" style="display:none;"></span>
+                </div>
+                <div class="tree-switcher-divider"></div>
+                <!-- One Export…: the whole tree or the current view, chosen in its dialog. -->
+                <div class="tree-switcher-action actions-export-row" id="actions-export-row" onclick="window.Strom.UI.treeActionExport()" tabindex="0" role="menuitem">
+                    <span class="actions-row-text"><span data-i18n="menu.exportAll"></span><span class="actions-row-sub" data-i18n="menu.exportAllSub"></span></span>
+                </div>
                 <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showPosterDialog()" tabindex="0" role="menuitem">
                     <span data-i18n="menu.poster"></span>
-                </div>
-                <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.exportFocusedJSON()" tabindex="0" role="menuitem">
-                    <span data-i18n="menu.exportSelection"></span>
-                </div>
-                <div class="tree-switcher-action edit-only" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.makeTreeFromCurrentView()" tabindex="0" role="menuitem">
-                    <span data-i18n="menu.makeTree"></span>
-                </div>
-                <div class="tree-switcher-action edit-only" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.mergeViewInto()" tabindex="0" role="menuitem">
-                    <span data-i18n="menu.mergeViewInto"></span>
                 </div>
                 <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.startSlideshow()" tabindex="0" role="menuitem">
                     <span data-i18n="slideshow.menu"></span>
                 </div>
                 <div class="tree-switcher-divider"></div>
-                <!-- "Strom: {name}" — every whole-tree action lives here (all except
-                     Delete, which stays in the tree manager). Anniversaries, Change
-                     history and Save-to-file moved in from the old "Tree" section. -->
-                <div class="actions-tree-wrap" id="actions-tree-wrap">
-                    <div class="tree-switcher-action actions-tree-row" id="actions-tree-row" role="menuitem" tabindex="0" aria-haspopup="true" aria-expanded="false" onclick="window.Strom.UI.toggleActionsTreeSubmenu()">
-                        <span class="actions-tree-prefix" data-i18n="menu.treeActions"></span>
-                        <span class="actions-tree-name" id="actions-tree-name"></span>
-                        <span id="actions-tree-row-dot" style="display:none; width:8px; height:8px; border-radius:50%; background:var(--danger); margin-left:6px; flex-shrink:0;"></span>
-                        <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
-                    </div>
-                    <div class="actions-tree-submenu" id="actions-tree-submenu" role="menu">
-                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionRename()" tabindex="0">
-                            <span data-i18n="treeManager.rename"></span>
-                        </div>
-                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionDuplicate()" tabindex="0">
-                            <span data-i18n="treeManager.duplicate"></span>
-                        </div>
-                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionMergeInto()" tabindex="0">
-                            <span data-i18n="treeManager.mergeInto"></span>
-                        </div>
-                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionSplitFamilies()" tabindex="0">
-                            <span data-i18n="menu.splitFamilies"></span>
-                        </div>
-                        <div class="tree-switcher-divider"></div>
-                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionStats()" tabindex="0">
-                            <span data-i18n="treeManager.stats"></span>
-                        </div>
-                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionHealth()" tabindex="0">
-                            <span data-i18n="treeHealth.menu"></span>
-                        </div>
-                        <!-- Source catalog: shown with advanced fields on, or once the tree has a source. -->
-                        <div class="tree-switcher-action edit-only" id="actions-tree-sources-row" style="display:none;" role="menuitem" onclick="window.Strom.UI.treeActionSources()" tabindex="0">
-                            <span data-i18n="sources.menu"></span>
-                        </div>
-                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionBook()" tabindex="0">
-                            <span data-i18n="book.menu"></span>
-                        </div>
-                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionExport()" tabindex="0">
-                            <span data-i18n="menu.export"></span>
-                        </div>
-                        <div class="tree-switcher-action fsa-only" role="menuitem" onclick="window.Strom.UI.treeActionSaveToFile()" tabindex="0">
-                            <span data-i18n="fileAccess.saveToFile"></span>
-                        </div>
-                        <div class="tree-switcher-divider"></div>
-                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionAnniversaries()" tabindex="0">
-                            <span data-i18n="anniversaries.menu"></span>
-                            <span id="actions-tree-ann-badge" class="tree-switcher-badge" style="display:none;"></span>
-                        </div>
-                        <div class="tree-switcher-action" id="actions-tree-audit-row" style="display:none;" role="menuitem" onclick="window.Strom.UI.treeActionAudit()" tabindex="0">
-                            <span data-i18n="auditLog.viewLog"></span>
-                        </div>
-                        <div class="tree-switcher-divider"></div>
-                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionHide()" tabindex="0">
-                            <span data-i18n="treeManager.hide"></span>
-                        </div>
-                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionManager()" tabindex="0">
-                            <span data-i18n="treeManager.manageTreesTitle"></span>
-                        </div>
-                    </div>
-                </div>
                 <!-- "Research": a Strom Research tree on a computer — the research's
                      actions (filled by research-actions-ui.ts); it takes the place
                      of the "AI ancestor research" entry below. -->
                 <div class="actions-tree-wrap actions-research-wrap" id="actions-research-wrap" style="display:none;">
-                    <div class="tree-switcher-action actions-tree-row actions-research-row" id="actions-research-row" role="menuitem" tabindex="0" aria-haspopup="true" aria-expanded="false" onclick="window.Strom.UI.toggleActionsResearchSubmenu()">
+                    <div class="tree-switcher-action actions-tree-row actions-research-row" id="actions-research-row" role="menuitem" tabindex="0" aria-haspopup="menu" aria-expanded="false" onclick="window.Strom.UI.toggleActionsResearchSubmenu()">
                         <span class="actions-research-label" data-i18n="research.menuTitle"></span>
                         <span id="actions-research-badge" class="tree-switcher-badge actions-research-badge" style="display:none;"></span>
                         <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
@@ -10922,10 +10941,61 @@
                 </div>
                 <!-- Strom Research (3.0): permanent entry; "New" label while it is new.
                      Shown via body.research-menu (never in exports / view mode / locked). -->
-                <div class="tree-switcher-divider research-menu-divider"></div>
                 <div class="tree-switcher-action research-menu-row" id="research-menu-row" role="menuitem" tabindex="0" onclick="window.Strom.UI.showResearchInfoDialog()">
                     <span class="research-menu-label" data-i18n="research.menuItem"></span>
                     <span class="research-new-badge" aria-hidden="true" data-i18n="research.newBadge" hidden></span>
+                </div>
+                <!-- "Strom: {name}" — about the tree and its management (all except
+                     Delete, which stays in the tree manager). -->
+                <div class="actions-tree-wrap" id="actions-tree-wrap">
+                    <div class="tree-switcher-action actions-tree-row" id="actions-tree-row" role="menuitem" tabindex="0" aria-haspopup="menu" aria-expanded="false" onclick="window.Strom.UI.toggleActionsTreeSubmenu()">
+                        <span class="actions-tree-prefix" data-i18n="menu.treeActions"></span>
+                        <span class="actions-tree-name" id="actions-tree-name"></span>
+                        <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
+                    </div>
+                    <div class="actions-tree-submenu" id="actions-tree-submenu" role="menu">
+                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionStats()" tabindex="0">
+                            <span data-i18n="treeManager.stats"></span>
+                        </div>
+                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionHealth()" tabindex="0">
+                            <span data-i18n="treeHealth.menu"></span>
+                        </div>
+                        <div class="tree-switcher-action" id="actions-tree-audit-row" style="display:none;" role="menuitem" onclick="window.Strom.UI.treeActionAudit()" tabindex="0">
+                            <span data-i18n="auditLog.viewLog"></span>
+                        </div>
+                        <div class="tree-switcher-divider edit-only"></div>
+                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionRename()" tabindex="0">
+                            <span data-i18n="treeManager.rename"></span>
+                        </div>
+                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionDuplicate()" tabindex="0">
+                            <span data-i18n="treeManager.duplicate"></span>
+                        </div>
+                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionHide()" tabindex="0">
+                            <span data-i18n="treeManager.hide"></span>
+                        </div>
+                        <div class="tree-switcher-divider edit-only"></div>
+                        <div class="menu-section-header edit-only" data-i18n="menu.sectionFromView"></div>
+                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.makeTreeFromCurrentView()" tabindex="0">
+                            <span data-i18n="menu.makeTree"></span>
+                        </div>
+                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.mergeViewInto()" tabindex="0">
+                            <span data-i18n="menu.mergeViewInto"></span>
+                        </div>
+                        <div class="tree-switcher-divider edit-only"></div>
+                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionMergeInto()" tabindex="0">
+                            <span data-i18n="menu.mergeIntoTree"></span>
+                        </div>
+                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionSplitFamilies()" tabindex="0">
+                            <span data-i18n="menu.splitFamilies"></span>
+                        </div>
+                        <div class="tree-switcher-action fsa-only" role="menuitem" onclick="window.Strom.UI.treeActionSaveToFile()" tabindex="0">
+                            <span data-i18n="fileAccess.saveToFile"></span>
+                        </div>
+                        <div class="tree-switcher-divider"></div>
+                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionManager()" tabindex="0">
+                            <span data-i18n="treeManager.manageTreesTitle"></span>
+                        </div>
+                    </div>
                 </div>
                 <div class="tree-switcher-divider actions-menu-settings"></div>
                 <div class="tree-switcher-action actions-menu-settings" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showSettingsDialog()" tabindex="0" role="menuitem">
@@ -12118,8 +12188,17 @@
                 <h2><span data-i18n="menu.export"></span><span id="export-modal-tree-name"></span></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeExportDialog()">&times;</button>
             </div>
-            <!-- Grouped by purpose; the view-scoped actions sit last, set apart.
-                 `.active-tree-only` groups disappear whole for a non-active tree. -->
+            <!-- What to export: the whole tree, or only the people the view shows
+                 (formats that cannot do a view are disabled then). The active
+                 tree only — another tree has no view here. -->
+            <div class="export-scope active-tree-only" id="export-scope">
+                <div class="segment" role="radiogroup" data-i18n-aria-label="exportMenu.scopeLabel">
+                    <button type="button" class="segment-btn" role="radio" data-scope="tree" onclick="window.Strom.UI.setExportScope('tree')" data-i18n="exportMenu.scopeWhole"></button>
+                    <button type="button" class="segment-btn" role="radio" data-scope="view" id="export-scope-view" onclick="window.Strom.UI.setExportScope('view')"></button>
+                </div>
+            </div>
+            <!-- Grouped by purpose. `.active-tree-only` groups disappear whole
+                 for a non-active tree. -->
             <div class="menu-options menu-options-grouped">
                 <div class="menu-group active-tree-only" role="group" aria-labelledby="export-group-share">
                     <div class="menu-group-title" id="export-group-share" data-i18n="exportMenu.groupShare"></div>
@@ -12149,16 +12228,17 @@
                             <span class="option-desc" data-i18n="exportMenu.appDesc"></span>
                         </span>
                     </button>
-                    <button class="menu-option" onclick="window.Strom.UI.exportTargetTreeJSON()">
+                    <button class="menu-option" id="export-backup-btn" data-view-ok onclick="window.Strom.UI.exportBackupFromDialog()">
                         <span class="option-text">
                             <span class="option-title" data-i18n="exportMenu.backup"></span>
-                            <span class="option-desc" data-i18n="exportMenu.backupDesc"></span>
+                            <span class="option-desc option-desc-tree" data-i18n="exportMenu.backupDesc"></span>
+                            <span class="option-desc option-desc-view" data-i18n="exportMenu.backupViewDesc"></span>
                         </span>
                     </button>
                 </div>
                 <div class="menu-group active-tree-only" role="group" aria-labelledby="export-group-print">
                     <div class="menu-group-title" id="export-group-print" data-i18n="exportMenu.groupPrint"></div>
-                    <button class="menu-option active-tree-only" onclick="window.Strom.UI.showPosterDialog()">
+                    <button class="menu-option active-tree-only" data-view-ok onclick="window.Strom.UI.showPosterDialog()">
                         <span class="option-text">
                             <span class="option-title" data-i18n="exportMenu.poster"></span>
                             <span class="option-desc" data-i18n="exportMenu.posterDesc"></span>
@@ -12183,21 +12263,6 @@
                         <span class="option-text">
                             <span class="option-title" data-i18n="exportMenu.csv"></span>
                             <span class="option-desc" data-i18n="exportMenu.csvDesc"></span>
-                        </span>
-                    </button>
-                </div>
-                <div class="menu-group menu-group-secondary active-tree-only" role="group" aria-labelledby="export-group-selection">
-                    <div class="menu-group-title" id="export-group-selection" data-i18n="exportMenu.groupSelection"></div>
-                    <button class="menu-option active-tree-only" id="export-focus-btn" onclick="window.Strom.UI.exportFocusedJSON()">
-                        <span class="option-text">
-                            <span class="option-title" data-i18n="exportMenu.selJson"></span>
-                            <span class="option-desc" data-i18n="exportMenu.selJsonDesc"></span>
-                        </span>
-                    </button>
-                    <button class="menu-option active-tree-only" id="make-tree-from-view-btn" onclick="window.Strom.UI.makeTreeFromCurrentView()">
-                        <span class="option-text">
-                            <span class="option-title" data-i18n="exportMenu.selTree"></span>
-                            <span class="option-desc" data-i18n="exportMenu.selTreeDesc"></span>
                         </span>
                     </button>
                 </div>

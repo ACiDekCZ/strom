@@ -37,30 +37,25 @@ test('undo toast auto-dismisses on Escape', async ({ page }) => {
     await expect(page.locator('.undo-toast')).toBeHidden();
 });
 
-test('actions menu shows Undo with description and correct disabled states', async ({ page }) => {
+test('Undo / Redo live in the toolbar, not in the ⋯ menu: description and disabled states', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
-    const undoRow = page.locator('#actions-undo-row');
-    const undoLabel = page.locator('#actions-undo-label');
-    const redoRow = page.locator('#actions-redo-row');
-
-    // Open the ⋯ menu: Undo carries the last change; Redo is disabled (nothing
-    // to replay yet).
     await page.locator('.actions-menu-btn').click();
     await expect(page.locator('#actions-menu-dropdown')).toHaveClass(/active/);
-    await expect(undoLabel).toContainText('Undo:');
-    await expect(undoLabel).toContainText('Jan');
-    await expect(undoRow).not.toHaveClass(/menu-row-disabled/);
-    await expect(redoRow).toHaveClass(/menu-row-disabled/);
-    await expect(page.locator('#actions-undo-hint')).toHaveText(/Z$/);
+    await expect(page.locator('#actions-menu-dropdown')).not.toContainText('Undo');
+    await page.keyboard.press('Escape');
 
-    // Undo from the menu; reopen: the stack is now empty, so Undo greys out
-    // (label without a description) and Redo becomes available.
-    await undoRow.click();
+    // The toolbar Undo carries the last change; Redo is disabled (nothing to replay yet).
+    const undo = page.locator('#toolbar-undo-btn');
+    const redo = page.locator('#toolbar-redo-btn');
+    await expect(undo).toBeEnabled();
+    await expect(undo).toHaveAttribute('title', /^Undo: .*Jan/);
+    await expect(redo).toBeDisabled();
+
+    // Undo: the stack is now empty, so Undo greys out and Redo becomes available.
+    await undo.click();
     await expect(card(page, 'Jan')).toBeHidden();
-    await page.locator('.actions-menu-btn').click();
-    await expect(undoLabel).toHaveText('Undo');
-    await expect(undoRow).toHaveClass(/menu-row-disabled/);
-    await expect(redoRow).not.toHaveClass(/menu-row-disabled/);
+    await expect(undo).toBeDisabled();
+    await expect(redo).toBeEnabled();
 });

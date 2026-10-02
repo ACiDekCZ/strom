@@ -5,7 +5,7 @@
  * comes back with ?adopt=<bridge>, asking for the tree by that token. The user
  * confirms, the app POSTs the tree as GEDCOM and links it to the research
  * tree it gets back — from then on it is a research tree like any other
- * (Research menu, "In the research" …). Nothing changes in the app's data.
+ * (Research menu, the person menu's "Research ›" …). Nothing changes in the app's data.
  */
 
 import { DataManager } from '../data.js';
