@@ -38,6 +38,8 @@ const FRESH_MS = 30_000;
 /** Timeouts: the background ask, the ask before a send. */
 const POLL_TIMEOUT_MS = 3000;
 const PING_TIMEOUT_MS = 1500;
+/** An answer younger than this is not asked again when the menu opens or the window comes back. */
+const RECHECK_MS = 5000;
 /** Quiet after the last edit before the state is worked out again. */
 const RECOMPUTE_DEBOUNCE_MS = 1500;
 
@@ -109,9 +111,11 @@ export const researchSyncMethods = uiModule({
             this.refreshResearchSyncUi();
             void this.pollResearchBridge();
         });
+        // Back to the window: ask at once (a hidden window does not ask at all).
         document.addEventListener('visibilitychange', () => {
-            if (visible()) void this.pollResearchBridge();
+            if (visible()) this.refreshResearchStateSoon();
         });
+        window.addEventListener('focus', () => this.refreshResearchStateSoon());
         void this.pollResearchBridge();
     },
 
@@ -216,6 +220,14 @@ export const researchSyncMethods = uiModule({
         }
         this.refreshResearchSyncUi();
         return !!status;
+    },
+
+    /** Ask now unless the last answer is only seconds old (menu opened, window back). */
+    refreshResearchStateSoon(): void {
+        const ctx = this.researchSyncLink();
+        const rt = ctx ? runtime.get(ctx.link.id) : undefined;
+        if (rt && Date.now() - rt.checkedAt < RECHECK_MS) return;
+        void this.pollResearchBridge();
     },
 
     scheduleResearchPoll(): void {

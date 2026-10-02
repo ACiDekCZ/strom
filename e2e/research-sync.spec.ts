@@ -51,6 +51,7 @@ interface FakeBridge {
     syncReply: { status: number; body: unknown };
     treeGed: string;
     down: boolean;
+    links: string[];
     posts: string[];
 }
 
@@ -62,6 +63,7 @@ async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<F
         syncReply: { status: 200, body: { ok: true, input: 'I0042', changes: 6, inbox: true } },
         treeGed: researchGed(),
         down: false,
+        links: ['send', 'open', 'live', 'app', 'setup'],
         posts: [],
         ...init,
     };
@@ -71,7 +73,7 @@ async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<F
         const json = (status: number, body: unknown) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) });
         if (url.pathname.endsWith('/status')) {
             return json(200, {
-                tree: { id: UUID, name: 'Víškovi' }, head: b.head, links: ['send', 'open', 'live', 'app', 'setup'],
+                tree: { id: UUID, name: 'Víškovi' }, head: b.head, links: b.links,
                 accepts: b.accepts, inbox: { trees: b.inbox, material: 0 }, lastIntake: b.lastIntake,
                 ...(b.accepts ? { sends: b.sends } : {}),
             });
@@ -255,6 +257,46 @@ test.describe('the state of the tree and sending straight', () => {
         await expect(dot(page)).toBeHidden();
         await expect(page.locator('#research-item-tree-settings')).toHaveCount(0);
         expect(asked).toBe(0);   // an older research is never asked unasked
+    });
+});
+
+test.describe('after a send the research wrote', () => {
+    test('"Load new version" loads at once (nothing here the research lacks); the window coming back asks at once', async ({ page }) => {
+        await openResearch(page, { edit: true });
+        const bridge = await fakeBridge(page);
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect(page.locator('.toast')).toContainText('Sent to the research');
+        // Written in the research; no explicit ask from the test — the window coming back asks.
+        bridge.inbox = [];
+        Object.assign(bridge.sends[0], { state: 'written', decidedAt: new Date().toISOString() });
+        bridge.lastIntake = { id: 'I0001', at: new Date(Date.now() + 1000).toISOString() };
+        bridge.head = 'aa11bb22cc33';
+        bridge.treeGed = researchGed('aa11bb22cc33').replace('1 NAME Jan /Víšek/', '1 NAME Jan /Víšek/\n1 BIRT\n2 PLAC Praha');
+        await page.waitForTimeout(5100);   // past the "just asked" window
+        await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+        await expect.poll(async () => {
+            await openResearchMenu(page);
+            return block(page).getAttribute('data-state');
+        }).toBe('newer');
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await expect(page.locator('.toast')).toContainText('New version loaded from the research, including your changes.');
+        await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
+        const meta = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata());
+        expect(meta.research.head).toBe('aa11bb22cc33');
+    });
+
+    test('no strom-research:// links: the state, loading and Research for this tree are still there', async ({ page }) => {
+        await openResearch(page);
+        await page.evaluate(() => localStorage.removeItem('strom-research-links'));
+        await fakeBridge(page, { links: [] });
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'inSync');
+        await expect(page.locator('#research-item-version')).toBeVisible();
+        await expect(page.locator('#research-item-tree-settings')).toBeVisible();
+        await expect(page.locator('#research-item-open')).toHaveCount(0);   // opening the research needs its links
     });
 });
 

@@ -1001,19 +1001,22 @@ export const researchUiMethods = uiModule({
         let includeImages = SettingsManager.isImportImages();
         let action = decideResearchOpen(null, null);
         let asCopy = false;
+        let holdsSent = false;
         if (existing) {
             const unreadable = TreeManager.isTreeUnreadable(existing.id);
             previous = unreadable ? null : await readTree(existing.id);
             action = decideResearchOpen(existing.research, previous ? fingerprintLike(previous, existing.research?.fingerprint) : null);
-            // The user's changes were sent and written there: this version holds them.
+            // Nothing here the research lacks: the last send was written there and
+            // the tree has not changed since — its newer version holds it all.
             const sent = existing.research?.sent;
-            const holdsChanges = action === 'ask' && opts.afterSend === existing.id && !!previous
+            const holdsChanges = action === 'ask' && !!previous
                 && sent?.state === 'written' && contentFingerprint(previous) === sent.fingerprint;
             if (unreadable || !previous) {
                 // Cannot be read with this session's key: never overwrite it.
                 asCopy = true;
             } else if (holdsChanges) {
                 // Replaced without asking (a backup is still kept below).
+                holdsSent = true;
             } else if (action === 'ask' && existing.research && this.researchSyncCapable(existing.research.id)) {
                 // A research that tells what it has: send first, or decide knowing it.
                 const choice = await this.showResearchUpdateConflict(existing.id, existing.name, data, includeImages);
@@ -1082,7 +1085,7 @@ export const researchUiMethods = uiModule({
                 ...(head ? { head } : {}),
             });
         }
-        const loadedAfterSend = !!opts.afterSend && opts.afterSend === treeId && !created;
+        const loadedAfterSend = !created && (holdsSent || (!!opts.afterSend && opts.afterSend === treeId));
 
         const switched = previousTreeId !== treeId;
         this.updateTreeSwitcher();

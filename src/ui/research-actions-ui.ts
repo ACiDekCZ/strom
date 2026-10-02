@@ -142,11 +142,17 @@ export const researchActionsMethods = uiModule({
         const capable = !!researchId && this.researchSyncCapable(researchId);
         const bridgeUp = capable && !!researchId && this.researchBridgeFresh(researchId);
         if (!this.researchAnyAnnounced()) {
-            // An older research (or the links switched off): the way back, and what it is.
-            groups = [[
+            // No strom-research:// links here (an older research, none announced, or
+            // switched off): the way back, and what it is. A research that says what
+            // it takes still gets its version loaded and its settings for this tree.
+            const look: SubmenuItem[] = bridgeUp
+                ? [{ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') }] : [];
+            const tree: SubmenuItem[] = this.researchTranscriptsCapable(researchId ?? undefined)
+                ? [{ id: 'research-item-tree-settings', label: strings.sync.treeSettings, run: call('researchActionTreeSettings') }] : [];
+            groups = [look, [
                 { id: 'research-item-send', label: r.sendChanges, run: call('researchActionSend') },
                 { id: 'research-item-about', label: r.whatIs, run: call('researchActionWhatIs') },
-            ]];
+            ], tree];
         } else {
             const look: SubmenuItem[] = [];
             if (this.researchLinkAvailable('app') || bridgeUp) look.push({ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') });
@@ -219,6 +225,8 @@ export const researchActionsMethods = uiModule({
         wrap.classList.add('submenu-open');
         document.getElementById('actions-research-row')?.setAttribute('aria-expanded', 'true');
         this.positionActionsSubmenu('actions-research-submenu');
+        // The state shown should be now's, not the last background ask's.
+        this.refreshResearchStateSoon();
     },
 
     closeActionsResearchSubmenu(): void {
