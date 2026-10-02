@@ -281,10 +281,66 @@ test.describe('after a send the research wrote', () => {
         }).toBe('newer');
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
-        await expect(page.locator('.toast')).toContainText('New version loaded from the research, including your changes.');
+        await expect(page.locator('.toast')).toContainText("Loaded the research's new version, made after it wrote your send.");
         await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
         const meta = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata());
         expect(meta.research.head).toBe('aa11bb22cc33');
+    });
+
+    test('the user\'s own images (the research does not take them yet): never loaded over without asking; the warning names them', async ({ page }) => {
+        await openResearch(page);
+        const bridge = await fakeBridge(page);
+        await poll(page);
+        // A portrait and a crop the user cut, then the send the research wrote.
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const jan = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
+            const px = 'data:image/jpeg;base64,' + '/9j/'.padEnd(2400, 'A');
+            dm.updatePerson(jan.id, { photo: px });
+            const src = Object.values(dm.getData().sources).find((s: any) => s.refn === 'S0001') as any;
+            dm.updateSource(src.id, { excerpts: [{ id: 'exc_user', dataUrl: px, width: 10, height: 10, sizeBytes: 1800 }] });
+        });
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect(page.locator('.toast')).toContainText('Sent to the research');
+        bridge.inbox = [];
+        Object.assign(bridge.sends[0], { state: 'written', decidedAt: new Date().toISOString() });
+        bridge.head = 'aa11bb22cc33';
+        bridge.treeGed = researchGed('aa11bb22cc33');
+        await poll(page);
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        const dialog = page.locator('#confirmation-modal');
+        await expect(dialog).toContainText("You have changes the research doesn't have");
+        await expect(dialog).toContainText('2 images you added to this tree (portraits, attachments, excerpts) the research does not have yet');
+        await dialog.locator('#confirm-cancel-btn').click();
+        const kept = await page.evaluate(() => {
+            const d = window.Strom.DataManager.getData();
+            return { photo: !!(Object.values(d.persons).find((p: any) => p.firstName === 'Jan') as any).photo,
+                excerpts: (Object.values(d.sources).find((s: any) => s.refn === 'S0001') as any).excerpts?.length ?? 0 };
+        });
+        expect(kept).toEqual({ photo: true, excerpts: 1 });
+    });
+
+    test('a tree unchanged since the research had it, but with the user\'s images: the update asks', async ({ page }) => {
+        await openResearch(page);
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const jan = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
+            dm.updatePerson(jan.id, { photo: 'data:image/jpeg;base64,' + '/9j/'.padEnd(2400, 'A') });
+        });
+        // As after "Start research with this tree" (sent without images): the
+        // research's version counts as this very tree, its images included.
+        await page.evaluate(() => {
+            const tm = window.Strom.TreeManager;
+            const tree = tm.getActiveTreeId();
+            const link = tm.getActiveTreeMetadata().research;
+            const fp = (window.Strom.UI as any).researchSyncFingerprints(tree, { ...link, fingerprint: 'x' }).current;
+            tm.setResearchLink(tree, { ...link, fingerprint: fp });
+        });
+        await dropFile(page, 'tree-strom.ged', researchGed(NEW_HEAD));
+        const dialog = page.locator('#confirmation-modal');
+        await expect(dialog).toContainText('1 image you added to this tree');
+        await dialog.locator('#confirm-cancel-btn').click();
+        expect(await page.evaluate(() => !!(Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any).photo)).toBe(true);
     });
 
     test('no strom-research:// links: the state, loading and Research for this tree are still there', async ({ page }) => {
@@ -324,7 +380,7 @@ test.describe('updating over changes the research does not have', () => {
         bridge.head = 'aa11bb22cc33';
         bridge.treeGed = researchGed('aa11bb22cc33').replace('1 NAME Jan /Víšek/', '1 NAME Jan /Víšek/\n1 BIRT\n2 PLAC Praha');
         await poll(page);
-        await expect(page.locator('.toast')).toContainText('New version loaded from the research, including your changes.');
+        await expect(page.locator('.toast')).toContainText("Loaded the research's new version, made after it wrote your send.");
         await expect(pill).toBeHidden();
         const meta = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata());
         expect(meta.research.head).toBe('aa11bb22cc33');

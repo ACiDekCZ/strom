@@ -473,7 +473,7 @@ test.describe('a research update', () => {
         '0 TRLR',
     ].join('\n');
 
-    test('asks about images and warns that the tree\'s own excerpts are replaced', async ({ page }) => {
+    test('asks about images; no warning about excerpts the update brings again', async ({ page }) => {
         await openApp(page);
         const jpeg = await jpegDataUrl(page, 200, 40);
         await page.evaluate((t) => window.Strom.UI.openGedcomText(t), researchGed(jpeg));
@@ -487,7 +487,8 @@ test.describe('a research update', () => {
         void page.evaluate((t) => window.Strom.UI.openGedcomText(t), researchGed(jpeg, true));
         const dlg = page.locator('#confirmation-modal');
         await expect(dlg).toBeVisible();
-        await expect(dlg).toContainText('Excerpts you added to this tree will be replaced');
+        // The excerpt came from the research and comes again: nothing of the user's is dropped.
+        await expect(dlg).not.toContainText('the research does not have yet');
         const check = dlg.locator('#confirm-choice-check');
         await expect(check).toBeChecked();
         await check.uncheck();

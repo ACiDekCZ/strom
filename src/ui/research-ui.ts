@@ -575,6 +575,32 @@ function incomingImageBytes(data: StromData): number {
     return countImages(data).bytes;
 }
 
+/**
+ * Images of the app's version an update from the research would remove:
+ * portraits, attachments and crops the user cut that the research's version
+ * (ids already carried over, see stabilizeIds) does not have. The research
+ * does not take the app's images yet, so these exist only here — an update
+ * never drops them without asking.
+ */
+function imagesDroppedBy(next: StromData, previous: StromData): number {
+    let n = 0;
+    for (const [id, old] of Object.entries(previous.persons ?? {})) {
+        const now = next.persons?.[id as keyof typeof next.persons];
+        if (old?.photo && now?.photo !== old.photo) n++;
+        for (const att of old?.attachments ?? []) {
+            if (!now?.attachments?.some(a => a.id === att.id || a.dataUrl === att.dataUrl)) n++;
+        }
+    }
+    for (const [id, old] of Object.entries(previous.sources ?? {})) {
+        const now = next.sources?.[id];
+        for (const exc of old?.excerpts ?? []) {
+            if (exc.clip) continue;   // the research's own crop: its version decides
+            if (!now?.excerpts?.some(e => e.id === exc.id || e.dataUrl === exc.dataUrl)) n++;
+        }
+    }
+    return n;
+}
+
 function todayIso(): string {
     const d = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -1006,10 +1032,15 @@ export const researchUiMethods = uiModule({
             const unreadable = TreeManager.isTreeUnreadable(existing.id);
             previous = unreadable ? null : await readTree(existing.id);
             action = decideResearchOpen(existing.research, previous ? fingerprintLike(previous, existing.research?.fingerprint) : null);
+            // The user's own images would go with the update (the research does not
+            // take them yet): always ask, even over a tree unchanged since (a tree
+            // handed over to the research without its images).
+            const ownImages = previous ? imagesDroppedBy(stabilizeIds(data, previous), previous) : 0;
+            if (action === 'update' && ownImages > 0) action = 'ask';
             // Nothing here the research lacks: the last send was written there and
             // the tree has not changed since — its newer version holds it all.
             const sent = existing.research?.sent;
-            const holdsChanges = action === 'ask' && !!previous
+            const holdsChanges = action === 'ask' && !!previous && ownImages === 0
                 && sent?.state === 'written' && contentFingerprint(previous) === sent.fingerprint;
             // The question is about that tree: show it behind the dialog, never
             // whichever tree was open (the user must see what they decide on).
@@ -1037,10 +1068,9 @@ export const researchUiMethods = uiModule({
                 asCopy = choice === 'copy';
                 if (incomingImageBytes(data) > 0) includeImages = this.choiceCheckboxChecked;
             } else if (action === 'ask') {
-                // Excerpts the user cut in this tree go with the update — say so.
-                const ownExcerpts = Object.values(previous.sources ?? {}).some(src => src.excerpts?.length);
+                // The user's own images go with the update — say so.
                 const message = [strings.research.editedMessage(existing.name, TreeManager.isAutoBackupEnabled(existing.id)),
-                    ownExcerpts ? strings.research.excerptsReplaced : ''].filter(Boolean).join('\n\n');
+                    ownImages > 0 ? strings.research.imagesReplaced(ownImages) : ''].filter(Boolean).join('\n\n');
                 const choice = await this.showChoice(
                     message,
                     strings.research.editedTitle,
@@ -1136,20 +1166,20 @@ export const researchUiMethods = uiModule({
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         const bridgeUp = !!link && await this.researchBridgeReady(link.id);
         const previous = await readTree(treeId);
-        const ownExcerpts = Object.values(previous?.sources ?? {}).some(src => src.excerpts?.length);
+        const own = previous ? imagesDroppedBy(stabilizeIds(data, previous), previous) : 0;
         const images = incomingImageBytes(data) > 0
             ? { label: strings.importImages.label, checked: includeImages,
                 detail: strings.importImages.size((incomingImageBytes(data) / (1024 * 1024)).toFixed(1)) }
             : undefined;
         if (bridgeUp) {
-            const message = [u.unsentBody(treeName), ownExcerpts ? r.excerptsReplaced : ''].filter(Boolean).join('\n\n');
+            const message = [u.unsentBody(treeName), own > 0 ? r.imagesReplaced(own) : ''].filter(Boolean).join('\n\n');
             const pick = await this.showChoice(message, u.unsentTitle, [
                 { id: 'copy', label: r.openCopy },
                 { id: 'sendThenLoad', label: strings.sync.sendThenLoad },
             ], images, { subtitle: `${treeName} · ${u.newerSub}`, aside: { id: 'update', label: u.loadWithout, sub: u.loadWithoutSub } });
             return pick as 'sendThenLoad' | 'update' | 'copy' | null;
         }
-        const message = [u.bridgeDownBody(treeName), u.bridgeDownAdvice, ownExcerpts ? r.excerptsReplaced : ''].filter(Boolean).join('\n\n');
+        const message = [u.bridgeDownBody(treeName), u.bridgeDownAdvice, own > 0 ? r.imagesReplaced(own) : ''].filter(Boolean).join('\n\n');
         const start = link && this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }) : null;
         const pick = await this.showChoice(message, r.editedTitle, [{ id: 'copy', label: r.openCopy }], images, {
             aside: { id: 'update', label: u.overwrite },
