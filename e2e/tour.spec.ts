@@ -9,7 +9,7 @@ import { openApp, card } from './helpers.js';
 test('tour is offered, walks through steps, and Escape ends it', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     // The non-blocking offer appears; start the tour from it.
     const offer = page.locator('.tour-offer');

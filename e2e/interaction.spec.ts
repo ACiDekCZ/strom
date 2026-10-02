@@ -85,16 +85,16 @@ test('expanded mode: a multi-marriage person shows all partners inline', async (
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(page.locator('#empty-state')).toBeHidden();
 
-    // Henry VIII had several marriages; focusing him lays out all wives inline.
-    await focusViaSearch(page, 'Henry VIII');
-    await expect(card(page, 'Jane')).toBeVisible();    // Jane Seymour
-    await expect(card(page, 'Anne')).toBeVisible();    // Anne Boleyn
+    // Erik married twice; focusing him lays out both wives inline.
+    await focusViaSearch(page, 'Erik');
+    await expect(card(page, 'Laura')).toBeVisible();
+    await expect(card(page, 'Rosa')).toBeVisible();
     // More than a single couple is on screen.
     expect(await page.locator('.person-card').count()).toBeGreaterThan(4);
 
     // Refocusing another person re-lays-out the tree around the new focus.
-    await focusViaSearch(page, 'Mary I');
-    await expect(card(page, 'Mary I')).toHaveClass(/focused/);
+    await focusViaSearch(page, 'Sofia');
+    await expect(card(page, 'Sofia')).toHaveClass(/focused/);
 });
 
 test('Escape closes dialogs that are not on the dialog stack (book, sources)', async ({ page }) => {
@@ -131,7 +131,7 @@ test.describe('mobile', () => {
 test('focus back/forward buttons walk history in both directions', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     const back = page.locator('#focus-back-btn');
     const fwd = page.locator('#focus-forward-btn');
     await expect(back).toBeHidden();
@@ -140,29 +140,29 @@ test('focus back/forward buttons walk history in both directions', async ({ page
     const focusName = () => page.evaluate(() =>
         window.Strom.DataManager.getPerson(window.Strom.TreeRenderer.getFocusPersonId())?.firstName ?? null);
 
-    // VIII → VII → (via fan) Edmund.
-    await focusViaSearch(page, 'Henry VII');
+    // Johan → Peter → (directly) Maria.
+    await focusViaSearch(page, 'Peter');
     await expect(back).toBeVisible();
     await expect(fwd).toBeHidden();               // no forward yet
     await page.evaluate(() => {
-        const p = window.Strom.DataManager.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Edmund');
+        const p = window.Strom.DataManager.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Maria');
         if (p) window.Strom.TreeRenderer.setFocus(p.id);
     });
-    await expect.poll(focusName).toBe('Edmund');
+    await expect.poll(focusName).toBe('Maria');
 
-    // Back to VII: forward becomes available.
+    // Back to Peter: forward becomes available.
     await back.click();
-    await expect.poll(focusName).toBe('Henry VII');
+    await expect.poll(focusName).toBe('Peter');
     await expect(fwd).toBeVisible();
-    // Forward returns to Edmund.
+    // Forward returns to Maria.
     await fwd.click();
-    await expect.poll(focusName).toBe('Edmund');
+    await expect.poll(focusName).toBe('Maria');
     await expect(fwd).toBeHidden();               // at the tip again
 
     // A NEW navigation after going back clears forward.
-    await back.click();                            // → Henry VII
+    await back.click();                            // → Peter
     await expect(fwd).toBeVisible();
-    await focusViaSearch(page, 'Henry VIII');       // new branch
+    await focusViaSearch(page, 'Johan');       // new branch
     await expect(fwd).toBeHidden();
 });
 
@@ -171,14 +171,14 @@ test('focus back/forward buttons walk history in both directions', async ({ page
 test('the very first navigation counts the default focus (back works after one step)', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     // Fresh tree: no history yet.
     await expect(page.locator('#focus-back-btn')).toBeHidden();
     const defaultFocus = await page.evaluate(() =>
         window.Strom.DataManager.getPerson(window.Strom.TreeRenderer.getFocusPersonId())?.firstName);
 
     // ONE navigation must already enable back (the default must be counted).
-    await focusViaSearch(page, 'Henry VII');
+    await focusViaSearch(page, 'Peter');
     await expect(page.locator('#focus-back-btn')).toBeVisible();
     // Back returns to the default person.
     await page.locator('#focus-back-btn').click();

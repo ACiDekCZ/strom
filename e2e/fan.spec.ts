@@ -7,7 +7,7 @@ import { openApp, card, createFirstPerson } from './helpers.js';
 test('fan view shows ancestor sectors and clicking one refocuses', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     await page.locator('#view-mode-fan').click();
     const container = page.locator('#fan-container');
@@ -17,16 +17,16 @@ test('fan view shows ancestor sectors and clicking one refocuses', async ({ page
     await expect(page.locator('#tree-canvas')).toBeHidden();
 
     // Focus disc shows the focus person; his father is a clickable sector.
-    await expect(container.locator('.fan-focus')).toContainText('Henry VIII');
-    const father = container.locator('[data-fan-person]', { hasText: 'Henry VII' }).first();
+    await expect(container.locator('.fan-focus')).toContainText('Johan');
+    const father = container.locator('[data-fan-person]', { hasText: 'Peter' }).first();
     await expect(father).toBeVisible();
     await father.click();
-    await expect(container.locator('.fan-focus')).toContainText('Henry VII');
+    await expect(container.locator('.fan-focus')).toContainText('Peter');
 
     // Back to the family view: cards return, fan hidden.
     await page.locator('#view-mode-family').click();
     await expect(container).toBeHidden();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 });
 
 test('fan view: generations selector changes ring count and persists', async ({ page }) => {
@@ -62,13 +62,13 @@ test('fan view: empty ancestor slot offers adding a parent', async ({ page }) =>
 test('Kekule numbers are off by default, drawn when enabled, always in the tooltip (K9)', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
     await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
 
     // Default: no numbers drawn, but the tooltip carries the ahnentafel.
     await expect(page.locator('.fan-kekule')).toHaveCount(0);
-    await expect(page.locator('.fan-sector title').first()).toHaveText(/^#2 · Henry VII/);
+    await expect(page.locator('.fan-sector title').first()).toHaveText(/^#2 · Peter/);
 
     // Enabled: numbers appear in the sectors.
     await page.evaluate(() => window.Strom.UI.toggleFanKekule(true));

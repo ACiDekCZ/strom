@@ -24,7 +24,7 @@ test('family book: dialog generates a printable book in a new window', async ({ 
     await book.waitForLoadState('domcontentloaded');
 
     // The book contains the demo tree's people and the expected structure.
-    await expect(book.locator('body')).toContainText('Henry VIII');
+    await expect(book.locator('body')).toContainText('Johan');
     await expect(book.locator('.book-families > h2')).toHaveText('Families');
     await expect(book.locator('.book-index-page > h2')).toHaveText('Person index');
     await expect(book.locator('.book-chapter').first()).toBeVisible();

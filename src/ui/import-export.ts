@@ -24,12 +24,13 @@ import {
     LastFocusedMarker,
     EmbeddedDataEnvelope
 } from '../types.js';
-import { strings, getCurrentLanguage } from '../strings.js';
+import { strings } from '../strings.js';
 import { extractSubtree } from '../subtree.js';
 import { findComponents } from '../components.js';
 import { compressPhoto, dataUrlByteSize } from '../photo.js';
 import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES, countImages, stripMedia } from '../attachments.js';
-import { getDemoTree, getDemoFocus } from '../demo-trees.js';
+import { getDemoTree, DEMO_FOCUS, DEMO_CARD_FIELDS } from '../demo-tree.js';
+import { demoImageMaker } from '../demo-images.js';
 import { parseGedcom, convertToStrom, decodeGedcomFile, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -1279,17 +1280,21 @@ export const importExportMethods = uiModule({
     },
 
     /**
-     * Load a bundled demo tree (Přemyslids in Czech, House of Tudor otherwise)
-     * as a new tree, focus an interesting person and show a hint toast.
+     * Load the bundled sample tree (src/demo-tree.ts, its pictures drawn now)
+     * as a new tree, focus the emigrant Johan and show a hint toast.
      */
     async loadDemoTree(): Promise<void> {
         // Read-only viewers (and locked data) must not create trees
         if (DataManager.isReadOnly()) return;
         this.closeMobileMenu();
         this.closeNewTreeMenu();
-        const lang = getCurrentLanguage() === 'cs' ? 'cs' : 'en';
-        const data = getDemoTree(lang);
-        const focusId = getDemoFocus(lang);
+        const data = getDemoTree(demoImageMaker());
+        const focusId = DEMO_FOCUS;
+        // The fullest card shows what the sample holds — unless the user already chose a density.
+        if (!SettingsManager.hasCardDensity()) {
+            SettingsManager.setCardFields(DEMO_CARD_FIELDS);
+            SettingsManager.setCardDensity('custom');
+        }
 
         const newTreeId = await DataManager.importAsNewTree(data, strings.demo.treeName);
 

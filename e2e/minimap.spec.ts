@@ -9,7 +9,7 @@ test.describe('Minimap', () => {
     test('shows when zoomed in, navigates on click, hides via settings', async ({ page }) => {
         await openApp(page);
         await page.getByRole('button', { name: 'Try a sample tree' }).click();
-        await expect(card(page, 'Henry VIII')).toBeVisible();
+        await expect(card(page, 'Johan')).toBeVisible();
 
         const panel = page.locator('#minimap-panel');
 
@@ -45,7 +45,7 @@ test.describe('Minimap', () => {
         await page.setViewportSize({ width: 1200, height: 850 });
         await openApp(page);
         await page.getByRole('button', { name: 'Try a sample tree' }).click();
-        await expect(card(page, 'Henry VIII')).toBeVisible();
+        await expect(card(page, 'Johan')).toBeVisible();
         for (let i = 0; i < 6; i++) await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
 
         for (const w of [1200, 900, 700, 641, 640, 620, 601, 600, 560, 520, 500, 499, 420]) {

@@ -54,6 +54,9 @@ async function stubGeocoder(page: Page, answers: Record<string, [number, number]
 async function setPlaces(page: Page, places: Record<string, string>): Promise<void> {
     await page.evaluate((wanted) => {
         const dm = window.Strom.DataManager;
+        // Events and weddings name places too.
+        for (const p of Object.values(dm.getData().persons)) for (const e of p.events ?? []) delete e.place;
+        for (const u of Object.values(dm.getData().partnerships)) { delete u.startPlace; delete u.endPlace; }
         for (const p of dm.getAllPersons()) {
             dm.updatePerson(p.id, { birthPlace: '', deathPlace: '' });
         }
@@ -66,9 +69,9 @@ async function setPlaces(page: Page, places: Record<string, string>): Promise<vo
     }, places);
 }
 
-/** The usual two: Henry VIII in Greenwich, Henry VII in Pembroke. */
+/** The usual two: Johan in Greenwich, his father Peter in Pembroke. */
 async function seedPlaces(page: Page): Promise<void> {
-    await setPlaces(page, { 'Henry VIII': 'Greenwich', 'Henry VII': 'Pembroke' });
+    await setPlaces(page, { 'Johan': 'Greenwich', 'Peter': 'Pembroke' });
 }
 
 test('the sample tree is on the map the moment it loads', async ({ page }) => {
@@ -80,14 +83,14 @@ test('the sample tree is on the map the moment it loads', async ({ page }) => {
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await page.getByRole('button', { name: 'Whole tree' }).click();
 
     // The demo ships its own coordinates: places show up with nothing sent.
     await expect(page.locator('.map-marker').first()).toBeVisible();
-    expect(await page.locator('.map-marker').count()).toBeGreaterThan(10);
+    expect(await page.locator('.map-marker').count()).toBeGreaterThanOrEqual(8);
     expect(asked).toBe(0);
     await expect(page.getByRole('button', { name: /Look up/ })).toBeHidden();
 });
@@ -101,7 +104,7 @@ test('first open shows the tiles notice and fetches nothing until it is read', a
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
 
@@ -126,7 +129,7 @@ test('the map offers to look up places, then plots them', async ({ page }) => {
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     await seedPlaces(page);
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
@@ -146,7 +149,7 @@ test('the map offers to look up places, then plots them', async ({ page }) => {
     expect(asked.sort()).toEqual(['Greenwich', 'Pembroke']);
 
     // Only place names left the app — no family data rode along.
-    expect(asked.join(' ')).not.toMatch(/Henry|Tudor|1491/);
+    expect(asked.join(' ')).not.toMatch(/Johan|Berg|1825/);
 
     // Tiles are drawn under the markers.
     expect(await page.locator('.map-tile').count()).toBeGreaterThan(0);
@@ -158,7 +161,7 @@ test('coordinates are stored in the tree, so the map needs no second lookup', as
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     await seedPlaces(page);
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
@@ -186,7 +189,7 @@ test('the map never scrolls out from under its own controls', async ({ page }) =
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     await seedPlaces(page);
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
@@ -246,7 +249,7 @@ test('a marker tells you who belongs to the place and takes you to them', async 
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     await seedPlaces(page);
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
@@ -256,11 +259,11 @@ test('a marker tells you who belongs to the place and takes you to them', async 
 
     await page.locator('.map-marker[data-key="greenwich"] .map-marker-dot').click();
     await expect(page.locator('.map-popup')).toBeVisible();
-    await page.locator('.map-popup-person', { hasText: 'Henry VIII' }).click();
+    await page.locator('.map-popup-person', { hasText: 'Johan' }).click();
 
     // Clicking a person leaves the map and focuses them in the family view.
     await expect(page.locator('#map-container')).toBeHidden();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     expect(await page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('family');
 });
 
@@ -272,8 +275,8 @@ test('two places close together stay separately clickable', async ({ page }) => 
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
-    await setPlaces(page, { 'Henry VIII': 'Greenwich', 'Henry VII': 'Westminster' });
+    await expect(card(page, 'Johan')).toBeVisible();
+    await setPlaces(page, { 'Johan': 'Greenwich', 'Peter': 'Westminster' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
@@ -291,7 +294,7 @@ test('panning re-positions the same tile images instead of rebuilding them', asy
     await stubTiles(page);
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await expect(page.locator('.map-tile').first()).toBeVisible();
@@ -323,7 +326,7 @@ test('a two-finger pinch steps the map zoom in', async ({ page }) => {
     await stubTiles(page);
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await expect(page.locator('.map-tile').first()).toBeVisible();
@@ -353,7 +356,7 @@ test('offline, the map says so instead of showing a blank canvas', async ({ page
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     await seedPlaces(page);
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
@@ -376,7 +379,7 @@ test('the map controls say what they do', async ({ page }) => {
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     await seedPlaces(page);
     await page.getByRole('button', { name: 'Map', exact: true }).click();
 
@@ -395,8 +398,8 @@ test('a place the map cannot find can be matched by hand', async ({ page }) => {
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
-    await setPlaces(page, { 'Henry VIII': 'Praha', 'Henry VII': 'Kravaře u Č. Lípy' });
+    await expect(card(page, 'Johan')).toBeVisible();
+    await setPlaces(page, { 'Johan': 'Praha', 'Peter': 'Kravaře u Č. Lípy' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
@@ -421,7 +424,7 @@ test('a place the map cannot find can be matched by hand', async ({ page }) => {
     // ...and the tree still calls it what the family calls it.
     const stored = await page.evaluate(() => {
         const dm = window.Strom.DataManager;
-        const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Henry VII');
+        const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Peter');
         return { place: p?.birthPlace, keys: Object.keys(dm.getData().places ?? {}).sort() };
     });
     expect(stored.place).toBe('Kravaře u Č. Lípy');
@@ -437,8 +440,8 @@ test('a hand search that finds nothing says so and keeps the place', async ({ pa
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
-    await setPlaces(page, { 'Henry VIII': 'Lhota u Nikde' });
+    await expect(card(page, 'Johan')).toBeVisible();
+    await setPlaces(page, { 'Johan': 'Lhota u Nikde' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await page.getByRole('button', { name: 'Places', exact: true }).click();
@@ -462,8 +465,8 @@ test('a pin in the wrong place can be fixed from the map', async ({ page }) => {
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
-    await setPlaces(page, { 'Henry VIII': 'Boston' });
+    await expect(card(page, 'Johan')).toBeVisible();
+    await setPlaces(page, { 'Johan': 'Boston' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
@@ -536,7 +539,7 @@ test('a pin can be removed, and the place stays', async ({ page }) => {
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     await seedPlaces(page);
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
@@ -551,7 +554,7 @@ test('a pin can be removed, and the place stays', async ({ page }) => {
     await expect(page.locator('.map-marker')).toHaveCount(1);
     const after = await page.evaluate(() => {
         const dm = window.Strom.DataManager;
-        const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Henry VIII');
+        const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Johan');
         return { place: p?.birthPlace, keys: Object.keys(dm.getData().places ?? {}) };
     });
     expect(after.place).toBe('Greenwich');
@@ -564,9 +567,9 @@ test('renaming a place fixes it everywhere and keeps its pin', async ({ page }) 
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     // The same typo on two people — a rename must catch both.
-    await setPlaces(page, { 'Henry VIII': 'Grenwich', 'Henry VII': 'Grenwich' });
+    await setPlaces(page, { 'Johan': 'Grenwich', 'Peter': 'Grenwich' });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
@@ -581,7 +584,7 @@ test('renaming a place fixes it everywhere and keeps its pin', async ({ page }) 
     const after = await page.evaluate(() => {
         const dm = window.Strom.DataManager;
         const places = dm.getAllPersons()
-            .filter((x: { firstName: string }) => x.firstName.startsWith('Henry V'))
+            .filter((x: { firstName: string }) => ['Johan', 'Peter'].includes(x.firstName))
             .map((x: { birthPlace?: string }) => x.birthPlace);
         return { places, keys: Object.keys(dm.getData().places ?? {}) };
     });
@@ -598,7 +601,7 @@ test('nothing is sent when the user declines', async ({ page }) => {
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     await seedPlaces(page);
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();

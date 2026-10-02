@@ -24,7 +24,7 @@ async function overlapCount(page: import('@playwright/test').Page): Promise<numb
 test('every density sizes the cards, tells the layout, and never overlaps', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     // "Letopis" card boxes (see CARD_SIZE): normal 188x64, compact names-only,
     // detailed taller for the occupation/age lines.
@@ -41,7 +41,7 @@ test('every density sizes the cards, tells the layout, and never overlaps', asyn
         });
         expect(cfg).toEqual([...expected[d]]);
         // Measure a NON-focused card: the focus card is scaled up on purpose.
-        const box = await card(page, 'Edmund').boundingBox();
+        const box = await card(page, 'Maria').boundingBox();
         expect(Math.round(box!.width)).toBe(expected[d][0]);
 
         expect(await overlapCount(page)).toBe(0);
@@ -51,34 +51,34 @@ test('every density sizes the cards, tells the layout, and never overlaps', asyn
 test('compact hides the meta row; normal and detailed show life years, place and age', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     await page.evaluate(() => {
         const dm = window.Strom.DataManager;
-        const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Henry VIII');
+        const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Johan');
         if (p) dm.updatePerson(p.id, { birthPlace: 'Greenwich Palace' });
     });
 
     // Compact: names only, no meta row.
     await page.evaluate(() => window.Strom.UI.setCardDensity('compact'));
-    await expect(card(page, 'Henry VIII').locator('.birth-date')).toHaveCount(0);
+    await expect(card(page, 'Johan').locator('.birth-date')).toHaveCount(0);
 
     // Normal: meta row carries the life-year range and the birth place.
     await page.evaluate(() => window.Strom.UI.setCardDensity('normal'));
-    await expect(card(page, 'Henry VIII').locator('.birth-date')).toHaveCount(1);
-    await expect(card(page, 'Henry VIII').locator('.birth-date')).toContainText('Greenwich Palace');
+    await expect(card(page, 'Johan').locator('.birth-date')).toHaveCount(1);
+    await expect(card(page, 'Johan').locator('.birth-date')).toContainText('Greenwich Palace');
 
     // Detailed: the place gets its own line and the age moves onto the year row
     // ("1491 – 1547 · age 55"), so there is no separate .card-age element.
     await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
-    await expect(card(page, 'Henry VIII').locator('.card-place')).toContainText('Greenwich Palace');
-    await expect(card(page, 'Henry VIII').locator('.birth-date')).toHaveText(/·\s*\D+\s*\d+\s*$/);
-    await expect(card(page, 'Henry VIII').locator('.card-age')).toHaveCount(0);
+    await expect(card(page, 'Johan').locator('.card-place')).toContainText('Greenwich Palace');
+    await expect(card(page, 'Johan').locator('.birth-date')).toHaveText(/·\s*\D+\s*\d+\s*$/);
+    await expect(card(page, 'Johan').locator('.card-age')).toHaveCount(0);
 });
 
 test('detailed cards never show a nonsense age for historical people', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
 
     // Someone long dead WITHOUT a death date has no knowable age — counting to
@@ -86,11 +86,11 @@ test('detailed cards never show a nonsense age for historical people', async ({ 
     // "· age N" suffix, so a person with no age shows just the years.
     await page.evaluate(() => {
         const dm = window.Strom.DataManager;
-        const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Henry VIII');
+        const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Johan');
         if (p) dm.updatePerson(p.id, { deathDate: '' });
         window.Strom.TreeRenderer.render();
     });
-    await expect(card(page, 'Henry VIII').locator('.birth-date')).not.toHaveText(/·\s*\D+\s*\d+\s*$/);
+    await expect(card(page, 'Johan').locator('.birth-date')).not.toHaveText(/·\s*\D+\s*\d+\s*$/);
 
     // Nobody in the sample tree shows an implausible age (parsed off the meta row).
     const overMax = await page.evaluate(() =>

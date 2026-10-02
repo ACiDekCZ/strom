@@ -5,7 +5,9 @@ test('generation labels survive zooming out a step or two', async ({ page }) => 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(page.locator('.person-card').first()).toBeVisible();
-    await expect(page.locator('#gen-labels .gen-label').first()).toBeVisible();
+    // (The topmost band's label may be legitimately hidden when it would land
+    // on that band's cards under the toolbar — see the line-mode test below.)
+    await expect(page.locator('#gen-labels .gen-label:visible').first()).toBeVisible();
 
     // Two zoom-out steps: labels must still be there (bands are still legible).
     await page.evaluate(() => { window.Strom.ZoomPan.zoomOut(); window.Strom.ZoomPan.zoomOut(); });

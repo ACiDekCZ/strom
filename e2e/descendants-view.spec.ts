@@ -247,8 +247,8 @@ test.describe('mobile', () => {
 });
 
 test.describe('mobile: descendants framing (no left clip)', () => {
-    // The Czech sample tree (Přemyslids) rooted at Bořivoj I. reproduces the
-    // exact bug: a chart far wider than a 390px phone. The old framing centred
+    // The sample tree rooted at its oldest ancestor reproduces the exact bug:
+    // a chart far wider than a 390px phone. The old framing centred
     // the full content box, which — because deep descendant rows sprawl right —
     // shoved the focus (top generation) off the left edge.
     test.use({ locale: 'cs-CZ', viewport: { width: 390, height: 844 } });
@@ -257,19 +257,19 @@ test.describe('mobile: descendants framing (no left clip)', () => {
         await page.goto('/strom.html');
         await expect(page.locator('.toolbar')).toBeVisible();
 
-        // Real user path: empty-state "Try a sample tree" link (cs → Přemyslids).
+        // Real user path: the empty-state "Try a sample tree" link.
         await page.locator('#empty-state button.link').click();
         await expect(page.locator('.person-card').first()).toBeVisible();
 
-        // Focus Bořivoj I. (the reported root), then enter Potomci via the
-        // actual mobile bottom-bar tab — the exact sequence the user reported.
+        // Focus the root (Peter), then enter Potomci via the actual mobile
+        // bottom-bar tab — the exact sequence the user reported.
         const focusFirst = await page.evaluate(() => {
             const dm = window.Strom.DataManager;
-            const b = dm.getAllPersons().find((p: { firstName: string }) => p.firstName.startsWith('Bořivoj I'));
+            const b = dm.getAllPersons().find((p: { firstName: string }) => p.firstName === 'Peter');
             window.Strom.TreeRenderer.setFocus(b!.id);
             return b!.firstName;
         });
-        expect(focusFirst).toContain('Bořivoj');
+        expect(focusFirst).toBe('Peter');
         await page.locator('#bb-view-descendants').click();
         await expect(page.locator('#descendants-badge')).toBeVisible();
 

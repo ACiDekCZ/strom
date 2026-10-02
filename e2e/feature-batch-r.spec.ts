@@ -10,12 +10,12 @@ import { openApp, createFirstPerson, card } from './helpers.js';
  *   R4 — tree-health dashboard
  */
 
-/** Load the built-in sample tree (House of Tudor) from the empty state. */
+/** Load the built-in sample tree (the Berg family) from the empty state. */
 async function loadSample(page: Page): Promise<void> {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(page.locator('#empty-state')).toBeHidden();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 }
 
 // ==================== R1: descendants poster ====================
@@ -26,8 +26,8 @@ test('R1: the descendants view exports a non-empty poster SVG with a card per vi
     // Focus a person with descendants and switch to the Descendants view.
     await page.evaluate(() => {
         const dm = window.Strom.DataManager;
-        const henry = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Henry VIII');
-        if (henry) window.Strom.TreeRenderer.setFocus(henry.id);
+        const johan = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Johan');
+        if (johan) window.Strom.TreeRenderer.setFocus(johan.id);
         window.Strom.UI.setDisplayViewMode('descendants');
     });
     await expect.poll(() => page.locator('.person-card').count()).toBeGreaterThan(1);
@@ -51,7 +51,7 @@ test('R1: the descendants view exports a non-empty poster SVG with a card per vi
     expect((svg.match(/<line /g) || []).length).toBeGreaterThan(0);
 
     // Draw parity for the de-emphasis (R1 F5): the poster dims exactly the same
-    // context-only people the view dims on screen (opacity 0.5). Henry VIII's
+    // context-only people the view dims on screen (opacity 0.5). Johan's
     // descendants have no context-only relatives, so both counts are 0 here —
     // the parity is exercised for real in the family-view test below.
     const onScreenIndirect = await page.locator('.person-card.indirect').count();
@@ -62,12 +62,12 @@ test('R1: the descendants view exports a non-empty poster SVG with a card per vi
 test('R1: the family-view poster dims context-only in-laws, matching the screen', async ({ page }) => {
     await loadSample(page);
 
-    // Anne Boleyn's FAMILY view pulls in her co-wives' branches for context —
+    // Rosa's FAMILY view pulls in her husband's first marriage for context —
     // those in-laws render de-emphasized (opacity 0.5) on screen.
     await page.evaluate(() => {
         const dm = window.Strom.DataManager;
-        const anne = dm.getAllPersons().find((x: { id: string }) => x.id === 'td_anne_b');
-        if (anne) window.Strom.TreeRenderer.setFocus(anne.id);
+        const rosa = dm.getAllPersons().find((x: { id: string }) => x.id === 'demo_rosa');
+        if (rosa) window.Strom.TreeRenderer.setFocus(rosa.id);
         window.Strom.UI.setDisplayViewMode('family');
     });
     await expect.poll(() => page.locator('.person-card.indirect').count()).toBeGreaterThan(0);
@@ -91,8 +91,8 @@ test('R2: the life timeline renders chronological rows for a rich person', async
 
     await page.evaluate(() => {
         const dm = window.Strom.DataManager;
-        const henry = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Henry VIII');
-        if (henry) window.Strom.UI.showEditPersonModal(henry.id);
+        const johan = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === 'Johan');
+        if (johan) window.Strom.UI.showEditPersonModal(johan.id);
     });
 
     const section = page.locator('#pm-lifeline-section');

@@ -118,10 +118,10 @@ async function setTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
 async function loadDemo(page: Page): Promise<string> {
     await openApp(page);
     await page.evaluate(() => window.Strom.UI.loadDemoTree());
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     // Dismiss the non-blocking tour offer / hint so nothing sits on the bar.
     await page.evaluate(() => document.querySelectorAll('.tour-offer, .toast').forEach(e => e.remove()));
-    const id = await card(page, 'Henry VIII').getAttribute('data-id');
+    const id = await card(page, 'Johan').getAttribute('data-id');
     if (!id) throw new Error('demo focus has no data-id');
     return id;
 }

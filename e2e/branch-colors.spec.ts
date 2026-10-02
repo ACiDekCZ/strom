@@ -8,14 +8,14 @@ import { openApp, card } from './helpers.js';
 test('branch colours toggle adds card classes and a legend', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     // Colours default ON, the legend box defaults OFF (opt-in in settings).
     const legend = page.locator('#branch-legend');
     await expect(legend).toBeHidden();
     await page.evaluate(() => window.Strom.UI.toggleBranchLegend(true));
     await expect(legend).toBeVisible();
-    // At least one card now carries a branch class (Henry VIII has descendants/ancestors).
+    // At least one card now carries a branch class (Johan has descendants/ancestors).
     await expect.poll(() =>
         page.locator('.person-card.branch-paternal, .person-card.branch-maternal, .person-card.branch-descendant').count()
     ).toBeGreaterThan(0);
@@ -43,7 +43,7 @@ test('branch colours toggle adds card classes and a legend', async ({ page }) =>
 test('the legend can be hidden separately while stripes stay on', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     const legend = page.locator('#branch-legend');
     await expect(legend).toBeHidden();   // default OFF

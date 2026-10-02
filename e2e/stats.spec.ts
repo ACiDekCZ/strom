@@ -8,7 +8,7 @@ import { openApp, card } from './helpers.js';
 test('tree statistics render charts, split bars and record cards inline', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     await page.evaluate(() => window.Strom.UI.showActiveTreeStats());
     const modal = page.locator('#tree-stats-modal');
@@ -40,7 +40,7 @@ test('tree statistics render charts, split bars and record cards inline', async 
 test('by-generation and month charts render as vertical columns', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     await page.evaluate(() => window.Strom.UI.showActiveTreeStats());
     const modal = page.locator('#tree-stats-modal');

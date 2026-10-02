@@ -325,7 +325,7 @@ test('plain GEDCOM import clears stale manager intent; new-tree opens naming dia
 test('make a tree from the current view creates a separate tree of the shown people', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     const treesBefore = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
     const shown = await page.evaluate(() => window.Strom.TreeRenderer.getVisiblePersonIds().size);
 
@@ -334,7 +334,7 @@ test('make a tree from the current view creates a separate tree of the shown peo
     const importDialog = page.locator('#import-tree-modal');
     await expect(importDialog).toBeVisible();
     // Name is pre-filled from the focus person.
-    await expect(importDialog.locator('#import-tree-name')).toHaveValue(/Henry VIII/);
+    await expect(importDialog.locator('#import-tree-name')).toHaveValue(/Johan/);
     await importDialog.getByRole('button', { name: 'Import' }).click();
     await expect(importDialog).toBeHidden();
 
@@ -350,9 +350,9 @@ test('make a tree from the current view creates a separate tree of the shown peo
 test('focus slice (New Tree from focus) is self-consistent — no dangling refs', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
     // Focus a mid-tree person so some parents/children are off-screen.
-    await focusViaSearch(page, 'Henry VIII');
+    await focusViaSearch(page, 'Johan');
 
     const consistent = await page.evaluate(() => {
         const data = window.Strom.TreeRenderer.getFocusedData();

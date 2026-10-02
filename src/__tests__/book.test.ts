@@ -6,10 +6,10 @@
 
 import { describe, it, expect } from 'vitest';
 import { buildFamilyBook } from '../book.js';
-import { getDemoTree } from '../demo-trees.js';
+import { getDemoTree } from '../demo-tree.js';
 import { StromData, PersonId, PartnershipId, Person, Source, Gender } from '../types.js';
 
-const demo = getDemoTree('cs');
+const demo = getDemoTree();
 
 /** Extract the chapter <section> blocks in order. */
 function chapters(html: string): string[] {
@@ -59,10 +59,10 @@ describe('buildFamilyBook (demo)', () => {
         expect(html).not.toContain('<script');
     });
 
-    it('orders chapters oldest-first (Bořivoj is chapter 1)', () => {
+    it('orders chapters oldest-first (Peter is chapter 1)', () => {
         const first = chapters(html)[0];
         expect(first).toContain('book-chapter-num">1<');
-        expect(first).toContain('Bořivoj');
+        expect(first).toContain('Peter');
     });
 
     it('emits chapter cross-references for children who head their own chapter', () => {
@@ -70,11 +70,11 @@ describe('buildFamilyBook (demo)', () => {
     });
 
     it('includes every non-placeholder person in the index (childless kept)', () => {
-        const realPersons = Object.values(demo.persons).filter(p => !p.isPlaceholder);
+        const realPersons = Object.values(demo.persons).filter((p): p is import("../types.js").Person => !p.isPlaceholder);
         const indexRows = html.match(/class="book-index-row"/g) ?? [];
         expect(indexRows.length).toBe(realPersons.length);
-        // Václav III died childless — no chapter, but must still be in the index.
-        expect(html).toContain('Přemyslovec, Václav III.');
+        // Leo has no children — no chapter, but must still be in the index.
+        expect(html).toContain('Berg, Leo');
     });
 
     it('respects maxGenerations by trimming deeper chapters', () => {

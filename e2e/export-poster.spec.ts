@@ -112,7 +112,7 @@ test('poster dialog shows a truthful view label for the family view', async ({ p
 test('fan view: poster downloads an SVG containing fan sectors', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     await page.locator('#view-mode-fan').click();
     await expect(page.locator('#fan-container .fan-svg')).toBeVisible();
@@ -139,7 +139,7 @@ test('fan view: poster downloads an SVG containing fan sectors', async ({ page }
 test('timeline view: poster downloads an SVG containing timeline bars', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('timeline'));
     await expect(page.locator('.timeline-svg')).toBeVisible();
@@ -173,7 +173,7 @@ test('timeline view: tiled print decodes its tiles (no blank sheets)', async ({ 
     // the print preview showed blank sheets. Assert the tile image loads.
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('timeline'));
     await expect(page.locator('.timeline-svg')).toBeVisible();
@@ -208,7 +208,7 @@ test('timeline view: tiled print decodes its tiles (no blank sheets)', async ({ 
 test('map view: poster export is honestly blocked and buttons are disabled', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     await page.evaluate(() => window.Strom.UI.setDisplayViewMode('map'));
     await page.evaluate(() => window.Strom.UI.showPosterDialog());

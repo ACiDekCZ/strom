@@ -5,7 +5,7 @@ import { openApp, card } from './helpers.js';
 test('slideshow spotlights each stop, hides the chrome and is keyboard driven', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     await page.evaluate(() => window.Strom.UI.startSlideshow());
     await expect(page.locator('body')).toHaveClass(/slideshow-mode/);
@@ -41,7 +41,7 @@ test('slideshow spotlights each stop, hides the chrome and is keyboard driven', 
 test('slideshow started from the fan view runs in Family and restores the fan on exit', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Henry VIII')).toBeVisible();
+    await expect(card(page, 'Johan')).toBeVisible();
 
     // Enter a standalone view (fan) — it draws into its own container and the
     // tree canvas (with the person cards) is hidden.

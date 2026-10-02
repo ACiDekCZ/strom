@@ -328,6 +328,11 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Whether the user ever picked a density (the sample tree picks one only if not). */
+    hasCardDensity(): boolean {
+        return this.settings.cardDensity !== undefined;
+    }
+
     /** The custom card's lines (src/card-fields.ts), repaired to a valid set. */
     getCardFields(): CardFieldSettings {
         return normalizeCardFields(this.settings.cardFields);
