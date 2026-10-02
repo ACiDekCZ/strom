@@ -205,6 +205,14 @@ export const researchOverviewMethods = uiModule({
         if (!root) {
             root = el('aside', 'research-overview');
             root.id = 'research-overview';
+            // Delegated on the root, which outlives every redraw: a row rebuilt
+            // under the pointer never gets its mouseleave, and a per-row
+            // handler left that card lit up for good.
+            root.addEventListener('mouseover', (e) => {
+                const row = (e.target as HTMLElement).closest<HTMLElement>('.research-overview__row.has-person');
+                hoverCard((row?.dataset.person as PersonId | undefined) ?? null);
+            });
+            root.addEventListener('mouseleave', () => hoverCard(null));
             document.body.appendChild(root);
         }
         root.className = `research-overview research-overview--${mode}`;
@@ -532,8 +540,7 @@ export const researchOverviewMethods = uiModule({
                 const target = c.personIds.find(id => DataManager.getPerson(id));
                 if (target) {
                     li.classList.add('has-person');
-                    li.onmouseenter = () => hoverCard(target);
-                    li.onmouseleave = () => hoverCard(null);
+                    li.dataset.person = target;
                     li.onclick = () => this.overviewShowPerson(target, mode);
                 }
                 list.appendChild(li);
