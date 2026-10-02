@@ -71,7 +71,7 @@ describe('the state of a research tree', () => {
         expect(researchSyncState(input({ link: rejected, matchesBase: false, current: 'fp-other' })).kind).toBe('rejected');
         const refused = link({ refused: { reason: 'locked', at: '' } });
         const state = researchSyncState(input({ link: refused, matchesBase: false }));
-        expect(state).toEqual({ kind: 'refused', reason: 'locked' });
+        expect(state).toEqual({ kind: 'refused', core: 'refused', reason: 'locked' });
     });
 
     it('Safari: its own block whatever else is true', () => {
@@ -79,10 +79,78 @@ describe('the state of a research tree', () => {
     });
 
     it('the dot asks for the user only where there is something to do', () => {
-        const lit = ['unsent', 'unsentBridgeDown', 'newer', 'unsentAndNewer', 'refused', 'rejected'];
-        const quiet = ['inSync', 'sentPending', 'waitThenLoad', 'bridgeDown', 'safari', 'none'];
+        const lit = ['unsentBridgeDown', 'newer', 'unsentAndNewer', 'refused', 'rejected', 'autoPaused', 'autoBridgeDown', 'switched'];
+        // Sent by hand, "unsent" has the Send button in the toolbar (its ⋯ dot only where the button is not: CSS).
+        const quiet = ['unsent', 'inSync', 'written', 'sentPending', 'waitThenLoad', 'bridgeDown', 'safari', 'none',
+            'autoWaiting', 'sending', 'offerAuto', 'autoIntro'];
         for (const k of lit) expect(researchSyncWantsAttention(k as never)).toBe(true);
         for (const k of quiet) expect(researchSyncWantsAttention(k as never)).toBe(false);
+    });
+});
+
+describe('sending by itself, the archive, one-time notices', () => {
+    const auto = (extra: Partial<ResearchSyncInput> = {}) => input({ auto: true, matchesBase: false, ...extra });
+
+    it('changes waiting quietly while the quiet time runs, the bridge up or not', () => {
+        expect(researchSyncState(auto()).kind).toBe('autoWaiting');
+        expect(researchSyncState(auto({ bridgeUp: false })).kind).toBe('autoWaiting');
+        // Sent by hand the same tree asks for the Send button.
+        expect(researchSyncState(input({ matchesBase: false })).kind).toBe('unsent');
+    });
+
+    it('"not running" only once the quiet time ran out without a bridge', () => {
+        expect(researchSyncState(auto({ bridgeUp: false, autoDue: true })).kind).toBe('autoBridgeDown');
+        // The bridge back: about to go, still quiet.
+        expect(researchSyncState(auto({ bridgeUp: true, autoDue: true })).kind).toBe('autoWaiting');
+    });
+
+    it('sending; a send the research is still writing (202) or an archive is never "waiting for you"', () => {
+        expect(researchSyncState(auto({ sending: true })).kind).toBe('sending');
+        const writing = link({ sent: sent({ writing: true }) });
+        expect(researchSyncState(input({ auto: true, link: writing, matchesBase: false, current: 'fp-sent' })).kind).toBe('sending');
+        const pending = link({ sent: sent() });
+        expect(researchSyncState(input({ auto: true, archive: true, link: pending, matchesBase: false, current: 'fp-sent' })).kind).toBe('sending');
+        expect(researchSyncState(input({ auto: true, link: pending, matchesBase: false, current: 'fp-sent' })).kind).toBe('sentPending');
+        // Sent by hand, the Send button shows the send (unsent stays the state).
+        expect(researchSyncState(input({ matchesBase: false, sending: true })).kind).toBe('unsent');
+    });
+
+    it('written: the last write, after the new version loaded too', () => {
+        const w = { at: '2026-10-02T14:32:00Z', changes: 6, conflicts: 0 };
+        expect(researchSyncState(input({ auto: true, written: w })).kind).toBe('written');
+        expect(researchSyncState(input({ auto: true, written: w, bridgeUp: false })).kind).toBe('bridgeDown');
+        expect(researchSyncState(input({ auto: true })).kind).toBe('inSync');
+    });
+
+    it('refused by itself: paused until sent again; discarded: unchanged it stays discarded', () => {
+        const refused = link({ refused: { reason: 'locked', at: '' } });
+        expect(researchSyncState(auto({ link: refused }))).toEqual({ kind: 'autoPaused', core: 'autoPaused', reason: 'locked' });
+        const discarded = link({ sent: sent({ state: 'discarded' }) });
+        expect(researchSyncState(input({ auto: true, link: discarded, matchesBase: false, current: 'fp-sent' })).kind).toBe('rejected');
+    });
+
+    it('a switch of mode comes first, the toolbar keeps the real state', () => {
+        const st = researchSyncState(auto({ remoteHead: 'bbbbbbb', switched: true }));
+        expect(st.kind).toBe('switched');
+        expect(st.core).toBe('unsentAndNewer');
+        expect(researchSyncState(input({ switched: true })).kind).toBe('switched');
+    });
+
+    it('the offer to send by itself: an archive sent by hand, until answered', () => {
+        expect(researchSyncState(input({ archive: true, offerUnseen: true })).kind).toBe('offerAuto');
+        expect(researchSyncState(input({ archive: true, offerUnseen: false })).kind).toBe('inSync');
+        expect(researchSyncState(input({ archive: true, auto: true, offerUnseen: true })).kind).toBe('inSync');
+        expect(researchSyncState(input({ offerUnseen: true })).kind).toBe('inSync');
+        // Something to do comes first.
+        expect(researchSyncState(input({ archive: true, offerUnseen: true, remoteHead: 'bbbbbbb' })).kind).toBe('newer');
+    });
+
+    it('the first start of sending by itself as a block (no toolbar mark at this width)', () => {
+        const st = researchSyncState(input({ auto: true, introDue: true }));
+        expect(st.kind).toBe('autoIntro');
+        expect(st.core).toBe('inSync');
+        expect(researchSyncState(input({ introDue: true })).kind).toBe('inSync');
+        expect(researchSyncState(auto({ introDue: true })).kind).toBe('autoWaiting');
     });
 });
 
@@ -128,9 +196,17 @@ describe('what the bridge says', () => {
     it('accepts: the gate the other way round; null from an older research', () => {
         expect(sanitizeAccepts(undefined)).toBeNull();
         expect(sanitizeAccepts({ sync: { auto: 'additions' }, sources: true, verified: true, media: null }))
-            .toEqual({ syncAuto: 'additions', sources: true, verified: true, media: false });
+            .toEqual({ syncAuto: 'additions', sources: true, verified: true, media: false, mode: 'agent', review: false });
         expect(sanitizeAccepts({ sync: { auto: 'everything' }, sources: 'yes' }))
-            .toEqual({ syncAuto: 'off', sources: false, verified: false, media: false });
+            .toEqual({ syncAuto: 'off', sources: false, verified: false, media: false, mode: 'agent', review: true });
+    });
+
+    it('accepts: how a send is written and the mode (Strom Research with the immediate write)', () => {
+        expect(sanitizeAccepts({ mode: 'research', sync: { auto: 'write' } })).toMatchObject({ syncAuto: 'write', mode: 'agent', review: false });
+        expect(sanitizeAccepts({ mode: 'archive', sync: { auto: 'mirror' } })).toMatchObject({ syncAuto: 'mirror', mode: 'archive', review: false });
+        // "off": every send waits in the inbox (sync.review on, and every research before the immediate write).
+        expect(sanitizeAccepts({ mode: 'research', sync: { auto: 'off' } })).toMatchObject({ mode: 'agent', review: true });
+        expect(sanitizeAccepts({ mode: 'robot' })?.mode).toBe('agent');
     });
 
     it('inbox: clean entries only', () => {
@@ -157,7 +233,7 @@ describe('what the bridge says', () => {
             { intake: 'bad mark', state: 'written' },
         ] })?.sends;
         expect(sends).toEqual([{ intake: 'R20261002143205123-a1b2', at: '2026-10-02T14:32:05Z', state: 'discarded', changes: 6,
-            tree: 'tree_1', sent: 'v2-x', decidedAt: '2026-10-02T15:10:00Z', reason: 'zkouška' }]);
+            tree: 'tree_1', sent: 'v2-x', decidedAt: '2026-10-02T15:10:00Z', reason: 'zkouška', conflicts: null }]);
         expect(sanitizeLiveStatus({ tree: RID })?.sends).toBeNull();
     });
 

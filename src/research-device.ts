@@ -132,6 +132,7 @@ function writeBridge(researchId: string, value: StoredResearchBridge): void {
             ...(value.accepts ? { accepts: {
                 sync: { auto: value.accepts.syncAuto }, sources: value.accepts.sources,
                 verified: value.accepts.verified, ...(value.accepts.media ? { media: {} } : {}),
+                ...(value.accepts.mode === 'archive' ? { mode: 'archive' } : {}),
             } } : {}),
             ...(value.head ? { head: value.head } : {}),
         }));
@@ -154,4 +155,74 @@ export function noteResearchBridgeStatus(researchId: string, accepts: ResearchAc
         accepts: accepts ?? prev?.accepts ?? null,
         head: isResearchHead(head) ?? prev?.head ?? '',
     });
+}
+
+// ==================== SENDING BY ITSELF (per tree, this browser) ====================
+
+const AUTO_KEY = 'strom-research-auto:';
+const INTRO_KEY = 'strom-research-auto-intro-seen';
+
+/**
+ * What this browser keeps about a research tree's sending, beside the tree's
+ * research link: the last send the research wrote (it outlives loading the
+ * new version), the research's mode as last shown (a switch is said once),
+ * the one-time offer to send by itself, and the user's edits not sent yet.
+ */
+export interface ResearchAutoState {
+    /** The last send the research wrote, and the conflicts it left. */
+    lastWritten?: { at: string; changes: number | null; conflicts: number; persons?: string[] };
+    /** The research's mode the user last saw ("switched" is said once). */
+    modeSeen?: 'agent' | 'archive';
+    /** When the mode last switched (ISO): the line in Research for this tree. */
+    modeSince?: string;
+    /** The offer to send by itself (an archive, a tree sent by hand) was answered. */
+    offerSeen?: true;
+    /** Edits since the last send ("3 changes waiting"). */
+    edits?: number;
+    /** The reasons a refusal was already told (once each). */
+    toldRefused?: string[];
+}
+
+export function researchAutoState(treeId: string): ResearchAutoState {
+    try {
+        const raw = localStorage.getItem(AUTO_KEY + treeId);
+        if (!raw) return {};
+        const p = JSON.parse(raw) as Record<string, unknown>;
+        const out: ResearchAutoState = {};
+        const lw = p.lastWritten as Record<string, unknown> | undefined;
+        if (lw && typeof lw.at === 'string' && Number.isFinite(Date.parse(lw.at))) {
+            out.lastWritten = {
+                at: lw.at,
+                changes: typeof lw.changes === 'number' && lw.changes >= 0 ? Math.floor(lw.changes) : null,
+                conflicts: typeof lw.conflicts === 'number' && lw.conflicts > 0 ? Math.floor(lw.conflicts) : 0,
+                ...(Array.isArray(lw.persons) ? { persons: lw.persons.filter((x): x is string => typeof x === 'string').slice(0, 20) } : {}),
+            };
+        }
+        if (p.modeSeen === 'agent' || p.modeSeen === 'archive') out.modeSeen = p.modeSeen;
+        if (typeof p.modeSince === 'string' && Number.isFinite(Date.parse(p.modeSince))) out.modeSince = p.modeSince;
+        if (p.offerSeen === true) out.offerSeen = true;
+        if (typeof p.edits === 'number' && p.edits > 0) out.edits = Math.min(Math.floor(p.edits), 99999);
+        if (Array.isArray(p.toldRefused)) out.toldRefused = p.toldRefused.filter((r): r is string => typeof r === 'string').slice(-10);
+        return out;
+    } catch {
+        return {};
+    }
+}
+
+/** Change part of it (undefined removes a field). */
+export function patchResearchAutoState(treeId: string, patch: Partial<ResearchAutoState>): void {
+    try {
+        const next: Record<string, unknown> = { ...researchAutoState(treeId), ...patch };
+        for (const [k, v] of Object.entries(patch)) if (v === undefined) delete next[k];
+        localStorage.setItem(AUTO_KEY + treeId, JSON.stringify(next));
+    } catch { /* no storage: the notices may show again */ }
+}
+
+/** "Changes now go to the research by themselves" was shown once on this install. */
+export function researchAutoIntroSeen(): boolean {
+    try { return localStorage.getItem(INTRO_KEY) === '1'; } catch { return true; }
+}
+
+export function noteResearchAutoIntroSeen(): void {
+    try { localStorage.setItem(INTRO_KEY, '1'); } catch { /* shown again next time */ }
 }

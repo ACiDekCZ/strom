@@ -63,6 +63,8 @@ export interface ResearchSource {
     date: string | null;
     /** The research commit (file header `_STROM_HEAD`); the bridge passes it in opts. */
     head?: string | null;
+    /** `_STROM_MODE archive`: the research works without an agent. */
+    mode?: 'archive' | null;
 }
 
 export interface LiveChangeItem {
@@ -477,14 +479,14 @@ export async function fetchWithTimeout(url: string, ms: number): Promise<Respons
     }
 }
 
-async function fetchGedcomText(url: string): Promise<string> {
+export async function fetchGedcomText(url: string): Promise<string> {
     const res = await fetchWithTimeout(url, 30000);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return decodeGedcomFile(await res.arrayBuffer());
 }
 
 /** POST the tree to the send bridge; never sends cookies. */
-export async function postSync(url: string, gedcom: string, ms: number): Promise<Response> {
+export async function postSync(url: string, gedcom: string, ms: number, keepalive = false): Promise<Response> {
     if (typeof fetch !== 'function') throw new Error('fetch unavailable');
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), ms) : null;
@@ -499,6 +501,8 @@ export async function postSync(url: string, gedcom: string, ms: number): Promise
             headers: { 'Content-Type': 'text/plain; charset=utf-8' },
             body: gedcom,
             signal: ctl?.signal,
+            // Leaving the page: a small tree still reaches the bridge (a keepalive body is capped at 64 kB).
+            ...(keepalive ? { keepalive: true } : {}),
         });
     } finally {
         if (timer) clearTimeout(timer);
@@ -582,7 +586,7 @@ function incomingImageBytes(data: StromData): number {
  * does not take the app's images yet, so these exist only here — an update
  * never drops them without asking.
  */
-function imagesDroppedBy(next: StromData, previous: StromData): number {
+export function imagesDroppedBy(next: StromData, previous: StromData): number {
     let n = 0;
     for (const [id, old] of Object.entries(previous.persons ?? {})) {
         const now = next.persons?.[id as keyof typeof next.persons];
@@ -1122,6 +1126,7 @@ export const researchUiMethods = uiModule({
                 fingerprint: contentFingerprint(DataManager.getData()),
                 syncedAt: new Date().toISOString(),
                 ...(head ? { head } : {}),
+                ...(source.mode === 'archive' ? { mode: 'archive' as const } : {}),
             });
         }
         const loadedAfterSend = !created && (holdsSent || (!!opts.afterSend && opts.afterSend === treeId));
@@ -1552,7 +1557,7 @@ export const researchUiMethods = uiModule({
             const name = status.name || header.name || strings.research.defaultName;
             const treeId = await this.applyResearch(
                 data,
-                { treeId: status.treeId, name, date: header.date },
+                { treeId: status.treeId, name, date: header.date, mode: header.mode },
                 { head: status.head, quiet: opts.resume }
             );
             if (!treeId) {
@@ -1848,6 +1853,7 @@ export const researchUiMethods = uiModule({
             fingerprint: contentFingerprint(active ? DataManager.getData() : stable),
             syncedAt: new Date().toISOString(),
             ...(s.head ? { head: s.head } : {}),
+            ...(header.mode === 'archive' ? { mode: 'archive' as const } : {}),
         });
         return active ? DataManager.getData() : stable;
     },

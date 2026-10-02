@@ -8686,11 +8686,11 @@
             font-size: 13px; border-radius: var(--r-sm);
         }
         .actions-research-submenu .research-sync-btn[disabled] { opacity: 0.75; cursor: progress; }
-        .research-sync-link {
+        .research-sync-link, .toolbar .research-sync-link {
             padding: 2px 0; border: 0; background: none; cursor: pointer; font: inherit;
             font-size: 13px; font-weight: 600; color: var(--primary);
         }
-        .research-sync-link:hover { text-decoration: underline; }
+        .research-sync-link:hover, .toolbar .research-sync-link:hover { text-decoration: underline; background: none; }
         .research-sync-btn:focus-visible, .research-sync-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .research-sync-spinner {
             flex: none; width: 11px; height: 11px; border-radius: 50%;
@@ -8723,6 +8723,78 @@
         @media (max-width: 1179px) {
             .toolbar .research-sync-pill { display: none !important; }
         }
+        /* Sending by itself: the quiet mark, always in the research's place (the toolbar does not move). */
+        .toolbar .research-sync-pill.is-mark,
+        .toolbar .research-sync-pill.is-send {
+            width: auto; height: auto; padding: 0; border: 0; background: none; position: relative;
+        }
+        .toolbar .research-sync-pill.is-warn, .toolbar .research-sync-pill.is-wait { position: relative; }
+        .research-sync-mark, .toolbar .research-sync-mark {
+            width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; background: none;
+            display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--primary);
+        }
+        .research-sync-mark:hover, .toolbar .research-sync-mark:hover { background: var(--hover-bg); }
+        .research-sync-mark:focus-visible, .research-sync-send:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .research-sync-mark-ring {
+            width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid var(--text-secondary);
+        }
+        .research-sync-mark-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+        .research-sync-mark-ghost { width: 8px; height: 8px; border-radius: 50%; background: var(--text-ghost); }
+        .research-sync-mark-check { font-size: 14px; font-weight: 700; line-height: 1; color: var(--primary); animation: research-mark-in 0.2s ease-out; }
+        .research-sync-mark .research-sync-spinner { width: 12px; height: 12px; box-sizing: border-box; color: var(--primary); }
+        @keyframes research-mark-in { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) { .research-sync-mark-check { animation: none; } }
+        /* Sent by hand: the Send button while changes wait and the research runs. */
+        .research-sync-send, .toolbar .research-sync-send {
+            display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px;
+            border: 0; border-radius: 999px; background: var(--primary); color: var(--on-primary);
+            font-family: var(--font-sans); font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer;
+        }
+        .toolbar .research-sync-send:hover { background: var(--primary-dark); }
+        .toolbar .research-sync-send[disabled] { background: var(--primary-soft); color: var(--primary); cursor: progress; }
+        .research-sync-send-short { display: none; }
+        @media (max-width: 1599px) {
+            .research-sync-send-long { display: none; }
+            .research-sync-send-short { display: inline; }
+        }
+        /* The note under the mark: a new conflict, the first start of sending by itself. */
+        .research-sync-note {
+            position: absolute; top: calc(100% + 4px); left: 0; z-index: 120;
+            display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 10px;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+            box-shadow: 0 6px 18px var(--shadow), var(--shadow-sm);
+            font-family: var(--font-sans); font-size: 12px; font-weight: 400; line-height: 1.3; color: var(--text); white-space: nowrap;
+        }
+        .research-sync-note-link, .toolbar .research-sync-note-link {
+            padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-weight: 600; color: var(--primary);
+        }
+        .toolbar .research-sync-note-link:hover { text-decoration: underline; background: none; }
+        .research-sync-note-x, .toolbar .research-sync-note-x {
+            padding: 0 2px; border: 0; background: none; cursor: pointer; font-size: 16px; line-height: 1; color: var(--text-light);
+        }
+        .toolbar .research-sync-note-x:hover { background: none; color: var(--text); }
+        /* The research is an archive: a small label (state block, Research for this tree, a delete). */
+        .research-sync-tag {
+            align-self: flex-start; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--divider);
+            background: var(--surface-2); color: var(--text-light); font-size: 11px; font-weight: 600; line-height: 1.4;
+        }
+        .research-sync-tag--inline { display: inline-block; vertical-align: middle; margin-left: 6px; }
+        .research-sync-actions { gap: 14px; align-items: center; flex-wrap: wrap; }
+        .research-sync-title .research-sync-spinner { display: inline-block; margin-right: 6px; vertical-align: -1px; }
+        /* Sent by hand: a dot on ⋯ only where the toolbar has no Send button. */
+        @media (min-width: 1180px) and (pointer: fine) {
+            .actions-menu-research-dot { display: none !important; }
+        }
+        .actions-menu-research-dot { background: var(--accent); }
+        /* Research for this tree: sending changes. */
+        .research-mode-line { margin-top: 2px; font-size: 12px; color: var(--text-light); }
+        .research-transcripts.research-send-mode { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--divider); }
+        .research-send-status { margin-top: 8px; font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        .research-send-status.is-warn { padding: 8px 12px; border-radius: 8px; background: var(--warning-soft); color: var(--warning-text); }
+        .research-send-status-action { font-size: 12px; font-weight: 600; }
+        .research-send-device, .research-transcripts-archive { margin: 8px 0 0; font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        .confirm-note { margin: 10px 0 0; font-size: 13px; line-height: 1.4; color: var(--text-light); }
+        .confirm-note .research-sync-tag--inline { margin-left: 0; margin-right: 6px; }
         /* A toast's own action ("Send again", "Open the research ↗"). */
         .toast-action {
             margin-left: 12px; padding: 0; border: 0; background: none; cursor: pointer;
@@ -11046,7 +11118,7 @@
 </head>
 <body>
     <div class="toolbar">
-        <h1 class="app-wordmark"><span class="app-logo" role="button" tabindex="0" onclick="window.Strom.UI.showAboutDialog()" data-i18n-title="about.title">Strom<span class="wordmark-dot" aria-hidden="true"></span></span><button type="button" id="unsaved-copy-indicator" class="storage-pill is-unsaved unsaved-copy-indicator" style="display:none;" aria-live="polite" onclick="window.Strom.UI.showStorageStatusDialog()" data-i18n-title="fileCopy.indicatorTitle" data-i18n-aria-label="fileCopy.indicatorTitle"><span class="storage-pill-icon" aria-hidden="true"></span><span class="storage-pill-label" data-i18n="fileCopy.indicatorShort"></span></button><div id="research-sync-pill" class="storage-pill research-sync-pill" style="display:none;" role="status" aria-live="polite"></div></h1>
+        <h1 class="app-wordmark"><span class="app-logo" role="button" tabindex="0" onclick="window.Strom.UI.showAboutDialog()" data-i18n-title="about.title">Strom<span class="wordmark-dot" aria-hidden="true"></span></span><button type="button" id="unsaved-copy-indicator" class="storage-pill is-unsaved unsaved-copy-indicator" style="display:none;" aria-live="polite" onclick="window.Strom.UI.showStorageStatusDialog()" data-i18n-title="fileCopy.indicatorTitle" data-i18n-aria-label="fileCopy.indicatorTitle"><span class="storage-pill-icon" aria-hidden="true"></span><span class="storage-pill-label" data-i18n="fileCopy.indicatorShort"></span></button><div id="research-sync-pill" class="storage-pill research-sync-pill" style="display:none;"></div></h1>
         <span id="offline-indicator" class="offline-indicator" style="display:none;" data-i18n="pwa.offline"></span>
         <button id="file-link-indicator" class="file-link-indicator" style="display:none;" onclick="window.Strom.UI.saveActiveTreeToFile()" data-i18n-title="fileAccess.saveToFile"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button>
 
@@ -11155,7 +11227,7 @@
 
         <!-- Actions menu (⋯) — desktop only; the mobile ⋯ + "More" sheet cover smaller screens -->
         <div class="actions-menu desktop-only">
-            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><svg class="actions-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span><span id="actions-menu-new-dot" class="actions-menu-dot actions-menu-new-dot" style="display:none;" aria-hidden="true"></span><span class="actions-menu-dot actions-menu-storage-dot is-storage storage-dot storage-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="tri" d="M10.27 3.2a2 2 0 0 1 3.46 0l8.5 14.8A2 2 0 0 1 20.5 21h-17a2 2 0 0 1-1.73-3z"/><path class="mark" d="M12 9.5v4M12 17h.01"/></svg></span></button>
+            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><svg class="actions-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span><span id="actions-menu-research-dot" class="actions-menu-dot actions-menu-research-dot" style="display:none;" aria-hidden="true"></span><span id="actions-menu-new-dot" class="actions-menu-dot actions-menu-new-dot" style="display:none;" aria-hidden="true"></span><span class="actions-menu-dot actions-menu-storage-dot is-storage storage-dot storage-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="tri" d="M10.27 3.2a2 2 0 0 1 3.46 0l8.5 14.8A2 2 0 0 1 20.5 21h-17a2 2 0 0 1-1.73-3z"/><path class="mark" d="M12 9.5v4M12 17h.01"/></svg></span></button>
             <div id="actions-menu-dropdown" class="tree-switcher-dropdown actions-menu-dropdown" role="menu">
                 <div id="actions-storage-row" class="tree-switcher-action actions-storage-row storage-dot" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showStorageStatusDialog()" tabindex="0" role="menuitem">
                     <span class="actions-storage-icon" aria-hidden="true"></span>

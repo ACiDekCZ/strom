@@ -970,6 +970,7 @@ class TreeManagerClass {
         if (!tree) return;
         tree.changedAt = new Date().toISOString();
         dispatchFileCopyEvent(treeId);
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('strom:user-change', { detail: { treeId } }));
     }
 
     /** These trees were just written, whole, to a file (export, working file). */
@@ -1063,6 +1064,7 @@ class TreeManagerClass {
             if (prev?.transcriptsAt && link.transcriptsAt === undefined) kept.transcriptsAt = prev.transcriptsAt;
             if (prev?.olderSources && link.olderSources === undefined) kept.olderSources = prev.olderSources;
             if (prev?.sentSources && link.sentSources === undefined) kept.sentSources = prev.sentSources;
+            if (prev?.sendMode && link.sendMode === undefined) kept.sendMode = prev.sendMode;
             tree.research = { ...kept, ...link, id };
         } else delete tree.research;
         this.saveIndex();

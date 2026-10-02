@@ -200,7 +200,7 @@ export const attachmentsMethods = uiModule({
         if (!att) return;
         const d = strings.danger;
         const confirmed = await this.showConfirm(d.undoHint, d.deleteAttachmentTitle(att.name),
-            { confirmLabel: d.deleteAttachment, variant: 'danger' });
+            { confirmLabel: d.deleteAttachment, variant: 'danger', note: this.researchArchiveDeleteNote() });
         if (!confirmed) return;
         DataManager.removeAttachment(this.currentId, attachmentId);
         this.renderAttachmentsList();

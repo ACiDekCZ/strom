@@ -51,6 +51,8 @@ export interface ConfirmOptions {
     cancel?: string;
     /** 'danger' paints the confirm button in --danger instead of the primary green. */
     variant?: 'default' | 'danger';
+    /** A small line under the message with a label before it (a delete in a research archive). */
+    note?: { tag: string; text: string };
 }
 
 export const dialogsMethods = uiModule({
@@ -146,8 +148,12 @@ export const dialogsMethods = uiModule({
             titleEl.textContent = title || strings.dialog.confirm;
             messageEl.textContent = message;
 
-            // Hide options (not used for simple confirm)
-            if (optionsEl) optionsEl.innerHTML = '';
+            // No options in a simple confirm; a note goes there when given.
+            if (optionsEl) {
+                optionsEl.innerHTML = options?.note
+                    ? `<p class="confirm-note"><span class="research-sync-tag research-sync-tag--inline">${this.escapeHtml(options.note.tag)}</span> ${this.escapeHtml(options.note.text)}</p>`
+                    : '';
+            }
 
             // Show Cancel and OK buttons
             const cancelLabel = options?.cancel || strings.buttons.cancel;
@@ -336,6 +342,7 @@ export const dialogsMethods = uiModule({
             confirmLabel: d.deletePerson,
             cancel: cancelLabel,
             variant: 'danger',
+            note: this.researchArchiveDeleteNote(),
         });
     },
 

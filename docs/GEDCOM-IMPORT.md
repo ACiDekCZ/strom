@@ -526,6 +526,11 @@ The header is read before the records; the records themselves go through the
 normal importer described above, so everything else in this contract applies
 unchanged.
 
+A research that works without an agent (an archive of the user's data) also
+says so in its header: `1 _STROM_MODE archive`. Missing means a research with
+an agent. A running bridge's status (`accepts.mode`) says it more freshly and
+wins; the header is what the app keeps for when the bridge is not running.
+
 ### What the app writes back to a research
 
 A faithful export of a tree tied to a research, and every send to it, names

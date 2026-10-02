@@ -236,6 +236,8 @@ export interface ResearchHeader {
     head: string | null;
     /** `1 _STROM_LINKS`: strom-research:// actions this computer handles (Strom Research files only). */
     links: ResearchLinkAction[];
+    /** `1 _STROM_MODE archive`: the research works without an agent (missing: with one). */
+    mode: 'archive' | null;
 }
 
 /** Normalise a research UUID (lower case), or null when it is not one. */
@@ -265,7 +267,7 @@ export function cleanText(value: unknown, max = MAX_TEXT): string {
  * records themselves go through the normal importer.
  */
 export function readResearchHeader(text: string): ResearchHeader {
-    const none: ResearchHeader = { isStromResearch: false, treeId: null, name: null, date: null, head: null, links: [] };
+    const none: ResearchHeader = { isStromResearch: false, treeId: null, name: null, date: null, head: null, links: [], mode: null };
     if (typeof text !== 'string') return none;
     const body = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
     const lines = body.split(/\r\n|\r|\n/);
@@ -278,6 +280,7 @@ export function readResearchHeader(text: string): ResearchHeader {
     let treeRaw: string | null = null;
     let headRaw: string | null = null;
     let linksRaw = '';
+    let modeRaw = '';
     let date: string | null = null;
     let noteLines: string[] | null = null;
     let inFirstNote = false;
@@ -295,6 +298,7 @@ export function readResearchHeader(text: string): ResearchHeader {
             else if (tag === STROM_TREE_TAG) treeRaw = value;
             else if (tag === STROM_HEAD_TAG) headRaw = value;
             else if (tag === STROM_LINKS_TAG) linksRaw = value;
+            else if (tag === '_STROM_MODE') modeRaw = value.trim().toLowerCase();
             else if (tag === 'DATE') date = value.trim() || null;
             else if (tag === 'NOTE' && noteLines === null) {
                 noteLines = [value];
@@ -315,6 +319,7 @@ export function readResearchHeader(text: string): ResearchHeader {
         date,
         head: isStromResearch ? isResearchHead(headRaw) : null,
         links: isStromResearch ? sanitizeResearchLinks(linksRaw) : [],
+        mode: isStromResearch && modeRaw === 'archive' ? 'archive' : null,
     };
 }
 
@@ -685,6 +690,8 @@ export interface ResearchSendRecord {
     decidedAt: string;
     /** The user's words when discarding ('' = none). */
     reason: string;
+    /** Conflicts it left to decide (null: not said). */
+    conflicts: number | null;
 }
 
 const SEND_STATES = new Set(['pending', 'written', 'discarded', 'replaced', 'nothing']);
@@ -710,21 +717,48 @@ export function sanitizeSends(value: unknown): ResearchSendRecord[] | null {
             sent: headerToken(r.sent) ?? '',
             decidedAt: iso(r.decidedAt),
             reason: cleanText(r.reason, 200),
+            conflicts: conflictCount(r.conflicts),
         });
     }
     return out;
 }
 
+/** Conflicts as a count, or a list of them (`[{ person: "P12" }, …]`); null when not said. */
+function conflictCount(value: unknown): number | null {
+    if (Array.isArray(value)) return Math.min(value.length, 9999);
+    return asCount(value);
+}
+
+/** The persons a list of conflicts names (research refs "P12"), at most 20. */
+function conflictPersons(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const out: string[] = [];
+    for (const item of value.slice(0, MAX_ITEMS)) {
+        const ref = researchPersonRef(typeof item === 'string' ? item : asRecord(item)?.person);
+        if (ref && !out.includes(ref)) out.push(ref);
+    }
+    return out.slice(0, 20);
+}
+
 /** What the research takes from the app (`/status.accepts`): the gate the other way round. */
 export interface ResearchAccepts {
-    /** Sends written without asking: off, or additions only (with the user's own setting). */
-    syncAuto: 'off' | 'additions';
+    /**
+     * How a send is written: 'off' — it waits in the inbox for the user
+     * (`sync.review on`, and every research before the immediate write);
+     * 'write' — at once, an edit of a documented fact becomes a conflict;
+     * 'mirror' — at once, the user's word wins (an archive).
+     */
+    syncAuto: 'off' | 'write' | 'mirror' | 'additions';
     /** It reads sources and citations from a send. */
     sources: boolean;
     /** It knows how much a transcript weighs (`_STROM_TRANSCRIPTS`, `_STROM_VERIFIED`). */
     verified: boolean;
     /** It takes original files (a later step); false until then. */
     media: boolean;
+    /** It works with an agent, or as an archive of the user's data without one (`mode: "archive"`). */
+    mode: 'agent' | 'archive';
+    /** A send waits in the research's inbox for the user (`sync.auto: "off"`). */
+    review: boolean;
 }
 
 /** One send waiting in the research's inbox. */
@@ -748,11 +782,14 @@ export function sanitizeAccepts(value: unknown): ResearchAccepts | null {
     const r = asRecord(value);
     if (!r) return null;
     const sync = asRecord(r.sync);
+    const auto = sync?.auto === 'write' || sync?.auto === 'mirror' || sync?.auto === 'additions' ? sync.auto : 'off';
     return {
-        syncAuto: sync?.auto === 'additions' ? 'additions' : 'off',
+        syncAuto: auto,
         sources: r.sources === true,
         verified: r.verified === true,
         media: !!asRecord(r.media),
+        mode: r.mode === 'archive' ? 'archive' : 'agent',
+        review: auto === 'off' && r.mode !== 'archive',
     };
 }
 
@@ -1285,17 +1322,32 @@ export interface SyncReply {
     inbox: boolean | null;
     /** The research's mark of this send ("R20261002143205123-a1b2"; '' = not said): find it in `/status.sends`. */
     intake: string;
+    /** The commit the write made (written at once; '' = not said or nothing written). */
+    head: string;
+    /** What of `changes` was written (the rest only reported); null: not said. */
+    applied: number | null;
+    /** Still writing (202): the end comes in the status. */
+    pending: boolean;
+    /** Conflicts the send left to decide (null: not said). */
+    conflicts: number | null;
+    /** The persons those conflicts are about (research refs), when it says. */
+    conflictPersons: string[];
 }
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '' };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [] };
     return {
         ok: r.ok === true,
         changes: asCount(r.changes),
         error: cleanText(r.error),
         inbox: typeof r.inbox === 'boolean' ? r.inbox : null,
         intake: headerToken(r.intake) ?? '',
+        head: isResearchHead(r.head) ?? '',
+        applied: asCount(r.applied),
+        pending: r.pending === true,
+        conflicts: conflictCount(r.conflicts),
+        conflictPersons: conflictPersons(r.conflicts),
     };
 }
 

@@ -141,6 +141,15 @@ export const researchActionsMethods = uiModule({
         const researchId = this.activeResearchId();
         const capable = !!researchId && this.researchSyncCapable(researchId);
         const bridgeUp = capable && !!researchId && this.researchBridgeFresh(researchId);
+        const ctx = this.researchSyncLink();
+        // Changes go by themselves: no "Send changes" row (the block's "Send now" and its amber actions stand in).
+        const autoSend = capable && this.researchAutoOn(ctx?.link);
+        // An archive: nothing that leads to an agent.
+        const archive = capable && this.activeResearchArchive();
+        const sendRow: SubmenuItem[] = autoSend ? [] : [
+            // Straight to a running bridge (no ↗); else the research starts it in the terminal.
+            { id: 'research-item-send', label: r.sendChanges, run: call('researchActionSend'), ext: !bridgeUp && this.researchLinkAvailable('send') },
+        ];
         if (!this.researchAnyAnnounced()) {
             // No strom-research:// links here (an older research, none announced, or
             // switched off): the way back, and what it is. A research that says what
@@ -150,32 +159,33 @@ export const researchActionsMethods = uiModule({
             const tree: SubmenuItem[] = this.researchTranscriptsCapable(researchId ?? undefined)
                 ? [{ id: 'research-item-tree-settings', label: strings.sync.treeSettings, run: call('researchActionTreeSettings') }] : [];
             groups = [look, [
-                { id: 'research-item-send', label: r.sendChanges, run: call('researchActionSend') },
+                ...sendRow.map(i => ({ ...i, ext: false })),
                 { id: 'research-item-about', label: r.whatIs, run: call('researchActionWhatIs') },
             ], tree];
         } else {
             const look: SubmenuItem[] = [];
             if (this.researchLinkAvailable('app') || bridgeUp) look.push({ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') });
             if (waiting > 0) look.push({ id: 'research-item-waiting', label: r.waiting, run: call('researchActionWaiting'), count: waiting });
-            // Follow live: the research starts (or reuses) its bridge and opens ?live= here.
-            if (this.researchLinkAvailable('live') && !this.isFollowingActiveResearch()) {
+            // Follow live: the research starts (or reuses) its bridge and opens ?live= here (an archive has no agent to follow).
+            if (!archive && this.researchLinkAvailable('live') && !this.isFollowingActiveResearch()) {
                 look.push({ id: 'research-item-live', label: r.followLive, run: call('researchActionLive'), ext: true });
             }
             if (this.isFollowingActiveResearch()) look.push({ id: 'research-item-overview', label: strings.live.overviewTitle, run: call('researchActionOverview') });
             const known = this.researchWaiting();
-            const work: SubmenuItem[] = [
-                // Straight to a running bridge (no ↗); else the research starts it in the terminal.
-                { id: 'research-item-send', label: r.sendChanges, run: call('researchActionSend'), ext: !bridgeUp && this.researchLinkAvailable('send') },
-            ];
+            const work: SubmenuItem[] = [...sendRow];
             const intake = known?.lastIntake;
             const sentAt = intake ? Date.parse(intake.at) : NaN;
-            if (intake && this.researchLinkAvailable('sync-undo') && Number.isFinite(sentAt) && Date.now() - sentAt < UNDO_MAX_AGE_MS) {
+            // An archive keeps its history itself: taking a send back happens there.
+            if (!archive && intake && this.researchLinkAvailable('sync-undo') && Number.isFinite(sentAt) && Date.now() - sentAt < UNDO_MAX_AGE_MS) {
                 work.push({ id: 'research-item-undo', label: r.undoSend, run: call('researchActionUndoSend'), ext: true,
                     sub: r.sentAt(formatLiveClock(sentAt, Date.now(), getCurrentLanguage())) });
             }
-            if (this.researchLinkAvailable('open')) work.push({ id: 'research-item-open', label: r.openResearch, run: call('researchActionOpen'), ext: true });
-            const agent: SubmenuItem[] = [];
-            if (this.researchLinkAvailable('chat')) agent.push({ id: 'research-item-chat', label: r.continueAgent, run: call('researchActionChat'), ext: true, ai: true });
+            const open: SubmenuItem[] = this.researchLinkAvailable('open')
+                ? [{ id: 'research-item-open', label: r.openResearch, run: call('researchActionOpen'), ext: true }] : [];
+            // An archive: "Open the research" stands on its own (2b).
+            if (!archive) work.push(...open);
+            const agent: SubmenuItem[] = archive ? open : [];
+            if (!archive && this.researchLinkAvailable('chat')) agent.push({ id: 'research-item-chat', label: r.continueAgent, run: call('researchActionChat'), ext: true, ai: true });
             const setup: SubmenuItem[] = [];
             if (this.researchTranscriptsCapable(researchId ?? undefined)) {
                 setup.push({ id: 'research-item-tree-settings', label: strings.sync.treeSettings, run: call('researchActionTreeSettings') });
@@ -183,7 +193,7 @@ export const researchActionsMethods = uiModule({
             if (this.researchLinkAvailable('setup')) {
                 setup.push({ id: 'research-item-setup', label: capable ? r.settingsInResearch : r.settings, run: call('researchActionSetup'), ext: true });
             }
-            groups = [look, work, agent, setup];
+            groups = archive ? [[...look, ...work], agent, setup] : [look, work, agent, setup];
             note = true;
             // A newer research: a block above the rows, its "Update" the only item in it.
             if (known?.update) {
@@ -319,7 +329,8 @@ export const researchActionsMethods = uiModule({
      * locked people and read-only trees too.
      */
     personResearchActions(personId: PersonId): PersonMenuAction[] {
-        if (!this.personResearchRef(personId)) return [];
+        // An archive has no agent: only "What the research knows" stays.
+        if (!this.personResearchRef(personId) || this.activeResearchArchive()) return [];
         const r = strings.research;
         const items: PersonMenuAction[] = [];
         if (this.researchLinkAvailable('review')) {
@@ -473,6 +484,7 @@ export const researchActionsMethods = uiModule({
 
     /** "Find a source in the research ↗" for a person without sources (null: not offered). */
     personFindSourceUrl(personId: PersonId): string | null {
+        if (this.activeResearchArchive()) return null;
         const person = this.personResearchRef(personId);
         return person ? this.activeResearchLink('review', { person, scope: 'person' }) : null;
     },

@@ -383,7 +383,7 @@ export const coupleEventsMethods = uiModule({
         const what = `${label} — ${dateAndPlace(ev)}`;
         const d = strings.danger;
         const confirmed = await this.showConfirm(`${what}\n\n${d.undoHint}`, d.deleteEventTitle(label),
-            { confirmLabel: d.deleteEvent, variant: 'danger' });
+            { confirmLabel: d.deleteEvent, variant: 'danger', note: this.researchArchiveDeleteNote() });
         if (!confirmed) return;
         DataManager.removeCoupleEvent(partnershipId, eventId);
         this.forceCloseEventEditor();

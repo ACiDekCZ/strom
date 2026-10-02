@@ -9,8 +9,12 @@ import { ResearchLink, ResearchSend, Source, StromData } from './types.js';
 import { ResearchInbox, LiveIntake, ResearchSendRecord } from './research-link.js';
 
 export type ResearchSyncKind =
-    | 'none' | 'inSync' | 'unsent' | 'sentPending' | 'newer' | 'unsentAndNewer' | 'waitThenLoad'
-    | 'bridgeDown' | 'unsentBridgeDown' | 'refused' | 'rejected' | 'safari';
+    | 'none' | 'inSync' | 'written' | 'unsent' | 'sentPending' | 'newer' | 'unsentAndNewer' | 'waitThenLoad'
+    | 'bridgeDown' | 'unsentBridgeDown' | 'refused' | 'rejected' | 'safari'
+    // Sending by itself (ResearchLink.sendMode 'auto', the default):
+    | 'autoWaiting' | 'sending' | 'autoBridgeDown' | 'autoPaused'
+    // One-time notices:
+    | 'switched' | 'offerAuto' | 'autoIntro';
 
 export interface ResearchSyncInput {
     /** The tree's tie to its research (none: not a research tree). */
@@ -29,45 +33,81 @@ export interface ResearchSyncInput {
     safari: boolean;
     /** The research's head as last seen ('' = unknown). */
     remoteHead: string;
+    /** Changes go by themselves (sendMode 'auto'). */
+    auto?: boolean;
+    /** The research is an archive (no agent). */
+    archive?: boolean;
+    /** A send of this tree is on its way. */
+    sending?: boolean;
+    /** The quiet time ran out and the bridge was not there to take the changes. */
+    autoDue?: boolean;
+    /** The last send the research wrote (it outlives loading the new version). */
+    written?: { at: string; changes: number | null; conflicts: number } | null;
+    /** The research switched between agent and archive since the user last saw it. */
+    switched?: boolean;
+    /** The one-time offer to send by itself was not answered yet. */
+    offerUnseen?: boolean;
+    /** "Changes now go by themselves" is due as a block (no toolbar mark at this width). */
+    introDue?: boolean;
 }
 
 export interface ResearchSyncState {
     kind: ResearchSyncKind;
-    /** The send shown (sentPending / waitThenLoad / rejected). */
+    /** The state without the one-time notices (what the toolbar mark shows). */
+    core: ResearchSyncKind;
+    /** The send shown (sentPending / waitThenLoad / rejected / sending). */
     sent?: ResearchSend;
-    /** Why the bridge refused (refused). */
+    /** Why the bridge refused (refused / autoPaused). */
     reason?: string;
 }
 
-/** The one state to show, by priority (see ZADANI_DEV_app-vstup-dat 1.1). */
+/** The one state to show, by priority (see ZADANI_DEV_archiv-a-automatika 1.2). */
 export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
     const { link } = input;
-    if (!link || !input.capable || !input.shown) return { kind: 'none' };
-    if (input.safari) return { kind: 'safari' };
+    if (!link || !input.capable || !input.shown) return { kind: 'none', core: 'none' };
+    const notice = (core: ResearchSyncState): ResearchSyncState => {
+        if (input.switched) return { ...core, kind: 'switched' };
+        return core;
+    };
+    // Safari never reaches the bridge: nothing goes by itself and nothing can be sent.
+    if (input.safari) return notice({ kind: 'safari', core: 'safari' });
+    const auto = !!input.auto;
     const sent = link.sent;
+    const st = (kind: ResearchSyncKind, extra: Partial<ResearchSyncState> = {}): ResearchSyncState =>
+        notice({ kind, core: kind, ...extra });
     // What the research does not have: changed since its version and not the state sent.
     const unsent = !input.matchesBase && input.current !== sent?.fingerprint;
     const newer = !!input.remoteHead && !!link.head && input.remoteHead !== link.head;
-    if (unsent && newer && input.bridgeUp) return { kind: 'unsentAndNewer' };
-    if (sent?.state === 'discarded') return { kind: 'rejected', sent };
-    if (link.refused) return { kind: 'refused', reason: link.refused.reason };
-    if (unsent) return { kind: input.bridgeUp ? 'unsent' : 'unsentBridgeDown' };
-    if (sent?.state === 'pending' && sent.thenLoad) return { kind: 'waitThenLoad', sent };
-    if (sent?.state === 'pending') return { kind: 'sentPending', sent };
-    if (newer) return { kind: 'newer' };
-    if (!input.bridgeUp) return { kind: 'bridgeDown' };
-    return { kind: 'inSync' };
+    if (unsent && newer && input.bridgeUp) return st('unsentAndNewer');
+    if (sent?.state === 'discarded') return st('rejected', { sent });
+    if (link.refused) return st(auto ? 'autoPaused' : 'refused', { reason: link.refused.reason });
+    if (unsent && auto && input.autoDue && !input.bridgeUp && !input.sending) return st('autoBridgeDown');
+    if (unsent && !auto) return st(input.bridgeUp ? 'unsent' : 'unsentBridgeDown');
+    // The research writing a send (a 202, an archive) is "sending", never "waiting for you".
+    if (input.sending || (sent?.state === 'pending' && (sent.writing || input.archive))) return st('sending', sent ? { sent } : {});
+    if (unsent) return st('autoWaiting');
+    if (sent?.state === 'pending' && sent.thenLoad) return st('waitThenLoad', { sent });
+    if (sent?.state === 'pending') return st('sentPending', { sent });
+    if (newer) return st('newer');
+    const quiet: ResearchSyncState = !input.bridgeUp
+        ? { kind: 'bridgeDown', core: 'bridgeDown' }
+        : input.written ? { kind: 'written', core: 'written' } : { kind: 'inSync', core: 'inSync' };
+    if (input.switched) return { ...quiet, kind: 'switched' };
+    if (input.archive && !auto && input.offerUnseen) return { ...quiet, kind: 'offerAuto' };
+    if (auto && input.introDue) return { ...quiet, kind: 'autoIntro' };
+    return quiet;
 }
 
 /** States that light the dot on ⋯ (the user has something to do). */
 export function researchSyncWantsAttention(kind: ResearchSyncKind): boolean {
-    return kind === 'unsent' || kind === 'unsentBridgeDown' || kind === 'newer'
-        || kind === 'unsentAndNewer' || kind === 'refused' || kind === 'rejected';
+    return kind === 'unsentBridgeDown' || kind === 'newer' || kind === 'unsentAndNewer'
+        || kind === 'refused' || kind === 'rejected' || kind === 'autoPaused' || kind === 'autoBridgeDown'
+        || kind === 'switched';
 }
 
 /** A changes-not-sent state (the ⋯ label and the data window say so). */
 export function researchSyncUnsent(kind: ResearchSyncKind): boolean {
-    return kind === 'unsent' || kind === 'unsentBridgeDown' || kind === 'unsentAndNewer';
+    return kind === 'unsent' || kind === 'unsentBridgeDown' || kind === 'unsentAndNewer' || kind === 'autoBridgeDown';
 }
 
 /** "Send, then load" waits at most this long. */

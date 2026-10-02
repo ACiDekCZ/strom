@@ -897,7 +897,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.3';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.4';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -1092,7 +1092,22 @@ export interface ResearchLink {
     olderSources?: Record<string, string>;
     /** Sources in the last accepted send, by id → hash of transcript and page (see olderSources). */
     sentSources?: Record<string, string>;
+    /**
+     * Sending changes to the research: by themselves after a quiet while
+     * ('auto', the default when missing) or with the Send button ('manual').
+     * Survives updates from the research.
+     */
+    sendMode?: ResearchSendMode;
+    /**
+     * The research works without an agent (an archive of the user's data), as
+     * the file it came from said (`_STROM_MODE archive`); a running bridge's
+     * status says it more freshly. Missing: with an agent.
+     */
+    mode?: 'archive';
 }
+
+/** How changes go to the research (see ResearchLink.sendMode). */
+export type ResearchSendMode = 'auto' | 'manual';
 
 /** How the research takes the user's transcripts (see ResearchLink.transcripts). */
 export type ResearchTranscripts = 'lead' | 'evidence';
@@ -1119,6 +1134,12 @@ export interface ResearchSend {
     intake?: string;
     /** Why the user discarded it in the research ('' = not said). */
     reason?: string;
+    /** The research is still writing it (a 202 reply): its end comes in the status. */
+    writing?: boolean;
+    /** Conflicts this send left to decide in the research (written with an agent). */
+    conflicts?: number;
+    /** Sent with the Send button (its result is told by a toast), not by itself. */
+    manual?: boolean;
 }
 
 /** Index of all trees */

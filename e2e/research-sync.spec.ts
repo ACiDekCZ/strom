@@ -1,5 +1,8 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, card } from './helpers.js';
+import {
+    BRIDGE, FakeBridge, HEAD, NEW_HEAD, UUID, block, dot, dropFile, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, researchGed,
+} from './research-bridge.js';
 
 /**
  * A research that tells what it has (Strom Research 1.12+: `accepts` and
@@ -10,144 +13,16 @@ import { openApp, card } from './helpers.js';
  * "Transcription verified". The bridge is answered by page.route.
  */
 
-const UUID = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
-const HEAD = '3f2a9c1e5b7d';
-const NEW_HEAD = '9b8c7d6e5f40';
-const BRIDGE = 'http://127.0.0.1:5998/0123456789abcdef0123456789abcdef';
-const cors = { 'access-control-allow-origin': '*' };
 
-function researchGed(head = HEAD, extra: string[] = []): string {
-    return [
-        '0 HEAD', '1 SOUR STROM_RESEARCH', '2 NAME Strom Research', '1 DATE 27 SEP 2026',
-        `1 _STROM_TREE ${UUID}`, `1 _STROM_HEAD ${head}`, '1 _STROM_LINKS send open live app setup', '1 CHAR UTF-8', '1 NOTE Víškovi',
-        '0 @P0001@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 REFN P0001', '2 TYPE strom-research', '1 FAMS @F0001@',
-        '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '2 TYPE strom-research', '1 FAMS @F0001@',
-        '0 @P0003@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 REFN P0003', '2 TYPE strom-research', '1 FAMC @F0001@',
-        ...extra,
-        '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0003@',
-        '0 @S0001@ SOUR', '1 TITL Oddací matrika Čáslav', '1 PAGE fol. 41', '1 REFN S0001', '1 TEXT Josef Víšek a Anna', '1 _STROM_READ research',
-        '0 TRLR',
-    ].join('\n');
-}
-
-async function dropFile(page: Page, name: string, content: string): Promise<void> {
-    const dataTransfer = await page.evaluateHandle(({ name, content }) => {
-        const dt = new DataTransfer();
-        dt.items.add(new File([content], name, { type: 'text/plain' }));
-        return dt;
-    }, { name, content });
-    await page.dispatchEvent('#tree-container', 'dragenter', { dataTransfer });
-    await page.dispatchEvent('#tree-container', 'dragover', { dataTransfer });
-    await page.dispatchEvent('#tree-container', 'drop', { dataTransfer });
-}
-
-/** What the fake bridge says and what it got. */
-interface FakeBridge {
-    head: string;
-    accepts: unknown;
-    inbox: { tree: string; at: string; changes: number; sent: string }[];
-    sends: { intake: string; at: string; state: string; changes: number; tree: string; sent: string; decidedAt?: string; reason?: string }[];
-    lastIntake: { id: string; at: string } | null;
-    syncReply: { status: number; body: unknown };
-    treeGed: string;
-    down: boolean;
-    links: string[];
-    posts: string[];
-}
-
-async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
-    const b: FakeBridge = {
-        head: HEAD,
-        accepts: { sync: { auto: 'off' }, sources: true, verified: true, media: null },
-        inbox: [], sends: [], lastIntake: null,
-        syncReply: { status: 200, body: { ok: true, input: 'I0042', changes: 6, inbox: true } },
-        treeGed: researchGed(),
-        down: false,
-        links: ['send', 'open', 'live', 'app', 'setup'],
-        posts: [],
-        ...init,
-    };
-    await page.route(`${BRIDGE}/**`, async (route) => {
-        if (b.down) return route.abort('connectionrefused');
-        const url = new URL(route.request().url());
-        const json = (status: number, body: unknown) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) });
-        if (url.pathname.endsWith('/status')) {
-            return json(200, {
-                tree: { id: UUID, name: 'Víškovi' }, head: b.head, links: b.links,
-                accepts: b.accepts, inbox: { trees: b.inbox, material: 0 }, lastIntake: b.lastIntake,
-                ...(b.accepts ? { sends: b.sends } : {}),
-            });
-        }
-        if (url.pathname.endsWith('/sync') && route.request().method() === 'POST') {
-            const body = route.request().postData() ?? '';
-            b.posts.push(body);
-            const sent = /1 _STROM_SENT (\S+)/.exec(body)?.[1] ?? '';
-            const appTree = /1 _STROM_APP_TREE (\S+)/.exec(body)?.[1] ?? UUID;
-            const intake = `R${Date.now()}-${b.posts.length}`;
-            if (b.syncReply.status === 200 && (b.syncReply.body as { inbox?: boolean }).inbox) {
-                const at = new Date().toISOString();
-                for (const rec of b.sends) if (rec.tree === appTree && rec.state === 'pending') rec.state = 'replaced';
-                b.inbox = [{ tree: appTree, at, changes: 6, sent }];
-                b.sends.unshift({ intake, at, state: 'pending', changes: 6, tree: appTree, sent });
-            }
-            return json(b.syncReply.status, b.syncReply.status === 200 ? { ...(b.syncReply.body as object), intake } : b.syncReply.body);
-        }
-        if (url.pathname.endsWith('/tree.ged')) {
-            return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: b.treeGed });
-        }
-        if (url.pathname.endsWith('/cancel')) return json(200, { ok: true });
-        return route.fulfill({ status: 404, headers: cors, body: '' });
-    });
-    return b;
-}
-
-/** The research opened in the app; its bridge remembered (as after a ?live= / ?send=); optionally changed. */
-async function openResearch(page: Page, opts: { edit?: boolean; bridge?: boolean; capable?: boolean } = {}): Promise<void> {
-    await openApp(page);
-    await page.evaluate(() => {
-        // Opening links in the system is not testable: record them instead.
-        const ui = window.Strom.UI as unknown as { handOverResearchLink: (u: string) => void; __links: string[] };
-        ui.__links = [];
-        ui.handOverResearchLink = (u: string) => { ui.__links.push(u); };
-    });
-    await dropFile(page, 'tree-strom.ged', researchGed());
-    await expect(card(page, 'Jan')).toBeVisible();
-    if (opts.bridge !== false) {
-        // As after a ?live= / ?send= from a research that says what it takes.
-        await page.evaluate(({ uuid, base, accepts }) => {
-            localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, ...(accepts ? { accepts } : {}) }));
-        }, { uuid: UUID, base: BRIDGE, accepts: opts.capable === false ? null : { sync: { auto: 'off' }, sources: true, verified: true } });
-    }
-    if (opts.edit) await editJan(page);
-}
-
-async function editJan(page: Page, place = 'Praha'): Promise<void> {
-    await page.evaluate((place) => {
-        const dm = window.Strom.DataManager;
-        const jan = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
-        dm.updatePerson(jan.id, { birthPlace: place });
-    }, place);
-}
-
-const poll = (page: Page) => page.evaluate(() => window.Strom.UI.pollResearchBridge());
-const links = (page: Page) => page.evaluate(() => (window.Strom.UI as unknown as { __links: string[] }).__links);
-
-async function openResearchMenu(page: Page): Promise<void> {
-    await page.evaluate(() => {
-        if (!document.getElementById('actions-menu-dropdown')?.classList.contains('active')) window.Strom.UI.toggleActionsMenu();
-        window.Strom.UI.openActionsResearchSubmenu();
-    });
-}
-
-const block = (page: Page) => page.locator('#research-sync-block');
-const dot = (page: Page) => page.locator('#actions-menu-dot');
 
 test.describe('the state of the tree and sending straight', () => {
     test('changes the research lacks: the block and the dot; Send posts without a dialog; then sent and waiting, no dot', async ({ page }) => {
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page);
         await poll(page);
-        await expect(dot(page)).toBeVisible();
+        // Sent by hand: the toolbar's Send button, no dot on ⋯ where the button is.
+        await expect(page.locator('#research-sync-send')).toBeVisible();
+        await expect(dot(page)).toBeHidden();
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'unsent');
         await expect(block(page)).toContainText("Changes the research doesn't have");
@@ -261,7 +136,7 @@ test.describe('the state of the tree and sending straight', () => {
 });
 
 test.describe('after a send the research wrote', () => {
-    test('"Load new version" loads at once (nothing here the research lacks); the window coming back asks at once', async ({ page }) => {
+    test('the new version loads by itself (nothing here the research lacks), the view kept; the window coming back asks at once', async ({ page }) => {
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page);
         await poll(page);
@@ -275,16 +150,11 @@ test.describe('after a send the research wrote', () => {
         bridge.treeGed = researchGed('aa11bb22cc33').replace('1 NAME Jan /Víšek/', '1 NAME Jan /Víšek/\n1 BIRT\n2 PLAC Praha');
         await page.waitForTimeout(5100);   // past the "just asked" window
         await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-        await expect.poll(async () => {
-            await openResearchMenu(page);
-            return block(page).getAttribute('data-state');
-        }).toBe('newer');
-        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
-        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
-        await expect(page.locator('.toast')).toContainText("Loaded the research's new version, made after it wrote your send.");
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('aa11bb22cc33');
         await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
-        const meta = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata());
-        expect(meta.research.head).toBe('aa11bb22cc33');
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'written');
+        await expect(dot(page)).toBeHidden();
     });
 
     test('the user\'s own images (the research does not take them yet): never loaded over without asking; the warning names them', async ({ page }) => {

@@ -81,6 +81,14 @@ describe('readResearchHeader', () => {
         expect(h.name).toBe('Víškovi');
     });
 
+    it('_STROM_MODE archive: the research works without an agent (missing: with one)', () => {
+        expect(readResearchHeader(researchGed()).mode).toBeNull();
+        expect(readResearchHeader(researchGed().replace('0 HEAD', '0 HEAD\n1 _STROM_MODE archive')).mode).toBe('archive');
+        expect(readResearchHeader(researchGed().replace('0 HEAD', '0 HEAD\n1 _STROM_MODE robot')).mode).toBeNull();
+        // Only in a Strom Research file.
+        expect(readResearchHeader(researchGed().replace('1 SOUR STROM_RESEARCH', '1 SOUR Other').replace('0 HEAD', '0 HEAD\n1 _STROM_MODE archive')).mode).toBeNull();
+    });
+
     it('a research file without _STROM_TREE has no id (opened as a new tree)', () => {
         const h = readResearchHeader(researchGed({ tree: null }));
         expect(h.isStromResearch).toBe(true);
@@ -501,9 +509,19 @@ describe('send bridge', () => {
     });
 
     it('the reply and the JSON field are checked', () => {
-        expect(sanitizeSyncReply({ ok: true, input: 'I1', changes: 12 })).toEqual({ ok: true, changes: 12, error: '', inbox: null, intake: '' });
+        const none = { head: '', applied: null, pending: false, conflicts: null, conflictPersons: [] };
+        expect(sanitizeSyncReply({ ok: true, input: 'I1', changes: 12 })).toEqual({ ok: true, changes: 12, error: '', inbox: null, intake: '', ...none });
+        // Written at once: the commit it made and what of the changes was written.
+        expect(sanitizeSyncReply({ ok: true, inbox: false, changes: 8, applied: 7, head: 'ABCDEF1234', input: 'I0042', intake: 'R1' }))
+            .toMatchObject({ ok: true, inbox: false, changes: 8, applied: 7, head: 'abcdef1234', intake: 'R1', pending: false });
+        // Still writing (202).
+        expect(sanitizeSyncReply({ ok: true, inbox: false, pending: true, changes: 8, intake: 'R2' })).toMatchObject({ pending: true, head: '' });
+        // Conflicts as a count or as a list naming persons.
+        expect(sanitizeSyncReply({ ok: true, conflicts: 2 })).toMatchObject({ conflicts: 2, conflictPersons: [] });
+        expect(sanitizeSyncReply({ ok: true, conflicts: [{ person: 'P0012' }, { person: 'bad' }, 'P0013'] }))
+            .toMatchObject({ conflicts: 3, conflictPersons: ['P0012', 'P0013'] });
         expect(sanitizeSyncReply({ ok: true, changes: 3, inbox: true }).inbox).toBe(true);
-        expect(sanitizeSyncReply({ error: 'bad\u0000 thing' })).toEqual({ ok: false, changes: null, error: 'bad thing', inbox: null, intake: '' });
+        expect(sanitizeSyncReply({ error: 'bad\u0000 thing' })).toEqual({ ok: false, changes: null, error: 'bad thing', inbox: null, intake: '', ...none });
         expect(sanitizeSyncReply('x').ok).toBe(false);
         expect(sanitizeResearchField({ id: RID, head: 'ABCDEF1' })).toEqual({ id: RID, head: 'abcdef1' });
         expect(sanitizeResearchField({ id: RID, head: 'zz' })).toEqual({ id: RID });

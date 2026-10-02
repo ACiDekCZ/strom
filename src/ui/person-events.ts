@@ -607,7 +607,7 @@ export const personEventsMethods = uiModule({
         const what = `${eventTypeLabel(event)}${meta ? ` — ${meta}` : ''}`;
         const d = strings.danger;
         const confirmed = await this.showConfirm(`${what}\n\n${d.undoHint}`, d.deleteEventTitle(eventTypeLabel(event)),
-            { confirmLabel: d.deleteEvent, variant: 'danger' });
+            { confirmLabel: d.deleteEvent, variant: 'danger', note: this.researchArchiveDeleteNote() });
         if (!confirmed) return;
         DataManager.removeLifeEvent(this.currentId, eventId);
         this.renderEventsList();
