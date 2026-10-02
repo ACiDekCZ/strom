@@ -541,6 +541,123 @@ export function stabilizeIds(next: StromData, previous: StromData): StromData {
     return remapIds(next, map) as StromData;
 }
 
+// ==================== MEDIA ACROSS UPDATES ====================
+
+/**
+ * People of `previous` that stabilizeIds could not match (no REFN yet — a
+ * tree handed to the research from the app), paired with a person of `next`
+ * that is new to it, by name, birth date and gender. Only pairs unique on
+ * both sides count. previous id → next id.
+ */
+function matchUnlinkedPersons(next: StromData, previous: StromData): Map<string, string> {
+    const key = (p: StromData['persons'][PersonId]): string | null => {
+        const name = `${p.firstName ?? ''}|${p.lastName ?? ''}`.trim().toLowerCase();
+        return name === '|' || p.isPlaceholder ? null : `${name}|${p.birthDate ?? ''}|${p.gender ?? ''}`;
+    };
+    const unique = (data: StromData, keep: (id: string, p: StromData['persons'][PersonId]) => boolean): Map<string, string> => {
+        const seen = new Map<string, string | null>();
+        for (const [id, p] of Object.entries(data.persons ?? {})) {
+            if (!p || !keep(id, p)) continue;
+            const k = key(p);
+            if (k) seen.set(k, seen.has(k) ? null : id);
+        }
+        const out = new Map<string, string>();
+        for (const [k, id] of seen) if (id) out.set(k, id);
+        return out;
+    };
+    const fresh = unique(next, id => !previous.persons?.[id as PersonId]);
+    const out = new Map<string, string>();
+    if (!fresh.size) return out;
+    for (const [k, id] of unique(previous, (id, p) => !p.refn && !next.persons?.[id as PersonId])) {
+        const match = fresh.get(k);
+        if (match) out.set(id, match);
+    }
+    return out;
+}
+
+/** What carryOverMedia did: the tree, and what had nowhere to go. */
+export interface MediaCarryOver {
+    data: StromData;
+    /** Photos, attachments and excerpts of people / sources the update no longer has. */
+    lost: number;
+}
+
+/**
+ * Strom Research does not keep the app's images (photos, attachments, crops
+ * cut in the app), so an update would drop them. Carry them over from the
+ * previous state onto `next` (already through stabilizeIds, so ids match;
+ * people without a REFN yet are paired by matchUnlinkedPersons):
+ * - a person's photo when the research has none for them;
+ * - attachments the research does not have (by id or content); a link to a
+ *   source the update no longer has is dropped;
+ * - excerpts without a `clip` (clipped ones belong to the research) to the
+ *   source with the same id: all when the research has none for it, else
+ *   only those cut here from an attachment.
+ * What belongs to a person or source missing from `next` is counted as lost.
+ * Returns a new object; neither input is changed.
+ */
+export function carryOverMedia(next: StromData, previous: StromData): MediaCarryOver {
+    let lost = 0;
+    const persons = { ...(next.persons ?? {}) };
+    const unlinked = matchUnlinkedPersons(next, previous);
+    const sources = next.sources ? { ...next.sources } : undefined;
+    const sourceExists = (id: string | undefined): boolean => !!id && !!sources?.[id];
+
+    for (const [id, old] of Object.entries(previous.persons ?? {})) {
+        if (!old) continue;
+        const media = (old.photo ? 1 : 0) + (old.attachments?.length ?? 0);
+        if (!media) continue;
+        const curId = (persons[id as PersonId] ? id : unlinked.get(id)) as PersonId | undefined;
+        const cur = curId ? persons[curId] : undefined;
+        if (!curId || !cur) {
+            lost += media;
+            continue;
+        }
+        const out = { ...cur };
+        let changed = false;
+        if (old.photo && !cur.photo) {
+            out.photo = old.photo;
+            if (old.photoOriginalName) out.photoOriginalName = old.photoOriginalName;
+            changed = true;
+        }
+        const have = cur.attachments ?? [];
+        const ids = new Set(have.map(a => a.id));
+        const urls = new Set(have.map(a => a.dataUrl));
+        const extra = (old.attachments ?? [])
+            .filter(a => !ids.has(a.id) && !urls.has(a.dataUrl))
+            .map(a => {
+                if (a.sourceId === undefined || sourceExists(a.sourceId)) return a;
+                const { sourceId: _gone, ...rest } = a;
+                return rest;
+            });
+        if (extra.length) {
+            out.attachments = [...have, ...extra];
+            changed = true;
+        }
+        if (changed) persons[curId] = out;
+    }
+
+    for (const [id, old] of Object.entries(previous.sources ?? {})) {
+        const own = (old?.excerpts ?? []).filter(e => !e.clip);
+        if (!own.length) continue;
+        const cur = sources?.[id];
+        if (!cur || !sources) {
+            lost += own.length;
+            continue;
+        }
+        const have = cur.excerpts ?? [];
+        const ids = new Set(have.map(e => e.id));
+        const urls = new Set(have.map(e => e.dataUrl));
+        // A research file need not mark its crops (clip): when the research
+        // brings crops of its own, only those cut here from an attachment are
+        // surely the app's — anything else could duplicate a newer crop.
+        const extra = own.filter(e => !ids.has(e.id) && !urls.has(e.dataUrl) && (!have.length || e.fromAttachmentId));
+        if (extra.length) sources[id] = { ...cur, excerpts: [...have, ...extra] };
+    }
+
+    return { data: { ...next, persons, ...(sources ? { sources } : {}) }, lost };
+}
+
 /**
  * A copy of `value` (shaped like a JSON round-trip, strings shared) with every
  * key and string equal to a mapped id replaced. Generated ids are unique

@@ -130,6 +130,8 @@ test.describe('mobile', () => {
 
 test('focus back/forward buttons walk history in both directions', async ({ page }) => {
     await openApp(page);
+    // The sample tree has anniversaries; an "on this day" card would cover the buttons on those dates.
+    await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     const back = page.locator('#focus-back-btn');
@@ -170,6 +172,8 @@ test('focus back/forward buttons walk history in both directions', async ({ page
 
 test('the very first navigation counts the default focus (back works after one step)', async ({ page }) => {
     await openApp(page);
+    // The sample tree has anniversaries; an "on this day" card would cover the buttons on those dates.
+    await page.evaluate(() => window.Strom.SettingsManager.setOnThisDay(false));
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     // Fresh tree: no history yet.

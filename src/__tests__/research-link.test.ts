@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs,
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
-    decideResearchOpen, stabilizeIds, sanitizeLiveStatus, sanitizeLiveChange,
+    decideResearchOpen, stabilizeIds, carryOverMedia, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, extractChangedRefs, personsByRefs, humanizeChange,
     isGedcomFileName, normalizeResearchId, parseEventData, isSafariBrowser,
     sanitizeResearchLinks, researchSchemeUrl, researchSourceRef, researchClip, researchPersonRef, researchTaskRef,
@@ -20,7 +20,7 @@ import {
     sanitizeSyncReply, isFaithfulExport, readResearchHeader as readHeader, sanitizeLiveStatus as liveStatus,
 } from '../research-link.js';
 import { exportToGedcom } from '../ged-exporter.js';
-import { StromData } from '../types.js';
+import { StromData, PersonId } from '../types.js';
 
 const UUID = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
 
@@ -283,6 +283,114 @@ describe('stabilizeIds', () => {
         expect(JSON.stringify(second)).toBe(before);
         // Nothing matched uniquely → person ids stay as imported.
         expect(Object.keys(out.persons).sort()).toEqual(Object.keys(second.persons).sort());
+    });
+});
+
+describe('carryOverMedia', () => {
+    const IMG = (tag: string) => `data:image/jpeg;base64,${tag}${'A'.repeat(2000)}`;
+    const idOf = (d: StromData, refn: string) => Object.values(d.persons).find(p => p.refn === refn)!.id;
+    /** The tree as the app holds it: the research plus a photo, an attachment and a crop added here. */
+    function appTree(): StromData {
+        const data = importData(researchGed({ extraPerson: true }));
+        const josef = data.persons[idOf(data, 'P0001')];
+        josef.photo = IMG('photo');
+        josef.photoOriginalName = 'josef.jpg';
+        josef.attachments = [{ id: 'att1', name: 'page.jpg', mimeType: 'image/jpeg', dataUrl: IMG('page'), sizeBytes: 2000, sourceId: 'src1' }];
+        const ludmila = data.persons[idOf(data, 'P0004')];
+        ludmila.photo = IMG('ludmila');
+        data.sources = {
+            src1: { id: 'src1', title: 'Baptism', refn: 'S0001', excerpts: [
+                { id: 'exc1', dataUrl: IMG('crop'), width: 10, height: 10, sizeBytes: 2000 },
+                { id: 'exc2', dataUrl: IMG('clip'), width: 10, height: 10, sizeBytes: 2000, clip: 'C1' },
+            ] },
+        };
+        return data;
+    }
+    /** The next research state: no images (the research never had them). */
+    function update(previous: StromData, opts: { extraPerson?: boolean; source?: boolean } = {}): StromData {
+        const next = stabilizeIds(importData(researchGed({ extraPerson: opts.extraPerson ?? true })), previous);
+        if (opts.source !== false) next.sources = { src1: { id: 'src1', title: 'Baptism', refn: 'S0001' } };
+        return next;
+    }
+
+    it('keeps photos, attachments and the crops cut in the app', () => {
+        const previous = appTree();
+        const next = update(previous);
+        const before = JSON.stringify(next);
+        const { data, lost } = carryOverMedia(next, previous);
+        expect(lost).toBe(0);
+        expect(JSON.stringify(next)).toBe(before);
+        const josef = data.persons[idOf(previous, 'P0001')];
+        expect(josef.photo).toBe(IMG('photo'));
+        expect(josef.photoOriginalName).toBe('josef.jpg');
+        expect(josef.attachments).toEqual(previous.persons[josef.id].attachments);
+        expect(data.persons[idOf(previous, 'P0004')].photo).toBe(IMG('ludmila'));
+        // The app's crop comes back; the research's own (clip) is the research's business.
+        expect(data.sources!.src1.excerpts!.map(e => e.id)).toEqual(['exc1']);
+    });
+
+    it('prefers what the research brings and never duplicates', () => {
+        const previous = appTree();
+        const next = update(previous);
+        const josefId = idOf(previous, 'P0001');
+        next.persons[josefId].photo = IMG('newer');
+        next.persons[josefId].attachments = [{ id: 'other', name: 'p.jpg', mimeType: 'image/jpeg', dataUrl: IMG('page'), sizeBytes: 2000 }];
+        next.sources!.src1.excerpts = [{ id: 'exc1', dataUrl: IMG('crop'), width: 10, height: 10, sizeBytes: 2000 }];
+        const { data } = carryOverMedia(next, previous);
+        expect(data.persons[josefId].photo).toBe(IMG('newer'));
+        expect(data.persons[josefId].attachments!.map(a => a.id)).toEqual(['other']);
+        expect(data.sources!.src1.excerpts!.map(e => e.id)).toEqual(['exc1']);
+    });
+
+    it('next to the research\'s own crops, only crops cut here from an attachment come back', () => {
+        const previous = appTree();
+        previous.sources!.src1.excerpts!.push({ id: 'exc3', dataUrl: IMG('cut'), width: 10, height: 10, sizeBytes: 2000, fromAttachmentId: 'att1' });
+        const next = update(previous);
+        next.sources!.src1.excerpts = [{ id: 'new', dataUrl: IMG('recrop'), width: 10, height: 10, sizeBytes: 2000 }];
+        const { data, lost } = carryOverMedia(next, previous);
+        expect(lost).toBe(0);
+        expect(data.sources!.src1.excerpts!.map(e => e.id)).toEqual(['new', 'exc3']);
+    });
+
+    it('counts images of people and sources the research dropped and unlinks gone sources', () => {
+        const previous = appTree();
+        const next = update(previous, { extraPerson: false, source: false });
+        const { data, lost } = carryOverMedia(next, previous);
+        // Ludmila's photo and the source's own crop have nowhere to go.
+        expect(lost).toBe(2);
+        const att = data.persons[idOf(previous, 'P0001')].attachments![0];
+        expect(att.id).toBe('att1');
+        expect(att.sourceId).toBeUndefined();
+    });
+
+    it('a tree handed over from the app (no REFN, other ids) keeps its photos', () => {
+        const previous = appTree();
+        // The app's own ids and no research numbers yet.
+        const own: StromData = { ...previous, persons: {} as StromData['persons'] };
+        for (const p of Object.values(previous.persons)) {
+            const id = `app_${p.id}` as PersonId;
+            own.persons[id] = { ...p, id, refn: undefined };
+        }
+        const next = stabilizeIds(importData(researchGed({ extraPerson: true })), own);
+        const { data, lost } = carryOverMedia(next, own);
+        expect(lost).toBe(1); // the source's crop: the research has no such source
+        const josef = data.persons[idOf(next, 'P0001')];
+        expect(josef.photo).toBe(IMG('photo'));
+        expect(josef.attachments![0].sourceId).toBeUndefined();
+        expect(data.persons[idOf(next, 'P0004')].photo).toBe(IMG('ludmila'));
+    });
+
+    it('people with the same name and birth are never guessed', () => {
+        const previous = appTree();
+        const own: StromData = { ...previous, persons: {} as StromData['persons'] };
+        for (const p of Object.values(previous.persons)) {
+            const id = `app_${p.id}` as PersonId;
+            own.persons[id] = { ...p, id, refn: undefined, firstName: 'Jan', lastName: 'Víšek', gender: 'male' };
+        }
+        const next = stabilizeIds(importData(researchGed({ extraPerson: true })), own);
+        const { data, lost } = carryOverMedia(next, own);
+        expect(lost).toBe(4);
+        expect(Object.values(data.persons).some(p => p.photo)).toBe(false);
     });
 });
 

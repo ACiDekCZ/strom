@@ -32,7 +32,7 @@ import { formatLiveTime, formatLiveClock } from '../live-time.js';
 import { isMobile } from '../breakpoints.js';
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
-    decideResearchOpen, stabilizeIds, sanitizeLiveStatus, sanitizeLiveChange,
+    decideResearchOpen, stabilizeIds, carryOverMedia, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
@@ -999,26 +999,37 @@ export const researchUiMethods = uiModule({
             if (unreadable || !previous) {
                 // Cannot be read with this session's key: never overwrite it.
                 asCopy = true;
-            } else if (action === 'ask') {
-                // Excerpts the user cut in this tree go with the update — say so.
-                const ownExcerpts = Object.values(previous.sources ?? {}).some(src => src.excerpts?.length);
-                const message = [strings.research.editedMessage(existing.name, TreeManager.isAutoBackupEnabled(existing.id)),
-                    ownExcerpts ? strings.research.excerptsReplaced : ''].filter(Boolean).join('\n\n');
-                const choice = await this.showChoice(
-                    message,
-                    strings.research.editedTitle,
-                    [
-                        { id: 'update', label: strings.research.update, variant: 'danger' },
-                        { id: 'copy', label: strings.research.openCopy },
-                    ],
-                    incomingImageBytes(data) > 0
-                        ? { label: strings.importImages.label, checked: includeImages,
-                            detail: strings.importImages.size((incomingImageBytes(data) / (1024 * 1024)).toFixed(1)) }
-                        : undefined
-                );
-                if (choice === null) return null;
-                asCopy = choice === 'copy';
-                if (incomingImageBytes(data) > 0) includeImages = this.choiceCheckboxChecked;
+            } else {
+                // The app's images stay (carryOverMedia); those of people or
+                // sources the research dropped would go — never without asking.
+                const lost = carryOverMedia(stabilizeIds(data, previous), previous).lost;
+                const edited = action === 'ask';
+                if (lost > 0) action = 'ask';
+                if (action === 'ask') {
+                    const backup = TreeManager.isAutoBackupEnabled(existing.id);
+                    const ownMedia = countImages(previous);
+                    const message = edited
+                        ? [strings.research.editedMessage(existing.name, backup),
+                            lost > 0 ? strings.research.mediaLost(lost)
+                                : ownMedia.photos + ownMedia.attachments + ownMedia.excerpts > 0 ? strings.research.mediaKept : '',
+                        ].filter(Boolean).join('\n\n')
+                        : strings.research.mediaLostMessage(existing.name, lost, backup);
+                    const choice = await this.showChoice(
+                        message,
+                        edited ? strings.research.editedTitle : strings.research.mediaLostTitle,
+                        [
+                            { id: 'update', label: strings.research.update, variant: 'danger' },
+                            { id: 'copy', label: strings.research.openCopy },
+                        ],
+                        incomingImageBytes(data) > 0
+                            ? { label: strings.importImages.label, checked: includeImages,
+                                detail: strings.importImages.size((incomingImageBytes(data) / (1024 * 1024)).toFixed(1)) }
+                            : undefined
+                    );
+                    if (choice === null) return null;
+                    asCopy = choice === 'copy';
+                    if (incomingImageBytes(data) > 0) includeImages = this.choiceCheckboxChecked;
+                }
             }
         }
         // Images stay out when the user said so (the setting, or the checkbox).
@@ -1038,7 +1049,7 @@ export const researchUiMethods = uiModule({
         } else {
             treeId = existing.id;
             if (existing.isHidden) TreeManager.setTreeVisibility(treeId, false);
-            const stable = stabilizeIds(data, previous!);
+            const stable = carryOverMedia(stabilizeIds(data, previous!), previous!).data;
             if (DataManager.getCurrentTreeId() !== treeId) {
                 if (!await DataManager.switchTree(treeId)) return null;
                 TreeRenderer.restoreFromSession();
@@ -1718,7 +1729,8 @@ export const researchUiMethods = uiModule({
         }
         const active = DataManager.getCurrentTreeId() === s.treeId;
         const previous = await readTree(s.treeId);
-        const stable = migrateData(previous ? stabilizeIds(data, previous) : data);
+        // Images added in the app before following stay (the research has none of them).
+        const stable = migrateData(previous ? carryOverMedia(stabilizeIds(data, previous), previous).data : data);
         if (active) {
             DataManager.replaceWithSourceData(stable);
             this.refreshSearch();

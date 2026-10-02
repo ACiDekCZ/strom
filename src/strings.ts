@@ -916,7 +916,12 @@ const stringsEN = {
         fullQualityTitle: 'Open the excerpt from the original scan in Strom Research',
         linksSetting: 'Strom Research on this computer',
         linksSettingHint: 'Extra features that open the research: send changes in one click, excerpts at full quality.',
-        excerptsReplaced: 'Excerpts you added to this tree will be replaced by the update.',
+        mediaKept: 'Photos, attachments and excerpts you added in the app stay with their people and sources.',
+        mediaLost: (n: number) =>
+            `The research no longer has some people or sources that carry ${nEn(n, 'image', 'images')} here (photos, attachments, excerpts). Updating removes them with those records.`,
+        mediaLostTitle: 'Images would be removed',
+        mediaLostMessage: (name: string, n: number, backup = true) =>
+            `The research no longer has some people or sources that carry ${nEn(n, 'image', 'images')} in the tree “${name}” (photos, attachments, excerpts). Updating removes them with those records${backup ? ' (a backup is kept first)' : ''}. Or open the research as a new copy and leave this tree as it is.`,
         defaultName: 'Research',
         opened: (name: string, persons: number, families: number, date: string) =>
             `Opened the research ${name} from Strom Research — ${nEn(persons, 'person', 'people')}, ${nEn(families, 'family', 'families')} (as of ${date})`,
@@ -3676,7 +3681,12 @@ const stringsCZ: StringsType = {
         fullQualityTitle: 'Otevřít výřez z originálního skenu ve Strom Research',
         linksSetting: 'Strom Research na tomto počítači',
         linksSettingHint: 'Funkce navíc, které otevírají výzkum: poslání úprav jedním klikem, výřezy v plné kvalitě.',
-        excerptsReplaced: 'Výřezy, které jste do tohoto stromu přidali, se aktualizací nahradí.',
+        mediaKept: 'Fotky, přílohy a výřezy, které jste přidali v aplikaci, zůstanou u svých osob a pramenů.',
+        mediaLost: (n: number) =>
+            `Výzkum už nemá některé osoby nebo prameny, ke kterým tu patří ${nCs(n, 'obrázek', 'obrázky', 'obrázků')} (fotky, přílohy, výřezy). Aktualizace je odstraní spolu s nimi.`,
+        mediaLostTitle: 'Obrázky by se odstranily',
+        mediaLostMessage: (name: string, n: number, backup = true) =>
+            `Výzkum už nemá některé osoby nebo prameny, ke kterým v rodokmenu „${name}“ patří ${nCs(n, 'obrázek', 'obrázky', 'obrázků')} (fotky, přílohy, výřezy). Aktualizace je odstraní spolu s nimi${backup ? ' (předtím se uloží záloha)' : ''}. Nebo výzkum otevřete jako novou kopii a tento rodokmen zůstane beze změny.`,
         defaultName: 'Výzkum',
         opened: (name: string, persons: number, families: number, date: string) =>
             `Otevřen výzkum ${name} ze Strom Research — ${nCs(persons, 'osoba', 'osoby', 'osob')}, ${nCs(families, 'rodina', 'rodiny', 'rodin')} (stav k ${date})`,
@@ -6430,7 +6440,12 @@ const stringsDE: StringsType = {
         fullQualityTitle: 'Den Ausschnitt aus dem Originalscan in Strom Research öffnen',
         linksSetting: 'Strom Research auf diesem Computer',
         linksSettingHint: 'Zusatzfunktionen, die die Forschung öffnen: Änderungen mit einem Klick senden, Ausschnitte in voller Qualität.',
-        excerptsReplaced: 'Ausschnitte, die Sie diesem Stammbaum hinzugefügt haben, werden durch die Aktualisierung ersetzt.',
+        mediaKept: 'Fotos, Anhänge und Ausschnitte, die Sie in der App hinzugefügt haben, bleiben bei ihren Personen und Quellen.',
+        mediaLost: (n: number) =>
+            `Die Forschung enthält einige Personen oder Quellen nicht mehr, zu denen hier ${n === 1 ? '1 Bild gehört' : `${n} Bilder gehören`} (Fotos, Anhänge, Ausschnitte). Beim Aktualisieren werden sie mit ihnen entfernt.`,
+        mediaLostTitle: 'Bilder würden entfernt',
+        mediaLostMessage: (name: string, n: number, backup = true) =>
+            `Die Forschung enthält einige Personen oder Quellen nicht mehr, zu denen im Stammbaum „${name}“ ${n === 1 ? '1 Bild gehört' : `${n} Bilder gehören`} (Fotos, Anhänge, Ausschnitte). Beim Aktualisieren werden sie mit ihnen entfernt${backup ? ' (vorher wird eine Sicherung angelegt)' : ''}. Oder öffnen Sie die Forschung als neue Kopie und lassen diesen Stammbaum unverändert.`,
         defaultName: 'Forschung',
         opened: (name: string, persons: number, families: number, date: string) =>
             `Forschung ${name} aus Strom Research geöffnet — ${nDe(persons, 'Person', 'Personen')}, ${nDe(families, 'Familie', 'Familien')} (Stand ${date})`,

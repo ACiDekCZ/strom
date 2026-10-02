@@ -490,6 +490,94 @@ test.describe('Start research with this tree (G3)', () => {
         expect(calls.cancel).toEqual([]);
     });
 
+    /** Adopt the Dvořákovi tree with a photo on Karel and an attachment on Petr. */
+    async function adoptWithImages(page: Page): Promise<{ img: string; att: string }> {
+        await appTree(page, ALL);
+        const { img, att } = await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const url = `data:image/jpeg;base64,${'A'.repeat(3000)}`;
+            dm.updatePerson('a', { photo: url });
+            const added = dm.addAttachment('b', { name: 'page.jpg', mimeType: 'image/jpeg', dataUrl: url, sizeBytes: 2250 });
+            return { img: url, att: added.id as string };
+        });
+        await page.evaluate(() => window.Strom.UI.startResearchAdopt(window.Strom.DataManager.getCurrentTreeId()));
+        const token = (await launched(page))[0].match(TOKEN_RE)![1];
+        const calls = { cancel: [] as string[], posted: [] as string[] };
+        await routeBridge(page, token, calls);
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+        await page.locator('#research-adopt-confirm').click();
+        await expect(page.locator('.toast')).toContainText('Dvořákovi is now linked to the research.');
+        // The research never got the images.
+        expect(calls.posted[0]).not.toContain('AAAA');
+        return { img, att };
+    }
+
+    /** The research's next version of the adopted tree: its own numbers, no images. */
+    const adoptedGed = (extra = false): string => [
+        '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 3 OCT 2026', `1 _STROM_TREE ${UUID}`, '1 CHAR UTF-8', '1 NOTE Dvořákovi',
+        '0 @P0001@ INDI', '1 NAME Karel /Dvořák/', '1 SEX M', '1 REFN P0001', '1 FAMS @F0001@',
+        '0 @P0002@ INDI', '1 NAME Petr /Dvořák/', '1 SEX M', '1 REFN P0002', '1 FAMC @F0001@',
+        ...(extra ? ['0 @P0003@ INDI', '1 NAME Marie /Dvořáková/', '1 SEX F', '1 REFN P0003', '1 FAMS @F0001@'] : []),
+        '0 @F0001@ FAM', '1 HUSB @P0001@', ...(extra ? ['1 WIFE @P0003@'] : []), '1 CHIL @P0002@',
+        '0 TRLR',
+    ].join('\n');
+
+    const media = (page: Page) => page.evaluate(() => {
+        const persons = Object.values(window.Strom.DataManager.getData().persons) as any[];
+        const by = (n: string) => persons.find(p => p.firstName === n);
+        return { karel: by('Karel')?.photo ?? null, petr: (by('Petr')?.attachments ?? []).map((a: any) => a.id) };
+    });
+
+    test('adopted tree: "load the new version" without edits keeps the photos and attachments', async ({ page }) => {
+        const { img, att } = await adoptWithImages(page);
+        await dropFile(page, adoptedGed(true));
+        await expect(page.locator('.toast')).toContainText('Updated the research');
+        await expect(page.locator('#confirmation-modal')).toBeHidden();
+        await expect(card(page, 'Marie')).toBeVisible();
+        expect(await media(page)).toEqual({ karel: img, petr: [att] });
+        // And again (now matched by the research's numbers).
+        await dropFile(page, adoptedGed(true));
+        await expect(page.locator('#confirmation-modal')).toBeHidden();
+        await expect.poll(() => media(page)).toEqual({ karel: img, petr: [att] });
+    });
+
+    test('adopted tree, a photo added in the app: the dialog says images stay, "Update" keeps them', async ({ page }) => {
+        const { img, att } = await adoptWithImages(page);
+        await dropFile(page, adoptedGed());
+        await expect(page.locator('.toast')).toContainText('Updated the research');
+        const other = await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const petr = (Object.values(dm.getData().persons) as any[]).find(p => p.firstName === 'Petr');
+            const url = `data:image/jpeg;base64,${'B'.repeat(3000)}`;
+            dm.updatePerson(petr.id, { photo: url });
+            return url;
+        });
+        await dropFile(page, adoptedGed(true));
+        const dialog = page.locator('#confirmation-modal');
+        await expect(dialog).toContainText('was changed in this app');
+        await expect(dialog).toContainText('Photos, attachments and excerpts you added in the app stay');
+        await dialog.getByRole('button', { name: 'Update' }).click();
+        await expect(page.locator('.toast')).toContainText('Updated the research');
+        await expect(card(page, 'Marie')).toBeVisible();
+        expect(await media(page)).toEqual({ karel: img, petr: [att] });
+        expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[])
+            .find(p => p.firstName === 'Petr').photo)).toBe(other);
+    });
+
+    test('the research dropped a person with a photo: never silently, a dialog warns', async ({ page }) => {
+        await adoptWithImages(page);
+        await dropFile(page, adoptedGed());
+        await expect(page.locator('.toast')).toContainText('Updated the research');
+        const onlyPetr = adoptedGed().replace(/0 @P0001@ INDI[\s\S]*?(?=0 @P0002@)/, '').replace('1 HUSB @P0001@\n', '');
+        await dropFile(page, onlyPetr);
+        const dialog = page.locator('#confirmation-modal');
+        await expect(dialog).toContainText('Images would be removed');
+        await expect(dialog).toContainText('carry 1 image');
+        await dialog.getByRole('button', { name: 'Open as copy' }).click();
+        await expect(page.locator('.toast')).toContainText('Opened the research');
+        expect(await page.evaluate(() => window.Strom.TreeManager.getTrees().length)).toBe(2);
+    });
+
     test('an unknown token: a toast, no dialog, the research is told', async ({ page }) => {
         await appTree(page, ALL);
         const calls = { cancel: [] as string[], posted: [] as string[] };
