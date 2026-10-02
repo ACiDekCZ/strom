@@ -473,7 +473,7 @@ test.describe('a research update', () => {
         '0 TRLR',
     ].join('\n');
 
-    test('asks about images; no warning about excerpts the update brings again', async ({ page }) => {
+    test('asks about images and says the tree\'s own excerpts stay', async ({ page }) => {
         await openApp(page);
         const jpeg = await jpegDataUrl(page, 200, 40);
         await page.evaluate((t) => window.Strom.UI.openGedcomText(t), researchGed(jpeg));
@@ -487,8 +487,7 @@ test.describe('a research update', () => {
         void page.evaluate((t) => window.Strom.UI.openGedcomText(t), researchGed(jpeg, true));
         const dlg = page.locator('#confirmation-modal');
         await expect(dlg).toBeVisible();
-        // The excerpt came from the research and comes again: nothing of the user's is dropped.
-        await expect(dlg).not.toContainText('the research does not have yet');
+        await expect(dlg).toContainText('Photos, attachments and excerpts you added in the app stay');
         const check = dlg.locator('#confirm-choice-check');
         await expect(check).toBeChecked();
         await check.uncheck();
@@ -496,7 +495,9 @@ test.describe('a research update', () => {
         await expect(page.locator('.toast')).toContainText('Updated the research');
         const src = await page.evaluate(() => Object.values(window.Strom.DataManager.getData().sources as Record<string, any>)[0]);
         expect(src.title).toBe('Křest Josefa');
-        expect(src.excerpts).toBeUndefined();
+        // No new images came in; the excerpt the tree had stays.
+        expect(src.excerpts).toHaveLength(1);
+        expect(src.excerpts[0].dataUrl).toBe(jpeg);
     });
 });
 

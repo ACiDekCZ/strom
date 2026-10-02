@@ -33,7 +33,7 @@ import { SettingsManager } from '../settings.js';
 import { stripMedia } from '../attachments.js';
 import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
-    parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds,
+    parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, carryOverMedia,
 } from '../research-link.js';
 import {
     noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, storedResearchBridge, researchLinksEnabled,
@@ -45,7 +45,7 @@ import {
 } from '../research-sync.js';
 import { uiModule } from './module.js';
 import {
-    fetchWithTimeout, fetchGedcomText, postSync, onComputer, readTree, researchGedcom, imagesDroppedBy,
+    fetchWithTimeout, fetchGedcomText, postSync, onComputer, readTree, researchGedcom,
 } from './research-ui.js';
 
 /** How often the bridge is asked, the window visible: normally / while a send waits. */
@@ -736,7 +736,7 @@ export const researchSyncMethods = uiModule({
      * Load the research's version over the open tree without asking, after a
      * write: the last send was written there, nothing changed here since, no
      * dialog or editor is open, its head moved on, and nothing would be lost
-     * (until the research takes the app's images: none of them would go).
+     * (the app's images carried over; none belongs to a record the research dropped).
      * The view stays (zoom, place, focus); no toast. Returns the conflicts it
      * brought, or null when it did not load.
      */
@@ -775,11 +775,14 @@ export const researchSyncMethods = uiModule({
         fpCache = null;
         if (this.researchSyncFingerprints(treeId, fresh).current !== sent.fingerprint) return null;
         const previous = DataManager.getData();
-        const stable = stabilizeIds(data, previous);
-        if (imagesDroppedBy(stable, previous) > 0) {
+        // The app's images stay with their people and sources; images of
+        // records the research dropped would go — that is asked, never quiet.
+        const carried = carryOverMedia(stabilizeIds(data, previous), previous);
+        if (carried.lost > 0) {
             quietSkippedHead = header.head ?? remote;
             return null;
         }
+        const stable = carried.data;
         const before = openConflictCounts(previous);
         quietLoading = true;
         try {
