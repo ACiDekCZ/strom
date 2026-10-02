@@ -261,7 +261,9 @@ test.describe('updating over changes the research does not have', () => {
         bridge.treeGed = researchGed('aa11bb22cc33').replace('1 NAME Jan /Víšek/', '1 NAME Jan /Víšek/\n1 BIRT\n2 PLAC Praha');
         await poll(page);
         await expect(page.locator('.toast')).toContainText("Loaded the research's new version, made after it wrote your send.");
-        await expect(pill).toBeHidden();
+        // Sent by hand, nothing to send: only the Send button's empty place stays.
+        await expect(pill).not.toHaveClass(/is-warn|is-wait/);
+        await expect(pill.locator('#research-sync-send')).toHaveCount(0);
         const meta = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata());
         expect(meta.research.head).toBe('aa11bb22cc33');
     });

@@ -199,6 +199,40 @@ test.describe('sending by itself', () => {
     });
 });
 
+test('the research names the conflicts in its reply: the note names the person', async ({ page }) => {
+    const bridge = await autoTree(page);
+    writesAtOnce(bridge);
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0003', person: 'P0003', fact: 'BIRT' }] } };
+    await editJan(page);
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    const note = page.locator('.research-sync-note');
+    await expect(note).toContainText('Written, 1 conflict to decide');
+    await expect(note.getByRole('button', { name: 'Jan Víšek ›' })).toBeVisible();
+});
+
+test('a written send taken back in the research: told once, not sent again by itself, the new version asks before it loads', async ({ page }) => {
+    const bridge = await autoTree(page);
+    writesAtOnce(bridge);
+    await editJan(page);
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('ab10cd10ef10');
+    Object.assign(bridge.sends[0], { state: 'undone', decidedAt: new Date().toISOString() });
+    bridge.head = 'ee77ff88aa99';
+    bridge.treeGed = researchGed('ee77ff88aa99');
+    await poll(page);
+    await expect(page.locator('.toast')).toContainText('was taken back in the research. Your changes are still here.');
+    await expect(pill(page)).toContainText('Send taken back');
+    await expect(dot(page)).toBeVisible();
+    await page.clock.fastForward(QUIET * 2);
+    expect(bridge.posts).toHaveLength(1);
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    await expect(page.locator('#confirmation-modal')).toContainText("You have changes the research doesn't have");
+    await page.locator('#confirm-cancel-btn').click();
+    // Praha is still here.
+    expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any).birthPlace)).toBe('Praha');
+});
+
 test('a write that takes longer (202): "writing" until the status says written, then loaded quietly', async ({ page }) => {
     const bridge = await autoTree(page);
     bridge.syncReply = { status: 202, body: { ok: true, inbox: false, pending: true, changes: 6 } };
@@ -313,6 +347,27 @@ test.describe('the toolbar', () => {
         await expect(send).toHaveCount(0);
     });
 
+    test('sent by hand: the bridge back is found within seconds; the button\'s place is kept, the toolbar does not move', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.clock.install();
+        await openResearch(page);
+        const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null } });
+        await poll(page);
+        const switcher = page.locator('.tree-switcher').first();
+        const send = page.locator('#research-sync-send');
+        bridge.down = true;
+        await poll(page);
+        await editJan(page);
+        await expect(send).toHaveCount(0);
+        // (After the edit: the storage pill "only in this browser" has its own place.)
+        await page.waitForTimeout(1700);
+        const at = await switcher.boundingBox();
+        bridge.down = false;
+        await page.clock.fastForward(16_000);
+        await expect(send).toBeVisible();
+        expect(await switcher.boundingBox()).toEqual(at);
+    });
+
     test('a tree without a research at 360 and 768 px: no research place, no dot', async ({ page }) => {
         for (const width of [360, 768]) {
             await page.setViewportSize({ width, height: 800 });
@@ -398,7 +453,7 @@ test.describe('the research as an archive', () => {
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('auto');
     });
 
-    test('a delete says it is set aside in the archive, once something was written there; not with an agent', async ({ page }) => {
+    test('a delete says it is set aside in the archive (the tree came from there); not with an agent', async ({ page }) => {
         await page.clock.install();
         await openResearch(page, { auto: true });
         const bridge = await fakeBridge(page, { accepts: ARCHIVE });
@@ -408,21 +463,27 @@ test.describe('the research as an archive', () => {
             const jan = Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
             void window.Strom.UI.confirmDeletePersonDialog(jan.id);
         });
+        // Before any send: the archive has the tree it gave.
         await askDelete();
         await expect(page.locator('#confirmation-modal')).toHaveClass(/active/);
-        await expect(page.locator('.confirm-note')).toHaveCount(0);
-        await page.locator('#confirm-cancel-btn').click();
-        writesAtOnce(bridge);
-        await editJan(page);
-        await page.clock.fastForward(QUIET + 1000);
-        await expect.poll(() => bridge.posts.length).toBe(1);
-        await askDelete();
         await expect(page.locator('.confirm-note')).toContainText('Archive The research sets it aside; it can be restored.');
         await page.locator('#confirm-cancel-btn').click();
         bridge.accepts = { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null };
         await poll(page);
         await askDelete();
+        await expect(page.locator('#confirmation-modal')).toHaveClass(/active/);
         await expect(page.locator('.confirm-note')).toHaveCount(0);
+    });
+
+    test('opened by ?live=: an archive opens for editing, not followed', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page, { auto: true });
+        await fakeBridge(page, { accepts: ARCHIVE });
+        await page.evaluate((b) => window.Strom.UI.startLiveFollow(b), BRIDGE);
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.id)).toBe(UUID);
+        expect(await page.evaluate(() => window.Strom.UI.isFollowingActiveResearch())).toBe(false);
+        expect(await page.evaluate(() => window.Strom.DataManager.isReadOnly())).toBe(false);
+        await expect(page.locator('.live-panel')).toHaveCount(0);
     });
 
     test('the bridge not running with changes: how many wait', async ({ page }) => {

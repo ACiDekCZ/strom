@@ -1548,6 +1548,14 @@ export const researchUiMethods = uiModule({
                 if (opts.resume) forgetLiveBridge();
                 return;
             }
+            // An archive has no agent to follow: the tree opens for editing, its
+            // bridge remembered (the changes go to it by themselves).
+            if (status.accepts?.mode === 'archive') {
+                if (opts.resume) forgetLiveBridge();
+                this.refreshResearchSyncUi();
+                void this.pollResearchBridge();
+                return;
+            }
             rememberLiveBridge(bridge.base, treeId);
 
             live = {

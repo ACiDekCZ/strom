@@ -122,6 +122,14 @@ describe('sending by itself, the archive, one-time notices', () => {
         expect(researchSyncState(input({ auto: true })).kind).toBe('inSync');
     });
 
+    it('a written send taken back in the research: its own warning, unchanged it is not sent again', () => {
+        const undone = link({ fingerprint: '', sent: sent({ state: 'undone' }) });
+        expect(researchSyncState(input({ auto: true, link: undone, matchesBase: false, current: 'fp-sent' })).kind).toBe('rejected');
+        // Edited since: goes again by itself.
+        expect(researchSyncState(input({ auto: true, link: undone, matchesBase: false, current: 'fp-edited' })).kind).toBe('rejected');
+        expect(researchSyncWantsAttention('rejected')).toBe(true);
+    });
+
     it('refused by itself: paused until sent again; discarded: unchanged it stays discarded', () => {
         const refused = link({ refused: { reason: 'locked', at: '' } });
         expect(researchSyncState(auto({ link: refused }))).toEqual({ kind: 'autoPaused', core: 'autoPaused', reason: 'locked' });
@@ -169,6 +177,10 @@ describe('what became of a send', () => {
         expect(ask([rec({ state: 'nothing' })])?.nothing).toBe(true);
         // Replaced by a newer send of this tree: that one tells.
         expect(state(ask([rec({ state: 'replaced' }), rec({ intake: 'R2', at: '2026-10-02T14:40:00Z', state: 'written' })]))).toBe('written');
+        // Written with conflicts still open; taken back afterwards still counts as written here (the undo is noticed on its own).
+        const withConflicts = ask([rec({ state: 'written', conflicts: 1, conflictPersons: ['P0012'] })]);
+        expect(withConflicts).toMatchObject({ state: 'written', conflicts: 1, conflictPersons: ['P0012'] });
+        expect(state(ask([rec({ state: 'undone', decidedAt: '2026-10-03T09:00:00Z' })]))).toBe('written');
         // Not in the list (older than it keeps): the inbox decides, as before.
         expect(ask([rec({ intake: 'R9' })])).toBeNull();
     });
@@ -229,11 +241,15 @@ describe('what the bridge says', () => {
     it('sends: known states only, the reason as plain text', () => {
         const sends = sanitizeLiveStatus({ tree: RID, sends: [
             { intake: 'R20261002143205123-a1b2', at: '2026-10-02T14:32:05Z', state: 'discarded', changes: 6, tree: 'tree_1', sent: 'v2-x', decidedAt: '2026-10-02T15:10:00Z', reason: 'zkouška\u0000' },
+            { intake: 'R3', state: 'written', conflicts: [{ id: 'X0003', person: 'P0012', fact: 'BIRT' }, { id: 'X0004', family: 'F0007', person: 'P0013' }] },
+            { intake: 'R4', state: 'undone', decidedAt: '2026-10-03T09:00:00Z' },
             { intake: 'R2', state: 'exploded' },
             { intake: 'bad mark', state: 'written' },
         ] })?.sends;
         expect(sends).toEqual([{ intake: 'R20261002143205123-a1b2', at: '2026-10-02T14:32:05Z', state: 'discarded', changes: 6,
-            tree: 'tree_1', sent: 'v2-x', decidedAt: '2026-10-02T15:10:00Z', reason: 'zkouška', conflicts: null }]);
+            tree: 'tree_1', sent: 'v2-x', decidedAt: '2026-10-02T15:10:00Z', reason: 'zkouška', conflicts: null, conflictPersons: [] },
+            { intake: 'R3', at: '', state: 'written', changes: null, tree: '', sent: '', decidedAt: '', reason: '', conflicts: 2, conflictPersons: ['P0012', 'P0013'] },
+            { intake: 'R4', at: '', state: 'undone', changes: null, tree: '', sent: '', decidedAt: '2026-10-03T09:00:00Z', reason: '', conflicts: null, conflictPersons: [] }]);
         expect(sanitizeLiveStatus({ tree: RID })?.sends).toBeNull();
     });
 

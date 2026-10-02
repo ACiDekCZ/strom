@@ -797,7 +797,7 @@ export interface ResearchSendRecord {
     /** The mark the `/sync` reply gave it. */
     intake: string;
     at: string;
-    state: 'pending' | 'written' | 'discarded' | 'replaced' | 'nothing';
+    state: 'pending' | 'written' | 'discarded' | 'replaced' | 'nothing' | 'undone';
     changes: number | null;
     /** The app tree (`_STROM_APP_TREE`), or the research id. */
     tree: string;
@@ -807,11 +807,13 @@ export interface ResearchSendRecord {
     decidedAt: string;
     /** The user's words when discarding ('' = none). */
     reason: string;
-    /** Conflicts it left to decide (null: not said). */
+    /** Conflicts it left to decide and still open (null: not said). */
     conflicts: number | null;
+    /** The persons those conflicts are about (research refs). */
+    conflictPersons: string[];
 }
 
-const SEND_STATES = new Set(['pending', 'written', 'discarded', 'replaced', 'nothing']);
+const SEND_STATES = new Set(['pending', 'written', 'discarded', 'replaced', 'nothing', 'undone']);
 
 /** `/status.sends`, or null when the research does not say. Untrusted. */
 export function sanitizeSends(value: unknown): ResearchSendRecord[] | null {
@@ -835,6 +837,7 @@ export function sanitizeSends(value: unknown): ResearchSendRecord[] | null {
             decidedAt: iso(r.decidedAt),
             reason: cleanText(r.reason, 200),
             conflicts: conflictCount(r.conflicts),
+            conflictPersons: conflictPersons(r.conflicts),
         });
     }
     return out;

@@ -79,7 +79,7 @@ export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
     const unsent = !input.matchesBase && input.current !== sent?.fingerprint;
     const newer = !!input.remoteHead && !!link.head && input.remoteHead !== link.head;
     if (unsent && newer && input.bridgeUp) return st('unsentAndNewer');
-    if (sent?.state === 'discarded') return st('rejected', { sent });
+    if (sent?.state === 'discarded' || sent?.state === 'undone') return st('rejected', { sent });
     if (link.refused) return st(auto ? 'autoPaused' : 'refused', { reason: link.refused.reason });
     if (unsent && auto && input.autoDue && !input.bridgeUp && !input.sending) return st('autoBridgeDown');
     if (unsent && !auto) return st(input.bridgeUp ? 'unsent' : 'unsentBridgeDown');
@@ -125,6 +125,9 @@ export interface SendFate {
     reason: string;
     /** "Nothing new": the research already had it all (0 changes). */
     nothing: boolean;
+    /** Conflicts the write left, still open (null: not said), and whom they are about (research refs). */
+    conflicts?: number | null;
+    conflictPersons?: string[];
 }
 
 /**
@@ -153,7 +156,10 @@ export function pendingSendFate(
         }
         if (rec) {
             if (rec.state === 'pending' || rec.state === 'replaced') return fate('pending');
-            if (rec.state === 'written') return fate('written', rec.decidedAt);
+            // Taken back afterwards: written first (the undo is noticed on its own, see the UI).
+            if (rec.state === 'written' || rec.state === 'undone') {
+                return { ...fate('written', rec.decidedAt), conflicts: rec.conflicts, conflictPersons: rec.conflictPersons };
+            }
             if (rec.state === 'nothing') return fate('written', rec.decidedAt, '', true);
             return fate('discarded', rec.decidedAt, rec.reason);
         }

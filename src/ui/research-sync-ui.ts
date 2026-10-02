@@ -33,7 +33,7 @@ import { SettingsManager } from '../settings.js';
 import { stripMedia } from '../attachments.js';
 import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
-    parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, carryOverMedia,
+    parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, carryOverMedia, researchPersonRef,
 } from '../research-link.js';
 import {
     noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, storedResearchBridge, researchLinksEnabled,
@@ -51,6 +51,8 @@ import {
 /** How often the bridge is asked, the window visible: normally / while a send waits. */
 const POLL_MS = 60_000;
 const POLL_PENDING_MS = 30_000;
+/** The bridge not answering while changes wait for it: asked more often, so it is found soon after it starts. */
+const POLL_DOWN_MS = 15_000;
 /** A status this fresh counts as "the bridge runs" without asking again. */
 const FRESH_MS = 30_000;
 /** Timeouts: the background ask, the ask before a send, the send itself (the research writes it, up to 20 s and then 202). */
@@ -85,6 +87,8 @@ interface BridgeRuntime {
 
 const runtime = new Map<string, BridgeRuntime>();
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
+/** When the scheduled ask runs (ms). */
+let pollDueAt = 0;
 let recomputeTimer: ReturnType<typeof setTimeout> | null = null;
 let polling = false;
 let started = false;
@@ -153,6 +157,22 @@ function openConflictCounts(data: StromData): Map<PersonId, number> {
         if (n > 0) out.set(id as PersonId, n);
     }
     return out;
+}
+
+/** The app's persons the research's refs name ("P0012"), in order, found ones only. */
+function personsByResearchRefs(data: StromData, refs: readonly string[]): PersonId[] {
+    const out: PersonId[] = [];
+    for (const ref of refs) {
+        const hit = Object.entries(data.persons ?? {}).find(([, p]) => researchPersonRef(p?.refn) === ref);
+        if (hit && !out.includes(hit[0] as PersonId)) out.push(hit[0] as PersonId);
+    }
+    return out;
+}
+
+/** What the research said about a write's conflicts (null count: it did not say). */
+interface KnownConflicts {
+    conflicts: number | null;
+    refs: string[];
 }
 
 /** The fingerprints of a tree's data against its research link. */
@@ -367,7 +387,12 @@ export const researchSyncMethods = uiModule({
             polling = false;
         }
         this.researchNoteMode(ctx.treeId);
-        if (status) await this.settleResearchSend(ctx.treeId, status);
+        // The next ask by what this one found (down with changes waiting: soon).
+        if (opts.reschedule !== false) this.scheduleResearchPoll();
+        if (status) {
+            await this.settleResearchSend(ctx.treeId, status);
+            this.researchNoteUndone(ctx.treeId, status);
+        }
         this.refreshResearchSyncUi();
         if (status && opts.reschedule !== false) void this.researchAutoCheck();
         return !!status;
@@ -381,15 +406,26 @@ export const researchSyncMethods = uiModule({
         void this.pollResearchBridge();
     },
 
-    scheduleResearchPoll(): void {
-        if (pollTimer) clearTimeout(pollTimer);
+    /** Schedule the next ask; `onlySooner`: only when that comes sooner than the one already scheduled. */
+    scheduleResearchPoll(onlySooner = false): void {
         const ctx = this.researchSyncLink();
         const waiting = ctx?.link.sent?.state === 'pending';
+        const rt = ctx ? runtime.get(ctx.link.id) : undefined;
+        // Down with changes the research lacks (sent by hand or by itself): look again soon.
+        const downWithChanges = !!ctx && !!rt && !rt.up && this.researchSyncCapable(ctx.link.id)
+            && (() => {
+                const fps = this.researchSyncFingerprints(ctx.treeId, ctx.link);
+                return !fps.matchesBase && fps.current !== ctx.link.sent?.fingerprint;
+            })();
+        const delay = downWithChanges ? POLL_DOWN_MS : waiting ? POLL_PENDING_MS : POLL_MS;
+        if (onlySooner && pollTimer && pollDueAt <= Date.now() + delay) return;
+        if (pollTimer) clearTimeout(pollTimer);
+        pollDueAt = Date.now() + delay;
         pollTimer = setTimeout(() => {
             pollTimer = null;
             if (visible()) void this.pollResearchBridge();
             else this.scheduleResearchPoll();
-        }, waiting ? POLL_PENDING_MS : POLL_MS);
+        }, delay);
     },
 
     /** The research's mode as first seen is remembered quietly; a later switch is said once. */
@@ -440,7 +476,41 @@ export const researchSyncMethods = uiModule({
             return;
         }
         // A write that took longer (202): its result now, as the reply would have said it.
-        if (sent.writing) await this.researchAfterWrite(treeId, closed);
+        if (sent.writing) {
+            await this.researchAfterWrite(treeId, closed,
+                fate.conflicts !== undefined ? { conflicts: fate.conflicts ?? null, refs: fate.conflictPersons ?? [] } : undefined);
+        }
+    },
+
+    /**
+     * The research took a written send back (`strom sync undo`): the changes
+     * are here and not there any more — "changes the research does not have"
+     * again, told once; nothing goes by itself until the next edit, and the
+     * research's version asks before it loads over them.
+     */
+    researchNoteUndone(treeId: TreeId, status: LiveStatus): void {
+        const lw = researchAutoState(treeId).lastWritten;
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        if (!lw?.intake || !link || !status.sends) return;
+        const rec = status.sends.find(r => r.intake === lw.intake);
+        if (rec?.state !== 'undone') return;
+        // The state now stands for the send taken back (the version loaded after the write is that state,
+        // its ids from the research); edited since, the written state does, and the edits go again.
+        const fps = this.researchSyncFingerprints(treeId, link);
+        const fingerprint = fps.matchesBase || !lw.fingerprint ? fps.current : lw.fingerprint;
+        TreeManager.patchResearchLink(treeId, {
+            // No base any more: an update from the research asks first.
+            fingerprint: '',
+            sent: { fingerprint, at: lw.at, changes: lw.changes, head: '', state: 'undone', closedAt: rec.decidedAt || new Date().toISOString(),
+                intake: lw.intake, noticed: true },
+        });
+        patchResearchAutoState(treeId, { lastWritten: undefined });
+        fpCache = null;
+        const s = strings.sync;
+        this.showToast(s.undoneToast(when(lw.at)), Infinity, {
+            closable: true,
+            action: { label: s.sendAgain, run: () => { void this.researchSendTree(treeId); } },
+        });
     },
 
     // ==================== SENDING BY ITSELF ====================
@@ -453,6 +523,8 @@ export const researchSyncMethods = uiModule({
         fpCache = null;
         patchResearchAutoState(treeId, { edits: (researchAutoState(treeId).edits ?? 0) + 1 });
         autoDue.delete(treeId);
+        // The bridge not answering and now changes wait for it: look for it sooner.
+        if (DataManager.getCurrentTreeId() === treeId && !runtime.get(link.id)?.up) this.scheduleResearchPoll(true);
         if (DataManager.getCurrentTreeId() === treeId && this.researchAutoOn(link)) this.scheduleResearchAutoSend(treeId);
     },
 
@@ -674,7 +746,8 @@ export const researchSyncMethods = uiModule({
                 if (!opts.auto) this.showToast(s.writtenToast(changes ?? 0), 6000);
                 await this.researchLoadNewer({ afterSend: true });
             } else {
-                await this.researchAfterWrite(treeId, sent);
+                await this.researchAfterWrite(treeId, sent,
+                    reply.conflicts !== null ? { conflicts: reply.conflicts, refs: reply.conflictPersons } : undefined);
             }
         } else if (writing) {
             if (!opts.auto) this.showToast(strings.sync.markWriting, 4000);
@@ -692,17 +765,23 @@ export const researchSyncMethods = uiModule({
      * quietly when nothing here changed since, and tell the conflicts it left
      * (by hand: a toast; by itself: the note under the mark, for new ones only).
      */
-    async researchAfterWrite(treeId: TreeId, sent: ResearchSend): Promise<void> {
+    async researchAfterWrite(treeId: TreeId, sent: ResearchSend, known?: KnownConflicts): Promise<void> {
         const at = sent.closedAt ?? new Date().toISOString();
-        patchResearchAutoState(treeId, { lastWritten: { at, changes: sent.changes, conflicts: 0 } });
+        const base = { at, changes: sent.changes, ...(sent.intake ? { intake: sent.intake } : {}), fingerprint: sent.fingerprint };
+        patchResearchAutoState(treeId, { lastWritten: { ...base, conflicts: 0 } });
         justWritten = { treeId, until: Date.now() + WRITTEN_MARK_MS };
         setTimeout(() => { justWritten = null; this.renderResearchSyncPill(); }, WRITTEN_MARK_MS + 50);
         this.refreshResearchSyncUi();
         const loaded = await this.researchQuietLoad(treeId);
-        const persons = loaded?.conflictPersons ?? [];
-        const conflicts = loaded?.conflicts ?? 0;
+        // The research's own word on the conflicts first; else what the new version shows.
+        const active = DataManager.getCurrentTreeId() === treeId;
+        const data = active ? DataManager.getData() : null;
+        const persons = known && known.conflicts !== null
+            ? (data ? personsByResearchRefs(data, known.refs) : [])
+            : loaded?.conflictPersons ?? [];
+        const conflicts = known && known.conflicts !== null ? known.conflicts : loaded?.conflicts ?? 0;
         if (conflicts > 0) {
-            patchResearchAutoState(treeId, { lastWritten: { at, changes: sent.changes, conflicts, persons: persons.slice(0, 20) } });
+            patchResearchAutoState(treeId, { lastWritten: { ...base, conflicts, persons: persons.slice(0, 20) } });
             const link = TreeManager.getTreeMetadata(treeId)?.research;
             if (link?.sent) TreeManager.patchResearchLink(treeId, { sent: { ...link.sent, conflicts } });
         }
@@ -981,7 +1060,8 @@ export const researchSyncMethods = uiModule({
         const ctx = this.researchSyncLink();
         if (!ctx || !onComputer() || !this.researchSyncCapable(ctx.link.id)) return undefined;
         if (this.researchModeOf(ctx.link.id, ctx.link) !== 'archive') return undefined;
-        if (!researchAutoState(ctx.treeId).lastWritten) return undefined;
+        // The archive has the tree: it came from there, or a send was written there.
+        if (!ctx.link.head && !researchAutoState(ctx.treeId).lastWritten) return undefined;
         return { tag: strings.sync.archiveTag, text: strings.sync.archiveDeleteNote };
     },
 
@@ -1017,7 +1097,8 @@ export const researchSyncMethods = uiModule({
             written: () => {
                 const lw = autoState.lastWritten;
                 const persons = treeId ? this.researchWrittenConflictPersons(treeId) : [];
-                const conflicts = persons.length > 0 ? lw?.conflicts ?? 0 : 0;
+                // Known persons: while one of them still has an open conflict; unknown ones: the research's count.
+                const conflicts = persons.length > 0 || !lw?.persons?.length ? lw?.conflicts ?? 0 : 0;
                 const parts = [archive ? '' : lw?.changes ? s.changesN(lw.changes) : '', conflicts > 0 ? s.conflictsN(conflicts) : ''].filter(Boolean);
                 const actions: Action[] = [];
                 if (conflicts > 0) {
@@ -1044,7 +1125,11 @@ export const researchSyncMethods = uiModule({
                 actions: this.researchLinkAvailable('send') ? [{ action: 'startAndSend', label: s.startAndSend }] : [] }),
             refused: () => ({ tone: 'warn', title: s.stateRefused,
                 sub: [state.reason, s.staysHere].filter(Boolean).join(' '), actions: [{ action: 'retry', label: s.retry }] }),
-            rejected: () => ({ tone: 'warn', title: s.stateRejected(when(state.sent?.at)),
+            rejected: () => state.sent?.state === 'undone'
+                ? { tone: 'warn', title: s.stateUndone(when(state.sent?.at)),
+                    sub: auto ? s.undoneAutoSub(when(state.sent?.closedAt)) : s.undoneSub(when(state.sent?.closedAt)),
+                    actions: [{ action: 'sendAgain', label: s.sendAgain }] }
+                : ({ tone: 'warn', title: s.stateRejected(when(state.sent?.at)),
                 sub: auto
                     ? s.rejectedAutoSub(when(state.sent?.closedAt), state.sent?.reason ?? '')
                     : [s.rejectedSub(when(state.sent?.closedAt)), state.sent?.reason ? `(${state.sent.reason})` : ''].filter(Boolean).join(' '),
@@ -1144,7 +1229,7 @@ export const researchSyncMethods = uiModule({
                 autoBridgeDown: { text: archive ? s.pillBridgeDownWaiting(Math.max(1, researchAutoState(ctx.treeId).edits ?? 1)) : s.pillBridgeDown,
                     button: s.pillStart, action: 'startResearch' },
                 autoPaused: { text: s.pillRefused, button: s.sendAgain, action: 'retry' },
-                rejected: { text: s.pillRejected, button: s.sendAgain, action: 'sendAgain' },
+                rejected: { text: state.sent?.state === 'undone' ? s.pillUndone : s.pillRejected, button: s.sendAgain, action: 'sendAgain' },
             } : {}),
         };
         const w = warn[kind];
@@ -1164,7 +1249,13 @@ export const researchSyncMethods = uiModule({
         }
         // Sent by hand: the Send button while changes wait and the bridge runs.
         if (!auto) {
-            if (kind !== 'unsent') { hide(); return; }
+            if (safariBrowser()) { hide(); return; }
+            // Nothing to send: the button's place stays (empty), so the toolbar does not move when it comes.
+            if (kind !== 'unsent') {
+                set('is-send is-reserved', `<span class="research-sync-send research-sync-send--placeholder" aria-hidden="true">`
+                    + `<span class="research-sync-send-long">${esc(s.sendButton)}</span><span class="research-sync-send-short">${esc(s.barSend)}</span></span>`);
+                return;
+            }
             const busy = sendingTree === ctx.treeId;
             set('is-send', `<button type="button" class="research-sync-send" id="research-sync-send"${busy ? ' disabled aria-busy="true"' : ''}`
                 + ` title="${esc(s.sendButtonTitle)}" onclick="${call('researchSyncAction', "'send'")}">`
@@ -1294,7 +1385,7 @@ export const researchSyncMethods = uiModule({
         switch (state.core) {
             case 'autoPaused': return { text: t.statusStopped(state.reason || '?'), warn: true, action: 'sendAgain' };
             case 'refused': return { text: `${strings.sync.stateRefused}: ${state.reason || '?'}.`, warn: true, action: 'sendAgain' };
-            case 'rejected': return { text: t.statusRejected(when(state.sent?.at)), warn: true, action: 'sendAgain' };
+            case 'rejected': return { text: state.sent?.state === 'undone' ? t.statusUndone(when(state.sent?.at)) : t.statusRejected(when(state.sent?.at)), warn: true, action: 'sendAgain' };
             case 'sentPending': case 'waitThenLoad': return { text: strings.sync.markPending(when(state.sent?.at)), warn: false };
             case 'autoBridgeDown':
                 if (archive) {

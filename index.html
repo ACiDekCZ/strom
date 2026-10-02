@@ -8753,6 +8753,9 @@
         .toolbar .research-sync-send:hover { background: var(--primary-dark); }
         .toolbar .research-sync-send[disabled] { background: var(--primary-soft); color: var(--primary); cursor: progress; }
         .research-sync-send-short { display: none; }
+        /* Sent by hand with nothing to send: the button's place kept, invisible (the toolbar never moves). */
+        .research-sync-send--placeholder { visibility: hidden; pointer-events: none; }
+        .toolbar .research-sync-send { justify-content: center; min-width: 96px; }
         @media (max-width: 1599px) {
             .research-sync-send-long { display: none; }
             .research-sync-send-short { display: inline; }

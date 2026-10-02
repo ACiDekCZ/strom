@@ -170,7 +170,7 @@ const INTRO_KEY = 'strom-research-auto-intro-seen';
  */
 export interface ResearchAutoState {
     /** The last send the research wrote, and the conflicts it left. */
-    lastWritten?: { at: string; changes: number | null; conflicts: number; persons?: string[] };
+    lastWritten?: { at: string; changes: number | null; conflicts: number; persons?: string[]; intake?: string; fingerprint?: string };
     /** The research's mode the user last saw ("switched" is said once). */
     modeSeen?: 'agent' | 'archive';
     /** When the mode last switched (ISO): the line in Research for this tree. */
@@ -196,6 +196,8 @@ export function researchAutoState(treeId: string): ResearchAutoState {
                 changes: typeof lw.changes === 'number' && lw.changes >= 0 ? Math.floor(lw.changes) : null,
                 conflicts: typeof lw.conflicts === 'number' && lw.conflicts > 0 ? Math.floor(lw.conflicts) : 0,
                 ...(Array.isArray(lw.persons) ? { persons: lw.persons.filter((x): x is string => typeof x === 'string').slice(0, 20) } : {}),
+                ...(typeof lw.intake === 'string' ? { intake: lw.intake } : {}),
+                ...(typeof lw.fingerprint === 'string' ? { fingerprint: lw.fingerprint } : {}),
             };
         }
         if (p.modeSeen === 'agent' || p.modeSeen === 'archive') out.modeSeen = p.modeSeen;

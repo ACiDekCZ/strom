@@ -897,7 +897,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.4';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.5';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -1122,8 +1122,8 @@ export interface ResearchSend {
     changes: number | null;
     /** The research's head when it was sent ('' = unknown). */
     head: string;
-    /** In the research's inbox / written / discarded there by the user. */
-    state: 'pending' | 'written' | 'discarded';
+    /** In the research's inbox / written / discarded there by the user / written and then taken back there (`strom sync undo`). */
+    state: 'pending' | 'written' | 'discarded' | 'undone';
     /** When it was found written or discarded (ISO). */
     closedAt?: string;
     /** "Send, then load": load the research's new version once this is written. */
