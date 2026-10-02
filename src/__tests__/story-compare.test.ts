@@ -107,7 +107,7 @@ describe('the comparison as HTML', () => {
 
 describe('the family book', () => {
     const data = (): StromData => ({
-        version: 8,
+        version: 9,
         persons: {
             ['p1' as PersonId]: {
                 id: 'p1' as PersonId, firstName: 'Jan', lastName: 'Vlk', gender: 'male', isPlaceholder: false,

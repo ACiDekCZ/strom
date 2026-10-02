@@ -593,10 +593,14 @@ export function personSourceIds(p: Pick<Person, PersonCitationField>): string[] 
  * v8 (2026-09): Person.birthSourceIds / deathSourceIds — the birth and death
  *   fields cited on their own (GEDCOM BIRT.SOUR / DEAT.SOUR used to land in
  *   Person.sourceIds, so a name citation looked like a documented birth).
+ * v9 (2026-10): register details — Person.birthAddress / deathCause /
+ *   deathAge / deathAddress; LifeEvent.cause / age / address;
+ *   Partnership.address / ages / endPlace (the divorce place); the waiting
+ *   new version of an approved story (Story.draft).
  * All additive/backward-compatible for reading; the bump makes an older app
  * warn ("newer version") before it silently drops the new fields on re-save.
  */
-export const STROM_DATA_VERSION = 8;
+export const STROM_DATA_VERSION = 9;
 
 /**
  * Coordinates of one place, kept in the tree's own file so a place is looked up
