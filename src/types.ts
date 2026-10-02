@@ -200,7 +200,22 @@ export interface Source {
      * Strom Research "S0042". Keeps the entry's identity across re-imports.
      */
     refn?: string;
+    /**
+     * The user read the transcript from the record ("Transcription verified"):
+     * Strom Research takes it as the first reading of the entry even when the
+     * tree's transcripts count as leads. GEDCOM `_STROM_VERIFIED Y` on the record.
+     */
+    transcriptVerified?: boolean;
+    /**
+     * Who read the entry, as the research says (GEDCOM `_STROM_READ` on the
+     * record of a research file): the user, the research, or both. Shown in
+     * the source viewer only; absent from an older research.
+     */
+    readBy?: SourceReadBy;
 }
+
+/** Who read a source's entry (see Source.readBy). */
+export type SourceReadBy = 'user' | 'research' | 'both';
 
 /**
  * A document attached to a person (register scan, marriage certificate,
@@ -651,10 +666,13 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  * v10 (2026-10): the couple's own events — Partnership.events (banns, a
  *   marriage contract, a census of the household…), which used to be folded
  *   into the couple's note as text lines.
+ * v11 (2026-10): Source.transcriptVerified (the user read the transcript
+ *   from the record — the research's first reading) and Source.readBy (who
+ *   read the entry, from the research).
  * All additive/backward-compatible for reading; the bump makes an older app
  * warn ("newer version") before it silently drops the new fields on re-save.
  */
-export const STROM_DATA_VERSION = 10;
+export const STROM_DATA_VERSION = 11;
 
 /**
  * Coordinates of one place, kept in the tree's own file so a place is looked up
@@ -879,7 +897,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.8.0';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.1';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -1054,6 +1072,53 @@ export interface ResearchLink {
      * updated from the research — only the tree without `copy` is.
      */
     copy?: boolean;
+    /** The last send straight to the bridge and what became of it (a research that announces `accepts`). */
+    sent?: ResearchSend;
+    /** The bridge refused the last send at once, with its reason (cleared by the next good send or an update). */
+    refused?: { reason: string; at: string };
+    /**
+     * How the research takes the user's transcripts (Research for this tree):
+     * 'lead' (default) — it checks them by its own reading; 'evidence' — a
+     * transcript is the first reading. Survives updates from the research.
+     */
+    transcripts?: ResearchTranscripts;
+    /** When `transcripts` was set to 'evidence' (ISO). */
+    transcriptsAt?: string;
+    /**
+     * Sources already sent when the tree switched to 'evidence', by id → the
+     * hash of their transcript and page then: the switch does not reach back,
+     * so these keep "Transcription verified" until they change.
+     */
+    olderSources?: Record<string, string>;
+    /** Sources in the last accepted send, by id → hash of transcript and page (see olderSources). */
+    sentSources?: Record<string, string>;
+}
+
+/** How the research takes the user's transcripts (see ResearchLink.transcripts). */
+export type ResearchTranscripts = 'lead' | 'evidence';
+
+/** A send straight to the research's bridge and its fate in the research's inbox. */
+export interface ResearchSend {
+    /** Content fingerprint of the tree as sent (also `_STROM_SENT` in the file). */
+    fingerprint: string;
+    /** When it was sent (ISO). */
+    at: string;
+    /** Changes the research counted; null when it did not say. */
+    changes: number | null;
+    /** The research's head when it was sent ('' = unknown). */
+    head: string;
+    /** In the research's inbox / written / discarded there by the user. */
+    state: 'pending' | 'written' | 'discarded';
+    /** When it was found written or discarded (ISO). */
+    closedAt?: string;
+    /** "Send, then load": load the research's new version once this is written. */
+    thenLoad?: boolean;
+    /** The "discarded" notice was shown (it is shown once). */
+    noticed?: boolean;
+    /** The research's mark of the send (`intake` of the /sync reply), to find it in `/status.sends`. */
+    intake?: string;
+    /** Why the user discarded it in the research ('' = not said). */
+    reason?: string;
 }
 
 /** Index of all trees */

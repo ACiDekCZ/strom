@@ -22,7 +22,8 @@ import {
     LAST_FOCUSED,
     LastFocusedMarker,
     PlaceGeo,
-    EventParticipant
+    EventParticipant,
+    Source
 } from '../types.js';
 import { strings } from '../strings.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
@@ -98,6 +99,8 @@ import { pwaUiMethods } from './pwa-ui.js';
 import { fileAccessMethods } from './file-access-ui.js';
 import { fileCopyMethods } from './file-copy-ui.js';
 import { researchUiMethods } from './research-ui.js';
+import { researchSyncMethods } from './research-sync-ui.js';
+import { researchTreeSettingsMethods } from './research-tree-settings-ui.js';
 import { tourMethods, TourStepDef } from './tour.js';
 
 export class UIClass {
@@ -116,6 +119,8 @@ export class UIClass {
     gedcomImportImages: boolean | null = null;
     /** State of the optional checkbox of the last showChoice() dialog. */
     choiceCheckboxChecked = false;
+    /** The source catalog's filter ("Transcription not verified" from Research for this tree). */
+    sourcesFilter: 'all' | 'unverifiedTranscript' = 'all';
     saveCurrentCallback: (() => void) | null = null;
     relationPicker: PersonPicker | null = null;
     toolbarSearchPicker: PersonPicker | null = null;
@@ -236,6 +241,10 @@ export class UIClass {
     excerptDrafts: ExcerptDraft[] = [];
     /** Reliability picked in the source editor (QUAY 1–3, 0 kept from import). */
     sourceQualityDraft: number | undefined = undefined;
+    /** The source as it was when the editor opened (Transcription verified, the research's reading). */
+    sourceEditorOriginal: Partial<Source> | null = null;
+    /** The research read this source and the user changed its transcript or page: the note stays until close. */
+    sourceUserReadingShown = false;
     /** Where the open source editor was reached from (for page crops and citing). */
     sourceEditorContext: CitationContext | null = null;
     /** The source shown in the viewer, and the citation chip it was opened from. */
@@ -591,6 +600,14 @@ Object.assign(UIClass.prototype, fileCopyMethods);
 type ResearchUiMethods = typeof researchUiMethods;
 export interface UIClass extends ResearchUiMethods {}
 Object.assign(UIClass.prototype, researchUiMethods);
+
+type ResearchSyncMethods = typeof researchSyncMethods;
+export interface UIClass extends ResearchSyncMethods {}
+Object.assign(UIClass.prototype, researchSyncMethods);
+
+type ResearchTreeSettingsMethods = typeof researchTreeSettingsMethods;
+export interface UIClass extends ResearchTreeSettingsMethods {}
+Object.assign(UIClass.prototype, researchTreeSettingsMethods);
 
 type ResearchPromoMethods = typeof researchPromoMethods;
 export interface UIClass extends ResearchPromoMethods {}

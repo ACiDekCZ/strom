@@ -791,6 +791,10 @@ export const miscMethods = uiModule({
                         this.cancelResearchAdoptDialog();
                         return;
                     }
+                    if (currentDialog === 'research-tree-settings-modal') {
+                        this.closeResearchTreeSettings();
+                        return;
+                    }
                     if (currentDialog === 'kinship-modal') {
                         this.closeRelationshipCalculator();
                         return;
@@ -1319,7 +1323,7 @@ export const miscMethods = uiModule({
      * A short message at the bottom. `duration` Infinity keeps it until it is
      * replaced or (with `closable`) closed with its ×.
      */
-    showToast(message: string, duration = 3000, opts: { title?: string; spinner?: boolean; closable?: boolean; kind?: string } = {}): void {
+    showToast(message: string, duration = 3000, opts: { title?: string; spinner?: boolean; closable?: boolean; kind?: string; action?: { label: string; run: () => void } } = {}): void {
         // Remove existing toast
         const existing = document.querySelector('.toast');
         if (existing) existing.remove();
@@ -1344,6 +1348,19 @@ export const miscMethods = uiModule({
             toast.appendChild(body);
         } else {
             toast.appendChild(document.createTextNode(message));
+        }
+        if (opts.action) {
+            const { label, run } = opts.action;
+            const act = document.createElement('button');
+            act.type = 'button';
+            act.className = 'toast-action';
+            act.textContent = label;
+            act.onclick = () => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+                run();
+            };
+            toast.appendChild(act);
         }
         if (opts.closable) {
             const close = document.createElement('button');

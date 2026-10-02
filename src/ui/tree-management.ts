@@ -227,8 +227,10 @@ export const treeManagementMethods = uiModule({
             const dot = document.getElementById(id);
             if (dot) dot.style.display = count > 0 ? 'block' : 'none';
         }
-        // "Research" row + its submenu; waiting tasks light the ⋯ dot as well.
-        if (this.refreshResearchMenu() > 0) {
+        // "Research" row + its submenu; waiting tasks light the ⋯ dot as well,
+        // and so does a state of the research tree that asks for the user.
+        const researchWaiting = this.refreshResearchMenu();
+        if (researchWaiting > 0 || this.researchSyncAttention()) {
             const dot = document.getElementById('actions-menu-dot');
             if (dot) dot.style.display = 'block';
         }
@@ -365,7 +367,7 @@ export const treeManagementMethods = uiModule({
     treeActionSendToResearch(): void {
         const id = TreeManager.getActiveTreeId();
         this.closeActionsMenu();
-        if (id) void this.sendTreeToResearch(id);
+        if (id) void this.researchSendTree(id);
     },
 
     treeActionRename(): void {
@@ -646,7 +648,8 @@ export const treeManagementMethods = uiModule({
                                 ${menuItem(`window.Strom.UI.showTreeStatsDialog('${tree.id}', 'tree-manager-modal')`, s.stats)}
                                 ${menuItem(`window.Strom.UI.showTreeHealthDialog('${tree.id}', 'tree-manager-modal')`, strings.treeHealth.menu)}
                                 ${menuItem(`window.Strom.UI.showExportDialogFromManager('${tree.id}')`, s.export)}
-                                ${tree.research && researchRunsHere() ? menuItem(`window.Strom.UI.sendTreeToResearch('${tree.id}')`, strings.research.sendMenu, 'edit-only') : ''}
+                                ${tree.research && researchRunsHere() ? menuItem(`window.Strom.UI.researchSendTree('${tree.id}')`, strings.research.sendMenu, 'edit-only') : ''}
+                                ${tree.research && this.researchTranscriptsCapable(tree.research.id) ? menuItem(`window.Strom.UI.showResearchTreeSettings('${tree.id}')`, strings.sync.treeSettingsRow) : ''}
                                 ${this.researchAdoptAvailable(tree) ? menuItem(`window.Strom.UI.treeActionStartResearch('${tree.id}')`, this.escapeHtml(strings.research.adoptTree), 'edit-only') : ''}
                                 ${menuItem(`window.Strom.UI.showRenameTreeDialog('${tree.id}', 'tree-manager-modal')`, s.rename, 'edit-only tree-row-menu-divider')}
                                 ${menuItem(`window.Strom.UI.showDefaultPersonDialog('${tree.id}', 'tree-manager-modal')`, s.defaultPerson, 'edit-only')}

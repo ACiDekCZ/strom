@@ -8,12 +8,14 @@
  */
 
 import {
-    ResearchLinkAction, LiveWaiting, LiveIntake, sanitizeResearchLinks, sanitizeWaiting, sanitizeUpdate, sanitizeIntake,
+    ResearchLinkAction, LiveWaiting, LiveIntake, ResearchAccepts, sanitizeResearchLinks, sanitizeWaiting, sanitizeUpdate, sanitizeIntake,
+    sanitizeAccepts, parseLiveBridge, isResearchHead,
 } from './research-link.js';
 
 const LINKS_KEY = 'strom-research-links';
 const OFF_KEY = 'strom-research-links-off';
 const WAITING_KEY = 'strom-research-waiting:';
+const BRIDGE_KEY = 'strom-research-bridge:';
 /** A remembered "Waiting for you" older than this is not shown any more. */
 const WAITING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -94,4 +96,62 @@ export function storedResearchWaiting(researchId: string, now = Date.now()): Sto
     } catch {
         return null;
     }
+}
+
+/**
+ * The research's bridge on this computer, per research tree: its address (the
+ * token stays, the port can change — every ?live= / ?send= rewrites it), what
+ * it takes from the app (`accepts`, kept after the bridge stops: a research
+ * that once said so still does) and its last known head.
+ */
+export interface StoredResearchBridge {
+    /** `http://127.0.0.1:<port>/<token>`, or '' when only `accepts` is known. */
+    base: string;
+    accepts: ResearchAccepts | null;
+    /** The research's head at the last status ('' = unknown). */
+    head: string;
+}
+
+export function storedResearchBridge(researchId: string): StoredResearchBridge | null {
+    try {
+        const raw = localStorage.getItem(BRIDGE_KEY + researchId);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as { base?: unknown; accepts?: unknown; head?: unknown };
+        const base = parseLiveBridge(parsed.base)?.base ?? '';
+        const head = isResearchHead(parsed.head) ?? '';
+        return { base, accepts: sanitizeAccepts(parsed.accepts), head };
+    } catch {
+        return null;
+    }
+}
+
+function writeBridge(researchId: string, value: StoredResearchBridge): void {
+    try {
+        localStorage.setItem(BRIDGE_KEY + researchId, JSON.stringify({
+            base: value.base,
+            ...(value.accepts ? { accepts: {
+                sync: { auto: value.accepts.syncAuto }, sources: value.accepts.sources,
+                verified: value.accepts.verified, ...(value.accepts.media ? { media: {} } : {}),
+            } } : {}),
+            ...(value.head ? { head: value.head } : {}),
+        }));
+    } catch { /* no storage: the bridge is found again at the next ?live= / ?send= */ }
+}
+
+/** The research reached this page at `base` (?live= / ?send= / a status from it): remember where. */
+export function noteResearchBridge(researchId: string, base: string): void {
+    const bridge = parseLiveBridge(base);
+    if (!bridge) return;
+    const prev = storedResearchBridge(researchId);
+    writeBridge(researchId, { base: bridge.base, accepts: prev?.accepts ?? null, head: prev?.head ?? '' });
+}
+
+/** What the bridge's status said: its `accepts` (only when it says) and head. */
+export function noteResearchBridgeStatus(researchId: string, accepts: ResearchAccepts | null, head: string): void {
+    const prev = storedResearchBridge(researchId);
+    writeBridge(researchId, {
+        base: prev?.base ?? '',
+        accepts: accepts ?? prev?.accepts ?? null,
+        head: isResearchHead(head) ?? prev?.head ?? '',
+    });
 }

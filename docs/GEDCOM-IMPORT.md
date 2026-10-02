@@ -356,6 +356,12 @@ all belong to that entry, and every fact it proves cites it.
   it but is not required: every image on a source record is read as its
   excerpt. A path, a URL or any other payload in `FILE` is skipped and reported
   (`OBJE`). `FORM` and a `_REGION` line are not read.
+- `1 _STROM_VERIFIED Y` — the user read the transcript from the record
+  ("Transcription verified"). Strom Research takes it as the first reading of
+  the entry. Written only when the source has a `TEXT`.
+- `1 _STROM_READ user|research|both` (from Strom Research) — who read the
+  entry: the user, the research, or both. Shown in the source viewer only; any
+  other value is ignored. Strom does not write it back.
 
 A source given inline, as text instead of a pointer (`1 SOUR Vzpomínky
 babičky`, `2 SOUR Farní kniha`), becomes a source record of its own with that
@@ -386,7 +392,9 @@ Two limits of the model to plan around:
 
 Strom writes all of the above back on export: `TEXT`, `REFN`, the excerpts as
 `OBJE` (unless the export leaves attachments out) and `DATA` / `DATE` on every
-citation of a source with an entry date.
+citation of a source with an entry date. A couple's citations are the
+marriage record's: they go under `1 MARR` as `2 SOUR` (on the family itself,
+`1 SOUR`, only for a couple without a marriage); both are read back the same.
 
 ## Narratives (`_STORY`)
 
@@ -517,6 +525,31 @@ sections above.
 The header is read before the records; the records themselves go through the
 normal importer described above, so everything else in this contract applies
 unchanged.
+
+### What the app writes back to a research
+
+A faithful export of a tree tied to a research, and every send to it, names
+the research in the header:
+
+```
+1 _STROM_TREE 3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77
+1 _STROM_HEAD 3f2a9c1e5b7d
+1 _STROM_APP_TREE tree_1727872325000_ab12c
+1 _STROM_TRANSCRIPTS evidence
+1 _STROM_SENT v2-1k3f-9x2a-4m7q
+```
+
+- `_STROM_HEAD` — the research version the tree came from (the base it is
+  compared with).
+- `_STROM_APP_TREE` — the tree's id in the app: the research keeps one waiting
+  send per app tree, so two copies of one research do not replace each other.
+- `_STROM_TRANSCRIPTS evidence` — the user's transcripts count as the first
+  reading of their entries (Research for this tree). Missing means `lead`: the
+  research checks them by its own reading. The switch does not reach back;
+  older sources are raised one by one with `_STROM_VERIFIED`.
+- `_STROM_SENT` — the fingerprint of the tree as sent, only on a send straight
+  to the bridge: the research's status (`inbox`, `sends`) names it back, so the
+  app knows its send is waiting, written or discarded.
 
 ### What happens to an opened research
 

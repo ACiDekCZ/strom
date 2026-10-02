@@ -136,6 +136,11 @@ export const researchActionsMethods = uiModule({
         let groups: SubmenuItem[][];
         let note = false;
         let updateBlock = '';
+        // A research that tells what it has (1.12+): its state on top, sending straight.
+        const syncBlock = this.researchSyncBlockHtml();
+        const researchId = this.activeResearchId();
+        const capable = !!researchId && this.researchSyncCapable(researchId);
+        const bridgeUp = capable && !!researchId && this.researchBridgeFresh(researchId);
         if (!this.researchAnyAnnounced()) {
             // An older research (or the links switched off): the way back, and what it is.
             groups = [[
@@ -144,7 +149,7 @@ export const researchActionsMethods = uiModule({
             ]];
         } else {
             const look: SubmenuItem[] = [];
-            if (this.researchLinkAvailable('app')) look.push({ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') });
+            if (this.researchLinkAvailable('app') || bridgeUp) look.push({ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') });
             if (waiting > 0) look.push({ id: 'research-item-waiting', label: r.waiting, run: call('researchActionWaiting'), count: waiting });
             // Follow live: the research starts (or reuses) its bridge and opens ?live= here.
             if (this.researchLinkAvailable('live') && !this.isFollowingActiveResearch()) {
@@ -153,7 +158,8 @@ export const researchActionsMethods = uiModule({
             if (this.isFollowingActiveResearch()) look.push({ id: 'research-item-overview', label: strings.live.overviewTitle, run: call('researchActionOverview') });
             const known = this.researchWaiting();
             const work: SubmenuItem[] = [
-                { id: 'research-item-send', label: r.sendChanges, run: call('researchActionSend'), ext: this.researchLinkAvailable('send') },
+                // Straight to a running bridge (no ↗); else the research starts it in the terminal.
+                { id: 'research-item-send', label: r.sendChanges, run: call('researchActionSend'), ext: !bridgeUp && this.researchLinkAvailable('send') },
             ];
             const intake = known?.lastIntake;
             const sentAt = intake ? Date.parse(intake.at) : NaN;
@@ -165,7 +171,12 @@ export const researchActionsMethods = uiModule({
             const agent: SubmenuItem[] = [];
             if (this.researchLinkAvailable('chat')) agent.push({ id: 'research-item-chat', label: r.continueAgent, run: call('researchActionChat'), ext: true, ai: true });
             const setup: SubmenuItem[] = [];
-            if (this.researchLinkAvailable('setup')) setup.push({ id: 'research-item-setup', label: r.settings, run: call('researchActionSetup'), ext: true });
+            if (this.researchTranscriptsCapable(researchId ?? undefined)) {
+                setup.push({ id: 'research-item-tree-settings', label: strings.sync.treeSettings, run: call('researchActionTreeSettings') });
+            }
+            if (this.researchLinkAvailable('setup')) {
+                setup.push({ id: 'research-item-setup', label: capable ? r.settingsInResearch : r.settings, run: call('researchActionSetup'), ext: true });
+            }
             groups = [look, work, agent, setup];
             note = true;
             // A newer research: a block above the rows, its "Update" the only item in it.
@@ -181,7 +192,7 @@ export const researchActionsMethods = uiModule({
                     + '</div>';
             }
         }
-        const html = updateBlock + groups.filter(g => g.length > 0)
+        const html = syncBlock + updateBlock + groups.filter(g => g.length > 0)
             .map(g => g.map(submenuItemHtml).join(''))
             .join('<div class="tree-switcher-divider"></div>')
             + (note ? `<div class="tree-switcher-divider"></div><div class="research-submenu-note">${esc(r.submenuNote)}</div>` : '');
@@ -219,6 +230,11 @@ export const researchActionsMethods = uiModule({
 
     researchActionLoadVersion(): void {
         this.closeActionsMenu();
+        const researchId = this.activeResearchId();
+        if (researchId && this.researchSyncCapable(researchId)) {
+            void this.researchLoadNewer();
+            return;
+        }
         const url = this.activeResearchLink('app');
         if (url) this.launchResearchLink(url, 'version');
     },
@@ -239,7 +255,7 @@ export const researchActionsMethods = uiModule({
         this.openResearchOverview();
     },
 
-    /** "Send changes": one click when the research handles it, else the way there. */
+    /** "Send changes": straight to a running research that tells what it has, else the way there. */
     researchActionSend(): void {
         this.treeActionSendToResearch();
     },

@@ -87,8 +87,8 @@ function comparable(ev: CoupleEvent, data: StromData): object {
 }
 
 describe('data version 10: the couple\'s events', () => {
-    it('is the current version', () => {
-        expect(STROM_DATA_VERSION).toBe(10);
+    it('is part of the current version', () => {
+        expect(STROM_DATA_VERSION).toBeGreaterThanOrEqual(10);
     });
 
     it('has a GEDCOM tag for every type, read back as the same type', () => {

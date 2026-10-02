@@ -420,7 +420,7 @@ class TreeManagerClass {
             partnershipCount: Object.keys(sourceData.partnerships).length,
             sizeBytes,
             // A duplicate of a research tree can be sent back too, as a copy.
-            ...(source?.research ? { research: { ...source.research, copy: true } } : {}),
+            ...(source?.research ? { research: { ...withoutSendState(source.research), copy: true } } : {}),
         };
 
         // Add to index, then save through the encrypting path — a direct
@@ -1047,12 +1047,36 @@ class TreeManagerClass {
         return this.index.trees.filter(t => t.research?.id === id);
     }
 
-    /** Link a tree to a research (or drop the link with `undefined`). */
+    /**
+     * Link a tree to a research (or drop the link with `undefined`). The
+     * user's settings for that research (how it takes their transcripts) stay
+     * across updates from the same research; the state of a send does not.
+     */
     setResearchLink(treeId: TreeId, link: ResearchLink | undefined): void {
         const tree = this.index.trees.find(t => t.id === treeId);
         if (!tree) return;
-        if (link) tree.research = { ...link, id: link.id.toLowerCase() };
-        else delete tree.research;
+        if (link) {
+            const id = link.id.toLowerCase();
+            const prev = tree.research?.id === id ? tree.research : undefined;
+            const kept: Partial<ResearchLink> = {};
+            if (prev?.transcripts && link.transcripts === undefined) kept.transcripts = prev.transcripts;
+            if (prev?.transcriptsAt && link.transcriptsAt === undefined) kept.transcriptsAt = prev.transcriptsAt;
+            if (prev?.olderSources && link.olderSources === undefined) kept.olderSources = prev.olderSources;
+            if (prev?.sentSources && link.sentSources === undefined) kept.sentSources = prev.sentSources;
+            tree.research = { ...kept, ...link, id };
+        } else delete tree.research;
+        this.saveIndex();
+    }
+
+    /** Change part of a tree's research link (a send, its fate, the transcript setting); no-op without a link. */
+    patchResearchLink(treeId: TreeId, patch: Partial<Omit<ResearchLink, 'id'>>): void {
+        const tree = this.index.trees.find(t => t.id === treeId);
+        if (!tree?.research) return;
+        const next: ResearchLink = { ...tree.research, ...patch };
+        for (const [key, value] of Object.entries(patch)) {
+            if (value === undefined) delete (next as unknown as Record<string, unknown>)[key];
+        }
+        tree.research = next;
         this.saveIndex();
     }
 
@@ -1103,3 +1127,9 @@ registerPoolReferences('trees', async () => {
     }
     return ids;
 });
+
+/** A research link without the state of a send (a duplicate starts with none). */
+function withoutSendState(link: ResearchLink): ResearchLink {
+    const { sent: _sent, refused: _refused, ...rest } = link;
+    return rest;
+}

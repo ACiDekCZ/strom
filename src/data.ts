@@ -3166,9 +3166,10 @@ class DataManagerClass {
         // version (Strom Research reads it; our import restores the tie).
         const { isFaithfulExport } = await import('./research-link.js');
         if (treeMeta?.research && isFaithfulExport(privacyMode, resolveContentOptions(content))) {
-            (treeData as StromData & { research?: { id: string; head?: string } }).research = {
+            (treeData as StromData & { research?: { id: string; head?: string; transcripts?: string } }).research = {
                 id: treeMeta.research.id,
                 ...(treeMeta.research.head ? { head: treeMeta.research.head } : {}),
+                ...(treeMeta.research.transcripts === 'evidence' ? { transcripts: 'evidence' } : {}),
             };
         }
         const treeName = treeMeta?.name || 'family-tree';

@@ -409,6 +409,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         // computer) and the installed app's file handler (launchQueue). Reads
         // its parameters before handleUrlImportParam may clear the address.
         UI.initExternalOpen();
+        // Where a research tree stands with its research (a research that says so).
+        UI.initResearchSync();
 
         // Handle URL import parameter (from offline version redirect)
         handleUrlImportParam();

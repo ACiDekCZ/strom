@@ -22,7 +22,7 @@
  * the 255-byte line limit, and the importer joins it back.
  */
 
-import { researchHeaderLines } from './research-link.js';
+import { researchHeaderLines, ResearchHeaderInfo } from './research-link.js';
 import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType } from './types.js';
 import { strings } from './strings.js';
 import { COUPLE_EVENT_TAG, eventValueIsOnTag, sortCoupleEvents } from './events.js';
@@ -39,7 +39,7 @@ export interface GedcomExportOptions {
      * written back as `1 _STROM_TREE` + `1 _STROM_HEAD`, so Strom Research
      * can tell which of its versions the edits start from.
      */
-    research?: { id: string; head?: string };
+    research?: ResearchHeaderInfo;
 }
 
 /** Partnership statuses MARR/DIV cannot express, written as 1 _STAT. */
@@ -661,9 +661,10 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
 
         // Marriage event (for married or divorced status)
-        if (partnership.status === 'married' || partnership.status === 'divorced' ||
-            partnership.startDate || partnership.startPlace || partnership.address
-            || Object.values(partnership.ages ?? {}).some(a => a.trim())) {
+        const hasMarriage = partnership.status === 'married' || partnership.status === 'divorced' ||
+            !!partnership.startDate || !!partnership.startPlace || !!partnership.address
+            || Object.values(partnership.ages ?? {}).some(a => a.trim());
+        if (hasMarriage) {
             lines.push('1 MARR');
             if (partnership.startDate) {
                 const date = formatGedcomDate(partnership.startDate);
@@ -694,6 +695,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 lines.push(`3 RELA ${GEDCOM_RELA[part.role]}`);
                 if (part.note) pushNote(lines, 3, part.note);
             }
+            // The couple's citations are the marriage record's: under MARR, where
+            // other programs and Strom Research read a marriage's evidence.
+            for (const srcId of partnership.sourceIds ?? []) pushCitation(2, srcId);
         }
 
         // Divorce event
@@ -755,8 +759,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushNote(lines, 1, partnership.note);
         }
 
-        // Family citations (marriage record etc.)
-        for (const srcId of partnership.sourceIds ?? []) {
+        // Family citations of a couple without a marriage (partners).
+        for (const srcId of hasMarriage ? [] : partnership.sourceIds ?? []) {
             pushCitation(1, srcId);
         }
     }
@@ -778,6 +782,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (source.reference) pushLongValue(lines, 1, 'PAGE', source.reference);
         if (source.refn) pushWrapped(lines, 1, 'REFN', source.refn);
         if (source.transcript) pushLongValue(lines, 1, 'TEXT', source.transcript);
+        // The user read the transcript from the record (Strom Research: the first reading).
+        if (source.transcriptVerified && source.transcript) lines.push('1 _STROM_VERIFIED Y');
         if (source.url) pushWrapped(lines, 1, 'WWW', source.url);
         if (source.note) pushNote(lines, 1, source.note);
         // Crops of the entry, embedded like person media (other programs

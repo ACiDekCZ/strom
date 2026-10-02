@@ -8666,6 +8666,144 @@
             .live-panel { left: 16px; right: 76px; max-height: 40vh; font-size: 12.5px; }
         }
 
+
+        /* ===== Where a research tree stands with its research (research-sync-ui.ts) ===== */
+        .research-sync-block {
+            margin: 0 6px 4px; padding: 10px 12px; border-radius: 8px;
+            display: flex; flex-direction: column; gap: 4px;
+        }
+        .research-sync-block--warn { background: var(--warning-soft); color: var(--warning-text); }
+        .research-sync-block--neutral { background: var(--surface-2); color: var(--text); }
+        .research-sync-block--quiet { padding: 8px 8px 4px; background: none; }
+        .research-sync-title { font-size: 13px; font-weight: 600; line-height: 1.35; }
+        .research-sync-block--quiet .research-sync-title { color: var(--text-light); }
+        .research-sync-block--warn .research-sync-title { color: var(--warning-text); }
+        .research-sync-sub { font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        .research-sync-block--warn .research-sync-sub { color: var(--text-secondary); }
+        .research-sync-actions { display: flex; margin-top: 4px; }
+        .actions-research-submenu .research-sync-btn {
+            display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px;
+            font-size: 13px; border-radius: var(--r-sm);
+        }
+        .actions-research-submenu .research-sync-btn[disabled] { opacity: 0.75; cursor: progress; }
+        .research-sync-link {
+            padding: 2px 0; border: 0; background: none; cursor: pointer; font: inherit;
+            font-size: 13px; font-weight: 600; color: var(--primary);
+        }
+        .research-sync-link:hover { text-decoration: underline; }
+        .research-sync-btn:focus-visible, .research-sync-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .research-sync-spinner {
+            flex: none; width: 11px; height: 11px; border-radius: 50%;
+            border: 2px solid color-mix(in srgb, currentColor 35%, transparent); border-top-color: currentColor;
+            animation: toast-spin 0.9s linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) { .research-sync-spinner { animation: none; } }
+        .actions-research-dot {
+            flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 4px;
+        }
+        /* The toolbar pill: changes would be lost / "Send, then load" waits. */
+        .toolbar .research-sync-pill { margin-left: 6px; gap: 6px; padding: 0 4px 0 10px; cursor: default; }
+        .toolbar .research-sync-pill.is-wait { padding-right: 10px; }
+        .research-sync-pill.is-warn {
+            color: var(--accent-text); background: var(--warning-soft);
+            border-color: color-mix(in srgb, var(--warning) 60%, transparent);
+        }
+        .research-sync-pill.is-wait { color: var(--text-secondary); background: var(--surface-2); border-color: var(--divider); }
+        .research-sync-pill-mark { font-weight: 700; color: var(--warning-text); }
+        .research-sync-pill-label { cursor: pointer; }
+        .toolbar .research-sync-pill .research-sync-pill-send {
+            height: 22px; padding: 0 10px; border-radius: 999px; border: 0;
+            background: var(--primary); color: var(--surface); font-size: 12px; font-weight: 600; cursor: pointer;
+        }
+        /* The label only where the tree switcher keeps its name. */
+        @media (max-width: 1599px) {
+            .toolbar .research-sync-pill .research-sync-pill-label { display: none; }
+            .toolbar .research-sync-pill { width: auto; padding: 0 4px 0 8px; }
+        }
+        @media (max-width: 1179px) {
+            .toolbar .research-sync-pill { display: none !important; }
+        }
+        /* A toast's own action ("Send again", "Open the research ↗"). */
+        .toast-action {
+            margin-left: 12px; padding: 0; border: 0; background: none; cursor: pointer;
+            font: inherit; font-weight: 600; color: inherit; text-decoration: underline;
+        }
+        /* Choice dialog extras: a quiet subtitle, a link, a destructive answer set apart. */
+        .confirm-subtitle { display: block; margin-bottom: 8px; font-size: 13px; color: var(--text-light); }
+        .confirm-link { margin-top: 4px; }
+        .dialog-has-aside #confirm-buttons { flex-wrap: wrap; }
+        @media (min-width: 500px) {
+            /* Room for three answers in one row; the destructive one below them. */
+            .dialog-has-aside .modal { width: min(560px, 94vw); max-width: min(560px, 94vw); }
+        }
+        .confirm-aside {
+            flex-basis: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--divider);
+        }
+        .confirm-aside-btn {
+            padding: 4px 0; border: 0; background: none; cursor: pointer; font: inherit;
+            font-weight: 600; color: var(--danger);
+        }
+        .confirm-aside-btn:hover { text-decoration: underline; }
+        .confirm-aside-sub { font-size: 12px; color: var(--text-light); }
+        /* "Where your data is": the research lacks the changes. */
+        .storage-status-research {
+            display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+            padding-top: 10px; margin-top: 4px; border-top: 1px solid var(--divider); font-size: 14px;
+        }
+        /* Research for this tree (research-tree-settings-ui.ts). */
+        .research-transcripts { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+        .research-transcripts legend { font-size: 14px; font-weight: 600; margin-bottom: 8px; padding: 0; }
+        .modal label.research-transcripts-card {
+            display: flex; gap: 10px; align-items: flex-start; min-height: 44px; padding: 10px 12px; margin: 0;
+            border: 1px solid var(--border); border-radius: 10px; cursor: pointer;
+            font-size: 14px; font-weight: 400; color: var(--text);
+        }
+        .research-transcripts-card:has(input:checked) {
+            border: 2px solid var(--primary); padding: 9px 11px;
+            background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+        }
+        .modal .research-transcripts-card input { width: auto; margin: 3px 0 0; flex: none; accent-color: var(--primary); }
+        .research-transcripts-card:has(input:focus-visible) { box-shadow: var(--shadow-focus); }
+        .research-transcripts-text { display: flex; flex-direction: column; gap: 2px; }
+        .research-transcripts-title { font-size: 14px; font-weight: 600; }
+        .research-transcripts-default { font-weight: 400; color: var(--text-light); }
+        .research-transcripts-desc { font-size: 13px; color: var(--text-light); line-height: 1.45; }
+        .research-not-retroactive {
+            display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 4px; padding: 10px 12px;
+            border-radius: 8px; background: var(--surface-2); font-size: 13px; line-height: 1.45;
+        }
+        .research-not-retroactive-icon {
+            flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid currentColor;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 700; font-style: italic; color: var(--text-light);
+        }
+        .research-older-sources { margin: 4px 0 0; }
+        .research-older-sources[hidden] { display: none; }
+        .research-tree-settings-buttons { align-items: center; }
+        .research-tree-settings-buttons .research-settings-in-research { margin-right: auto; }
+        /* Source editor: "Transcription verified"; the research's reading. */
+        .modal label.source-verified {
+            display: flex; gap: 8px; align-items: flex-start; margin: 6px 0 0; cursor: pointer;
+            font-size: 14px; font-weight: 400; color: var(--text);
+        }
+        .source-verified[hidden], .source-verified-bytree[hidden], .source-user-reading-note[hidden], .viewer-read-by[hidden] { display: none; }
+        .modal .source-verified input { width: auto; margin: 3px 0 0; flex: none; accent-color: var(--primary); }
+        .modal label.source-verified[hidden] { display: none; }
+        .source-verified-text { display: flex; flex-direction: column; gap: 1px; }
+        .source-verified-label { font-size: 14px; }
+        .source-verified-hint { font-size: 12px; color: var(--text-light); }
+        .source-verified-bytree { margin: 6px 0 0; font-size: 12px; color: var(--text-light); }
+        .source-verified-bytree::before { content: '✓ '; color: var(--primary); font-weight: 700; }
+        @media (max-width: 899px) { .modal label.source-verified { min-height: 44px; align-items: center; } }
+        .source-user-reading-note {
+            display: flex; gap: 8px; margin: 6px 0 0; padding: 8px 10px; border-radius: 8px;
+            background: var(--surface-2); font-size: 13px; line-height: 1.45;
+        }
+        .viewer-read-by { margin: 4px 0 0; font-size: 12px; color: var(--text-light); }
+        .sources-filter { display: flex; gap: 6px; margin: 0 0 8px; }
+        .sources-filter[hidden] { display: none; }
+
         /* ===== Research actions, second wave ===== */
         /* Research submenu: "New Strom Research 1.7" block, second line of "Undo last send". */
         .research-update-block {
@@ -10908,7 +11046,7 @@
 </head>
 <body>
     <div class="toolbar">
-        <h1 class="app-wordmark"><span class="app-logo" role="button" tabindex="0" onclick="window.Strom.UI.showAboutDialog()" data-i18n-title="about.title">Strom<span class="wordmark-dot" aria-hidden="true"></span></span><button type="button" id="unsaved-copy-indicator" class="storage-pill is-unsaved unsaved-copy-indicator" style="display:none;" aria-live="polite" onclick="window.Strom.UI.showStorageStatusDialog()" data-i18n-title="fileCopy.indicatorTitle" data-i18n-aria-label="fileCopy.indicatorTitle"><span class="storage-pill-icon" aria-hidden="true"></span><span class="storage-pill-label" data-i18n="fileCopy.indicatorShort"></span></button></h1>
+        <h1 class="app-wordmark"><span class="app-logo" role="button" tabindex="0" onclick="window.Strom.UI.showAboutDialog()" data-i18n-title="about.title">Strom<span class="wordmark-dot" aria-hidden="true"></span></span><button type="button" id="unsaved-copy-indicator" class="storage-pill is-unsaved unsaved-copy-indicator" style="display:none;" aria-live="polite" onclick="window.Strom.UI.showStorageStatusDialog()" data-i18n-title="fileCopy.indicatorTitle" data-i18n-aria-label="fileCopy.indicatorTitle"><span class="storage-pill-icon" aria-hidden="true"></span><span class="storage-pill-label" data-i18n="fileCopy.indicatorShort"></span></button><div id="research-sync-pill" class="storage-pill research-sync-pill" style="display:none;" role="status" aria-live="polite"></div></h1>
         <span id="offline-indicator" class="offline-indicator" style="display:none;" data-i18n="pwa.offline"></span>
         <button id="file-link-indicator" class="file-link-indicator" style="display:none;" onclick="window.Strom.UI.saveActiveTreeToFile()" data-i18n-title="fileAccess.saveToFile"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></button>
 
@@ -11055,6 +11193,7 @@
                 <div class="actions-tree-wrap actions-research-wrap" id="actions-research-wrap" style="display:none;">
                     <div class="tree-switcher-action actions-tree-row actions-research-row" id="actions-research-row" role="menuitem" tabindex="0" aria-haspopup="menu" aria-expanded="false" onclick="window.Strom.UI.toggleActionsResearchSubmenu()">
                         <span class="actions-research-label" data-i18n="research.menuTitle"></span>
+                        <span id="actions-research-dot" class="actions-research-dot" style="display:none;" aria-hidden="true"></span>
                         <span id="actions-research-badge" class="tree-switcher-badge actions-research-badge" style="display:none;"></span>
                         <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
                     </div>
@@ -11699,6 +11838,7 @@
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeSourcesDialog()">&times;</button>
             </div>
             <input type="text" id="sources-search" class="source-picker-search" data-i18n-placeholder="sources.searchPlaceholder" autocomplete="off" hidden>
+            <div class="sources-filter" id="sources-filter" role="group" hidden></div>
             <div id="sources-list" class="sources-list"></div>
             <p class="sources-total" id="sources-total" hidden></p>
             <div class="buttons sources-footer">
@@ -11741,11 +11881,20 @@
                 <label for="input-source-url" data-i18n="sources.fieldUrl"></label>
                 <input type="text" id="input-source-url" autocomplete="off" inputmode="url">
             </div>
+            <p class="source-user-reading-note" id="source-user-reading-note" role="note" hidden data-i18n="sources.userReadingNote"></p>
             <details class="source-more" id="source-more">
                 <summary data-i18n="sources.more"></summary>
                 <div class="form-group">
                     <label for="input-source-transcript" data-i18n="sources.fieldTranscript"></label>
                     <textarea id="input-source-transcript" class="source-transcript-input" rows="3" autocomplete="off"></textarea>
+                    <label class="source-verified" id="source-verified-row" hidden>
+                        <input type="checkbox" id="input-source-verified">
+                        <span class="source-verified-text">
+                            <span class="source-verified-label" data-i18n="sources.verified"></span>
+                            <span class="source-verified-hint" id="source-verified-hint"></span>
+                        </span>
+                    </label>
+                    <p class="source-verified-bytree" id="source-verified-bytree" hidden data-i18n="sources.verifiedByTree"></p>
                 </div>
                 <div class="form-group">
                     <label for="input-source-recorddate" data-i18n="sources.fieldRecordDate"></label>
@@ -11754,7 +11903,7 @@
                     <p class="field-hint" id="source-recorddate-hint" data-i18n="sources.recordDateHint"></p>
                 </div>
                 <div class="form-group">
-                    <span class="form-label" id="source-quality-label" data-i18n="sources.fieldQuality"></span>
+                    <span class="form-label" id="source-quality-label" data-i18n="sources.reliabilityLabel"></span>
                     <div class="source-quality" id="source-quality" role="radiogroup" aria-labelledby="source-quality-label">
                         <button type="button" role="radio" aria-checked="false" data-quality="3" data-i18n="sources.quality3"></button>
                         <button type="button" role="radio" aria-checked="false" data-quality="2" data-i18n="sources.quality2"></button>

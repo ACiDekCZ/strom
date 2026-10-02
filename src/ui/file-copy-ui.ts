@@ -430,6 +430,9 @@ export const fileCopyMethods = uiModule({
         // 3) Storage, 4) advice, 5) backups, 6) the general intro last.
         nodes.push(para(this.storageStateSentence()));
         if (knownState !== 'persistent') nodes.push(para(this.storageAdviceSentence()));
+        // The research lacks the open tree's changes: one row with "Send".
+        const researchRow = viewMode ? null : this.researchSyncDataRow();
+        if (researchRow) nodes.push(researchRow);
         nodes.push(para(s.backupsNote));
         nodes.push(para(s.intro, 'storage-status-intro'));
         body.replaceChildren(...nodes);

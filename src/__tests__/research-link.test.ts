@@ -501,8 +501,9 @@ describe('send bridge', () => {
     });
 
     it('the reply and the JSON field are checked', () => {
-        expect(sanitizeSyncReply({ ok: true, input: 'I1', changes: 12 })).toEqual({ ok: true, changes: 12, error: '' });
-        expect(sanitizeSyncReply({ error: 'bad\u0000 thing' })).toEqual({ ok: false, changes: null, error: 'bad thing' });
+        expect(sanitizeSyncReply({ ok: true, input: 'I1', changes: 12 })).toEqual({ ok: true, changes: 12, error: '', inbox: null, intake: '' });
+        expect(sanitizeSyncReply({ ok: true, changes: 3, inbox: true }).inbox).toBe(true);
+        expect(sanitizeSyncReply({ error: 'bad\u0000 thing' })).toEqual({ ok: false, changes: null, error: 'bad thing', inbox: null, intake: '' });
         expect(sanitizeSyncReply('x').ok).toBe(false);
         expect(sanitizeResearchField({ id: RID, head: 'ABCDEF1' })).toEqual({ id: RID, head: 'abcdef1' });
         expect(sanitizeResearchField({ id: RID, head: 'zz' })).toEqual({ id: RID });

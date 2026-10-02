@@ -8,7 +8,7 @@
  * in src/ui/research-ui.ts. Nothing here touches the DOM or storage.
  */
 
-import { StromData, PersonId, ResearchLink } from './types.js';
+import { StromData, PersonId, ResearchLink, Source } from './types.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
 export const STROM_RESEARCH_SOURCE = 'STROM_RESEARCH';
@@ -530,6 +530,24 @@ export function stabilizeIds(next: StromData, previous: StromData): StromData {
         if (!oldId || oldId === newId || nextIds.has(oldId)) continue;
         map.set(newId, oldId);
     }
+    // An entry the user made in the app comes back with the research's number:
+    // the same title, archive, page and wording is the same entry.
+    const entryKey = (src: Source): string =>
+        [src.title, src.repository, src.reference, src.transcript].map(v => (v ?? '').trim().toLowerCase()).join('\u0000');
+    const prevUnnumbered = new Map<string, string | null>();
+    for (const [id, src] of Object.entries(previous.sources ?? {})) {
+        if (!src || src.refn) continue;
+        const key = entryKey(src);
+        prevUnnumbered.set(key, prevUnnumbered.has(key) ? null : id);
+    }
+    const taken = new Set(map.values());
+    for (const [newId, src] of Object.entries(next.sources ?? {})) {
+        if (!src?.refn || map.has(newId)) continue;
+        const oldId = prevUnnumbered.get(entryKey(src));
+        if (!oldId || oldId === newId || nextIds.has(oldId) || taken.has(oldId)) continue;
+        map.set(newId, oldId);
+        taken.add(oldId);
+    }
 
     const prevPairs = uniquePairs(previous, false);
     for (const [key, newId] of uniquePairs(next, true)) {
@@ -644,6 +662,118 @@ export interface LiveStatus {
     lastIntake: LiveIntake | null;
     /** The research's directions (empty: an older research, or none said). */
     researches: LiveDirection[];
+    /** What the research takes from the app (Strom Research 1.12+); null: an older research. */
+    accepts: ResearchAccepts | null;
+    /** What the app sent and waits for a decision in the research; null: an older research. */
+    inbox: ResearchInbox | null;
+    /** The app's sends of the last days and what became of each; null: an older research. */
+    sends: ResearchSendRecord[] | null;
+}
+
+/** One send of the app as the research keeps it (`/status.sends`). */
+export interface ResearchSendRecord {
+    /** The mark the `/sync` reply gave it. */
+    intake: string;
+    at: string;
+    state: 'pending' | 'written' | 'discarded' | 'replaced' | 'nothing';
+    changes: number | null;
+    /** The app tree (`_STROM_APP_TREE`), or the research id. */
+    tree: string;
+    /** `_STROM_SENT` of that send. */
+    sent: string;
+    /** When the user decided in the research (ISO, '' = not yet). */
+    decidedAt: string;
+    /** The user's words when discarding ('' = none). */
+    reason: string;
+}
+
+const SEND_STATES = new Set(['pending', 'written', 'discarded', 'replaced', 'nothing']);
+
+/** `/status.sends`, or null when the research does not say. Untrusted. */
+export function sanitizeSends(value: unknown): ResearchSendRecord[] | null {
+    if (!Array.isArray(value)) return null;
+    const out: ResearchSendRecord[] = [];
+    for (const item of value.slice(0, MAX_ITEMS)) {
+        const r = asRecord(item);
+        const intake = r ? headerToken(r.intake) : null;
+        if (!r || !intake || typeof r.state !== 'string' || !SEND_STATES.has(r.state)) continue;
+        const iso = (v: unknown): string => {
+            const t = cleanText(v, 40);
+            return Number.isFinite(Date.parse(t)) ? t : '';
+        };
+        out.push({
+            intake,
+            at: iso(r.at),
+            state: r.state as ResearchSendRecord['state'],
+            changes: asCount(r.changes),
+            tree: headerToken(r.tree) ?? normalizeResearchId(r.tree) ?? '',
+            sent: headerToken(r.sent) ?? '',
+            decidedAt: iso(r.decidedAt),
+            reason: cleanText(r.reason, 200),
+        });
+    }
+    return out;
+}
+
+/** What the research takes from the app (`/status.accepts`): the gate the other way round. */
+export interface ResearchAccepts {
+    /** Sends written without asking: off, or additions only (with the user's own setting). */
+    syncAuto: 'off' | 'additions';
+    /** It reads sources and citations from a send. */
+    sources: boolean;
+    /** It knows how much a transcript weighs (`_STROM_TRANSCRIPTS`, `_STROM_VERIFIED`). */
+    verified: boolean;
+    /** It takes original files (a later step); false until then. */
+    media: boolean;
+}
+
+/** One send waiting in the research's inbox. */
+export interface ResearchInboxTree {
+    /** The app's tree id (`_STROM_APP_TREE`), or the research id from a send without it. */
+    tree: string;
+    at: string;
+    changes: number | null;
+    /** `_STROM_SENT` of that send ('' = none). */
+    sent: string;
+}
+
+/** `/status.inbox`. */
+export interface ResearchInbox {
+    trees: ResearchInboxTree[];
+    material: number;
+}
+
+/** `/status.accepts`, or null when the research does not say (older than 1.12). Untrusted. */
+export function sanitizeAccepts(value: unknown): ResearchAccepts | null {
+    const r = asRecord(value);
+    if (!r) return null;
+    const sync = asRecord(r.sync);
+    return {
+        syncAuto: sync?.auto === 'additions' ? 'additions' : 'off',
+        sources: r.sources === true,
+        verified: r.verified === true,
+        media: !!asRecord(r.media),
+    };
+}
+
+/** `/status.inbox`, or null when the research does not say. Untrusted. */
+export function sanitizeInbox(value: unknown): ResearchInbox | null {
+    const r = asRecord(value);
+    if (!r) return null;
+    const trees: ResearchInboxTree[] = [];
+    for (const item of Array.isArray(r.trees) ? r.trees.slice(0, MAX_ITEMS) : []) {
+        const t = asRecord(item);
+        const tree = t ? headerToken(t.tree) ?? normalizeResearchId(t.tree) : null;
+        if (!t || !tree) continue;
+        const at = cleanText(t.at, 40);
+        trees.push({
+            tree,
+            at: Number.isFinite(Date.parse(at)) ? at : '',
+            changes: asCount(t.changes),
+            sent: headerToken(t.sent) ?? '',
+        });
+    }
+    return { trees, material: asCount(r.material) ?? 0 };
 }
 
 /** A task in the agent's queue. */
@@ -849,6 +979,9 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         spend: sanitizeSpend(r.spend),
         lastIntake: sanitizeIntake(r.lastIntake),
         researches: sanitizeDirections(r.researches),
+        accepts: sanitizeAccepts(r.accepts),
+        inbox: sanitizeInbox(r.inbox),
+        sends: sanitizeSends(r.sends),
     };
 }
 
@@ -1101,12 +1234,37 @@ export function pickSendDefault<T extends { id: string; changedAt?: string; last
     return [...trees].sort((a, b) => when(b) - when(a))[0];
 }
 
+/** What names an exported GEDCOM's research (header lines, see researchHeaderLines). */
+export interface ResearchHeaderInfo {
+    id: string;
+    head?: string;
+    /** The tree's id in the app (`_STROM_APP_TREE`): the research keeps one send per app tree. */
+    appTree?: string;
+    /** How the research takes the user's transcripts (`_STROM_TRANSCRIPTS`; missing = lead). */
+    transcripts?: 'lead' | 'evidence';
+    /** The fingerprint of the tree as sent (`_STROM_SENT`): only on a send to the bridge. */
+    sent?: string;
+}
+
+/** `_STROM_SENT` / `_STROM_APP_TREE` values: what the research accepts (at most 64 of [A-Za-z0-9._:-]). */
+function headerToken(value: unknown): string | null {
+    return typeof value === 'string' && /^[A-Za-z0-9._:-]{1,64}$/.test(value) ? value : null;
+}
+
 /** The header lines that tie an exported GEDCOM to its research. */
-export function researchHeaderLines(link: { id: string; head?: string } | null | undefined): string[] {
+export function researchHeaderLines(link: ResearchHeaderInfo | null | undefined): string[] {
     const id = normalizeResearchId(link?.id);
     if (!id) return [];
     const head = isResearchHead(link?.head);
-    return [`1 ${STROM_TREE_TAG} ${id}`, ...(head ? [`1 ${STROM_HEAD_TAG} ${head}`] : [])];
+    const appTree = headerToken(link?.appTree);
+    const sent = headerToken(link?.sent);
+    return [
+        `1 ${STROM_TREE_TAG} ${id}`,
+        ...(head ? [`1 ${STROM_HEAD_TAG} ${head}`] : []),
+        ...(appTree ? [`1 _STROM_APP_TREE ${appTree}`] : []),
+        ...(link?.transcripts === 'evidence' || link?.transcripts === 'lead' ? [`1 _STROM_TRANSCRIPTS ${link.transcripts}`] : []),
+        ...(sent ? [`1 _STROM_SENT ${sent}`] : []),
+    ];
 }
 
 /** The `research` field of a JSON export / import: `{ id, head? }`, checked. */
@@ -1123,15 +1281,21 @@ export interface SyncReply {
     ok: boolean;
     changes: number | null;
     error: string;
+    /** The send waits in the research's inbox (true) or was written at once (false); null: not said. */
+    inbox: boolean | null;
+    /** The research's mark of this send ("R20261002143205123-a1b2"; '' = not said): find it in `/status.sends`. */
+    intake: string;
 }
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '' };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '' };
     return {
         ok: r.ok === true,
         changes: asCount(r.changes),
         error: cleanText(r.error),
+        inbox: typeof r.inbox === 'boolean' ? r.inbox : null,
+        intake: headerToken(r.intake) ?? '',
     };
 }
 

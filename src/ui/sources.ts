@@ -29,6 +29,7 @@ import { excerptFromDataUrl } from '../excerpts.js';
 import { openCropEditor, compressWholeImage, CropRegion } from './crop-editor.js';
 import { coupleEventLabel } from '../events.js';
 import { eventTypeLabel } from './person-events.js';
+import { verifiedOffer, isOlderSource, researchReadSource, unverifiedOlderSources } from '../research-sync.js';
 
 /** What a citation applies to: a person, one of their events, or a partnership. */
 /** What a citation is made on: a person (as a whole, or their birth / death), one of their events, a union. */
@@ -158,6 +159,7 @@ export const sourcesMethods = uiModule({
 
     closeSourcesDialog(): void {
         document.getElementById('sources-modal')?.classList.remove('active');
+        this.sourcesFilter = 'all';
         if (this.returnToPickerAfterManager) {
             this.returnToPickerAfterManager = false;
             this.renderSourcePickerList();
@@ -202,7 +204,14 @@ export const sourcesMethods = uiModule({
             return;
         }
         const query = search && !search.hidden ? search.value.trim().toLowerCase() : '';
-        const sources = all.filter(s => this.sourceMatches(s, query)).sort((a, b) => a.title.localeCompare(b.title));
+        // "Transcription not verified": older sources of an Evidence tree (Research for this tree).
+        const treeId = DataManager.getCurrentTreeId();
+        const link = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
+        const unverified = new Set(unverifiedOlderSources(DataManager.getData(), link).map(src => src.id));
+        if (unverified.size === 0) this.sourcesFilter = 'all';
+        this.renderSourcesFilter(unverified.size > 0);
+        const filtered = this.sourcesFilter === 'unverifiedTranscript' ? all.filter(src => unverified.has(src.id)) : all;
+        const sources = filtered.filter(s => this.sourceMatches(s, query)).sort((a, b) => a.title.localeCompare(b.title));
         const counts = DataManager.sourceCitationCounts();
         container.innerHTML = sources.map(src => {
             const count = counts.get(src.id) ?? 0;
@@ -236,6 +245,28 @@ export const sourcesMethods = uiModule({
             btn.addEventListener('click', () => { void this.deleteSource(btn.dataset.sourceId ?? ''); });
         });
         hydrateThumbs(container);
+    },
+
+    /** The catalog's two filters (only while an Evidence tree has older unverified sources). */
+    renderSourcesFilter(offered: boolean): void {
+        const bar = document.getElementById('sources-filter');
+        if (!bar) return;
+        bar.hidden = !offered;
+        if (!offered) {
+            bar.innerHTML = '';
+            return;
+        }
+        const s = strings.sources;
+        const chip = (value: 'all' | 'unverifiedTranscript', label: string): string =>
+            `<button type="button" class="segment-btn${this.sourcesFilter === value ? ' active' : ''}" data-filter="${value}"`
+            + ` aria-pressed="${this.sourcesFilter === value}">${esc(label)}</button>`;
+        bar.innerHTML = `<div class="segment">${chip('all', s.filterAll) + chip('unverifiedTranscript', s.filterUnverified)}</div>`;
+        bar.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach(btn => {
+            btn.onclick = () => {
+                this.sourcesFilter = btn.dataset.filter === 'unverifiedTranscript' ? 'unverifiedTranscript' : 'all';
+                this.renderSourcesList();
+            };
+        });
     },
 
     /** Search over title, archive, reference and transcript (case-insensitive). */
@@ -329,8 +360,10 @@ export const sourcesMethods = uiModule({
             chunks.push(`<a class="viewer-open-page" href="${esc(pageUrl)}" target="_blank" rel="noopener noreferrer">${esc(s.viewerOpenPage)} ↗</a>`);
         }
         if (src.transcript) {
+            // Who read the entry, as the research says (nothing when it does not).
+            const readBy = src.readBy === 'user' || src.readBy === 'research' || src.readBy === 'both' ? s.readBy[src.readBy] : '';
             chunks.push(`<section><h3 class="viewer-section-title">${esc(s.viewerTranscript)}</h3>
-                <p class="viewer-transcript">${esc(src.transcript)}</p></section>`);
+                <p class="viewer-transcript">${esc(src.transcript)}</p>${readBy ? `<p class="viewer-read-by">${esc(readBy)}</p>` : ''}</section>`);
         }
         const cites = DataManager.listSourceCitations(src.id).map(ref => {
             if (ref.kind === 'partnership') {
@@ -431,6 +464,10 @@ export const sourcesMethods = uiModule({
         if (titleInput) titleInput.placeholder = titlePlaceholder;
         this.excerptDrafts = (src.excerpts ?? []).map(e => ({ excerpt: structuredClone(e) }));
         this.sourceQualityDraft = src.quality;
+        this.sourceEditorOriginal = { ...src, excerpts: undefined };
+        this.sourceUserReadingShown = false;
+        const verified = document.getElementById('input-source-verified') as HTMLInputElement | null;
+        if (verified) verified.checked = !!src.transcriptVerified;
         const more = document.getElementById('source-more') as HTMLDetailsElement | null;
         if (more) more.open = !!(src.transcript || src.recordDate || src.quality !== undefined);
     },
@@ -445,6 +482,7 @@ export const sourcesMethods = uiModule({
         this.wireSourceEditor();
         this.renderExcerptBlock();
         this.renderQualityControl();
+        this.renderSourceReading();
         const sameBook = document.getElementById('source-editor-same-book');
         if (sameBook) sameBook.hidden = !this.editingSourceId;
         modal.classList.add('active');
@@ -459,6 +497,10 @@ export const sourcesMethods = uiModule({
         if (this.sourceEditorWired) return;
         this.sourceEditorWired = true;
         const modal = document.getElementById('source-editor-modal');
+        // "Transcription verified" and the note about the research's reading follow the wording and the page.
+        for (const id of ['input-source-transcript', 'input-source-reference']) {
+            document.getElementById(id)?.addEventListener('input', () => this.renderSourceReading());
+        }
         modal?.addEventListener('paste', (e) => {
             const file = imageFromTransfer((e as ClipboardEvent).clipboardData);
             // Only an image is taken over; text pastes into the field as usual.
@@ -488,6 +530,58 @@ export const sourcesMethods = uiModule({
         });
     },
 
+    /**
+     * "Transcription verified" (a research tree that knows how a transcript
+     * weighs): a checkbox, the tree's Evidence line, or nothing; and the note
+     * that a change to a transcript the research read is a second reading.
+     */
+    renderSourceReading(): void {
+        const val = (id: string) => ((document.getElementById(id) as HTMLInputElement | null)?.value ?? '').trim();
+        const original = this.sourceEditorOriginal ?? {};
+        const treeId = DataManager.getCurrentTreeId();
+        const link = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
+        const capable = this.researchTranscriptsCapable(link?.id);
+        const draft: Source = {
+            id: this.editingSourceId ?? '',
+            title: original.title ?? '',
+            transcript: val('input-source-transcript'),
+            reference: val('input-source-reference'),
+            refn: original.refn,
+            readBy: original.readBy,
+            transcriptVerified: original.transcriptVerified,
+        };
+        const offer = verifiedOffer(draft, link, capable);
+        const row = document.getElementById('source-verified-row');
+        const box = document.getElementById('input-source-verified') as HTMLInputElement | null;
+        const hint = document.getElementById('source-verified-hint');
+        const byTree = document.getElementById('source-verified-bytree');
+        if (row) row.hidden = offer !== 'checkbox';
+        if (byTree) byTree.hidden = offer !== 'byTree';
+        // No transcript, no verified transcript.
+        if (box && !draft.transcript) box.checked = false;
+        if (hint) {
+            hint.textContent = isOlderSource(draft, link) ? strings.sources.verifiedHintOlder : strings.sources.verifiedHintGuide;
+        }
+        // A transcript the research read: say once, at the first change, what a correction becomes there.
+        const note = document.getElementById('source-user-reading-note');
+        if (note) {
+            const researchRead = !!this.editingSourceId && !!link && capable && researchReadSource(original as Source, link);
+            const changed = draft.transcript !== (original.transcript ?? '').trim() || draft.reference !== (original.reference ?? '').trim();
+            if (researchRead && changed) this.sourceUserReadingShown = true;
+            note.hidden = !this.sourceUserReadingShown;
+        }
+    },
+
+    /** The saved "Transcription verified": ticked where offered; kept unchanged where the editor did not offer it. */
+    sourceVerifiedValue(transcript: string): true | undefined {
+        if (!transcript) return undefined;
+        const row = document.getElementById('source-verified-row');
+        const box = document.getElementById('input-source-verified') as HTMLInputElement | null;
+        if (row && !row.hidden) return box?.checked ? true : undefined;
+        const original = this.sourceEditorOriginal;
+        return original?.transcriptVerified && (original.transcript ?? '').trim() === transcript ? true : undefined;
+    },
+
     renderQualityControl(): void {
         // An imported 0 ("unreliable") shows as the lowest level and survives
         // until the user picks something else.
@@ -505,7 +599,8 @@ export const sourcesMethods = uiModule({
         const fields = ['title', 'repository', 'reference', 'url', 'note', 'transcript', 'recorddate'].map(f =>
             (document.getElementById(`input-source-${f}`) as HTMLInputElement | null)?.value ?? '');
         const excerpts = this.excerptDrafts.map(d => [d.excerpt.dataUrl.length, d.excerpt.dataUrl.slice(-64), d.excerpt.caption ?? '']);
-        return JSON.stringify([fields, excerpts, this.sourceQualityDraft ?? null]);
+        const verified = (document.getElementById('input-source-verified') as HTMLInputElement | null)?.checked ?? false;
+        return JSON.stringify([fields, excerpts, this.sourceQualityDraft ?? null, verified]);
     },
 
     hasSourceEditorChanges(): boolean {
@@ -531,6 +626,8 @@ export const sourcesMethods = uiModule({
         this.sourceEditorSnapshot = null;
         this.excerptDrafts = [];
         this.sourceQualityDraft = undefined;
+        this.sourceEditorOriginal = null;
+        this.sourceUserReadingShown = false;
         this.sourceEditorContext = null;
         document.querySelector('.excerpt-page-picker')?.remove();
         // If this editor was opened from the picker, tear the picker down too.
@@ -576,6 +673,8 @@ export const sourcesMethods = uiModule({
         if (url) payload.url = url;
         if (note) payload.note = note;
         if (transcript) payload.transcript = transcript;
+        const verified = this.sourceVerifiedValue(transcript);
+        if (verified) payload.transcriptVerified = true;
         if (recordDate) payload.recordDate = recordDate;
         if (this.sourceQualityDraft !== undefined) payload.quality = this.sourceQualityDraft;
 
@@ -611,6 +710,7 @@ export const sourcesMethods = uiModule({
                     url: url || undefined,
                     note: note || undefined,
                     transcript: transcript || undefined,
+                    transcriptVerified: verified,
                     recordDate: recordDate || undefined,
                     quality: this.sourceQualityDraft,
                     excerpts: excerpts.length > 0 ? excerpts : undefined,

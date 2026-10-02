@@ -619,6 +619,8 @@ function absorbSourceDetails(kept: Source, incoming: Source): void {
     if (!kept.transcript && incoming.transcript) kept.transcript = incoming.transcript;
     if (!kept.recordDate && incoming.recordDate) kept.recordDate = incoming.recordDate;
     if (!kept.refn && incoming.refn) kept.refn = incoming.refn;
+    // "Transcription verified" belongs to that very wording.
+    if (!kept.transcriptVerified && incoming.transcriptVerified && kept.transcript === incoming.transcript) kept.transcriptVerified = true;
     for (const exc of incoming.excerpts ?? []) {
         if (kept.excerpts?.some(e => e.dataUrl === exc.dataUrl)) continue;
         (kept.excerpts ??= []).push(structuredClone(exc));

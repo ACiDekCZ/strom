@@ -37,7 +37,7 @@ import {
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
-    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection,
+    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, ResearchHeaderInfo,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry } from '../research-link.js';
@@ -51,7 +51,10 @@ import { formatRelativeDateTime } from '../format.js';
 import { safeFileName } from '../filenames.js';
 import {
     noteResearchLinks, announcedResearchLinks, researchLinksEnabled, noteResearchWaiting, storedResearchWaiting,
+    noteResearchBridge, noteResearchBridgeStatus,
 } from '../research-device.js';
+import { rememberBridgeStatus } from './research-sync-ui.js';
+import { sourceReadings } from '../research-sync.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -519,8 +522,8 @@ export function postCancel(url: string, reason: SendCancelReason): void {
 }
 
 /** The GEDCOM the research gets back: the whole tree, as is, naming its research and version. */
-function researchGedcom(data: StromData, treeName: string, link: { id: string; head?: string }): string {
-    return exportToGedcom(data, treeName, { research: { id: link.id, head: link.head } }).content;
+export function researchGedcom(data: StromData, treeName: string, link: ResearchHeaderInfo): string {
+    return exportToGedcom(data, treeName, { research: link }).content;
 }
 
 async function fetchStatus(url: string): Promise<LiveStatus | null> {
@@ -529,7 +532,13 @@ async function fetchStatus(url: string): Promise<LiveStatus | null> {
     const status = sanitizeLiveStatus(await res.json());
     // The bridge runs on this computer: what it announces holds here.
     if (status) noteResearchLinks(status.links);
-    if (status?.treeId) noteResearchWaiting(status.treeId, status.waiting, status);
+    if (status?.treeId) {
+        noteResearchWaiting(status.treeId, status.waiting, status);
+        // Where this research's bridge is now (the port can change between runs).
+        noteResearchBridge(status.treeId, url.replace(/\/status(\?.*)?$/, ''));
+        noteResearchBridgeStatus(status.treeId, status.accepts, status.head);
+        rememberBridgeStatus(status.treeId, status);
+    }
     syncResearchCardInfo();
     return status;
 }
@@ -904,7 +913,7 @@ export const researchUiMethods = uiModule({
     },
 
     /** B. ?import-url=: a file offered by Strom Research on this computer. */
-    async importResearchFromUrl(raw: string): Promise<void> {
+    async importResearchFromUrl(raw: string, opts: { afterSend?: TreeId } = {}): Promise<void> {
         // "Load new version" asked for this: its spinner is done.
         this.settleResearchVersion();
         const url = parseLoopbackUrl(raw);
@@ -928,7 +937,7 @@ export const researchUiMethods = uiModule({
             // Served from 127.0.0.1: the research is on this computer.
             const header = readResearchHeader(text);
             if (header.isStromResearch) noteResearchLinks(header.links);
-            await this.openGedcomText(text);
+            await this.openGedcomText(text, opts);
         });
     },
 
@@ -951,7 +960,7 @@ export const researchUiMethods = uiModule({
      * GEDCOM text from outside. A Strom Research file opens its research
      * tree; any other GEDCOM goes to the normal import dialog.
      */
-    async openGedcomText(text: string): Promise<void> {
+    async openGedcomText(text: string, opts: { afterSend?: TreeId } = {}): Promise<void> {
         if (DataManager.isViewMode()) {
             this.showToast(strings.research.notInViewMode, 5000);
             return;
@@ -975,7 +984,7 @@ export const researchUiMethods = uiModule({
             return;
         }
         if (!await this.ensureLocalUnlocked()) return;
-        await this.applyResearch(result.data, header, {});
+        await this.applyResearch(result.data, header, opts.afterSend ? { afterSend: opts.afterSend } : {});
     },
 
     /**
@@ -983,7 +992,7 @@ export const researchUiMethods = uiModule({
      * afterwards (asking when the user changed it in the app), switch to it.
      * Returns the tree, or null when the user cancelled.
      */
-    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean }): Promise<TreeId | null> {
+    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean; afterSend?: TreeId }): Promise<TreeId | null> {
         const name = source.name || strings.research.defaultName;
         const dateLabel = researchDateLabel(source.date);
         const existing = source.treeId ? TreeManager.findTreeByResearchId(source.treeId) : null;
@@ -996,9 +1005,25 @@ export const researchUiMethods = uiModule({
             const unreadable = TreeManager.isTreeUnreadable(existing.id);
             previous = unreadable ? null : await readTree(existing.id);
             action = decideResearchOpen(existing.research, previous ? fingerprintLike(previous, existing.research?.fingerprint) : null);
+            // The user's changes were sent and written there: this version holds them.
+            const sent = existing.research?.sent;
+            const holdsChanges = action === 'ask' && opts.afterSend === existing.id && !!previous
+                && sent?.state === 'written' && contentFingerprint(previous) === sent.fingerprint;
             if (unreadable || !previous) {
                 // Cannot be read with this session's key: never overwrite it.
                 asCopy = true;
+            } else if (holdsChanges) {
+                // Replaced without asking (a backup is still kept below).
+            } else if (action === 'ask' && existing.research && this.researchSyncCapable(existing.research.id)) {
+                // A research that tells what it has: send first, or decide knowing it.
+                const choice = await this.showResearchUpdateConflict(existing.id, existing.name, data, includeImages);
+                if (choice === null) return null;
+                if (choice === 'sendThenLoad') {
+                    void this.researchSendNow({ thenLoad: true });
+                    return null;
+                }
+                asCopy = choice === 'copy';
+                if (incomingImageBytes(data) > 0) includeImages = this.choiceCheckboxChecked;
             } else if (action === 'ask') {
                 // Excerpts the user cut in this tree go with the update — say so.
                 const ownExcerpts = Object.values(previous.sources ?? {}).some(src => src.excerpts?.length);
@@ -1057,6 +1082,7 @@ export const researchUiMethods = uiModule({
                 ...(head ? { head } : {}),
             });
         }
+        const loadedAfterSend = !!opts.afterSend && opts.afterSend === treeId && !created;
 
         const switched = previousTreeId !== treeId;
         this.updateTreeSwitcher();
@@ -1075,12 +1101,49 @@ export const researchUiMethods = uiModule({
         // part of the research and would inflate the summary.
         const persons = Object.values(stored.persons).filter(p => !p.isPlaceholder).length;
         const families = Object.keys(stored.partnerships).length;
-        if (!opts.quiet) {
+        if (loadedAfterSend) this.showToast(strings.sync.loadedAfterSend, 6000);
+        else if (!opts.quiet) {
             this.showToast(created
                 ? strings.research.opened(name, persons, families, dateLabel)
                 : strings.research.updated(name, persons, families, dateLabel), 6000);
         }
+        this.refreshResearchSyncUi();
         return treeId;
+    },
+
+    /**
+     * An update over a tree with changes the research does not have (a
+     * research that tells what it has). Its bridge runs: send them first (the
+     * new version then holds them), open as a copy, or load without them. It
+     * does not run: the copy is the advice; overwriting stays possible.
+     * Resolves 'sendThenLoad' | 'update' | 'copy', or null (cancelled).
+     */
+    async showResearchUpdateConflict(treeId: TreeId, treeName: string, data: StromData, includeImages: boolean): Promise<'sendThenLoad' | 'update' | 'copy' | null> {
+        const u = strings.researchUpdate;
+        const r = strings.research;
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        const bridgeUp = !!link && await this.researchBridgeReady(link.id);
+        const previous = await readTree(treeId);
+        const ownExcerpts = Object.values(previous?.sources ?? {}).some(src => src.excerpts?.length);
+        const images = incomingImageBytes(data) > 0
+            ? { label: strings.importImages.label, checked: includeImages,
+                detail: strings.importImages.size((incomingImageBytes(data) / (1024 * 1024)).toFixed(1)) }
+            : undefined;
+        if (bridgeUp) {
+            const message = [u.unsentBody(treeName), ownExcerpts ? r.excerptsReplaced : ''].filter(Boolean).join('\n\n');
+            const pick = await this.showChoice(message, u.unsentTitle, [
+                { id: 'copy', label: r.openCopy },
+                { id: 'sendThenLoad', label: strings.sync.sendThenLoad },
+            ], images, { subtitle: `${treeName} · ${u.newerSub}`, aside: { id: 'update', label: u.loadWithout, sub: u.loadWithoutSub } });
+            return pick as 'sendThenLoad' | 'update' | 'copy' | null;
+        }
+        const message = [u.bridgeDownBody(treeName), u.bridgeDownAdvice, ownExcerpts ? r.excerptsReplaced : ''].filter(Boolean).join('\n\n');
+        const start = link && this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }) : null;
+        const pick = await this.showChoice(message, r.editedTitle, [{ id: 'copy', label: r.openCopy }], images, {
+            aside: { id: 'update', label: u.overwrite },
+            ...(start ? { link: { label: u.startResearch, run: () => this.launchResearchLink(start) } } : {}),
+        });
+        return pick as 'update' | 'copy' | null;
     },
 
     // ==================== E. SENDING CHANGES BACK ====================
@@ -1146,11 +1209,19 @@ export const researchUiMethods = uiModule({
         }
         // Show the tree being sent behind the dialogs, not whichever was open.
         if (DataManager.getCurrentTreeId() !== tree.id) await this.switchToTree(tree.id);
+        const capable = !!status.accepts;
         // Nothing changed since the research sent it (a tree followed live
         // is read-only, so it always lands here).
         if (link.fingerprint && fingerprintLike(data, link.fingerprint) === link.fingerprint) {
             cancel('unchanged');
-            await this.showAlert(r.sendNothing(tree.name), 'info');
+            if (capable) this.showToast(strings.sync.nothingToast, 4000);
+            else await this.showAlert(r.sendNothing(tree.name), 'info');
+            return;
+        }
+        // A research that tells what it has: no question, the same send as
+        // "Send changes" in the app (the research shows the changes and asks).
+        if (capable) {
+            await this.researchSendNow();
             return;
         }
         const ok = await this.showConfirm(r.sendConfirm(tree.name, researchName), r.sendConfirmTitle, { confirmLabel: r.sendButton });
@@ -1159,7 +1230,7 @@ export const researchUiMethods = uiModule({
         this.showToast(r.sending, 60000);
         let res: Response;
         try {
-            res = await postSync(bridge.sync, researchGedcom(data, tree.name, link), 120000);
+            res = await postSync(bridge.sync, researchGedcom(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: link.transcripts }), 120000);
         } catch (err) {
             console.warn('Sending to the research failed', err);
             document.querySelector('.toast')?.remove();
@@ -1171,8 +1242,11 @@ export const researchUiMethods = uiModule({
             reply = sanitizeSyncReply(await res.json());
         } catch { /* not JSON: a refusal without a reason */ }
         document.querySelector('.toast')?.remove();
-        if (res.ok && reply.ok) await this.showAlert(r.sent, 'info');
-        else await this.showAlert(r.sendRefused(reply.error), 'error');
+        if (res.ok && reply.ok) {
+            // What the research now has of the user's transcripts (Research for this tree).
+            TreeManager.patchResearchLink(tree.id, { sentSources: sourceReadings(data) });
+            await this.showAlert(r.sent, 'info');
+        } else await this.showAlert(r.sendRefused(reply.error), 'error');
     },
 
     /** Explain the way back to the research; offer the faithful GEDCOM of the tree. */
@@ -1366,7 +1440,8 @@ export const researchUiMethods = uiModule({
             await this.showAlert(strings.storageSafety.treeLocked, 'warning');
             return;
         }
-        const blob = new Blob([researchGedcom(data, meta.name, meta.research)], { type: 'text/plain;charset=utf-8' });
+        const research = { id: meta.research.id, head: meta.research.head, appTree: treeId, transcripts: meta.research.transcripts };
+        const blob = new Blob([researchGedcom(data, meta.name, research)], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;

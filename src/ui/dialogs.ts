@@ -203,7 +203,17 @@ export const dialogsMethods = uiModule({
         message: string,
         title: string,
         choices: { id: string; label: string; variant?: 'default' | 'danger' }[],
-        checkbox?: { label: string; checked: boolean; detail?: string }
+        checkbox?: { label: string; checked: boolean; detail?: string },
+        extra: {
+            /** A destructive answer set apart below the buttons, with a quiet second line. */
+            aside?: { id: string; label: string; sub?: string };
+            /** A link under the message (it runs and closes the dialog as cancelled). */
+            link?: { label: string; run: () => void };
+            /** The Cancel button's text. */
+            cancelLabel?: string;
+            /** Shown above the message, small (what the dialog is about). */
+            subtitle?: string;
+        } = {}
     ): Promise<string | null> {
         return new Promise((resolve) => {
             const modal = document.getElementById('confirmation-modal');
@@ -215,9 +225,15 @@ export const dialogsMethods = uiModule({
                 resolve(null);
                 return;
             }
-            modal.className = 'modal-overlay dialog-confirm';
+            modal.className = 'modal-overlay dialog-confirm' + (extra.aside ? ' dialog-has-aside' : '');
             titleEl.textContent = title;
             messageEl.textContent = message;
+            if (extra.subtitle) {
+                const sub = document.createElement('span');
+                sub.className = 'confirm-subtitle';
+                sub.textContent = extra.subtitle;
+                messageEl.prepend(sub);
+            }
             if (optionsEl) optionsEl.innerHTML = '';
             // Optional checkbox under the message; its state is read back
             // through choiceCheckboxChecked once the dialog settles.
@@ -241,10 +257,19 @@ export const dialogsMethods = uiModule({
                 closeAndReturn();
                 resolve(value);
             };
+            if (extra.link && optionsEl) {
+                const { label, run } = extra.link;
+                const link = document.createElement('button');
+                link.type = 'button';
+                link.className = 'link-button confirm-link';
+                link.textContent = label;
+                link.onclick = () => { settle(null); run(); };
+                optionsEl.appendChild(link);
+            }
             const cancelBtn = document.createElement('button');
             cancelBtn.className = 'secondary';
             cancelBtn.id = 'confirm-cancel-btn';
-            cancelBtn.textContent = strings.buttons.cancel;
+            cancelBtn.textContent = extra.cancelLabel ?? strings.buttons.cancel;
             cancelBtn.onclick = () => settle(null);
             buttonsEl.appendChild(cancelBtn);
             choices.forEach((choice, i) => {
@@ -256,6 +281,25 @@ export const dialogsMethods = uiModule({
                 btn.onclick = () => settle(choice.id);
                 buttonsEl.appendChild(btn);
             });
+            if (extra.aside) {
+                const { id, label, sub } = extra.aside;
+                const row = document.createElement('div');
+                row.className = 'confirm-aside';
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'confirm-aside-btn';
+                btn.dataset.choice = id;
+                btn.textContent = label;
+                btn.onclick = () => settle(id);
+                row.appendChild(btn);
+                if (sub) {
+                    const note = document.createElement('span');
+                    note.className = 'confirm-aside-sub';
+                    note.textContent = sub;
+                    row.appendChild(note);
+                }
+                buttonsEl.appendChild(row);
+            }
 
             modal.onclick = (e) => {
                 if (e.target === modal) settle(null);

@@ -33,6 +33,7 @@ import {
     ParentChildRelType,
     ParticipantRole,
     Source,
+    SourceReadBy,
     Attachment,
     toPersonId,
     toPartnershipId,
@@ -654,6 +655,10 @@ interface RawSource {
     transcript?: string;
     /** REFN: the record's id in the program that wrote the file. */
     refn?: string;
+    /** _STROM_VERIFIED Y: the user read the transcript from the record. */
+    verified?: boolean;
+    /** _STROM_READ: who read the entry (a Strom Research file). */
+    readBy?: SourceReadBy;
     /** Record date from a citation's DATA > DATE (first wins). */
     recordDate?: string;
     /** OBJE on the record: crops of the entry (Strom: _STROM_KIND excerpt). */
@@ -1790,6 +1795,11 @@ export function parseGedcom(content: string): ParsedGedcom {
                     addLine(label(plain(value).trim()).trimEnd(), '\n');
                 }
                 else if (tag === 'REFN') { if (value) src.refn = value; }
+                else if (tag === '_STROM_VERIFIED') { if (value.trim().toUpperCase() === 'Y') src.verified = true; }
+                else if (tag === '_STROM_READ') {
+                    const who = value.trim().toLowerCase();
+                    if (who === 'user' || who === 'research' || who === 'both') src.readBy = who;
+                }
                 else if (tag === 'OBJE') src.media.push({ title: '', file: '' });
                 else if (tag === 'QUAY') { const q = parseInt(value, 10); if (q >= 0 && q <= 3) src.quality = q; }
                 else if (tag === 'WWW' || tag === 'URL') src.url = value;
@@ -2576,6 +2586,8 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (raw.quality !== undefined) src.quality = raw.quality;
         if (raw.transcript?.trim()) src.transcript = raw.transcript.trim();
         if (raw.refn) src.refn = raw.refn;
+        if (raw.verified && src.transcript) src.transcriptVerified = true;
+        if (raw.readBy) src.readBy = raw.readBy;
         if (raw.recordDate) src.recordDate = raw.recordDate;
         // Images on a source record are crops of its entry. Only embedded
         // raster images come in; a path or URL (another program's media

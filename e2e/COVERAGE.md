@@ -185,6 +185,12 @@ the table honest.
 | File handler (`launchQueue`) | `research-open.spec.ts` | partial | simulated `window.launchQueue` via `addInitScript`; the real OS "open with" / install prompt cannot be driven headlessly |
 | `?live=` bridge: read-only tree, panel (working / changes / waiting), refresh + highlight on `change`, "following ended" | `research-open.spec.ts` | covered | status, tree.ged and the SSE stream answered by `page.route`; bridge text with markup shown as text |
 | `?live=` stop following | `research-open.spec.ts` | covered | panel removed, read-only lifted |
+| State of a research tree (Strom Research 1.12+, `accepts` / `inbox` / `sends`): block in ⋯ → Research, the ⋯ dot | `research-sync.spec.ts` | covered | unsent / sent and waiting / in sync / bridge down; nothing new for a tree without research or a research without `accepts`; state machine in vitest `research-sync-state.test.ts` |
+| Send straight to the bridge (no dialog): `_STROM_APP_TREE` / `_STROM_SENT`; nothing to send; refused (dialog, Try again); bridge down → the old link | `research-sync.spec.ts` | covered | bridge answered by `page.route`; links recorded instead of handed to the system |
+| Discarded in the research: own state, one notice (not after a reload), Send again | `research-sync.spec.ts` | covered | found in `/status.sends` by the `intake` of the `/sync` reply |
+| Update over changes the research lacks: pill, "Send, then load" → written → loads by itself; bridge down → copy advised | `research-sync.spec.ts` | covered | the 2a / 2b dialogs (choice with a destructive answer set apart) |
+| Research for this tree: lead / evidence, not retroactive, older sources → filtered catalog; from the tree manager | `research-sync.spec.ts` | covered | `_STROM_TRANSCRIPTS evidence` on the next send |
+| "Transcription verified", the research's reading note, who read it | `research-sync.spec.ts` | covered | `_STROM_VERIFIED Y` in the send; `_STROM_READ` in vitest |
 | No `launchQueue` / `EventSource`, phone viewport, bogus `?live=` / `?import-url=` | `research-open.spec.ts` | covered | no `pageerror`, toolbar visible, params removed; valid `?live=` without EventSource still opens the research (polling fallback) |
 | Real browsers reaching a loopback bridge from https (PNA / mixed content) | — | n-a | depends on the browser's network policy; not reproducible in the headless suite |
 

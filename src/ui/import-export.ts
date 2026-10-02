@@ -228,7 +228,7 @@ export const importExportMethods = uiModule({
             const filtered = applyLivingPrivacy(data, privacy);
             // A faithful export of a research tree names the research and its version.
             const research = metadata?.research && isFaithfulExport(privacy, resolveContentOptions(content))
-                ? { id: metadata.research.id, head: metadata.research.head } : undefined;
+                ? { id: metadata.research.id, head: metadata.research.head, appTree: treeId, transcripts: metadata.research.transcripts } : undefined;
             const result = exportToGedcom(filtered, metadata?.name, { content, research });
 
             // Download file

@@ -532,7 +532,7 @@ test('tree merge close → save → pending-merge dialog resume, then discard le
 async function openPersonMergeWithSharedPartner(page: Page): Promise<Locator> {
     await openApp(page);
     const json = {
-        version: 10,
+        version: 11,
         ...treeData([
             { id: 'jan', firstName: 'Jan', lastName: 'Novak', gender: 'male', birthDate: '1900-05-05', birthPlace: 'Brno', partnerships: ['u1'], childIds: ['petr'] },
             { id: 'honza', firstName: 'Honza', lastName: 'Novak', gender: 'male', birthDate: '1900-05-05', birthPlace: 'Praha', partnerships: ['u2', 'u3'], childIds: ['pavel', 'olga'] },
