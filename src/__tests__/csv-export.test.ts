@@ -56,6 +56,23 @@ describe('buildPersonsCsv', () => {
         initLanguage('en');
     });
 
+    it('carries the birth house, the cause, the recorded age and the house of the death', () => {
+        initLanguage('cs');
+        const d: StromData = {
+            persons: {
+                ['v' as PersonId]: {
+                    ...person('v', 'Jan', 'Vlk'), birthPlace: 'Horní Lhota', birthAddress: 'čp. 13',
+                    deathDate: '1919-03-12', deathPlace: 'Horní Lhota', deathCause: 'souchotiny', deathAge: '54 let', deathAddress: 'čp. 13',
+                },
+            },
+            partnerships: {},
+        };
+        const [header, row] = buildPersonsCsv(d).split('\r\n');
+        expect(header).toContain('Místo narození;Dům narození;Úmrtí;Místo úmrtí;Příčina úmrtí;Věk při úmrtí podle zápisu;Dům úmrtí;Otec');
+        expect(row).toContain('Horní Lhota;čp. 13;1919-03-12;Horní Lhota;souchotiny;54 let;čp. 13;');
+        initLanguage('en');
+    });
+
     it('skips placeholders', () => {
         const d: StromData = {
             persons: {

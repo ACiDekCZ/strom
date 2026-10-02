@@ -923,7 +923,9 @@ const stringsEN = {
         menuDesc: 'Person table for Excel / Google Sheets',
         firstName: 'First name', lastName: 'Last name', gender: 'Gender',
         birthDate: 'Born', birthPlace: 'Birth place',
+        birthAddress: 'Birth house / address',
         deathDate: 'Died', deathPlace: 'Death place',
+        deathCause: 'Cause of death', deathAge: 'Age at death as recorded', deathAddress: 'Death house / address',
         father: 'Father', mother: 'Mother', partners: 'Partners', notes: 'Notes',
     },
 
@@ -3615,7 +3617,9 @@ const stringsCZ: StringsType = {
         menuDesc: 'Tabulka osob pro Excel / Google Sheets',
         firstName: 'Jméno', lastName: 'Příjmení', gender: 'Pohlaví',
         birthDate: 'Narození', birthPlace: 'Místo narození',
+        birthAddress: 'Dům narození',
         deathDate: 'Úmrtí', deathPlace: 'Místo úmrtí',
+        deathCause: 'Příčina úmrtí', deathAge: 'Věk při úmrtí podle zápisu', deathAddress: 'Dům úmrtí',
         father: 'Otec', mother: 'Matka', partners: 'Partneři', notes: 'Poznámky',
     },
 
@@ -6301,7 +6305,9 @@ const stringsDE: StringsType = {
         menuDesc: 'Personentabelle für Excel / Google Sheets',
         firstName: 'Vorname', lastName: 'Nachname', gender: 'Geschlecht',
         birthDate: 'Geboren', birthPlace: 'Geburtsort',
+        birthAddress: 'Geburtshaus / Adresse',
         deathDate: 'Gestorben', deathPlace: 'Sterbeort',
+        deathCause: 'Todesursache', deathAge: 'Sterbealter laut Eintrag', deathAddress: 'Sterbehaus / Adresse',
         father: 'Vater', mother: 'Mutter', partners: 'Partner', notes: 'Notizen',
     },
 
