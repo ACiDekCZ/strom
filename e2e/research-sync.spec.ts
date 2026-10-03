@@ -242,7 +242,8 @@ test.describe('after a send the research wrote', () => {
         await poll(page);
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'inSync');
-        await expect(page.locator('#research-item-version')).toBeVisible();
+        // In step with a running bridge: no "Load new version" row (the block offers loading when there is a newer one).
+        await expect(page.locator('#research-item-version')).toHaveCount(0);
         await expect(page.locator('#research-item-tree-settings')).toBeVisible();
         await expect(page.locator('#research-item-open')).toHaveCount(0);   // opening the research needs its links
     });
