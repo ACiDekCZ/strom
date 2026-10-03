@@ -115,7 +115,7 @@ test.describe('small live panel', () => {
         await expect(panel.locator('.live-change-text .live-person-link').first()).toHaveText('Karel Víšek');
         await expect(panel.locator('.live-section__title')).toHaveText(['At work', 'Waiting for you · 2', 'Latest changes', 'Up next']);
         await expect(head(page, '#live-panel', 'At work').locator('.live-section__sum')).toHaveText(/agent-matriky · 1[67] min/);
-        await expect(panel.locator('.live-working .live-time')).toHaveText(/^since \d{1,2}:\d{2}.* · 1[67] min$/);
+        await expect(panel.locator('.live-working .live-time')).toHaveText(/^since (?:\S+ )?\d{1,2}:\d{2}.* · 1[67] min$/);   // a date before the time across midnight
         await expect(head(page, '#live-panel', 'Up next').locator('.live-section__sum')).toHaveText('5 tasks');
 
         // Folded for lack of room or not, Changes unfolds on a click; all changes are in the overview.

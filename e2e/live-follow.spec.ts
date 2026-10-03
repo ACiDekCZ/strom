@@ -204,6 +204,8 @@ test.describe('follow the agent in the tree', () => {
         await setScale(page, 0.4);
         await btn(page).click();
         await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeCloseTo(0.8, 2);
+        // The glide ends first (a slow machine reaches 0.8 before the last frame, which would undo 1.2).
+        await expect.poll(() => page.evaluate(() => (window.Strom.ZoomPan as unknown as { animationFrame: number | null }).animationFrame)).toBeNull();
         await setScale(page, 1.2);
         bridge.person = 'P0001';
         await expect.poll(() => focusRefn(page), { timeout: 6000 }).toBe('P0001');

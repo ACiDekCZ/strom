@@ -37,10 +37,17 @@ test('fan view: generations selector changes ring count and persists', async ({ 
     const select = page.locator('#fan-gen-select');
     await expect(select).toHaveValue('5');
     const countAt = () => page.locator('#fan-chart .fan-sector').count();
-    const at5 = await countAt();
+    // Counted once the chart is drawn (a slow machine counts a half-drawn fan otherwise).
+    const settled = async (): Promise<number> => {
+        let last = -1;
+        await expect.poll(async () => { const n = await countAt(); const same = n > 0 && n === last; last = n; return same; },
+            { intervals: [150] }).toBe(true);
+        return last;
+    };
+    const at5 = await settled();
     await select.selectOption('4');
     await expect(select).toHaveValue('4');
-    const at4 = await countAt();
+    const at4 = await settled();
     expect(at4).toBeLessThanOrEqual(at5);
 });
 
