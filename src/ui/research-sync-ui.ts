@@ -54,6 +54,9 @@ import {
 
 /** The "told once" mark of sending held for want of the research's numbers (see tellResearchNoIds). */
 const NO_IDS = 'no-ids';
+
+/** What reading the research's numbers came to (researchReadIds). */
+type NoIdsResult = { ok: true } | { ok: false; why: 'unavailable' | 'unreachable' | 'other-tree' | 'unmatched'; research?: StromData; header?: ReturnType<typeof readResearchHeader> };
 /** How often the bridge is asked, the window visible: normally / while a send waits. */
 const POLL_MS = 60_000;
 const POLL_PENDING_MS = 30_000;
@@ -974,40 +977,51 @@ export const researchSyncMethods = uiModule({
      * the research's people now.
      */
     async researchFetchIds(treeId: TreeId): Promise<boolean> {
+        return (await this.researchReadIds(treeId)).ok;
+    },
+
+    /** researchFetchIds, saying why not: the research unreachable, its version another tree, or none of its people matched (with that version). */
+    async researchReadIds(treeId: TreeId): Promise<NoIdsResult> {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
-        if (!link || DataManager.getCurrentTreeId() !== treeId || DataManager.isTreeLocked() || DataManager.isReadOnly()) return false;
+        if (!link || DataManager.getCurrentTreeId() !== treeId || DataManager.isTreeLocked() || DataManager.isReadOnly()) return { ok: false, why: 'unavailable' };
         const bridge = parseLiveBridge(storedResearchBridge(link.id)?.base);
-        if (!bridge) return false;
+        if (!bridge) return { ok: false, why: 'unreachable' };
         let text: string;
         try {
             text = await fetchGedcomText(bridge.ged);
         } catch (err) {
             console.warn('Loading the research version for its numbers failed', err);
-            return false;
+            return { ok: false, why: 'unreachable' };
         }
         const header = readResearchHeader(text);
         if (!header.isStromResearch || header.treeId !== link.id) {
             console.warn('The research version is not this tree', { stromResearch: header.isStromResearch, tree: header.treeId, expected: link.id });
-            return false;
+            return { ok: false, why: 'other-tree' };
         }
         const research = convertToStrom(parseGedcom(text)).data;
         if (this.researchSyncFingerprints(treeId, link).matchesBase) {
             const done = await this.applyResearch(research, header, { quiet: true });
-            return done === treeId && !TreeManager.getTreeMetadata(treeId)?.research?.awaitingIds;
+            return done === treeId && !TreeManager.getTreeMetadata(treeId)?.research?.awaitingIds
+                ? { ok: true } : { ok: false, why: 'unavailable' };
         }
         const current = DataManager.getData();
-        const base = await loadResearchCopy(treeId) ?? current;
+        const kept = await loadResearchCopy(treeId);
+        const base = kept ?? current;
         const next = researchIdsByContent(current, base, research);
         if (next.persons === 0 || !holdsResearchIds(next.data)) {
-            console.warn('The research version names none of the people that went over', link.id);
-            return false;
+            const people = (d: StromData) => Object.values(d.persons ?? {}).filter(p => p && !p.isPlaceholder);
+            console.warn('The research version names none of the people that went over', link.id, {
+                theirs: people(research).length, theirsNumbered: people(research).filter(p => !!p.refn).length,
+                wentOver: people(base).length, keptCopy: !!kept, hereNumberedOtherwise: people(current).filter(p => !!p.refn).length,
+            });
+            return { ok: false, why: 'unmatched', research, header };
         }
         DataManager.replaceWithSourceData(next.data);
         // The kept version gets them too: changes per person stay the user's own.
         this.researchKeepCopy(treeId, researchIdsByContent(base, base, research).data, link.fingerprint);
         TreeManager.patchResearchLink(treeId, { awaitingIds: undefined });
         this.refreshResearchSyncUi();
-        return true;
+        return { ok: true };
     },
 
     /** Not sent for want of the research's numbers: by hand a toast with "Load the research's version", by itself once. */
@@ -1024,18 +1038,31 @@ export const researchSyncMethods = uiModule({
         });
     },
 
-    /** "Load the research's version" for a copy without its numbers: then what waits goes. */
+    /**
+     * "Load the research's version" for a copy without its numbers: then what
+     * waits goes. When none of its people match what went over, the way out
+     * is taking that version (over this tree, a backup kept, or as a new tree):
+     * asked, never done by itself.
+     */
     async researchLoadIds(treeId: TreeId): Promise<void> {
         if (DataManager.getCurrentTreeId() !== treeId || !await this.ensureLocalUnlocked()) return;
-        if (!await this.researchFetchIds(treeId)) {
-            this.showToast(strings.sync.noIdsFailed, 6000);
+        const s = strings.sync;
+        const got = await this.researchReadIds(treeId);
+        if (!got.ok) {
+            if (got.why === 'unmatched' && got.research && got.header) {
+                if (!await this.showConfirm(s.noIdsUnmatched, s.noIdsUnmatchedTitle, { confirmLabel: s.loadVersion })) return;
+                await this.applyResearch(got.research, got.header, { plainAsk: true });
+                this.refreshResearchSyncUi();
+                return;
+            }
+            this.showToast(got.why === 'other-tree' ? s.noIdsOtherTree : s.noIdsFailed, 6000);
             return;
         }
         patchResearchAutoState(treeId, { toldRefused: (researchAutoState(treeId).toldRefused ?? []).filter(r => r !== NO_IDS) });
         this.refreshResearchSyncUi();
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (link && !this.researchSyncFingerprints(treeId, link).matchesBase) {
-            this.showToast(strings.sync.noIdsLoaded, 4000);
+            this.showToast(s.noIdsLoaded, 4000);
             await this.postResearchSend(treeId, { auto: false });
         }
     },

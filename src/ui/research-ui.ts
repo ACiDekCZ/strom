@@ -1172,7 +1172,7 @@ export const researchUiMethods = uiModule({
      * afterwards (asking when the user changed it in the app), switch to it.
      * Returns the tree, or null when the user cancelled.
      */
-    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean; afterSend?: TreeId }): Promise<TreeId | null> {
+    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean; afterSend?: TreeId; plainAsk?: boolean }): Promise<TreeId | null> {
         const name = source.name || strings.research.defaultName;
         const dateLabel = researchDateLabel(source.date);
         const existing = source.treeId ? TreeManager.findTreeByResearchId(source.treeId) : null;
@@ -1211,7 +1211,8 @@ export const researchUiMethods = uiModule({
             } else if (holdsChanges) {
                 // Replaced without asking (a backup is still kept below).
                 holdsSent = true;
-            } else if (edited && existing.research && this.researchSyncCapable(existing.research.id)) {
+            } else if (edited && existing.research && !opts.plainAsk && this.researchSyncCapable(existing.research.id)) {
+                // (plainAsk: a copy that cannot send yet — "send first" would only come back here.)
                 // A research that tells what it has: send first, or decide knowing it.
                 const choice = await this.showResearchUpdateConflict(existing.id, existing.name, data, includeImages);
                 if (choice === null) return null;

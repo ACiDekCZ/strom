@@ -95,6 +95,34 @@ describe('researchIdsByContent', () => {
         expect(out.data.persons['b' as PersonId].refn).toBe('P0002');
     });
 
+    it('finding 27: one-character and digit names, the sex written otherwise there, diacritics and case: still matched', () => {
+        const handed = tree();
+        const current = tree();
+        current.persons['a' as PersonId] = { ...current.persons['a' as PersonId], firstName: 'jedna' };
+        const theirs = research();
+        // The research's version without the sex (the parser then guesses), another case and accents.
+        theirs.persons['r1' as PersonId] = { ...theirs.persons['r1' as PersonId], gender: 'female' };
+        theirs.persons['r3' as PersonId] = { ...theirs.persons['r3' as PersonId], gender: 'female' };
+        handed.persons['b' as PersonId] = { ...handed.persons['b' as PersonId], firstName: 'Žofie  Nová' };
+        theirs.persons['r2' as PersonId] = { ...theirs.persons['r2' as PersonId], firstName: 'zofie', lastName: 'nova' };
+        const out = researchIdsByContent(current, handed, theirs);
+        expect(out.persons).toBe(3);
+        expect(out.data.persons['a' as PersonId]).toMatchObject({ firstName: 'jedna', refn: 'P0001' });
+        expect(out.data.persons['b' as PersonId].refn).toBe('P0002');
+        expect(out.data.persons['c' as PersonId].refn).toBe('P0003');
+    });
+
+    it('a looser round never pairs what a stricter one left ambiguous on either side', () => {
+        const handed = tree();
+        handed.persons['a' as PersonId] = { ...handed.persons['a' as PersonId], birthDate: '1900' };
+        handed.persons['c' as PersonId] = { ...handed.persons['c' as PersonId], firstName: '1', birthDate: '1910' };
+        const out = researchIdsByContent(handed, handed, research());
+        // Two "1" here (born 1900 and 1910), one there without a date: the name alone is not unique here.
+        expect(out.data.persons['a' as PersonId].refn).toBeUndefined();
+        expect(out.data.persons['c' as PersonId].refn).toBeUndefined();
+        expect(out.data.persons['b' as PersonId].refn).toBe('P0002');
+    });
+
     it('a person with a number already keeps it', () => {
         const handed = tree();
         const current = tree();

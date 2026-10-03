@@ -187,6 +187,37 @@ test.describe('the research\'s numbers after a hand-over', () => {
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.awaitingIds)).toBeUndefined();
     });
 
+    test('finding 27: names 1/2/3, "1" renamed before the load, the research\'s version writes no sex: still numbered, sent', async ({ page }) => {
+        const b = await handOver(page, { treeGed: null });
+        await renameOne(page);
+        await send(page);
+        const toast = page.locator('.toast', { hasText: 'Not sent.' });
+        await expect(toast).toBeVisible();
+        b.treeGed = researchVersion().replace(/\n1 SEX [MF]/g, '');
+        await toast.getByRole('button', { name: "Load the research's version" }).click();
+        await expect.poll(() => b.posts.length).toBe(1);
+        expect(people(b.posts[0])).toEqual(SENT_WITH_IDS);
+    });
+
+    test('finding 27: none of the research\'s people match: said so, its version taken over this tree on a yes, no circle', async ({ page }) => {
+        const b = await handOver(page, { treeGed: null });
+        await renameOne(page);
+        await send(page);
+        const toast = page.locator('.toast', { hasText: 'Not sent.' });
+        await expect(toast).toBeVisible();
+        b.treeGed = researchVersion().replace('1 NAME 1 //', '1 NAME Adam //').replace('1 NAME 2 //', '1 NAME Eva //').replace('1 NAME 3 //', '1 NAME Kain //');
+        await toast.getByRole('button', { name: "Load the research's version" }).click();
+        const ask = page.locator('#confirmation-modal');
+        await expect(ask).toContainText("The research's version doesn't match");
+        await ask.locator('#confirm-ok-btn').click();
+        // The plain question (never "send first": that would come back here).
+        const choice = page.locator('.dialog-confirm', { hasText: 'Changed in the app' });
+        await choice.getByRole('button', { name: 'Update' }).click();
+        await expect.poll(() => refns(page)).toEqual(['Adam:P0001', 'Eva:P0002', 'Kain:P0003']);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.awaitingIds)).toBeUndefined();
+        expect(b.posts).toHaveLength(0);
+    });
+
     test('refused as a copy without the research\'s numbers (tree.no-ids): its version brings them, sent again once', async ({ page }) => {
         const b = await handOver(page, { syncReplies: [
             { status: 400, body: { error: 'tato kopie stromu nenese osoby výzkumu', code: 'tree.no-ids', text: 'This copy does not carry the research\'s people.' } },

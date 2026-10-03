@@ -1709,18 +1709,30 @@ export function holdsResearchIds(data: StromData): boolean {
     return people.length === 0 || people.some(p => !!p.refn && /^P\d{1,9}$/.test(p.refn.trim()));
 }
 
+/** A name as both sides compare it: diacritics, case and spacing aside; every word kept (one letter, a digit). */
+function foldName(v: string | undefined): string {
+    return (v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 /**
  * The research's numbers onto a copy that went over without them (neither
  * the hand-over's `ids` nor the research's version came): each person of the
- * research's version is matched to the state that went over by name, sex and
- * dates — a match that is unique on both sides only — and the number is set
- * on the current tree's person of that id, edits since kept. Sources by title,
- * archive, page and wording. Returns the tree and how many people got a number.
+ * research's version is matched to the state that went over, and the number
+ * is set on the current tree's person of that id, edits since kept. People go
+ * in rounds, each taking only a match unique on both sides among those still
+ * unmatched: name, sex and dates; then name and dates (the research may write
+ * the sex otherwise); then the whole name alone. Sources by title, archive,
+ * page and wording. Returns the tree and how many people got a number.
  */
 export function researchIdsByContent(current: StromData, handedOver: StromData, research: StromData): { data: StromData; persons: number; sources: number } {
+    type P = StromData['persons'][PersonId];
     const norm = (v: string | undefined): string => (v ?? '').trim().toLowerCase();
-    const personKey = (p: StromData['persons'][PersonId]): string =>
-        [p.firstName, p.lastName, p.gender, p.birthDate, p.deathDate].map(norm).join('\u0000');
+    const name = (p: P): string => foldName(`${p.firstName ?? ''} ${p.lastName ?? ''}`);
+    const personRounds: ((p: P) => string)[] = [
+        p => [name(p), norm(p.gender), norm(p.birthDate), norm(p.deathDate)].join('\u0000'),
+        p => [name(p), norm(p.birthDate), norm(p.deathDate)].join('\u0000'),
+        p => name(p),
+    ];
     const sourceKey = (src: Source): string =>
         [src.title, src.repository, src.reference, src.transcript].map(norm).join('\u0000');
     const unique = <T>(records: [string, T][], key: (r: T) => string): Map<string, string> => {
@@ -1733,18 +1745,28 @@ export function researchIdsByContent(current: StromData, handedOver: StromData, 
         for (const [k, id] of seen) if (id) out.set(k, id);
         return out;
     };
-    const live = (d: StromData) => Object.entries(d.persons ?? {}).filter(([, p]) => p && !p.isPlaceholder) as [string, StromData['persons'][PersonId]][];
-    const before = unique(live(handedOver), personKey);
-    const theirs = unique(live(research).filter(([, p]) => !!p.refn), personKey);
+    const live = (d: StromData) => Object.entries(d.persons ?? {}).filter(([, p]) => p && !p.isPlaceholder) as [string, P][];
+    let before = live(handedOver);
+    let theirs = live(research).filter(([, p]) => !!p.refn?.trim());
     const persons = { ...current.persons };
     let np = 0;
-    for (const [k, rid] of theirs) {
-        const id = before.get(k) as PersonId | undefined;
-        const p = id ? persons[id] : undefined;
-        const refn = research.persons[rid as PersonId]?.refn?.trim();
-        if (!p || !refn || p.refn) continue;
-        persons[id!] = { ...p, refn, refnType: RESEARCH_REFN_TYPE };
-        np++;
+    for (const key of personRounds) {
+        const mine = unique(before, key);
+        const matched = new Set<string>();
+        const taken = new Set<string>();
+        for (const [k, rid] of unique(theirs, key)) {
+            const id = mine.get(k) as PersonId | undefined;
+            if (!id) continue;
+            matched.add(rid);
+            taken.add(id);
+            const p = persons[id];
+            const refn = research.persons[rid as PersonId]?.refn?.trim();
+            if (!p || !refn || p.refn) continue;
+            persons[id] = { ...p, refn, refnType: RESEARCH_REFN_TYPE };
+            np++;
+        }
+        before = before.filter(([id]) => !taken.has(id));
+        theirs = theirs.filter(([id]) => !matched.has(id));
     }
     let ns = 0;
     const sources = current.sources ? { ...current.sources } : undefined;
