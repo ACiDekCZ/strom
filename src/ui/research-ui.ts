@@ -54,7 +54,7 @@ import {
     noteResearchBridge, noteResearchBridgeStatus, patchResearchAutoState,
 } from '../research-device.js';
 import { rememberBridgeStatus } from './research-sync-ui.js';
-import { sourceReadings, researchSendVouches } from '../research-sync.js';
+import { sourceReadings, researchSendVouches, conflictTakeovers } from '../research-sync.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -1006,6 +1006,12 @@ export const researchUiMethods = uiModule({
             // Served from 127.0.0.1: the research is on this computer.
             const header = readResearchHeader(text);
             if (header.isStromResearch) noteResearchLinks(header.links);
+            // Served by the research's bridge (…/tree.ged): where it runs, and how (its mode, what it
+            // takes) — asked, so the tree knows its bridge from now on, not only after a ?live=.
+            if (header.isStromResearch && header.treeId && /\/tree\.ged$/.test(url.pathname)) {
+                const base = `${url.origin}${url.pathname.replace(/\/tree\.ged$/, '')}`;
+                void fetchStatus(`${base}/status`, 4000).then(() => this.refreshResearchSyncUi()).catch(() => undefined);
+            }
             await this.openGedcomText(text, opts);
         });
     },
@@ -1196,11 +1202,13 @@ export const researchUiMethods = uiModule({
             // the tree has not changed since — its newer version holds it all.
             const sent = existing.research?.sent;
             const sentIsTree = !!previous && !!sent && contentFingerprint(previous) === sent.fingerprint;
-            const holdsChanges = edited && lost === 0 && sentIsTree && researchSendVouches(sent);
+            // …unless a conflict still open there is about a value the user has here: theirs would go (finding 37).
+            const takesOver = !!previous && conflictTakeovers(previous, stabilizeIds(data, previous)).length > 0;
+            const holdsChanges = edited && lost === 0 && sentIsTree && researchSendVouches(sent) && !takesOver;
             // The tree is what was sent and written, but the research did not take it all (nothing
             // written, a conflict left): asked plainly — "send first" would send nothing new (findings 29, 35).
             // (Waiting in its inbox, or taken back: "send, then load" still means something.)
-            const plainAsk = !!opts.plainAsk || (sentIsTree && sent?.state === 'written' && !researchSendVouches(sent));
+            const plainAsk = !!opts.plainAsk || (sentIsTree && sent?.state === 'written' && (!researchSendVouches(sent) || takesOver));
             // The question is about that tree: show it behind the dialog, never
             // whichever tree was open (the user must see what they decide on).
             if (action === 'ask' && previous && !unreadable && !holdsChanges && DataManager.getCurrentTreeId() !== existing.id) {
@@ -1570,7 +1578,9 @@ export const researchUiMethods = uiModule({
         }
         const researchId = this.activeResearchId();
         const stored = researchId ? storedResearchWaiting(researchId) : null;
-        return stored ? { ...stored, live: false } : null;
+        if (!stored) return null;
+        // An archive has no tasks for the user (whatever its status or an old list says); its update and last send stay.
+        return { ...stored, items: this.activeResearchArchive() ? [] : stored.items, live: false };
     },
 
     /** Research menu "Waiting for you": the live panel open at that section, or the last known state. */

@@ -40,11 +40,11 @@ import {
 import { loadResearchCopy } from '../research-copy.js';
 import {
     noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, storedResearchBridge, researchLinksEnabled,
-    researchAutoState, patchResearchAutoState, researchAutoIntroSeen, noteResearchAutoIntroSeen,
+    researchAutoState, patchResearchAutoState, researchAutoIntroSeen, noteResearchAutoIntroSeen, forgetResearchWaitingItems, anyResearchBridgeKnown,
 } from '../research-device.js';
 import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
-    pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, researchSendVouches,
+    pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, researchSendVouches, conflictTakeovers,
 } from '../research-sync.js';
 import { uiModule } from './module.js';
 import { researchWrittenList } from './research-changes-ui.js';
@@ -201,6 +201,8 @@ function personsByResearchRefs(data: StromData, refs: readonly string[]): Person
 interface KnownConflicts {
     conflicts: number | null;
     refs: string[];
+    /** The conflicts' own ids, when the reply names them. */
+    ids?: string[];
 }
 
 /** The fingerprints of a tree's data against its research link. */
@@ -337,7 +339,8 @@ export const researchSyncMethods = uiModule({
     /** Agent or archive: the bridge's word (now or last time), else the file's (`_STROM_MODE`). */
     researchModeOf(researchId: string, link?: Pick<ResearchLink, 'mode'>): 'agent' | 'archive' {
         const accepts = runtime.get(researchId)?.status?.accepts ?? storedResearchBridge(researchId)?.accepts;
-        if (accepts) return accepts.mode;
+        // A bridge that does not say its mode (older) does not outweigh the file's archive.
+        if (accepts && (accepts.modeSaid || link?.mode !== 'archive')) return accepts.mode;
         return link?.mode === 'archive' ? 'archive' : 'agent';
     },
 
@@ -349,6 +352,26 @@ export const researchSyncMethods = uiModule({
     researchTranscriptsLink<L extends Pick<ResearchLink, 'id' | 'transcripts' | 'mode'>>(link: L): L {
         return link.transcripts !== undefined && this.researchModeOf(link.id, link) === 'archive'
             ? { ...link, transcripts: undefined } : link;
+    },
+
+    /**
+     * The active research tree's mode is known here: its bridge answered (now or
+     * before), or its file says archive. Researches hand their bridge over
+     * (1.11+); when this browser knows bridges of others but never heard of this
+     * one's (it reached another browser, or the public app), the tree is neither
+     * shown as working with an agent nor given its old "waiting for you". With
+     * no bridge known at all (an older research, links from its file), as before.
+     */
+    activeResearchModeKnown(): boolean {
+        const ctx = this.researchSyncLink();
+        if (!ctx) return false;
+        const id = ctx.link.id;
+        return !!runtime.get(id)?.status || !!storedResearchBridge(id)?.base || ctx.link.mode === 'archive' || !anyResearchBridgeKnown();
+    },
+
+    /** Nothing that leads to an agent: an archive, or a research whose mode is not known here. */
+    activeResearchNoAgent(): boolean {
+        return this.activeResearchArchive() || !this.activeResearchModeKnown();
     },
 
     /** The active research tree is an archive (no agent): the agent's actions are not offered. */
@@ -536,6 +559,8 @@ export const researchSyncMethods = uiModule({
         const st = researchAutoState(treeId);
         if (!st.modeSeen) patchResearchAutoState(treeId, { modeSeen: mode });
         else if (st.modeSeen !== mode && !st.modeSince) patchResearchAutoState(treeId, { modeSince: new Date().toISOString() });
+        // An archive: the tasks it listed with an agent are not the user's any more.
+        if (mode === 'archive') forgetResearchWaitingItems(link.id);
     },
 
     /** A send waiting in the research (its inbox, or still being written): written, discarded, or still there. */
@@ -599,6 +624,16 @@ export const researchSyncMethods = uiModule({
             await this.researchAfterWrite(treeId, closed,
                 fate.conflicts !== undefined ? { conflicts: fate.conflicts ?? null, refs: fate.conflictPersons ?? [] } : undefined);
         }
+    },
+
+    /** When a send of this tree went, by the research's mark: its record there, else this app's own. */
+    researchSendTime(treeId: TreeId, link: ResearchLink, intake: string): string {
+        if (!intake) return '';
+        const rec = runtime.get(link.id)?.status?.sends?.find(r => r.intake === intake);
+        if (rec?.at) return rec.at;
+        if (link.sent?.intake === intake) return link.sent.at;
+        const lw = researchAutoState(treeId).lastWritten;
+        return lw?.intake === intake ? lw.at : '';
     },
 
     /**
@@ -737,7 +772,9 @@ export const researchSyncMethods = uiModule({
             this.refreshResearchSyncUi();
             return;
         }
-        await this.postResearchSend(treeId, { auto: true, thenLoad: why === 'newer', keepalive: why === 'leave' });
+        // The research newer: load its version after the write.
+        const newer = why === 'newer' || (active && this.currentResearchSyncState().core === 'unsentAndNewer');
+        await this.postResearchSend(treeId, { auto: true, thenLoad: newer, keepalive: why === 'leave' });
     },
 
     /** After an answer from the bridge: what waited for it goes now; a written send's new version loads quietly. */
@@ -747,9 +784,12 @@ export const researchSyncMethods = uiModule({
         const { treeId, link } = ctx;
         if (this.researchAutoOn(link) && this.researchBridgeFresh(link.id) && !sendingTree) {
             const kind = this.currentResearchSyncState().core;
-            // Not sent, and the research has a newer version: send now (it loads after the write).
-            if (kind === 'unsentAndNewer') { await this.researchAutoSend(treeId, 'newer'); return; }
-            if (autoDue.has(treeId)) { await this.researchAutoSend(treeId, 'bridge'); return; }
+            // Not sent, and the research has a newer version: send now (it loads after the write) — unless
+            // that version is the one a write left conflicts in: it does not load after a send anyway, and
+            // each edit would go at once (a new conflict each); then the quiet time as any edit.
+            const conflictsLeft = (link.sent?.state === 'written' && (link.sent.conflicts ?? 0) > 0);
+            if (kind === 'unsentAndNewer' && !conflictsLeft) { await this.researchAutoSend(treeId, 'newer'); return; }
+            if (autoDue.has(treeId)) { await this.researchAutoSend(treeId, kind === 'unsentAndNewer' ? 'newer' : 'bridge'); return; }
         }
         await this.researchQuietLoad(treeId);
     },
@@ -946,10 +986,13 @@ export const researchSyncMethods = uiModule({
         };
         // The copy still carries sends the research took back since its base (`undoneSince`, 1.12): what
         // it wrote stands, but the app and the research differ by those — never shown as in step, nor
-        // loaded quietly over them. The bar "taken back": Send again (theirs again) or load (the undo kept).
+        // loaded quietly over them. The bar "taken back" names the send taken back, at its own time
+        // (findings 38, 39): Send again (theirs again) or load (the undo kept).
         const undone = !again && reply.undoneSince.length > 0;
+        const undoneIntake = undone ? reply.undoneSince[reply.undoneSince.length - 1] : '';
         TreeManager.patchResearchLink(treeId, { refused: undefined, sentSources: sourceReadings(data),
-            sent: undone ? { ...sent, state: 'undone', intake: reply.undoneSince[reply.undoneSince.length - 1], closedAt: now, noticed: true } : sent });
+            sent: undone ? { ...sent, at: this.researchSendTime(treeId, link, undoneIntake) || now, state: 'undone', intake: undoneIntake,
+                closedAt: now, noticed: true } : sent });
         if (written && reply.changes !== 0) this.researchNoteWritten(treeId, sentFp, now);
         // Edits since the send taken back were not in it: they still wait.
         if (sentFp === fps.current) patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined, toldRefused: undefined });
@@ -958,6 +1001,12 @@ export const researchSyncMethods = uiModule({
             console.warn('The copy sent carries sends the research took back since', reply.undoneSince);
             this.refreshResearchSyncUi();
             this.tellResearchUndoneChoice(s.undoneSinceToast(reply.undoneSince.length));
+            // This send itself was written: remembered and its conflicts told like any write (nothing loads —
+            // the copy and the research differ by the send taken back).
+            if (written && reply.changes !== 0) {
+                await this.researchAfterWrite(treeId, sent,
+                    reply.conflicts !== null ? { conflicts: reply.conflicts, refs: reply.conflictPersons, ids: reply.conflictIds } : undefined);
+            }
             return;
         }
         autoDue.delete(treeId);
@@ -980,7 +1029,7 @@ export const researchSyncMethods = uiModule({
                 await this.researchLoadNewer({ afterSend: true });
             } else {
                 await this.researchAfterWrite(treeId, sent,
-                    reply.conflicts !== null ? { conflicts: reply.conflicts, refs: reply.conflictPersons } : undefined);
+                    reply.conflicts !== null ? { conflicts: reply.conflicts, refs: reply.conflictPersons, ids: reply.conflictIds } : undefined);
             }
         } else if (writing) {
             if (!opts.auto) this.showToast(strings.sync.markWriting, 4000);
@@ -1025,9 +1074,10 @@ export const researchSyncMethods = uiModule({
             : loaded?.conflictPersons ?? [];
         const conflicts = known && known.conflicts !== null ? known.conflicts : loaded?.conflicts ?? 0;
         if (conflicts > 0) {
-            patchResearchAutoState(treeId, { lastWritten: { ...base, conflicts, persons: persons.slice(0, 20) } });
+            patchResearchAutoState(treeId, { lastWritten: { ...base, conflicts, persons: persons.slice(0, 20),
+                ...(known?.ids?.length ? { conflictIds: known.ids.slice(0, 20) } : {}) } });
             const link = TreeManager.getTreeMetadata(treeId)?.research;
-            if (link?.sent) TreeManager.patchResearchLink(treeId, { sent: { ...link.sent, conflicts } });
+            if (link?.sent && link.sent.at === sent.at) TreeManager.patchResearchLink(treeId, { sent: { ...link.sent, conflicts } });
         }
         const s = strings.sync;
         if (sent.manual) {
@@ -1210,6 +1260,12 @@ export const researchSyncMethods = uiModule({
             return null;
         }
         const stable = carried.data;
+        // A conflict still open there over a value the user has here: their value would go (finding 37) —
+        // that version is loaded only when asked.
+        if (conflictTakeovers(previous, stable).length > 0) {
+            quietSkippedHead = header.head ?? remote;
+            return null;
+        }
         const before = openConflictCounts(previous);
         // One window loads (another window of this tree may be at it too).
         if (!await this.researchWindowLock(treeId, true, async () => {
@@ -1399,6 +1455,7 @@ export const researchSyncMethods = uiModule({
             }
             case 'downloadGedcom': void this.downloadResearchGedcom(ctx.treeId); break;
             case 'showConflicts': this.researchShowConflicts(this.researchWrittenConflictPersons(ctx.treeId)); break;
+            case 'conflicts': this.openResearchSyncMenu(); break;
             case 'decideInResearch': {
                 const url = this.researchDecideUrl(ctx.treeId);
                 if (url) this.launchResearchLink(url);
@@ -1432,12 +1489,18 @@ export const researchSyncMethods = uiModule({
     /** The persons the last write's conflicts are about, while they are still open. */
     researchWrittenConflictPersons(treeId: TreeId): PersonId[] {
         const persons = (researchAutoState(treeId).lastWritten?.persons ?? []) as PersonId[];
+        // The research's version not loaded: its new conflicts are not in this tree yet — the people it named.
+        if (this.currentResearchSyncState().kind === 'writtenConflicts') return persons.filter(id => DataManager.getPerson(id));
         return persons.filter(id => this.personOpenConflicts(id).length > 0);
     },
 
     /** "Decide in the research ↗": the one open conflict of the one person, when the research announced the link. */
     researchDecideUrl(treeId: TreeId): string | null {
         if (!this.researchLinkAvailable('conflict')) return null;
+        // The one conflict the write's reply named (it may not be in this tree yet).
+        const named = researchAutoState(treeId).lastWritten?.conflictIds ?? [];
+        if (named.length === 1) return this.activeResearchLink('conflict', { conflict: named[0], conflictDo: 'decide' });
+        if (named.length > 1) return null;
         const persons = this.researchWrittenConflictPersons(treeId);
         if (persons.length !== 1) return null;
         const open = this.personOpenConflicts(persons[0]);
@@ -1527,6 +1590,18 @@ export const researchSyncMethods = uiModule({
                     if (treeId && this.researchDecideUrl(treeId)) actions.push({ action: 'decideInResearch', label: s.decideInResearch, asLink: true });
                 }
                 return { tone: 'quiet', title: s.writtenAt(when(lw?.at)), sub: parts.join(' · ') || undefined, actions };
+            },
+            writtenConflicts: () => {
+                const lw = autoState.lastWritten;
+                const conflicts = Math.max(state.sent?.conflicts ?? 0, lw?.conflicts ?? 0, 1);
+                const persons = (lw?.persons ?? []).filter(id => DataManager.getPerson(id as PersonId)) as PersonId[];
+                const one = persons.length === 1 ? DataManager.getPerson(persons[0]) : null;
+                const name = one ? `${one.firstName} ${one.lastName}`.trim() : '';
+                const actions: Action[] = [];
+                if (treeId && this.researchDecideUrl(treeId)) actions.push({ action: 'decideInResearch', label: s.decideInResearch, asLink: true });
+                if (persons.length) actions.push({ action: 'showConflicts', label: name ? `${name} ›` : `${s.showConflicts} ›`, asLink: true });
+                actions.push({ action: 'loadNewer', label: s.loadVersion, asLink: true });
+                return { tone: 'neutral', title: s.flyConflict(conflicts), sub: [s.writtenAt(when(lw?.at ?? state.sent?.closedAt)), s.writtenConflictsSub].join(' · '), actions };
             },
             unsent: () => ({ tone: 'warn', title: s.stateUnsent, sub: changed ? s.changedAt(changed) : undefined, actions: [{ action: 'send', label: s.send }] }),
             sentPending: () => ({ tone: 'neutral', title: s.stateSent(when(state.sent?.at), state.sent?.changes ?? null),
@@ -1662,6 +1737,8 @@ export const researchSyncMethods = uiModule({
         const warn: Partial<Record<ResearchSyncKind, { text: string; button: string; action: string }>> = {
             unsentAndNewer: { text: s.barUnsent, button: s.barSend, action: 'sendThenLoad' },
             stale: { text: s.pillStale, button: strings.storageSafety.reload, action: 'reload' },
+            // A write left conflicts: they stay in sight until decided or the version is loaded (finding 40).
+            writtenConflicts: { text: s.flyConflict(Math.max(state.sent?.conflicts ?? 0, 1)), button: s.showConflicts, action: 'conflicts' },
             ...(auto ? {
                 autoBridgeDown: { text: archive ? s.pillBridgeDownWaiting(Math.max(1, researchAutoState(ctx.treeId).edits ?? 1)) : s.pillBridgeDown,
                     button: s.pillStart, action: 'startResearch' },
@@ -1670,7 +1747,9 @@ export const researchSyncMethods = uiModule({
             } : {}),
         };
         const w = warn[kind];
-        if (w && (w.action !== 'startResearch' || this.researchLinkAvailable('open') || this.researchLinkAvailable('live'))) {
+        // A new conflict's note (with the person) first; the pill once it goes.
+        const noteFirst = kind === 'writtenConflicts' && note?.kind === 'conflict';
+        if (w && !noteFirst && (w.action !== 'startResearch' || this.researchLinkAvailable('open') || this.researchLinkAvailable('live'))) {
             this.closeResearchSyncNote();
             set('is-warn', '<span class="research-sync-pill-mark" aria-hidden="true">!</span>'
                 + `<span class="research-sync-pill-label" onclick="${call('openResearchSyncMenu')}">${esc(w.text)}</span>`
@@ -1807,10 +1886,13 @@ export const researchSyncMethods = uiModule({
         if (!note) return;
         if (note.timer) clearTimeout(note.timer);
         if (note.kind === 'intro') noteResearchAutoIntroSeen();
+        const wasConflict = note.kind === 'conflict';
         note = null;
         const pill = document.getElementById('research-sync-pill');
         pill?.querySelector('.research-sync-note')?.remove();
         if (pill) pill.dataset.html = pill.innerHTML;
+        // The conflicts it told may still wait (the pill says so from now on).
+        if (wasConflict) this.renderResearchSyncPill();
     },
 
     /** The row in "Where your data is" while the research lacks the changes (null otherwise). */

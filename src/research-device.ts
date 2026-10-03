@@ -79,6 +79,17 @@ export function noteResearchWaiting(
     } catch { /* no storage: the count just is not remembered */ }
 }
 
+/** Drop the remembered tasks (an archive has none for the user); its update and last send stay. */
+export function forgetResearchWaitingItems(researchId: string): void {
+    try {
+        const raw = localStorage.getItem(WAITING_KEY + researchId);
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        if (!Array.isArray(parsed.items) || parsed.items.length === 0) return;
+        localStorage.setItem(WAITING_KEY + researchId, JSON.stringify({ ...parsed, items: [] }));
+    } catch { /* nothing remembered */ }
+}
+
 /** The remembered list, or null when there is none or it is older than a week. */
 export function storedResearchWaiting(researchId: string, now = Date.now()): StoredResearchWaiting | null {
     try {
@@ -137,11 +148,23 @@ function writeBridge(researchId: string, value: StoredResearchBridge): void {
                     ...(value.accepts.mediaBatch ? { batch: value.accepts.mediaBatch } : {}),
                     ...(value.accepts.mediaEstimate ? { estimate: value.accepts.mediaEstimate } : {}),
                 } } : {}),
-                ...(value.accepts.mode === 'archive' ? { mode: 'archive' } : {}),
+                // Said by the bridge: kept either way (an archive switched back to research too).
+                ...(value.accepts.mode === 'archive' ? { mode: 'archive' } : value.accepts.modeSaid ? { mode: 'research' } : {}),
             } } : {}),
             ...(value.head ? { head: value.head } : {}),
         }));
     } catch { /* no storage: the bridge is found again at the next ?live= / ?send= */ }
+}
+
+/** Does this browser know the bridge of any research (one that hands its bridge over, 1.11+)? */
+export function anyResearchBridgeKnown(): boolean {
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key?.startsWith(BRIDGE_KEY) && storedResearchBridge(key.slice(BRIDGE_KEY.length))?.base) return true;
+        }
+    } catch { /* no storage */ }
+    return false;
 }
 
 /** The research reached this page at `base` (?live= / ?send= / a status from it): remember where. */
@@ -175,7 +198,7 @@ const INTRO_KEY = 'strom-research-auto-intro-seen';
  */
 export interface ResearchAutoState {
     /** The last send the research wrote, and the conflicts it left. */
-    lastWritten?: { at: string; changes: number | null; conflicts: number; persons?: string[]; intake?: string; fingerprint?: string };
+    lastWritten?: { at: string; changes: number | null; conflicts: number; persons?: string[]; conflictIds?: string[]; intake?: string; fingerprint?: string };
     /** The research's mode the user last saw ("switched" is said once). */
     modeSeen?: 'agent' | 'archive';
     /** When the mode last switched (ISO): the line in Research for this tree. */
@@ -203,6 +226,7 @@ export function researchAutoState(treeId: string): ResearchAutoState {
                 changes: typeof lw.changes === 'number' && lw.changes >= 0 ? Math.floor(lw.changes) : null,
                 conflicts: typeof lw.conflicts === 'number' && lw.conflicts > 0 ? Math.floor(lw.conflicts) : 0,
                 ...(Array.isArray(lw.persons) ? { persons: lw.persons.filter((x): x is string => typeof x === 'string').slice(0, 20) } : {}),
+                ...(Array.isArray(lw.conflictIds) ? { conflictIds: lw.conflictIds.filter((x): x is string => typeof x === 'string' && /^X\d{1,9}$/.test(x)).slice(0, 20) } : {}),
                 ...(typeof lw.intake === 'string' ? { intake: lw.intake } : {}),
                 ...(typeof lw.fingerprint === 'string' ? { fingerprint: lw.fingerprint } : {}),
             };

@@ -108,7 +108,7 @@ export const personResearchMethods = uiModule({
         const sources = DataManager.getData().sources ?? {};
         const canDecide = this.researchLinkAvailable('conflict') && this.personResearchRef(personId) !== null;
         // An archive has no agent to leave a conflict to: deciding stays (in the research).
-        const toAgent = !this.activeResearchArchive();
+        const toAgent = !this.activeResearchNoAgent();
 
         const sourceCell = (v: ResearchConflictValue): string => {
             const id = v.sourceIds?.find(sid => sources[sid]);

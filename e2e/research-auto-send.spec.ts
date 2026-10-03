@@ -354,9 +354,95 @@ test('finding 29: a write that left a conflict (named in the reply): the note sa
     await editJan(page);
     await page.clock.fastForward(QUIET + 1000);
     await expect.poll(() => bridge.posts.length).toBe(1);
-    await expect(page.locator('.research-sync-note')).toContainText('Written, 1 conflict to decide');
+    await expect(pill(page)).toContainText('Written, 1 conflict to decide');
     for (let i = 0; i < 3; i++) { await poll(page); await page.clock.fastForward(30_000); }
     expect(await janPlace(page)).toBe('Praha');
+});
+
+/** Jan by the research's number (his first name changes in these tests). */
+const janFirst = (page: Page) => page.evaluate(() =>
+    (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.lastName === 'Víšek' && p.firstName !== 'Josef') as any).firstName);
+const janBirthPlace = (page: Page, place: string) => page.evaluate((place) => {
+    const dm = window.Strom.DataManager;
+    const jan = Object.values(dm.getData().persons).find((p: any) => p.lastName === 'Víšek' && p.firstName !== 'Josef') as any;
+    dm.updatePerson(jan.id, { birthPlace: place });
+}, place);
+const janWhere = (page: Page) => page.evaluate(() =>
+    (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.lastName === 'Víšek' && p.firstName !== 'Josef') as any).birthPlace ?? '');
+const renameJan = (page: Page, first: string) => page.evaluate((first) => {
+    const dm = window.Strom.DataManager;
+    const jan = Object.values(dm.getData().persons).find((p: any) => p.lastName === 'Víšek' && p.firstName !== 'Josef') as any;
+    dm.updatePerson(jan.id, { firstName: first });
+}, first);
+/** The research's version: its own name for Jan, the conflict about it still open, the user's birth place written. */
+const nameConflictGed = (head: string, birth: string[] = []) => researchGed(head, [...birth,
+    '1 _STROM_CONFLICT X0001', '2 TYPE NAME', '2 STAT open', '2 VAL Jan /Víšek/', '2 VAL Jenda /Víšek/']);
+
+test('finding 37: a later send written without a conflict never takes over the name an earlier conflict is about', async ({ page }) => {
+    const bridge = await autoTree(page);
+    // 1st send: the rename, written with a conflict (the research keeps its name).
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0001', person: 'P0003', fact: 'NAME' }] } };
+    bridge.onWrite = () => ({ head: 'c1c1c1c1c1c1', ged: nameConflictGed('c1c1c1c1c1c1') });
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    // 2nd send: only the birth place, written, nothing new to decide; the version still has the research's name.
+    bridge.syncReply = WRITE;
+    bridge.onWrite = () => ({ head: 'c2c2c2c2c2c2', ged: nameConflictGed('c2c2c2c2c2c2', ['1 BIRT', '2 PLAC Praha']) });
+    await janBirthPlace(page, 'Praha');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    for (let i = 0; i < 3; i++) { await poll(page); await page.clock.fastForward(30_000); }
+    expect(await janFirst(page)).toBe('Jenda');
+    expect(await janWhere(page)).toBe('Praha');
+    // Its version waits for the user, asked.
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    await expect(page.locator('.dialog-confirm', { hasText: 'Changed in the app' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    expect(await janFirst(page)).toBe('Jenda');
+});
+
+test('finding 40: a write that left a conflict stays in sight after the note goes: the block and the pill, its version offered (asked)', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    const bridge = await autoTree(page);
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0001', person: 'P0003', fact: 'NAME' }] } };
+    bridge.onWrite = () => ({ head: 'c1c1c1c1c1c1', ged: nameConflictGed('c1c1c1c1c1c1') });
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    await expect(page.locator('.research-sync-note')).toContainText('Written, 1 conflict to decide');
+    // The note goes; the conflict stays on the toolbar.
+    await page.clock.fastForward(30_000);
+    await poll(page);
+    await expect(page.locator('.research-sync-note')).toHaveCount(0);
+    await expect(pill(page)).toContainText('Written, 1 conflict to decide');
+    await expect(pill(page).getByRole('button', { name: 'Show' })).toBeVisible();
+    await openResearchMenu(page);
+    await expect(block(page)).toHaveAttribute('data-state', 'writtenConflicts');
+    await expect(block(page)).toContainText('Your value stays here');
+    await block(page).getByRole('button', { name: "Load the research's version" }).click();
+    await expect(page.locator('.dialog-confirm', { hasText: 'Changed in the app' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    expect(await janFirst(page)).toBe('Jenda');
+});
+
+test('findings 38/39: a copy carrying a send taken back, the next send written with a conflict: the conflict told and kept, the bar names the send taken back at its own time', async ({ page }) => {
+    const bridge = await writtenThenUndone(page);
+    const undone = bridge.sends.find(r => r.state === 'undone')!;
+    await page.clock.fastForward(5 * 60_000);
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, input: 'I0043', conflicts: [{ id: 'X0002', person: 'P0003', fact: 'NAME' }], undoneSince: [undone.intake] } };
+    bridge.onWrite = () => ({ head: 'd2d2d2d2d2d2', ged: nameConflictGed('d2d2d2d2d2d2') });
+    await renameJan(page, 'Jenda');
+    // By itself (by hand, Send again would ask the research to write the send taken back).
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    await expect(page.locator('.toast', { hasText: 'The research took back a send this copy of the tree still carries' })).toBeVisible();
+    const sent = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent);
+    expect(sent).toMatchObject({ state: 'undone', intake: undone.intake, at: undone.at });
+    const lw = await page.evaluate((id) => JSON.parse(localStorage.getItem(`strom-research-auto:${id}`) ?? '{}').lastWritten, await treeId(page));
+    expect(lw).toMatchObject({ conflicts: 1, conflictIds: ['X0002'] });
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).toBe('undone');
+    expect(await janFirst(page)).toBe('Jenda');
 });
 
 test('a write that takes longer (202): "writing" until the status says written, then loaded quietly', async ({ page }) => {
@@ -520,7 +606,8 @@ test.describe('the research as an archive', () => {
         await poll(page);
         await openResearchMenu(page);
         const sub = page.locator('#actions-research-submenu');
-        await expect(sub.locator('#research-item-version')).toBeVisible();
+        // In step with a running bridge: no "Load new version" row (the block offers one when there is).
+        await expect(sub.locator('#research-item-version')).toHaveCount(0);
         await expect(sub.locator('#research-item-open')).toBeVisible();
         await expect(sub.locator('#research-item-tree-settings')).toBeVisible();
         for (const id of ['research-item-chat', 'research-item-undo', 'research-item-live', 'research-item-send']) {
@@ -535,6 +622,59 @@ test.describe('the research as an archive', () => {
         for (const a of ['research-review', 'research-ancestors', 'research-descendants', 'research-ask', 'research']) expect(actions).not.toContain(a);
     });
 
+    test('the bridge switches to archive while the page is open: the menu changes at its next answer, no reload', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page, { auto: true });
+        const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null },
+            links: ['send', 'open', 'live', 'app', 'setup', 'chat', 'review', 'research', 'sync-undo'] });
+        await page.evaluate(() => localStorage.setItem('strom-research-auto-intro-seen', '1'));
+        await poll(page);
+        await openResearchMenu(page);
+        const sub = page.locator('#actions-research-submenu');
+        await expect(sub.locator('#research-item-chat')).toBeVisible();
+        await expect(sub.locator('#research-item-live')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        bridge.accepts = ARCHIVE;
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(sub.locator('#research-item-chat')).toHaveCount(0);
+        await expect(sub.locator('#research-item-live')).toHaveCount(0);
+        await expect(sub).not.toContainText('paid');
+        // And back: the agent's rows again, at the next answer.
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        bridge.accepts = { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null };
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(sub.locator('#research-item-chat')).toBeVisible();
+    });
+
+    test('the research\'s bridge never reached this browser (others did): no agent rows, no old "waiting"; its ?import-url= pairs it, the menu follows', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page, { auto: true, bridge: false });
+        await page.evaluate(({ uuid }) => {
+            // Another research's bridge is known here; this one's not. Links were announced, a list was kept.
+            localStorage.setItem('strom-research-bridge:11111111-2222-4333-8444-555555555555', JSON.stringify({ base: 'http://127.0.0.1:5997/ffffffffffffffffffffffffffffffff' }));
+            localStorage.setItem('strom-research-links', JSON.stringify({ actions: ['send', 'open', 'live', 'app', 'setup', 'chat'], at: new Date().toISOString() }));
+            localStorage.setItem(`strom-research-waiting:${uuid}`, JSON.stringify({ items: [{ id: 'T0010', what: 'Confirm', at: new Date().toISOString() }], at: new Date().toISOString() }));
+            localStorage.setItem('strom-research-auto-intro-seen', '1');
+        }, { uuid: UUID });
+        await openResearchMenu(page);
+        const sub = page.locator('#actions-research-submenu');
+        await expect(sub.locator('#research-item-open')).toBeVisible();
+        for (const id of ['research-item-chat', 'research-item-live', 'research-item-waiting']) await expect(sub.locator(`#${id}`)).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        // The research opens its version here from its bridge: the bridge is known from now on, its mode said.
+        await fakeBridge(page, { accepts: ARCHIVE, links: ['send', 'open', 'live', 'app', 'setup', 'chat'] });
+        await page.evaluate((u) => window.Strom.UI.openExternalRequest(new URLSearchParams({ 'import-url': u })), `${BRIDGE}/tree.ged`);
+        await expect.poll(() => page.evaluate((uuid) => !!localStorage.getItem(`strom-research-bridge:${uuid}`), UUID)).toBe(true);
+        await expect.poll(() => page.evaluate(() => window.Strom.UI.activeResearchArchive())).toBe(true);
+        // An archive: the old tasks are gone, not only hidden.
+        await poll(page);
+        expect(await page.evaluate((uuid) => JSON.parse(localStorage.getItem(`strom-research-waiting:${uuid}`) ?? '{}').items, UUID)).toEqual([]);
+        await openResearchMenu(page);
+        for (const id of ['research-item-chat', 'research-item-live', 'research-item-waiting']) await expect(sub.locator(`#${id}`)).toHaveCount(0);
+    });
+
     test('a switch of mode is said once (the dot until Got it, nothing after a reload); the dialog keeps the date', async ({ page }) => {
         await page.clock.install();
         await openResearch(page, { auto: true });
@@ -547,7 +687,7 @@ test.describe('the research as an archive', () => {
         await expect(dot(page)).toBeVisible();
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'switched');
-        await expect(block(page)).toContainText('The research is an archive again.');
+        await expect(block(page)).toContainText('The research is now an archive.');
         await block(page).getByRole('button', { name: 'Got it' }).click();
         await expect(dot(page)).toBeHidden();
         await page.reload();

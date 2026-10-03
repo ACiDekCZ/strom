@@ -918,6 +918,18 @@ function conflictPersons(value: unknown): string[] {
     return out.slice(0, 20);
 }
 
+/** The conflicts a list names (research ids "X0002", bare or as `id` / `conflict`), at most 20. */
+function conflictIds(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const out: string[] = [];
+    for (const item of value.slice(0, MAX_ITEMS)) {
+        const r = asRecord(item);
+        const id = researchConflictRef(typeof item === 'string' ? item : r?.id ?? r?.conflict);
+        if (id && !out.includes(id)) out.push(id);
+    }
+    return out.slice(0, 20);
+}
+
 /** What the research takes from the app (`/status.accepts`): the gate the other way round. */
 export interface ResearchAccepts {
     /**
@@ -945,6 +957,8 @@ export interface ResearchAccepts {
     mediaEstimate: { filesPerTask: number; perTask: number; currency: string; basis: 'past' | 'typical' } | null;
     /** It works with an agent, or as an archive of the user's data without one (`mode: "archive"`). */
     mode: 'agent' | 'archive';
+    /** The bridge said its mode (an older one does not: then the file's `_STROM_MODE` decides). */
+    modeSaid?: boolean;
     /** A send waits in the research's inbox for the user (`sync.auto: "off"`). */
     review: boolean;
 }
@@ -1016,6 +1030,7 @@ export function sanitizeAccepts(value: unknown): ResearchAccepts | null {
         mediaBatch: mediaBatch(asRecord(r.media)?.batch),
         mediaEstimate: mediaEstimate(asRecord(r.media)?.estimate),
         mode: r.mode === 'archive' ? 'archive' : 'agent',
+        ...(typeof r.mode === 'string' && r.mode ? { modeSaid: true } : {}),
         review: auto === 'off' && r.mode !== 'archive',
     };
 }
@@ -1566,6 +1581,8 @@ export interface SyncReply {
     conflicts: number | null;
     /** The persons those conflicts are about (research refs), when it says. */
     conflictPersons: string[];
+    /** The conflicts themselves (research ids "X0002"), when it says. */
+    conflictIds: string[];
     /** Things the send lacked that the research kept (an archive takes away only what this app tree had). */
     kept: number | null;
     /** The technical reason of a send not written (`reason`, English; '' = not said): shown as details. */
@@ -1580,7 +1597,7 @@ export interface SyncReply {
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [] };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [] };
     return {
         ok: r.ok === true,
         changes: asCount(r.changes),
@@ -1592,6 +1609,7 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
         pending: r.pending === true,
         conflicts: conflictCount(r.conflicts),
         conflictPersons: conflictPersons(r.conflicts),
+        conflictIds: conflictIds(r.conflicts),
         kept: asCount(r.kept),
         reason: cleanText(r.reason, 400),
         skipped: (Array.isArray(r.skipped) ? r.skipped.slice(0, 50) : [])

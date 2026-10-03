@@ -106,6 +106,8 @@ export const researchActionsMethods = uiModule({
     /** Tasks waiting for the user, as the menu counts them (0 when the row is hidden). */
     researchWaitingCount(): number {
         if (!this.researchMenuShown() || !this.researchAnyAnnounced()) return 0;
+        // Its bridge not known here: what it once said is waiting is not shown as now.
+        if (!this.activeResearchModeKnown()) return 0;
         return this.researchWaiting()?.items.length ?? 0;
     },
 
@@ -148,6 +150,8 @@ export const researchActionsMethods = uiModule({
         const autoSend = capable && this.researchAutoOn(ctx?.link);
         // An archive: nothing that leads to an agent.
         const archive = capable && this.activeResearchArchive();
+        // Nothing that leads to an agent in an archive, nor while the research's mode is not known here.
+        const noAgent = archive || !this.activeResearchModeKnown();
         const sendRow: SubmenuItem[] = autoSend ? [] : [
             // Straight to a running bridge (no ↗); else the research starts it in the terminal.
             { id: 'research-item-send', label: r.sendChanges, run: call('researchActionSend'), ext: !bridgeUp && this.researchLinkAvailable('send') },
@@ -156,8 +160,7 @@ export const researchActionsMethods = uiModule({
             // No strom-research:// links here (an older research, none announced, or
             // switched off): the way back, and what it is. A research that says what
             // it takes still gets its version loaded and its settings for this tree.
-            const look: SubmenuItem[] = bridgeUp && !blockLoads
-                ? [{ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') }] : [];
+            const look: SubmenuItem[] = [];
             const tree: SubmenuItem[] = this.researchTranscriptsCapable(researchId ?? undefined)
                 ? [{ id: 'research-item-tree-settings', label: strings.sync.treeSettings, run: call('researchActionTreeSettings') }] : [];
             const batch: SubmenuItem[] = this.batchAvailable() ? [{ id: 'research-item-batch', label: strings.batch.menu, run: call('showBatchDialog') }] : [];
@@ -167,10 +170,11 @@ export const researchActionsMethods = uiModule({
             ], batch, tree];
         } else {
             const look: SubmenuItem[] = [];
-            if ((this.researchLinkAvailable('app') || bridgeUp) && !blockLoads) look.push({ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') });
+            // The bridge answering: the block above offers a newer version when there is one (never beside "in step").
+            if (this.researchLinkAvailable('app') && !bridgeUp && !blockLoads) look.push({ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') });
             if (waiting > 0) look.push({ id: 'research-item-waiting', label: r.waiting, run: call('researchActionWaiting'), count: waiting });
             // Follow live: the research starts (or reuses) its bridge and opens ?live= here (an archive has no agent to follow).
-            if (!archive && this.researchLinkAvailable('live') && !this.isFollowingActiveResearch()) {
+            if (!noAgent && this.researchLinkAvailable('live') && !this.isFollowingActiveResearch()) {
                 look.push({ id: 'research-item-live', label: r.followLive, run: call('researchActionLive'), ext: true });
             }
             if (this.isFollowingActiveResearch()) look.push({ id: 'research-item-overview', label: strings.live.overviewTitle, run: call('researchActionOverview') });
@@ -179,7 +183,7 @@ export const researchActionsMethods = uiModule({
             const intake = known?.lastIntake;
             const sentAt = intake ? Date.parse(intake.at) : NaN;
             // An archive keeps its history itself: taking a send back happens there.
-            if (!archive && intake && this.researchLinkAvailable('sync-undo') && Number.isFinite(sentAt) && Date.now() - sentAt < UNDO_MAX_AGE_MS) {
+            if (!noAgent && intake && this.researchLinkAvailable('sync-undo') && Number.isFinite(sentAt) && Date.now() - sentAt < UNDO_MAX_AGE_MS) {
                 work.push({ id: 'research-item-undo', label: r.undoSend, run: call('researchActionUndoSend'), ext: true,
                     sub: r.sentAt(formatLiveClock(sentAt, Date.now(), getCurrentLanguage())) });
             }
@@ -188,7 +192,7 @@ export const researchActionsMethods = uiModule({
             // An archive: "Open the research" stands on its own (2b).
             if (!archive) work.push(...open);
             const agent: SubmenuItem[] = archive ? open : [];
-            if (!archive && this.researchLinkAvailable('chat')) agent.push({ id: 'research-item-chat', label: r.continueAgent, run: call('researchActionChat'), ext: true, ai: true });
+            if (!noAgent && this.researchLinkAvailable('chat')) agent.push({ id: 'research-item-chat', label: r.continueAgent, run: call('researchActionChat'), ext: true, ai: true });
             const setup: SubmenuItem[] = [];
             if (this.researchTranscriptsCapable(researchId ?? undefined)) {
                 setup.push({ id: 'research-item-tree-settings', label: strings.sync.treeSettings, run: call('researchActionTreeSettings') });
@@ -338,7 +342,7 @@ export const researchActionsMethods = uiModule({
      */
     personResearchActions(personId: PersonId): PersonMenuAction[] {
         // An archive has no agent: only "What the research knows" stays.
-        if (!this.personResearchRef(personId) || this.activeResearchArchive()) return [];
+        if (!this.personResearchRef(personId) || this.activeResearchNoAgent()) return [];
         const r = strings.research;
         const items: PersonMenuAction[] = [];
         if (this.researchLinkAvailable('review')) {
@@ -492,7 +496,7 @@ export const researchActionsMethods = uiModule({
 
     /** "Find a source in the research ↗" for a person without sources (null: not offered). */
     personFindSourceUrl(personId: PersonId): string | null {
-        if (this.activeResearchArchive()) return null;
+        if (this.activeResearchNoAgent()) return null;
         const person = this.personResearchRef(personId);
         return person ? this.activeResearchLink('review', { person, scope: 'person' }) : null;
     },

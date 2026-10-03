@@ -617,7 +617,7 @@ describe('send bridge', () => {
     });
 
     it('the reply and the JSON field are checked', () => {
-        const none = { head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [] };
+        const none = { head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [] };
         expect(sanitizeSyncReply({ ok: true, input: 'I1', changes: 12 })).toEqual({ ok: true, changes: 12, error: '', inbox: null, intake: '', ...none });
         // Written at once: the commit it made and what of the changes was written.
         expect(sanitizeSyncReply({ ok: true, inbox: false, changes: 8, applied: 7, head: 'ABCDEF1234', input: 'I0042', intake: 'R1' }))
@@ -628,6 +628,9 @@ describe('send bridge', () => {
         expect(sanitizeSyncReply({ ok: true, conflicts: 2 })).toMatchObject({ conflicts: 2, conflictPersons: [] });
         expect(sanitizeSyncReply({ ok: true, conflicts: [{ person: 'P0012' }, { person: 'bad' }, 'P0013'] }))
             .toMatchObject({ conflicts: 3, conflictPersons: ['P0012', 'P0013'] });
+        // The conflicts' own ids, bare or named (finding 40: "Decide in the research" for the one it wrote).
+        expect(sanitizeSyncReply({ ok: true, conflicts: ['X0002', { id: 'X0003', person: 'P0012' }, { conflict: 'X0004' }, { id: 'nope' }] }))
+            .toMatchObject({ conflicts: 4, conflictIds: ['X0002', 'X0003', 'X0004'] });
         expect(sanitizeSyncReply({ ok: true, changes: 3, inbox: true }).inbox).toBe(true);
         expect(sanitizeSyncReply({ error: 'bad\u0000 thing' })).toEqual({ ok: false, changes: null, error: 'bad thing', inbox: null, intake: '', ...none });
         expect(sanitizeSyncReply('x').ok).toBe(false);

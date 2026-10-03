@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     researchSyncState, researchSyncWantsAttention, pendingSendFate, verifiedOffer, isOlderSource,
-    researchReadSource, sourceReadingHash, unverifiedOlderSources, ResearchSyncInput,
+    researchReadSource, sourceReadingHash, unverifiedOlderSources, ResearchSyncInput, conflictTakeovers,
 } from '../research-sync.js';
 import { sanitizeAccepts, sanitizeInbox, sanitizeLiveStatus, researchHeaderLines, stabilizeIds } from '../research-link.js';
 import { ResearchLink, ResearchSend, Source, StromData, STROM_DATA_VERSION } from '../types.js';
@@ -378,5 +378,43 @@ describe('an entry made in the app comes back with the research\'s number', () =
         const stable = stabilizeIds(next, previous);
         expect(Object.keys(stable.sources ?? {})).toEqual(['s_app']);
         expect(stable.sources?.s_app.refn).toBe('S0042');
+    });
+});
+
+describe('a write that left conflicts (finding 40)', () => {
+    it('its version newer: the conflicts to decide, not "a newer version"; it wants attention', () => {
+        const st = researchSyncState(input({ link: link({ sent: sent({ state: 'written', conflicts: 1 }) }), remoteHead: 'bbbbbbb' }));
+        expect(st.kind).toBe('writtenConflicts');
+        expect(researchSyncWantsAttention(st.kind)).toBe(true);
+    });
+    it('without conflicts: newer as before', () => {
+        expect(researchSyncState(input({ link: link({ sent: sent({ state: 'written' }) }), remoteHead: 'bbbbbbb' })).kind).toBe('newer');
+    });
+});
+
+describe('the bridge says its mode (or not)', () => {
+    it('modeSaid only when the bridge names a mode', () => {
+        expect(sanitizeAccepts({ mode: 'archive' })).toMatchObject({ mode: 'archive', modeSaid: true });
+        expect(sanitizeAccepts({ mode: 'research' })).toMatchObject({ mode: 'agent', modeSaid: true });
+        expect(sanitizeAccepts({ sources: true })?.modeSaid).toBeUndefined();
+    });
+});
+
+describe('conflictTakeovers (finding 37)', () => {
+    const person = (id: string, first: string, extra: Record<string, unknown> = {}) =>
+        ({ id, firstName: first, lastName: 'Nováková', gender: 'female', partnerships: [], childIds: [], ...extra });
+    const tree = (persons: Record<string, unknown>) => ({ version: STROM_DATA_VERSION, persons, partnerships: {} }) as unknown as StromData;
+    const open = { research: { conflicts: [{ id: 'X0001', fact: 'NAME', status: 'open', values: [{ value: 'Marie' }, { value: 'Marianna' }] }] } };
+    it('an open conflict over a value the user has: taken over', () => {
+        expect(conflictTakeovers(tree({ p1: person('p1', 'Marianna') }), tree({ p1: person('p1', 'Marie', open) }))).toEqual(['p1']);
+    });
+    it('the same value, a value the research adds, or the conflict decided: none', () => {
+        expect(conflictTakeovers(tree({ p1: person('p1', 'Marianna') }), tree({ p1: person('p1', 'Marianna', open) }))).toEqual([]);
+        expect(conflictTakeovers(tree({ p1: person('p1', 'Marianna') }), tree({ p1: person('p1', 'Marianna', { ...open, birthDate: '1880' }) }))).toEqual([]);
+        const decided = { research: { conflicts: [{ ...open.research.conflicts[0], status: 'decided' }] } };
+        expect(conflictTakeovers(tree({ p1: person('p1', 'Marianna') }), tree({ p1: person('p1', 'Marie', decided) }))).toEqual([]);
+    });
+    it('no conflict there: the research may change it (written as sent)', () => {
+        expect(conflictTakeovers(tree({ p1: person('p1', 'Marianna') }), tree({ p1: person('p1', 'Marie') }))).toEqual([]);
     });
 });

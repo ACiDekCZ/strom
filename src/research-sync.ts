@@ -5,7 +5,7 @@
  * Pure: the UI feeds it what it knows and shows the one state that matters most.
  */
 
-import { ResearchLink, ResearchSend, Source, StromData } from './types.js';
+import { ResearchLink, ResearchSend, Source, StromData, Person, PersonId } from './types.js';
 import { ResearchInbox, LiveIntake, ResearchSendRecord } from './research-link.js';
 
 /**
@@ -29,7 +29,9 @@ export type ResearchSyncKind =
     // Sending by itself (ResearchLink.sendMode 'auto', the default):
     | 'autoWaiting' | 'sending' | 'autoBridgeDown' | 'autoPaused'
     // One-time notices:
-    | 'switched' | 'offerAuto' | 'autoIntro';
+    | 'switched' | 'offerAuto' | 'autoIntro'
+    // Written, with conflicts left, and the research's version (their values in those places) not loaded:
+    | 'writtenConflicts';
 
 export interface ResearchSyncInput {
     /** The tree's tie to its research (none: not a research tree). */
@@ -107,6 +109,9 @@ export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
     if (unsent) return st('autoWaiting');
     if (sent?.state === 'pending' && sent.thenLoad) return st('waitThenLoad', { sent });
     if (sent?.state === 'pending') return st('sentPending', { sent });
+    // Its version holds the research's values where the conflicts are: not "a newer version" to load,
+    // the conflicts to decide (finding 40); loading it stays possible, asked.
+    if (newer && sent?.state === 'written' && (sent.conflicts ?? 0) > 0) return st('writtenConflicts', { sent });
     if (newer) return st('newer');
     const quiet: ResearchSyncState = !input.bridgeUp
         ? { kind: 'bridgeDown', core: 'bridgeDown' }
@@ -121,7 +126,7 @@ export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
 export function researchSyncWantsAttention(kind: ResearchSyncKind): boolean {
     return kind === 'unsentBridgeDown' || kind === 'newer' || kind === 'unsentAndNewer'
         || kind === 'refused' || kind === 'rejected' || kind === 'autoPaused' || kind === 'autoBridgeDown'
-        || kind === 'switched' || kind === 'stale';
+        || kind === 'switched' || kind === 'stale' || kind === 'writtenConflicts';
 }
 
 /** A changes-not-sent state (the ⋯ label and the data window say so). */
@@ -271,4 +276,31 @@ export function unverifiedOlderSources(data: StromData, link: ResearchLink | und
     if (link?.transcripts !== 'evidence') return [];
     return Object.values(data.sources ?? {}).filter(src =>
         !!src?.transcript?.trim() && !src.transcriptVerified && isOlderSource(src, link) && !researchReadSource(src, link));
+}
+
+/** The user's values a conflict can be about: the name, sex, birth and death. */
+const CONFLICT_FIELDS: (keyof Person)[] = ['firstName', 'lastName', 'gender', 'birthDate', 'birthPlace', 'deathDate', 'deathPlace'];
+
+/**
+ * People whose value in the app the research's version would replace while a
+ * conflict about them is still open there (finding 37): the version keeps the
+ * research's value in that place, the user's stands only in the app. Such a
+ * version is never taken without asking. `incoming` carries the app's ids
+ * (stabilizeIds). Only values the app has: one the research adds is no
+ * takeover.
+ */
+export function conflictTakeovers(previous: StromData, incoming: StromData): PersonId[] {
+    const out: PersonId[] = [];
+    for (const p of Object.values(incoming.persons ?? {})) {
+        if (!p?.research?.conflicts?.some(c => c.status === 'open')) continue;
+        const before = previous.persons?.[p.id];
+        if (!before) continue;
+        const replaced = CONFLICT_FIELDS.some(f => {
+            const had = before[f];
+            if (had === undefined || had === null || had === '') return false;
+            return JSON.stringify(had) !== JSON.stringify(p[f] ?? null);
+        });
+        if (replaced) out.push(p.id);
+    }
+    return out;
 }

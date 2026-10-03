@@ -279,7 +279,7 @@ export const researchEdgeUiMethods = uiModule({
         // none in an archive (each leads to an agent): its edge is a record.
         const ref = this.personResearchRef(personId);
         const actions: string[] = [];
-        if (ref && !this.activeResearchArchive()) {
+        if (ref && !this.activeResearchNoAgent()) {
             const decide = next === 'decide';
             if (this.researchLinkAvailable('chat')) {
                 actions.push(`<button type="button" class="${decide ? 'primary' : 'secondary'} rep-action" data-do="chat">${esc(decide ? re.decideInChat : re.chat)} ↗</button>`);
