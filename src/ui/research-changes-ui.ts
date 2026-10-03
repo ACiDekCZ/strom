@@ -290,7 +290,7 @@ export const researchChangesMethods = uiModule({
     researchSendMoreHtml(reserve = false): string {
         const list = reserve ? null : this.researchChangesNow();
         if (!list || list.length === 0) {
-            return '<span class="research-sync-send-more research-sync-send-more--placeholder" aria-hidden="true">0 ⌄</span>';
+            return '<span class="research-sync-send-more research-sync-send-more--placeholder" aria-hidden="true">0 <span>⌄</span></span>';
         }
         const open = !!document.getElementById(PANEL_ID);
         return `<button type="button" class="research-sync-send-more" id="research-sync-send-more" aria-haspopup="dialog" aria-expanded="${open}"`
