@@ -1572,11 +1572,13 @@ export interface SyncReply {
     reason: string;
     /** Changes the research could not write and skipped, the rest written (`skipped: [{n, kind, why}]`, 1.12). */
     skipped: { kind: string; why: string }[];
+    /** The refusal's stable code (`code`, 1.12: `tree.no-ids` …; '' = not said). */
+    code: string;
 }
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], kept: null, reason: '', skipped: [] };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], kept: null, reason: '', skipped: [], code: '' };
     return {
         ok: r.ok === true,
         changes: asCount(r.changes),
@@ -1593,6 +1595,7 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
         skipped: (Array.isArray(r.skipped) ? r.skipped.slice(0, 50) : [])
             .map(x => asRecord(x)).filter((x): x is Record<string, unknown> => !!x)
             .map(x => ({ kind: cleanText(x.kind, 40), why: cleanText(x.why, 300) })),
+        code: typeof r.code === 'string' && /^[a-z0-9.-]{1,40}$/.test(r.code) ? r.code : '',
     };
 }
 
@@ -1625,10 +1628,138 @@ export function sanitizeAdoptOffer(value: unknown): AdoptOffer | null {
 }
 
 /** The research's answer to the handed-over tree: its tree UUID and version, or null. Untrusted. */
-export function sanitizeAdoptReply(value: unknown): { tree: string; head: string | null } | null {
+export function sanitizeAdoptReply(value: unknown): { tree: string; head: string | null; ids: AdoptIds | null } | null {
     const r = asRecord(value);
     const tree = normalizeResearchId(r?.tree);
-    return tree ? { tree, head: isResearchHead(r?.head) } : null;
+    if (!tree) return null;
+    const ids = asRecord(r?.ids);
+    const persons = adoptIdMap(ids?.persons, /^P\d{1,9}$/);
+    const sources = adoptIdMap(ids?.sources, /^S\d{1,9}$/);
+    return { tree, head: isResearchHead(r?.head), ids: Object.keys(persons).length || Object.keys(sources).length ? { persons, sources } : null };
+}
+
+/**
+ * `ids` of the research's answer to `POST /adopt` (1.12): what each record of
+ * the file that went over became there, by that file's xrefs
+ * (`{"@I1@": "P0001"}`, `{"@S1@": "S0001"}`).
+ */
+export interface AdoptIds {
+    persons: Record<string, string>;
+    sources: Record<string, string>;
+}
+
+/** One kind of `ids`: xref → the research's number, both checked (anything else is dropped). */
+function adoptIdMap(value: unknown, idRe: RegExp): Record<string, string> {
+    const r = asRecord(value);
+    const out: Record<string, string> = {};
+    if (!r) return out;
+    for (const [xref, id] of Object.entries(r).slice(0, 200000)) {
+        if (!/^@[A-Za-z0-9_]{1,40}@$/.test(xref) || typeof id !== 'string') continue;
+        const v = id.trim();
+        if (idRe.test(v)) out[xref] = v;
+    }
+    return out;
+}
+
+/** The kind of number the research's person numbers are (REFN > TYPE). */
+export const RESEARCH_REFN_TYPE = 'strom-research';
+
+/** The xrefs a GEDCOM export gave the records (see GedcomExportResult.xrefs). */
+export interface ExportXrefs {
+    persons: ReadonlyMap<string, string>;
+    sources: ReadonlyMap<string, string>;
+}
+
+/**
+ * The research's numbers onto the tree that went over (its `ids`, by the xrefs
+ * of that file): every later send then names the research's own people, as
+ * after opening its `tree.ged`. Returns the tree (a new object) and how many
+ * people and sources got a number.
+ */
+export function applyAdoptIds(data: StromData, xrefs: ExportXrefs, ids: AdoptIds): { data: StromData; persons: number; sources: number } {
+    const persons = { ...data.persons };
+    let np = 0;
+    for (const [id, xref] of xrefs.persons) {
+        const refn = ids.persons[xref];
+        const p = persons[id as PersonId];
+        if (!refn || !p) continue;
+        persons[id as PersonId] = { ...p, refn, refnType: RESEARCH_REFN_TYPE };
+        np++;
+    }
+    let ns = 0;
+    const sources = data.sources ? { ...data.sources } : undefined;
+    if (sources) {
+        for (const [id, xref] of xrefs.sources) {
+            const refn = ids.sources[xref];
+            if (!refn || !sources[id]) continue;
+            sources[id] = { ...sources[id], refn };
+            ns++;
+        }
+    }
+    return { data: { ...data, persons, ...(sources ? { sources } : {}) }, persons: np, sources: ns };
+}
+
+/**
+ * Does the tree name the research's people? False for a copy that went over
+ * and never got their numbers (no person with a research REFN while it has
+ * people): a send of it would read there as a second family tree.
+ */
+export function holdsResearchIds(data: StromData): boolean {
+    const people = Object.values(data.persons ?? {}).filter(p => p && !p.isPlaceholder);
+    return people.length === 0 || people.some(p => !!p.refn && /^P\d{1,9}$/.test(p.refn.trim()));
+}
+
+/**
+ * The research's numbers onto a copy that went over without them (neither
+ * the hand-over's `ids` nor the research's version came): each person of the
+ * research's version is matched to the state that went over by name, sex and
+ * dates — a match that is unique on both sides only — and the number is set
+ * on the current tree's person of that id, edits since kept. Sources by title,
+ * archive, page and wording. Returns the tree and how many people got a number.
+ */
+export function researchIdsByContent(current: StromData, handedOver: StromData, research: StromData): { data: StromData; persons: number; sources: number } {
+    const norm = (v: string | undefined): string => (v ?? '').trim().toLowerCase();
+    const personKey = (p: StromData['persons'][PersonId]): string =>
+        [p.firstName, p.lastName, p.gender, p.birthDate, p.deathDate].map(norm).join('\u0000');
+    const sourceKey = (src: Source): string =>
+        [src.title, src.repository, src.reference, src.transcript].map(norm).join('\u0000');
+    const unique = <T>(records: [string, T][], key: (r: T) => string): Map<string, string> => {
+        const seen = new Map<string, string | null>();
+        for (const [id, r] of records) {
+            const k = key(r);
+            seen.set(k, seen.has(k) ? null : id);
+        }
+        const out = new Map<string, string>();
+        for (const [k, id] of seen) if (id) out.set(k, id);
+        return out;
+    };
+    const live = (d: StromData) => Object.entries(d.persons ?? {}).filter(([, p]) => p && !p.isPlaceholder) as [string, StromData['persons'][PersonId]][];
+    const before = unique(live(handedOver), personKey);
+    const theirs = unique(live(research).filter(([, p]) => !!p.refn), personKey);
+    const persons = { ...current.persons };
+    let np = 0;
+    for (const [k, rid] of theirs) {
+        const id = before.get(k) as PersonId | undefined;
+        const p = id ? persons[id] : undefined;
+        const refn = research.persons[rid as PersonId]?.refn?.trim();
+        if (!p || !refn || p.refn) continue;
+        persons[id!] = { ...p, refn, refnType: RESEARCH_REFN_TYPE };
+        np++;
+    }
+    let ns = 0;
+    const sources = current.sources ? { ...current.sources } : undefined;
+    if (sources) {
+        const beforeSrc = unique(Object.entries(handedOver.sources ?? {}), sourceKey);
+        const theirSrc = unique(Object.entries(research.sources ?? {}).filter(([, s]) => !!s.refn), sourceKey);
+        for (const [k, rid] of theirSrc) {
+            const id = beforeSrc.get(k);
+            const refn = research.sources?.[rid]?.refn;
+            if (!id || !sources[id] || sources[id].refn || !refn) continue;
+            sources[id] = { ...sources[id], refn };
+            ns++;
+        }
+    }
+    return { data: { ...current, persons, ...(sources ? { sources } : {}) }, persons: np, sources: ns };
 }
 
 /** A one-time token for "Start research with this tree": 32 random bytes, base64url (43 characters). */

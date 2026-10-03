@@ -97,6 +97,8 @@ export interface GedcomExportResult {
         individuals: number;
         families: number;
     };
+    /** The xrefs this export gave persons and sources (by id): a hand-over's `ids` answer by them. */
+    xrefs: { persons: ReadonlyMap<string, string>; sources: ReadonlyMap<string, string> };
 }
 
 /** GEDCOM month names (uppercase) */
@@ -853,6 +855,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         stats: {
             individuals: personIdMap.size,
             families: partnershipIdMap.size
-        }
+        },
+        xrefs: { persons: personIdMap, sources: sourceIdMap },
     };
 }

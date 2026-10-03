@@ -179,10 +179,11 @@ export const researchTreeSettingsMethods = uiModule({
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'link-button research-send-status-action';
-                btn.textContent = s.sendAgain;
+                const load = line.action === 'loadVersion';
+                btn.textContent = load ? strings.sync.loadVersion : s.sendAgain;
                 btn.onclick = () => {
                     close();
-                    void this.researchSendTree(treeId);
+                    void (load ? this.researchLoadIds(treeId) : this.researchSendTree(treeId));
                 };
                 statusEl.append(' ', btn);
             }

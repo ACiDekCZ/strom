@@ -20,7 +20,7 @@ import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import {
     parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint, researchSchemeUrl,
-    readResearchHeader, AdoptOffer,
+    readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { onComputer, fetchWithTimeout, fetchStatus, fetchGedcomText, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
@@ -33,6 +33,8 @@ const READY_ID = 'research-ready-modal';
 const TOKEN_MAX_AGE_MS = 60 * 60 * 1000;
 /** Strom Research takes photos and attachments over with a tree (not yet: it skips data URLs). */
 const RESEARCH_TAKES_IMAGES = false;
+/** Tries at the research's version right after a hand-over (ms to wait before each): it may write it a moment later. */
+const ADOPT_LOAD_WAITS = [0, 1000, 3000];
 
 /** HTML-escape a string for innerHTML (text and attribute values). */
 function esc(text: string): string {
@@ -140,10 +142,10 @@ export const researchAdoptMethods = uiModule({
             return;
         }
         // The research does not take photos over yet: they stay here only.
-        const gedcom = exportToGedcom(choice.images ? data : stripMedia(data), tree.name).content;
-        let reply: { tree: string; head: string | null } | null = null;
+        const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name);
+        let reply: { tree: string; head: string | null; ids: AdoptIds | null } | null = null;
         try {
-            const res = await postSync(`${bridge.base}/adopt`, gedcom, 120000);
+            const res = await postSync(`${bridge.base}/adopt`, exported.content, 120000);
             if (res.ok) reply = sanitizeAdoptReply(await res.json());
         } catch (err) {
             console.warn('Handing the tree to the research failed', err);
@@ -152,14 +154,30 @@ export const researchAdoptMethods = uiModule({
             await this.showAlert(r.adoptFailed, 'error');
             return;
         }
+        // The research's numbers for what went over (its `ids`, by this file's xrefs): every later
+        // send names its people, even when its version below does not come.
+        let taken = data;
+        let numbered = false;
+        if (reply.ids && DataManager.getCurrentTreeId() === tree.id) {
+            const withIds = applyAdoptIds(data, exported.xrefs, reply.ids);
+            if (withIds.persons + withIds.sources > 0) {
+                DataManager.replaceWithSourceData(withIds.data);
+                taken = DataManager.getData();
+                numbered = withIds.persons > 0;
+            }
+        }
+        // Without them nothing goes to the research until its version comes (loading it clears
+        // this): a copy that does not name its people would read there as a second family tree.
+        const hasPeople = Object.values(taken.persons).some(p => !p.isPlaceholder);
         TreeManager.setResearchLink(tree.id, {
             id: reply.tree,
-            fingerprint: contentFingerprint(data),
+            fingerprint: contentFingerprint(taken),
             syncedAt: new Date().toISOString(),
             ...(reply.head ? { head: reply.head } : {}),
+            ...(!numbered && hasPeople ? { awaitingIds: true as const } : {}),
         });
         // What the research took is its version now: changes per person count from here.
-        this.researchKeepCopy(tree.id, data);
+        this.researchKeepCopy(tree.id, taken);
         TreeManager.setResearchAdoptToken(tree.id, null);
         // The bridge that took the tree is the research's own: the tree is
         // connected now (sending by itself, the state in the bar), not only
@@ -167,17 +185,8 @@ export const researchAdoptMethods = uiModule({
         let status: Awaited<ReturnType<typeof fetchStatus>> = null;
         try { status = await fetchStatus(`${bridge.base}/status`, 4000); } catch { /* connected at the next open */ }
         if (status?.treeId !== reply.tree) noteResearchBridge(reply.tree, bridge.base);
-        // The research's own version of what it took (its numbers, its families) becomes the tree now:
-        // the next send is compared to that there and here, even when the research opens no ?import-url=.
-        try {
-            const text = await fetchGedcomText(bridge.ged);
-            const header = readResearchHeader(text);
-            if (header.isStromResearch && header.treeId === reply.tree) {
-                await this.applyResearch(convertToStrom(parseGedcom(text)).data, header, { quiet: true, ...(reply.head ? { head: reply.head } : {}) });
-            }
-        } catch (err) {
-            console.warn('Loading the research version after the hand-over failed', err);
-        }
+        const loaded = await this.loadResearchAfterAdopt(tree.id, bridge.ged, reply.tree, reply.head);
+        if (!loaded && !numbered && hasPeople) console.warn('The research numbers did not come with the hand-over: sending waits for its version', reply.tree);
         this.refreshResearchSyncUi();
         this.updateTreeSwitcher();
         this.updateTreeManagerList();
@@ -185,11 +194,45 @@ export const researchAdoptMethods = uiModule({
         TreeRenderer.render();
         if (fromInstall) {
             this.finishResearchInstall(offer.token);
-            const hasPeople = Object.values(data.persons).some(p => !p.isPlaceholder);
             void this.showResearchReady(bridge.base, reply.tree, offer.name || r.defaultName, hasPeople);
             return;
         }
         this.showToast(r.adopted(tree.name), 6000);
+    },
+
+    /**
+     * The research's own version of what it just took (its numbers, its
+     * families) becomes the tree: the next send is compared to that there and
+     * here, even when the research opens no ?import-url=. Tried a few times
+     * (it may write it a moment after answering); every miss says why in the
+     * console. True when it loaded.
+     */
+    async loadResearchAfterAdopt(treeId: TreeId, gedUrl: string, researchId: string, head: string | null): Promise<boolean> {
+        for (const wait of ADOPT_LOAD_WAITS) {
+            if (wait) await new Promise(resolve => setTimeout(resolve, wait));
+            let text: string;
+            try {
+                text = await fetchGedcomText(gedUrl);
+            } catch (err) {
+                console.warn('Loading the research version after the hand-over failed', err);
+                continue;
+            }
+            const header = readResearchHeader(text);
+            if (!header.isStromResearch || header.treeId !== researchId) {
+                console.warn('The research version after the hand-over is not that tree (yet)',
+                    { stromResearch: header.isStromResearch, tree: header.treeId, expected: researchId });
+                continue;
+            }
+            try {
+                const done = await this.applyResearch(convertToStrom(parseGedcom(text)).data, header, { quiet: true, ...(head ? { head } : {}) });
+                if (done !== treeId) console.warn('The research version after the hand-over was not loaded into the tree', { done, treeId });
+                return done === treeId;
+            } catch (err) {
+                console.warn('Loading the research version after the hand-over failed', err);
+                return false;
+            }
+        }
+        return false;
     },
 
     /**

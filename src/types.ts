@@ -962,7 +962,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.18';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.19';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -1174,6 +1174,13 @@ export interface ResearchLink {
      * status says it more freshly. Missing: with an agent.
      */
     mode?: 'archive';
+    /**
+     * The copy went over (or was refused as `tree.no-ids`) without the
+     * research's numbers for its people: a send would read there as a second
+     * family tree, so none goes until they come (its `tree.ged`). Cleared by
+     * any load of the research's version.
+     */
+    awaitingIds?: true;
 }
 
 /** How changes go to the research (see ResearchLink.sendMode). */
