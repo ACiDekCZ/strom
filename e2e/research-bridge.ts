@@ -72,6 +72,8 @@ export interface FakeBridge {
     batchDone?: { id: string; body: Record<string, unknown> }[];
     /** Batches it reports in `/status.batches`. */
     batches?: unknown[];
+    /** A file it has, sent again with a person or a note: it adds them to its input (`added`, Strom Research 1.12). */
+    knownAdds?: boolean;
 }
 
 export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
@@ -107,7 +109,12 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 if (b.mediaPutStatus !== 200) return json(b.mediaPutStatus, { error: 'no' });
                 // Content it has: said so (as the research does), nothing new.
                 const prior = b.mediaKnown.get(sha);
-                if (prior) return json(200, { known: prior, kind: 'input' });
+                if (prior) {
+                    const h = route.request().headers();
+                    const added = b.knownAdds && (h['x-strom-person'] || h['x-strom-note'])
+                        ? { added: { persons: h['x-strom-person'] ? [h['x-strom-person']] : [], note: !!h['x-strom-note'] } } : {};
+                    return json(200, { known: prior, kind: 'input', ...added });
+                }
                 const id = `I${String(100 + b.mediaPuts.length).padStart(4, '0')}`;
                 b.mediaKnown.set(sha, id);
                 return json(200, { input: id });

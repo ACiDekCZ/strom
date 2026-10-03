@@ -512,6 +512,19 @@ test.describe('Send material… (beta.10)', () => {
         expect(decodeURIComponent(b.mediaPuts[0].headers['x-strom-note'])).toBe('Dopis od babičky');
     });
 
+    test('material the research had, and it added the person and the note (1.12): said so', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS, knownAdds: true });
+        b.mediaKnown.set(AVATAR_SHA, 'I0013');
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => (window.Strom.UI as any).showMaterialDialog({ personId: Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan')!.id }));
+        const dialog = page.locator('#material-modal');
+        await dialog.locator('#material-input').setInputFiles(AVATAR);
+        await dialog.locator('#material-note').fill('Dopis od babičky');
+        await dialog.getByRole('button', { name: 'Send 1 file' }).click();
+        await expect(page.locator('.toast')).toContainText('The research already had this file and added the person and the note to it.');
+    });
+
     test('the research not running: the files wait in the browser and go later', async ({ page }) => {
         const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
         await openResearch(page, { media: true });

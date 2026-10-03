@@ -43,7 +43,7 @@ const SENT_KEY = 'strom-originals-sent:';
 const SENT_MAX = 2000;
 
 /** Why an original was not queued (the attachment keeps its preview either way). 'sent': straight to a running research. */
-export type QueueOutcome = 'queued' | 'sent' | 'known' | 'notLinked' | 'notTaken' | 'off' | 'safari' | 'encrypted' | 'tooLarge' | 'noRoom' | 'failed';
+export type QueueOutcome = 'queued' | 'sent' | 'known' | 'knownFilled' | 'notLinked' | 'notTaken' | 'off' | 'safari' | 'encrypted' | 'tooLarge' | 'noRoom' | 'failed';
 
 /** Why only the preview is in the tree (the title of "preview only"). */
 export type PreviewOnlyWhy = 'room' | 'encrypted' | 'off' | 'older' | 'safari';
@@ -103,6 +103,13 @@ function sentMap(researchId: string): Record<string, string> {
 
 /** Files the research answered it already had (sent on purpose, as material): told so, not "sent". */
 const knownByResearch = new Set<string>();
+/** Of those, what the research added to its input from this send (`added`: a person, the note). */
+const knownAdded = new Map<string, { person: boolean; note: boolean }>();
+
+/** What the research says it added to a file it had: a person, the note (none: nothing new). */
+export function researchKnownAdded(sha: string): { person: boolean; note: boolean } | null {
+    return knownAdded.get(sha) ?? null;
+}
 
 function noteSent(researchId: string, sha: string, id: string): void {
     try {
@@ -233,7 +240,10 @@ export const originalsMethods = uiModule({
         if (file.size > accepts.maxBytes) return 'tooLarge';
         if (target.material && this.researchBridgeUp(link.researchId)) {
             knownByResearch.delete(original.sha256);
-            if (await this.sendOriginalNow(link, original, file, target)) return knownByResearch.has(original.sha256) ? 'known' : 'sent';
+            knownAdded.delete(original.sha256);
+            if (await this.sendOriginalNow(link, original, file, target)) {
+                return !knownByResearch.has(original.sha256) ? 'sent' : knownAdded.has(original.sha256) ? 'knownFilled' : 'known';
+            }
         }
         if (SettingsManager.isEncryptionEnabled()) {
             // Never kept in the browser in the clear: straight to a running research, or preview only.
@@ -811,7 +821,14 @@ export const originalsMethods = uiModule({
             });
             if (res.ok) {
                 const body = await res.json().catch(() => null) as Record<string, unknown> | null;
-                if (body && typeof body.known === 'string') knownByResearch.add(rec.sha256);
+                if (body && typeof body.known === 'string') {
+                    knownByResearch.add(rec.sha256);
+                    // Strom Research 1.12: what it added to its input (a person it did not have, the note).
+                    const added = body.added && typeof body.added === 'object' ? body.added as Record<string, unknown> : null;
+                    const person = Array.isArray(added?.persons) && added!.persons.length > 0;
+                    const note = added?.note === true;
+                    if (person || note) knownAdded.set(rec.sha256, { person, note });
+                }
                 return mediaReplyId(body) ?? 'ok';
             }
             // Too large / a kind it does not take: never. Out of disk space: stop for now.

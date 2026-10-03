@@ -20,7 +20,7 @@ import { exifOrientation, originalTargets } from '../originals.js';
 import { dataUrlByteSize } from '../photo.js';
 import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES } from '../attachments.js';
 import { personSubtitle } from './person-sources-ui.js';
-import { formatBytesShort, QueueOutcome } from './originals-ui.js';
+import { formatBytesShort, QueueOutcome, researchKnownAdded } from './originals-ui.js';
 import { bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
 
@@ -231,6 +231,8 @@ export const materialMethods = uiModule({
         const go = overlay.querySelector<HTMLButtonElement>('.material-go');
         const queuedShas: string[] = [];
         let known = 0;
+        const filled = { person: false, note: false };
+        let filledN = 0;
         /** Files not sent nor waiting, with why (the first one is named). */
         const failed: { name: string; why: string }[] = [];
         const archive = this.researchModeOf(link.researchId) === 'archive';
@@ -251,6 +253,13 @@ export const materialMethods = uiModule({
             const outcome = await this.queueOriginal(original, file, { ...target, note, material: true });
             if (outcome === 'queued') queuedShas.push(original.sha256);
             else if (outcome === 'known') known++;
+            else if (outcome === 'knownFilled') {
+                known++;
+                filledN++;
+                const a = researchKnownAdded(original.sha256);
+                if (a?.person) filled.person = true;
+                if (a?.note) filled.note = true;
+            }
             else if (outcome !== 'sent') failed.push({ name: file.name, why: this.materialWhy(outcome, link.researchId) });
         }
         // What waits goes now when the bridge runs (one at a time); waited for, so the toast tells what is left.
@@ -271,7 +280,10 @@ export const materialMethods = uiModule({
         } else if (stillWaiting > 0) {
             this.showToast((ready ? m.queuedToast(stillWaiting) : m.noIdToast(stillWaiting)) + knownPart, 6000, { closable: true });
         } else if (sent === 0 && known > 0) {
-            this.showToast(m.alreadyHadToast(known), 6000, { closable: true });
+            // It had them: what it added from this send (a person, the note), or that it has them already.
+            this.showToast(filledN > 0
+                ? m.alreadyHadFilledToast(known, filled.person && filled.note ? m.filledBoth : filled.person ? m.filledPerson : m.filledNote)
+                : m.alreadyHadToast(known), 6000, { closable: true });
         } else {
             this.showToast((archive ? m.savedArchiveToast(sent, name) : m.sentToast(sent, name)) + knownPart, 6000, { closable: true });
         }
