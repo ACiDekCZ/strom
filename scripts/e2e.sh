@@ -9,7 +9,8 @@
 #   scripts/e2e.sh [playwright args]   build, then the browser suite (all args go to Playwright)
 #   scripts/e2e.sh --quick [specs]     before a beta push: typecheck, vitest, build, the @smoke
 #                                      set and the specs touched since github/beta (plus [specs])
-#   scripts/e2e.sh --run <command...>  any command under the lock (e.g. Strom Research's suite)
+#   scripts/e2e.sh --run <command...>  any command under the lock, in the caller's folder
+#                                      (e.g. Strom Research's suite)
 #
 # The lock is a directory (mkdir is atomic): $STROM_TEST_LOCK, default
 # /tmp/strom-heavy-tests.lock, holding who has it. A lock whose process is
@@ -17,7 +18,8 @@
 set -eu
 
 LOCK="${STROM_TEST_LOCK:-/tmp/strom-heavy-tests.lock}"
-cd "$(dirname "$0")/.."
+# The app's own runs work in this checkout; --run stays where it was called.
+[ "${1:-}" = --run ] || cd "$(dirname "$0")/.."
 
 acquire() {
     [ "${STROM_TEST_LOCK_HELD:-}" = 1 ] && return 0
