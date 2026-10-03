@@ -1,5 +1,6 @@
 import { test, expect, Page, Locator } from '@playwright/test';
-import { card, cardAction } from './helpers.js';
+import { card, cardAction, openApp } from './helpers.js';
+import { fakeBridge, poll, openResearchMenu, researchGed, HEAD, UUID, BRIDGE, dropFile, block } from './research-bridge.js';
 
 /**
  * German UI smoke: with the system language set to German, the main dialogs
@@ -156,4 +157,62 @@ test('German UI: html lang and the main dialogs are free of English words', { ta
     const book = page.locator('#book-modal');
     await expectNoEnglish(book, 'Book dialog');
     await closeWithEscape(page, book);
+});
+
+test('German UI: the research — its menu, the states of the block, Research for this tree, the person, materials, installing', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.clock.install();
+    await openApp(page);
+    await page.evaluate(() => {
+        const ui = window.Strom.UI as unknown as { handOverResearchLink: (u: string) => void };
+        ui.handOverResearchLink = () => undefined;
+        localStorage.setItem('strom-research-auto-intro-seen', '1');
+    });
+    // Jan as the research has him: an open conflict and the research edge.
+    await dropFile(page, 'tree-strom.ged', researchGed(HEAD, [
+        '1 BIRT', '2 DATE 1865', '1 _STROM_CONFLICT X0007', '2 TYPE BIRT', '2 STAT open', '2 VAL 3 FEB 1865', '2 VAL 1866',
+        '1 _STROM_EDGE parents', '2 _SCOPE in', '2 _END not-found', '2 _NEXT decide',
+        '2 _TASK T0002', '3 _LEVEL link', '3 STAT waiting', '3 TITL Taufe von Jan', '3 _POS 1',
+    ]).replace('1 _STROM_LINKS send open live app setup', '1 _STROM_LINKS send open live app setup chat review conflict task'));
+    await expect(card(page, 'Jan')).toBeVisible();
+    const accepts = { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true,
+        media: { max: 500 * 1024 * 1024, region: true, batch: { files: 5000, bytes: 20 * 1024 * 1024 * 1024, zip: true } } };
+    await page.evaluate(({ uuid, base, accepts }) => localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, accepts })), { uuid: UUID, base: BRIDGE, accepts });
+    const bridge = await fakeBridge(page, { accepts, links: ['send', 'open', 'live', 'app', 'setup', 'chat', 'review', 'conflict', 'task'] });
+    await poll(page);
+    const janId = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.id);
+
+    await openResearchMenu(page);
+    await expectNoEnglish(page.locator('#actions-research-submenu'), 'Actions → Research');
+    await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+
+    await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
+    await expectNoEnglish(page.locator('#research-tree-settings-modal'), 'Research for this tree');
+    await page.evaluate(() => window.Strom.UI.closeResearchTreeSettings());
+
+    await page.evaluate((id) => window.Strom.UI.showPersonResearchDialog(id, { edge: true }), janId);
+    await expectNoEnglish(page.locator('.modal-overlay.active').last(), 'What the research knows');
+    await page.keyboard.press('Escape');
+
+    await page.evaluate((id) => window.Strom.UI.showMaterialDialog({ personId: id }), janId);
+    await expectNoEnglish(page.locator('.modal-overlay.active').last(), 'Send material');
+    await page.keyboard.press('Escape');
+
+    // A write that leaves a conflict: the pill and the block (finding 40).
+    bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0042', conflicts: [{ id: 'X0008', person: 'P0003', fact: 'NAME' }] } };
+    bridge.onWrite = () => ({ head: 'c1c1c1c1c1c1', ged: researchGed('c1c1c1c1c1c1', ['1 _STROM_CONFLICT X0008', '2 TYPE NAME', '2 STAT open', '2 VAL Jan /Víšek/', '2 VAL Johann /Víšek/']) });
+    await page.evaluate((id) => window.Strom.DataManager.updatePerson(id, { firstName: 'Johann' }), janId);
+    await page.evaluate(() => window.Strom.UI.researchSendNow());
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    await page.clock.fastForward(30_000);
+    await poll(page);
+    await expectNoEnglish(page.locator('#research-sync-pill'), 'The toolbar pill');
+    await openResearchMenu(page);
+    await expect(block(page)).toHaveAttribute('data-state', 'writtenConflicts');
+    await expectNoEnglish(block(page), 'The block: written, a conflict left');
+    await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+
+    // Installing the research (a tree without one).
+    await page.evaluate(() => window.Strom.UI.showResearchInstall());
+    await expectNoEnglish(page.locator('.modal-overlay.active').last(), 'Installing the research');
 });
