@@ -411,7 +411,7 @@ export const attachmentsMethods = uiModule({
         const mimeType = file.type || originalMimeOf(file.name);
         const original = { ...prepared, mimeType };
         const outcome = await this.queueOriginal(original, file, { personId });
-        if (outcome === 'queued' || outcome === 'sent') {
+        if (outcome === 'queued' || outcome === 'sent' || outcome === 'known') {
             DataManager.addAttachment(personId, { name: file.name, mimeType, dataUrl: '', sizeBytes: 0, original, originalOnly: true });
             this.renderAttachmentsList();
             this.noteOriginalOutcome(outcome, file.size, { personId });

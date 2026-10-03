@@ -230,6 +230,7 @@ export const materialMethods = uiModule({
         const files = [...picked];
         const go = overlay.querySelector<HTMLButtonElement>('.material-go');
         const queuedShas: string[] = [];
+        let known = 0;
         /** Files not sent nor waiting, with why (the first one is named). */
         const failed: { name: string; why: string }[] = [];
         const archive = this.researchModeOf(link.researchId) === 'archive';
@@ -249,6 +250,7 @@ export const materialMethods = uiModule({
             if (attach && 'personId' in target) await this.attachMaterialFile(target.personId, file, original);
             const outcome = await this.queueOriginal(original, file, { ...target, note, material: true });
             if (outcome === 'queued') queuedShas.push(original.sha256);
+            else if (outcome === 'known') known++;
             else if (outcome !== 'sent') failed.push({ name: file.name, why: this.materialWhy(outcome, link.researchId) });
         }
         // What waits goes now when the bridge runs (one at a time); waited for, so the toast tells what is left.
@@ -261,12 +263,17 @@ export const materialMethods = uiModule({
             : DataManager.getData().sources?.[target.sourceId]?.title ?? '';
         const ready = originalTargets('personId' in target ? { personId: target.personId } : { sourceId: target.sourceId }, DataManager.getData()).ready;
         const done = files.length - stillWaiting - failed.length;
+        const sent = done - known;
+        // The research had some already: said so (no task comes of them), never as "sent".
+        const knownPart = known > 0 ? ` ${m.alreadyHadPart(known)}` : '';
         if (failed.length) {
-            this.showToast(m.partialToast(done, files.length, failed[0].name, failed[0].why), 8000, { closable: true });
+            this.showToast(m.partialToast(done, files.length, failed[0].name, failed[0].why) + knownPart, 8000, { closable: true });
         } else if (stillWaiting > 0) {
-            this.showToast(ready ? m.queuedToast(stillWaiting) : m.noIdToast(stillWaiting), 6000, { closable: true });
+            this.showToast((ready ? m.queuedToast(stillWaiting) : m.noIdToast(stillWaiting)) + knownPart, 6000, { closable: true });
+        } else if (sent === 0 && known > 0) {
+            this.showToast(m.alreadyHadToast(known), 6000, { closable: true });
         } else {
-            this.showToast(archive ? m.savedArchiveToast(files.length, name) : m.sentToast(files.length, name), 6000, { closable: true });
+            this.showToast((archive ? m.savedArchiveToast(sent, name) : m.sentToast(sent, name)) + knownPart, 6000, { closable: true });
         }
     },
 

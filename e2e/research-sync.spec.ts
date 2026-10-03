@@ -238,6 +238,16 @@ test.describe('after a send the research wrote', () => {
     });
 });
 
+test('a newer version: the block offers Load, the menu does not repeat it', async ({ page }) => {
+    await openResearch(page);
+    await fakeBridge(page, { head: NEW_HEAD, treeGed: researchGed(NEW_HEAD) });
+    await poll(page);
+    await openResearchMenu(page);
+    await expect(block(page)).toHaveAttribute('data-state', 'newer');
+    await expect(block(page).locator('[data-action="loadNewer"]')).toBeVisible();
+    await expect(page.locator('#research-item-version')).toHaveCount(0);
+});
+
 test.describe('updating over changes the research does not have', () => {
     test('the pill; "Send, then load" waits for the research, then the new version loads by itself', async ({ page }) => {
         await openResearch(page, { edit: true });

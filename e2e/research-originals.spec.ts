@@ -496,6 +496,22 @@ test.describe('Send material… (beta.10)', () => {
         expect(b.mediaPuts).toEqual([]);
     });
 
+    test('material the research already has: sent with its note, and the toast says it had it (no task), not "sent"', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        b.mediaKnown.set(AVATAR_SHA, 'I0013');
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => (window.Strom.UI as any).showMaterialDialog({ personId: Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan')!.id }));
+        const dialog = page.locator('#material-modal');
+        await dialog.locator('#material-input').setInputFiles(AVATAR);
+        await dialog.locator('#material-note').fill('Dopis od babičky');
+        await dialog.getByRole('button', { name: 'Send 1 file' }).click();
+        await expect(page.locator('.toast')).toContainText('The research already has this file; no new task comes of it.');
+        // Not asked first: the note went along to the file it has.
+        expect(b.mediaPuts).toHaveLength(1);
+        expect(decodeURIComponent(b.mediaPuts[0].headers['x-strom-note'])).toBe('Dopis od babičky');
+    });
+
     test('the research not running: the files wait in the browser and go later', async ({ page }) => {
         const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
         await openResearch(page, { media: true });

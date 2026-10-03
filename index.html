@@ -8917,7 +8917,7 @@
             .research-sync-send-short { display: inline; }
         }
         /* Split Send button (A2): "Send | 3 ⌄", the second part opens "What will be sent". */
-        .toolbar .research-sync-pill.is-send { display: inline-flex; align-items: center; }
+        .toolbar .research-sync-pill.is-send { display: inline-flex; align-items: center; gap: 0; }
         .toolbar .research-sync-pill.is-split .research-sync-send { border-radius: 999px 0 0 999px; }
         /* Its place is always kept (invisible without people to show): the toolbar does not move. */
         .research-sync-send-more {
@@ -8928,6 +8928,8 @@
         }
         .research-sync-send-more:hover { filter: brightness(0.92); }
         .research-sync-send-more--placeholder { visibility: hidden; pointer-events: none; }
+        /* Sent by hand with nothing to send: the quiet mark at the end of the kept place (next to the tree switcher). */
+        .toolbar .research-sync-pill.is-reserved .research-sync-mark--reserved { position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 1; }
         .research-sync-send-more:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         /* "What will be sent" / "What was written": a bubble under the button (or ⋯). */
         /* ===== "Add materials" (C2): the batch wizard ===== */

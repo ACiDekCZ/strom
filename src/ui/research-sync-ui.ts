@@ -1461,7 +1461,14 @@ export const researchSyncMethods = uiModule({
             if (safariBrowser()) { hide(); return; }
             // Nothing to send: the button's place stays (empty), so the toolbar does not move when it comes.
             if (kind !== 'unsent') {
-                set('is-send is-reserved', `<span class="research-sync-send research-sync-send--placeholder" aria-hidden="true">`
+                // In its place the quiet mark (in step, or the research not running), at the end next to the tree switcher.
+                const down = kind === 'bridgeDown' || kind === 'unsentBridgeDown';
+                const lwm = researchAutoState(ctx.treeId).lastWritten;
+                const label = down ? s.markBridgeDown(lwm ? when(lwm.at) : '') : lwm ? s.writtenAt(when(lwm.at)) : s.stateInSync;
+                set('is-send is-reserved', `<button type="button" class="research-sync-mark research-sync-mark--reserved" id="research-sync-mark" data-look="${down ? 'ghost' : 'dot'}"`
+                    + ` title="${esc(label)}" aria-label="${esc(label)}" onclick="${call('openResearchSyncMenu')}">`
+                    + `<span class="research-sync-mark-${down ? 'ghost' : 'dot'}" aria-hidden="true"></span></button>`
+                    + `<span class="research-sync-send research-sync-send--placeholder" aria-hidden="true">`
                     + `<span class="research-sync-send-long">${esc(s.sendButton)}</span><span class="research-sync-send-short">${esc(s.barSend)}</span></span>`
                     + this.researchSendMoreHtml(true));
                 return;

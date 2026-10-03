@@ -138,6 +138,8 @@ export const researchActionsMethods = uiModule({
         let updateBlock = '';
         // A research that tells what it has (1.12+): its state on top, sending straight.
         const syncBlock = this.researchSyncBlockHtml();
+        // The block itself offers "Load new version" then: not again as a row under it.
+        const blockLoads = !!syncBlock && this.currentResearchSyncState().kind === 'newer';
         const researchId = this.activeResearchId();
         const capable = !!researchId && this.researchSyncCapable(researchId);
         const bridgeUp = capable && !!researchId && this.researchBridgeFresh(researchId);
@@ -154,7 +156,7 @@ export const researchActionsMethods = uiModule({
             // No strom-research:// links here (an older research, none announced, or
             // switched off): the way back, and what it is. A research that says what
             // it takes still gets its version loaded and its settings for this tree.
-            const look: SubmenuItem[] = bridgeUp
+            const look: SubmenuItem[] = bridgeUp && !blockLoads
                 ? [{ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') }] : [];
             const tree: SubmenuItem[] = this.researchTranscriptsCapable(researchId ?? undefined)
                 ? [{ id: 'research-item-tree-settings', label: strings.sync.treeSettings, run: call('researchActionTreeSettings') }] : [];
@@ -165,7 +167,7 @@ export const researchActionsMethods = uiModule({
             ], batch, tree];
         } else {
             const look: SubmenuItem[] = [];
-            if (this.researchLinkAvailable('app') || bridgeUp) look.push({ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') });
+            if ((this.researchLinkAvailable('app') || bridgeUp) && !blockLoads) look.push({ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') });
             if (waiting > 0) look.push({ id: 'research-item-waiting', label: r.waiting, run: call('researchActionWaiting'), count: waiting });
             // Follow live: the research starts (or reuses) its bridge and opens ?live= here (an archive has no agent to follow).
             if (!archive && this.researchLinkAvailable('live') && !this.isFollowingActiveResearch()) {

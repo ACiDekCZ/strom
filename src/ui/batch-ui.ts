@@ -58,7 +58,10 @@ interface Run {
     totalBytes: number;
     doneBytes: number;
     received: number;
+    /** Files the research answered it had (PUT → known): in its own count at the close. */
     skipped: number;
+    /** Files skipped before sending (GET said the research has them): never in the batch, counted here. */
+    skippedAsked: number;
     refused: { path: string; why: string }[];
     current: string;
     paused: boolean;
@@ -422,7 +425,10 @@ export const batchMethods = uiModule({
         const archive = this.researchModeOf(link.researchId) === 'archive';
         const chosen = s.items.filter(i => i.checked);
         const bytes = chosen.reduce((sum, i) => sum + i.size, 0);
-        const est = batchEstimate(chosen.length, this.researchAcceptsOf(link.researchId)?.mediaEstimate ?? null);
+        const rates = this.researchAcceptsOf(link.researchId)?.mediaEstimate ?? null;
+        const est = batchEstimate(chosen.length, rates);
+        // Fewer files than one task takes: the price of one task is the most it costs, not a typical amount.
+        const smallBatch = !!rates && chosen.length < rates.filesPerTask;
         const money = (n: number, cur: string): string => {
             try { return new Intl.NumberFormat(getCurrentLanguage(), { style: 'currency', currency: cur, maximumFractionDigits: n < 10 ? 2 : 0 }).format(n); }
             catch { return `${n} ${cur}`; }
@@ -431,7 +437,7 @@ export const batchMethods = uiModule({
             ? `<p class="material-box"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span>${esc(b.archiveInfo)}</span></p>`
             : `<div class="batch-confirm-block"><div class="batch-confirm-label">${esc(b.privacyTitle)}</div><p>${esc(b.privacy)}</p></div>
                <div class="batch-confirm-block"><div class="batch-confirm-label">${esc(b.costTitle)}</div>${est
-                    ? `<div class="batch-cost-row"><span>${esc(b.costSort)}</span><strong>${esc(b.about(money(est.amount, est.currency)))}</strong></div><p class="batch-cost-note">${esc(b.costNote)}</p>`
+                    ? `<div class="batch-cost-row"><span>${esc(b.costSort)}</span><strong>${esc(smallBatch ? b.atMost(money(est.amount, est.currency)) : b.about(money(est.amount, est.currency)))}</strong></div><p class="batch-cost-note">${esc(b.costNote)}</p>`
                     : `<p>${esc(b.costUnknown)}</p>`}</div>`;
         return `
                 <div class="modal-content batch-content">
@@ -469,7 +475,7 @@ export const batchMethods = uiModule({
                     <div class="batch-bar"><span style="width:${pct}%"></span></div>
                     ${r.paused ? `<p class="batch-paused-note">${esc(r.lost ? b.bridgeLost : b.pausedNote)}</p>`
                         : cur ? `<p class="batch-now">${esc(b.now(cur.path, formatBytesShort(cur.size)))}</p>` : ''}
-                    ${r.skipped ? `<p class="batch-skipped">${esc(b.skipped)} · ${r.skipped}</p>` : ''}
+                    ${r.skipped + r.skippedAsked ? `<p class="batch-skipped">${esc(b.skipped)} · ${r.skipped + r.skippedAsked}</p>` : ''}
                     ${refused}
                     <p class="batch-keep-tab">${esc(b.keepTabHide)}</p>
                 </div>
@@ -487,7 +493,8 @@ export const batchMethods = uiModule({
         const link = this.researchOriginalsLink();
         const archive = !!link && this.researchModeOf(link.researchId) === 'archive';
         const received = r.result?.inputs ?? r.received;
-        const known = r.result?.known ?? r.skipped;
+        // What the research already had: its count at the close (sent and known) plus what was skipped before sending.
+        const known = (r.result ? r.result.known : r.skipped) + r.skippedAsked;
         const refusedRow = r.refused.length === 1
             ? `<div class="batch-done-row is-warn"><span>${esc(b.refusedRow(r.refused[0].path, r.refused[0].why))}</span></div>`
             : r.refused.length > 1 ? `<details class="batch-refused"><summary>${esc(b.refused)} · ${r.refused.length}</summary><ul>${r.refused.slice(0, 200)
@@ -679,7 +686,7 @@ export const batchMethods = uiModule({
             id: resume?.id ?? newBatchId(), treeId: link.treeId, researchId: link.researchId, base: bridge.base,
             name: s.name.trim() || strings.batch.defaultName(new Date().toLocaleDateString(getCurrentLanguage())),
             person, personId: s.personId, note: s.note.trim(), queue, index: 0, total: queue.length,
-            totalBytes: queue.reduce((sum, i) => sum + i.size, 0), doneBytes: 0, received: 0, skipped: 0, refused: [],
+            totalBytes: queue.reduce((sum, i) => sum + i.size, 0), doneBytes: 0, received: 0, skipped: 0, skippedAsked: 0, refused: [],
             current: '', paused: false, lost: false, cancelled: false, finished: false, hidden: false, result: null, resume: null,
         };
         s.step = 'progress';
@@ -755,7 +762,7 @@ export const batchMethods = uiModule({
         if (!zip) {
             try {
                 const res = await fetchWithTimeout(url, ASK_TIMEOUT_MS);
-                if (res.ok && mediaReplyId(await res.json().catch(() => null))) { r.skipped++; return 'ok'; }
+                if (res.ok && mediaReplyId(await res.json().catch(() => null))) { r.skippedAsked++; return 'ok'; }
             } catch {
                 return 'down';
             }
@@ -810,7 +817,7 @@ export const batchMethods = uiModule({
 
     /** `POST /batch/<id>/done`: the research closes the batch and makes its tasks. */
     async batchClose(r: Run): Promise<DoneReply | null> {
-        const body = JSON.stringify({ name: r.name, files: r.received + r.skipped + r.refused.length,
+        const body = JSON.stringify({ name: r.name, files: r.received + r.skipped + r.skippedAsked + r.refused.length,
             ...(r.person ? { person: r.person } : {}), ...(r.note ? { note: r.note } : {}) });
         for (let attempt = 0; attempt < 4; attempt++) {
             try {

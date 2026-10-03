@@ -73,6 +73,28 @@ test.describe('Add materials', () => {
         await expect(dialog).toHaveCount(0);
     });
 
+    test('a file the research already has: skipped, the summary says how many it had; a small batch costs at most one task', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: BATCH_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => (window.Strom.UI as any).showBatchDialog());
+        await addFiles(page, ['Krabice/a.jpg', 'Krabice/b.jpg']);
+        // The research has a.jpg (its hash, as the page makes it).
+        const sha = await page.evaluate(async () => {
+            const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('obsah Krabice/a.jpg'));
+            return Array.from(new Uint8Array(buf)).map(x => x.toString(16).padStart(2, '0')).join('');
+        });
+        b.mediaKnown.set(sha, 'I0007');
+        const dialog = page.locator('#batch-modal');
+        await dialog.locator('[data-act="next"]').click();
+        await expect(dialog.locator('.batch-cost-row')).toContainText('at most about $1.00');
+        await dialog.getByRole('button', { name: 'Send 2 files' }).click();
+        await expect(dialog.locator('.batch-confirm-title')).toContainText('is in the research');
+        await expect(dialog.locator('.batch-done-row', { hasText: 'Already in the research' })).toContainText('1');
+        expect(b.mediaPuts).toHaveLength(1);
+        expect(b.batchDone![0].body).toMatchObject({ files: 2 });
+    });
+
     test('an unfinished batch: the block says so; Continue… opens the wizard with the banner; Discard forgets it', async ({ page }) => {
         await fakeBridge(page, { accepts: BATCH_ACCEPTS });
         await openResearch(page, { media: true });

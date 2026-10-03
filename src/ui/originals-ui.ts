@@ -43,7 +43,7 @@ const SENT_KEY = 'strom-originals-sent:';
 const SENT_MAX = 2000;
 
 /** Why an original was not queued (the attachment keeps its preview either way). 'sent': straight to a running research. */
-export type QueueOutcome = 'queued' | 'sent' | 'notLinked' | 'notTaken' | 'off' | 'safari' | 'encrypted' | 'tooLarge' | 'noRoom' | 'failed';
+export type QueueOutcome = 'queued' | 'sent' | 'known' | 'notLinked' | 'notTaken' | 'off' | 'safari' | 'encrypted' | 'tooLarge' | 'noRoom' | 'failed';
 
 /** Why only the preview is in the tree (the title of "preview only"). */
 export type PreviewOnlyWhy = 'room' | 'encrypted' | 'off' | 'older' | 'safari';
@@ -100,6 +100,9 @@ function sentMap(researchId: string): Record<string, string> {
         return {};
     }
 }
+
+/** Files the research answered it already had (sent on purpose, as material): told so, not "sent". */
+const knownByResearch = new Set<string>();
 
 function noteSent(researchId: string, sha: string, id: string): void {
     try {
@@ -229,7 +232,8 @@ export const originalsMethods = uiModule({
         if (bridgeFailure(null) === 'safari') { why('safari'); return 'safari'; }
         if (file.size > accepts.maxBytes) return 'tooLarge';
         if (target.material && this.researchBridgeUp(link.researchId)) {
-            if (await this.sendOriginalNow(link, original, file, target)) return 'sent';
+            knownByResearch.delete(original.sha256);
+            if (await this.sendOriginalNow(link, original, file, target)) return knownByResearch.has(original.sha256) ? 'known' : 'sent';
         }
         if (SettingsManager.isEncryptionEnabled()) {
             // Never kept in the browser in the clear: straight to a running research, or preview only.
@@ -663,8 +667,9 @@ export const originalsMethods = uiModule({
         };
         const targets = originalTargets(rec, DataManager.getData());
         if (!targets.ready) return false;
+        // Material goes even when the research has the file (its note and person with it); it says "known" then.
         const result = await this.sendOneOriginal(bridge.base, rec,
-            { ...targets, region: this.researchMediaAccepts(link.researchId)?.region ?? false });
+            { ...targets, region: this.researchMediaAccepts(link.researchId)?.region ?? false }, { force: !!target.material });
         if (result === 'down' || result === 'full' || result === 'retry' || result === 'refused') return false;
         noteSent(link.researchId, original.sha256, result);
         return true;
@@ -738,7 +743,7 @@ export const originalsMethods = uiModule({
                     this.renderAttachmentsList();
                     this.refreshResearchSyncUi();
                     const result = await this.sendOneOriginal(bridge.base, rec,
-                        { ...targets, region: this.researchMediaAccepts(link.researchId)?.region ?? false });
+                        { ...targets, region: this.researchMediaAccepts(link.researchId)?.region ?? false }, { force: !!rec.sendAnyway });
                     sendingKey = null;
                     if (result === 'down' || result === 'full') break;
                     if (result === 'retry') {
@@ -775,19 +780,22 @@ export const originalsMethods = uiModule({
      * large, hash mismatch), 'retry' (try again later) or 'down' (the bridge
      * does not answer — stop for now).
      */
-    async sendOneOriginal(base: string, rec: QueuedOriginal, targets: { person?: string; source?: string; region?: boolean }):
-        Promise<string | 'refused' | 'retry' | 'down' | 'full'> {
+    async sendOneOriginal(base: string, rec: QueuedOriginal, targets: { person?: string; source?: string; region?: boolean },
+        opts: { force?: boolean } = {}): Promise<string | 'refused' | 'retry' | 'down' | 'full'> {
         const url = `${base}/media/${rec.sha256}`;
-        try {
-            const res = await fetchWithTimeout(url, ASK_TIMEOUT_MS);
-            if (res.ok) {
-                const id = mediaReplyId(await res.json().catch(() => null));
-                if (id) return id;
-            } else if (res.status !== 404) {
-                return res.status >= 500 ? 'retry' : 'down';
+        // Sent on purpose (material, a deleted attachment's original): no asking first — its note goes along.
+        if (!opts.force) {
+            try {
+                const res = await fetchWithTimeout(url, ASK_TIMEOUT_MS);
+                if (res.ok) {
+                    const id = mediaReplyId(await res.json().catch(() => null));
+                    if (id) return id;
+                } else if (res.status !== 404) {
+                    return res.status >= 500 ? 'retry' : 'down';
+                }
+            } catch {
+                return 'down';
             }
-        } catch {
-            return 'down';
         }
         const ctl = typeof AbortController === 'function' ? new AbortController() : null;
         const timer = ctl ? setTimeout(() => ctl.abort(), Math.max(PUT_MIN_TIMEOUT_MS, rec.bytes / 2000)) : null;
@@ -801,7 +809,11 @@ export const originalsMethods = uiModule({
                 body: rec.blob,
                 signal: ctl?.signal,
             });
-            if (res.ok) return mediaReplyId(await res.json().catch(() => null)) ?? 'ok';
+            if (res.ok) {
+                const body = await res.json().catch(() => null) as Record<string, unknown> | null;
+                if (body && typeof body.known === 'string') knownByResearch.add(rec.sha256);
+                return mediaReplyId(body) ?? 'ok';
+            }
             // Too large / a kind it does not take: never. Out of disk space: stop for now.
             if (res.status === 413 || res.status === 415) {
                 console.warn(`Strom Research refused the original ${rec.name} (HTTP ${res.status})`);

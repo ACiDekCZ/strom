@@ -275,10 +275,11 @@ test.describe('the toolbar', () => {
         await expect(mark(page)).toHaveAttribute('data-look', 'ghost');
         await page.setViewportSize({ width: 1100, height: 900 });
         await expect(mark(page)).toBeHidden();
-        // Sent by hand: no mark.
+        // Sent by hand with nothing to send: the quiet mark stays, in the Send button's kept place.
         await page.setViewportSize({ width: 1600, height: 900 });
         await page.evaluate(() => window.Strom.UI.setResearchSendMode(window.Strom.TreeManager.getActiveTreeId()!, 'manual'));
-        await expect(mark(page)).toHaveCount(0);
+        await expect(mark(page)).toHaveAttribute('data-look', 'ghost');
+        await expect(page.locator('#research-sync-pill')).toHaveClass(/is-reserved/);
     });
 
     test('reduced motion: the spinner stands still', async ({ page }) => {
@@ -355,8 +356,11 @@ test.describe('the toolbar', () => {
         await poll(page);
         const switcher = page.locator('.tree-switcher').first();
         const send = page.locator('#research-sync-send');
+        // Nothing to send: the quiet mark in the button's place, next to the tree switcher.
+        await expect(page.locator('#research-sync-mark')).toHaveAttribute('data-look', 'dot');
         bridge.down = true;
         await poll(page);
+        await expect(page.locator('#research-sync-mark')).toHaveAttribute('data-look', 'ghost');
         await editJan(page);
         await expect(send).toHaveCount(0);
         // (After the edit: the storage pill "only in this browser" has its own place.)

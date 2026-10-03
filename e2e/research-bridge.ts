@@ -105,6 +105,9 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 const body = route.request().postDataBuffer();
                 b.mediaPuts.push({ sha, headers: route.request().headers(), bytes: body?.length ?? 0 });
                 if (b.mediaPutStatus !== 200) return json(b.mediaPutStatus, { error: 'no' });
+                // Content it has: said so (as the research does), nothing new.
+                const prior = b.mediaKnown.get(sha);
+                if (prior) return json(200, { known: prior, kind: 'input' });
                 const id = `I${String(100 + b.mediaPuts.length).padStart(4, '0')}`;
                 b.mediaKnown.set(sha, id);
                 return json(200, { input: id });
