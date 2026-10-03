@@ -64,6 +64,10 @@ export interface FakeBridge {
     mediaPutStatus: number;
     /** Files it can serve in full (`GET /media/<sha>?file=1`); others answer 410. */
     mediaFiles: Map<string, { type: string; body: Buffer }>;
+    /** Busy (starting up): every request answers 503 with Retry-After. */
+    busy?: boolean;
+    /** Every request it got (path, method). */
+    seen?: string[];
 }
 
 export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
@@ -82,6 +86,10 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
     await page.route(`${BRIDGE}/**`, async (route) => {
         if (b.down) return route.abort('connectionrefused');
         const url = new URL(route.request().url());
+        (b.seen ??= []).push(`${route.request().method()} ${url.pathname.replace(/^\/[^/]+/, '')}`);
+        if (b.busy && route.request().method() !== 'OPTIONS') {
+            return route.fulfill({ status: 503, headers: { ...cors, 'content-type': 'application/json', 'retry-after': '2' }, body: JSON.stringify({ error: 'busy' }) });
+        }
         const json = (status: number, body: unknown) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) });
         if (route.request().method() === 'OPTIONS') {
             return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-methods': 'GET, PUT, POST', 'access-control-allow-headers': '*' } });

@@ -75,6 +75,12 @@ const KEEPALIVE_MAX_CHARS = 60_000;
 /** The toolbar keeps a place for the research from this width (index.html has the same breakpoint). */
 const TOOLBAR_MIN_WIDTH = 1180;
 
+/** A Retry-After header (seconds) as ms, between 1 s and 30 s; 5 s when it says nothing usable. */
+function retryAfterMs(value: string | null): number {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? Math.min(30_000, Math.max(1000, n * 1000)) : 5000;
+}
+
 /** Researches that said nothing of what they take, asked once in this page whether they do now. */
 const olderAsked = new Set<string>();
 
@@ -85,6 +91,8 @@ interface BridgeRuntime {
     status: LiveStatus | null;
     /** The last ask failed the way Safari fails (a TypeError on a local address). */
     blocked: boolean;
+    /** It answered 503 (busy): asked again from this time (ms), sooner than a bridge that is down. */
+    busyUntil?: number;
     /** Since when it does not answer (ms; 0 = it answers). */
     downSince: number;
 }
@@ -391,9 +399,12 @@ export const researchSyncMethods = uiModule({
         if (!bridge) return null;
         let status: LiveStatus | null = null;
         let blocked = false;
+        let busyFor = 0;
         try {
             const res = await fetchWithTimeout(`${bridge.status}?poll=1`, timeout);
             if (res.ok) status = sanitizeLiveStatus(await res.json());
+            // Busy (starting up, a long write): ask again after the time it names.
+            else if (res.status === 503) busyFor = retryAfterMs(res.headers.get('Retry-After'));
         } catch (err) {
             blocked = err instanceof TypeError;
         }
@@ -401,7 +412,7 @@ export const researchSyncMethods = uiModule({
         if (status && status.treeId !== researchId) status = null;
         const prev = runtime.get(researchId);
         const downSince = status ? 0 : (prev?.up || !prev?.downSince ? Date.now() : prev.downSince);
-        runtime.set(researchId, { up: !!status, checkedAt: Date.now(), status, blocked: !status && blocked, downSince });
+        runtime.set(researchId, { up: !!status, checkedAt: Date.now(), status, blocked: !status && blocked, downSince, busyUntil: busyFor ? Date.now() + busyFor : 0 });
         if (status) {
             noteResearchLinks(status.links);
             noteResearchWaiting(researchId, status.waiting, status);
@@ -475,7 +486,8 @@ export const researchSyncMethods = uiModule({
                 const fps = this.researchSyncFingerprints(ctx.treeId, ctx.link);
                 return !fps.matchesBase && fps.current !== ctx.link.sent?.fingerprint;
             })();
-        const delay = downWithChanges ? POLL_DOWN_MS : waiting ? POLL_PENDING_MS : POLL_MS;
+        const busy = rt?.busyUntil && rt.busyUntil > Date.now() ? Math.max(1000, rt.busyUntil - Date.now()) : 0;
+        const delay = busy || (downWithChanges ? POLL_DOWN_MS : waiting ? POLL_PENDING_MS : POLL_MS);
         if (onlySooner && pollTimer && pollDueAt <= Date.now() + delay) return;
         if (pollTimer) clearTimeout(pollTimer);
         pollDueAt = Date.now() + delay;

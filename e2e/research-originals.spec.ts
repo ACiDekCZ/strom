@@ -383,3 +383,51 @@ test.describe('Send material… (beta.10)', () => {
         expect(b.mediaPuts[0].headers['x-strom-source']).toBe('S0001');
     });
 });
+
+test.describe('a bridge busy at start (503)', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('material waiting in the browser goes once the busy bridge answers; asking goes on after 503', async ({ page }) => {
+        await page.clock.install();
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        b.down = true;
+        await page.evaluate(() => (window.Strom.UI as any).showMaterialDialog({ personId: Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan')!.id }));
+        const dialog = page.locator('#material-modal');
+        await dialog.locator('#material-input').setInputFiles({ name: 'fotka.png', mimeType: 'image/png', buffer: readFileSync(AVATAR) });
+        await dialog.locator('#material-note').fill('poznámka');
+        await dialog.locator('.material-go').click();
+        await expect(dialog).toHaveCount(0);
+        await expect.poll(async () => (await queued(page)).length).toBe(1);
+
+        // The research starts: busy for a moment (503), then answers.
+        b.down = false;
+        b.busy = true;
+        await page.clock.fastForward(70_000);
+        await expect.poll(() => (b.seen ?? []).filter(x => x.includes('/status')).length).toBeGreaterThan(0);
+        b.busy = false;
+        // Busy said "Retry-After: 2": asked again within seconds, not after the minute.
+        await page.clock.fastForward(5_000);
+        await expect.poll(() => b.mediaPuts.length, { timeout: 10_000 }).toBe(1);
+        expect(decodeURIComponent(b.mediaPuts[0].headers['x-strom-note'])).toBe('poznámka');
+        await expect.poll(() => queued(page)).toEqual([]);
+    });
+
+    test('material left in the queue goes after a reload', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        b.down = true;
+        await page.evaluate(() => (window.Strom.UI as any).showMaterialDialog({ personId: Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan')!.id }));
+        const dialog = page.locator('#material-modal');
+        await dialog.locator('#material-input').setInputFiles({ name: 'fotka.png', mimeType: 'image/png', buffer: readFileSync(AVATAR) });
+        await dialog.locator('.material-go').click();
+        await expect.poll(async () => (await queued(page)).length).toBe(1);
+        b.down = false;
+        await page.reload();
+        await expect(page.locator('.person-card').first()).toBeVisible();
+        await expect.poll(() => b.mediaPuts.length, { timeout: 15_000 }).toBe(1);
+        await expect.poll(() => queued(page)).toEqual([]);
+    });
+});

@@ -461,7 +461,12 @@ function enqueueOpen<T>(job: () => Promise<T>): Promise<T | undefined> {
     return next;
 }
 
-/** fetch with a timeout where AbortController exists; never sends cookies. */
+/**
+ * fetch with a timeout where AbortController exists; never sends cookies.
+ * The timeout covers reading the body too (`res.json()` / `res.text()`):
+ * a bridge that sends its headers and then nothing more must not leave the
+ * caller waiting for ever (a stuck read stopped all asking in that page).
+ */
 export async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
     if (typeof fetch !== 'function') throw new Error('fetch unavailable');
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
@@ -474,8 +479,9 @@ export async function fetchWithTimeout(url: string, ms: number): Promise<Respons
             cache: 'no-store',
             signal: ctl?.signal,
         });
-    } finally {
+    } catch (err) {
         if (timer) clearTimeout(timer);
+        throw err;
     }
 }
 

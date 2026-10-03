@@ -158,16 +158,23 @@ async function allQueued(): Promise<QueuedOriginal[]> {
     }
 }
 
-/** Run `fn` as the only sender across tabs (Web Lock); without locks, as the only one in this tab. */
-async function asOnlySender(fn: () => Promise<void>): Promise<void> {
+/**
+ * Run `fn` as the only sender across tabs (Web Lock); without locks, as the
+ * only one in this tab. False when another tab is sending right now.
+ */
+async function asOnlySender(fn: () => Promise<void>): Promise<boolean> {
     const locks = (navigator as Navigator & { locks?: LockManager }).locks;
     if (locks?.request) {
+        let ran = false;
         await locks.request('strom-originals', { ifAvailable: true }, async (lock) => {
-            if (lock) await fn();
+            if (!lock) return;
+            ran = true;
+            await fn();
         });
-        return;
+        return ran;
     }
     await fn();
+    return true;
 }
 
 export const originalsMethods = uiModule({
@@ -664,8 +671,9 @@ export const originalsMethods = uiModule({
         if (!bridge) return;
         sending = true;
         let changed = false;
+        let ran = true;
         try {
-            await asOnlySender(async () => {
+            ran = await asOnlySender(async () => {
                 const data = DataManager.getData();
                 const referenced = referencedShas(data);
                 const all = await allQueued();
@@ -729,6 +737,8 @@ export const originalsMethods = uiModule({
             sendingKey = null;
             sendRun = null;
         }
+        // Another tab holds the sending: try again in a while (it may have closed meanwhile).
+        if (!ran) setTimeout(() => { void this.researchOriginalsKick(); }, 30_000);
         // The rows say what happened (sent, or "sending" over again with the bridge gone).
         this.renderAttachmentsList();
         if (changed) void this.renderOriginalsQueueRow();
