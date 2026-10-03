@@ -56,7 +56,7 @@ async function bridge(page: Page, reply: { status?: number; body?: unknown } = {
     const posts: { body: string; type: string }[] = [];
     const cancels: string[] = [];
     await page.route(`${BRIDGE}/**`, async (route) => {
-        const url = route.request().url();
+        const url = new URL(route.request().url()).pathname;
         if (url.endsWith('/status')) {
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
                 body: JSON.stringify({ tree: UUID, name: 'Víškovi', head: HEAD }) });
@@ -216,7 +216,7 @@ test.describe('send changes back to the research', () => {
         await openResearch(page, true);
         let statusCalls = 0;
         const { posts } = await bridge(page);
-        page.on('request', (r) => { if (r.url().endsWith('/status')) statusCalls++; });
+        page.on('request', (r) => { if (new URL(r.url()).pathname.endsWith('/status')) statusCalls++; });
         const target = `/strom.html?send=${encodeURIComponent(BRIDGE)}`;
         await page.addInitScript((t) => {
             Object.defineProperty(window, 'launchQueue', { configurable: true, value: {

@@ -8,7 +8,7 @@
  * in src/ui/research-ui.ts. Nothing here touches the DOM or storage.
  */
 
-import { StromData, PersonId, ResearchLink, Source } from './types.js';
+import { StromData, PersonId, ResearchLink, Source, APP_VERSION } from './types.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
 export const STROM_RESEARCH_SOURCE = 'STROM_RESEARCH';
@@ -344,6 +344,20 @@ export function parseLoopbackUrl(raw: unknown): URL | null {
     if (url.username !== '' || url.password !== '') return null;
     if (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost') return null;
     return url;
+}
+
+/**
+ * A request to a research bridge on this computer, with the app's version
+ * (`app=<version>`): the research decides by it what the app can show (the
+ * status of a fact, `_STROM_STATUS`). A query parameter, not a header — a
+ * header would need a CORS preflight that older bridges do not answer.
+ * Any other address comes back as it was.
+ */
+export function withAppVersion(raw: string, version: string = APP_VERSION): string {
+    const url = parseLoopbackUrl(raw);
+    if (!url || !version) return raw;
+    url.searchParams.set('app', version);
+    return url.toString();
 }
 
 /** The endpoints of a live research bridge. */

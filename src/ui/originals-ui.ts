@@ -20,7 +20,7 @@ import { SettingsManager } from '../settings.js';
 import { StorageManager } from '../storage.js';
 import { MediaOriginal, PersonId, StromData, TreeId } from '../types.js';
 import { storedResearchBridge, researchLinksEnabled } from '../research-device.js';
-import { parseLiveBridge } from '../research-link.js';
+import { parseLiveBridge, withAppVersion } from '../research-link.js';
 import { sha256OfBlob, normalizeSha256 } from '../sha256.js';
 import {
     QueuedOriginal, Region, queueKey, fitsBudget, exifOrientation, originalTargets, uploadHeaders, mediaReplyId,
@@ -297,7 +297,7 @@ export const originalsMethods = uiModule({
         const ctl = typeof AbortController === 'function' ? new AbortController() : null;
         const timer = ctl ? setTimeout(() => ctl.abort(), Math.max(PUT_MIN_TIMEOUT_MS, rec.bytes / 2000)) : null;
         try {
-            const res = await fetch(url, {
+            const res = await fetch(withAppVersion(url), {
                 method: 'PUT',
                 mode: 'cors',
                 credentials: 'omit',

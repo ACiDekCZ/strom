@@ -40,7 +40,7 @@ import {
     LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, ResearchHeaderInfo,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry } from '../research-link.js';
+import { withAppVersion, changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry } from '../research-link.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import { activeDirections, directionsMulti, queueDirectionFilter, setQueueDirectionFilter, taskDirectionName } from './research-directions-ui.js';
 import { iconSvg } from '../icons.js';
@@ -467,7 +467,7 @@ export async function fetchWithTimeout(url: string, ms: number): Promise<Respons
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), ms) : null;
     try {
-        return await fetch(url, {
+        return await fetch(withAppVersion(url), {
             method: 'GET',
             mode: 'cors',
             credentials: 'omit',
@@ -493,7 +493,7 @@ export async function postSync(url: string, gedcom: string, ms: number, keepaliv
     try {
         // text/plain keeps it a simple request (no CORS preflight beyond the
         // browser's own private-network check).
-        return await fetch(url, {
+        return await fetch(withAppVersion(url), {
             method: 'POST',
             mode: 'cors',
             credentials: 'omit',
@@ -515,7 +515,7 @@ export type SendCancelReason = 'unchanged' | 'cancelled' | 'no-tree';
 /** Tell the send bridge nothing is coming (fire and forget; errors ignored). */
 export function postCancel(url: string, reason: SendCancelReason): void {
     if (typeof fetch !== 'function') return;
-    void fetch(url, {
+    void fetch(withAppVersion(url), {
         method: 'POST',
         mode: 'cors',
         credentials: 'omit',
@@ -569,7 +569,7 @@ async function localNetworkReason(): Promise<ConnectReason> {
     return st.state === 'denied' ? 'denied' : st.state === 'prompt' ? 'prompt' : 'down';
 }
 
-async function fetchStatus(url: string, ms = 10000): Promise<LiveStatus | null> {
+export async function fetchStatus(url: string, ms = 10000): Promise<LiveStatus | null> {
     const res = await fetchWithTimeout(url, ms);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const status = sanitizeLiveStatus(await res.json());
@@ -1777,7 +1777,7 @@ export const researchUiMethods = uiModule({
         }
         let es: EventSource;
         try {
-            es = new EventSource(s.bridge.events);
+            es = new EventSource(withAppVersion(s.bridge.events));
         } catch {
             this.scheduleLive(s, () => this.probeLive(s), POLL_MS);
             return;

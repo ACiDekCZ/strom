@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import fs from 'fs';
 import { openApp, card, createFirstPerson } from './helpers.js';
 
 /**
@@ -195,9 +196,11 @@ test.describe('installing the research from the app', () => {
         await expect(dialog(other).locator('.research-install-dialog')).toHaveAttribute('data-step', 'wait');
 
         const posted: string[] = [];
+        const versions: string[] = [];
         await page.route(`${BRIDGE}/**`, async (route) => {
             const req = route.request();
             const path = new URL(req.url()).pathname;
+            versions.push(new URL(req.url()).searchParams.get('app') ?? '');
             if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-headers': '*' } });
             if (path.endsWith('/adopt') && req.method() === 'GET') {
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ token, name: 'Novákovi' }) });
@@ -223,8 +226,15 @@ test.describe('installing the research from the app', () => {
         await expect(ready.locator('.install-ready-path')).toHaveText('/Users/jan/Strom/Novakovi');
         await expect(ready).toContainText('full quality');
         expect(posted[0]).toContain('1 NAME Jan /Novak/');
+        // Every request names the app's version (the research decides what to send by it).
+        expect(versions.length).toBeGreaterThan(1);
+        const version = JSON.parse(fs.readFileSync('package.json', 'utf8')).version as string;
+        expect(new Set(versions)).toEqual(new Set([version]));
         expect(await installRecord(page)).toBeNull();
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.id)).toBe(UUID);
+        // Connected at once: the bridge that took the tree is remembered for the research.
+        const remembered = await page.evaluate((id) => localStorage.getItem(`strom-research-bridge:${id}`), UUID);
+        expect(JSON.parse(remembered ?? '{}').base).toBe(BRIDGE);
         await ready.getByRole('button', { name: 'Done' }).click();
         await expect(ready).toHaveCount(0);
 

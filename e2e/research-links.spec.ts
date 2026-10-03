@@ -57,7 +57,7 @@ const launched = (page: Page) => page.evaluate(() => (window as unknown as { __l
 /** The research answers the bridge status — with or without its links. */
 async function contact(page: Page, links: string[] | null): Promise<void> {
     await page.route(`${BRIDGE}/**`, (route) => {
-        const url = route.request().url();
+        const url = new URL(route.request().url()).pathname;
         if (url.endsWith('/status')) {
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
                 body: JSON.stringify({ tree: UUID, name: 'Víškovi', ...(links ? { links } : {}) }) });

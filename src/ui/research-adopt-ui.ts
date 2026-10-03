@@ -14,6 +14,7 @@ import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import { TreeId, TreeMetadata, StromData, STROM_DATA_VERSION } from '../types.js';
 import { readInstallRecord, installPhase, INSTALL_TTL_MS } from '../research-install.js';
+import { noteResearchBridge } from '../research-device.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom } from '../ged-exporter.js';
@@ -22,7 +23,7 @@ import {
     AdoptOffer,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { onComputer, fetchWithTimeout, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
+import { onComputer, fetchWithTimeout, fetchStatus, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
 
 const ADOPT_ID = 'research-adopt-modal';
@@ -155,6 +156,13 @@ export const researchAdoptMethods = uiModule({
             ...(reply.head ? { head: reply.head } : {}),
         });
         TreeManager.setResearchAdoptToken(tree.id, null);
+        // The bridge that took the tree is the research's own: the tree is
+        // connected now (sending by itself, the state in the bar), not only
+        // after the research opens the app again.
+        let status: Awaited<ReturnType<typeof fetchStatus>> = null;
+        try { status = await fetchStatus(`${bridge.base}/status`, 4000); } catch { /* connected at the next open */ }
+        if (status?.treeId !== reply.tree) noteResearchBridge(reply.tree, bridge.base);
+        this.refreshResearchSyncUi();
         this.updateTreeSwitcher();
         this.updateTreeManagerList();
         this.refreshActionMenuBadges();
@@ -239,7 +247,8 @@ export const researchAdoptMethods = uiModule({
     askResearchAdopt(tree: TreeMetadata, offer: AdoptOffer, data: ReturnType<typeof DataManager.getData>, opts: { install?: boolean } = {}): Promise<{ images: boolean } | null> {
         document.getElementById(ADOPT_ID)?.remove();
         const r = strings.research;
-        const persons = Object.values(data.persons).filter(p => !p.isPlaceholder).length;
+        // Everyone goes over, the unnamed too (the research counts them).
+        const persons = Object.keys(data.persons).length;
         const families = Object.keys(data.partnerships).length;
         const sources = Object.keys(data.sources ?? {}).length;
         const images = countImages(data);
