@@ -134,6 +134,8 @@ function writeBridge(researchId: string, value: StoredResearchBridge): void {
                 verified: value.accepts.verified, ...(value.accepts.media ? { media: {
                     ...(value.accepts.mediaMaxBytes ? { max: value.accepts.mediaMaxBytes } : {}),
                     ...(value.accepts.mediaRegion ? { region: true } : {}),
+                    ...(value.accepts.mediaBatch ? { batch: value.accepts.mediaBatch } : {}),
+                    ...(value.accepts.mediaEstimate ? { estimate: value.accepts.mediaEstimate } : {}),
                 } } : {}),
                 ...(value.accepts.mode === 'archive' ? { mode: 'archive' } : {}),
             } } : {}),

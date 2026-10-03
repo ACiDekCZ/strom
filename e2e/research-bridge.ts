@@ -68,6 +68,10 @@ export interface FakeBridge {
     busy?: boolean;
     /** Every request it got (path, method). */
     seen?: string[];
+    /** Every `POST /batch/<id>/done`: the batch and its body. */
+    batchDone?: { id: string; body: Record<string, unknown> }[];
+    /** Batches it reports in `/status.batches`. */
+    batches?: unknown[];
 }
 
 export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
@@ -119,6 +123,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             return json(200, {
                 tree: { id: UUID, name: 'Víškovi' }, head: b.head, links: b.links,
                 accepts: b.accepts, inbox: { trees: b.inbox, material: 0 }, lastIntake: b.lastIntake,
+                ...(b.batches ? { batches: b.batches } : {}),
                 ...(b.accepts ? { sends: b.sends } : {}),
             });
         }
@@ -153,6 +158,14 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: b.treeGed });
         }
         if (url.pathname.endsWith('/cancel')) return json(200, { ok: true });
+        const done = /\/batch\/([^/]+)\/done$/.exec(url.pathname);
+        if (done && route.request().method() === 'POST') {
+            let body: Record<string, unknown> = {};
+            try { body = JSON.parse(route.request().postData() ?? '{}'); } catch { /* keep empty */ }
+            (b.batchDone ??= []).push({ id: decodeURIComponent(done[1]), body });
+            const files = b.mediaPuts.filter(p => p.headers['x-strom-batch'] === decodeURIComponent(done[1])).length;
+            return json(200, { batch: done[1], name: body.name, inputs: files, known: 0, refused: 0, nested: [], tasks: files ? ['T0101'] : [], head: b.head });
+        }
         return route.fulfill({ status: 404, headers: cors, body: '' });
     });
     return b;

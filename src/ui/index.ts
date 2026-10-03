@@ -79,6 +79,7 @@ import { researchInstallMethods } from './research-install-ui.js';
 import { materialMethods } from './material-ui.js';
 import { researchUpdateMethods } from './research-update-ui.js';
 import { researchChangesMethods } from './research-changes-ui.js';
+import { batchMethods } from './batch-ui.js';
 import { evidenceUiMethods } from './evidence-ui.js';
 import { cardSignalsUiMethods } from './card-signals-ui.js';
 import { researchOverviewMethods } from './research-overview-ui.js';
@@ -540,6 +541,10 @@ Object.assign(UIClass.prototype, researchUpdateMethods);
 type ResearchChangesMethods = typeof researchChangesMethods;
 export interface UIClass extends ResearchChangesMethods {}
 Object.assign(UIClass.prototype, researchChangesMethods);
+
+type BatchMethods = typeof batchMethods;
+export interface UIClass extends BatchMethods {}
+Object.assign(UIClass.prototype, batchMethods);
 
 type EvidenceUiMethods = typeof evidenceUiMethods;
 export interface UIClass extends EvidenceUiMethods {}

@@ -158,10 +158,11 @@ export const researchActionsMethods = uiModule({
                 ? [{ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') }] : [];
             const tree: SubmenuItem[] = this.researchTranscriptsCapable(researchId ?? undefined)
                 ? [{ id: 'research-item-tree-settings', label: strings.sync.treeSettings, run: call('researchActionTreeSettings') }] : [];
+            const batch: SubmenuItem[] = this.batchAvailable() ? [{ id: 'research-item-batch', label: strings.batch.menu, run: call('showBatchDialog') }] : [];
             groups = [look, [
                 ...sendRow.map(i => ({ ...i, ext: false })),
                 { id: 'research-item-about', label: r.whatIs, run: call('researchActionWhatIs') },
-            ], tree];
+            ], batch, tree];
         } else {
             const look: SubmenuItem[] = [];
             if (this.researchLinkAvailable('app') || bridgeUp) look.push({ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') });
@@ -193,7 +194,9 @@ export const researchActionsMethods = uiModule({
             if (this.researchLinkAvailable('setup')) {
                 setup.push({ id: 'research-item-setup', label: capable ? r.settingsInResearch : r.settings, run: call('researchActionSetup'), ext: true });
             }
-            groups = archive ? [[...look, ...work], agent, setup] : [look, work, agent, setup];
+            // "Add materials…": its own group under "Open the research".
+            const batch: SubmenuItem[] = this.batchAvailable() ? [{ id: 'research-item-batch', label: strings.batch.menu, run: call('showBatchDialog') }] : [];
+            groups = archive ? [[...look, ...work], batch, agent, setup] : [look, work, batch, agent, setup];
             note = true;
             // A newer research: a block above the rows, its "Update" the only item in it.
             if (known?.update) {

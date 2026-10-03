@@ -303,6 +303,11 @@ export const researchSyncMethods = uiModule({
         return runtime.get(researchId)?.status?.accepts ?? storedResearchBridge(researchId)?.accepts ?? null;
     },
 
+    /** The research's last status in this page (null: not asked yet, or it did not answer). */
+    researchStatusOf(researchId: string): LiveStatus | null {
+        return runtime.get(researchId)?.status ?? null;
+    },
+
     /** The research's version as its bridge said it in this page ('' = not asked yet, or not said). */
     researchBridgeVersion(researchId: string): string {
         return runtime.get(researchId)?.status?.version ?? '';
@@ -1355,6 +1360,7 @@ export const researchSyncMethods = uiModule({
             + (b.sub ? `<div class="research-sync-sub">${esc(b.sub)}</div>` : '')
             + (buttons ? `<div class="research-sync-actions">${buttons}</div>` : '')
             + this.originalsQueueLineHtml()
+            + this.batchLineHtml()
             + '</div>';
     },
 

@@ -8930,6 +8930,99 @@
         .research-sync-send-more--placeholder { visibility: hidden; pointer-events: none; }
         .research-sync-send-more:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         /* "What will be sent" / "What was written": a bubble under the button (or ⋯). */
+        /* ===== "Add materials" (C2): the batch wizard ===== */
+        .drop-overlay-title { font-size: 17px; font-weight: 600; }
+        .drop-overlay-sub { margin-top: 6px; font-size: 13px; color: var(--text-light); max-width: 420px; }
+        #batch-modal .batch-dialog {
+            width: 880px; max-width: calc(100vw - 32px); height: calc(100vh - 64px); max-height: 900px;
+            display: flex; flex-direction: column; padding: 0; overflow: hidden;
+        }
+        .batch-header { display: flex; align-items: flex-start; gap: 14px; padding: 18px 20px 12px; border-bottom: 1px solid var(--border); flex: none; }
+        .batch-header .audit-log-heading { flex: 1; min-width: 0; }
+        .batch-steps { display: flex; gap: 6px; list-style: none; margin: 4px 0 0; padding: 0; flex: none; }
+        .batch-step { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--text-light); white-space: nowrap; }
+        .batch-step.is-active { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+        .batch-step.is-done { background: var(--primary-soft); color: var(--primary-dark); }
+        .batch-content { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px; }
+        .batch-footer { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border); background: var(--surface-2); margin: 0; }
+        .batch-foot-note { flex: 1; min-width: 0; font-size: 12px; color: var(--text-light); line-height: 1.4; }
+        .batch-foot-note strong { color: var(--text); font-size: 13px; }
+        .batch-banner { display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 14px; border-radius: var(--r-md); background: var(--surface-2); font-size: 13px; }
+        .batch-banner-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .batch-banner-actions { display: flex; gap: 10px; align-items: center; flex: none; }
+        .batch-drop {
+            min-height: 190px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+            border: 2px dashed var(--border); border-radius: var(--r-lg); padding: 20px; text-align: center; background: var(--surface);
+        }
+        .batch-drop.is-over { border-color: var(--primary); background: var(--primary-soft); }
+        .batch-drop.is-down { border-style: solid; background: var(--surface-2); }
+        .batch-drop-title { font-size: 15px; font-weight: 600; }
+        .batch-drop-note { font-size: 13px; color: var(--text-light); max-width: 460px; }
+        .batch-drop-buttons { display: flex; gap: 10px; margin-top: 6px; }
+        .batch-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin-top: 16px; }
+        .batch-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--text); }
+        .batch-field input, .batch-field textarea { font-weight: 400; width: 100%; box-sizing: border-box; }
+        .batch-field-wide { grid-column: 1 / -1; }
+        .batch-optional { font-weight: 400; color: var(--text-light); }
+        .batch-list-title { font-size: 15px; font-weight: 600; }
+        .batch-list-sub { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+        .batch-toolbar { display: flex; align-items: center; gap: 12px; margin: 12px 0 8px; }
+        .batch-toolbar input[type="search"] { flex: 1; min-width: 0; }
+        .batch-list { border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+        .batch-row {
+            display: grid; grid-template-columns: minmax(0, 1fr) 70px 110px minmax(0, 0.8fr); gap: 10px; align-items: center;
+            min-height: 34px; padding: 0 12px 0 calc(12px + var(--depth, 0) * 22px); border-top: 1px solid var(--border); font-size: 13px;
+        }
+        .batch-row-head { border-top: 0; min-height: 30px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-light); background: var(--surface-2); }
+        .batch-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .batch-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .batch-folder .batch-name-text { font-weight: 600; }
+        .batch-chevron { width: 18px; padding: 0; border: 0; background: none; color: var(--text-light); cursor: pointer; font-size: 12px; }
+        .batch-type, .batch-size { color: var(--text-light); font-size: 12px; white-space: nowrap; }
+        .batch-reason { color: var(--warning-text); font-size: 12px; }
+        .batch-file.is-off .batch-name-text { color: var(--text-light); }
+        .batch-more, .batch-more-note { display: block; padding-top: 7px; padding-bottom: 7px; font-size: 12px; color: var(--text-light); }
+        .batch-over { flex: none; margin: 0; padding: 8px 20px; background: var(--warning-soft); color: var(--warning-text); font-size: 13px; }
+        .batch-confirm-title { margin: 0 0 6px; font-size: 18px; }
+        .batch-confirm-sum { margin: 0 0 16px; color: var(--text-light); }
+        .batch-confirm-block { padding: 12px 14px; margin-bottom: 12px; border-radius: var(--r-md); background: var(--surface-2); font-size: 13px; }
+        .batch-confirm-block p { margin: 4px 0 0; }
+        .batch-confirm-label { font-weight: 600; }
+        .batch-cost-row { display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; }
+        .batch-cost-note { color: var(--text-light); font-size: 12px; }
+        .batch-keep-tab { font-size: 12px; color: var(--text-light); }
+        .batch-progress-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; }
+        .batch-progress-sub { font-size: 13px; color: var(--text-light); margin: 2px 0 16px; }
+        .batch-progress-count { display: flex; align-items: baseline; gap: 8px; }
+        .batch-progress-count strong { font-size: 22px; }
+        .batch-progress-count span { font-size: 13px; color: var(--text-light); }
+        .batch-bar { height: 8px; margin: 10px 0; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+        .batch-bar span { display: block; height: 100%; background: var(--primary); transition: width 0.3s; }
+        .batch-progress.is-paused .batch-bar span { background: var(--text-light); }
+        .batch-now, .batch-skipped, .batch-paused-note { font-size: 13px; color: var(--text-light); overflow-wrap: anywhere; }
+        .batch-refused { font-size: 13px; margin: 8px 0; }
+        .batch-refused summary { cursor: pointer; color: var(--warning-text); }
+        .batch-refused ul { margin: 6px 0 0; padding-left: 18px; color: var(--text-light); }
+        .batch-done-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+        .batch-done-row.is-warn { color: var(--warning-text); }
+        .batch-done-text { font-size: 13px; color: var(--text-light); margin: 14px 0; }
+        .is-danger-text { color: var(--danger) !important; }
+        .material-big-batch { display: inline-block; margin: 2px 0 10px; }
+        @media (min-width: 500px) and (max-width: 900px) {
+            #batch-modal .batch-dialog { height: calc(100vh - 32px); }
+            .batch-row { grid-template-columns: minmax(0, 1fr) 60px 90px; }
+            .batch-row .batch-reason { grid-column: 1 / -1; padding-bottom: 6px; }
+        }
+        @media (max-width: 499px) {
+            #batch-modal .batch-dialog { max-width: calc(100vw - 16px); height: calc(100vh - 16px); }
+            .batch-header { flex-wrap: wrap; }
+            .batch-fields { grid-template-columns: 1fr; }
+            .batch-row { grid-template-columns: minmax(0, 1fr) 70px; }
+            .batch-row .batch-type, .batch-row-head span:nth-child(2), .batch-row-head span:nth-child(4) { display: none; }
+            .batch-row .batch-reason { grid-column: 1 / -1; padding-bottom: 6px; }
+            .batch-footer { flex-wrap: wrap; }
+            .batch-foot-note { flex-basis: 100%; }
+        }
         /* A large file for a research being read (hash, preview). */
         .attachment-preparing { align-items: center; }
         .attachment-preparing-spin { flex: none; width: 14px; height: 14px; margin: 0 6px; color: var(--primary); }

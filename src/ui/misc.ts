@@ -793,6 +793,10 @@ export const miscMethods = uiModule({
                         this.closeMaterialDialog();
                         return;
                     }
+                    if (currentDialog === 'batch-modal') {
+                        void this.cancelBatchDialog();
+                        return;
+                    }
                     if (currentDialog === 'research-update-modal') {
                         this.closeResearchUpdateHelp();
                         return;

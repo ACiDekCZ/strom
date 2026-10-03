@@ -148,6 +148,7 @@ export const materialMethods = uiModule({
                             <button type="button" class="material-remove" data-index="${i}" aria-label="${esc(strings.relationships.remove)}">&times;</button>
                         </li>`).join('')}</ul>` : ''}
                     ${rejected ? `<p class="material-rejected">${esc(m.rejectedTypes(rejected))}</p>` : ''}
+                    ${this.batchAvailable() ? `<button type="button" class="research-sync-link material-big-batch">${esc(m.bigBatch)}</button>` : ''}
                     <label class="material-note-label" for="material-note">${esc(m.note)}</label>
                     <textarea id="material-note" rows="2" maxlength="${MATERIAL_NOTE_MAX}">${esc(note)}</textarea>
                     <div class="material-note-count">${note.length} / ${MATERIAL_NOTE_MAX}</div>
@@ -167,6 +168,11 @@ export const materialMethods = uiModule({
         overlay.querySelector('.close-btn')?.addEventListener('click', () => this.closeMaterialDialog());
         overlay.querySelector('[data-dismiss]')?.addEventListener('click', () => this.closeMaterialDialog());
         overlay.querySelector('.material-pick')?.addEventListener('click', () => input?.click());
+        overlay.querySelector('.material-big-batch')?.addEventListener('click', () => {
+            const personId = 'personId' in target ? target.personId : undefined;
+            this.closeMaterialDialog();
+            this.showBatchDialog(personId ? { personId } : {});
+        });
         input?.addEventListener('change', () => { this.addMaterialFiles(Array.from(input.files ?? [])); });
         const drop = overlay.querySelector<HTMLElement>('.material-drop');
         drop?.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('is-over'); });

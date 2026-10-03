@@ -905,7 +905,12 @@ export const researchUiMethods = uiModule({
                 document.body.appendChild(node);
             }
             const box = node.firstElementChild;
-            if (box) box.textContent = strings.research.dropHint;
+            // A tree linked to a research that takes batches: other files go there as material.
+            if (box && this.batchAvailable()) {
+                box.innerHTML = '';
+                box.appendChild(el('div', 'drop-overlay-title', strings.batch.dropTitle));
+                box.appendChild(el('div', 'drop-overlay-sub', strings.batch.dropSub));
+            } else if (box) box.textContent = strings.research.dropHint;
             node.classList.add('active');
         };
 
@@ -933,7 +938,13 @@ export const researchUiMethods = uiModule({
                 if (!hasFiles(e) || onFileInput(e)) return;
                 e.preventDefault();
                 if (modalOpen()) return;
-                const file = e.dataTransfer?.files?.[0];
+                const files = Array.from(e.dataTransfer?.files ?? []);
+                // Anything but one family tree, for a research that takes batches: the batch's review.
+                if (this.batchAvailable() && !(files.length === 1 && isGedcomFileName(files[0].name))) {
+                    void this.batchFilesFromDrop(e.dataTransfer).then(list => this.showBatchDialog({ files: list }));
+                    return;
+                }
+                const file = files[0];
                 if (file) void this.openGedcomFile(file);
             });
         } catch (err) {

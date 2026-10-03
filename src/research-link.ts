@@ -813,6 +813,38 @@ export interface LiveStatus {
     sends: ResearchSendRecord[] | null;
     /** The research's own version (`strom`, "1.11.0"; '' = not said). */
     version: string;
+    /** Batches of "Add materials" of the last days and any not yet sorted; null: an older research. */
+    batches: LiveBatch[] | null;
+}
+
+/** One batch as the research keeps it (`/status.batches`). */
+export interface LiveBatch {
+    id: string;
+    name: string;
+    state: 'open' | 'closed';
+    at: string;
+    files: number;
+    known: number;
+    refused: number;
+    sorted: number;
+}
+
+/** `/status.batches`. Untrusted. */
+export function sanitizeBatches(value: unknown): LiveBatch[] | null {
+    if (!Array.isArray(value)) return null;
+    const out: LiveBatch[] = [];
+    for (const item of value.slice(0, MAX_ITEMS)) {
+        const b = asRecord(item);
+        const id = typeof b?.id === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(b.id) ? b.id : '';
+        if (!b || !id) continue;
+        const at = cleanText(b.at, 40);
+        out.push({
+            id, name: cleanText(b.name, MAX_NAME), state: b.state === 'open' ? 'open' : 'closed',
+            at: Number.isFinite(Date.parse(at)) ? at : '',
+            files: asCount(b.files) ?? 0, known: asCount(b.known) ?? 0, refused: asCount(b.refused) ?? 0, sorted: asCount(b.sorted) ?? 0,
+        });
+    }
+    return out;
 }
 
 /** One send of the app as the research keeps it (`/status.sends`). */
@@ -907,6 +939,10 @@ export interface ResearchAccepts {
     mediaRegion: boolean;
     /** The kinds of file it takes (`accepts.media.types`); null when it does not say. */
     mediaTypes: { mime: string; ext: string[] }[] | null;
+    /** It takes batches ("Add materials", `accepts.media.batch`): at most so many files and bytes, ZIP or not; null: no batches. */
+    mediaBatch: { files: number; bytes: number; zip: boolean } | null;
+    /** A rough cost of sorting a batch (`accepts.media.estimate`); null: not said (an archive, or no rates). */
+    mediaEstimate: { filesPerTask: number; perTask: number; currency: string; basis: 'past' | 'typical' } | null;
     /** It works with an agent, or as an archive of the user's data without one (`mode: "archive"`). */
     mode: 'agent' | 'archive';
     /** A send waits in the research's inbox for the user (`sync.auto: "off"`). */
@@ -947,6 +983,23 @@ function mediaTypes(value: unknown): { mime: string; ext: string[] }[] | null {
     return out.length ? out : null;
 }
 
+/** `accepts.media.batch`. Untrusted. */
+function mediaBatch(value: unknown): ResearchAccepts['mediaBatch'] {
+    const b = asRecord(value);
+    const files = asCount(b?.files);
+    const bytes = mediaMaxBytes(b?.bytes);
+    return b && files && bytes ? { files, bytes, zip: b.zip === true } : null;
+}
+
+/** `accepts.media.estimate`. Untrusted. */
+function mediaEstimate(value: unknown): ResearchAccepts['mediaEstimate'] {
+    const e = asRecord(value);
+    const per = typeof e?.perTask === 'number' && Number.isFinite(e.perTask) && e.perTask >= 0 ? e.perTask : null;
+    const files = asCount(e?.filesPerTask);
+    const currency = typeof e?.currency === 'string' && /^[A-Z]{3}$/.test(e.currency) ? e.currency : '';
+    return e && per !== null && files && currency ? { filesPerTask: files, perTask: per, currency, basis: e.basis === 'past' ? 'past' : 'typical' } : null;
+}
+
 export function sanitizeAccepts(value: unknown): ResearchAccepts | null {
     const r = asRecord(value);
     if (!r) return null;
@@ -960,6 +1013,8 @@ export function sanitizeAccepts(value: unknown): ResearchAccepts | null {
         mediaMaxBytes: mediaMaxBytes(asRecord(r.media)?.max ?? asRecord(r.media)?.maxBytes),
         mediaRegion: asRecord(r.media)?.region === true,
         mediaTypes: mediaTypes(asRecord(r.media)?.types),
+        mediaBatch: mediaBatch(asRecord(r.media)?.batch),
+        mediaEstimate: mediaEstimate(asRecord(r.media)?.estimate),
         mode: r.mode === 'archive' ? 'archive' : 'agent',
         review: auto === 'off' && r.mode !== 'archive',
     };
@@ -1192,6 +1247,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         inbox: sanitizeInbox(r.inbox),
         sends: sanitizeSends(r.sends),
         version: researchVersion(r.strom),
+        batches: sanitizeBatches(r.batches),
     };
 }
 

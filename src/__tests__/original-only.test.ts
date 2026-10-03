@@ -16,7 +16,7 @@ const SHA = 'c'.repeat(64);
 function tree(): StromData {
     const anna: Person = {
         id: 'p1' as PersonId, firstName: 'Anna', lastName: 'Víšková', gender: 'female', isPlaceholder: false,
-        partnerships: [], parentIds: [],
+        partnerships: [], parentIds: [], childIds: [],
         attachments: [{
             id: 'att1', name: 'matrika-1846.tif', mimeType: 'image/tiff', dataUrl: '', sizeBytes: 0, originalOnly: true,
             original: { sha256: SHA, name: 'matrika-1846.tif', mimeType: 'image/tiff', bytes: 148_000_000 },
