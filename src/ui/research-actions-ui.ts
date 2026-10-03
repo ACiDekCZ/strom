@@ -208,6 +208,9 @@ export const researchActionsMethods = uiModule({
                     + '</div>';
             }
         }
+        // An older research (it never said what it takes): a quiet line, "How to update…" (the research's own newer-version block goes first).
+        const olderLine = updateBlock ? '' : this.researchOlderLineHtml('menu');
+        if (olderLine) updateBlock = `<div class="research-update-block research-older-block" id="research-older-block">${olderLine}</div>`;
         const html = syncBlock + updateBlock + groups.filter(g => g.length > 0)
             .map(g => g.map(submenuItemHtml).join(''))
             .join('<div class="tree-switcher-divider"></div>')

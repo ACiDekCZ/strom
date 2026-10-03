@@ -302,6 +302,11 @@ export const researchSyncMethods = uiModule({
         return runtime.get(researchId)?.status?.accepts ?? storedResearchBridge(researchId)?.accepts ?? null;
     },
 
+    /** The research's version as its bridge said it in this page ('' = not asked yet, or not said). */
+    researchBridgeVersion(researchId: string): string {
+        return runtime.get(researchId)?.status?.version ?? '';
+    },
+
     /** The research said what it takes (now or before): sending straight and the states are on. */
     researchSyncCapable(researchId: string): boolean {
         return !!(runtime.get(researchId)?.status?.accepts ?? storedResearchBridge(researchId)?.accepts);

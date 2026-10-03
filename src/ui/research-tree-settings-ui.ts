@@ -84,7 +84,8 @@ export const researchTreeSettingsMethods = uiModule({
                 </span>
             </label>`;
         const effect = archive ? t.effectArchive : this.researchReviewOn(link.id) ? t.effectReview : t.effectAgent;
-        const sendingHtml = !sendingShown ? '' : `
+        const olderLine = sendingShown ? '' : this.researchOlderLineHtml('settings');
+        const sendingHtml = !sendingShown ? (olderLine ? `<p class="research-older-line">${olderLine}</p>` : '') : `
                 <fieldset class="research-transcripts research-send-mode">
                     <legend>${esc(t.sending)}</legend>
                     ${sendOption('auto', t.auto, compact ? t.autoDescShort : t.autoDesc, true)}

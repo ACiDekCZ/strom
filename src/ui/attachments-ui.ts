@@ -132,7 +132,10 @@ export const attachmentsMethods = uiModule({
         const older = document.getElementById('attachments-older-research');
         if (older) {
             older.hidden = !this.researchMediaOlder();
-            older.textContent = strings.media.olderResearch;
+            // Older than 1.12: the line says how to update; a newer one that takes no originals: just the line.
+            const html = this.researchOlderLineHtml('attachments');
+            if (html) older.innerHTML = html;
+            else older.textContent = strings.media.olderResearch;
         }
     },
 

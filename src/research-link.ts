@@ -810,6 +810,8 @@ export interface LiveStatus {
     inbox: ResearchInbox | null;
     /** The app's sends of the last days and what became of each; null: an older research. */
     sends: ResearchSendRecord[] | null;
+    /** The research's own version (`strom`, "1.11.0"; '' = not said). */
+    version: string;
 }
 
 /** One send of the app as the research keeps it (`/status.sends`). */
@@ -1188,7 +1190,13 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         accepts: sanitizeAccepts(r.accepts),
         inbox: sanitizeInbox(r.inbox),
         sends: sanitizeSends(r.sends),
+        version: researchVersion(r.strom),
     };
+}
+
+/** A version as the research names itself ("1.11.0", "1.12.0-beta.2"), or ''. Untrusted. */
+export function researchVersion(value: unknown): string {
+    return typeof value === 'string' && /^\d{1,4}\.\d{1,4}\.\d{1,6}(-[0-9A-Za-z.]{1,20})?$/.test(value) ? value : '';
 }
 
 /** One version of the research in its history (a commit): when, what, on which task. */

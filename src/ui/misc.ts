@@ -793,6 +793,10 @@ export const miscMethods = uiModule({
                         this.closeMaterialDialog();
                         return;
                     }
+                    if (currentDialog === 'research-update-modal') {
+                        this.closeResearchUpdateHelp();
+                        return;
+                    }
                     if (currentDialog === 'research-connect-failed') {
                         this.cancelResearchConnectFailed();
                         return;

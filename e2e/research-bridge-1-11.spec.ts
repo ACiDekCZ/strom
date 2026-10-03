@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { cardAction, personModal } from './helpers.js';
-import { openResearch, editJan, poll, researchGed, dropFile, BRIDGE, UUID, HEAD, NEW_HEAD } from './research-bridge.js';
+import { openResearch, openResearchMenu, editJan, poll, researchGed, dropFile, BRIDGE, UUID, HEAD, NEW_HEAD } from './research-bridge.js';
 
 /**
  * Backward compatibility: this app with the bridge of Strom Research 1.11.0
@@ -132,6 +132,31 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
         await page.clock.fastForward(3 * 60_000);
         await expect.poll(() => b.posts.length).toBeGreaterThan(0);
         expect(b.posts[0]).toContain('tkadlec');
+    });
+
+    test('the older version is said quietly, with how to update it; once updated, the line goes', async ({ page }) => {
+        await bridge111(page);
+        await openResearch(page, { capable: false });
+        await poll(page);
+        await openResearchMenu(page);
+        const line = page.locator('#research-older-block');
+        await expect(line).toContainText('The research has an older version (1.11.0)');
+        await line.getByRole('button', { name: 'How to update…' }).click();
+        const dialog = page.locator('#research-update-modal');
+        await expect(dialog.locator('.install-line').nth(0)).toHaveText('strom update');
+        await expect(dialog.locator('.install-line').nth(1)).toHaveText('npm install -g strom-research@latest');
+        await expect(dialog).toContainText('paste the install line again');
+        // Not updated yet: said so, the dialog stays.
+        await dialog.getByRole('button', { name: 'Check again' }).click();
+        await expect(dialog).toContainText('The research still has the older version (1.11.0)');
+        // Updated (same port and token): it says what it takes now.
+        const { fakeBridge } = await import('./research-bridge.js');
+        await fakeBridge(page, { accepts: { sync: { auto: 'off' }, sources: true, verified: true, media: null } });
+        await dialog.getByRole('button', { name: 'Check again' }).click();
+        await expect(dialog).toHaveCount(0);
+        await expect(page.locator('.toast')).toContainText('The research is updated');
+        await openResearchMenu(page);
+        await expect(page.locator('#research-older-block')).toHaveCount(0);
     });
 
     test('?send= with its reply {ok, changes, file}: sent, said so', async ({ page }) => {

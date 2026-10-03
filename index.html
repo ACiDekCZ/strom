@@ -9042,6 +9042,17 @@
             background: var(--surface-2); border-radius: 8px;
         }
         .research-update-title { font-size: 13px; font-weight: 600; color: var(--text); }
+        /* An older research: a quiet line with "How to update…" (menu, Research for this tree, Attachments). */
+        .research-older-block, .research-older-line { font-size: 13px; color: var(--text-light); line-height: 1.45; }
+        .research-older-line { margin: 0 0 12px; }
+        .research-older-how { padding: 0; font-size: inherit; }
+        .research-update-dialog .research-update-intro { margin: 0 0 14px; }
+        .research-update-dialog .research-update-label { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--text); }
+        .research-update-dialog .research-update-hint { margin: 4px 0 8px; font-size: 13px; color: var(--text-light); }
+        .research-update-dialog .research-update-note { margin: 10px 0 0; padding: 8px 10px; border-radius: var(--r-md); background: var(--surface-2); font-size: 13px; }
+        .research-update-dialog { width: 560px; max-width: calc(100vw - 32px); }
+        @media (max-width: 499px) { .research-update-dialog { max-width: calc(100vw - 16px); } }
+        @media (min-width: 500px) and (max-width: 900px) { .research-update-dialog { width: 500px; } }
         .actions-research-submenu .tree-switcher-action.research-update-action {
             display: inline-flex; margin: 2px -6px 0; padding: 4px 6px; border-radius: var(--r-sm);
             font-size: 13px; color: var(--primary); background: none;

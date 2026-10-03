@@ -1053,6 +1053,24 @@ const stringsEN = {
         show: 'Show…',
     },
 
+    // An older Strom Research (1.11 and before): how to update it
+    researchOlder: {
+        title: 'Update the research',
+        line: (v: string) => `The research has an older version${v ? ` (${v})` : ''}. Update it to send changes by itself and take originals.`,
+        how: 'How to update…',
+        intro: (v: string) => `The research on this computer has an older version${v ? ` (${v})` : ''}. The new one sends your changes by itself and takes original files.`,
+        runInTerminal: 'In a terminal, run:',
+        npm: 'Installed with npm:',
+        restart: 'If the research is running, start it again afterwards.',
+        fallback: "If that doesn't work, or the app still says the older version, paste the install line again. Your research and settings stay.",
+        showInstall: 'Show the install line',
+        check: 'Check again',
+        checking: 'Checking…',
+        updated: (v: string) => `The research is updated${v ? ` (${v})` : ''}.`,
+        stillOlder: (v: string) => `The research still has the older version${v ? ` (${v})` : ''}. Is the updated program running? Start the research again.`,
+        notAnswering: "The research isn't responding. Start it and check again.",
+    },
+
     // "Send material…" to the research (a person, a source)
     material: {
         send: 'Send material…',
@@ -4210,6 +4228,23 @@ const stringsCZ: StringsType = {
         show: 'Ukázat…',
     },
 
+    researchOlder: {
+        title: 'Aktualizovat výzkum',
+        line: (v: string) => `Výzkum má starší verzi${v ? ` (${v})` : ''}. Aktualizujte ho pro automatické posílání a originály.`,
+        how: 'Jak aktualizovat…',
+        intro: (v: string) => `Výzkum na tomto počítači má starší verzi${v ? ` (${v})` : ''}. Nová verze posílá změny sama a přijímá originály souborů.`,
+        runInTerminal: 'V terminálu spusťte:',
+        npm: 'Nainstalovaný přes npm:',
+        restart: 'Pokud výzkum běží, spusťte ho potom znovu.',
+        fallback: 'Když to nepůjde nebo aplikace dál hlásí starou verzi, vložte znovu instalační řádek. Výzkumy i nastavení zůstanou.',
+        showInstall: 'Ukázat instalační řádek',
+        check: 'Zkontrolovat znovu',
+        checking: 'Kontroluji…',
+        updated: (v: string) => `Výzkum je aktualizovaný${v ? ` (${v})` : ''}.`,
+        stillOlder: (v: string) => `Výzkum má pořád starší verzi${v ? ` (${v})` : ''}. Běží už aktualizovaný program? Spusťte výzkum znovu.`,
+        notAnswering: 'Výzkum neodpovídá. Spusťte ho a zkontrolujte znovu.',
+    },
+
     // "Send material…" to the research (a person, a source)
     material: {
         send: 'Poslat materiál…',
@@ -7359,6 +7394,23 @@ const stringsDE: StringsType = {
         fullTitle: 'Der Platz für wartende Originale ist fast voll',
         fullSub: (u: string, t: string) => `${u} von ${t}. Weitere Originale werden nur als Vorschau gespeichert.`,
         show: 'Anzeigen…',
+    },
+
+    researchOlder: {
+        title: 'Forschung aktualisieren',
+        line: (v: string) => `Die Forschung hat eine ältere Version${v ? ` (${v})` : ''}. Aktualisieren Sie sie für automatisches Senden und Originale.`,
+        how: 'So aktualisieren…',
+        intro: (v: string) => `Die Forschung auf diesem Computer hat eine ältere Version${v ? ` (${v})` : ''}. Die neue sendet Ihre Änderungen selbst und nimmt Originaldateien an.`,
+        runInTerminal: 'Führen Sie im Terminal aus:',
+        npm: 'Mit npm installiert:',
+        restart: 'Läuft die Forschung, starten Sie sie danach neu.',
+        fallback: 'Klappt das nicht oder meldet die App weiter die alte Version, fügen Sie die Installationszeile erneut ein. Forschungen und Einstellungen bleiben erhalten.',
+        showInstall: 'Installationszeile zeigen',
+        check: 'Erneut prüfen',
+        checking: 'Wird geprüft…',
+        updated: (v: string) => `Die Forschung ist aktualisiert${v ? ` (${v})` : ''}.`,
+        stillOlder: (v: string) => `Die Forschung hat noch die ältere Version${v ? ` (${v})` : ''}. Läuft schon das aktualisierte Programm? Starten Sie die Forschung neu.`,
+        notAnswering: 'Die Forschung antwortet nicht. Starten Sie sie und prüfen Sie erneut.',
     },
 
     // "Send material…" to the research (a person, a source)
