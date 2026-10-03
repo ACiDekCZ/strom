@@ -231,6 +231,8 @@ function registerAppListeners(): void {
 
     onTreeSavedElsewhere((treeId) => {
         if (DataManager.isViewMode() || treeId !== DataManager.getCurrentTreeId()) return;
+        // A research tree says it too: nothing of this copy is sent until a reload.
+        UI.refreshResearchSyncUi();
         UI.showStorageNotice('other-tab-notice', strings.storageSafety.otherTabSaved, {
             label: strings.storageSafety.reload,
             run: () => window.location.reload(),

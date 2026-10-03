@@ -104,6 +104,39 @@ test.describe('more than one window on one research', () => {
         await second.page.close();
     });
 
+    test('a window left behind by another window\'s write sends nothing, also when the research has the newer version', async ({ page }) => {
+        await autoTree(page);
+        const second = await secondWindow(page);
+        // The first window writes and loads the research's new version.
+        await editJan(page);
+        await page.clock.fastForward(QUIET + 1000);
+        await expect.poll(() => head(page)).toBe('ab10cd10ef10');
+        await expect(second.page.locator('#other-tab-notice')).toBeVisible();
+
+        // The second window edits its stale copy; its bridge names the newer version.
+        second.bridge.head = 'ab10cd10ef10';
+        second.bridge.syncReply = WRITE;
+        await second.page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const josef = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Josef') as any;
+            dm.updatePerson(josef.id, { birthPlace: 'Kolín' });
+        });
+        // Not sent and newer: the send that would come first is not made.
+        await poll(second.page);
+        await second.page.waitForTimeout(500);
+        expect(second.bridge.posts).toHaveLength(0);
+        // The pill offers the reload, not a send.
+        const pill = second.page.locator('#research-sync-pill');
+        await expect(pill).toContainText('Saved in another window');
+        await expect(pill.locator('[data-action="reload"]')).toBeVisible();
+        await expect(pill.locator('[data-action="sendThenLoad"]')).toHaveCount(0);
+        // Nor by hand: said why, with a reload.
+        await second.page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect(second.page.locator('.toast')).toContainText('saved in another window');
+        expect(second.bridge.posts).toHaveLength(0);
+        await second.page.close();
+    });
+
     test('opened again, a tree takes the head stored with its data, not a newer one another window wrote to the index', async ({ page }) => {
         await autoTree(page);
         const second = await secondWindow(page);

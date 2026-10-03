@@ -363,6 +363,7 @@ export const researchSyncMethods = uiModule({
             bridgeUp: !!rt?.up,
             safari,
             remoteHead,
+            stale: isTreeStale(treeId),
             auto,
             archive: mode === 'archive',
             sending: sendingTree === treeId,
@@ -1095,6 +1096,7 @@ export const researchSyncMethods = uiModule({
             case 'send': case 'retry': case 'sendAgain': void this.researchSendNow(); break;
             case 'sendThenLoad': void this.researchSendNow({ thenLoad: true }); break;
             case 'loadNewer': void this.researchLoadNewer(); break;
+            case 'reload': window.location.reload(); break;
             case 'cancelLoad': this.researchCancelThenLoad(); break;
             case 'startResearch': {
                 const url = this.activeResearchLink('open') ?? this.activeResearchLink('live');
@@ -1266,6 +1268,7 @@ export const researchSyncMethods = uiModule({
                     ? s.rejectedAutoSub(when(state.sent?.closedAt), state.sent?.reason ?? '')
                     : [s.rejectedSub(when(state.sent?.closedAt)), state.sent?.reason ? `(${state.sent.reason})` : ''].filter(Boolean).join(' '),
                 actions: [{ action: 'sendAgain', label: s.sendAgain }] }),
+            stale: () => ({ tone: 'warn', title: s.stateStale, sub: s.staleSub, actions: [{ action: 'reload', label: strings.storageSafety.reload }] }),
             safari: () => ({ tone: 'neutral', title: s.stateSafari, sub: s.safariSub, actions: [{ action: 'downloadGedcom', label: s.downloadGedcom, asLink: true }] }),
             autoWaiting: () => ({ tone: 'quiet', title: s.autoWaitingTitle, sub: changed ? s.changedAt(changed) : undefined,
                 actions: [{ action: 'send', label: s.sendNow, asLink: true }] }),
@@ -1357,6 +1360,7 @@ export const researchSyncMethods = uiModule({
         // Attention: the amber pill (sent by hand, only when changes would be lost).
         const warn: Partial<Record<ResearchSyncKind, { text: string; button: string; action: string }>> = {
             unsentAndNewer: { text: s.barUnsent, button: s.barSend, action: 'sendThenLoad' },
+            stale: { text: s.pillStale, button: strings.storageSafety.reload, action: 'reload' },
             ...(auto ? {
                 autoBridgeDown: { text: archive ? s.pillBridgeDownWaiting(Math.max(1, researchAutoState(ctx.treeId).edits ?? 1)) : s.pillBridgeDown,
                     button: s.pillStart, action: 'startResearch' },

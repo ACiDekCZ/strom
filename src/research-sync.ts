@@ -11,6 +11,8 @@ import { ResearchInbox, LiveIntake, ResearchSendRecord } from './research-link.j
 export type ResearchSyncKind =
     | 'none' | 'inSync' | 'written' | 'unsent' | 'sentPending' | 'newer' | 'unsentAndNewer' | 'waitThenLoad'
     | 'bridgeDown' | 'unsentBridgeDown' | 'refused' | 'rejected' | 'safari'
+    // Another window of this browser saved the tree since this one read it:
+    | 'stale'
     // Sending by itself (ResearchLink.sendMode 'auto', the default):
     | 'autoWaiting' | 'sending' | 'autoBridgeDown' | 'autoPaused'
     // One-time notices:
@@ -33,6 +35,8 @@ export interface ResearchSyncInput {
     safari: boolean;
     /** The research's head as last seen ('' = unknown). */
     remoteHead: string;
+    /** Another window saved the tree since this one read it: nothing of it may be sent. */
+    stale?: boolean;
     /** Changes go by themselves (sendMode 'auto'). */
     auto?: boolean;
     /** The research is an archive (no agent). */
@@ -71,6 +75,8 @@ export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
     };
     // Safari never reaches the bridge: nothing goes by itself and nothing can be sent.
     if (input.safari) return notice({ kind: 'safari', core: 'safari' });
+    // A stale copy is never sent: before anything else, the reload that brings it up to date.
+    if (input.stale) return { kind: 'stale', core: 'stale' };
     const auto = !!input.auto;
     const sent = link.sent;
     const st = (kind: ResearchSyncKind, extra: Partial<ResearchSyncState> = {}): ResearchSyncState =>
@@ -102,7 +108,7 @@ export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
 export function researchSyncWantsAttention(kind: ResearchSyncKind): boolean {
     return kind === 'unsentBridgeDown' || kind === 'newer' || kind === 'unsentAndNewer'
         || kind === 'refused' || kind === 'rejected' || kind === 'autoPaused' || kind === 'autoBridgeDown'
-        || kind === 'switched';
+        || kind === 'switched' || kind === 'stale';
 }
 
 /** A changes-not-sent state (the ⋯ label and the data window say so). */

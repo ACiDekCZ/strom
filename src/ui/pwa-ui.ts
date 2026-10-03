@@ -29,7 +29,7 @@ export const pwaUiMethods = uiModule({
         el.innerHTML = `<span>${this.escapeHtml(p.updateReady)}</span>`
             + `<button type="button" class="pwa-update-btn">${this.escapeHtml(p.refresh)}</button>`
             + `<button type="button" class="pwa-update-close" aria-label="${strings.buttons.close}">&times;</button>`;
-        el.querySelector('.pwa-update-btn')!.addEventListener('click', () => applyServiceWorkerUpdate());
+        el.querySelector('.pwa-update-btn')!.addEventListener('click', () => { void applyServiceWorkerUpdate(); });
         el.querySelector('.pwa-update-close')!.addEventListener('click', () => el.remove());
         document.body.appendChild(el);
         requestAnimationFrame(() => el.classList.add('show'));

@@ -78,8 +78,15 @@ describe('the state of a research tree', () => {
         expect(researchSyncState(input({ safari: true, matchesBase: false })).kind).toBe('safari');
     });
 
+    it('a copy another window saved over: the reload before anything else (never a send)', () => {
+        expect(researchSyncState(input({ stale: true, matchesBase: false, remoteHead: 'bbbbbbb' })).kind).toBe('stale');
+        expect(researchSyncState(input({ stale: true, auto: true, matchesBase: false })).kind).toBe('stale');
+        const rejected = link({ sent: sent({ state: 'discarded' }) });
+        expect(researchSyncState(input({ stale: true, link: rejected, switched: true })).kind).toBe('stale');
+    });
+
     it('the dot asks for the user only where there is something to do', () => {
-        const lit = ['unsentBridgeDown', 'newer', 'unsentAndNewer', 'refused', 'rejected', 'autoPaused', 'autoBridgeDown', 'switched'];
+        const lit = ['unsentBridgeDown', 'newer', 'unsentAndNewer', 'refused', 'rejected', 'autoPaused', 'autoBridgeDown', 'switched', 'stale'];
         // Sent by hand, "unsent" has the Send button in the toolbar (its ⋯ dot only where the button is not: CSS).
         const quiet = ['unsent', 'inSync', 'written', 'sentPending', 'waitThenLoad', 'bridgeDown', 'safari', 'none',
             'autoWaiting', 'sending', 'offerAuto', 'autoIntro'];
