@@ -211,7 +211,8 @@ export const sourcesMethods = uiModule({
         const query = search && !search.hidden ? search.value.trim().toLowerCase() : '';
         // "Transcription not verified": older sources of an Evidence tree (Research for this tree).
         const treeId = DataManager.getCurrentTreeId();
-        const link = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
+        const stored = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
+        const link = stored ? this.researchTranscriptsLink(stored) : undefined;
         const unverified = new Set(unverifiedOlderSources(DataManager.getData(), link).map(src => src.id));
         if (unverified.size === 0) this.sourcesFilter = 'all';
         this.renderSourcesFilter(unverified.size > 0);
@@ -556,7 +557,9 @@ export const sourcesMethods = uiModule({
         const val = (id: string) => ((document.getElementById(id) as HTMLInputElement | null)?.value ?? '').trim();
         const original = this.sourceEditorOriginal ?? {};
         const treeId = DataManager.getCurrentTreeId();
-        const link = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
+        const stored = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
+        // An archive takes transcripts as leads whatever the tree's setting: the checkbox, never "by the tree".
+        const link = stored ? this.researchTranscriptsLink(stored) : undefined;
         const capable = this.researchTranscriptsCapable(link?.id);
         const draft: Source = {
             id: this.editingSourceId ?? '',

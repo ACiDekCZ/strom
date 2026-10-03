@@ -107,6 +107,8 @@ export const personResearchMethods = uiModule({
         const subtitle = [personSubtitle(personId), asOf ? r.asOf(formatFlexDate(asOf)) : ''].filter(Boolean).join(' · ');
         const sources = DataManager.getData().sources ?? {};
         const canDecide = this.researchLinkAvailable('conflict') && this.personResearchRef(personId) !== null;
+        // An archive has no agent to leave a conflict to: deciding stays (in the research).
+        const toAgent = !this.activeResearchArchive();
 
         const sourceCell = (v: ResearchConflictValue): string => {
             const id = v.sourceIds?.find(sid => sources[sid]);
@@ -128,10 +130,10 @@ export const personResearchMethods = uiModule({
                     </table>
                     ${canDecide && id ? `
                     <div class="person-research-conflict-actions">
-                        <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide">${esc(r.decide)}</button>
+                        <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide">${esc(r.decide)}</button>${toAgent ? `
                         <button type="button" class="link-button person-research-agent" data-conflict="${esc(id)}" data-do="agent"
                             aria-label="${esc(`${r.leaveToAgent}, ${r.aiBadge}, ${r.opensInResearchSr}`)}">${esc(r.leaveToAgent)}
-                            <span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span> ↗</button>
+                            <span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span> ↗</button>` : ''}
                     </div>` : ''}
                 </div>`;
         }).join('');

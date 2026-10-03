@@ -245,6 +245,8 @@ test.describe('installing the research from the app', () => {
         await expect(ready.locator('h2')).toContainText('The research is ready');
         await expect(ready.locator('.install-ready-path')).toHaveText('/Users/jan/Strom/Novakovi');
         await expect(ready).toContainText('full quality');
+        // An archive: no row for an agent.
+        await expect(ready).not.toContainText('Agent');
         expect(posted[0]).toContain('1 NAME Jan /Novak/');
         // Every request names the app's version (the research decides what to send by it).
         expect(versions.length).toBeGreaterThan(1);

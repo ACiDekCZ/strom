@@ -559,7 +559,8 @@ test.describe('the research as an archive', () => {
         const dialog = page.locator('#research-tree-settings-modal');
         await expect(dialog.locator('h2 .research-sync-tag')).toHaveText('Archive');
         await expect(dialog).toContainText('The research has been an archive since');
-        await expect(dialog).toContainText('Takes effect once the research starts working with an agent.');
+        // An archive takes transcripts as leads: no setting for them (it waits for a switch to research).
+        await expect(dialog.locator('input[name="research-transcripts"]')).toHaveCount(0);
         await expect(dialog).toContainText('The research writes every send straight away.');
     });
 

@@ -122,7 +122,8 @@ export const cardSignalsUiMethods = uiModule({
         // Waiting only means something with a research tree; the agent only
         // with the research connected on this computer (it is followed live).
         const research = TreeManager.getTrees().some(t => !!t.research?.id);
-        const connected = research && announcedResearchLinks().length > 0;
+        // (An archive has no agent: no badge for its work there.)
+        const connected = research && announcedResearchLinks().length > 0 && !this.activeResearchArchive();
         const box = (key: keyof CardSignals): string => `
             <label class="settings-checkbox card-signal-option">
                 <input type="checkbox" data-signal="${key}"${on[key] ? ' checked' : ''}>

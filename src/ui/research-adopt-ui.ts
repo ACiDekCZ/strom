@@ -244,11 +244,13 @@ export const researchAdoptMethods = uiModule({
         const s = strings.install;
         let where = '';
         let agent = '';
+        let archive = false;
         try {
             const res = await fetchWithTimeout(`${base}/status`, 3000);
             if (res.ok) {
-                const st = await res.json() as { path?: unknown; agent?: unknown };
+                const st = await res.json() as { path?: unknown; agent?: unknown; accepts?: { mode?: unknown } };
                 if (typeof st.path === 'string') where = st.path.slice(0, 300);
+                archive = st.accepts?.mode === 'archive';
                 // `agent: { id, name, where? }` (an archive has none); a bare name from an older shape too.
                 const named = st.agent && typeof st.agent === 'object' ? (st.agent as { name?: unknown }).name : st.agent;
                 if (typeof named === 'string') agent = named.slice(0, 60);
@@ -262,7 +264,7 @@ export const researchAdoptMethods = uiModule({
         const rows = hasPeople ? `
                 <dl class="install-ready-rows">
                     ${where ? `<dt>${esc(s.where)}</dt><dd class="install-ready-path">${esc(where)}</dd>` : ''}
-                    <dt>${esc(s.agentRowLabel)}</dt><dd>${esc(agent ? s.agentRowOn(agent) : s.agentRow)}</dd>
+                    ${archive ? '' : `<dt>${esc(s.agentRowLabel)}</dt><dd>${esc(agent ? s.agentRowOn(agent) : s.agentRow)}</dd>`}
                     <dt>${esc(s.originalsLabel)}</dt><dd>${esc(s.originalsRow)}</dd>
                 </dl>` : '';
         overlay.innerHTML = `

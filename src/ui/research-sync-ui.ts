@@ -335,10 +335,20 @@ export const researchSyncMethods = uiModule({
     },
 
     /** Agent or archive: the bridge's word (now or last time), else the file's (`_STROM_MODE`). */
-    researchModeOf(researchId: string, link?: ResearchLink): 'agent' | 'archive' {
+    researchModeOf(researchId: string, link?: Pick<ResearchLink, 'mode'>): 'agent' | 'archive' {
         const accepts = runtime.get(researchId)?.status?.accepts ?? storedResearchBridge(researchId)?.accepts;
         if (accepts) return accepts.mode;
         return link?.mode === 'archive' ? 'archive' : 'agent';
+    },
+
+    /**
+     * The link as its transcripts weigh in the research: an archive takes them as leads
+     * (a source the user ticked as verified aside), so the tree's setting is neither
+     * offered there nor sent (`_STROM_TRANSCRIPTS`); it is kept for a switch to research.
+     */
+    researchTranscriptsLink<L extends Pick<ResearchLink, 'id' | 'transcripts' | 'mode'>>(link: L): L {
+        return link.transcripts !== undefined && this.researchModeOf(link.id, link) === 'archive'
+            ? { ...link, transcripts: undefined } : link;
     },
 
     /** The active research tree is an archive (no agent): the agent's actions are not offered. */
@@ -847,7 +857,7 @@ export const researchSyncMethods = uiModule({
         // What goes over is then the state that send had, not this one (edits since go after it).
         const sentFp = again ? again.fingerprint : fps.current;
         const gedcom = again ? '' : researchGedcom(data, meta?.name ?? '', {
-            id: link.id, head: link.head, appTree: treeId, transcripts: link.transcripts, sent: fps.current,
+            id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
         });
         // What this send carries, person by person (what was written, once it is).
         if (!again) this.researchNoteSending(treeId, data, fps.current);

@@ -427,7 +427,7 @@ test.describe('Start research with this tree (G3)', () => {
         await page.keyboard.press('Escape');
         await page.evaluate(() => window.Strom.UI.showResearchInfoDialog());
         const dialog = page.locator('#research-info-modal');
-        await expect(dialog.locator('.research-info-lead')).toContainText('can continue with your tree Dvořákovi');
+        await expect(dialog.locator('.research-info-lead')).toContainText('can take over your tree Dvořákovi');
         await expect(dialog.locator('.research-info-need')).toHaveCount(0);
         await expect(dialog.locator('.research-info-step')).toHaveCount(3);
         await expect(dialog.locator('.research-info-about')).toContainText('What is Strom Research');

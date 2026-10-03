@@ -4,7 +4,9 @@
  * first reading). Saved at once on the tree's research link and sent with the
  * next send (`_STROM_TRANSCRIPTS`). The switch does not reach back: sources
  * already sent keep their weight until the user ticks "Transcription
- * verified" on each, which the dialog says and links to.
+ * verified" on each, which the dialog says and links to. An archive takes
+ * transcripts as leads: the setting is not offered there (nor sent), and is
+ * kept for a switch to research.
  */
 
 import { DataManager } from '../data.js';
@@ -124,14 +126,14 @@ export const researchTreeSettingsMethods = uiModule({
                     </div>
                     <button type="button" class="close-btn" id="research-tree-settings-x" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
+                ${archive ? '' : `
                 <fieldset class="research-transcripts">
                     <legend>${esc(t.transcripts)}</legend>
                     ${option('lead', t.guide, t.guideDesc, true)}
                     ${option('evidence', t.evidence, t.evidenceDesc, false)}
                 </fieldset>
-                ${archive ? `<p class="research-transcripts-archive">${esc(t.transcriptsArchiveNote)}</p>` : ''}
                 <p class="research-not-retroactive"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span>${esc(t.notRetroactive)}</span></p>
-                <button type="button" class="link-button research-older-sources" id="research-older-sources" hidden></button>
+                <button type="button" class="link-button research-older-sources" id="research-older-sources" hidden></button>`}
                 ${sendingHtml}
                 ${originalsHtml}
                 <div class="buttons research-tree-settings-buttons">

@@ -219,7 +219,7 @@ export const researchActionsMethods = uiModule({
         const html = syncBlock + updateBlock + groups.filter(g => g.length > 0)
             .map(g => g.map(submenuItemHtml).join(''))
             .join('<div class="tree-switcher-divider"></div>')
-            + (note ? `<div class="tree-switcher-divider"></div><div class="research-submenu-note">${esc(r.submenuNote)}</div>` : '');
+            + (note ? `<div class="tree-switcher-divider"></div><div class="research-submenu-note">${esc(archive ? r.submenuNoteArchive : r.submenuNote)}</div>` : '');
         const sub = document.getElementById('actions-research-submenu');
         // Rebuilt only when it changed: a redraw would drop keyboard focus.
         if (sub && sub.dataset.html !== html) {

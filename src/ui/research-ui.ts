@@ -1451,7 +1451,7 @@ export const researchUiMethods = uiModule({
         this.showToast(r.sending, 60000);
         let res: Response;
         try {
-            res = await postSync(bridge.sync, researchGedcom(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: link.transcripts }), 120000);
+            res = await postSync(bridge.sync, researchGedcom(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts }), 120000);
         } catch (err) {
             console.warn('Sending to the research failed', err);
             document.querySelector('.toast')?.remove();
@@ -1661,7 +1661,7 @@ export const researchUiMethods = uiModule({
             await this.showAlert(strings.storageSafety.treeLocked, 'warning');
             return;
         }
-        const research = { id: meta.research.id, head: meta.research.head, appTree: treeId, transcripts: meta.research.transcripts };
+        const research = { id: meta.research.id, head: meta.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(meta.research).transcripts };
         const blob = new Blob([researchGedcom(data, meta.name, research)], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
