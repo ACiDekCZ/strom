@@ -45,13 +45,11 @@ export function validateJsonImport(content: string): ValidationResult {
     }
     const root = parsed as Record<string, unknown>;
 
-    // 2b. Check version
+    // 2b. Check version: only a newer file is worth a word. Every older format is
+    // read as it is (each step only added fields), so an older or unversioned
+    // file is no warning — it used to put up "Validation failed" for nothing.
     const importedVersion = typeof root.version === 'number' ? root.version : 0;
-    if (importedVersion === 0) {
-        warnings.push('noVersion');
-    } else if (importedVersion < STROM_DATA_VERSION) {
-        warnings.push(`olderVersion:${importedVersion}:${STROM_DATA_VERSION}`);
-    } else if (importedVersion > STROM_DATA_VERSION) {
+    if (importedVersion > STROM_DATA_VERSION) {
         warnings.push(`newerVersion:${importedVersion}:${STROM_DATA_VERSION}`);
     }
 

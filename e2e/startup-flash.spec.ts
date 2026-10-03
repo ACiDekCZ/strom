@@ -19,7 +19,7 @@ const WATCH_WELCOME = () => {
 test('opening a tree with people never flashes the welcome screen', async ({ page }) => {
     await openApp(page);
     await page.locator('#file-input').setInputFiles('test/comprehensive.json');
-    await page.getByRole('button', { name: 'Continue with warnings' }).click();
+    // No version in the file: read as it is, no warning (straight to the import dialog).
     const d = page.locator('#import-tree-modal');
     await d.locator('#import-tree-name').fill('Flash');
     await d.getByRole('button', { name: 'Import' }).click();

@@ -44,7 +44,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, uniqueIdSuffix } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
@@ -558,7 +558,7 @@ export const importExportMethods = uiModule({
                     person.photoOriginalName = file.name;
                 } else {
                     (person.attachments ??= []).push({
-                        id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                        id: `att_${Date.now()}_${uniqueIdSuffix()}`,
                         name: ref.title || file.name,
                         mimeType: 'image/jpeg',
                         dataUrl: await compressImageAttachment(file),
@@ -567,7 +567,7 @@ export const importExportMethods = uiModule({
                 }
             } else if (file.type === 'application/pdf' && file.size <= MAX_PDF_BYTES) {
                 (person.attachments ??= []).push({
-                    id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                    id: `att_${Date.now()}_${uniqueIdSuffix()}`,
                     name: ref.title || file.name,
                     mimeType: 'application/pdf',
                     dataUrl: await readFileAsDataUrl(file),

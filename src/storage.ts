@@ -39,7 +39,19 @@ class StorageManagerClass {
         if (this.db) return;
 
         return new Promise<void>((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            this.openRequest(DB_VERSION, resolve, reject);
+        });
+    }
+
+    /**
+     * Open at `version`; a database a newer build already upgraded (VersionError)
+     * is opened as it is (no version): its stores are a superset of ours, so
+     * this build keeps working instead of failing to start — a downgrade, or an
+     * older exported file opened where a newer app has run.
+     */
+    private openRequest(version: number | undefined, resolve: () => void, reject: (err: unknown) => void): void {
+        {
+            const request = version === undefined ? indexedDB.open(DB_NAME) : indexedDB.open(DB_NAME, version);
 
             request.onupgradeneeded = () => {
                 const db = request.result;
@@ -65,6 +77,11 @@ class StorageManagerClass {
             };
 
             request.onerror = () => {
+                if (version !== undefined && request.error?.name === 'VersionError') {
+                    console.warn('The browser storage is from a newer version of the app: opened as it is');
+                    this.openRequest(undefined, resolve, reject);
+                    return;
+                }
                 console.error('Failed to open IndexedDB:', request.error);
                 reject(request.error ?? new Error('IndexedDB open failed'));
             };
@@ -76,7 +93,7 @@ class StorageManagerClass {
                 console.warn('IndexedDB open blocked by another tab');
                 dispatchStorageEvent('strom:storage-blocked');
             };
-        });
+        }
     }
 
     /**

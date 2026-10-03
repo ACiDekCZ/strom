@@ -10,6 +10,7 @@ import { isLivingPerson, inferBirthUpperBounds } from './privacy.js';
 import { normalizeName } from './merge/matching.js';
 import { nameMatchesQuery, surnameMatchesQuery } from './name-search.js';
 import { coupleEventLabel } from './events.js';
+import { withSurnameRules } from './surnames.js';
 
 export interface SearchCriteria {
     /** Free text matched against the full name. */
@@ -89,6 +90,10 @@ export function hasSearchCriteria(c: SearchCriteria): boolean {
  * With no criteria set, returns every non-placeholder person.
  */
 export function filterPersons(data: StromData, criteria: SearchCriteria, currentYear: number = new Date().getFullYear()): PersonId[] {
+    return withSurnameRules(data, () => filterPersonsPass(data, criteria, currentYear));
+}
+
+function filterPersonsPass(data: StromData, criteria: SearchCriteria, currentYear: number): PersonId[] {
     // Smart liveness shared with the privacy filter (indirect evidence).
     const bounds = inferBirthUpperBounds(data);
     const q = criteria.query ? normalizeName(criteria.query) : '';

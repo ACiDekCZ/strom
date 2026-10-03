@@ -31,6 +31,8 @@ const czechRelevanceCache = new WeakMap<StromData, { personCount: number; releva
 
 export function czechRulesApply(data: StromData): boolean {
     if (getCurrentLanguage() === 'cs') return true;
+    // Inside one pass over the tree (a search): asked once for it, not per person.
+    if (rulesPass && rulesPass.data === data) return rulesPass.relevant;
     const personCount = Object.keys(data.persons).length;
     const cached = czechRelevanceCache.get(data);
     if (cached && cached.personCount === personCount) return cached.relevant;
@@ -38,6 +40,23 @@ export function czechRulesApply(data: StromData): boolean {
         || (data.surnameVariants ?? []).some(g => g.some(n => CZECH_LETTERS.test(n)));
     czechRelevanceCache.set(data, { personCount, relevant });
     return relevant;
+}
+
+let rulesPass: { data: StromData; relevant: boolean } | null = null;
+
+/**
+ * Run `fn` as one pass over the tree: czechRulesApply is worked out once for
+ * it. Counting the people on every call made a search grow with the square of
+ * the tree (90 ms a keystroke at 2 500 people outside the Czech UI).
+ */
+export function withSurnameRules<T>(data: StromData, fn: () => T): T {
+    const prev = rulesPass;
+    rulesPass = { data, relevant: czechRulesApply(data) };
+    try {
+        return fn();
+    } finally {
+        rulesPass = prev;
+    }
 }
 
 /**

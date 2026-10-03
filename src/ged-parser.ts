@@ -52,6 +52,7 @@ import {
     ResearchEdgeTask,
     ResearchIsland,
     YearSpan,
+    uniqueIdSuffix,
 } from './types';
 import { dateSortKey, formatFlexDate, normalizeDateInput } from './dates';
 import { readDateWords } from './date-words';
@@ -1076,7 +1077,7 @@ export function parseName(nameStr: string): { firstName: string; lastName: strin
  * Generate unique ID with prefix
  */
 function generateId(prefix: string): string {
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    return `${prefix}_${Date.now()}_${uniqueIdSuffix()}`;
 }
 
 // ==================== ENCODING ====================

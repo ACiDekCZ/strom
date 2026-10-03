@@ -10,7 +10,7 @@ import { openApp, fillPerson } from './helpers.js';
 
 async function importBigTree(page: Page, name: string): Promise<void> {
     await page.locator('#file-input').setInputFiles('test/comprehensive.json');
-    await page.getByRole('button', { name: 'Continue with warnings' }).click();
+    // No version in the file: read as it is, no warning (straight to the import dialog).
     const dialog = page.locator('#import-tree-modal');
     await expect(dialog).toBeVisible();
     await dialog.locator('#import-tree-name').fill(name);

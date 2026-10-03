@@ -1570,11 +1570,16 @@ class TreeRendererClass {
             requestAnimationFrame(() => this.fitCardNames(canvas, attempt + 1));
             return;
         }
-        const names = canvas.querySelectorAll<HTMLElement>('.person-card .name');
-        names.forEach(nameEl => {
+        // In passes over all cards (each card fits on its own: fixed width,
+        // absolutely placed): every write of a step, then one round of reads.
+        // A write and a read per card forced a layout of the page per card
+        // (2.7 s for 1 500 cards); now one layout per step.
+        type Item = { nameEl: HTMLElement; textEl: HTMLElement; given: string; surname: string;
+            meta: HTMLElement | null; metaText: HTMLElement | null };
+        const items: Item[] = [];
+        canvas.querySelectorAll<HTMLElement>('.person-card .name').forEach(nameEl => {
             const textEl = nameEl.querySelector<HTMLElement>('.name-text');
             if (!textEl) return;
-
             const given = textEl.dataset.given ?? '';
             const surname = textEl.dataset.surname ?? '';
             const full = `${given} ${surname}`.trim();
@@ -1596,39 +1601,44 @@ class TreeRendererClass {
                     delete meta.dataset.full;
                 }
             }
+            items.push({ nameEl, textEl, given, surname, meta, metaText });
+        });
 
-            const avail = nameEl.clientWidth;
-            if (avail === 0) return;                                 // detached card
-            // Fractional measurement: the ellipsis triggers on ANY layout
-            // overflow, even sub-pixel ("Maria Paroulková" is 128.34px in a
-            // 128px column — clipped to "Maria Paroulko…"), while the integer
-            // scrollWidth rounds that overflow away AND never reports below the
-            // box width. Range rects give the true glyph width; both sides come
-            // from the same (possibly zoom-transformed) space, so the
-            // comparison holds at any canvas scale.
-            const fits = (): boolean => {
-                const range = document.createRange();
-                range.selectNodeContents(textEl);
-                let contentW = 0;
-                for (const r of range.getClientRects()) contentW = Math.max(contentW, r.width);
-                return contentW <= textEl.getBoundingClientRect().width + 0.01;
-            };
+        // Fractional measurement: the ellipsis triggers on ANY layout
+        // overflow, even sub-pixel ("Maria Paroulková" is 128.34px in a
+        // 128px column — clipped to "Maria Paroulko…"), while the integer
+        // scrollWidth rounds that overflow away AND never reports below the
+        // box width. Range rects give the true glyph width; both sides come
+        // from the same (possibly zoom-transformed) space, so the
+        // comparison holds at any canvas scale.
+        const fits = (textEl: HTMLElement): boolean => {
+            const range = document.createRange();
+            range.selectNodeContents(textEl);
+            let contentW = 0;
+            for (const r of range.getClientRects()) contentW = Math.max(contentW, r.width);
+            return contentW <= textEl.getBoundingClientRect().width + 0.01;
+        };
+        const overflowing = (list: Item[]): Item[] => list.filter(it => !fits(it.textEl));
 
-            if (fits()) return;                                      // step 0: 15px
-            nameEl.classList.add('name-fit-1');                      // step 1: 14px
-            if (fits()) return;
-            nameEl.classList.remove('name-fit-1');
-            nameEl.classList.add('name-fit-13');                     // step 1: 13px floor
-            if (fits()) return;
+        // Step 0: 15px (a detached card, no width, is left as it is).
+        let left = overflowing(items.filter(it => it.nameEl.clientWidth !== 0));
+        // Step 1: 14px.
+        left.forEach(it => it.nameEl.classList.add('name-fit-1'));
+        left = overflowing(left);
+        // Step 1: 13px floor.
+        left.forEach(it => { it.nameEl.classList.remove('name-fit-1'); it.nameEl.classList.add('name-fit-13'); });
+        left = overflowing(left);
 
-            // Compact cards are a single centred line in a 44px box: the two-line
-            // step does not apply. Once the 12.5px floor still overflows, the base
-            // ellipsis takes over (the compact-scoped .name-fit-* CSS shrinks to
-            // that floor at matching specificity).
-            // The custom card has one name row above its lines: no two-line step either.
-            if (SettingsManager.getCardDensity() === 'compact' || SettingsManager.getCardDensity() === 'custom') return;
+        // Compact cards are a single centred line in a 44px box: the two-line
+        // step does not apply. Once the 12.5px floor still overflows, the base
+        // ellipsis takes over (the compact-scoped .name-fit-* CSS shrinks to
+        // that floor at matching specificity).
+        // The custom card has one name row above its lines: no two-line step either.
+        const density = SettingsManager.getCardDensity();
+        if (density === 'compact' || density === 'custom') return;
 
-            // Step 2: two lines (break between given name and surname) + years-only meta.
+        // Step 2: two lines (break between given name and surname) + years-only meta.
+        for (const { nameEl, textEl, given, surname, meta, metaText } of left) {
             nameEl.classList.remove('name-fit-13');
             nameEl.classList.add('name-fit-2lines');
             const givenSpan = document.createElement('span');
@@ -1646,9 +1656,9 @@ class TreeRendererClass {
                 metaText.textContent = meta.dataset.years;
                 meta.classList.add('meta-short');
             }
-            // Step 3 (ellipsis on an overflowing line) is handled by the
-            // .name-line { text-overflow: ellipsis } CSS.
-        });
+        }
+        // Step 3 (ellipsis on an overflowing line) is handled by the
+        // .name-line { text-overflow: ellipsis } CSS.
     }
 
     // ============= Research edge =============
