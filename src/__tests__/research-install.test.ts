@@ -5,6 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+    installTreeName,
     detectInstallOs, installLine, npmLines, installAppUrl, sanitizeInstallRecord, newInstallRecord, installPhase,
     readInstallRecord, writeInstallRecord, clearInstallRecord, INSTALL_KEY, INSTALL_TTL_MS, INSTALL_LONG_MS,
 } from '../research-install.js';
@@ -50,6 +51,22 @@ describe('installing the research from the app', () => {
         expect(win.length).toBeLessThanOrEqual(259);
         expect(npmLines('mac', TOKEN, beta)[1]).toBe(`STROM_FROM_APP=${TOKEN} STROM_APP_URL=${beta} strom-research`);
         expect(npmLines('win', TOKEN, beta)[1]).toBe(`$env:STROM_FROM_APP='${TOKEN}'; $env:STROM_APP_URL='${beta}'; strom-research`);
+    });
+
+    it('names the tree for the research (STROM_FROM_APP_NAME), safe for the shell', () => {
+        const T = 'a'.repeat(32);
+        expect(installLine('mac', T, null, 'Test Win')).toContain(`STROM_FROM_APP=${T} STROM_FROM_APP_NAME='Test Win' sh`);
+        expect(installLine('win', T, null, "Novákovi's")).toContain("$env:STROM_FROM_APP_NAME='Novákovi''s'; irm");
+        expect(installLine('linux', T, null, "Novákovi's")).toContain("STROM_FROM_APP_NAME='Novákovi'\\''s' sh");
+        expect(npmLines('win', T, null, 'Víškovi')[1]).toContain("$env:STROM_FROM_APP_NAME='Víškovi'; strom-research");
+        // A name from a foreign file never brings shell syntax along.
+        expect(installTreeName('$(rm -rf ~)"`x`; Víškovi')).toBe('(rm -rf ) x Víškovi');
+        expect(installTreeName('  a\n\tb  ')).toBe('a b');
+        expect(installTreeName('x'.repeat(200))).toHaveLength(80);
+        expect(installLine('mac', T, null, '')).not.toContain('STROM_FROM_APP_NAME');
+        // Win + R: shortened to fit, or left out.
+        const long = installLine('win', 'a'.repeat(43), 'https://beta.stromapp.info/run/', 'Velmi dlouhý název rodiny Víšků z Čáslavi a okolí');
+        expect(long.length).toBeLessThanOrEqual(259);
     });
 
     it('keeps the record 24 h: waiting, long after 15 minutes, then expired', () => {

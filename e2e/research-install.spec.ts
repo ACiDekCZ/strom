@@ -76,7 +76,7 @@ test.describe('installing the research from the app', () => {
         const line = await d.locator('.install-line').first().getAttribute('data-line');
         // A copy of the app other than stromapp.info (here the test server): the line names it.
         const app = appUrlOf(page);
-        expect(line).toBe(`curl -fsSL https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.sh | STROM_FROM_APP=${rec.token} STROM_APP_URL=${app} sh`);
+        expect(line).toBe(`curl -fsSL https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.sh | STROM_FROM_APP=${rec.token} STROM_FROM_APP_NAME='My Family Tree' STROM_APP_URL=${app} sh`);
         await expect(d.locator('.install-line .install-token').first()).toHaveText(rec.token);
         // Opened again while it holds: the same token.
         await d.locator('[data-act="back"]').click();
@@ -94,13 +94,14 @@ test.describe('installing the research from the app', () => {
         const token = (await installRecord(page))!.token;
         expect(await d.locator('.install-line').first().getAttribute('data-line'))
             .toBe(`powershell -ExecutionPolicy Bypass -c "$env:STROM_FROM_APP='${token}'; $env:STROM_APP_URL='${appUrlOf(page)}'; irm https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.ps1 | iex"`);
+        // (With this copy's address the tree's name no longer fits Win + R: left out, the research suggests one.)
         expect((await d.locator('.install-line').first().getAttribute('data-line'))!.length).toBeLessThanOrEqual(259);
         await expect(d.locator('.install-howto li').first()).toContainText('Win + R');
         await expect(d.locator('.install-apple')).toHaveCount(0);
 
         await d.locator('.install-os-btn[data-os="linux"]').click();
         await expect(d.locator('.install-howto li').first()).toContainText('Ctrl + Alt + T');
-        expect(await d.locator('.install-line').first().getAttribute('data-line')).toContain(`STROM_FROM_APP=${token} STROM_APP_URL=${appUrlOf(page)} sh`);
+        expect(await d.locator('.install-line').first().getAttribute('data-line')).toContain(`STROM_FROM_APP=${token} STROM_FROM_APP_NAME='My Family Tree' STROM_APP_URL=${appUrlOf(page)} sh`);
         await d.locator('.install-os-btn[data-os="mac"]').click();
         await expect(d.locator('.install-apple')).toContainText('Command Line Tools');
         expect((await installRecord(page))!.os).toBe('mac');
@@ -110,7 +111,7 @@ test.describe('installing the research from the app', () => {
         // npm folded away; open, it carries the same token.
         await expect(d.locator('details.install-other')).not.toHaveAttribute('open', '');
         await d.locator('details.install-other summary').click();
-        expect(await d.locator('.install-npm').getAttribute('data-line')).toBe(`npm i -g strom-research\nSTROM_FROM_APP=${token} STROM_APP_URL=${appUrlOf(page)} strom-research`);
+        expect(await d.locator('.install-npm').getAttribute('data-line')).toBe(`npm i -g strom-research\nSTROM_FROM_APP=${token} STROM_FROM_APP_NAME='My Family Tree' STROM_APP_URL=${appUrlOf(page)} strom-research`);
     });
 
     test('Copy puts the exact line on the clipboard; "Copied" holds until the system changes', async ({ page, context }) => {

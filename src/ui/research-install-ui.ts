@@ -222,8 +222,10 @@ export const researchInstallMethods = uiModule({
         const what = os === 'mac' ? s.whatMac : os === 'win' ? s.whatWin : s.whatLinux;
         // Another copy than the public app (the beta): the research must open this one.
         const appUrl = installAppUrl(window.location.href);
-        const line = installLine(os, record.token, appUrl);
-        const [npm1, npm2] = npmLines(os, record.token, appUrl);
+        // The tree's name: the research suggests it as its own (an empty tree from the welcome screen: none).
+        const treeName = record.treeId ? TreeManager.getTreeMetadata(record.treeId)?.name ?? '' : '';
+        const line = installLine(os, record.token, appUrl, treeName);
+        const [npm1, npm2] = npmLines(os, record.token, appUrl, treeName);
         return `
             <div class="modal-content install-body">
                 <div class="install-os-row">

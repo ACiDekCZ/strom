@@ -40,18 +40,40 @@ export function installAppUrl(href: string): string | null {
 }
 
 /** The line for Terminal (macOS, Linux) or Win + R (Windows), with the tree's token (and this app's address, see installAppUrl). */
-export function installLine(os: InstallOs, token: string, appUrl: string | null = null): string {
-    return os === 'win'
-        ? `powershell -ExecutionPolicy Bypass -c "$env:STROM_FROM_APP='${token}'; ${appUrl ? `$env:STROM_APP_URL='${appUrl}'; ` : ''}irm ${DOWNLOAD}/install.ps1 | iex"`
-        : `curl -fsSL ${DOWNLOAD}/install.sh | STROM_FROM_APP=${token} ${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}sh`;
+export function installLine(os: InstallOs, token: string, appUrl: string | null = null, treeName = ''): string {
+    const name = installTreeName(treeName);
+    if (os !== 'win') return `curl -fsSL ${DOWNLOAD}/install.sh | STROM_FROM_APP=${token} ${shName(name)}${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}sh`;
+    const line = (n: string): string =>
+        `powershell -ExecutionPolicy Bypass -c "$env:STROM_FROM_APP='${token}'; ${winName(n)}${appUrl ? `$env:STROM_APP_URL='${appUrl}'; ` : ''}irm ${DOWNLOAD}/install.ps1 | iex"`;
+    // Win + R takes 259 characters: the name shortened to what is left, or left out (the research suggests one).
+    let fit = name;
+    while (fit && line(fit).length > WIN_RUN_MAX) fit = fit.slice(0, -1).trim();
+    return line(fit.length >= 3 ? fit : '');
 }
 
+/** The Run dialog's (Win + R) limit. */
+export const WIN_RUN_MAX = 259;
+
 /** The npm way for technical users: install, then start with the token (and this app's address). */
-export function npmLines(os: InstallOs, token: string, appUrl: string | null = null): [string, string] {
+export function npmLines(os: InstallOs, token: string, appUrl: string | null = null, treeName = ''): [string, string] {
+    const name = installTreeName(treeName);
     return ['npm i -g strom-research', os === 'win'
-        ? `$env:STROM_FROM_APP='${token}'; ${appUrl ? `$env:STROM_APP_URL='${appUrl}'; ` : ''}strom-research`
-        : `STROM_FROM_APP=${token} ${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}strom-research`];
+        ? `$env:STROM_FROM_APP='${token}'; ${winName(name)}${appUrl ? `$env:STROM_APP_URL='${appUrl}'; ` : ''}strom-research`
+        : `STROM_FROM_APP=${token} ${shName(name)}${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}strom-research`];
 }
+
+/**
+ * The tree's name as the research's suggested name (`STROM_FROM_APP_NAME`):
+ * letters, digits, spaces and . , ( ) ' - only — the name may come from a
+ * foreign file and goes into a shell command (inside PowerShell's double
+ * quotes `$`, `"` and the backtick would be live) — at most 80 characters.
+ */
+export function installTreeName(raw: string): string {
+    return raw.normalize('NFC').replace(/[^\p{L}\p{M}\p{N} .,()'-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 80).trim();
+}
+
+const winName = (name: string): string => (name ? `$env:STROM_FROM_APP_NAME='${name.replace(/'/g, "''")}'; ` : '');
+const shName = (name: string): string => (name ? `STROM_FROM_APP_NAME='${name.replace(/'/g, "'\\''")}' ` : '');
 
 /**
  * The system from the browser: User-Agent Client Hints when there are
