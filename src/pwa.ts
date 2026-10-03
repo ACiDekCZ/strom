@@ -157,8 +157,13 @@ export async function applyServiceWorkerUpdate(
 ): Promise<void> {
     if (!container) return;
     const scope = typeof location !== 'undefined' ? pwaBasePath(location.pathname) : '/run/';
-    const waiting = await findWaitingWorkers(registration, container, scope);
+    // The worker the page knows is asked at once, before any lookup: a slow
+    // getRegistrations() made the first click look as if nothing happened.
+    const first = registration?.waiting ?? null;
+    if (first) activateWaiting([first], reload);
+    const waiting = (await findWaitingWorkers(registration, container, scope)).filter(w => w !== first);
     if (waiting.length) { activateWaiting(waiting, reload); return; }
+    if (first) return;
     const reg = registration ?? await container.getRegistration(scope).catch(() => undefined) ?? null;
     if (!reg) return;
     if (reg.active && container.controller && reg.active !== container.controller) { reload(); return; }

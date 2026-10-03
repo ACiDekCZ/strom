@@ -249,8 +249,8 @@ export const researchAdoptMethods = uiModule({
     askResearchAdopt(tree: TreeMetadata, offer: AdoptOffer, data: ReturnType<typeof DataManager.getData>, opts: { install?: boolean } = {}): Promise<{ images: boolean } | null> {
         document.getElementById(ADOPT_ID)?.remove();
         const r = strings.research;
-        // Everyone goes over, the unnamed too (the research counts them).
-        const persons = Object.keys(data.persons).length;
+        // As the research counts them: people with a name (an unnamed "?" stays out of its count).
+        const persons = Object.values(data.persons).filter(p => !p.isPlaceholder).length;
         const families = Object.keys(data.partnerships).length;
         const sources = Object.keys(data.sources ?? {}).length;
         const images = countImages(data);

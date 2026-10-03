@@ -29,7 +29,15 @@ export const pwaUiMethods = uiModule({
         el.innerHTML = `<span>${this.escapeHtml(p.updateReady)}</span>`
             + `<button type="button" class="pwa-update-btn">${this.escapeHtml(p.refresh)}</button>`
             + `<button type="button" class="pwa-update-close" aria-label="${strings.buttons.close}">&times;</button>`;
-        el.querySelector('.pwa-update-btn')!.addEventListener('click', () => { void applyServiceWorkerUpdate(); });
+        // Once clicked it says it is on its way (and a second click changes nothing).
+        const btn = el.querySelector<HTMLButtonElement>('.pwa-update-btn')!;
+        btn.addEventListener('click', () => {
+            btn.disabled = true;
+            btn.textContent = p.refreshing;
+            void applyServiceWorkerUpdate();
+            // Nothing happened after a while (no new build reachable): the button again.
+            setTimeout(() => { btn.disabled = false; btn.textContent = p.refresh; }, 10_000);
+        });
         el.querySelector('.pwa-update-close')!.addEventListener('click', () => el.remove());
         document.body.appendChild(el);
         requestAnimationFrame(() => el.classList.add('show'));

@@ -21,7 +21,7 @@ import { newAdoptToken, researchNewUrl, isSafariBrowser } from '../research-link
 import { isPromoAvailable } from '../research-promo.js';
 import {
     InstallOs, InstallRecord, INSTALL_OSES, INSTALL_RELEASE_URL,
-    detectInstallOs, installLine, npmLines, installPhase, newInstallRecord,
+    detectInstallOs, installLine, npmLines, installPhase, newInstallRecord, INSTALL_KEY,
     readInstallRecord, writeInstallRecord, clearInstallRecord,
 } from '../research-install.js';
 import { onComputer } from './research-ui.js';
@@ -38,6 +38,7 @@ type InstallStep = 'what' | 'install' | 'wait';
 let current: { step: InstallStep; os: InstallOs; copied: boolean; otherOpen: boolean; resumed: boolean } | null = null;
 let phaseTimer: ReturnType<typeof setInterval> | null = null;
 let channel: BroadcastChannel | null = null;
+let storageWatched = false;
 
 function esc(text: string): string {
     return text
@@ -458,6 +459,19 @@ export const researchInstallMethods = uiModule({
 
     /** Another tab finished the installation (the research opened it): this one's dialog closes, with a word. */
     listenResearchInstallDone(): void {
+        if (!storageWatched && typeof window !== 'undefined') {
+            storageWatched = true;
+            // A second way to hear it: the record removed by the tab that finished.
+            window.addEventListener('storage', (e) => {
+                if (e.key !== INSTALL_KEY || e.newValue !== null) return;
+                if (this.researchInstallOpen() && current?.step === 'wait') {
+                    this.closeResearchInstall();
+                    this.showToast(strings.install.otherTab, 6000);
+                } else {
+                    this.refreshResearchPromo();
+                }
+            });
+        }
         if (channel || typeof BroadcastChannel !== 'function') return;
         try {
             channel = new BroadcastChannel(INSTALL_CHANNEL);

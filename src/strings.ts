@@ -814,6 +814,7 @@ const stringsEN = {
         offline: 'Offline',
         updateReady: 'A new version is available.',
         refresh: 'Refresh',
+        refreshing: 'Refreshing…',
     },
 
     // File System Access (work over a file on disk)
@@ -3962,6 +3963,7 @@ const stringsCZ: StringsType = {
         offline: 'Offline',
         updateReady: 'Je k dispozici nová verze.',
         refresh: 'Obnovit',
+        refreshing: 'Obnovuji…',
     },
 
     // File System Access (práce nad souborem na disku)
@@ -7104,6 +7106,7 @@ const stringsDE: StringsType = {
         offline: 'Offline',
         updateReady: 'Eine neue Version ist verfügbar.',
         refresh: 'Aktualisieren',
+        refreshing: 'Wird aktualisiert…',
     },
 
     // File System Access (work over a file on disk)

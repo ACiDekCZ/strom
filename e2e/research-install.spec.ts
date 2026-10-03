@@ -244,6 +244,23 @@ test.describe('installing the research from the app', () => {
         await other.close();
     });
 
+    test('a waiting tab without BroadcastChannel hears it too (the record removed)', async ({ page }) => {
+        await setup(page);
+        await toInstallStep(page);
+        await dialog(page).locator('[data-act="pasted"]').click();
+        const other = await page.context().newPage();
+        await other.addInitScript(() => { delete (window as unknown as { BroadcastChannel?: unknown }).BroadcastChannel; });
+        await other.setViewportSize({ width: 1280, height: 900 });
+        await openApp(other);
+        await other.evaluate(() => window.Strom.UI.showResearchInstall());
+        await expect(dialog(other).locator('.research-install-dialog')).toHaveAttribute('data-step', 'wait');
+        // The tab the research opened finishes the installation.
+        await page.evaluate(() => window.Strom.UI.finishResearchInstall('x'));
+        await expect(dialog(other)).toHaveCount(0);
+        await expect(other.locator('.toast')).toContainText('The research responded in a new tab.');
+        await other.close();
+    });
+
     test('Safari: the Install step says it will not connect there', async ({ page }) => {
         await page.addInitScript(() => {
             Object.defineProperty(navigator, 'userAgent', {

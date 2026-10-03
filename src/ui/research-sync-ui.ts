@@ -328,6 +328,11 @@ export const researchSyncMethods = uiModule({
     },
 
     /** The bridge answered within FRESH_MS. */
+    /** The bridge answered the last time it was asked (however long ago; polls keep it current). */
+    researchBridgeUp(researchId: string): boolean {
+        return !!runtime.get(researchId)?.up;
+    },
+
     researchBridgeFresh(researchId: string): boolean {
         const rt = runtime.get(researchId);
         return !!rt?.up && Date.now() - rt.checkedAt < FRESH_MS;

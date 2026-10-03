@@ -301,7 +301,8 @@ export const originalsMethods = uiModule({
         const hash = normalizeSha256(sha);
         if (!link || !hash) return null;
         const external = this.researchLinkAvailable('media') && researchSchemeUrl('media', { tree: link.researchId, sha: hash }) ? 'external' : null;
-        const here = this.researchBridgeFresh(link.researchId) && !!storedResearchBridge(link.researchId)?.base
+        // Up at the last poll is enough: a failed fetch says so and offers the research.
+        const here = this.researchBridgeUp(link.researchId) && !!storedResearchBridge(link.researchId)?.base
             && FULL_QUALITY_TYPES.includes(mimeType) && bytes > 0 && bytes <= FULL_QUALITY_MAX_BYTES;
         return here ? 'app' : external;
     },
@@ -492,7 +493,7 @@ export const originalsMethods = uiModule({
         const since = (ms: number): string => new Date(ms).toLocaleDateString(getCurrentLanguage(), { day: 'numeric', month: 'numeric' })
             + ' ' + new Date(ms).toLocaleTimeString(getCurrentLanguage(), { hour: '2-digit', minute: '2-digit' });
         const link = this.researchOriginalsLink();
-        const up = !!link && this.researchBridgeFresh(link.researchId);
+        const up = !!link && this.researchBridgeUp(link.researchId);
         const sorted = [...records].sort((a, b) => a.addedAt - b.addedAt);
         row.innerHTML = `
             <summary class="settings-text">
