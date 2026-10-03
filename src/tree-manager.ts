@@ -387,6 +387,7 @@ class TreeManagerClass {
         await dropHandle(id).catch(() => {});
         const { deleteBaselinesForTree } = await import('./share-baselines.js');
         await deleteBaselinesForTree(id).catch(() => {});
+        await deleteBaselinesForTree(`research-base:${id}`).catch(() => {});
         SettingsManager.forgetRecentSources(id);
 
         // If this was the active tree, switch to another VISIBLE one (never
