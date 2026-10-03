@@ -191,15 +191,15 @@ export const researchInstallMethods = uiModule({
             <div class="modal-content install-body">
                 <p class="install-intro">${esc(intro)}</p>
                 <div class="install-cards">
-                    <div class="install-card install-card-archive">
-                        <div class="install-card-head"><h3>${esc(s.archive)}</h3><span class="install-tag install-tag-free">${esc(s.archiveTag)}</span></div>
-                        <p>${esc(s.archiveText)}</p>
-                        <div class="install-card-foot">${esc(s.archiveFoot)}</div>
-                    </div>
                     <div class="install-card install-card-agent">
                         <div class="install-card-head"><h3>${esc(s.agent)}</h3><span class="install-tag install-tag-agent">${esc(s.agentTag)}</span></div>
                         <p>${esc(s.agentText)}</p>
                         <div class="install-card-foot">${esc(s.agentFoot)}</div>
+                    </div>
+                    <div class="install-card install-card-archive">
+                        <div class="install-card-head"><h3>${esc(s.archive)}</h3><span class="install-tag install-tag-free">${esc(s.archiveTag)}</span></div>
+                        <p>${esc(s.archiveText)}</p>
+                        <div class="install-card-foot">${esc(s.archiveFoot)}</div>
                     </div>
                 </div>
                 <p class="install-later">${esc(s.choiceLater)}</p>
@@ -306,13 +306,13 @@ export const researchInstallMethods = uiModule({
             <div class="modal-content install-body">
                 <p class="install-intro">${esc(tree && people ? s.intro(tree.name) : s.introEmpty)}</p>
                 <div class="install-cards">
-                    <div class="install-card install-card-archive">
-                        <div class="install-card-head"><h3>${esc(s.archive)}</h3><span class="install-tag install-tag-free">${esc(s.archiveTag)}</span></div>
-                        <p>${esc(s.archiveShort)}</p>
-                    </div>
                     <div class="install-card install-card-agent">
                         <div class="install-card-head"><h3>${esc(s.agent)}</h3><span class="install-tag install-tag-agent">${esc(s.agentTag)}</span></div>
                         <p>${esc(s.agentShort)}</p>
+                    </div>
+                    <div class="install-card install-card-archive">
+                        <div class="install-card-head"><h3>${esc(s.archive)}</h3><span class="install-tag install-tag-free">${esc(s.archiveTag)}</span></div>
+                        <p>${esc(s.archiveShort)}</p>
                     </div>
                 </div>
                 <div class="install-mobile-box">

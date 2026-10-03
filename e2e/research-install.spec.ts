@@ -59,7 +59,9 @@ test.describe('installing the research from the app', () => {
         await expect(d.locator('.install-step')).toHaveText(['What it is', 'Install', 'Waiting']);
         await expect(d.locator('.install-intro')).toContainText('takes the tree');
         await expect(d.locator('.install-card-archive')).toContainText('Free');
-        await expect(d.locator('.install-card-agent')).toContainText('Your AI subscription');
+        await expect(d.locator('.install-card-agent')).toContainText('Recommended · your AI subscription');
+        // The agent first: recommended and the default; the archive free, without AI.
+        await expect(d.locator('.install-card').first()).toHaveClass(/install-card-agent/);
         await d.locator('[data-dismiss]').click();
         await expect(d).toHaveCount(0);
         expect(await installRecord(page)).toBeNull();
