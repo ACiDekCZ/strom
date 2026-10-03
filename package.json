@@ -8,14 +8,15 @@
     "build:dev": "esbuild src/main.ts --bundle --sourcemap --outfile=dist/bundle.js",
     "watch": "esbuild src/main.ts --bundle --sourcemap --outfile=dist/bundle.js --watch",
     "dev": "npm run build:dev && npx http-server -p 8080 -c-1",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile .tsbuildinfo",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:real": "npx tsx scripts/test-real-data.ts",
     "gen:etalon": "tsx scripts/generate-etalon.ts",
     "gen:devel-demo": "tsx scripts/generate-devel-demo.ts",
-    "test:e2e": "npm run build && playwright test",
-    "test:e2e:smoke": "npm run build && playwright test --grep @smoke"
+    "test:e2e": "sh scripts/e2e.sh",
+    "test:e2e:smoke": "sh scripts/e2e.sh --grep @smoke",
+    "test:quick": "sh scripts/e2e.sh --quick"
   },
   "keywords": [
     "family-tree",

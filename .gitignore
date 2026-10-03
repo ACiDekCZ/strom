@@ -16,3 +16,7 @@ playwright-report/
 /blob-report/
 .playwright/
 e2e-results.json
+/e2e-dist/
+
+# TypeScript incremental typecheck
+.tsbuildinfo

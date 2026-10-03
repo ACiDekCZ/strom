@@ -18,14 +18,18 @@ function e2ePort(): number {
 const PORT = e2ePort();
 
 /**
- * End-to-end tests run against the real single-file build (strom.html), served
- * by http-server. `npm run test:e2e` builds first, then runs these. Each test
+ * End-to-end tests run against the real single-file build, served by
+ * http-server from e2e-dist/: globalSetup copies strom.html there when a run
+ * starts, so a build made during the run does not change what is tested.
+ * `npm run test:e2e` (scripts/e2e.sh: one heavy run at a time on this
+ * computer) builds first, then runs these. Each test
  * gets a fresh browser context (clean IndexedDB), and the locale is forced to
  * en-US so the (system-language) UI is deterministically English; a few tests
  * override the locale to cs-CZ.
  */
 export default defineConfig({
     testDir: './e2e',
+    globalSetup: './e2e/global-setup.ts',
     fullyParallel: true,
     forbidOnly: !!process.env.CI,
     // One retry on CI: a flake does not stop a deploy, and the run reports it
@@ -53,8 +57,9 @@ export default defineConfig({
         { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     ],
     webServer: {
-        command: `npx http-server . -p ${PORT} -c-1 --silent`,
-        url: `http://localhost:${PORT}/strom.html`,
+        // Up before globalSetup copies the build in: ready by the folder's listing.
+        command: `mkdir -p e2e-dist && npx http-server e2e-dist -p ${PORT} -c-1 --silent`,
+        url: `http://localhost:${PORT}/`,
         reuseExistingServer: !process.env.CI,
         timeout: 30_000,
     },
