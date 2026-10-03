@@ -1,0 +1,329 @@
+/**
+ * Changes per person (A2): what the user changed since the research's
+ * version, person by person — "What will be sent" before a send, "What was
+ * written" after one. The base is the copy of the research's version kept in
+ * this browser (research-copy.ts), refreshed whenever the tree takes a version
+ * from the research or the research writes a send. A copy that no longer
+ * matches the tree's tie (another path moved the base) is not used.
+ */
+
+import { DataManager } from '../data.js';
+import { TreeManager } from '../tree-manager.js';
+import { TreeRenderer } from '../renderer.js';
+import { ZoomPan } from '../zoom.js';
+import { strings, getCurrentLanguage } from '../strings.js';
+import { PersonId, StromData, TreeId } from '../types.js';
+import { formatLiveClock } from '../live-time.js';
+import { ChangeKind, PersonChange, diffByPerson, baseCopy } from '../research-changes.js';
+import { saveResearchCopy, loadResearchCopy } from '../research-copy.js';
+import { researchAutoState } from '../research-device.js';
+import { researchSendMode } from './research-sync-ui.js';
+import { uiModule } from './module.js';
+
+const PANEL_ID = 'research-changes-panel';
+/** The fingerprint the kept copy stands for (the tie's base, or the written send's). */
+const FP_KEY = 'strom-research-base-fp:';
+/** What the last written send carried, person by person (for "What was written"). */
+const WRITTEN_KEY = 'strom-research-written:';
+/** At most this many kinds on a row, then "+ N more". */
+const KINDS_SHOWN = 3;
+/** At most this many people kept for "What was written". */
+const WRITTEN_MAX = 200;
+
+/** The copy of the open tree's research version, as loaded (base null: none kept). */
+let copy: { treeId: string; base: StromData | null; fp: string } | null = null;
+let loading: string | null = null;
+let loadingDone: Promise<void> | null = null;
+let memo: { treeId: string; key: string; list: PersonChange[] } | null = null;
+/** A send still pending in the research: its data and list, kept until it is written. */
+const pendingSent = new Map<string, { fingerprint: string; data: StromData; list: PersonChange[] | null }>();
+
+function esc(text: string): string {
+    return text
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function storedFp(treeId: string): string {
+    try { return localStorage.getItem(FP_KEY + treeId) ?? ''; } catch { return ''; }
+}
+
+function sanitizeChange(v: unknown): PersonChange | null {
+    const r = v as Record<string, unknown> | null;
+    if (!r || typeof r.personId !== 'string' || typeof r.name !== 'string' || !Array.isArray(r.kinds)) return null;
+    return {
+        personId: r.personId as PersonId, name: r.name.slice(0, 200),
+        kinds: r.kinds.filter((k): k is ChangeKind => typeof k === 'string').slice(0, 20),
+        ...(r.deleted === true ? { deleted: true } : {}),
+    };
+}
+
+/** "What was written": the last written send's people (null: none kept). */
+export function researchWrittenList(treeId: string): { at: string; list: PersonChange[] } | null {
+    try {
+        const raw = localStorage.getItem(WRITTEN_KEY + treeId);
+        if (!raw) return null;
+        const p = JSON.parse(raw) as { at?: unknown; list?: unknown };
+        if (typeof p.at !== 'string' || !Array.isArray(p.list)) return null;
+        return { at: p.at, list: p.list.map(sanitizeChange).filter((c): c is PersonChange => !!c) };
+    } catch {
+        return null;
+    }
+}
+
+function storeWritten(treeId: string, at: string, list: PersonChange[]): void {
+    try { localStorage.setItem(WRITTEN_KEY + treeId, JSON.stringify({ at, list: list.slice(0, WRITTEN_MAX) })); } catch { /* not kept */ }
+}
+
+/** Forget what this browser keeps of a tree's changes (the tree deleted). */
+export function forgetResearchChanges(treeId: string): void {
+    try {
+        localStorage.removeItem(FP_KEY + treeId);
+        localStorage.removeItem(WRITTEN_KEY + treeId);
+    } catch { /* nothing kept */ }
+    if (copy?.treeId === treeId) copy = null;
+    pendingSent.delete(treeId);
+}
+
+/** The labels of a row's kinds: at most three, then "+ N more". */
+export function changeKindsText(kinds: readonly ChangeKind[]): string {
+    const c = strings.changes;
+    const label: Record<ChangeKind, string> = {
+        added: c.kindAdded, deleted: c.kindDeleted, name: c.kindName, birth: c.kindBirth, death: c.kindDeath,
+        marriage: c.kindMarriage, event: c.kindEvent, godparent: c.kindGodparent, witness: c.kindWitness,
+        citation: c.kindCitation, source: c.kindSource, attachment: c.kindAttachment,
+        attachmentRemoved: c.kindAttachmentRemoved, note: c.kindNote, other: c.kindOther,
+    };
+    const shown = kinds.slice(0, KINDS_SHOWN).map(k => label[k]);
+    return [...shown, ...(kinds.length > KINDS_SHOWN ? [c.more(kinds.length - KINDS_SHOWN)] : [])].join(' · ');
+}
+
+export const researchChangesMethods = uiModule({
+    /**
+     * Keep `data` as the research's version of a tree (a load, a hand-over,
+     * a written send). `fp` is the fingerprint the tie counts as the base
+     * (default: the tie's own, set just before).
+     */
+    researchKeepCopy(treeId: TreeId, data: StromData, fp?: string): void {
+        const base = fp ?? TreeManager.getTreeMetadata(treeId)?.research?.fingerprint ?? '';
+        copy = { treeId, base: baseCopy(data), fp: base };
+        memo = null;
+        try { localStorage.setItem(FP_KEY + treeId, base); } catch { /* the copy is not trusted next time */ }
+        void saveResearchCopy(treeId, data);
+    },
+
+    /**
+     * What changed in the open tree since the research's version, person by
+     * person; null when it is not known (no copy kept, still loading, or the
+     * copy no longer stands for the tie's base). Cached until the next edit.
+     */
+    researchChangesNow(): PersonChange[] | null {
+        const ctx = this.researchSyncLink();
+        if (!ctx) return null;
+        const { treeId, link } = ctx;
+        if (!copy || copy.treeId !== treeId) {
+            if (loading !== treeId) {
+                loading = treeId;
+                loadingDone = loadResearchCopy(treeId).then(base => {
+                    if (loading !== treeId) return;
+                    loading = null;
+                    loadingDone = null;
+                    copy = { treeId, base, fp: storedFp(treeId) };
+                    memo = null;
+                    this.refreshResearchSyncUi();
+                });
+            }
+            return null;
+        }
+        const fps = this.researchSyncFingerprints(treeId, link);
+        // In step with the research: nothing to tell; a tree without a copy gets one now.
+        if (fps.matchesBase) {
+            if (!copy.base || copy.fp !== link.fingerprint) this.researchKeepCopy(treeId, DataManager.getData(), link.fingerprint);
+            return [];
+        }
+        const written = link.sent?.state === 'written' ? link.sent.fingerprint : '';
+        if (!copy.base || !copy.fp || (copy.fp !== link.fingerprint && copy.fp !== written)) return null;
+        if (memo && memo.treeId === treeId && memo.key === fps.current) return memo.list;
+        const list = diffByPerson(copy.base, DataManager.getData());
+        memo = { treeId, key: fps.current, list };
+        return list;
+    },
+
+    /** As researchChangesNow, waiting for the copy to load when it is not yet. */
+    async researchChangesReady(): Promise<PersonChange[] | null> {
+        const now = this.researchChangesNow();
+        if (now !== null || !loadingDone) return now;
+        await loadingDone;
+        return this.researchChangesNow();
+    },
+
+    /** A send is about to go: what it carries (for "What was written" once written). */
+    researchNoteSending(treeId: TreeId, data: StromData, fingerprint: string): void {
+        const list = DataManager.getCurrentTreeId() === treeId ? this.researchChangesNow() : null;
+        pendingSent.set(treeId, { fingerprint, data: baseCopy(data), list });
+    },
+
+    /** The research wrote the send with this fingerprint: its data is the research's version, its list what was written. */
+    researchNoteWritten(treeId: TreeId, fingerprint: string, at: string): void {
+        const p = pendingSent.get(treeId);
+        if (!p || p.fingerprint !== fingerprint) return;
+        pendingSent.delete(treeId);
+        copy = { treeId, base: p.data, fp: fingerprint };
+        memo = null;
+        try { localStorage.setItem(FP_KEY + treeId, fingerprint); } catch { /* not trusted next time */ }
+        void saveResearchCopy(treeId, p.data);
+        if (p.list) storeWritten(treeId, at, p.list);
+    },
+
+    // ==================== THE PANEL ====================
+
+    /** Open "What will be sent" / "What was written" under the toolbar's button (or the ⋯ button). */
+    showResearchChanges(mode: 'send' | 'written'): void {
+        this.closeActionsMenu();
+        this.closeResearchChanges();
+        const ctx = this.researchSyncLink();
+        if (!ctx) return;
+        const c = strings.changes;
+        const s = strings.sync;
+        const clock = (iso: string | undefined): string => {
+            const t = iso ? Date.parse(iso) : NaN;
+            return Number.isFinite(t) ? formatLiveClock(t, Date.now(), getCurrentLanguage()) : '';
+        };
+        const archive = this.researchModeOf(ctx.link.id, ctx.link) === 'archive';
+        const auto = researchSendMode(ctx.link) === 'auto';
+        let list: PersonChange[];
+        let title: string;
+        let sub: string;
+        let foot = '';
+        if (mode === 'written') {
+            const w = researchWrittenList(ctx.treeId);
+            const lw = researchAutoState(ctx.treeId).lastWritten;
+            list = w?.list ?? [];
+            title = c.writtenTitle(clock(w?.at ?? lw?.at));
+            const k = lw?.changes ?? list.length;
+            const conflicts = lw?.conflicts ?? 0;
+            sub = conflicts ? `${s.changesN(k)} · ${s.conflictsN(conflicts)}` : s.changesN(k);
+            if (archive) foot = `<span class="research-changes-note">${esc(c.archiveNoConflicts)}</span>`;
+            else if (conflicts && this.researchDecideUrl(ctx.treeId)) {
+                foot = `<button type="button" class="research-sync-link" data-act="decide">${esc(s.decideInResearch)}</button>`;
+            }
+        } else {
+            list = this.researchChangesNow() ?? [];
+            title = c.willSendTitle;
+            sub = auto ? c.willSendAutoSub(list.length) : c.willSendSub(list.length, clock(ctx.link.syncedAt));
+            foot = auto
+                ? `<button type="button" class="research-sync-link" data-act="send">${esc(s.sendNow)}</button>`
+                : `<button type="button" class="primary btn-sm" data-act="send">${esc(s.barSend)}</button>`;
+        }
+        const rows = list.map(ch => {
+            const name = ch.deleted || !DataManager.getPerson(ch.personId)
+                ? `<span class="research-changes-name is-deleted">${esc(ch.name)}</span>`
+                : `<button type="button" class="research-changes-name" data-person="${esc(ch.personId)}">${esc(ch.name)}</button>`;
+            return `<li class="research-changes-row">`
+                + `<span class="research-changes-icon ${mode === 'written' ? 'is-check' : 'is-ring'}" aria-hidden="true">${mode === 'written' ? '✓' : ''}</span>`
+                + `<span class="research-changes-text">${name}<span class="research-changes-kinds">${esc(changeKindsText(ch.kinds))}</span></span>`
+                + '</li>';
+        }).join('');
+        const panel = document.createElement('div');
+        panel.id = PANEL_ID;
+        panel.className = 'research-changes-panel';
+        panel.setAttribute('role', 'dialog');
+        panel.setAttribute('aria-label', title);
+        panel.dataset.mode = mode;
+        panel.innerHTML = `
+            <div class="research-changes-head">
+                <div class="research-changes-title">${esc(title)}</div>
+                <div class="research-changes-sub">${esc(sub)}</div>
+            </div>
+            ${rows ? `<ul class="research-changes-list">${rows}</ul>` : ''}
+            ${foot ? `<div class="research-changes-foot">${foot}</div>` : ''}`;
+        document.body.appendChild(panel);
+        this.positionResearchChanges();
+        panel.querySelectorAll<HTMLButtonElement>('[data-person]').forEach(btn => btn.addEventListener('click', () => {
+            const id = btn.dataset.person as PersonId;
+            this.closeResearchChanges();
+            TreeRenderer.setFocus(id);
+            ZoomPan.centerOnPerson(id);
+        }));
+        panel.querySelector('[data-act="send"]')?.addEventListener('click', () => {
+            this.closeResearchChanges();
+            this.researchSyncAction('send');
+        });
+        panel.querySelector('[data-act="decide"]')?.addEventListener('click', () => {
+            this.closeResearchChanges();
+            this.researchSyncAction('decideInResearch');
+        });
+        document.getElementById('research-sync-send-more')?.setAttribute('aria-expanded', 'true');
+        // Esc and a click outside close it (the opening click is over by now).
+        setTimeout(() => {
+            document.addEventListener('pointerdown', closeOnOutside, true);
+            document.addEventListener('keydown', closeOnEsc, true);
+        }, 0);
+        (panel.querySelector<HTMLElement>('button') ?? panel).focus?.();
+    },
+
+    /** Under the "N ⌄" part of the Send button when shown, else under ⋯; within the window. */
+    positionResearchChanges(): void {
+        const panel = document.getElementById(PANEL_ID);
+        if (!panel) return;
+        const more = document.getElementById('research-sync-send-more');
+        const anchor = more && more.offsetParent ? more : document.querySelector<HTMLElement>('.actions-menu-btn');
+        const rect = anchor?.getBoundingClientRect();
+        const width = Math.min(panel.offsetWidth || 380, window.innerWidth - 16);
+        const left = rect ? Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)) : 8;
+        panel.style.top = `${Math.round((rect?.bottom ?? 56) + 6)}px`;
+        panel.style.left = `${Math.round(left)}px`;
+    },
+
+    closeResearchChanges(): void {
+        document.getElementById(PANEL_ID)?.remove();
+        document.getElementById('research-sync-send-more')?.setAttribute('aria-expanded', 'false');
+        document.removeEventListener('pointerdown', closeOnOutside, true);
+        document.removeEventListener('keydown', closeOnEsc, true);
+    },
+
+    /**
+     * The send button's second part "N ⌄". Its place is always kept (an
+     * invisible one when the people are not known or `reserve`), so the
+     * toolbar does not move when it comes.
+     */
+    researchSendMoreHtml(reserve = false): string {
+        const list = reserve ? null : this.researchChangesNow();
+        if (!list || list.length === 0) {
+            return '<span class="research-sync-send-more research-sync-send-more--placeholder" aria-hidden="true">0 ⌄</span>';
+        }
+        const open = !!document.getElementById(PANEL_ID);
+        return `<button type="button" class="research-sync-send-more" id="research-sync-send-more" aria-haspopup="dialog" aria-expanded="${open}"`
+            + ` aria-label="${esc(strings.changes.showWhat(list.length))}" onclick="event.stopPropagation(); window.Strom.UI.toggleResearchChanges()">`
+            + `${list.length > 99 ? '99+' : list.length} <span aria-hidden="true">⌄</span></button>`;
+    },
+
+    toggleResearchChanges(): void {
+        if (document.getElementById(PANEL_ID)) this.closeResearchChanges();
+        else this.showResearchChanges('send');
+    },
+
+    /** The names for the "load over your changes" dialog: at most five, then "and N more" ('' when not known). */
+    async researchOverwriteNames(): Promise<string> {
+        const list = await this.researchChangesReady();
+        if (!list || list.length === 0) return '';
+        const c = strings.changes;
+        const lines = list.slice(0, 5).map(ch => `• ${ch.name} (${changeKindsText(ch.kinds)})`);
+        if (list.length > 5) lines.push(c.andMore(list.length - 5));
+        return `${c.overwriteIntro}\n${lines.join('\n')}`;
+    },
+});
+
+function closeOnOutside(e: Event): void {
+    const panel = document.getElementById(PANEL_ID);
+    const target = e.target as Node | null;
+    if (!panel || (target && (panel.contains(target) || document.getElementById('research-sync-send-more')?.contains(target)))) return;
+    window.Strom?.UI?.closeResearchChanges();
+}
+
+function closeOnEsc(e: KeyboardEvent): void {
+    if (e.key !== 'Escape' || !document.getElementById(PANEL_ID)) return;
+    e.stopPropagation();
+    e.preventDefault();
+    window.Strom?.UI?.closeResearchChanges();
+}

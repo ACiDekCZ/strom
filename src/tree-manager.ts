@@ -388,6 +388,10 @@ class TreeManagerClass {
         const { deleteBaselinesForTree } = await import('./share-baselines.js');
         await deleteBaselinesForTree(id).catch(() => {});
         await deleteBaselinesForTree(`research-base:${id}`).catch(() => {});
+        try {
+            localStorage.removeItem(`strom-research-base-fp:${id}`);
+            localStorage.removeItem(`strom-research-written:${id}`);
+        } catch { /* nothing kept */ }
         SettingsManager.forgetRecentSources(id);
 
         // If this was the active tree, switch to another VISIBLE one (never

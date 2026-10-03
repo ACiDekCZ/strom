@@ -45,6 +45,7 @@ import {
     pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS,
 } from '../research-sync.js';
 import { uiModule } from './module.js';
+import { researchWrittenList } from './research-changes-ui.js';
 import {
     fetchWithTimeout, fetchGedcomText, postSync, onComputer, readTree, researchGedcom,
 } from './research-ui.js';
@@ -553,7 +554,10 @@ export const researchSyncMethods = uiModule({
             }
             return;
         }
-        if (!fate.nothing) patchResearchAutoState(treeId, { lastWritten: { at: closed.closedAt!, changes: closed.changes, conflicts: 0 } });
+        if (!fate.nothing) {
+            patchResearchAutoState(treeId, { lastWritten: { at: closed.closedAt!, changes: closed.changes, conflicts: 0 } });
+            this.researchNoteWritten(treeId, sent.fingerprint, closed.closedAt!);
+        }
         // Written: "Send, then load" loads the version that has the changes now.
         if (sent.thenLoad && DataManager.getCurrentTreeId() === treeId) {
             const fps = this.researchSyncFingerprints(treeId, link);
@@ -795,6 +799,8 @@ export const researchSyncMethods = uiModule({
         const gedcom = researchGedcom(data, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: link.transcripts, sent: fps.current,
         });
+        // What this send carries, person by person (what was written, once it is).
+        this.researchNoteSending(treeId, data, fps.current);
         sendingTree = treeId;
         if (autoTimerTree === treeId) this.clearResearchAutoTimer();
         this.refreshResearchSyncUi();
@@ -847,6 +853,7 @@ export const researchSyncMethods = uiModule({
             ...(opts.auto ? {} : { manual: true }),
         };
         TreeManager.patchResearchLink(treeId, { refused: undefined, sentSources: sourceReadings(data), sent });
+        if (written && reply.changes !== 0) this.researchNoteWritten(treeId, fps.current, now);
         patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined, toldRefused: undefined });
         autoDue.delete(treeId);
         // The commit the write made is the research's version now.
@@ -1011,6 +1018,7 @@ export const researchSyncMethods = uiModule({
         });
         patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined });
         fpCache = null;
+        this.researchKeepCopy(treeId, DataManager.getData());
         const after = openConflictCounts(DataManager.getData());
         const conflictPersons: PersonId[] = [];
         let conflicts = 0;
@@ -1127,6 +1135,8 @@ export const researchSyncMethods = uiModule({
         switch (action) {
             case 'send': case 'retry': case 'sendAgain': void this.researchSendNow(); break;
             case 'sendThenLoad': void this.researchSendNow({ thenLoad: true }); break;
+            case 'showChanges': this.showResearchChanges('send'); break;
+            case 'showWritten': this.showResearchChanges('written'); break;
             case 'loadNewer': void this.researchLoadNewer(); break;
             case 'reload': window.location.reload(); break;
             case 'cancelLoad': this.researchCancelThenLoad(); break;
@@ -1319,6 +1329,16 @@ export const researchSyncMethods = uiModule({
                 actions: [{ action: 'introSeen', label: s.gotIt, asLink: true }, { action: 'introChange', label: s.autoIntroChange, asLink: true }] }),
         };
         const b = blocks[state.kind]();
+        // Changes per person: how many people, and "What will be sent ›" / "What was written ›".
+        if (['unsent', 'autoWaiting', 'unsentBridgeDown', 'unsentAndNewer'].includes(state.kind)) {
+            const list = this.researchChangesNow();
+            if (list && list.length > 0) {
+                b.sub = [strings.changes.personsChanged(list.length), b.sub].filter(Boolean).join(' · ');
+                b.actions = [...(b.actions ?? []), { action: 'showChanges', label: strings.changes.whatWillBeSent, asLink: true }];
+            }
+        } else if (state.kind === 'written' && treeId && researchWrittenList(treeId)?.list.length) {
+            b.actions = [...(b.actions ?? []), { action: 'showWritten', label: strings.changes.whatWasWritten, asLink: true }];
+        }
         const sendingNow = !!treeId && sendingTree === treeId;
         const buttons = (b.actions ?? []).map(a => {
             const busy = sendingNow && !a.asLink && ['send', 'sendThenLoad', 'retry', 'sendAgain'].includes(a.action);
@@ -1422,16 +1442,19 @@ export const researchSyncMethods = uiModule({
             // Nothing to send: the button's place stays (empty), so the toolbar does not move when it comes.
             if (kind !== 'unsent') {
                 set('is-send is-reserved', `<span class="research-sync-send research-sync-send--placeholder" aria-hidden="true">`
-                    + `<span class="research-sync-send-long">${esc(s.sendButton)}</span><span class="research-sync-send-short">${esc(s.barSend)}</span></span>`);
+                    + `<span class="research-sync-send-long">${esc(s.sendButton)}</span><span class="research-sync-send-short">${esc(s.barSend)}</span></span>`
+                    + this.researchSendMoreHtml(true));
                 return;
             }
             const busy = sendingTree === ctx.treeId;
-            set('is-send', `<button type="button" class="research-sync-send" id="research-sync-send"${busy ? ' disabled aria-busy="true"' : ''}`
+            // Split: "Send to research | 3 ⌄", the second part shows who changed (A2).
+            const more = this.researchSendMoreHtml(busy);
+            set(`is-send${more.startsWith('<button') ? ' is-split' : ''}`, `<button type="button" class="research-sync-send" id="research-sync-send"${busy ? ' disabled aria-busy="true"' : ''}`
                 + ` title="${esc(s.sendButtonTitle)}" onclick="${call('researchSyncAction', "'send'")}">`
                 + (busy
                     ? `<span class="research-sync-spinner" aria-hidden="true"></span><span>${esc(s.sending)}</span>`
                     : `<span class="research-sync-send-long">${esc(s.sendButton)}</span><span class="research-sync-send-short">${esc(s.barSend)}</span>`)
-                + '</button>');
+                + '</button>' + more);
             return;
         }
         // Sent by itself: the mark, always there (the toolbar does not move while a send goes).

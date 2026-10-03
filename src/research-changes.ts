@@ -110,6 +110,13 @@ function personKinds(before: Person, after: Person, sourcesChanged: Set<string>)
     return kinds;
 }
 
+/** A source this person cites changed. */
+function citesChanged(p: Person, sourcesChanged: Set<string>): boolean {
+    if (sourcesChanged.size === 0) return false;
+    return [...(p.sourceIds ?? []), ...(p.birthSourceIds ?? []), ...(p.deathSourceIds ?? []),
+        ...(p.events ?? []).flatMap(e => e.sourceIds ?? [])].some(id => sourcesChanged.has(id));
+}
+
 /** What changed for each person since `base` (an empty list: nothing). Sorted by name. */
 export function diffByPerson(base: StromData, current: StromData): PersonChange[] {
     const out = new Map<string, { name: string; kinds: Set<ChangeKind>; deleted?: boolean }>();
@@ -130,6 +137,8 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
             if (!p.isPlaceholder) touch(p.id, fullName(p)).add('added');
             continue;
         }
+        // Most people did not change: one comparison of the whole record, not one per field.
+        if (stable(before) === stable(p) && !citesChanged(p, sourcesChanged)) continue;
         const kinds = personKinds(before, p, sourcesChanged);
         if (kinds.size) kinds.forEach(k => touch(p.id, fullName(p)).add(k));
     }
@@ -145,6 +154,7 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
     for (const id of new Set([...Object.keys(bu), ...Object.keys(cu)])) {
         const a = bu[id];
         const b = cu[id];
+        if (a && b && stable(a) === stable(b)) continue;
         const kinds = new Set<ChangeKind>();
         if (!a || !b) kinds.add('marriage');
         else {

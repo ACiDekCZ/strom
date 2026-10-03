@@ -155,6 +155,8 @@ export const researchAdoptMethods = uiModule({
             syncedAt: new Date().toISOString(),
             ...(reply.head ? { head: reply.head } : {}),
         });
+        // What the research took is its version now: changes per person count from here.
+        this.researchKeepCopy(tree.id, data);
         TreeManager.setResearchAdoptToken(tree.id, null);
         // The bridge that took the tree is the research's own: the tree is
         // connected now (sending by itself, the state in the bar), not only

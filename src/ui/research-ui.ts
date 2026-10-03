@@ -1273,6 +1273,7 @@ export const researchUiMethods = uiModule({
                 ...(head ? { head } : {}),
                 ...(source.mode === 'archive' ? { mode: 'archive' as const } : {}),
             });
+            this.researchKeepCopy(treeId, DataManager.getCurrentTreeId() === treeId ? DataManager.getData() : data);
         }
         const loadedAfterSend = !created && (holdsSent || (!!opts.afterSend && opts.afterSend === treeId));
 
@@ -1325,15 +1326,17 @@ export const researchUiMethods = uiModule({
             ? { label: strings.importImages.label, checked: includeImages,
                 detail: strings.importImages.size((incomingImageBytes(data) / (1024 * 1024)).toFixed(1)) }
             : undefined;
+        // Who would lose what (A2): at most five people, then "and N more".
+        const names = treeId === DataManager.getCurrentTreeId() ? await this.researchOverwriteNames() : '';
         if (bridgeUp) {
-            const message = [u.unsentBody(treeName), mediaLine].filter(Boolean).join('\n\n');
+            const message = [u.unsentBody(treeName), names, mediaLine].filter(Boolean).join('\n\n');
             const pick = await this.showChoice(message, u.unsentTitle, [
                 { id: 'copy', label: r.openCopy },
                 { id: 'sendThenLoad', label: strings.sync.sendThenLoad },
             ], images, { subtitle: `${treeName} · ${u.newerSub}`, aside: { id: 'update', label: u.loadWithout, sub: u.loadWithoutSub } });
             return pick as 'sendThenLoad' | 'update' | 'copy' | null;
         }
-        const message = [u.bridgeDownBody(treeName), u.bridgeDownAdvice, mediaLine].filter(Boolean).join('\n\n');
+        const message = [u.bridgeDownBody(treeName), names, u.bridgeDownAdvice, mediaLine].filter(Boolean).join('\n\n');
         const start = link && this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }) : null;
         const pick = await this.showChoice(message, r.editedTitle, [{ id: 'copy', label: r.openCopy }], images, {
             aside: { id: 'update', label: u.overwrite },
@@ -2019,6 +2022,7 @@ export const researchUiMethods = uiModule({
             ...(s.head ? { head: s.head } : {}),
             ...(header.mode === 'archive' ? { mode: 'archive' as const } : {}),
         });
+        this.researchKeepCopy(s.treeId, active ? DataManager.getData() : stable);
         return active ? DataManager.getData() : stable;
     },
 
