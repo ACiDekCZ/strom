@@ -75,6 +75,9 @@ const KEEPALIVE_MAX_CHARS = 60_000;
 /** The toolbar keeps a place for the research from this width (index.html has the same breakpoint). */
 const TOOLBAR_MIN_WIDTH = 1180;
 
+/** Researches that said nothing of what they take, asked once in this page whether they do now. */
+const olderAsked = new Set<string>();
+
 /** What the app knows about one research's bridge in this page. */
 interface BridgeRuntime {
     up: boolean;
@@ -418,12 +421,17 @@ export const researchSyncMethods = uiModule({
         const ctx = this.researchSyncLink();
         if (!ctx || !onComputer() || !researchLinksEnabled()) return false;
         const researchId = ctx.link.id;
-        // Only a research that said what it takes (at a ?live= / ?send=) is
-        // asked on its own; an older one is never contacted unasked.
-        if (!parseLiveBridge(storedResearchBridge(researchId)?.base) || !this.researchSyncCapable(researchId)) {
+        // A research that said what it takes (at a ?live= / ?send=) is asked
+        // on its own. One that did not (an older version) is asked once per
+        // page, quietly: it may have been updated since, and then it says
+        // what it takes and the tree goes on by itself. Nothing more unasked.
+        const bridgeKnown = !!parseLiveBridge(storedResearchBridge(researchId)?.base);
+        const capable = this.researchSyncCapable(researchId);
+        if (!bridgeKnown || (!capable && olderAsked.has(researchId))) {
             this.refreshResearchSyncUi();
             return false;
         }
+        if (!capable) olderAsked.add(researchId);
         if (polling && opts.timeout === undefined) return this.researchBridgeFresh(researchId);
         polling = true;
         let status: LiveStatus | null;
@@ -440,6 +448,8 @@ export const researchSyncMethods = uiModule({
             this.researchNoteUndone(ctx.treeId, status);
         }
         this.refreshResearchSyncUi();
+        // Updated since: it takes sends now — what waits starts its quiet time.
+        if (status && !capable && this.researchSyncCapable(researchId)) this.researchAutoArm();
         if (status && opts.reschedule !== false) void this.researchAutoCheck();
         // Originals waiting for it go while it answers.
         if (status) void this.researchOriginalsKick();

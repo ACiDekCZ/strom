@@ -127,11 +127,13 @@ test.describe('the state of the tree and sending straight', () => {
         page.on('request', r => { if (r.url().startsWith(BRIDGE)) asked++; });
         await fakeBridge(page, { accepts: undefined });
         await poll(page);
+        await poll(page);
         await openResearchMenu(page);
         await expect(block(page)).toHaveCount(0);
         await expect(dot(page)).toBeHidden();
         await expect(page.locator('#research-item-tree-settings')).toHaveCount(0);
-        expect(asked).toBe(0);   // an older research is never asked unasked
+        // An older research is asked once per page whether it was updated, never more.
+        expect(asked).toBeLessThanOrEqual(1);
     });
 });
 

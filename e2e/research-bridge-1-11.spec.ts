@@ -107,11 +107,31 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
 
         // Whatever was asked named the app's version, which the old bridge ignores.
         expect(b.requests.every(r => !!r.app)).toBe(true);
-        // A few status questions in ten minutes, not a loop.
-        expect(b.requests.filter(r => r.path === 'status').length).toBeLessThan(40);
+        // Asked once whether it was updated (it was not); never again unasked.
+        expect(b.requests.filter(r => r.path === 'status').length).toBeLessThanOrEqual(1);
         // The data are as edited.
         expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons)
             .find((p: any) => p.firstName === 'Jan') as any).birthPlace)).toBe('Kolín');
+    });
+
+    test('updated to a research that says what it takes: the next open of the page asks once and goes on by itself', async ({ page }) => {
+        await page.clock.install();
+        // Opened from 1.11 (its bridge remembered, nothing said of what it takes), edited the old way.
+        await openResearch(page, { capable: false, auto: true });
+        await editJan(page, 'tkadlec');
+        // The research is updated on the same port and token: its status now says what it takes.
+        const { fakeBridge } = await import('./research-bridge.js');
+        const b = await fakeBridge(page, { accepts: { sync: { auto: 'write' }, sources: true, verified: true, media: null },
+            syncReply: { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0042' } } });
+        await page.evaluate(() => localStorage.setItem('strom-research-auto-intro-seen', '1'));
+        await page.reload();
+        await page.clock.fastForward(1000);
+        // Asked once: it takes sends now, so the waiting edit goes after the quiet time.
+        await expect.poll(async () => page.evaluate(() => (window.Strom.UI as any).researchSyncCapable(
+            window.Strom.TreeManager.getActiveTreeMetadata()?.research?.id))).toBe(true);
+        await page.clock.fastForward(3 * 60_000);
+        await expect.poll(() => b.posts.length).toBeGreaterThan(0);
+        expect(b.posts[0]).toContain('tkadlec');
     });
 
     test('?send= with its reply {ok, changes, file}: sent, said so', async ({ page }) => {

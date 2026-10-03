@@ -505,7 +505,9 @@ test.describe('live research survives a reload', () => {
         await page.reload();
         await expect(card(page, 'Jan')).toBeVisible();
         await expect(panel).toHaveCount(0);
-        expect(requests).toEqual([]);
+        // Not followed again: at most the one quiet question whether the research was updated.
+        expect(requests.filter(u => !new URL(u).pathname.endsWith('/status'))).toEqual([]);
+        expect(requests.length).toBeLessThanOrEqual(1);
     });
 
     test('a bridge gone meanwhile: a short note, no error, no import offer', async ({ page }) => {
