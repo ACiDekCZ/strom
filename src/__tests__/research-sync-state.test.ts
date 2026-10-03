@@ -185,6 +185,25 @@ describe('what became of a send', () => {
         expect(ask([rec({ intake: 'R9' })])).toBeNull();
     });
 
+    it('several windows: a write inherited through "replaced", a send the research could not write, its tries', () => {
+        const rec = (extra: Record<string, unknown>) => ({ intake: 'R1', at: '2026-10-02T14:32:05Z', changes: 6, tree: 'tree_1', sent: 'fp-sent', decidedAt: '', reason: '', state: 'pending', ...extra });
+        const s = sent({ intake: 'R1' });
+        const ask = (sends: unknown[]) => pendingSendFate(s, 'tree_1', RID, { inbox: null, head: 'aaaaaaa', lastIntake: null, sends: sends as never });
+        // Replaced by another window's send of the same app tree (another state): written, but not ours.
+        expect(ask([rec({ state: 'replaced' }), rec({ intake: 'R2', at: '2026-10-02T14:40:00Z', state: 'written', sent: 'fp-other' })]))
+            .toMatchObject({ state: 'written', inherited: true });
+        // The newer send carried the same state (this window sent it again): ours.
+        expect(ask([rec({ state: 'replaced' }), rec({ intake: 'R2', at: '2026-10-02T14:40:00Z', state: 'written' })])?.inherited).toBeUndefined();
+        // Written as it was: never inherited.
+        expect(ask([rec({ state: 'written' })])?.inherited).toBeUndefined();
+        // Failed: closed like a discard, with the research's reason, and said to be a failure.
+        expect(ask([rec({ state: 'failed', reason: 'disk full', decidedAt: '2026-10-03T09:00:00Z' })]))
+            .toMatchObject({ state: 'discarded', reason: 'disk full', failed: true });
+        // Pending with tries: the research tries again by itself; without: maybe stuck.
+        expect(ask([rec({ tries: 2 })])).toMatchObject({ state: 'pending', tries: 2 });
+        expect(ask([rec({})])?.tries ?? null).toBeNull();
+    });
+
     it('still in the inbox (named by the app tree, or by the research for an unnamed send)', () => {
         expect(state(pendingSendFate(sent(), 'tree_1', RID, { inbox: inbox('fp-sent'), head: 'aaaaaaa', lastIntake: null }))).toBe('pending');
         expect(state(pendingSendFate(sent(), 'tree_1', RID, { inbox: inbox('fp-sent', RID), head: 'aaaaaaa', lastIntake: null }))).toBe('pending');
@@ -246,10 +265,10 @@ describe('what the bridge says', () => {
             { intake: 'R2', state: 'exploded' },
             { intake: 'bad mark', state: 'written' },
         ] })?.sends;
-        expect(sends).toEqual([{ intake: 'R20261002143205123-a1b2', at: '2026-10-02T14:32:05Z', state: 'discarded', changes: 6,
+        expect(sends).toEqual([{ intake: 'R20261002143205123-a1b2', at: '2026-10-02T14:32:05Z', state: 'discarded', changes: 6, tries: null,
             tree: 'tree_1', sent: 'v2-x', decidedAt: '2026-10-02T15:10:00Z', reason: 'zkouška', conflicts: null, conflictPersons: [] },
-            { intake: 'R3', at: '', state: 'written', changes: null, tree: '', sent: '', decidedAt: '', reason: '', conflicts: 2, conflictPersons: ['P0012', 'P0013'] },
-            { intake: 'R4', at: '', state: 'undone', changes: null, tree: '', sent: '', decidedAt: '2026-10-03T09:00:00Z', reason: '', conflicts: null, conflictPersons: [] }]);
+            { intake: 'R3', at: '', state: 'written', changes: null, tries: null, tree: '', sent: '', decidedAt: '', reason: '', conflicts: 2, conflictPersons: ['P0012', 'P0013'] },
+            { intake: 'R4', at: '', state: 'undone', changes: null, tries: null, tree: '', sent: '', decidedAt: '2026-10-03T09:00:00Z', reason: '', conflicts: null, conflictPersons: [] }]);
         expect(sanitizeLiveStatus({ tree: RID })?.sends).toBeNull();
     });
 

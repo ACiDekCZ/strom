@@ -21,7 +21,7 @@ import { strings } from './strings.js';
 import { onTreeSavedElsewhere } from './tab-sync.js';
 import { StorageManager } from './storage.js';
 import { PERSISTENCE_EVENT } from './persistence.js';
-import { FILE_COPY_EVENT } from './tree-manager.js';
+import { FILE_COPY_EVENT, RESEARCH_BASE_EVENT } from './tree-manager.js';
 import { SNAPSHOTS_TRIMMED_EVENT, SNAPSHOT_CREATED_EVENT, SnapshotTrim } from './snapshots.js';
 import { collectPoolGarbage } from './media-pool.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT } from './pwa.js';
@@ -222,6 +222,13 @@ function registerAppListeners(): void {
 
     // Another tab saved the tree open here: warn and offer a reload — this
     // tab's next save would silently overwrite that work (V6).
+    // A tree's research base changed (loaded from the research, undone): its
+    // data are stored again with it, in one transaction.
+    window.addEventListener(RESEARCH_BASE_EVENT, (e) => {
+        const treeId = (e as CustomEvent<{ treeId: string }>).detail?.treeId;
+        if (treeId && treeId === DataManager.getCurrentTreeId()) DataManager.resaveCurrent();
+    });
+
     onTreeSavedElsewhere((treeId) => {
         if (DataManager.isViewMode() || treeId !== DataManager.getCurrentTreeId()) return;
         UI.showStorageNotice('other-tab-notice', strings.storageSafety.otherTabSaved, {

@@ -316,6 +316,8 @@ export const originalsMethods = uiModule({
                 console.warn('Strom Research has no room for originals');
                 return 'full';
             }
+            // Busy (503, Retry-After): stop for now, the next answer of the bridge tries again.
+            if (res.status === 503) return 'full';
             if (res.status === 403) return 'down';
             // 404 (person / source unknown there yet), 409 / 422 (garbled on the way), 5xx: again later.
             return 'retry';

@@ -797,8 +797,10 @@ export interface ResearchSendRecord {
     /** The mark the `/sync` reply gave it. */
     intake: string;
     at: string;
-    state: 'pending' | 'written' | 'discarded' | 'replaced' | 'nothing' | 'undone';
+    state: 'pending' | 'written' | 'discarded' | 'replaced' | 'nothing' | 'undone' | 'failed';
     changes: number | null;
+    /** A pending send the research is trying again (it was busy): how many tries so far; null: none said. */
+    tries: number | null;
     /** The app tree (`_STROM_APP_TREE`), or the research id. */
     tree: string;
     /** `_STROM_SENT` of that send. */
@@ -813,7 +815,7 @@ export interface ResearchSendRecord {
     conflictPersons: string[];
 }
 
-const SEND_STATES = new Set(['pending', 'written', 'discarded', 'replaced', 'nothing', 'undone']);
+const SEND_STATES = new Set(['pending', 'written', 'discarded', 'replaced', 'nothing', 'undone', 'failed']);
 
 /** `/status.sends`, or null when the research does not say. Untrusted. */
 export function sanitizeSends(value: unknown): ResearchSendRecord[] | null {
@@ -832,6 +834,7 @@ export function sanitizeSends(value: unknown): ResearchSendRecord[] | null {
             at: iso(r.at),
             state: r.state as ResearchSendRecord['state'],
             changes: asCount(r.changes),
+            tries: asCount(r.tries),
             tree: headerToken(r.tree) ?? normalizeResearchId(r.tree) ?? '',
             sent: headerToken(r.sent) ?? '',
             decidedAt: iso(r.decidedAt),
@@ -1462,11 +1465,13 @@ export interface SyncReply {
     conflicts: number | null;
     /** The persons those conflicts are about (research refs), when it says. */
     conflictPersons: string[];
+    /** Things the send lacked that the research kept (an archive takes away only what this app tree had). */
+    kept: number | null;
 }
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [] };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], kept: null };
     return {
         ok: r.ok === true,
         changes: asCount(r.changes),
@@ -1478,6 +1483,7 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
         pending: r.pending === true,
         conflicts: conflictCount(r.conflicts),
         conflictPersons: conflictPersons(r.conflicts),
+        kept: asCount(r.kept),
     };
 }
 

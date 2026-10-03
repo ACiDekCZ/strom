@@ -15,16 +15,17 @@ const DB_NAME = 'strom-db';
 // v4: added the 'shareBaselines' store (change-packet baselines per exportId).
 // v5: added the 'media' store (images shared by stored trees and backups).
 // v6: added the 'originals' store (original files waiting for Strom Research).
+// v7: added the 'researchBases' store (the research head a stored tree builds on).
 // onupgradeneeded creates any missing store, so existing databases gain it on
 // the next open.
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 /** Notify the UI layer (no-op outside a browser, e.g. in unit tests). */
 function dispatchStorageEvent(name: string): void {
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name));
 }
 
-const STORES = ['trees', 'audit', 'merge', 'snapshots', 'media', 'fileHandles', 'shareBaselines', 'originals'] as const;
+const STORES = ['trees', 'audit', 'merge', 'snapshots', 'media', 'fileHandles', 'shareBaselines', 'originals', 'researchBases'] as const;
 export type StoreName = typeof STORES[number];
 
 class StorageManagerClass {
@@ -120,6 +121,29 @@ class StorageManagerClass {
             if (idx >= 0) this.pendingWrites.splice(idx, 1);
         }).catch(() => { /* reported through the returned promise */ });
 
+        return promise;
+    }
+
+    /**
+     * Write several values, possibly in different stores, in ONE transaction:
+     * all land or none (a tree and the research head it builds on must never
+     * be stored apart). Tracked like set() for flush().
+     */
+    setTogether(writes: readonly { store: StoreName; key: string; value: unknown }[]): Promise<void> {
+        if (!this.db) return Promise.reject(new Error('StorageManager not initialized'));
+        const stores = [...new Set(writes.map(w => w.store))];
+        const promise = new Promise<void>((resolve, reject) => {
+            const tx = this.db!.transaction(stores, 'readwrite');
+            for (const w of writes) tx.objectStore(w.store).put(w.value, w.key);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+        });
+        this.pendingWrites.push(promise);
+        promise.finally(() => {
+            const idx = this.pendingWrites.indexOf(promise);
+            if (idx >= 0) this.pendingWrites.splice(idx, 1);
+        }).catch(() => { /* reported through the returned promise */ });
         return promise;
     }
 

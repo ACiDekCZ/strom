@@ -128,6 +128,12 @@ export interface SendFate {
     /** Conflicts the write left, still open (null: not said), and whom they are about (research refs). */
     conflicts?: number | null;
     conflictPersons?: string[];
+    /** Discarded because the research could not write it (`failed`). */
+    failed?: boolean;
+    /** Written as a newer send of this tree that replaced this one (not this window's state). */
+    inherited?: boolean;
+    /** Still pending: the research's tries so far (busy, it tries again by itself); null: none said. */
+    tries?: number | null;
 }
 
 /**
@@ -147,20 +153,25 @@ export function pendingSendFate(
     const ours = (tree: string): boolean => tree === appTreeId || tree === researchId;
     if (status.sends && sent.intake) {
         let rec = status.sends.find(r => r.intake === sent.intake);
+        let hops = 0;
         // Replaced by a newer send of this tree: that one tells.
         for (let hop = 0; rec?.state === 'replaced' && hop < 5; hop++) {
+            hops++;
             const from: ResearchSendRecord = rec;
             rec = status.sends
                 .filter(r => ours(r.tree) && r.intake !== from.intake && r.at >= from.at)
                 .sort((a, b) => (a.at < b.at ? 1 : -1))[0];
         }
         if (rec) {
-            if (rec.state === 'pending' || rec.state === 'replaced') return fate('pending');
+            if (rec.state === 'pending' || rec.state === 'replaced') return { ...fate('pending'), tries: rec.tries };
+            // Another send of this tree (another window) stands for this one: not our state.
+            const inherited = hops > 0 && rec.sent !== sent.fingerprint ? { inherited: true } : {};
             // Taken back afterwards: written first (the undo is noticed on its own, see the UI).
             if (rec.state === 'written' || rec.state === 'undone') {
-                return { ...fate('written', rec.decidedAt), conflicts: rec.conflicts, conflictPersons: rec.conflictPersons };
+                return { ...fate('written', rec.decidedAt), conflicts: rec.conflicts, conflictPersons: rec.conflictPersons, ...inherited };
             }
-            if (rec.state === 'nothing') return fate('written', rec.decidedAt, '', true);
+            if (rec.state === 'nothing') return { ...fate('written', rec.decidedAt, '', true), ...inherited };
+            if (rec.state === 'failed') return { ...fate('discarded', rec.decidedAt, rec.reason), failed: true };
             return fate('discarded', rec.decidedAt, rec.reason);
         }
     }

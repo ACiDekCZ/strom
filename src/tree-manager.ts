@@ -7,6 +7,7 @@ import {
     TreeId,
     TreeMetadata,
     ResearchLink,
+    ResearchBase,
     ResearchEdgeMode,
     TreeIndex,
     StromData,
@@ -26,7 +27,7 @@ import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
 import { requestPersistentStorage } from './persistence.js';
 import { asciiSlug } from './filenames.js';
-import { announceTreeSaved } from './tab-sync.js';
+import { announceTreeSaved, clearTreeStale } from './tab-sync.js';
 import { cloneTreeDataAsJson, estimateJsonBytes } from './clone.js';
 import {
     withPoolLock, collectPoolable, storeImages, stringifyPooled, replacePooled,
@@ -53,6 +54,20 @@ const TREE_INDEX_VERSION = 1;
 
 /** IDB key for the tree index inside 'trees' store */
 const INDEX_KEY = '_index';
+
+/** A tree's data were stored with another research base than this window's link (see ResearchBase). */
+export const RESEARCH_BASE_EVENT = 'strom:research-base-changed';
+
+/** The research base stored with a tree's data (store `researchBases`, key = tree id). */
+interface StoredResearchBase extends ResearchBase {
+    researchId: string;
+    /** When it was stored (ms). */
+    at: number;
+}
+
+function sameBase(a: ResearchBase | null, b: ResearchBase | null): boolean {
+    return (a?.head ?? null) === (b?.head ?? null) && (a?.fingerprint ?? null) === (b?.fingerprint ?? null);
+}
 
 /**
  * A stored tree that has images: the tree with its images as references into
@@ -626,8 +641,8 @@ class TreeManagerClass {
 
     /** Per-tree write queue: keeps saves ordered (see saveTreeData). */
     private saveQueues = new Map<TreeId, Promise<void>>();
-    /** The newest state waiting to be written per tree (coalesced saves). */
-    private pendingSaves = new Map<TreeId, StromData>();
+    /** The newest state waiting to be written per tree (coalesced saves), with the research base it builds on. */
+    private pendingSaves = new Map<TreeId, { data: StromData; base: ResearchBase | null }>();
 
     /** Trees whose stored data could not be read (see readTreeData). */
     private unreadableTrees = new Set<TreeId>();
@@ -663,28 +678,30 @@ class TreeManagerClass {
         // stack one whole serialized tree per edit (out of memory with big
         // image sets). Only the latest state matters, order is unchanged.
         const waiting = this.pendingSaves.has(id);
-        this.pendingSaves.set(id, snapshot);
+        // The research base as this window has it NOW, with this very data.
+        this.pendingSaves.set(id, { data: snapshot, base: this.researchBaseOf(id) });
         if (waiting) return;
 
         const prev = this.saveQueues.get(id) ?? Promise.resolve();
         const next = prev.then(async () => {
-            const latest = this.pendingSaves.get(id);
+            const pending = this.pendingSaves.get(id);
             this.pendingSaves.delete(id);
-            if (!latest) return;
+            if (!pending) return;
+            const latest = pending.data;
             // Deleted meanwhile: never resurrect the record (review S20).
             if (!this.index.trees.some(t => t.id === id)) return;
             const images = collectPoolable(latest);
             if (images.size > 0) {
-                await this.writePooledTree(id, latest, images);
+                await this.writePooledTree(id, latest, images, pending.base);
             } else if (SettingsManager.isEncryptionEnabled()) {
                 if (!CryptoSession.isUnlocked()) throw new Error('locked');
                 const encrypted = await CryptoSession.encrypt(JSON.stringify(latest));
                 const sizeBytes = new Blob([JSON.stringify(encrypted)]).size;
-                await StorageManager.set('trees', id, encrypted);
+                await this.writeTreeRecord(id, encrypted, pending.base);
                 this.updateMetadata(id, latest, sizeBytes);
             } else {
                 const sizeBytes = estimateJsonBytes(latest);
-                await StorageManager.set('trees', id, latest);
+                await this.writeTreeRecord(id, latest, pending.base);
                 this.updateMetadata(id, latest, sizeBytes);
             }
             // Other tabs with this tree open must learn their copy is stale.
@@ -703,7 +720,7 @@ class TreeManagerClass {
      * references to them. Under the pool lock, so a cleanup cannot remove an
      * image between finding it stored and this record naming it.
      */
-    private writePooledTree(id: TreeId, data: StromData, images: Set<string>): Promise<void> {
+    private writePooledTree(id: TreeId, data: StromData, images: Set<string>, base: ResearchBase | null = null): Promise<void> {
         return withPoolLock(async () => {
             if (!this.index.trees.some(t => t.id === id)) return;
             const encrypted = SettingsManager.isEncryptionEnabled();
@@ -719,9 +736,98 @@ class TreeManagerClass {
                 record = { pooled: 1, data: replacePooled(data, ids), media };
                 sizeBytes = estimateJsonBytes(data);
             }
-            await StorageManager.set('trees', id, record);
+            await this.writeTreeRecord(id, record, base);
             this.updateMetadata(id, data, sizeBytes);
         });
+    }
+
+    /**
+     * Store a tree record, and with a research link the base its data build
+     * on — in one transaction, so the two are never stored apart (another
+     * window saving its data while this one saves the index can otherwise
+     * leave old data with a newer head).
+     */
+    private async writeTreeRecord(id: TreeId, record: unknown, base: ResearchBase | null): Promise<void> {
+        const link = this.index.trees.find(t => t.id === id)?.research;
+        if (!base || !link) {
+            await StorageManager.set('trees', id, record);
+            return;
+        }
+        const stored: StoredResearchBase = { researchId: link.id, head: base.head, fingerprint: base.fingerprint, at: Date.now() };
+        if (typeof StorageManager.setTogether === 'function') {
+            await StorageManager.setTogether([
+                { store: 'trees', key: id, value: record },
+                { store: 'researchBases', key: id, value: stored },
+            ]);
+        } else {
+            await StorageManager.set('trees', id, record);
+            await StorageManager.set('researchBases', id, stored);
+        }
+    }
+
+    // ==================== RESEARCH BASE ====================
+
+    /** The research base of a tree as this window's link has it, or null (no link). */
+    researchBaseOf(id: TreeId): ResearchBase | null {
+        const link = this.index.trees.find(t => t.id === id)?.research;
+        return link ? { head: link.head ?? '', fingerprint: link.fingerprint ?? '' } : null;
+    }
+
+    /**
+     * Put a tree's link back on the base its data build on: data restored by
+     * undo / redo take their base with them. `null` = unknown (a restored
+     * backup): no head (the research then only adds) and no fingerprint (an
+     * update asks first).
+     */
+    restoreResearchBase(id: TreeId, base: ResearchBase | null): void {
+        const link = this.index.trees.find(t => t.id === id)?.research;
+        if (!link) return;
+        const next = base ?? { head: '', fingerprint: '' };
+        if (sameBase(this.researchBaseOf(id), next)) return;
+        this.patchResearchLink(id, { head: next.head || undefined, fingerprint: next.fingerprint });
+    }
+
+    /**
+     * The tree's data were just read into this window (opened, switched to,
+     * reloaded): it is current again, and the base stored with those data
+     * wins over this window's link when they differ — it is what they build
+     * on. Only for data that are loaded, never for a read for an export.
+     */
+    async adoptStoredData(id: TreeId): Promise<void> {
+        clearTreeStale(id);
+        await this.reconcileResearchBase(id);
+    }
+
+    private async reconcileResearchBase(id: TreeId): Promise<void> {
+        const link = this.index.trees.find(t => t.id === id)?.research;
+        if (!link) return;
+        let stored: StoredResearchBase | null = null;
+        try {
+            stored = await StorageManager.get<StoredResearchBase>('researchBases', id);
+        } catch { return; }
+        if (!stored || stored.researchId !== link.id) return;
+        const base = { head: stored.head ?? '', fingerprint: stored.fingerprint ?? '' };
+        if (sameBase(this.researchBaseOf(id), base)) return;
+        console.warn('The research base stored with the tree differs from its link: taking the stored one', id);
+        this.patchResearchLink(id, { head: base.head || undefined, fingerprint: base.fingerprint });
+    }
+
+    /**
+     * Before sending: the data stored for this tree still build on this
+     * window's base (true also when nothing says otherwise). False: another
+     * window stored the tree since with another base — this window's data
+     * are stale and must not go to the research.
+     */
+    async researchBaseMatches(id: TreeId): Promise<boolean> {
+        await this.flush(id);
+        const link = this.index.trees.find(t => t.id === id)?.research;
+        if (!link) return true;
+        let stored: StoredResearchBase | null = null;
+        try {
+            stored = await StorageManager.get<StoredResearchBase>('researchBases', id);
+        } catch { return true; }
+        if (!stored || stored.researchId !== link.id) return true;
+        return sameBase(this.researchBaseOf(id), { head: stored.head ?? '', fingerprint: stored.fingerprint ?? '' });
     }
 
     /** Update in-memory metadata after save */
@@ -1056,6 +1162,7 @@ class TreeManagerClass {
     setResearchLink(treeId: TreeId, link: ResearchLink | undefined): void {
         const tree = this.index.trees.find(t => t.id === treeId);
         if (!tree) return;
+        const before = this.researchBaseOf(treeId);
         if (link) {
             const id = link.id.toLowerCase();
             const prev = tree.research?.id === id ? tree.research : undefined;
@@ -1068,18 +1175,27 @@ class TreeManagerClass {
             tree.research = { ...kept, ...link, id };
         } else delete tree.research;
         this.saveIndex();
+        this.noteBaseChange(treeId, before);
+    }
+
+    /** The base changed: the tree's data must be stored again with it (the open tree's owner listens). */
+    private noteBaseChange(treeId: TreeId, before: ResearchBase | null): void {
+        if (sameBase(before, this.researchBaseOf(treeId)) || typeof window === 'undefined') return;
+        window.dispatchEvent(new CustomEvent(RESEARCH_BASE_EVENT, { detail: { treeId } }));
     }
 
     /** Change part of a tree's research link (a send, its fate, the transcript setting); no-op without a link. */
     patchResearchLink(treeId: TreeId, patch: Partial<Omit<ResearchLink, 'id'>>): void {
         const tree = this.index.trees.find(t => t.id === treeId);
         if (!tree?.research) return;
+        const before = this.researchBaseOf(treeId);
         const next: ResearchLink = { ...tree.research, ...patch };
         for (const [key, value] of Object.entries(patch)) {
             if (value === undefined) delete (next as unknown as Record<string, unknown>)[key];
         }
         tree.research = next;
         this.saveIndex();
+        this.noteBaseChange(treeId, before);
     }
 
     /** Remember (or forget, null) the token of "Start research with this tree". */

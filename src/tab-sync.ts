@@ -21,6 +21,8 @@ const TAB_ID = `tab_${Date.now().toString(36)}_${Math.random().toString(36).slic
 
 let channel: BroadcastChannel | null = null;
 let listener: ((treeId: string) => void) | null = null;
+/** Trees another tab saved since this tab read them: this tab's copy is stale. */
+const staleTrees = new Set<string>();
 
 function getChannel(): BroadcastChannel | null {
     if (channel) return channel;
@@ -40,7 +42,22 @@ export function handleMessage(msg: unknown): void {
     const m = msg as Partial<SaveMessage>;
     if (m.type !== 'tree-saved' || typeof m.treeId !== 'string') return;
     if (m.tabId === TAB_ID) return;
+    staleTrees.add(m.treeId);
     listener?.(m.treeId);
+}
+
+/**
+ * Another tab saved `treeId` since this tab read it: what this tab holds is
+ * not what is stored. Nothing of it may go to Strom Research (it would take
+ * back what the other tab loaded), until the tree is read again.
+ */
+export function isTreeStale(treeId: string): boolean {
+    return staleTrees.has(treeId);
+}
+
+/** This tab read the tree again (or reloaded): its copy is current. */
+export function clearTreeStale(treeId: string): void {
+    staleTrees.delete(treeId);
 }
 
 /** Tell other tabs that this tab just persisted `treeId`. */

@@ -922,7 +922,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.6';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.7';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -1165,6 +1165,25 @@ export interface ResearchSend {
     conflicts?: number;
     /** Sent with the Send button (its result is told by a toast), not by itself. */
     manual?: boolean;
+    /** Discarded because the research could not write it (`failed`), not by the user. */
+    failed?: boolean;
+    /**
+     * Written as part of a newer send of this tree that replaced it (another
+     * window of the same app tree sent since): what was written is not this
+     * window's state, so the research's version is not loaded quietly.
+     */
+    inherited?: boolean;
+}
+
+/**
+ * What a tree's data builds on in its research: the research head it was
+ * loaded at and the content fingerprint it had then. It belongs to the data —
+ * stored with it, restored with it — because data older than its head would
+ * read to the research as edits taking back what it changed since.
+ */
+export interface ResearchBase {
+    head: string;
+    fingerprint: string;
 }
 
 /** Index of all trees */

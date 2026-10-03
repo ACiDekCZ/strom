@@ -10,13 +10,15 @@
  * copies, applying them to the live data and persisting is the DataManager's job.
  */
 
-import { StromData, TreeId } from './types.js';
+import { StromData, TreeId, ResearchBase } from './types.js';
 
 export interface UndoSnapshot {
     /** Deep copy of the tree data at this point. */
     data: StromData;
     /** What the recorded action was (used in the toast: "Undone: <description>"). */
     description: string;
+    /** The research base these data build on (a tree tied to a research); undefined = not recorded. */
+    base?: ResearchBase | null;
 }
 
 /** Maximum number of undo steps kept per tree. */
@@ -55,18 +57,18 @@ class UndoManagerClass {
      * Pop the previous state. `currentData` (the present state) is stashed on the
      * redo stack tagged with the undone action's description.
      */
-    undo(currentData: StromData): UndoSnapshot | null {
+    undo(currentData: StromData, currentBase?: ResearchBase | null): UndoSnapshot | null {
         const snapshot = this.undoStack.pop();
         if (!snapshot) return null;
-        this.redoStack.push({ data: currentData, description: snapshot.description });
+        this.redoStack.push({ data: currentData, description: snapshot.description, ...(currentBase !== undefined ? { base: currentBase } : {}) });
         return snapshot;
     }
 
     /** Symmetric to undo(): replay the last undone state. */
-    redo(currentData: StromData): UndoSnapshot | null {
+    redo(currentData: StromData, currentBase?: ResearchBase | null): UndoSnapshot | null {
         const snapshot = this.redoStack.pop();
         if (!snapshot) return null;
-        this.undoStack.push({ data: currentData, description: snapshot.description });
+        this.undoStack.push({ data: currentData, description: snapshot.description, ...(currentBase !== undefined ? { base: currentBase } : {}) });
         return snapshot;
     }
 

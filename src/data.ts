@@ -34,6 +34,7 @@ import {
     FamilyWizardMember,
     PlaceGeo,
     PartnershipUpdates,
+    ResearchBase,
 } from './types.js';
 import { isCoupleEventType } from './events.js';
 import { strings, getCurrentLanguage, getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
@@ -227,6 +228,8 @@ class DataManagerClass {
 
     // Undo/redo: deep copy of the data taken at the start of the current mutation.
     private pendingBefore: StromData | null = null;
+    /** The research base of `pendingBefore` (it goes on the undo step with it). */
+    private pendingBase: ResearchBase | null = null;
     /** True while a batch (multiple mutations → one undo step) is in progress. */
     private batchActive = false;
     /** Nesting depth of beginBatch/commitBatch (a batch may run inside a batch). */
@@ -913,6 +916,7 @@ class DataManagerClass {
             // TreeManager refuses to save over it (review K8).
             const treeData = await TreeManager.getTreeData(startupTreeId);
             if (treeData) {
+                await TreeManager.adoptStoredData(startupTreeId);
                 this.data = migrateData(treeData);
                 return;
             }
@@ -949,6 +953,7 @@ class DataManagerClass {
         this.currentTreeId = treeId;
         const treeData = await TreeManager.getTreeData(treeId);
         if (treeData) {
+            await TreeManager.adoptStoredData(treeId);
             this.data = migrateData(treeData);
         } else {
             this.data = this.createEmptyData();
@@ -980,6 +985,7 @@ class DataManagerClass {
         const treeId = this.currentTreeId;
         const treeData = await TreeManager.getTreeData(treeId);
         if (treeData) {
+            await TreeManager.adoptStoredData(treeId);
             this.data = migrateData(treeData);
         } else {
             this.data = this.createEmptyData();
@@ -1011,6 +1017,11 @@ class DataManagerClass {
         TreeManager.noteUserChange(this.currentTreeId);
     }
 
+    /** Store the open tree again as it is (its research base changed: they are stored together). */
+    resaveCurrent(): void {
+        this.save();
+    }
+
     private save(): void {
         // Never save in view mode (read-only) or over locked data (the
         // in-memory tree is a stand-in; TreeManager would refuse it anyway).
@@ -1038,6 +1049,7 @@ class DataManagerClass {
         // mutations must not re-snapshot (that would split the batch into steps).
         if (this.batchActive) return;
         this.pendingBefore = cloneTreeData(this.data);
+        this.pendingBase = this.currentTreeId ? TreeManager.researchBaseOf(this.currentTreeId) : null;
     }
 
     /**
@@ -1055,7 +1067,7 @@ class DataManagerClass {
         if (this.pendingBefore) {
             // Auto-backup the FIRST mutation of the day (state before it).
             this.maybeAutoSnapshot(this.pendingBefore);
-            UndoManager.push({ data: this.pendingBefore, description });
+            UndoManager.push({ data: this.pendingBefore, description, base: this.pendingBase });
             this.pendingBefore = null;
         }
         this.save();
@@ -1266,6 +1278,9 @@ class DataManagerClass {
         const migrated = migrateData(JSON.parse(payload.json));
 
         this.beginMutation();
+        // A backup does not say which research head it built on: no head (the
+        // research then only adds), no fingerprint (an update asks first).
+        if (this.currentTreeId) TreeManager.restoreResearchBase(this.currentTreeId, null);
         this.data = migrated;
         this.commitMutation(strings.undo.restoreBackup, true);
         AuditLogManager.log(this.currentTreeId, 'data.load', strings.auditLog.restoredBackup);
@@ -1296,9 +1311,9 @@ class DataManagerClass {
         // A locked tree is read-only — undo would rewrite it (review S21).
         if (this.isTreeLocked()) return null;
         UndoManager.setActiveTree(this.currentTreeId);
-        const restored = UndoManager.undo(cloneTreeData(this.data));
+        const restored = UndoManager.undo(cloneTreeData(this.data), TreeManager.researchBaseOf(this.currentTreeId));
         if (!restored) return null;
-        this.applyRestoredData(restored.data);
+        this.applyRestoredData(restored.data, restored.base);
         AuditLogManager.log(this.currentTreeId, 'undo', strings.auditLog.undoAction(restored.description));
         return { description: restored.description };
     }
@@ -1310,15 +1325,17 @@ class DataManagerClass {
         if (this.editSession) return null;
         if (this.isTreeLocked()) return null;
         UndoManager.setActiveTree(this.currentTreeId);
-        const restored = UndoManager.redo(cloneTreeData(this.data));
+        const restored = UndoManager.redo(cloneTreeData(this.data), TreeManager.researchBaseOf(this.currentTreeId));
         if (!restored) return null;
-        this.applyRestoredData(restored.data);
+        this.applyRestoredData(restored.data, restored.base);
         AuditLogManager.log(this.currentTreeId, 'redo', strings.auditLog.redoAction(restored.description));
         return { description: restored.description };
     }
 
     /** Swap in restored data and persist it, without recording a new undo step. */
-    private applyRestoredData(data: StromData): void {
+    private applyRestoredData(data: StromData, base?: ResearchBase | null): void {
+        // The research base first: the data saved next go with the base they build on.
+        if (base !== undefined && this.currentTreeId) TreeManager.restoreResearchBase(this.currentTreeId, base);
         this.data = cloneTreeData(data);
         this.pendingBefore = null;
         if (!this.viewMode && this.currentTreeId) {

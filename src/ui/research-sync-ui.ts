@@ -27,6 +27,7 @@ import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { TreeId, PersonId, ResearchLink, ResearchSend, ResearchSendMode, StromData } from '../types.js';
 import { formatLiveClock } from '../live-time.js';
+import { isTreeStale } from '../tab-sync.js';
 import { formatFlexDate } from '../dates.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { SettingsManager } from '../settings.js';
@@ -86,6 +87,10 @@ interface BridgeRuntime {
 }
 
 const runtime = new Map<string, BridgeRuntime>();
+/** Trees whose windows' lock this window holds now (see researchWindowLock). */
+const heldLocks = new Set<TreeId>();
+/** A send pending this long with no tries said is stuck: it goes again. */
+const STUCK_PENDING_MS = 5 * 60 * 1000;
 /** Edits unsent this long are "only in the browser" again (the storage pill shows). */
 const RESEARCH_HOLD_MS = 10 * 60 * 1000;
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -251,6 +256,34 @@ export const researchSyncMethods = uiModule({
         const treeId = DataManager.getCurrentTreeId();
         const link = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
         return treeId && link ? { treeId, link } : null;
+    },
+
+    /**
+     * Run `fn` as the only window of this app doing a research step for the
+     * tree (Web Lock per tree; windows of the same browser share it).
+     * `ifAvailable`: skip when another window holds it (the automatic steps);
+     * else wait for it (a send by hand). Without Web Locks: just run.
+     * Resolves whether `fn` ran.
+     */
+    async researchWindowLock(treeId: TreeId, ifAvailable: boolean, fn: () => Promise<void>): Promise<boolean> {
+        const locks = (navigator as Navigator & { locks?: LockManager }).locks;
+        // Held by this window already (the quiet load after its own send): go on.
+        if (!locks?.request || heldLocks.has(treeId)) {
+            await fn();
+            return true;
+        }
+        let ran = false;
+        await locks.request(`strom-research-${treeId}`, { ifAvailable }, async (lock) => {
+            if (!lock) return;
+            ran = true;
+            heldLocks.add(treeId);
+            try {
+                await fn();
+            } finally {
+                heldLocks.delete(treeId);
+            }
+        });
+        return ran;
     },
 
     /** What the research takes (its last status, else what it said before), or null. */
@@ -457,11 +490,22 @@ export const researchSyncMethods = uiModule({
             TreeManager.patchResearchLink(treeId, { sent: { ...sent, thenLoad: false } });
         }
         const fate = pendingSendFate(sent, treeId, link.id, status);
-        if (fate === null || fate.state === 'pending') return;
+        if (fate === null) return;
+        if (fate.state === 'pending') {
+            // Stuck: the research is not trying it again (no tries said) and
+            // it has been a while — send again (a send is idempotent).
+            const age = Date.now() - Date.parse(sent.at);
+            if (!fate.tries && age > STUCK_PENDING_MS && DataManager.getCurrentTreeId() === treeId && !link.copy) {
+                void this.postResearchSend(treeId, { auto: true, again: true });
+            }
+            return;
+        }
         const closed: ResearchSend = {
             ...sent, state: fate.state, closedAt: fate.at || new Date().toISOString(),
             ...(fate.reason ? { reason: fate.reason } : {}),
             ...(fate.nothing ? { changes: 0 } : {}),
+            ...(fate.failed ? { failed: true } : {}),
+            ...(fate.inherited ? { inherited: true } : {}),
         };
         delete closed.writing;
         TreeManager.patchResearchLink(treeId, { sent: closed });
@@ -469,7 +513,7 @@ export const researchSyncMethods = uiModule({
         if (fate.state === 'discarded') {
             if (!sent.noticed) {
                 TreeManager.patchResearchLink(treeId, { sent: { ...closed, noticed: true } });
-                this.showToast(s.rejectedToast(when(sent.at), fate.reason), Infinity, {
+                this.showToast(fate.failed ? s.failedToast(when(sent.at), fate.reason) : s.rejectedToast(when(sent.at), fate.reason), Infinity, {
                     closable: true,
                     action: { label: s.sendAgain, run: () => { void this.researchSendTree(treeId); } },
                 });
@@ -672,7 +716,30 @@ export const researchSyncMethods = uiModule({
      * bridge is gone); by itself, only what needs the user is (a refusal,
      * once per reason) and the mark shows the rest.
      */
-    async postResearchSend(treeId: TreeId, opts: { auto: boolean; thenLoad?: boolean; keepalive?: boolean }): Promise<void> {
+    async postResearchSend(treeId: TreeId, opts: { auto: boolean; thenLoad?: boolean; keepalive?: boolean; again?: boolean }): Promise<void> {
+        const meta = TreeManager.getTreeMetadata(treeId);
+        const link = meta?.research;
+        if (!link || sendingTree) return;
+        const s = strings.sync;
+        // Another window stored this tree since: what this one holds would
+        // take back what that one has. Never send it; a reload brings it up to date.
+        if (isTreeStale(treeId) || !await TreeManager.researchBaseMatches(treeId)) {
+            console.warn('Not sending a stale copy of the tree to the research', treeId);
+            if (!opts.auto) this.showToast(s.staleTab, 8000, { action: { label: strings.storageSafety.reload, run: () => window.location.reload() } });
+            return;
+        }
+        // One window sends by itself (another window of this tree may be at it).
+        if (opts.auto) {
+            const ran = await this.researchWindowLock(treeId, true, () => this.postResearchSendNow(treeId, opts));
+            // Another window is at it: this one tries again after the quiet time.
+            if (!ran && DataManager.getCurrentTreeId() === treeId) this.scheduleResearchAutoSend(treeId);
+            return;
+        }
+        await this.researchWindowLock(treeId, false, () => this.postResearchSendNow(treeId, opts));
+    },
+
+    /** The send itself (postResearchSend, under the windows' lock). */
+    async postResearchSendNow(treeId: TreeId, opts: { auto: boolean; thenLoad?: boolean; keepalive?: boolean; again?: boolean }): Promise<void> {
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
         if (!link || sendingTree) return;
@@ -719,6 +786,12 @@ export const researchSyncMethods = uiModule({
         let reply = sanitizeSyncReply(null);
         try { reply = sanitizeSyncReply(await res.json()); } catch { /* a refusal without a reason */ }
         sendingTree = null;
+        // Busy (503): not a refusal — it goes again at the next look.
+        if (res.status === 503) {
+            if (opts.auto) autoDue.add(treeId);
+            this.refreshResearchSyncUi();
+            return;
+        }
         if (!res.ok || !reply.ok) {
             TreeManager.patchResearchLink(treeId, { refused: { reason: reply.error, at: new Date().toISOString() } });
             this.refreshResearchSyncUi();
@@ -837,6 +910,9 @@ export const researchSyncMethods = uiModule({
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         const sent = link?.sent;
         if (!link || !sent || sent.state !== 'written' || link.copy) return null;
+        // Written as another window's send (it replaced ours), or this window's
+        // copy is stale: what the research has is not this state — load on request only.
+        if (sent.inherited || isTreeStale(treeId)) return null;
         // Following live refreshes the tree by itself.
         if (this.isFollowingActiveResearch()) return null;
         if (anyDialogOpen()) return null;
@@ -876,12 +952,22 @@ export const researchSyncMethods = uiModule({
         }
         const stable = carried.data;
         const before = openConflictCounts(previous);
-        quietLoading = true;
-        try {
-            DataManager.loadStromData(stable);
-        } finally {
-            quietLoading = false;
-        }
+        // One window loads (another window of this tree may be at it too).
+        if (!await this.researchWindowLock(treeId, true, async () => {
+            // A backup of the state before (auto backups on): the load can be undone, and here is the proof.
+            await DataManager.snapshotNow('pre-import');
+            // Edited while the backup was written: then not now (the edit must not be loaded over).
+            fpCache = null;
+            const now = TreeManager.getTreeMetadata(treeId)?.research;
+            if (DataManager.getCurrentTreeId() !== treeId || anyDialogOpen() || !now
+                || this.researchSyncFingerprints(treeId, now).current !== sent.fingerprint) return;
+            quietLoading = true;
+            try {
+                DataManager.loadStromData(stable);
+            } finally {
+                quietLoading = false;
+            }
+        }) || DataManager.getData() === previous) return null;
         const head = header.head || remote;
         TreeManager.setResearchLink(treeId, {
             id: link.id,
@@ -1172,6 +1258,9 @@ export const researchSyncMethods = uiModule({
                 ? { tone: 'warn', title: s.stateUndone(when(state.sent?.at)),
                     sub: auto ? s.undoneAutoSub(when(state.sent?.closedAt)) : s.undoneSub(when(state.sent?.closedAt)),
                     actions: [{ action: 'sendAgain', label: s.sendAgain }] }
+                : state.sent?.failed
+                    ? { tone: 'warn', title: s.stateFailed(when(state.sent?.at)), sub: s.failedSub(state.sent?.reason ?? ''),
+                        actions: [{ action: 'sendAgain', label: s.sendAgain }] }
                 : ({ tone: 'warn', title: s.stateRejected(when(state.sent?.at)),
                 sub: auto
                     ? s.rejectedAutoSub(when(state.sent?.closedAt), state.sent?.reason ?? '')
@@ -1272,7 +1361,7 @@ export const researchSyncMethods = uiModule({
                 autoBridgeDown: { text: archive ? s.pillBridgeDownWaiting(Math.max(1, researchAutoState(ctx.treeId).edits ?? 1)) : s.pillBridgeDown,
                     button: s.pillStart, action: 'startResearch' },
                 autoPaused: { text: s.pillRefused, button: s.sendAgain, action: 'retry' },
-                rejected: { text: state.sent?.state === 'undone' ? s.pillUndone : s.pillRejected, button: s.sendAgain, action: 'sendAgain' },
+                rejected: { text: state.sent?.state === 'undone' ? s.pillUndone : state.sent?.failed ? s.pillFailed : s.pillRejected, button: s.sendAgain, action: 'sendAgain' },
             } : {}),
         };
         const w = warn[kind];
