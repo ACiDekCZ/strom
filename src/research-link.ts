@@ -665,9 +665,10 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
         }
         const have = cur.attachments ?? [];
         const ids = new Set(have.map(a => a.id));
-        const urls = new Set(have.map(a => a.dataUrl));
+        const urls = new Set(have.map(a => a.dataUrl).filter(Boolean));
+        const shas = new Set(have.map(a => a.original?.sha256).filter(Boolean));
         const extra = (old.attachments ?? [])
-            .filter(a => !ids.has(a.id) && !urls.has(a.dataUrl))
+            .filter(a => !ids.has(a.id) && !(a.dataUrl && urls.has(a.dataUrl)) && !(a.originalOnly && shas.has(a.original?.sha256)))
             .map(a => {
                 if (a.sourceId === undefined || sourceExists(a.sourceId)) return a;
                 const { sourceId: _gone, ...rest } = a;

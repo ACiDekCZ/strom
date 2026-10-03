@@ -578,8 +578,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
         // Media: portrait first (marked), then attachments. Data URLs are
         // CONC-wrapped to keep physical lines within the spec limit.
-        const pushMedia = (file: string, title: string, kind: 'photo' | '', note?: string, srcId?: string, original?: MediaOriginal): void => {
-            const mime = file.startsWith('data:') ? file.slice(5, file.indexOf(';')) : '';
+        const pushMedia = (file: string, title: string, kind: 'photo' | '', note?: string, srcId?: string, original?: MediaOriginal, fileMime?: string): void => {
+            const mime = file.startsWith('data:') ? file.slice(5, file.indexOf(';')) : fileMime ?? '';
             const form = mime.includes('/') ? mime.split('/')[1] : 'jpeg';
             lines.push('1 OBJE');
             lines.push(`2 FORM ${form}`);
@@ -603,7 +603,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushMedia(person.photo, person.photoOriginalName ?? '', 'photo');
         }
         for (const att of person.attachments ?? []) {
-            pushMedia(att.dataUrl, att.name, '', att.note, att.sourceId, att.original);
+            // Only the original (the research holds it): the file's name and hash, no data.
+            if (att.originalOnly) pushMedia(att.name || 'file', att.name, '', att.note, att.sourceId, att.original, att.original?.mimeType ?? att.mimeType);
+            else pushMedia(att.dataUrl, att.name, '', att.note, att.sourceId, att.original);
         }
 
         // Family as spouse (FAMS) - partnerships where this person is a partner

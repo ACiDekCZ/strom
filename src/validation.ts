@@ -687,6 +687,12 @@ export function isSafePhotoDataUrl(url: string): boolean {
 }
 
 /** An attachment may also be a base64 PDF — nothing else (no HTML, SVG, script). */
+/** An attachment held only as its original by the research: no data here, the file named by its hash. */
+export function isOriginalOnlyAttachment(att: { dataUrl?: unknown; originalOnly?: unknown; original?: { sha256?: unknown } }): boolean {
+    return att.originalOnly === true && att.dataUrl === '' && typeof att.original?.sha256 === 'string'
+        && /^[0-9a-f]{64}$/.test(att.original.sha256);
+}
+
 export function isSafeAttachmentDataUrl(url: string): boolean {
     return SAFE_IMAGE_DATA_URL.test(url) || SAFE_PDF_DATA_URL.test(url);
 }
@@ -729,7 +735,7 @@ export function stripUnsafeMediaDataUrls(data: StromData): number {
         }
         if (Array.isArray(person.attachments)) {
             const kept = person.attachments.filter(att =>
-                att && typeof att.dataUrl === 'string' && isSafeAttachmentDataUrl(att.dataUrl));
+                att && typeof att.dataUrl === 'string' && (isSafeAttachmentDataUrl(att.dataUrl) || isOriginalOnlyAttachment(att)));
             dropped += person.attachments.length - kept.length;
             if (kept.length > 0) person.attachments = kept;
             else delete person.attachments;
@@ -961,7 +967,7 @@ function checkSourceIntegrity(data: StromData, addIssue: AddIssue): void {
                     [personId], undefined, att.name);
             }
             // Only an image or a PDF payload is usable (and safe to open).
-            if (!att.dataUrl || !isSafeAttachmentDataUrl(att.dataUrl) || att.dataUrl.length < 32) {
+            if (!isOriginalOnlyAttachment(att) && (!att.dataUrl || !isSafeAttachmentDataUrl(att.dataUrl) || att.dataUrl.length < 32)) {
                 addIssue('warning', 'attachmentNoData',
                     `${name}: attachment "${att.name}" has no usable data`,
                     [personId], undefined, att.name);

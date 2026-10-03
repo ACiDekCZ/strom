@@ -7,6 +7,7 @@
  */
 
 import { DataManager } from '../data.js';
+import { TreeManager } from '../tree-manager.js';
 import { Attachment, PersonId } from '../types.js';
 import { strings } from '../strings.js';
 import { dataUrlByteSize } from '../photo.js';
@@ -19,6 +20,27 @@ import { openImageViewer, ViewerOriginal } from './image-viewer.js';
 import { emptyStateHtml } from './empty-state.js';
 
 import { iconSvg } from '../icons.js';
+
+/** Kinds the app cannot preview: only the original, for a research that takes it. */
+const ORIGINAL_ONLY_TYPES = ['image/tiff', 'image/heic', 'image/heif'];
+
+function needsOriginalOnly(file: File): boolean {
+    return ORIGINAL_ONLY_TYPES.includes(file.type) || /\.(tiff?|heic|heif)$/i.test(file.name)
+        || (file.type === 'application/pdf' && file.size > MAX_PDF_BYTES);
+}
+
+/** The type's type-tile letters: TIFF, HEIC, PDF. */
+function originalTypeLetters(name: string, mime: string): string {
+    const ext = /\.([^.]+)$/.exec(name)?.[1];
+    const fromMime = mime.split('/')[1] ?? '';
+    return (ext ?? fromMime ?? '?').replace(/^tif$/i, 'tiff').slice(0, 4).toUpperCase();
+}
+
+function originalMimeOf(name: string): string {
+    const ext = (/\.([^.]+)$/.exec(name)?.[1] ?? '').toLowerCase();
+    return ({ tif: 'image/tiff', tiff: 'image/tiff', heic: 'image/heic', heif: 'image/heif', pdf: 'application/pdf' } as Record<string, string>)[ext]
+        ?? 'application/octet-stream';
+}
 
 /** From this size a file for a research shows "Preparing the original…" while it is read. */
 const PREPARING_MIN_BYTES = 4 * 1024 * 1024;
@@ -68,6 +90,7 @@ export const attachmentsMethods = uiModule({
             });
         } else {
             container.innerHTML = attachments.map(att => {
+                if (att.originalOnly) return this.originalOnlyRowHtml(att, locked);
                 const thumb = isImage(att)
                     ? `<span class="attachment-thumb" data-attachment-id="${esc(att.id)}"><img src="${esc(att.dataUrl)}" alt=""></span>`
                     : `<span class="attachment-thumb" title="PDF" data-attachment-id="${esc(att.id)}">${iconSvg('file', { size: 18 })}</span>`;
@@ -129,6 +152,12 @@ export const attachmentsMethods = uiModule({
             totalEl.className = 'attachments-total';
         }
 
+        // A research that takes originals takes TIFF and HEIC too (only the original, no preview).
+        const input = document.getElementById('input-attachment') as HTMLInputElement | null;
+        const link = this.researchOriginalsLink();
+        if (input) input.accept = link && this.researchMediaAccepts(link.researchId)
+            ? 'image/jpeg,image/png,application/pdf,image/tiff,image/heic,image/heif,.tif,.tiff,.heic,.heif'
+            : 'image/jpeg,image/png,application/pdf';
         const addBtn = document.getElementById('btn-add-attachment');
         if (addBtn) addBtn.style.display = locked ? 'none' : '';
         // A research that does not take originals yet: one quiet line by the heading.
@@ -173,6 +202,8 @@ export const attachmentsMethods = uiModule({
     },
 
     async addAttachmentFile(personId: PersonId, file: File): Promise<void> {
+        // Only the research can take a TIFF, a HEIC or a PDF over 2 MB (no preview in the tree).
+        if (needsOriginalOnly(file) && await this.addOriginalOnlyAttachment(personId, file)) return;
         // The original's identity before it is shrunk (a tree linked to a research only).
         const original = ATTACHMENT_IMAGE_TYPES.includes(file.type) || file.type === 'application/pdf'
             ? await this.prepareOriginal(file, file.name) : null;
@@ -244,7 +275,7 @@ export const attachmentsMethods = uiModule({
         const att = DataManager.getPerson(this.currentId)?.attachments?.find(a => a.id === attachmentId);
         const sha = att?.original?.sha256;
         if (!att || !sha) return;
-        this.openFullQuality(sha, att.original?.mimeType ?? att.mimeType, att.original?.bytes ?? 0, isImage(att) ? att.dataUrl : null);
+        this.openFullQuality(sha, att.original?.mimeType ?? att.mimeType, att.original?.bytes ?? 0, isImage(att) && !att.originalOnly ? att.dataUrl : null);
     },
 
     /**
@@ -325,6 +356,79 @@ export const attachmentsMethods = uiModule({
                 return { line: '', link: `<button type="button" class="link-button media-full-quality" ${dataAttr} title="${esc(title)}">${esc(label)}</button>` };
             }
         }
+    },
+
+    /** A row of an attachment that is only its original (TIFF, HEIC, a large PDF): a type tile, no preview. */
+    originalOnlyRowHtml(att: Attachment, locked: boolean): string {
+        const esc = (t: string): string => this.escapeHtml(t);
+        const m = strings.media;
+        const letters = originalTypeLetters(att.name, att.original?.mimeType ?? att.mimeType);
+        const bytes = att.original?.bytes ?? 0;
+        const meta = bytes > 0 ? m.originalOnlyMeta(formatBytes(bytes), letters) : letters;
+        const { line, link } = this.mediaStateHtml(
+            { sha: att.original?.sha256, bytes, personId: this.currentId ?? undefined },
+            att.original?.mimeType ?? att.mimeType, `data-attachment-id="${esc(att.id)}"`);
+        // Not on a computer (no state there): where the original is.
+        const state = line || link ? line : `<span class="media-state is-in"><span>${esc(m.inResearchOnComputer)}</span></span>`;
+        const del = locked ? '' : `
+                    <div class="attachment-actions">
+                        <button type="button" class="attachment-delete-btn" title="${esc(strings.attachments.delete)}" aria-label="${esc(strings.attachments.delete)}"
+                            data-attachment-id="${esc(att.id)}">${iconSvg('trash')}</button>
+                    </div>`;
+        const note = locked
+            ? (att.note ? `<span class="attachment-size">${esc(att.note)}</span>` : '')
+            : `<input type="text" class="attachment-note-input" value="${esc(att.note ?? '')}" placeholder="${esc(strings.attachments.notePlaceholder)}" data-attachment-id="${esc(att.id)}">`;
+        return `
+                    <div class="attachment-row is-original-only">
+                        <span class="attachment-type-tile" aria-hidden="true">${esc(letters)}</span>
+                        <div class="attachment-main">
+                            <span class="attachment-name">${esc(att.name)}</span>
+                            <span class="attachment-size">${esc(meta)}</span>
+                            ${state}
+                            ${note}
+                        </div>
+                        ${link}
+                        ${del}
+                    </div>`;
+    },
+
+    /**
+     * A TIFF, a HEIC or a PDF over 2 MB for a research that takes originals:
+     * the original goes (or waits) and the tree keeps a row without a preview.
+     * Anything else (no research, originals off, an older research): refused
+     * as before. True when it was handled here.
+     */
+    async addOriginalOnlyAttachment(personId: PersonId, file: File): Promise<boolean> {
+        const link = this.researchOriginalsLink();
+        const letters = originalTypeLetters(file.name, file.type);
+        const off = !!link && TreeManager.getTreeMetadata(link.treeId)?.research?.sendMedia === false;
+        if (!link || !this.researchMediaAccepts(link.researchId) || off) return false;
+        const prepared = await this.prepareOriginal(file, file.name);
+        if (!prepared) {
+            this.showAlert(strings.attachments.readError, 'error');
+            return true;
+        }
+        const mimeType = file.type || originalMimeOf(file.name);
+        const original = { ...prepared, mimeType };
+        const outcome = await this.queueOriginal(original, file, { personId });
+        if (outcome === 'queued' || outcome === 'sent') {
+            DataManager.addAttachment(personId, { name: file.name, mimeType, dataUrl: '', sizeBytes: 0, original, originalOnly: true });
+            this.renderAttachmentsList();
+            this.noteOriginalOutcome(outcome, file.size, { personId });
+            return true;
+        }
+        if (outcome === 'tooLarge') {
+            this.showToast(strings.material.partialToast(0, 1, file.name,
+                strings.material.whyTooLarge(formatBytes(this.researchMediaAccepts(link.researchId)?.maxBytes ?? 0))), 8000, { closable: true });
+            return true;
+        }
+        // Neither sent nor able to wait (encrypted, Safari, no room): no attachment; start the research.
+        const canStart = this.researchLinkAvailable('open') || this.researchLinkAvailable('live');
+        this.showToast(strings.media.originalOnlyNeedsResearch(letters), 10000, {
+            closable: true,
+            ...(canStart ? { action: { label: strings.sync.pillStart, run: () => this.researchSyncAction('startResearch') } } : {}),
+        });
+        return true;
     },
 
     /** Fullscreen preview of an image (attachment, source excerpt): zoom and pan. */

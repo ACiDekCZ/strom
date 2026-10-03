@@ -1101,7 +1101,7 @@ export const sourcesMethods = uiModule({
         const out: { id: string; dataUrl: string; name: string }[] = [];
         for (const pid of this.excerptContextPersonIds()) {
             for (const att of DataManager.getPerson(pid)?.attachments ?? []) {
-                if (att.mimeType.startsWith('image/')) out.push(att);
+                if (att.mimeType.startsWith('image/') && !att.originalOnly) out.push(att);
             }
         }
         return out;

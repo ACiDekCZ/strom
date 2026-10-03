@@ -552,6 +552,13 @@ const SAFE_PHOTO_DATA_URL = /^data:image\/(jpeg|png|webp|gif);base64,/i;
 const SAFE_ATTACHMENT_DATA_URL = /^data:(image\/(jpeg|png|webp|gif)|application\/pdf);base64,/i;
 
 /** Raw OBJE media object under an individual. */
+/** The type of an original by its file name (only-original attachments); '' when not one the app knows. */
+function originalMimeOf(name: string): string {
+    const ext = (/\.([^./\\]+)$/.exec(name)?.[1] ?? '').toLowerCase();
+    return ({ tif: 'image/tiff', tiff: 'image/tiff', heic: 'image/heic', heif: 'image/heif', pdf: 'application/pdf',
+        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' } as Record<string, string>)[ext] ?? 'application/octet-stream';
+}
+
 interface RawMedia {
     /** _PRIM / _PERSONALPHOTO Y — preferred as the person's portrait. */
     primary?: boolean;
@@ -2884,6 +2891,18 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                     if (attSource) att.sourceId = attSource;
                     (person.attachments ??= []).push(att);
                 }
+            } else if (media.file && media.sha && /^[0-9a-f]{64}$/.test(media.sha) && media.stromKind !== 'photo') {
+                // Only the original, held by Strom Research by its hash (no preview yet).
+                const name = media.title || media.file.split(/[\\/]/).pop() || 'file';
+                const mimeType = originalMimeOf(media.file) || originalMimeOf(name);
+                const att: Attachment = {
+                    id: generateId('att'), name, mimeType, dataUrl: '', sizeBytes: 0, originalOnly: true,
+                    original: { sha256: media.sha, name, mimeType, bytes: 0, ...(media.orient ? { orientation: media.orient } : {}) },
+                };
+                if (media.note) att.note = media.note;
+                const attSource = media.sourceXref ? sourceIdMap.get(media.sourceXref) : undefined;
+                if (attSource) att.sourceId = attSource;
+                (person.attachments ??= []).push(att);
             } else if (media.file) {
                 // Platform exports (MyHeritage, Ancestry) reference media by
                 // path — remember the ref so the user can attach the files.

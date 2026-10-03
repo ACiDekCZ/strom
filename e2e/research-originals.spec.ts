@@ -155,6 +155,39 @@ test.describe('originals go to the research', () => {
         expect(Object.keys(h).filter(k => k.startsWith('x-strom-')).sort()).toEqual(['x-strom-name', 'x-strom-region', 'x-strom-source']);
     });
 
+    test('a TIFF: only its original goes to the research; the row has a type tile and no preview', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS, links: ['send', 'open', 'live', 'app', 'setup', 'media'] });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+        await cardAction(page, 'Jan', 'edit');
+        const modal = personModal(page);
+        await expect(modal.locator('#input-attachment')).toHaveAttribute('accept', /image\/tiff/);
+        await modal.locator('#input-attachment').setInputFiles({ name: 'matrika-1846.tif', mimeType: 'image/tiff', buffer: Buffer.from('II*\0' + 'x'.repeat(5000)) });
+        const row = modal.locator('.attachment-row.is-original-only');
+        await expect(row.locator('.attachment-type-tile')).toHaveText('TIFF');
+        await expect(row).toContainText('the research will make a preview');
+        await expect.poll(() => b.mediaPuts.length).toBe(1);
+        expect(b.mediaPuts[0].headers['x-strom-person']).toBe('P0003');
+        const att = await janAttachment(page);
+        expect(att).toMatchObject({ originalOnly: true, dataUrl: '', mimeType: 'image/tiff' });
+        // In the research now: opened there (a TIFF is not shown in the app).
+        await expect(row.locator('.media-full-quality')).toHaveText(/↗/);
+    });
+
+    test('a TIFF for a research that does not take originals: refused as before, no attachment', async ({ page }) => {
+        await fakeBridge(page, { accepts: { sync: { auto: 'off' }, sources: true, verified: true, media: null } });
+        await openResearch(page);
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+        await cardAction(page, 'Jan', 'edit');
+        const modal = personModal(page);
+        await expect(modal.locator('#input-attachment')).toHaveAttribute('accept', 'image/jpeg,image/png,application/pdf');
+        await modal.locator('#input-attachment').setInputFiles({ name: 'matrika-1846.tif', mimeType: 'image/tiff', buffer: Buffer.from('II*\0xxxx') });
+        await expect(page.locator('#confirmation-modal')).toContainText('Unsupported');
+        expect(await janAttachment(page)).toBeNull();
+    });
+
     test('a large file: its row says "Preparing the original…" while it is read', async ({ page }) => {
         await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
         await openResearch(page, { media: true });

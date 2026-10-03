@@ -284,6 +284,12 @@ export interface Attachment {
     sourceId?: string;
     /** The original file behind the preview (a tree linked to Strom Research). */
     original?: MediaOriginal;
+    /**
+     * Only the original, kept by the research (a TIFF, a HEIC, a PDF over
+     * 2 MB): no preview in the tree — `dataUrl` is '' and `original` names the
+     * file by its hash. The research may bring a preview in a later version.
+     */
+    originalOnly?: true;
 }
 
 export interface Person {
