@@ -3733,7 +3733,8 @@
 
         /* Installing Strom Research: what it is → the line → waiting (research-install-ui.ts). */
         .research-install-dialog { width: 560px; max-width: calc(100vw - 32px); }
-        .install-steps { list-style: none; display: flex; gap: 6px; margin: 0 0 14px; padding: 0; flex-wrap: wrap; }
+        /* Between the header and the body: inset like both (24 px; 16 px on phones). */
+        .install-steps { list-style: none; display: flex; gap: 6px; margin: 0; padding: 14px 24px 0; flex-wrap: wrap; flex-shrink: 0; }
         .install-step {
             font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
             background: var(--surface-2); color: var(--text-light);
@@ -3825,6 +3826,7 @@
         }
         @media (max-width: 499px) {
             .research-install-dialog { max-width: calc(100vw - 16px); }
+            .install-steps { padding: 12px 16px 0; }
             .install-line-row { flex-direction: column; }
             .install-copy { flex: 0 0 auto; min-height: 40px; }
             .install-card p { font-size: 13px; }

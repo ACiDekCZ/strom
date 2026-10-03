@@ -1574,11 +1574,13 @@ export interface SyncReply {
     skipped: { kind: string; why: string }[];
     /** The refusal's stable code (`code`, 1.12: `tree.no-ids` …; '' = not said). */
     code: string;
+    /** Sends the research took back after the state this copy was made from (`undoneSince`, their marks; 1.12). */
+    undoneSince: string[];
 }
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], kept: null, reason: '', skipped: [], code: '' };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [] };
     return {
         ok: r.ok === true,
         changes: asCount(r.changes),
@@ -1596,6 +1598,8 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
             .map(x => asRecord(x)).filter((x): x is Record<string, unknown> => !!x)
             .map(x => ({ kind: cleanText(x.kind, 40), why: cleanText(x.why, 300) })),
         code: typeof r.code === 'string' && /^[a-z0-9.-]{1,40}$/.test(r.code) ? r.code : '',
+        undoneSince: Array.isArray(r.undoneSince)
+            ? r.undoneSince.slice(0, 30).map(v => headerToken(v)).filter((v): v is string => !!v) : [],
     };
 }
 

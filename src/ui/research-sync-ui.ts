@@ -44,7 +44,7 @@ import {
 } from '../research-device.js';
 import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
-    pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS,
+    pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, researchSendVouches,
 } from '../research-sync.js';
 import { uiModule } from './module.js';
 import { researchWrittenList } from './research-changes-ui.js';
@@ -570,18 +570,22 @@ export const researchSyncMethods = uiModule({
             return;
         }
         if (!fate.nothing) {
-            patchResearchAutoState(treeId, { lastWritten: { at: closed.closedAt!, changes: closed.changes, conflicts: 0 } });
+            patchResearchAutoState(treeId, { lastWritten: { at: closed.closedAt!, changes: closed.changes, conflicts: 0,
+                ...(closed.intake ? { intake: closed.intake } : {}), fingerprint: closed.fingerprint } });
             this.researchNoteWritten(treeId, sent.fingerprint, closed.closedAt!);
         }
-        // Written: "Send, then load" loads the version that has the changes now.
-        if (sent.thenLoad && DataManager.getCurrentTreeId() === treeId) {
+        // Written: "Send, then load" loads the version that has the changes now — not one that left
+        // conflicts (it holds the research's values in place of the user's): told, it waits for the user.
+        const leftConflicts = (fate.conflicts ?? 0) > 0;
+        if (leftConflicts) TreeManager.patchResearchLink(treeId, { sent: { ...closed, conflicts: fate.conflicts! } });
+        if (sent.thenLoad && !leftConflicts && DataManager.getCurrentTreeId() === treeId) {
             const fps = this.researchSyncFingerprints(treeId, link);
             if (fps.current === sent.fingerprint) await this.researchLoadNewer({ afterSend: true });
             else await this.researchLoadNewer();
             return;
         }
-        // A write that took longer (202): its result now, as the reply would have said it.
-        if (sent.writing) {
+        // A write that took longer (202), or one that left conflicts: its result now, as the reply would have said it.
+        if (sent.writing || leftConflicts) {
             await this.researchAfterWrite(treeId, closed,
                 fate.conflicts !== undefined ? { conflicts: fate.conflicts ?? null, refs: fate.conflictPersons ?? [] } : undefined);
         }
@@ -836,17 +840,24 @@ export const researchSyncMethods = uiModule({
             return this.postResearchSendNow(treeId, opts);
         }
         const head = runtime.get(link.id)?.status?.head ?? '';
-        const gedcom = researchGedcom(data, meta?.name ?? '', {
+        // "Send again" by hand for a send the research took back (`strom sync undo`): the research
+        // writes it again from what it kept, on the state it was sent from (POST /sync/<R…>/again,
+        // 1.12). A copy sent instead reads there as "removed by the research": nothing written (finding 35).
+        const again = !opts.auto && link.sent?.state === 'undone' && link.sent.intake ? link.sent : null;
+        // What goes over is then the state that send had, not this one (edits since go after it).
+        const sentFp = again ? again.fingerprint : fps.current;
+        const gedcom = again ? '' : researchGedcom(data, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: link.transcripts, sent: fps.current,
         });
         // What this send carries, person by person (what was written, once it is).
-        this.researchNoteSending(treeId, data, fps.current);
+        if (!again) this.researchNoteSending(treeId, data, fps.current);
         sendingTree = treeId;
         if (autoTimerTree === treeId) this.clearResearchAutoTimer();
         this.refreshResearchSyncUi();
         let res: Response;
         try {
-            res = await postSync(`${bridge.base}/sync`, gedcom, SEND_TIMEOUT_MS, !!opts.keepalive && gedcom.length < KEEPALIVE_MAX_CHARS);
+            res = await postSync(again ? `${bridge.base}/sync/${encodeURIComponent(again.intake!)}/again` : `${bridge.base}/sync`,
+                gedcom, SEND_TIMEOUT_MS, !!opts.keepalive && gedcom.length < KEEPALIVE_MAX_CHARS);
         } catch (err) {
             console.warn('Sending to the research failed', err);
             sendingTree = null;
@@ -869,6 +880,13 @@ export const researchSyncMethods = uiModule({
         if (res.status === 503) {
             if (opts.auto) autoDue.add(treeId);
             this.refreshResearchSyncUi();
+            return;
+        }
+        // Not kept there any more (only its last 30 sends), or a research without the way back: said, the bar stays.
+        if (again && res.status === 404) {
+            console.warn('The research does not keep the send taken back any more', again.intake, reply.code);
+            this.refreshResearchSyncUi();
+            this.tellResearchUndoneChoice(s.againGone);
             return;
         }
         // Refused as a copy without the research's numbers (`tree.no-ids`, 1.12): they come from its
@@ -895,12 +913,20 @@ export const researchSyncMethods = uiModule({
             return;
         }
         const now = new Date().toISOString();
+        // A send taken back, sent again, and the research still writes nothing: the changes are here
+        // and not there — never shown as in step (finding 35). The bar stays; said why, with the way out.
+        if (again && reply.changes === 0) {
+            console.warn('Sent again after the research took it back, and it wrote nothing', again.intake);
+            this.refreshResearchSyncUi();
+            this.tellResearchUndoneChoice(s.againNothing);
+            return;
+        }
         // Written at once (the research's own word), or nothing it could take (0 changes).
         const writing = reply.inbox === false && reply.pending;
         const written = (reply.inbox === false && !reply.pending) || reply.changes === 0;
         const changes = reply.applied ?? reply.changes;
         const sent: ResearchSend = {
-            fingerprint: fps.current, at: now, changes, head,
+            fingerprint: sentFp, at: now, changes, head,
             ...(reply.intake ? { intake: reply.intake } : {}),
             state: written ? 'written' : 'pending',
             ...(written ? { closedAt: now } : {}),
@@ -908,9 +934,22 @@ export const researchSyncMethods = uiModule({
             ...(writing ? { writing: true } : {}),
             ...(opts.auto ? {} : { manual: true }),
         };
-        TreeManager.patchResearchLink(treeId, { refused: undefined, sentSources: sourceReadings(data), sent });
-        if (written && reply.changes !== 0) this.researchNoteWritten(treeId, fps.current, now);
-        patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined, toldRefused: undefined });
+        // The copy still carries sends the research took back since its base (`undoneSince`, 1.12): what
+        // it wrote stands, but the app and the research differ by those — never shown as in step, nor
+        // loaded quietly over them. The bar "taken back": Send again (theirs again) or load (the undo kept).
+        const undone = !again && reply.undoneSince.length > 0;
+        TreeManager.patchResearchLink(treeId, { refused: undefined, sentSources: sourceReadings(data),
+            sent: undone ? { ...sent, state: 'undone', intake: reply.undoneSince[reply.undoneSince.length - 1], closedAt: now, noticed: true } : sent });
+        if (written && reply.changes !== 0) this.researchNoteWritten(treeId, sentFp, now);
+        // Edits since the send taken back were not in it: they still wait.
+        if (sentFp === fps.current) patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined, toldRefused: undefined });
+        else patchResearchAutoState(treeId, { toldRefused: undefined });
+        if (undone) {
+            console.warn('The copy sent carries sends the research took back since', reply.undoneSince);
+            this.refreshResearchSyncUi();
+            this.tellResearchUndoneChoice(s.undoneSinceToast(reply.undoneSince.length));
+            return;
+        }
         autoDue.delete(treeId);
         // The commit the write made is the research's version now.
         if (written && reply.head) {
@@ -923,8 +962,10 @@ export const researchSyncMethods = uiModule({
         if (reply.changes === 0) {
             if (!opts.auto) this.showToast(s.nothingToast, 4000);
         } else if (written) {
-            if (opts.thenLoad && active) {
-                patchResearchAutoState(treeId, { lastWritten: { at: now, changes, conflicts: 0 } });
+            // A write that left conflicts never loads after itself: told as any write (the note, the
+            // conflicts), its version waits for the user — it holds the research's values in place of theirs.
+            if (opts.thenLoad && active && !((reply.conflicts ?? 0) > 0)) {
+                patchResearchAutoState(treeId, { lastWritten: { at: now, changes, conflicts: 0, ...(sent.intake ? { intake: sent.intake } : {}), fingerprint: sentFp } });
                 if (!opts.auto) this.showToast(s.writtenToast(changes ?? 0), 6000);
                 await this.researchLoadNewer({ afterSend: true });
             } else {
@@ -959,6 +1000,12 @@ export const researchSyncMethods = uiModule({
         justWritten = { treeId, until: Date.now() + WRITTEN_MARK_MS };
         setTimeout(() => { justWritten = null; this.renderResearchSyncPill(); }, WRITTEN_MARK_MS + 50);
         this.refreshResearchSyncUi();
+        // Conflicts the research names in its reply: known before anything loads — the version keeps
+        // the research's values in their place, so it is not loaded over the user's quietly.
+        if (known && (known.conflicts ?? 0) > 0) {
+            const now = TreeManager.getTreeMetadata(treeId)?.research;
+            if (now?.sent && now.sent.at === sent.at) TreeManager.patchResearchLink(treeId, { sent: { ...now.sent, conflicts: known.conflicts! } });
+        }
         const loaded = await this.researchQuietLoad(treeId);
         // The research's own word on the conflicts first; else what the new version shows.
         const active = DataManager.getCurrentTreeId() === treeId;
@@ -1110,7 +1157,8 @@ export const researchSyncMethods = uiModule({
         if (DataManager.getCurrentTreeId() !== treeId || DataManager.isTreeLocked() || DataManager.isReadOnly()) return null;
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         const sent = link?.sent;
-        if (!link || !sent || sent.state !== 'written' || link.copy) return null;
+        // Only a send that vouches for the research's version (something written, no conflict left).
+        if (!link || !sent || !researchSendVouches(sent) || link.copy) return null;
         // Written as another window's send (it replaced ours), or this window's
         // copy is stale: what the research has is not this state — load on request only.
         if (sent.inherited || isTreeStale(treeId)) return null;
@@ -1250,6 +1298,30 @@ export const researchSyncMethods = uiModule({
         if (url) this.launchResearchLink(url, 'version');
     },
 
+    /** A send taken back that cannot go again as it is: why, and "Load the research's version" (the undo kept). */
+    tellResearchUndoneChoice(message: string): void {
+        this.showToast(message, Infinity, {
+            closable: true,
+            action: { label: strings.sync.loadVersion, run: () => { void this.researchAcceptUndo(); } },
+        });
+    },
+
+    /**
+     * Keep what the research took back: its version over this tree, asked
+     * plainly (replace it, a backup kept, or open as a copy) — never "send
+     * first", which would only send it again.
+     */
+    async researchAcceptUndo(): Promise<void> {
+        const ctx = this.researchSyncLink();
+        const bridge = ctx ? parseLiveBridge(storedResearchBridge(ctx.link.id)?.base) : null;
+        if (!ctx || !bridge || !await this.researchBridgeReady(ctx.link.id)) {
+            this.showToast(strings.sync.noIdsFailed, 6000);
+            return;
+        }
+        await this.importResearchFromUrl(`${bridge.base}/tree.ged`, { plainAsk: true });
+        this.refreshResearchSyncUi();
+    },
+
     /** "Cancel loading": the send stays, the new version is not loaded by itself. */
     researchCancelThenLoad(): void {
         const ctx = this.researchSyncLink();
@@ -1296,6 +1368,7 @@ export const researchSyncMethods = uiModule({
         if (!keepMenu) this.closeActionsMenu();
         switch (action) {
             case 'send': case 'retry': case 'sendAgain': void this.researchSendNow(); break;
+            case 'acceptUndo': void this.researchAcceptUndo(); break;
             case 'sendThenLoad': void this.researchSendNow({ thenLoad: true }); break;
             case 'showChanges': this.showResearchChanges('send'); break;
             case 'showOriginals': this.showOriginalsQueue(); break;
@@ -1464,7 +1537,7 @@ export const researchSyncMethods = uiModule({
             rejected: () => state.sent?.state === 'undone'
                 ? { tone: 'warn', title: s.stateUndone(when(state.sent?.at)),
                     sub: auto ? s.undoneAutoSub(when(state.sent?.closedAt)) : s.undoneSub(when(state.sent?.closedAt)),
-                    actions: [{ action: 'sendAgain', label: s.sendAgain }] }
+                    actions: [{ action: 'sendAgain', label: s.sendAgain }, { action: 'acceptUndo', label: s.loadVersion, asLink: true }] }
                 : state.sent?.failed
                     ? { tone: 'warn', title: s.stateFailed(when(state.sent?.at)), sub: s.failedSub(''),
                         actions: [{ action: 'sendAgain', label: s.sendAgain }] }

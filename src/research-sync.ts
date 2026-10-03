@@ -8,6 +8,19 @@
 import { ResearchLink, ResearchSend, Source, StromData } from './types.js';
 import { ResearchInbox, LiveIntake, ResearchSendRecord } from './research-link.js';
 
+/**
+ * A send the research wrote vouches for its version (that version holds
+ * everything the send carried) only when something was written and no
+ * conflict was left: then the version may replace the tree without asking.
+ * "Nothing written" may mean the research reads the copy's values as removed
+ * there (a send taken back since, finding 35); a conflict keeps the research's
+ * value in place of the user's (finding 29) — loading those over the tree
+ * would drop the user's values without a word.
+ */
+export function researchSendVouches(sent: ResearchSend | undefined): boolean {
+    return !!sent && sent.state === 'written' && sent.changes !== 0 && !((sent.conflicts ?? 0) > 0);
+}
+
 export type ResearchSyncKind =
     | 'none' | 'inSync' | 'written' | 'unsent' | 'sentPending' | 'newer' | 'unsentAndNewer' | 'waitThenLoad'
     | 'bridgeDown' | 'unsentBridgeDown' | 'refused' | 'rejected' | 'safari'

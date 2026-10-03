@@ -41,6 +41,8 @@ async function autoTree(page: Page, init: Partial<FakeBridge> = {}): Promise<Fak
 const mark = (page: Page) => page.locator('#research-sync-mark');
 const pill = (page: Page) => page.locator('#research-sync-pill');
 const treeId = (page: Page) => page.evaluate(() => window.Strom.TreeManager.getActiveTreeId()!);
+const janPlace = (page: Page) => page.evaluate(() =>
+    (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any).birthPlace ?? '');
 
 async function hide(page: Page): Promise<void> {
     await page.evaluate(() => {
@@ -255,6 +257,106 @@ test('a written send taken back in the research: told once, not sent again by it
     await page.locator('#confirm-cancel-btn').click();
     // Praha is still here.
     expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any).birthPlace)).toBe('Praha');
+});
+
+/** A send written at once, then taken back in the research (`strom sync undo`): the app told so. */
+async function writtenThenUndone(page: Page): Promise<FakeBridge> {
+    const bridge = await autoTree(page);
+    writesAtOnce(bridge);
+    await editJan(page);
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('ab10cd10ef10');
+    Object.assign(bridge.sends[0], { state: 'undone', decidedAt: new Date().toISOString() });
+    bridge.head = 'ee77ff88aa99';
+    bridge.treeGed = researchGed('ee77ff88aa99');
+    await poll(page);
+    await expect(pill(page)).toContainText('Send taken back');
+    return bridge;
+}
+
+test('finding 35: Send again after a send taken back asks the research to write it again (POST /sync/<R…>/again), no copy goes', async ({ page }) => {
+    const bridge = await writtenThenUndone(page);
+    const first = bridge.sends.find(r => r.state === 'undone')!.intake;
+    await openResearchMenu(page);
+    await block(page).getByRole('button', { name: 'Send again' }).click();
+    await expect.poll(() => bridge.againAsks ?? []).toEqual([first]);
+    expect(bridge.posts).toHaveLength(1);
+    await expect(pill(page)).not.toContainText('Send taken back');
+    // Written again: its version (with the changes) loaded quietly, nothing taken back any more.
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(bridge.head);
+    expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).not.toBe('undone');
+    expect(await janPlace(page)).toBe('Praha');
+});
+
+test('finding 35: the research no longer keeps the send taken back (404 send.none): said, the bar stays, its version offered', async ({ page }) => {
+    const bridge = await writtenThenUndone(page);
+    bridge.sends.length = 0;
+    await page.evaluate(() => window.Strom.UI.researchSendNow());
+    await expect.poll(() => (bridge.againAsks ?? []).length).toBe(1);
+    const toast = page.locator('.toast', { hasText: 'no longer keeps the send it took back' });
+    await expect(toast.getByRole('button', { name: "Load the research's version" })).toBeVisible();
+    await expect(pill(page)).toContainText('Send taken back');
+    expect(bridge.posts).toHaveLength(1);
+});
+
+test('finding 35: a copy that still carries a send taken back (undoneSince): what was written stands, the bar "taken back" stays, never loaded quietly', async ({ page }) => {
+    const bridge = await autoTree(page);
+    writesAtOnce(bridge);
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, undoneSince: ['R20261003190000000-abcd'] } };
+    const headBefore = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head);
+    await editJan(page);
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    await expect(page.locator('.toast', { hasText: 'The research took back a send this copy of the tree still carries' })).toBeVisible();
+    await expect(pill(page)).toContainText('Send taken back');
+    const sent = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent);
+    expect(sent).toMatchObject({ state: 'undone', intake: 'R20261003190000000-abcd' });
+    // Not loaded quietly over what it carries.
+    await page.clock.fastForward(30_000);
+    expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(headBefore);
+});
+
+test('finding 35: keeping the undo: "Load the research\'s version" on the bar asks plainly (no "send first"), then the tree is the research\'s', async ({ page }) => {
+    await writtenThenUndone(page);
+    await openResearchMenu(page);
+    await block(page).getByRole('button', { name: "Load the research's version" }).click();
+    const choice = page.locator('.dialog-confirm', { hasText: 'Changed in the app' });
+    await choice.getByRole('button', { name: 'Update' }).click();
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('ee77ff88aa99');
+    await expect(pill(page)).not.toContainText('Send taken back');
+});
+
+test('findings 35/29: the copy has a value, the research writes nothing (and moves on): the value stays, never loaded over quietly', async ({ page }) => {
+    const bridge = await autoTree(page);
+    // "Nothing" — and the research has a newer version without the user's value (as after an undo).
+    bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 0, applied: 0 } };
+    bridge.onWrite = () => ({ head: 'dd44ee55ff66', ged: researchGed('dd44ee55ff66') });
+    await editJan(page);
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    for (let i = 0; i < 3; i++) { await poll(page); await page.clock.fastForward(30_000); }
+    expect(await janPlace(page)).toBe('Praha');
+    // The research opens its version here (?import-url=): asked, never replaced without a word.
+    await page.evaluate((u) => window.Strom.UI.openExternalRequest(new URLSearchParams({ 'import-url': u })), `${BRIDGE}/tree.ged`);
+    const ask = page.locator('.dialog-confirm', { hasText: 'Changed in the app' });
+    await expect(ask).toBeVisible();
+    // Plainly: no "send first" (it would send nothing new).
+    await expect(ask.getByRole('button', { name: 'Send first, then load' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    expect(await janPlace(page)).toBe('Praha');
+});
+
+test('finding 29: a write that left a conflict (named in the reply): the note says so, the user\'s value is not loaded over quietly', async ({ page }) => {
+    const bridge = await autoTree(page);
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0003', person: 'P0003', fact: 'BIRT' }] } };
+    // The research keeps its own value; the user's is the other side of the conflict.
+    bridge.onWrite = () => ({ head: 'cc33dd44ee55', ged: researchGed('cc33dd44ee55', ['1 BIRT', '2 PLAC Brno', '1 _STROM_CONFLICT X0003', '2 TYPE BIRT', '2 STAT open', '2 VAL Brno', '2 VAL Praha']) });
+    await editJan(page);
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    await expect(page.locator('.research-sync-note')).toContainText('Written, 1 conflict to decide');
+    for (let i = 0; i < 3; i++) { await poll(page); await page.clock.fastForward(30_000); }
+    expect(await janPlace(page)).toBe('Praha');
 });
 
 test('a write that takes longer (202): "writing" until the status says written, then loaded quietly', async ({ page }) => {

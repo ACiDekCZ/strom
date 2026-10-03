@@ -928,6 +928,11 @@ const stringsEN = {
         autoStoppedToast: (r: string) => `Automatic sending stopped. The research didn't accept the changes${r ? `: ${r}` : ''}.`,
         noIdsToast: "Not sent. This copy of the tree doesn't have the research's numbers for its people yet, so it would arrive there as a second family tree. Load the research's version first.",
         loadVersion: "Load the research's version",
+        againNothing: "The research wrote nothing again: the changes it took back are in this app and not in the research. Keep its undo by loading its version (your changes are replaced, a backup is kept).",
+        againGone: "The research no longer keeps the send it took back, so it can't write it again. Keep its undo by loading its version (your changes are replaced, a backup is kept), or send your changes again after editing.",
+        undoneSinceToast: (n: number) => n === 1
+            ? "The research took back a send this copy of the tree still carries. Send it again, or load the research's version to keep the undo."
+            : `The research took back ${n} sends this copy of the tree still carries. Send again, or load the research's version to keep the undo.`,
         noIdsLoaded: "The research's numbers are here. Sending your changes.",
         noIdsFailed: "The research's version couldn't be loaded. Is the research running?",
         noIdsOtherTree: "The research answered with a different family tree. Open the research for this tree and try again.",
@@ -4264,6 +4269,11 @@ const stringsCZ: StringsType = {
         autoStoppedToast: (r: string) => `Automatické posílání se zastavilo. Výzkum úpravy nepřijal${r ? `: ${r}` : ''}.`,
         noIdsToast: 'Neodesláno. Tahle kopie stromu ještě nemá čísla osob výzkumu, a tak by tam přišla jako druhý rodokmen. Nejdřív načtěte verzi výzkumu.',
         loadVersion: 'Načíst verzi výzkumu',
+        againNothing: 'Výzkum znovu nic nezapsal: změny, které vrátil, jsou v aplikaci, ale ve výzkumu ne. Vrácení ponecháte načtením verze výzkumu (vaše úpravy nahradí, záloha zůstane).',
+        againGone: 'Výzkum vrácené poslání už nedrží, a tak ho nemůže zapsat znovu. Vrácení ponecháte načtením verze výzkumu (vaše úpravy nahradí, záloha zůstane), nebo úpravy pošlete znovu po další změně.',
+        undoneSinceToast: (n: number) => n === 1
+            ? 'Výzkum vrátil poslání, které tahle kopie stromu ještě nese. Pošlete ho znovu, nebo vrácení ponechte načtením verze výzkumu.'
+            : `Výzkum vrátil ${n} poslání, která tahle kopie stromu ještě nese. Pošlete je znovu, nebo vrácení ponechte načtením verze výzkumu.`,
         noIdsLoaded: 'Čísla výzkumu jsou tu. Posílám vaše úpravy.',
         noIdsFailed: 'Verzi výzkumu se nepodařilo načíst. Běží výzkum?',
         noIdsOtherTree: 'Výzkum odpověděl jiným rodokmenem. Otevřete výzkum pro tento strom a zkuste to znovu.',
@@ -7591,6 +7601,11 @@ const stringsDE: StringsType = {
         autoStoppedToast: (r: string) => `Automatisches Senden wurde angehalten. Die Forschung hat die Änderungen nicht angenommen${r ? `: ${r}` : ''}.`,
         noIdsToast: 'Nicht gesendet. Diese Kopie des Stammbaums hat die Nummern der Personen der Forschung noch nicht und käme dort als zweiter Stammbaum an. Laden Sie zuerst die Version der Forschung.',
         loadVersion: 'Version der Forschung laden',
+        againNothing: 'Die Forschung hat wieder nichts geschrieben: Die zurückgenommenen Änderungen sind in der App, aber nicht in der Forschung. Behalten Sie die Rücknahme, indem Sie ihre Version laden (Ihre Änderungen werden ersetzt, eine Sicherung bleibt).',
+        againGone: 'Die Forschung hält die zurückgenommene Sendung nicht mehr und kann sie nicht erneut schreiben. Behalten Sie die Rücknahme, indem Sie ihre Version laden (Ihre Änderungen werden ersetzt, eine Sicherung bleibt), oder senden Sie Ihre Änderungen nach der nächsten Bearbeitung erneut.',
+        undoneSinceToast: (n: number) => n === 1
+            ? 'Die Forschung hat eine Sendung zurückgenommen, die diese Kopie des Stammbaums noch enthält. Senden Sie sie erneut oder laden Sie die Version der Forschung, um die Rücknahme zu behalten.'
+            : `Die Forschung hat ${n} Sendungen zurückgenommen, die diese Kopie des Stammbaums noch enthält. Senden Sie erneut oder laden Sie die Version der Forschung, um die Rücknahme zu behalten.`,
         noIdsLoaded: 'Die Nummern der Forschung sind da. Ihre Änderungen werden gesendet.',
         noIdsFailed: 'Die Version der Forschung konnte nicht geladen werden. Läuft die Forschung?',
         noIdsOtherTree: 'Die Forschung hat mit einem anderen Stammbaum geantwortet. Öffnen Sie die Forschung zu diesem Stammbaum und versuchen Sie es erneut.',

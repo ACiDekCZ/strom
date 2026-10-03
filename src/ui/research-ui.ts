@@ -54,7 +54,7 @@ import {
     noteResearchBridge, noteResearchBridgeStatus, patchResearchAutoState,
 } from '../research-device.js';
 import { rememberBridgeStatus } from './research-sync-ui.js';
-import { sourceReadings } from '../research-sync.js';
+import { sourceReadings, researchSendVouches } from '../research-sync.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -982,7 +982,7 @@ export const researchUiMethods = uiModule({
     },
 
     /** B. ?import-url=: a file offered by Strom Research on this computer. */
-    async importResearchFromUrl(raw: string, opts: { afterSend?: TreeId } = {}): Promise<void> {
+    async importResearchFromUrl(raw: string, opts: { afterSend?: TreeId; plainAsk?: boolean } = {}): Promise<void> {
         // "Load new version" asked for this: its spinner is done.
         this.settleResearchVersion();
         const url = parseLoopbackUrl(raw);
@@ -1140,7 +1140,7 @@ export const researchUiMethods = uiModule({
      * GEDCOM text from outside. A Strom Research file opens its research
      * tree; any other GEDCOM goes to the normal import dialog.
      */
-    async openGedcomText(text: string, opts: { afterSend?: TreeId } = {}): Promise<void> {
+    async openGedcomText(text: string, opts: { afterSend?: TreeId; plainAsk?: boolean } = {}): Promise<void> {
         if (DataManager.isViewMode()) {
             this.showToast(strings.research.notInViewMode, 5000);
             return;
@@ -1164,7 +1164,7 @@ export const researchUiMethods = uiModule({
             return;
         }
         if (!await this.ensureLocalUnlocked()) return;
-        await this.applyResearch(result.data, header, opts.afterSend ? { afterSend: opts.afterSend } : {});
+        await this.applyResearch(result.data, header, { ...(opts.afterSend ? { afterSend: opts.afterSend } : {}), ...(opts.plainAsk ? { plainAsk: true } : {}) });
     },
 
     /**
@@ -1195,8 +1195,12 @@ export const researchUiMethods = uiModule({
             // Nothing here the research lacks: the last send was written there and
             // the tree has not changed since — its newer version holds it all.
             const sent = existing.research?.sent;
-            const holdsChanges = edited && lost === 0 && !!previous
-                && sent?.state === 'written' && contentFingerprint(previous) === sent.fingerprint;
+            const sentIsTree = !!previous && !!sent && contentFingerprint(previous) === sent.fingerprint;
+            const holdsChanges = edited && lost === 0 && sentIsTree && researchSendVouches(sent);
+            // The tree is what was sent and written, but the research did not take it all (nothing
+            // written, a conflict left): asked plainly — "send first" would send nothing new (findings 29, 35).
+            // (Waiting in its inbox, or taken back: "send, then load" still means something.)
+            const plainAsk = !!opts.plainAsk || (sentIsTree && sent?.state === 'written' && !researchSendVouches(sent));
             // The question is about that tree: show it behind the dialog, never
             // whichever tree was open (the user must see what they decide on).
             if (action === 'ask' && previous && !unreadable && !holdsChanges && DataManager.getCurrentTreeId() !== existing.id) {
@@ -1211,7 +1215,7 @@ export const researchUiMethods = uiModule({
             } else if (holdsChanges) {
                 // Replaced without asking (a backup is still kept below).
                 holdsSent = true;
-            } else if (edited && existing.research && !opts.plainAsk && this.researchSyncCapable(existing.research.id)) {
+            } else if (edited && existing.research && !plainAsk && this.researchSyncCapable(existing.research.id)) {
                 // (plainAsk: a copy that cannot send yet — "send first" would only come back here.)
                 // A research that tells what it has: send first, or decide knowing it.
                 const choice = await this.showResearchUpdateConflict(existing.id, existing.name, data, includeImages);

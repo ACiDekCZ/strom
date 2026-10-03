@@ -85,6 +85,19 @@ test.describe('installing the research from the app', () => {
         expect(outside).toEqual([]);
     });
 
+    test('the step pills are inset like the title and the text (not on the dialog\'s edge)', async ({ page }) => {
+        await setup(page);
+        for (const width of [1280, 450]) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.evaluate(() => window.Strom.UI.showResearchInstall());
+            const left = (sel: string) => dialog(page).locator(sel).first().evaluate(e => Math.round(e.getBoundingClientRect().left));
+            const pill = await dialog(page).locator('.install-step').first().evaluate(e => Math.round(e.getBoundingClientRect().left));
+            expect(Math.abs(pill - await left('#research-install-title')), `at ${width} px`).toBeLessThanOrEqual(1);
+            expect(Math.abs(pill - await left('.install-intro')), `at ${width} px`).toBeLessThanOrEqual(1);
+            await page.evaluate(() => window.Strom.UI.closeResearchInstall());
+        }
+    });
+
     test('the system is recognised; the switch changes the line and the steps; macOS warns about Apple\'s tools', async ({ page }) => {
         await setup(page, 'Windows');
         await toInstallStep(page);

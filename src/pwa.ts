@@ -70,23 +70,51 @@ export function registerServiceWorker(onUpdateReady: () => void): void {
         // If one is already waiting (installed between visits): a research
         // request switches to it right away (the new build handles it), else
         // the user is offered the refresh.
-        if (reg.waiting && navigator.serviceWorker.controller) {
-            if (researchRequest) activateWaiting([reg.waiting], reloadForUpdate);
-            else onUpdateReady();
+        if (reg.waiting && navigator.serviceWorker.controller && researchRequest) {
+            activateWaiting([reg.waiting], reloadForUpdate);
+            return;
         }
-
-        reg.addEventListener('updatefound', () => {
-            const installing = reg.installing;
-            if (!installing) return;
-            installing.addEventListener('statechange', () => {
-                // A new worker is installed AND an old one controls the page →
-                // this is an update (not the first install), so offer to refresh.
-                if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-                    onUpdateReady();
-                }
-            });
+        watchForUpdate(reg, () => !!navigator.serviceWorker.controller, onUpdateReady);
+        // A tab left open finds a newer build when it is looked at again (the
+        // browser itself checks only on a navigation), at most every 30 minutes.
+        let checkedAt = Date.now();
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible' || Date.now() - checkedAt < UPDATE_CHECK_MS) return;
+            checkedAt = Date.now();
+            reg.update().catch(() => { /* offline */ });
         });
     }).catch(() => { /* offline / no SW served — silently ignore */ });
+}
+
+/** How often a tab looked at again asks for a newer build. */
+const UPDATE_CHECK_MS = 30 * 60_000;
+
+/**
+ * Offer the refresh once a new worker waits while an old one controls the
+ * page (an update, not the first install): one waiting already, one still
+ * installing when the registration resolved (its `updatefound` may have
+ * fired before anyone listened — the prompt never came, finding 34), or one
+ * found later.
+ */
+export function watchForUpdate(
+    reg: Pick<ServiceWorkerRegistration, 'waiting' | 'installing' | 'addEventListener'>,
+    controlled: () => boolean,
+    onUpdateReady: () => void,
+): void {
+    let told = false;
+    const tell = (): void => {
+        if (told || !controlled()) return;
+        told = true;
+        onUpdateReady();
+    };
+    const watch = (worker: ServiceWorker | null): void => {
+        if (!worker) return;
+        if (worker.state === 'installed') { tell(); return; }
+        worker.addEventListener('statechange', () => { if (worker.state === 'installed') tell(); });
+    };
+    if (reg.waiting) tell();
+    else watch(reg.installing);
+    reg.addEventListener('updatefound', () => { told = false; watch(reg.installing); });
 }
 
 let registration: ServiceWorkerRegistration | null = null;

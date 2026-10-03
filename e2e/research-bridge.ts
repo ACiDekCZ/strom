@@ -54,6 +54,8 @@ export interface FakeBridge {
     syncDelayMs?: number;
     /** A write at once (the research's reply has `inbox: false` and no `pending`): the version it makes. */
     onWrite?: (posted: string) => { head: string; ged: string };
+    /** The sends asked to be written again (`POST /sync/<R…>/again`), by their marks. */
+    againAsks?: string[];
     /** Originals it has (by SHA-256) and the id it gives them. */
     mediaKnown: Map<string, string>;
     /** Every `PUT /media/<sha>`: the hash, the headers it carried and the body's size. */
@@ -136,6 +138,19 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ...(b.batches ? { batches: b.batches } : {}),
                 ...(b.accepts ? { sends: b.sends } : {}),
             });
+        }
+        // A send taken back, written again from what the research kept (1.12): like a write at once.
+        const againPath = /\/sync\/([^/]+)\/again$/.exec(url.pathname);
+        if (againPath && route.request().method() === 'POST') {
+            const old = b.sends.find(r => r.intake === decodeURIComponent(againPath[1]));
+            (b.againAsks ??= []).push(decodeURIComponent(againPath[1]));
+            if (!old || old.state !== 'undone') return json(404, { error: 'no send taken back is kept here', code: 'send.none' });
+            const intake = `R${Date.now()}-again`;
+            const v = b.onWrite?.(old.sent);
+            if (v) { b.head = v.head; b.treeGed = v.ged; }
+            (old as { again?: string }).again = intake;
+            b.sends.unshift({ intake, at: new Date().toISOString(), state: 'written', changes: 6, tree: old.tree, sent: old.sent, decidedAt: new Date().toISOString() });
+            return json(200, { ok: true, inbox: false, changes: 6, applied: 6, intake, ...(v ? { head: v.head } : {}) });
         }
         if (url.pathname.endsWith('/sync') && route.request().method() === 'POST') {
             if (b.syncDelayMs) await new Promise(r => setTimeout(r, b.syncDelayMs));
