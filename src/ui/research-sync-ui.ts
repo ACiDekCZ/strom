@@ -810,7 +810,11 @@ export const researchSyncMethods = uiModule({
         }
         // A copy that went over without the research's numbers: never sent as it is (it would read
         // there as a second family tree) — its numbers first, from the research's version.
-        if (link.awaitingIds) {
+        if (link.awaitingIds && holdsResearchIds(data)) {
+            // Its people carry the research's numbers already (the mark outlived them, e.g. set by a
+            // refusal of a send that named them): nothing to wait for.
+            TreeManager.patchResearchLink(treeId, { awaitingIds: undefined });
+        } else if (link.awaitingIds) {
             // Another tree (sent on a switch): it waits, and is told once it is open.
             if (!active) return;
             if (!await this.researchFetchIds(treeId)) {
@@ -858,7 +862,9 @@ export const researchSyncMethods = uiModule({
         }
         // Refused as a copy without the research's numbers (`tree.no-ids`, 1.12): they come from its
         // version, then the send goes again (once).
-        if (reply.code === 'tree.no-ids' && active) {
+        // A send that named the research's people refused so is the research's own matter (as
+        // Strom Research rc.9 did): told as any refusal, never waiting for numbers it has.
+        if (reply.code === 'tree.no-ids' && active && !holdsResearchIds(data)) {
             TreeManager.patchResearchLink(treeId, { awaitingIds: true });
             if (!opts.noIdsRetried && await this.researchFetchIds(treeId)) {
                 if (!opts.auto) this.showToast(s.noIdsLoaded, 4000);
@@ -1008,7 +1014,9 @@ export const researchSyncMethods = uiModule({
         const kept = await loadResearchCopy(treeId);
         const base = kept ?? current;
         const next = researchIdsByContent(current, base, research);
-        if (next.persons === 0 || !holdsResearchIds(next.data)) {
+        // Success is the tree naming the research's people — also when they all did already
+        // (nothing new to number), never "none matched".
+        if (!holdsResearchIds(next.data)) {
             const people = (d: StromData) => Object.values(d.persons ?? {}).filter(p => p && !p.isPlaceholder);
             console.warn('The research version names none of the people that went over', link.id, {
                 theirs: people(research).length, theirsNumbered: people(research).filter(p => !!p.refn).length,
@@ -1016,7 +1024,7 @@ export const researchSyncMethods = uiModule({
             });
             return { ok: false, why: 'unmatched', research, header };
         }
-        DataManager.replaceWithSourceData(next.data);
+        if (next.persons + next.sources > 0) DataManager.replaceWithSourceData(next.data);
         // The kept version gets them too: changes per person stay the user's own.
         this.researchKeepCopy(treeId, researchIdsByContent(base, base, research).data, link.fingerprint);
         TreeManager.patchResearchLink(treeId, { awaitingIds: undefined });

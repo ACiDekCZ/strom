@@ -218,6 +218,36 @@ test.describe('the research\'s numbers after a hand-over', () => {
         expect(b.posts).toHaveLength(0);
     });
 
+    test('finding 27 on Windows: a send naming the research\'s people refused as tree.no-ids (rc.9) waits for nothing; a mark left over goes; the next send goes', async ({ page }) => {
+        const b = await handOver(page, { syncReplies: [
+            { status: 400, body: { error: 'tato kopie stromu nenese osoby výzkumu', code: 'tree.no-ids' } },
+            { status: 200, body: { ok: true, changes: 1, inbox: true } },
+        ] });
+        await expect.poll(() => refns(page)).toEqual(['1:P0001', '2:P0002', '3:P0003']);
+        await renameOne(page);
+        // Not awaited: the refusal's dialog holds it.
+        await page.evaluate(() => { void window.Strom.UI.researchSendNow(); });
+        await expect.poll(() => b.posts.length).toBe(1);
+        expect(people(b.posts[0])).toEqual(SENT_WITH_IDS);
+        // Told as the research's refusal, not "load its version": the numbers are here.
+        const refused = page.locator('.dialog-confirm', { hasText: "The research didn't accept the changes" });
+        await expect(refused).toBeVisible();
+        await refused.getByRole('button', { name: 'Close' }).click();
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.awaitingIds)).toBeUndefined();
+        // A tree beta.19 left marked so: the mark goes at the next send, nothing fetched for it.
+        await page.evaluate(() => {
+            const tm = window.Strom.TreeManager;
+            tm.patchResearchLink(tm.getActiveTreeId()!, { awaitingIds: true });
+        });
+        const asks = b.gedAsks;
+        await send(page);
+        await expect.poll(() => b.posts.length).toBe(2);
+        expect(people(b.posts[1])).toEqual(SENT_WITH_IDS);
+        expect(b.gedAsks).toBe(asks);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.awaitingIds)).toBeUndefined();
+        await expect(page.locator('.toast', { hasText: 'Not sent.' })).toHaveCount(0);
+    });
+
     test('refused as a copy without the research\'s numbers (tree.no-ids): its version brings them, sent again once', async ({ page }) => {
         const b = await handOver(page, { syncReplies: [
             { status: 400, body: { error: 'tato kopie stromu nenese osoby výzkumu', code: 'tree.no-ids', text: 'This copy does not carry the research\'s people.' } },
