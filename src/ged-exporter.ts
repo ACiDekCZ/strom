@@ -23,7 +23,7 @@
  */
 
 import { researchHeaderLines, ResearchHeaderInfo } from './research-link.js';
-import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment } from './types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, FactStatus } from './types.js';
 import { normalizeSha256 } from './sha256.js';
 import { regionHeader, regionToStored } from './originals.js';
 import { strings } from './strings.js';
@@ -307,6 +307,14 @@ function pushDetails(lines: string[], d: { cause?: string; age?: string; address
 }
 
 /**
+ * The research's status of a fact (`2 _STROM_STATUS`), written back as it
+ * came so a tree round-trips through the app unchanged.
+ */
+function pushStatus(lines: string[], status: FactStatus | undefined): void {
+    if (status) lines.push(`2 _STROM_STATUS ${status}`);
+}
+
+/**
  * Emit a _STORY structure — the narrative written about a person or a couple.
  *
  * A non-standard tag, deliberately: a story is prose built on top of the
@@ -450,6 +458,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 pushPlace(lines, 2, person.birthPlace, data.places);
             }
             pushDetails(lines, { address: person.birthAddress });
+            pushStatus(lines, person.birthStatus);
             for (const srcId of person.birthSourceIds ?? []) pushCitation(2, srcId);
         }
 
@@ -465,6 +474,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 pushPlace(lines, 2, person.deathPlace, data.places);
             }
             pushDetails(lines, { cause: person.deathCause, age: person.deathAge, address: person.deathAddress });
+            pushStatus(lines, person.deathStatus);
             for (const srcId of person.deathSourceIds ?? []) pushCitation(2, srcId);
         } else if (person.isDeceased === true) {
             // Known to be dead, date unknown: the standard way to say so.
@@ -530,6 +540,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 pushPlace(lines, 2, event.place, data.places);
             }
             pushDetails(lines, event);
+            pushStatus(lines, event.status);
             if (event.note && !eventValueIsOnTag(event.type)) {
                 pushNote(lines, 2, event.note);
             }
@@ -683,6 +694,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 pushPlace(lines, 2, partnership.startPlace, data.places);
             }
             pushDetails(lines, { address: partnership.address });
+            pushStatus(lines, partnership.startStatus);
             // Each partner's age at the wedding, under HUSB / WIFE.
             for (const [role, pid] of [['HUSB', husbId], ['WIFE', wifeId]] as const) {
                 const age = partnership.ages?.[pid]?.trim();
@@ -717,6 +729,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 if (date) lines.push(`2 DATE ${date}`);
             }
             if (partnership.endPlace) pushPlace(lines, 2, partnership.endPlace, data.places);
+            pushStatus(lines, partnership.endStatus);
         }
 
         // The couple's own events, each under its own tag (1 MARB, 1 CENS,
@@ -733,6 +746,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
             if (event.place) pushPlace(lines, 2, event.place, data.places);
             pushDetails(lines, { cause: event.cause, address: event.address });
+            pushStatus(lines, event.status);
             for (const [role, pid] of [['HUSB', husbId], ['WIFE', wifeId]] as const) {
                 const age = event.ages?.[pid]?.trim();
                 if (!age) continue;
@@ -812,6 +826,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             const sha = normalizeSha256(exc.originalSha);
             if (sha) {
                 lines.push(`2 _STROM_SHA ${sha}`);
+                // A research crop lying as its original is stored: back as it came.
+                if (exc.orient && exc.orient >= 2 && exc.orient <= 8) lines.push(`2 _STROM_ORIENT ${exc.orient}`);
                 const page = exc.fromAttachmentId ? attachmentById.get(exc.fromAttachmentId) : undefined;
                 if (exc.region && page?.original && normalizeSha256(page.original.sha256) === sha) {
                     lines.push(`2 _STROM_REGION ${regionHeader(regionToStored(exc.region, page.original.orientation))}`);

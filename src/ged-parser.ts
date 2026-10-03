@@ -18,6 +18,8 @@
  */
 
 import {
+    FactStatus,
+    parseFactStatus,
     PersonId,
     PartnershipId,
     Person,
@@ -585,6 +587,8 @@ interface RawEvent {
     participants?: RawParticipant[];
     /** `1 EVEN value`: the value on the tag line, kept when a TYPE takes the label. */
     tagValue?: string;
+    /** 2 _STROM_STATUS: the research's status of the event. */
+    status?: FactStatus;
 }
 
 /** An event of the couple under FAM (MARB, CENS, EVEN…), as the file gave it. */
@@ -603,6 +607,8 @@ interface RawCoupleEvent {
     participants?: RawParticipant[];
     /** `1 EVEN value`: the value on the tag line, kept when a TYPE takes the label. */
     tagValue?: string;
+    /** 2 _STROM_STATUS: the research's status of the event. */
+    status?: FactStatus;
 }
 
 /**
@@ -684,6 +690,8 @@ interface RawSourceMedia {
     sha?: string;
     /** _STROM_REGION: where on that original (its stored pixels). */
     region?: string;
+    /** _STROM_ORIENT: that original's EXIF orientation (the crop lies as stored). */
+    orient?: number;
 }
 
 // ==================== TYPES ====================
@@ -713,6 +721,9 @@ interface GedcomIndividual {
     deathCause?: string;
     deathAge?: string;
     deathAddress?: string;
+    /** BIRT / DEAT > _STROM_STATUS: the research's status of the birth and the death. */
+    birthStatus?: FactStatus;
+    deathStatus?: FactStatus;
     notes: string;
     /** User reference number (1 REFN) — id in a paper archive / other program. */
     refn: string;
@@ -777,6 +788,9 @@ interface GedcomFamily {
     divorceDate: string;
     /** DIV > PLAC. */
     divorcePlace?: string;
+    /** MARR / DIV > _STROM_STATUS (the first that gives one). */
+    marriageStatus?: FactStatus;
+    divorceStatus?: FactStatus;
     /** A DIV tag was present, even without a date (divorce date unknown). */
     divorced: boolean;
     /**
@@ -1847,6 +1861,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     else if (tag === '_STROM_CLIP' && /^[A-Za-z0-9-]{1,32}$/.test(value.trim())) media.clip = value.trim();
                     else if (tag === '_STROM_SHA') media.sha = normalizeSha256(value) ?? undefined;
                     else if (tag === '_STROM_REGION') media.region = value;
+                    else if (tag === '_STROM_ORIENT' && /^[2-8]$/.test(value.trim())) media.orient = Number(value.trim());
                     // FORM, _STROM_KIND, _REGION: nothing to keep — the data URL
                     // says the format, and every image on a source is its excerpt.
                 }
@@ -2227,6 +2242,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                             else indi.deathDate = parseGedcomDate(value);
                         } else if (tag === 'PLAC') {
                             if (isBirth) indi.birthPlace = value; else indi.deathPlace = value;
+                        } else if (tag === '_STROM_STATUS') {
+                            if (isBirth) indi.birthStatus = parseFactStatus(value);
+                            else indi.deathStatus = parseFactStatus(value);
                         } else if (tag === 'SOUR' && value) {
                             // The birth/death entry itself: cited on that field.
                             (isBirth ? indi.birthSourceRefs : indi.deathSourceRefs).push(value);
@@ -2323,6 +2341,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 delete currentEvent.tagValue;
                             }
                         }
+                        else if (tag === '_STROM_STATUS') currentEvent.status = parseFactStatus(value);
                         else if (tag === 'SOUR' && value) {
                             (currentEvent.sourceRefs ??= []).push(value);
                             currentCitationId = value;
@@ -2365,6 +2384,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         // First wins: the union's startDate comes from the FIRST
                         // marriage, so its place must not drift to a later one.
                         if (tag === 'PLAC' && !fam.marriagePlace) fam.marriagePlace = value;
+                        if (tag === '_STROM_STATUS' && !fam.marriageStatus) fam.marriageStatus = parseFactStatus(value);
                         // The marriage record's own citation, note and witnesses
                         // sit here, not on the FAM — reading only DATE/PLAC lost
                         // every one of them.
@@ -2380,6 +2400,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         }
                     } else if (currentSubTag === 'DIV') {
                         if (tag === 'PLAC' && value && !fam.divorcePlace) fam.divorcePlace = value;
+                        if (tag === '_STROM_STATUS' && !fam.divorceStatus) fam.divorceStatus = parseFactStatus(value);
                         if (tag === 'DATE') {
                             fam.divorceDate = parseGedcomDate(value);
                             lastUnionEvent(fam, 'divorce', fam.divorceDate);
@@ -2389,6 +2410,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         currentFamEventSubTag = tag;
                         if (tag === 'DATE') ev.date = parseGedcomDate(value);
                         else if (tag === 'PLAC') { if (value && !ev.place) ev.place = value; }
+                        else if (tag === '_STROM_STATUS') ev.status = parseFactStatus(value);
                         else if (tag === 'TYPE' && ev.type === 'custom' && value) {
                             // 1 EVEN / 2 TYPE Křest dítěte manželů — the TYPE is
                             // the label; a value on the EVEN line is the content.
@@ -2611,7 +2633,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         // folder) or any other payload is skipped and counted.
         for (const media of raw.media) {
             const exc = media.file.startsWith('data:')
-                ? excerptFromDataUrl(media.file, { caption: media.title, pageUrl: media.pageUrl, clip: media.clip, originalSha: media.sha })
+                ? excerptFromDataUrl(media.file, { caption: media.title, pageUrl: media.pageUrl, clip: media.clip, originalSha: media.sha, orient: media.orient })
                 : null;
             // Its place on the original: re-linked to the page attachment once persons are in.
             const region = exc?.originalSha ? parseRegion(media.region) : null;
@@ -2695,6 +2717,8 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (indi.deathCause) person.deathCause = indi.deathCause;
         if (indi.deathAge) person.deathAge = indi.deathAge;
         if (indi.deathAddress) person.deathAddress = indi.deathAddress;
+        if (indi.birthStatus) person.birthStatus = indi.birthStatus;
+        if (indi.deathStatus) person.deathStatus = indi.deathStatus;
         // Facts with no field of their own join the note, labelled, ahead of
         // whatever free text the file wrote (see NOTED_INDI_TAGS).
         const factLines = indi.noteFacts.map(factToNoteLine);
@@ -2735,6 +2759,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 if (ev.age) out.age = ev.age;
                 if (ev.address) out.address = ev.address;
                 if (ev.note) out.note = ev.note;
+                if (ev.status) out.status = ev.status;
                 const evRefs = mapRefs(ev.sourceRefs);
                 if (evRefs.length > 0) out.sourceIds = evRefs;
 
@@ -2947,6 +2972,8 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (fam.marriagePlace) partnership.startPlace = fam.marriagePlace;
         if (fam.marriageAddress) partnership.address = fam.marriageAddress;
         if (fam.divorcePlace) partnership.endPlace = fam.divorcePlace;
+        if (fam.marriageStatus) partnership.startStatus = fam.marriageStatus;
+        if (fam.divorceStatus) partnership.endStatus = fam.divorceStatus;
         // Ages by person: HUSB is the first partner, WIFE the second, unless
         // the file's own ids say otherwise (a parent with a placeholder).
         const husbId = (fam.husb && personIdMap.get(fam.husb)) || partnership.person1Id;
@@ -2972,6 +2999,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 if (Object.keys(evAges).length > 0) out.ages = evAges;
                 if (ev.address) out.address = ev.address;
                 if (ev.note) out.note = ev.note;
+                if (ev.status) out.status = ev.status;
                 const refs = mapRefs(ev.sourceRefs);
                 if (refs.length > 0) out.sourceIds = refs;
                 const parts = (ev.participants ?? []).map(toWitness)

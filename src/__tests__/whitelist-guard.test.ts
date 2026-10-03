@@ -314,7 +314,9 @@ type OwnedElsewhere =
     | 'attachments'         // addAttachment / removeAttachment
     | 'photoOriginalName'   // set with the photo itself (import / upload)
     | 'refnType'            // GEDCOM import only; updatePerson drops it with a changed refn
-    | 'research';           // written by Strom Research only (GEDCOM import), never edited
+    | 'research'            // written by Strom Research only (GEDCOM import), never edited
+    | 'birthStatus'         // the research's status of the birth (GEDCOM import), never edited
+    | 'deathStatus';        // …and of the death
 
 /**
  * Compile-time proof that the two lists together cover Person exactly. Add a

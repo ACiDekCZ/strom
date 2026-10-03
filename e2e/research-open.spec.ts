@@ -205,10 +205,10 @@ test.describe('open a research', () => {
         const page = await context.newPage();
         await page.route('http://127.0.0.1:5999/**', (route) => route.abort('blockedbyclient'));
         await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
-        const dialog = page.locator('#confirmation-modal');
-        await expect(dialog).toContainText('Safari does not let web pages connect to programs on this computer');
-        await expect(dialog).toContainText('Chrome or Edge');
-        await expect(dialog.getByRole('button', { name: 'Import file…' })).toBeVisible();
+        const dialog = page.locator('#research-connect-failed');
+        await expect(dialog.locator('.connect-reason')).toHaveText("Safari won't connect to the research");
+        await expect(dialog).toContainText('Open this link in Chrome, Edge or Firefox');
+        await expect(dialog.getByRole('button', { name: 'Copy link' })).toBeVisible();
         await context.close();
     });
 

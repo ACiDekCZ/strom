@@ -302,7 +302,7 @@ test.describe('where the tree menu offers it', () => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await openResearch(page, false);
         await page.locator('.actions-menu-btn').click();
-        // "Research" replaces "AI ancestor research" for this tree.
+        // "Research" replaces "Ancestor research" for this tree.
         await expect(page.locator('#research-menu-row')).toBeHidden();
         await page.locator('#actions-research-row').click();
         const items = page.locator('#actions-research-submenu .tree-switcher-action');

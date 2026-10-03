@@ -9,7 +9,7 @@
 
 import { DataManager } from '../data.js';
 import {
-    LifeEvent, LifeEventType, EventParticipant, ParticipantRole, PersonId,
+    LifeEvent, LifeEventType, EventParticipant, ParticipantRole, PersonId, PartnershipId, FactStatus,
     generateParticipantId,
 } from '../types.js';
 import { PersonPicker } from '../person-picker.js';
@@ -20,6 +20,7 @@ import { SELECTABLE_EVENT_TYPES, sortLifeEvents, eventTakesParticipants, eventVa
 import { formatFlexDate, normalizeDateInput, formatDateForInput } from '../dates.js';
 import { chainLinkSvg, iconSvg } from '../icons.js';
 import { uiModule } from './module.js';
+import { factStatusHtml } from './fact-status.js';
 import { autoGrowAll } from './autogrow.js';
 import { DETAIL_KEYS, offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
 
@@ -89,7 +90,7 @@ export const personEventsMethods = uiModule({
         if (person.birthDate || person.birthPlace) {
             rows.push(this.eventRowHtml(strings.events.types.birth,
                 eventMeta(person.birthDate, person.birthPlace), null, '',
-                eventDetailLine({ address: person.birthAddress })));
+                eventDetailLine({ address: person.birthAddress }), person.birthStatus));
         }
 
         const events = sortLifeEvents(person.events ?? []);
@@ -97,13 +98,13 @@ export const personEventsMethods = uiModule({
             rows.push(this.eventRowHtml(eventTypeLabel(event),
                 eventMeta(event.date, event.place, eventOwnSubject(event)),
                 locked ? null : event.id,
-                this.participantsSummary(event), eventDetailLine(event)));
+                this.participantsSummary(event), eventDetailLine(event), event.status));
         }
 
         if (person.deathDate || person.deathPlace) {
             rows.push(this.eventRowHtml(strings.events.types.death,
                 eventMeta(person.deathDate, person.deathPlace), null, '',
-                eventDetailLine({ cause: person.deathCause, age: person.deathAge, address: person.deathAddress })));
+                eventDetailLine({ cause: person.deathCause, age: person.deathAge, address: person.deathAddress }), person.deathStatus));
         }
 
         if (rows.length === 0) {
@@ -143,7 +144,7 @@ export const personEventsMethods = uiModule({
         }).join('  ·  ');
     },
 
-    eventRowHtml(typeLabel: string, meta: string, eventId: string | null, participants = '', details = ''): string {
+    eventRowHtml(typeLabel: string, meta: string, eventId: string | null, participants = '', details = '', status?: FactStatus): string {
         const actions = eventId === null ? '' : `
             <div class="event-actions">
                 <button type="button" class="event-edit-btn" title="${esc(strings.events.edit)}" aria-label="${esc(strings.events.edit)}"
@@ -159,7 +160,7 @@ export const personEventsMethods = uiModule({
         return `
             <div class="event-row${eventId === null ? ' readonly' : ''}">
                 <div class="event-main">
-                    <div><span class="event-type">${esc(typeLabel)}</span>${metaHtml}</div>
+                    <div><span class="event-type">${esc(typeLabel)}</span>${metaHtml}${factStatusHtml(status)}</div>
                     ${detailsHtml}
                     ${peopleHtml}
                 </div>
@@ -222,7 +223,9 @@ export const personEventsMethods = uiModule({
      * them would mean they write nothing down at all.
      */
     renderEventParticipants(): void {
-        const list = document.getElementById('event-participants-list');
+        // The same rows edit a wedding's witnesses, in their own dialog.
+        const list = document.getElementById(this.weddingWitnessesPartnershipId
+            ? 'wedding-witnesses-list' : 'event-participants-list');
         if (!list) return;
         const esc = (t: string): string => this.escapeHtml(t);
 
@@ -286,7 +289,7 @@ export const personEventsMethods = uiModule({
         // An event that names someone shows the field whatever its type is —
         // re-check here, because the rows are what decides it.
         const typeSelect = document.getElementById('input-event-type') as HTMLSelectElement | null;
-        if (!this.coupleEventPartnershipId) {
+        if (!this.coupleEventPartnershipId && !this.weddingWitnessesPartnershipId) {
             this.updateEventParticipantsVisibility((typeSelect?.value || 'custom') as LifeEventType);
         }
     },
@@ -294,10 +297,11 @@ export const personEventsMethods = uiModule({
     addEventParticipantRow(): void {
         // Baptism is the common case, so godparent is the useful default; at
         // a couple's banns or contract it is a witness.
-        this.eventParticipants.push({ id: generateParticipantId(),
-            role: this.coupleEventPartnershipId ? 'witness' : 'godparent', name: '' });
+        const couple = this.coupleEventPartnershipId || this.weddingWitnessesPartnershipId;
+        this.eventParticipants.push({ id: generateParticipantId(), role: couple ? 'witness' : 'godparent', name: '' });
         this.renderEventParticipants();
-        (document.querySelector('.participant-row:last-child .participant-name') as HTMLInputElement | null)?.focus();
+        const list = this.weddingWitnessesPartnershipId ? '#wedding-witnesses-list' : '#event-participants-list';
+        (document.querySelector(`${list} .participant-row:last-child .participant-name`) as HTMLInputElement | null)?.focus();
     },
 
     /** Link a row to someone in the tree, or drop the link and keep the name. */
@@ -312,7 +316,7 @@ export const personEventsMethods = uiModule({
             return;
         }
         const personId = await this.pickPerson(strings.events.participantLink,
-            this.coupleEventPartnershipId ? undefined : this.currentId ?? undefined);
+            this.coupleEventPartnershipId || this.weddingWitnessesPartnershipId ? undefined : this.currentId ?? undefined);
         if (!personId) return;
         row.personId = personId;
         // Keep a name snapshot beside the link: the display prefers the live
@@ -338,6 +342,60 @@ export const personEventsMethods = uiModule({
                 ...(p.note?.trim() ? { note: p.note.trim() } : {}),
             }))
             .filter(p => p.personId || p.name);
+    },
+
+    // ==================== WEDDING WITNESSES ====================
+
+    /**
+     * The wedding's witnesses, edited like an event's godparents: a role, a
+     * name as the register writes it or a link to someone in the tree, a
+     * note. The rows are held until Save, so Cancel really cancels; Save
+     * writes them to the partnership inside the relationships panel's own
+     * session (its Cancel takes them back too).
+     */
+    showWeddingWitnesses(partnershipId: PartnershipId): void {
+        const partnership = DataManager.getPartnership(partnershipId);
+        const modal = document.getElementById('wedding-witnesses-modal');
+        if (!partnership || !modal || DataManager.isTreeLocked()) return;
+        this.weddingWitnessesPartnershipId = partnershipId;
+        this.eventParticipants = (partnership.participants ?? []).map(p => ({ ...p }));
+        // A new list starts with one empty witness row, ready to type.
+        if (this.eventParticipants.length === 0) {
+            this.eventParticipants.push({ id: generateParticipantId(), role: 'witness', name: '' });
+        }
+        this.renderEventParticipants();
+        this.weddingWitnessesSnapshot = JSON.stringify(this.collectEventParticipants());
+        this.pushDialog('wedding-witnesses-modal');
+        modal.classList.add('active');
+        (modal.querySelector('.participant-row:last-child .participant-name:not([readonly])') as HTMLInputElement | null)?.focus();
+    },
+
+    saveWeddingWitnesses(): void {
+        const id = this.weddingWitnessesPartnershipId;
+        if (!id) return;
+        DataManager.setPartnershipParticipants(id, this.collectEventParticipants());
+        this.forceCloseWeddingWitnesses();
+        this.refreshRelationshipsPanel();
+    },
+
+    /** Cancel / × / Escape: ask before throwing away edited rows. */
+    closeWeddingWitnesses(): void {
+        if (this.weddingWitnessesPartnershipId
+            && JSON.stringify(this.collectEventParticipants()) !== this.weddingWitnessesSnapshot) {
+            this.showUnsavedEditorDialog(strings.events.unsavedMessage,
+                () => this.saveWeddingWitnesses(),
+                () => this.forceCloseWeddingWitnesses());
+            return;
+        }
+        this.forceCloseWeddingWitnesses();
+    },
+
+    forceCloseWeddingWitnesses(): void {
+        document.getElementById('wedding-witnesses-modal')?.classList.remove('active');
+        if (this.dialogStack[this.dialogStack.length - 1] === 'wedding-witnesses-modal') this.dialogStack.pop();
+        this.weddingWitnessesPartnershipId = null;
+        this.weddingWitnessesSnapshot = null;
+        this.eventParticipants = [];
     },
 
     /** Open the event editor in "add" mode. */

@@ -68,10 +68,10 @@ test.describe('relationships dialog is staged as a whole (S9)', () => {
         // Jan has no parents, so the only relation-type select is Petr's row.
         await panel.locator('.parent-rel-type-select').first().selectOption('adoptive');
         await panel.locator('.partnership-witness-btn').first().click();
-        const prompt = page.locator('#confirmation-modal');
-        await expect(prompt.locator('#prompt-input')).toBeVisible();
-        await prompt.locator('#prompt-input').fill('Tomas Witness');
-        await prompt.locator('#confirm-ok-btn').click();
+        const editor = page.locator('#wedding-witnesses-modal');
+        await editor.locator('.participant-name').first().fill('Tomas Witness');
+        await editor.getByRole('button', { name: 'Save' }).click();
+        await expect(editor).toBeHidden();
         await expect(panel.locator('.partnership-witnesses')).toContainText('Tomas Witness');
         // The refresh after the witness keeps the still-pending status.
         await expect(panel.locator('.rel-status-select').first()).toHaveValue('divorced');

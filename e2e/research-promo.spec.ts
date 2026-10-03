@@ -6,7 +6,7 @@ import { openApp, createFirstPerson, card, waitForPersist, exportTreeJson } from
 
 /**
  * Strom Research in the app (3.0): the welcome-screen offer, the permanent
- * "AI ancestor research" menu item with its "New" label + trigger dots, the
+ * "Ancestor research" menu item with its "New" label + trigger dots, the
  * in-app explanation dialog and the one-time "What's new in 3.0" card —
  * shown once, dismissed for good, never in exports / view mode / locked data /
  * research trees, and remembered in the browser settings only.
@@ -142,14 +142,14 @@ async function shot(page: Page, name: string, testInfo: TestInfo, target?: strin
 
 test.describe('welcome screen offer', () => {
     for (const size of [DESKTOP, { width: 400, height: 800 }, { width: 700, height: 900 }]) {
-        test(`is shown at ${size.width}px and opens the site (EN, no language parameter)`, { tag: '@smoke' }, async ({ page, context }) => {
-            await stubSite(context);
+        test(`is shown at ${size.width}px and opens the install dialog`, { tag: '@smoke' }, async ({ page }) => {
             await page.setViewportSize(size);
             await openApp(page, { researchPromo: true });
             const offer = page.locator('#empty-state .research-offer');
             await expect(offer).toBeVisible();
             await expect(offer).toContainText('Not sure where to start?');
-            await expect(offer).toContainText('Let an AI agent find your ancestors');
+            await expect(offer).toContainText('Ancestor research');
+            await expect(offer).toContainText('An archive on your disk, with an AI agent if you want');
             // Content stays left-aligned even where the column is centred.
             expect(await offer.evaluate(el => getComputedStyle(el).textAlign)).toBe('left');
             // Sits between "I have data elsewhere" and the demo link.
@@ -158,7 +158,8 @@ test.describe('welcome screen offer', () => {
             expect(order).toEqual(['primary', 'ghost', 'research-offer', 'link']);
             // A new user meets the news here: the one-time card is never due.
             await expect.poll(async () => (await readSettings(page)).whatsNew30Shown).toBe(true);
-            expect(await popupUrlAfter(page, () => offer.click())).toBe(SITE);
+            await offer.click();
+            await expect(infoDialog(page).locator('.research-install-dialog h2')).toHaveText('Strom Research');
             await expect(whatsNew(page)).toHaveCount(0);
         });
     }
@@ -176,23 +177,25 @@ test.describe('welcome screen offer', () => {
 
     test.describe('in Czech', () => {
         test.use({ locale: 'cs-CZ' });
-        test('opens the Czech page', async ({ page, context }) => {
+        test('says Výzkum předků; the dialog\'s web link opens the Czech page', async ({ page, context }) => {
             await stubSite(context);
             await openApp(page, { researchPromo: true });
             const offer = page.locator('#empty-state .research-offer');
-            await expect(offer).toContainText('Nechte předky dohledat AI agenta');
-            expect(await popupUrlAfter(page, () => offer.click())).toBe(`${SITE}?lang=cs`);
+            await expect(offer).toContainText('Výzkum předků');
+            await offer.click();
+            expect(await popupUrlAfter(page, () => infoDialog(page).locator('.install-web').click())).toBe(`${SITE}?lang=cs`);
         });
     });
 
     test.describe('in German', () => {
         test.use({ locale: 'de-DE' });
-        test('opens the German page', async ({ page, context }) => {
+        test('says Ahnenforschung; the dialog\'s web link opens the German page', async ({ page, context }) => {
             await stubSite(context);
             await openApp(page, { researchPromo: true });
             const offer = page.locator('#empty-state .research-offer');
-            await expect(offer).toContainText('Lassen Sie einen KI-Agenten Ihre Vorfahren finden');
-            expect(await popupUrlAfter(page, () => offer.click())).toBe(`${SITE}?lang=de`);
+            await expect(offer).toContainText('Ahnenforschung');
+            await offer.click();
+            expect(await popupUrlAfter(page, () => infoDialog(page).locator('.install-web').click())).toBe(`${SITE}?lang=de`);
         });
     });
 
@@ -245,7 +248,7 @@ test.describe('existing tree on desktop', () => {
         await openActionsMenu(page);
         await expect(menuRow(page)).toBeVisible();
         await expect(menuRow(page).locator('.research-new-badge')).toBeHidden();
-        await expect(menuRow(page)).toHaveAttribute('aria-label', 'AI ancestor research');
+        await expect(menuRow(page)).toHaveAttribute('aria-label', 'Ancestor research');
 
         // Once only: not after a reload.
         await page.reload();
@@ -290,7 +293,7 @@ test.describe('existing tree on desktop', () => {
         await openActionsMenu(page);
         await expect(whatsNew(page)).toHaveCount(0);
         await expect(menuRow(page)).toBeVisible();
-        await expect(menuRow(page)).toHaveAttribute('aria-label', 'AI ancestor research, new');
+        await expect(menuRow(page)).toHaveAttribute('aria-label', 'Ancestor research, new');
         const badge = menuRow(page).locator('.research-new-badge');
         await expect(badge).toBeVisible();
         await expect(badge).toHaveText('New');
@@ -308,16 +311,16 @@ test.describe('existing tree on desktop', () => {
         await menuRow(page).click();
         const dialog = infoDialog(page);
         await expect(dialog).toBeVisible();
-        await expect(dialog.locator('.modal.modal--sm h2')).toHaveText('AI ancestor research');
-        await expect(dialog.locator('.research-info-point')).toHaveCount(3);
-        await expect(dialog.locator('.research-info-need')).toContainText('What you need');
-        await expect(dialog.locator('.research-info-need')).toContainText('we recommend Claude');
+        await expect(dialog.locator('.research-install-dialog h2')).toHaveText('Strom Research');
+        await expect(dialog.locator('.install-card')).toHaveCount(2);
+        await expect(dialog.locator('.install-card-agent')).toContainText('We recommend Claude');
         await expect(newDot(page)).toBeHidden();
         await expect(actionsBtn).toHaveAttribute('aria-label', 'Actions');
         expect((await readSettings(page)).researchNewDismissed).toBe(true);
 
-        // The primary button opens the site and closes the dialog.
-        expect(await popupUrlAfter(page, () => dialog.getByRole('button', { name: /Open the Strom Research page/ }).click())).toBe(SITE);
+        // The web link opens the site; Close closes the dialog.
+        expect(await popupUrlAfter(page, () => dialog.locator('.install-web').click())).toBe(SITE);
+        await dialog.locator('[data-dismiss]').click();
         await expect(dialog).toHaveCount(0);
 
         await openActionsMenu(page);
@@ -325,7 +328,7 @@ test.describe('existing tree on desktop', () => {
         await expect(menuRow(page).locator('.research-new-badge')).toBeHidden();
         // Close / click outside close the dialog too.
         await menuRow(page).click();
-        await infoDialog(page).locator('.research-info-buttons button.secondary').click();
+        await infoDialog(page).locator('.buttons button.secondary').click();
         await expect(infoDialog(page)).toHaveCount(0);
         await page.evaluate(() => window.Strom.UI.showResearchInfoDialog());
         await infoDialog(page).click({ position: { x: 5, y: 5 } });
@@ -427,12 +430,15 @@ test.describe('existing tree on desktop', () => {
         await whatsNew(page).getByRole('button', { name: 'Not now' }).click();
         await page.evaluate(() => window.Strom.UI.showResearchInfoDialog());
         await expect(infoDialog(page)).toBeVisible();
-        const needBg = await infoDialog(page).locator('.research-info-need').evaluate(el => getComputedStyle(el).backgroundColor);
-        // Warm like the palette (copper mixed into the surface), not the cold --info-soft.
-        const [r, , b] = (needBg.match(/[\d.]+/g) ?? []).map(Number);
-        expect(needBg).not.toBe('rgb(42, 49, 57)');
-        expect(r).toBeGreaterThan(b);
+        const cardBg = await infoDialog(page).locator('.install-card').first().evaluate(el => getComputedStyle(el).backgroundColor);
+        expect(cardBg).toBe('rgb(44, 42, 36)'); // --surface (dark)
         await shot(page, 'research-dialog-desktop-dark.png', testInfo);
+        // The line to paste: a dark field in the dark theme too, the token in green.
+        await infoDialog(page).locator('[data-act="install"]').click();
+        const line = infoDialog(page).locator('.install-line').first();
+        expect(await line.evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(23, 21, 17)');
+        expect(await line.locator('.install-token').evaluate(el => getComputedStyle(el).color)).toBe('rgb(169, 209, 182)');
+        await shot(page, 'research-install-desktop-dark.png', testInfo);
     });
 });
 
@@ -462,7 +468,7 @@ test.describe('existing tree on a phone', () => {
         await expect(page.locator('#bb-view-more')).not.toHaveAttribute('aria-label', /new item/);
 
         await page.locator('#bb-view-more').click();
-        const row = page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'AI ancestor research' });
+        const row = page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Ancestor research' });
         await expect(row).toBeVisible();
         await expect(row.locator('.research-new-badge')).toHaveCount(0);
     });
@@ -482,23 +488,21 @@ test.describe('existing tree on a phone', () => {
         const items = page.locator('.bottom-sheet-menu .bottom-sheet-items > *');
         const classes = await items.evaluateAll(els => els.map(e => e.className + '|' + (e.textContent || '').trim()));
         const treeIdx = classes.findIndex(c => c.includes('bottom-sheet-tree-row'));
-        expect(classes[treeIdx - 1]).toContain('AI ancestor research');
+        expect(classes[treeIdx - 1]).toContain('Ancestor research');
         expect(classes[treeIdx - 2]).toContain('bottom-sheet-divider');
-        const row = page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'AI ancestor research' });
-        await expect(row).toHaveAttribute('aria-label', 'AI ancestor research, new');
+        const row = page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Ancestor research' });
+        await expect(row).toHaveAttribute('aria-label', 'Ancestor research, new');
         await expect(row.locator('.research-new-badge')).toHaveText('New');
         await row.click();
         const dialog = infoDialog(page);
         await expect(dialog).toBeVisible();
         await expect(moreDot(page)).toBeHidden();
-        // ≤ 499px: stacked full-width buttons, the primary on top, ≥ 48px.
-        const geo = await dialog.locator('.research-info-buttons button').evaluateAll(els =>
-            els.map(e => { const r = e.getBoundingClientRect(); return { cls: e.className, top: r.top, h: r.height, w: r.width }; }));
-        const primary = geo.find(g => g.cls.includes('primary'))!;
-        const secondary = geo.find(g => g.cls.includes('secondary'))!;
-        expect(primary.top).toBeLessThan(secondary.top);
-        expect(primary.h).toBeGreaterThanOrEqual(48);
-        expect(Math.abs(primary.w - secondary.w)).toBeLessThanOrEqual(1);
+        // On a phone: it installs on a computer — no line, a link to send to one.
+        await expect(dialog.locator('.research-install-touch')).toBeVisible();
+        await expect(dialog.locator('.install-line')).toHaveCount(0);
+        await expect(dialog.locator('.install-send-link')).toHaveText('Send myself the link');
+        expect((await dialog.locator('.install-send-link').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        expect(await page.evaluate(() => localStorage.getItem('strom-install'))).toBeNull();
         await page.keyboard.press('Escape');
         await expect(dialog).toHaveCount(0);
     });
@@ -669,7 +673,7 @@ test.describe('layout-overflow at 360 × 780 (DE)', () => {
         await expect(page.locator('.bottom-sheet-menu')).toBeVisible();
         await expect(page.locator('.bottom-sheet-menu .research-new-badge')).toHaveText('Neu');
         await expectNoOverflow(page, '.bottom-sheet-menu');
-        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'KI-Ahnenforschung' }).click();
+        await page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Ahnenforschung' }).click();
         await expect(infoDialog(page)).toBeVisible();
         await expectNoOverflow(page, '#research-info-modal .modal');
     });

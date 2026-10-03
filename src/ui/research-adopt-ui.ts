@@ -12,12 +12,13 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
-import { TreeId, TreeMetadata } from '../types.js';
+import { TreeId, TreeMetadata, StromData, STROM_DATA_VERSION } from '../types.js';
+import { readInstallRecord, installPhase, INSTALL_TTL_MS } from '../research-install.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import {
-    parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint,
+    parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint, researchSchemeUrl,
     AdoptOffer,
 } from '../research-link.js';
 import { uiModule } from './module.js';
@@ -25,6 +26,7 @@ import { onComputer, fetchWithTimeout, postSync, postCancel, readTree, CONNECT_T
 import { normalizeModal } from './modal-skeleton.js';
 
 const ADOPT_ID = 'research-adopt-modal';
+const READY_ID = 'research-ready-modal';
 /** How long the research has to come back for the tree. */
 const TOKEN_MAX_AGE_MS = 60 * 60 * 1000;
 /** Strom Research takes photos and attachments over with a tree (not yet: it skips data URLs). */
@@ -95,10 +97,22 @@ export const researchAdoptMethods = uiModule({
         } catch (err) {
             console.warn('The research bridge did not answer', err);
             // Not reached at all (the local network blocked, or the research gone): say so.
-            if (await this.showResearchConnectFailed(err)) void this.adoptFromResearch(raw);
+            if (await this.showResearchConnectFailed(err, { param: 'adopt', value: raw })) void this.adoptFromResearch(raw);
             return;
         }
-        const tree = offer ? TreeManager.findTreeByAdoptToken(offer.token, TOKEN_MAX_AGE_MS) : null;
+        // Installed from the app: its token holds 24 h, and from the welcome
+        // screen (no tree yet) the research gets a new empty tree.
+        const install = readInstallRecord();
+        const fromInstall = !!offer && install?.token === offer.token && installPhase(install) !== 'expired';
+        let tree = offer ? TreeManager.findTreeByAdoptToken(offer.token, fromInstall ? INSTALL_TTL_MS : TOKEN_MAX_AGE_MS) : null;
+        let fresh: StromData | null = null;
+        if (!tree && fromInstall && offer && install) {
+            const id = TreeManager.createTree(offer.name || strings.install.newTreeName);
+            TreeManager.setResearchAdoptToken(id, { token: offer.token, at: install.createdAt });
+            tree = TreeManager.getTreeMetadata(id);
+            fresh = { version: STROM_DATA_VERSION, persons: {}, partnerships: {} };
+            this.updateTreeSwitcher();
+        }
         if (!offer || !tree) {
             postCancel(cancelUrl, 'no-tree');
             this.showToast(r.adoptUnknown, 6000);
@@ -108,7 +122,7 @@ export const researchAdoptMethods = uiModule({
             postCancel(cancelUrl, 'cancelled');
             return;
         }
-        const data = TreeManager.isTreeUnreadable(tree.id) ? null : await readTree(tree.id);
+        const data = fresh ?? (TreeManager.isTreeUnreadable(tree.id) ? null : await readTree(tree.id));
         if (!data) {
             postCancel(cancelUrl, 'cancelled');
             await this.showAlert(strings.storageSafety.treeLocked, 'warning');
@@ -116,7 +130,7 @@ export const researchAdoptMethods = uiModule({
         }
         // The tree going over is the one on screen behind the dialog.
         if (DataManager.getCurrentTreeId() !== tree.id) await this.switchToTree(tree.id);
-        const choice = await this.askResearchAdopt(tree, offer, data);
+        const choice = await this.askResearchAdopt(tree, offer, data, { install: fromInstall });
         if (choice === null) {
             postCancel(cancelUrl, 'cancelled');
             return;
@@ -145,7 +159,76 @@ export const researchAdoptMethods = uiModule({
         this.updateTreeManagerList();
         this.refreshActionMenuBadges();
         TreeRenderer.render();
+        if (fromInstall) {
+            this.finishResearchInstall(offer.token);
+            const hasPeople = Object.values(data.persons).some(p => !p.isPlaceholder);
+            void this.showResearchReady(bridge.base, reply.tree, offer.name || r.defaultName, hasPeople);
+            return;
+        }
         this.showToast(r.adopted(tree.name), 6000);
+    },
+
+    /**
+     * After an installation from the app, once: what the research now does
+     * for the tree (where it is, the agent, the originals) — or, for an empty
+     * tree, how to start it. Later only the bar shows the state.
+     */
+    async showResearchReady(base: string, researchId: string, researchName: string, hasPeople: boolean): Promise<void> {
+        const s = strings.install;
+        let where = '';
+        let agent = '';
+        try {
+            const res = await fetchWithTimeout(`${base}/status`, 3000);
+            if (res.ok) {
+                const st = await res.json() as { path?: unknown; agent?: unknown };
+                if (typeof st.path === 'string') where = st.path.slice(0, 300);
+                if (typeof st.agent === 'string') agent = st.agent.slice(0, 60);
+            }
+        } catch { /* the rows the status gives are left out */ }
+        document.getElementById(READY_ID)?.remove();
+        const open = this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: researchId }) : null;
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay active';
+        overlay.id = READY_ID;
+        const rows = hasPeople ? `
+                <dl class="install-ready-rows">
+                    ${where ? `<dt>${esc(s.where)}</dt><dd class="install-ready-path">${esc(where)}</dd>` : ''}
+                    <dt>${esc(s.agentRowLabel)}</dt><dd>${esc(agent ? s.agentRowOn(agent) : s.agentRow)}</dd>
+                    <dt>${esc(s.originalsLabel)}</dt><dd>${esc(s.originalsRow)}</dd>
+                </dl>` : '';
+        overlay.innerHTML = `
+            <div class="modal modal--sm research-ready-modal" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="research-ready-title">
+                <div class="modal-header">
+                    <h2 id="research-ready-title"><span class="install-ready-check" aria-hidden="true">✓</span> ${esc(hasPeople ? s.readyTitle : s.liveTitle(researchName))}</h2>
+                </div>
+                <div class="modal-content">
+                    <p>${esc(hasPeople ? s.readyText : s.liveText)}</p>
+                    ${rows}
+                </div>
+                <div class="buttons">
+                    ${hasPeople
+                        ? `${open ? `<button type="button" class="link-button" data-act="open">${esc(s.openResearch)}</button>` : ''}
+                           <button type="button" class="primary" data-act="done" data-dismiss>${esc(s.done)}</button>`
+                        : `<button type="button" class="secondary" data-act="gedcom">${esc(s.openGedcom)}</button>
+                           <button type="button" class="primary" data-act="first" data-dismiss>${esc(s.addFirst)}</button>`}
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        this.pushDialog(READY_ID);
+        const close = (): void => this.closeResearchReady();
+        overlay.querySelectorAll<HTMLElement>('[data-act]').forEach(el => el.addEventListener('click', () => {
+            const act = el.dataset.act;
+            close();
+            if (act === 'open' && open) this.handOverResearchLink(open);
+            else if (act === 'gedcom') this.startGedcomImportPlain();
+            else if (act === 'first') this.showAddPersonModal();
+        }));
+        overlay.querySelector<HTMLElement>('.primary')?.focus();
+    },
+
+    closeResearchReady(): void {
+        document.getElementById(READY_ID)?.remove();
+        this.dialogStack = this.dialogStack.filter(d => d !== READY_ID);
     },
 
     /**
@@ -153,7 +236,7 @@ export const researchAdoptMethods = uiModule({
      * sources; photos and attachments by choice). Resolves null for "Don't
      * hand over". A decision: no ×, Escape = don't.
      */
-    askResearchAdopt(tree: TreeMetadata, offer: AdoptOffer, data: ReturnType<typeof DataManager.getData>): Promise<{ images: boolean } | null> {
+    askResearchAdopt(tree: TreeMetadata, offer: AdoptOffer, data: ReturnType<typeof DataManager.getData>, opts: { install?: boolean } = {}): Promise<{ images: boolean } | null> {
         document.getElementById(ADOPT_ID)?.remove();
         const r = strings.research;
         const persons = Object.values(data.persons).filter(p => !p.isPlaceholder).length;
@@ -173,8 +256,8 @@ export const researchAdoptMethods = uiModule({
             <div class="modal modal--sm research-adopt-modal" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="research-adopt-title">
                 <div class="modal-header">
                     <div class="audit-log-heading">
-                        <h2 id="research-adopt-title">${esc(r.adoptTitle)}</h2>
-                        <div class="audit-log-subtitle">${esc(`${tree.name} → ${r.adoptTarget(researchName)}`)}</div>
+                        <h2 id="research-adopt-title">${esc(opts.install ? strings.install.adoptTitle : r.adoptTitle)}</h2>
+                        <div class="audit-log-subtitle">${esc(opts.install ? strings.install.adoptSub(tree.name, persons, researchName) : `${tree.name} → ${r.adoptTarget(researchName)}`)}</div>
                     </div>
                 </div>
                 <p class="research-adopt-summary">${esc(summary)}</p>

@@ -407,7 +407,8 @@ test.describe('Start research with this tree (G3)', () => {
         await page.evaluate(() => window.Strom.UI.showResearchInfoDialog());
         await expect(page.locator('#research-info-modal')).toBeVisible();
         await expect(page.locator('#research-adopt-start')).toHaveCount(0);
-        await expect(page.locator('.research-info-need')).toBeVisible();
+        // Not announced: the way to install it.
+        await expect(page.locator('#research-info-modal .research-install-dialog')).toBeVisible();
         await page.keyboard.press('Escape');
 
         // Research here, `new` not announced: the menu item (a way to the website) is gone.

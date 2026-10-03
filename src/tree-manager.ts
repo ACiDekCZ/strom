@@ -27,7 +27,7 @@ import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
 import { requestPersistentStorage } from './persistence.js';
 import { asciiSlug } from './filenames.js';
-import { announceTreeSaved, clearTreeStale } from './tab-sync.js';
+import { announceTreeSaved, clearTreeStale, isTreeStale } from './tab-sync.js';
 import { cloneTreeDataAsJson, estimateJsonBytes } from './clone.js';
 import {
     withPoolLock, collectPoolable, storeImages, stringifyPooled, replacePooled,
@@ -661,6 +661,15 @@ class TreeManagerClass {
         if (this.unreadableTrees.has(id)) {
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('strom:save-blocked', { detail: { treeId: id } }));
+            }
+            return;
+        }
+        // Another window saved this tree since this window read it: this
+        // copy is older, and writing it would take back what that window
+        // stored. Nothing is written until the tree is read again.
+        if (isTreeStale(id)) {
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('strom:save-stale', { detail: { treeId: id } }));
             }
             return;
         }

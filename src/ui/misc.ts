@@ -787,6 +787,14 @@ export const miscMethods = uiModule({
                         this.closePersonResearchDialog();
                         return;
                     }
+                    if (currentDialog === 'research-connect-failed') {
+                        this.cancelResearchConnectFailed();
+                        return;
+                    }
+                    if (currentDialog === 'research-ready-modal') {
+                        this.closeResearchReady();
+                        return;
+                    }
                     if (currentDialog === 'research-adopt-modal') {
                         this.cancelResearchAdoptDialog();
                         return;
@@ -830,6 +838,18 @@ export const miscMethods = uiModule({
                     // editor underneath and leaving the await unsettled.
                     if (currentDialog === 'participant-picker-modal') {
                         this.cancelParticipantPicker();
+                        return;
+                    }
+
+                    // Wedding witnesses: close only itself (asking about edited
+                    // rows), leaving the relationships panel underneath.
+                    if (currentDialog === 'wedding-witnesses-modal') {
+                        const confirmModal = document.getElementById('confirmation-modal');
+                        if (confirmModal?.classList.contains('active')) {
+                            confirmModal.classList.remove('active');
+                            return;
+                        }
+                        this.closeWeddingWitnesses();
                         return;
                     }
 

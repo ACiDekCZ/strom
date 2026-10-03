@@ -137,33 +137,35 @@ test.describe('more than one window on one research', () => {
         await second.page.close();
     });
 
-    test('opened again, a tree takes the head stored with its data, not a newer one another window wrote to the index', async ({ page }) => {
+    test('a window with an older copy does not save over the newer data; a third window opens them with their head', async ({ page }) => {
         await autoTree(page);
         const second = await secondWindow(page);
         // The first window writes and loads the research's new version (head ab10…).
         await editJan(page);
         await page.clock.fastForward(QUIET + 1000);
         await expect.poll(() => head(page)).toBe('ab10cd10ef10');
-        // The second window still holds the older data and head, and saves them.
+        await expect(second.page.locator('#other-tab-notice')).toBeVisible();
+        // The second window still holds the older data and head; its edit is not written over the newer tree.
         expect(await head(second.page)).toBe(HEAD);
         await second.page.evaluate(() => {
             const dm = window.Strom.DataManager;
             const josef = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Josef') as any;
             dm.updatePerson(josef.id, { birthPlace: 'Kolín' });
         });
-        await expect.poll(async () => (await storedBase(second.page))?.head).toBe(HEAD);
-        // The first window writes the index again (with its newer head).
+        await expect(second.page.locator('#other-tab-notice')).toContainText('Not saved');
+        await expect.poll(async () => (await storedBase(page))?.head).toBe('ab10cd10ef10');
+        // The first window writes the index again (with its head).
         await page.evaluate(() => window.Strom.TreeManager.setActiveTree(window.Strom.TreeManager.getActiveTreeId()!));
 
-        // A third window opens the tree: the second window's data, with the head they build on.
+        // A third window opens the tree: the first window's data, with the head they build on.
         const third = await page.context().newPage();
         await fakeBridge(third, { accepts });
         await openApp(third);
         await expect(card(third, 'Josef')).toBeVisible();
         const josefPlace = await third.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons)
             .find((p: any) => p.firstName === 'Josef') as any).birthPlace);
-        expect(josefPlace).toBe('Kolín');
-        await expect.poll(() => head(third)).toBe(HEAD);
+        expect(josefPlace).toBeUndefined();
+        await expect.poll(() => head(third)).toBe('ab10cd10ef10');
         await second.page.close();
         await third.close();
     });

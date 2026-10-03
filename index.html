@@ -71,6 +71,10 @@
             --warning: #d0a23c;       /* pending merge */
             --danger-soft: #f5e6e2;   /* error/destructive tint backgrounds */
             --warning-soft: #f6ecd3;  /* warning tint backgrounds */
+            --code-bg: #2b2822;       /* a line to paste into a terminal (dark in both themes) */
+            --code-text: #f1ece1;
+            --code-token: #a9d1b6;    /* the tree's token in that line */
+            --code-border: #2b2822;
             --warning-text: #7f5500;  /* warning text on paper / warning-soft (≥4.5:1) */
             --signal-warn: #a2660f;   /* card action badge (waiting, conflict, question) */
             --on-signal-warn: #ffffff;
@@ -179,6 +183,10 @@
             --pending: #d8b25e;
             --danger-soft: #3d2b27;
             --warning-soft: #3a3324;
+            --code-bg: #171511;
+            --code-text: #ece6d8;
+            --code-token: #a9d1b6;
+            --code-border: #3e3a30;
             --warning-text: #e8c47c;
             --signal-warn: #d19a3a;
             --on-signal-warn: #1c1a15;
@@ -3675,6 +3683,120 @@
         .research-new-badge[hidden] { display: none; }
         .research-new-badge--sheet { font-size: 11px; }
         /* Copper dot on the ⋯ trigger (the red anniversaries dot wins). */
+
+        /* "Couldn't connect to the research": the reason, the way to allow it (research-ui.ts). */
+        .research-connect-failed { width: 480px; max-width: calc(100vw - 32px); }
+        .connect-reason { display: flex; align-items: center; gap: 6px; }
+        .connect-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); flex-shrink: 0; }
+        .research-connect-failed .connect-text { margin: 0 0 10px; font-size: 14px; line-height: 1.5; color: var(--text); }
+        .connect-how { margin: 0 0 10px; font-size: 13px; }
+        .connect-how summary { cursor: pointer; color: var(--text); font-weight: 600; padding: 4px 0; }
+        .connect-how ol { margin: 6px 0 0; padding-left: 20px; line-height: 1.5; color: var(--text); }
+        .research-connect-failed .connect-nothing { margin: 0; font-size: 12px; color: var(--text-light); }
+        @media (max-width: 499px) { .research-connect-failed { max-width: calc(100vw - 16px); } }
+        @media (min-width: 500px) and (max-width: 900px) { .research-connect-failed { width: 460px; } }
+
+        /* Installing Strom Research: what it is → the line → waiting (research-install-ui.ts). */
+        .research-install-dialog { width: 560px; max-width: calc(100vw - 32px); }
+        .install-steps { list-style: none; display: flex; gap: 6px; margin: 0 0 14px; padding: 0; flex-wrap: wrap; }
+        .install-step {
+            font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+            background: var(--surface-2); color: var(--text-light);
+        }
+        .install-step.active { background: var(--text); color: var(--surface); }
+        .install-step.done { background: var(--primary-soft); color: var(--primary-dark); }
+        .install-body p { margin: 0 0 12px; font-size: 14px; line-height: 1.5; color: var(--text); }
+        .install-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 12px; }
+        .install-card {
+            display: flex; flex-direction: column; gap: 6px; padding: 12px 14px;
+            border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface);
+        }
+        .install-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+        .install-card h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
+        .install-card p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text); }
+        .install-card-foot { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-light); }
+        .install-tag { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+        .install-tag-free { background: var(--primary-soft); color: var(--primary-dark); }
+        .install-tag-agent { background: var(--warning-soft); color: var(--warning-text); }
+        .install-body .install-later { font-size: 13px; color: var(--text-light); }
+        .install-os-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
+        .install-os { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+        .install-os-btn {
+            border: none; background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
+            padding: 6px 12px; cursor: pointer; min-height: 32px;
+        }
+        .install-os-btn + .install-os-btn { border-left: 1px solid var(--border); }
+        .install-os-btn.active { background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; }
+        .install-detected { font-size: 12px; color: var(--text-light); }
+        .install-what { margin: 0 0 10px; font-size: 13px; line-height: 1.45; color: var(--text); }
+        .install-body .install-warn {
+            font-size: 13px; padding: 8px 12px; border-radius: var(--r-md);
+            background: var(--warning-soft); color: var(--warning-text);
+        }
+        .install-howto { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+        .install-howto li { display: grid; grid-template-columns: 20px 1fr; gap: 6px; font-size: 14px; line-height: 1.4; color: var(--text); }
+        .install-num { font-family: var(--font-serif); font-weight: 600; color: var(--accent); }
+        .install-line-row { display: flex; gap: 8px; align-items: stretch; margin: 0 0 10px; }
+        .install-line {
+            flex: 1; min-width: 0; display: block; padding: 10px 12px; border-radius: var(--r-md);
+            background: var(--code-bg); color: var(--code-text); border: 1px solid var(--code-border);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.5;
+            word-break: break-all; white-space: pre-wrap; user-select: all; -webkit-user-select: all; cursor: text;
+        }
+        .install-token { color: var(--code-token); }
+        .install-copy {
+            flex: 0 0 128px; border: 1px solid var(--border); border-radius: var(--r-md);
+            background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer;
+        }
+        .install-copy.copied { background: var(--primary-soft); color: var(--primary-dark); border-color: transparent; font-weight: 600; }
+        .install-body .install-after { font-size: 13px; color: var(--text-light); }
+        .install-other { margin: 4px 0 0; font-size: 13px; }
+        .install-other summary { cursor: pointer; color: var(--text-light); padding: 4px 0; }
+        .install-other p { font-size: 13px; color: var(--text-light); margin: 6px 0 8px; }
+        .install-release { font-size: 12px; color: var(--text-light); }
+        .install-wait { text-align: left; }
+        .install-wait-title { margin: 4px 0 8px; font-size: 16px; font-weight: 600; color: var(--text); }
+        .install-body .install-note {
+            font-size: 13px; padding: 8px 12px; border-radius: var(--r-md);
+            background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+            border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+        }
+        .install-wait-links { display: flex; gap: 16px; flex-wrap: wrap; }
+        .install-dots { display: flex; gap: 6px; margin: 4px 0 8px; }
+        .install-dots span {
+            width: 8px; height: 8px; border-radius: 50%; background: var(--primary);
+            animation: install-dot 1.4s infinite ease-in-out both;
+        }
+        .install-dots span:nth-child(2) { animation-delay: 0.16s; }
+        .install-dots span:nth-child(3) { animation-delay: 0.32s; }
+        @keyframes install-dot { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) { .install-dots span { animation: none; opacity: 0.6; } }
+        .install-foot-note { margin-right: auto; font-size: 12px; color: var(--text-light); align-self: center; }
+        .research-install-dialog .buttons { flex-wrap: wrap; }
+        .research-install-dialog .buttons .link-button:first-child { margin-right: auto; }
+        .install-mobile-box {
+            padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2);
+            display: flex; flex-direction: column; gap: 10px; align-items: flex-start;
+        }
+        .install-mobile-box p { margin: 0; }
+        .install-send-link { min-height: 44px; }
+        .install-ready-rows { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 13px; }
+        .install-ready-rows dt { font-weight: 600; color: var(--text); }
+        .install-ready-rows dd { margin: 0; color: var(--text-light); }
+        .install-ready-path { word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+        .install-ready-check { color: var(--primary); }
+        @media (max-width: 520px) {
+            .install-cards { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 499px) {
+            .research-install-dialog { max-width: calc(100vw - 16px); }
+            .install-line-row { flex-direction: column; }
+            .install-copy { flex: 0 0 auto; min-height: 40px; }
+            .install-card p { font-size: 13px; }
+        }
+        @media (min-width: 500px) and (max-width: 900px) {
+            .research-install-dialog { width: 520px; }
+        }
 
         /* Explanation dialog. */
         .research-info-lead { margin: 0 0 16px; font-size: 14px; line-height: 1.5; color: var(--text); }
@@ -10228,6 +10350,22 @@
         .event-row .event-main { flex: 1; min-width: 0; }
         .event-row .event-type { font-weight: 600; }
         .event-row .event-meta { color: var(--text-secondary, #777); font-size: 13px; }
+        /* The research's status of a fact (lead / possible / probable / proven), beside the fact. */
+        .fact-status {
+            display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+            font-size: 11px; font-weight: 600; line-height: 16px; vertical-align: 1px; white-space: nowrap;
+            background: var(--surface-2); color: var(--text-light); border: 1px solid var(--border);
+        }
+        .fact-status-lead, .fact-status-possible { background: var(--warning-soft); color: var(--warning-text); border-color: transparent; }
+        .fact-status-proven { background: var(--primary-soft); color: var(--primary-dark); border-color: transparent; }
+        .partnership-grid .pg-label .fact-status { display: table; margin: 3px 0 0; }
+        @media (max-width: 499px) {
+            .fact-status { font-size: 10.5px; padding: 0 6px; }
+            .partnership-grid .pg-label .fact-status { display: inline-block; margin: 0 0 0 6px; }
+        }
+        @media (min-width: 500px) and (max-width: 900px) {
+            .fact-status { margin-left: 5px; }
+        }
         .event-row.readonly { opacity: 0.75; }
         .event-row .event-actions { display: flex; gap: 4px; flex-shrink: 0; }
         .event-row .event-actions button {
@@ -10319,7 +10457,7 @@
         #source-picker-modal, #source-editor-modal, #sources-modal { z-index: 250; }
         /* The event editor opens above the relationships panel too (a couple's
            event), and the person picker it opens above the editor. */
-        #event-editor-modal { z-index: 210; }
+        #event-editor-modal, #wedding-witnesses-modal { z-index: 210; }
         #participant-picker-modal { z-index: 220; }
         /* Source picker */
         .source-picker-search { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
@@ -10348,6 +10486,15 @@
             font: inherit; color: inherit; text-align: left;
         }
         .source-chip-open:hover .source-chip-label { text-decoration: underline; }
+        /* Wedding witnesses: the chip opens their editor */
+        .partnership-witness-open {
+            display: inline-flex; align-items: center; gap: 4px; min-width: 0;
+            border: none; background: none; padding: 0; cursor: pointer;
+            font: inherit; color: inherit; text-align: left;
+        }
+        .partnership-witness-open:hover { text-decoration: underline; }
+        .partnership-witness-open svg { flex-shrink: 0; color: var(--primary); }
+        #wedding-witnesses-modal .participants-list { margin: 8px 0 10px; }
         .source-chip-thumb {
             width: 40px; height: 24px; flex-shrink: 0; border-radius: 12px;
             object-fit: cover; object-position: top; border: 1px solid var(--border);
@@ -11446,16 +11593,16 @@
                 <div class="empty-state-actions">
                     <button class="primary" onclick="window.Strom.UI.showAddPersonModal()" data-i18n="emptyState.addFirst"></button>
                     <button class="ghost" onclick="window.Strom.UI.showImportFileDialog()" data-i18n="emptyState.importFromFile"></button>
-                    <!-- Strom Research (3.0): a third way in, straight to the website.
+                    <!-- Strom Research: a third way in, the install dialog.
                          Shown via body.research-promo (never in exports / view mode). -->
-                    <button type="button" class="research-offer" onclick="window.Strom.UI.openResearchSite()">
+                    <button type="button" class="research-offer" onclick="window.Strom.UI.showResearchInstall()">
                         <span class="research-offer-body">
                             <span class="research-offer-eyebrow" data-i18n="research.offerEyebrow"></span>
-                            <span class="research-offer-title" data-i18n="research.offerTitle"></span>
-                            <span class="research-offer-desc" data-i18n="research.offerDesc"></span>
+                            <span class="research-offer-title" data-i18n="install.welcomeTitle"></span>
+                            <span class="research-offer-desc" data-i18n="install.welcomeSub"></span>
                             <span class="research-offer-runs" data-i18n="research.runsOnComputer"></span>
                         </span>
-                        <span class="research-offer-arrow" aria-hidden="true">&#8599;</span>
+                        <span class="research-offer-arrow" aria-hidden="true">&#8250;</span>
                     </button>
                     <button class="link" onclick="window.Strom.UI.loadDemoTree()"><span data-i18n="demo.tryDemo"></span><span class="es-arrow" aria-hidden="true"> &rarr;</span></button>
                 </div>
@@ -12022,6 +12169,22 @@
 
     <!-- Source Picker Modal (cite an existing source or create a new one) -->
     <!-- Picking someone from the tree for an event (a godparent who IS a relative) -->
+    <div class="modal-overlay" id="wedding-witnesses-modal">
+        <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true" aria-labelledby="wedding-witnesses-title">
+            <div class="modal-header">
+                <h2 id="wedding-witnesses-title" data-i18n="relationships.witnessesTitle"></h2>
+                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeWeddingWitnesses()">&times;</button>
+            </div>
+            <p class="field-hint" data-i18n="partnerEvents.participantsHint"></p>
+            <div id="wedding-witnesses-list" class="participants-list"></div>
+            <button type="button" class="secondary" onclick="window.Strom.UI.addEventParticipantRow()" data-i18n="events.addParticipant"></button>
+            <div class="buttons">
+                <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeWeddingWitnesses()" data-i18n="buttons.cancel"></button>
+                <button type="button" class="primary" onclick="window.Strom.UI.saveWeddingWitnesses()" data-i18n="buttons.save"></button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="participant-picker-modal">
         <div class="modal modal--md" role="dialog" data-dialog-kind="picker" aria-modal="true">
             <div class="modal-header">

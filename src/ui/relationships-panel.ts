@@ -48,9 +48,11 @@ import { normalizeDateInput, formatDateForInput } from '../dates.js';
 import { autoGrowAll } from './autogrow.js';
 import { onAllDialogsClosed } from './dialog-focus.js';
 
-import { iconSvg } from '../icons.js';
+import { iconSvg, chainLinkSvg } from '../icons.js';
+import { extraParticipantRole } from '../godparents.js';
 import { sourceChipOpenHtml } from './sources.js';
 import { offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate } from './event-details-ui.js';
+import { factStatusHtml } from './fact-status.js';
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
         // Setup dialog stack for standalone mode (when opened directly from card, not from edit dialog)
@@ -189,15 +191,13 @@ export const relationshipsPanelMethods = uiModule({
             });
         });
 
-        // Wedding witnesses: the register names them, so they are typed in as
-        // written; the remove cross removes one.
-        content.querySelectorAll('.partnership-witness-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                const partnershipId = (e.currentTarget as HTMLElement).dataset.partnershipId as PartnershipId;
-                const name = await this.showPrompt(strings.relationships.witnessPrompt);
-                if (!name?.trim()) return;
-                DataManager.addPartnershipParticipant(partnershipId, { name: name.trim() });
-                this.refreshRelationshipsPanel();
+        // Wedding witnesses: edited like godparents at a baptism (role, a name
+        // as the register writes it or a link to someone in the tree, a note)
+        // in their own dialog — from "+ witness" or a witness's chip; the
+        // remove cross removes one.
+        content.querySelectorAll<HTMLElement>('.partnership-witness-btn, .partnership-witness-open').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.showWeddingWitnesses(btn.dataset.partnershipId as PartnershipId);
             });
         });
         content.querySelectorAll('.partnership-witness-remove').forEach(btn => {
@@ -368,7 +368,7 @@ export const relationshipsPanelMethods = uiModule({
         return `
             <div class="partnership-grid detail-group" data-partnership-id="${id}" data-current-person="${this.escapeHtml(currentPersonId)}">
                 <div class="pg-row">
-                    <span class="pg-label pg-label-start">${this.escapeHtml(f.marriageRow)}</span>
+                    <span class="pg-label pg-label-start"><span class="pg-label-text">${this.escapeHtml(f.marriageRow)}</span>${factStatusHtml(partnership.startStatus)}</span>
                     <input type="text" class="partnership-start-date flex-date" autocomplete="off"
                         placeholder="${strings.placeholders.flexDate}"
                         data-partnership-id="${id}"
@@ -380,7 +380,7 @@ export const relationshipsPanelMethods = uiModule({
                         placeholder="${strings.labels.startPlace}" aria-label="${strings.labels.startPlace}">
                 </div>
                 <div class="pg-row pg-end">
-                    <span class="pg-label pg-label-end">${this.escapeHtml(f.divorceRow)}</span>
+                    <span class="pg-label pg-label-end"><span class="pg-label-text">${this.escapeHtml(f.divorceRow)}</span>${factStatusHtml(partnership.endStatus)}</span>
                     <input type="text" class="partnership-end-date flex-date" autocomplete="off"
                         placeholder="${strings.placeholders.flexDate}"
                         data-partnership-id="${id}"
@@ -439,8 +439,9 @@ export const relationshipsPanelMethods = uiModule({
     syncPartnershipGrid(grid: HTMLElement, status: PartnershipStatus, reset: boolean): void {
         const f = strings.fields;
         const married = status === 'married' || status === 'divorced';
-        const startLabel = grid.querySelector('.pg-label-start');
-        const endLabel = grid.querySelector('.pg-label-end');
+        // The text only: the research's status label sits beside it.
+        const startLabel = grid.querySelector('.pg-label-start .pg-label-text');
+        const endLabel = grid.querySelector('.pg-label-end .pg-label-text');
         if (startLabel) startLabel.textContent = married ? f.marriageRow : f.startRow;
         if (endLabel) endLabel.textContent = married ? f.divorceRow : f.endRow;
         const val = (sel: string) => grid.querySelector<HTMLInputElement>(sel)?.value.trim() ?? '';
@@ -555,8 +556,13 @@ export const relationshipsPanelMethods = uiModule({
                             ${(partnership.participants ?? []).map(part => {
                                 const linked = part.personId ? DataManager.getPerson(part.personId) : null;
                                 const name = linked ? `${linked.firstName} ${linked.lastName}`.trim() : (part.name ?? '');
-                                const title = [name, part.note].filter(Boolean).join(' — ');
-                                return `<span class="source-chip"><span class="source-chip-label" title="${this.escapeHtml(title)}">${this.escapeHtml(name)}</span><button type="button" class="source-chip-remove partnership-witness-remove" title="${this.escapeHtml(strings.relationships.remove)}" aria-label="${this.escapeHtml(strings.relationships.remove)}" data-partnership-id="${this.escapeHtml(partnership.id)}" data-participant-id="${this.escapeHtml(part.id)}">&times;</button></span>`;
+                                // A witness is the usual role at a wedding; any other says so.
+                                const extra = extraParticipantRole(part);
+                                const role = part.role === 'witness' ? ''
+                                    : `${extra ? strings.events.extraRoles[extra.role] : strings.events.roles[part.role]}: `;
+                                const title = [`${role}${name}`, part.note].filter(Boolean).join(' — ');
+                                const link = linked ? `${chainLinkSvg({ stroke: 'currentColor', size: 10, strokeWidth: 2 })} ` : '';
+                                return `<span class="source-chip${linked ? ' is-linked' : ''}"><button type="button" class="source-chip-label partnership-witness-open" title="${this.escapeHtml(title)}" data-partnership-id="${this.escapeHtml(partnership.id)}">${link}${this.escapeHtml(role + name)}</button><button type="button" class="source-chip-remove partnership-witness-remove" title="${this.escapeHtml(strings.relationships.remove)}" aria-label="${this.escapeHtml(strings.relationships.remove)}" data-partnership-id="${this.escapeHtml(partnership.id)}" data-participant-id="${this.escapeHtml(part.id)}">&times;</button></span>`;
                             }).join('')}
                             <button type="button" class="partnership-witness-btn" data-partnership-id="${this.escapeHtml(partnership.id)}">${strings.relationships.addWitness}</button>
                         </div>

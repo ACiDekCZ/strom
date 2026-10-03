@@ -254,9 +254,21 @@ test('another tab saving the same tree shows a notice with a Reload action', asy
 
     const notice = page.locator('#other-tab-notice');
     await expect(notice).toBeVisible();
-    await expect(notice).toContainText('changed in another tab');
+    await expect(notice).toContainText('saved in another window');
     // Tab B does not warn about its own save.
     await expect(pageB.locator('#other-tab-notice')).toHaveCount(0);
+
+    // An edit in tab A now is not written over B's newer tree: said plainly.
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const jan = dm.getAllPersons().find((p: { firstName: string }) => p.firstName === 'Jan')!;
+        dm.updatePerson(jan.id, { birthPlace: 'Kolín' });
+    });
+    await expect(notice).toContainText('Not saved');
+    await pageB.reload();
+    await expect(card(pageB, 'Petr')).toBeVisible();
+    expect(await pageB.evaluate(() => window.Strom.DataManager.getAllPersons()
+        .find((p: { firstName: string }) => p.firstName === 'Jan')!.birthPlace)).toBeUndefined();
 
     // Reload in tab A brings in B's change.
     await expect(card(page, 'Petr')).toHaveCount(0);

@@ -25,7 +25,7 @@ import { safeHttpUrl } from '../validation.js';
 import { formatFlexDate, normalizeDateInput, formatDateForInput, yearOf } from '../dates.js';
 import { dataUrlByteSize } from '../photo.js';
 import { totalExcerptBytes } from '../attachments.js';
-import { excerptFromDataUrl } from '../excerpts.js';
+import { excerptFromDataUrl, excerptImageUrl } from '../excerpts.js';
 import { openCropEditor, compressWholeImage, CropRegion } from './crop-editor.js';
 import { coupleEventLabel } from '../events.js';
 import { eventTypeLabel } from './person-events.js';
@@ -75,7 +75,7 @@ export function qualityLabel(q: number | undefined): string {
 /** Thumbnail (or document icon) for a source, in one of the three sizes. */
 export function sourceThumbHtml(src: Source, kind: 'chip' | 'row' | 'picker'): string {
     const first = src.excerpts?.[0];
-    if (first && kind === 'chip') return `<img class="source-${kind}-thumb" src="${esc(first.dataUrl)}" alt="">`;
+    if (first && kind === 'chip') return `<img class="source-${kind}-thumb" src="${esc(excerptImageUrl(first))}" alt="">`;
     // Lists: the image comes when the row scrolls into view (hydrateThumbs).
     // Putting every excerpt into the markup parsed and escaped ~100 MB of
     // text for a catalog of a few hundred scans.
@@ -92,7 +92,8 @@ export function hydrateThumbs(container: HTMLElement): void {
     const imgs = container.querySelectorAll<HTMLImageElement>('img[data-thumb-source]');
     if (imgs.length === 0) return;
     const fill = (img: HTMLImageElement) => {
-        const url = DataManager.getData().sources?.[img.dataset.thumbSource ?? '']?.excerpts?.[0]?.dataUrl;
+        const first = DataManager.getData().sources?.[img.dataset.thumbSource ?? '']?.excerpts?.[0];
+        const url = first ? excerptImageUrl(first) : undefined;
         if (url) img.src = url;
         img.removeAttribute('data-thumb-source');
     };
@@ -351,7 +352,7 @@ export const sourcesMethods = uiModule({
                     title="${esc(strings.research.fullQualityTitle)}">${esc(strings.research.fullQuality)} ↗</button>` : '';
             chunks.push(`
                 <figure class="viewer-excerpt">
-                    <img src="${esc(exc.dataUrl)}" alt="${esc(alt)}" data-excerpt-index="${i}">
+                    <img src="${esc(excerptImageUrl(exc))}" alt="${esc(alt)}" data-excerpt-index="${i}">
                     <button type="button" class="viewer-zoom" data-excerpt-index="${i}" aria-label="${esc(s.viewerZoom)}">⤢</button>
                     ${exc.caption ? `<figcaption>${esc(exc.caption)}</figcaption>` : ''}
                 </figure>${full}`);
@@ -404,7 +405,7 @@ export const sourcesMethods = uiModule({
         body.querySelectorAll<HTMLElement>('[data-excerpt-index]').forEach(el => {
             el.addEventListener('click', () => {
                 const exc = excerpts[Number(el.dataset.excerptIndex)];
-                if (exc) this.showImageOverlay(exc.dataUrl);
+                if (exc) this.showImageOverlay(excerptImageUrl(exc));
             });
         });
         body.querySelectorAll<HTMLElement>('[data-full-quality]').forEach(el => {
@@ -767,7 +768,7 @@ export const sourcesMethods = uiModule({
             const canCrop = !!d.original || this.attachmentForExcerpt(d.excerpt) !== null;
             return `
                 <div class="excerpt-item" data-index="${i}">
-                    <img class="excerpt-img" src="${esc(d.excerpt.dataUrl)}" alt="${esc(d.excerpt.caption || s.excerptLabel)}" data-action="zoom">
+                    <img class="excerpt-img" src="${esc(excerptImageUrl(d.excerpt))}" alt="${esc(d.excerpt.caption || s.excerptLabel)}" data-action="zoom">
                     <div class="excerpt-bar">
                         <input type="text" class="excerpt-caption" value="${esc(d.excerpt.caption ?? '')}"
                             placeholder="${esc(s.excerptCaption)}" aria-label="${esc(s.excerptCaption)}" data-action="caption">
@@ -800,7 +801,8 @@ export const sourcesMethods = uiModule({
                 return;
             }
             el.addEventListener('click', (e) => {
-                if (action === 'zoom') this.showImageOverlay(this.excerptDrafts[index]?.excerpt.dataUrl ?? '');
+                const draft = this.excerptDrafts[index]?.excerpt;
+                if (action === 'zoom') this.showImageOverlay(draft ? excerptImageUrl(draft) : '');
                 else if (action === 'crop') void this.recropExcerpt(index);
                 else if (action === 'replace') this.showExcerptAdderMenu(el, index);
                 else if (action === 'remove') { this.excerptDrafts.splice(index, 1); this.renderExcerptBlock(); }

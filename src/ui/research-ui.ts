@@ -547,6 +547,28 @@ export function bridgeFailure(err: unknown): BridgeFailure {
     return err instanceof DOMException && (err.name === 'AbortError' || err.name === 'TimeoutError') ? 'timeout' : 'unreachable';
 }
 
+/** Why a bridge could not be reached, as far as the browser tells (the connect-failed dialog). */
+export type ConnectReason = 'denied' | 'prompt' | 'down' | 'unknown' | 'safari';
+const CONNECT_FAILED_ID = 'research-connect-failed';
+
+/** The browser's local network permission (Chrome), or null where it has none to tell. */
+async function localNetworkStatus(): Promise<PermissionStatus | null> {
+    try {
+        const perms = (navigator as Navigator & { permissions?: Permissions }).permissions;
+        if (!perms?.query) return null;
+        return await perms.query({ name: 'local-network-access' } as unknown as PermissionDescriptor);
+    } catch {
+        return null;
+    }
+}
+
+/** denied / prompt as the browser says; granted and still unreachable = the research is down; no answer = unknown. */
+async function localNetworkReason(): Promise<ConnectReason> {
+    const st = await localNetworkStatus();
+    if (!st) return 'unknown';
+    return st.state === 'denied' ? 'denied' : st.state === 'prompt' ? 'prompt' : 'down';
+}
+
 async function fetchStatus(url: string, ms = 10000): Promise<LiveStatus | null> {
     const res = await fetchWithTimeout(url, ms);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -777,6 +799,15 @@ export const researchUiMethods = uiModule({
             // A reload while following: follow the same bridge again, quietly.
             else if (resume !== null) void this.startLiveFollow(resume, { resume: true }).finally(reveal);
             else reveal();
+            // The link sent from a phone (?research=install): the install dialog, once.
+            if (params.get('research') === 'install') {
+                try {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('research');
+                    history.replaceState(null, '', url.toString());
+                } catch { /* keep the address */ }
+                if (!explicit) this.openResearchInstallFromLink();
+            }
         } catch (err) {
             document.documentElement.classList.remove('external-opening');
             console.warn('External open unavailable', err);
@@ -984,15 +1015,94 @@ export const researchUiMethods = uiModule({
      * Resolves true when the user wants to try again. Safari: the ways that
      * work there.
      */
-    async showResearchConnectFailed(err: unknown): Promise<boolean> {
-        const why = bridgeFailure(err);
-        const r = strings.research;
-        if (why === 'safari') {
-            await this.offerManualImport(r.safariBlocked);
-            return false;
-        }
-        return this.showConfirm(`${why === 'timeout' ? r.connectTimeout : r.connectUnreachable}\n\n${r.connectHelp}`,
-            r.connectFailedTitle, { ok: r.connectRetry, cancel: r.close });
+    async showResearchConnectFailed(err: unknown, request?: { param: 'adopt' | 'send' | 'live'; value: string }): Promise<boolean> {
+        const reason: ConnectReason = bridgeFailure(err) === 'safari' ? 'safari' : await localNetworkReason();
+        const c = strings.connect;
+        const tree = TreeManager.getActiveTreeMetadata();
+        const people = Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder);
+        const texts: Record<ConnectReason, [string, string]> = {
+            denied: [c.reasonDenied, c.textDenied], prompt: [c.reasonPrompt, c.textPrompt],
+            down: [c.reasonDown, c.textDown], unknown: [c.reasonUnknown, c.textUnknown], safari: [c.reasonSafari, c.textSafari],
+        };
+        const [why, text] = texts[reason];
+        // The way to allow it: open where it is the cause, folded where it may be.
+        const how = reason === 'denied' || reason === 'unknown' ? `
+            <details class="connect-how"${reason === 'denied' ? ' open' : ''}>
+                <summary>${this.escapeHtml(c.howTitle)}</summary>
+                <ol>${c.how.map(t => `<li>${this.escapeHtml(t)}</li>`).join('')}</ol>
+            </details>` : '';
+        document.getElementById(CONNECT_FAILED_ID)?.remove();
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay active';
+        overlay.id = CONNECT_FAILED_ID;
+        overlay.innerHTML = `
+            <div class="modal research-connect-failed" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="connect-failed-title" data-reason="${reason}">
+                <div class="modal-header">
+                    <div class="audit-log-heading">
+                        <h2 id="connect-failed-title">${this.escapeHtml(c.title)}</h2>
+                        <div class="audit-log-subtitle connect-reason"><span class="connect-dot" aria-hidden="true"></span>${this.escapeHtml(why)}</div>
+                    </div>
+                </div>
+                <div class="modal-content">
+                    <p class="connect-text">${this.escapeHtml(text)}</p>
+                    ${how}
+                    <p class="connect-nothing">${this.escapeHtml(tree && people ? c.nothingChanged(tree.name) : c.nothingChangedEmpty)}</p>
+                </div>
+                <div class="buttons">
+                    <button type="button" class="secondary" data-act="close" data-dismiss>${this.escapeHtml(strings.buttons.close)}</button>
+                    <button type="button" class="primary" data-act="${reason === 'safari' ? 'copy' : 'retry'}">${this.escapeHtml(reason === 'safari' ? c.copyLink : c.retry)}</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        this.pushDialog(CONNECT_FAILED_ID);
+        return new Promise<boolean>((resolve) => {
+            let settled = false;
+            let watch: PermissionStatus | null = null;
+            const finish = (retry: boolean): void => {
+                if (settled) return;
+                settled = true;
+                if (watch) watch.onchange = null;
+                this.closeResearchConnectFailed();
+                resolve(retry);
+            };
+            this.researchConnectFailedResolve = () => finish(false);
+            overlay.querySelectorAll<HTMLElement>('[data-act]').forEach(el => el.addEventListener('click', () => {
+                const act = el.dataset.act;
+                if (act === 'retry') finish(true);
+                else if (act === 'close') finish(false);
+                else if (act === 'copy') {
+                    const url = new URL(window.location.href);
+                    url.search = '';
+                    url.hash = '';
+                    if (request) url.searchParams.set(request.param, request.value);
+                    void navigator.clipboard.writeText(url.toString()).then(
+                        () => this.showToast(c.linkCopied, 5000),
+                        () => this.showToast(url.toString(), 10000));
+                }
+            }));
+            // Waiting for the user's answer to the browser: once allowed, connect by itself.
+            if (reason === 'prompt') {
+                void localNetworkStatus().then(st => {
+                    if (!st || settled) return;
+                    watch = st;
+                    st.onchange = () => { if (st.state === 'granted') finish(true); };
+                });
+            }
+            overlay.querySelector<HTMLElement>('.primary')?.focus();
+        });
+    },
+
+    /** Escape on the dialog = Close. */
+    cancelResearchConnectFailed(): void {
+        const resolve = this.researchConnectFailedResolve;
+        if (resolve) resolve();
+        else this.closeResearchConnectFailed();
+    },
+
+    closeResearchConnectFailed(): void {
+        this.researchConnectFailedResolve = null;
+        document.getElementById(CONNECT_FAILED_ID)?.remove();
+        this.dialogStack = this.dialogStack.filter(d => d !== CONNECT_FAILED_ID);
     },
 
     async offerManualImport(message: string): Promise<void> {
@@ -1252,7 +1362,7 @@ export const researchUiMethods = uiModule({
             status = await this.connectResearchBridge(() => fetchStatus(bridge.status, CONNECT_TIMEOUT_MS));
         } catch (err) {
             console.warn('The research bridge did not answer', err);
-            if (await this.showResearchConnectFailed(err)) {
+            if (await this.showResearchConnectFailed(err, { param: 'send', value: raw })) {
                 void this.sendChangesToResearch(raw);
                 return;
             }
@@ -1578,7 +1688,7 @@ export const researchUiMethods = uiModule({
                     this.showToast(strings.research.ended, 4000);
                     return;
                 }
-                if (await this.showResearchConnectFailed(err)) void this.startLiveFollow(raw);
+                if (await this.showResearchConnectFailed(err, { param: 'live', value: raw })) void this.startLiveFollow(raw);
                 return;
             }
             const header = readResearchHeader(text);

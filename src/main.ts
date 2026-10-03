@@ -229,6 +229,18 @@ function registerAppListeners(): void {
         if (treeId && treeId === DataManager.getCurrentTreeId()) DataManager.resaveCurrent();
     });
 
+    // This window's copy is older than the stored one: an edit here was
+    // not written over it. Say so plainly, every time, with the reload.
+    window.addEventListener('strom:save-stale', (e) => {
+        const treeId = (e as CustomEvent<{ treeId?: string }>).detail?.treeId;
+        if (!treeId || treeId !== DataManager.getCurrentTreeId()) return;
+        document.getElementById('other-tab-notice')?.remove();
+        UI.showStorageNotice('other-tab-notice', strings.storageSafety.otherTabNotSaved, {
+            label: strings.storageSafety.reload,
+            run: () => window.location.reload(),
+        });
+    });
+
     onTreeSavedElsewhere((treeId) => {
         if (DataManager.isViewMode() || treeId !== DataManager.getCurrentTreeId()) return;
         // A research tree says it too: nothing of this copy is sent until a reload.

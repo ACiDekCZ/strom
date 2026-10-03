@@ -20,6 +20,7 @@ import {
     generateSourceId,
     generateParticipantId,
     ParticipantRole,
+    EventParticipant,
     Source,
     generateAttachmentId,
     Attachment,
@@ -2029,6 +2030,37 @@ class DataManagerClass {
             ...(name ? { name } : {}),
             ...(participant.note ? { note: participant.note } : {}),
         });
+        const p1 = auditPersonName(this.data.persons[partnership.person1Id]);
+        const p2 = auditPersonName(this.data.persons[partnership.person2Id]);
+        this.commitMutation(strings.undo.editPartnership(p1, p2));
+        AuditLogManager.log(this.currentTreeId, 'partnership.update',
+            strings.auditLog.updatedPartnership(p1, p2));
+        return true;
+    }
+
+    /**
+     * Replace a wedding's witnesses with `participants` (the witnesses editor
+     * saves its rows at once, like an event's godparents). A row with neither
+     * a name nor a link is dropped; nothing changes when the list is the same.
+     */
+    setPartnershipParticipants(partnershipId: PartnershipId, participants: EventParticipant[]): boolean {
+        const partnership = this.data.partnerships[partnershipId];
+        if (!partnership) return false;
+        if (this.isTreeLocked()) return false;
+        const next = participants
+            .filter(p => p.personId || p.name?.trim())
+            .map(p => ({
+                id: p.id || generateParticipantId(),
+                role: p.role,
+                ...(p.personId ? { personId: p.personId } : {}),
+                ...(p.name?.trim() ? { name: p.name.trim() } : {}),
+                ...(p.note?.trim() ? { note: p.note.trim() } : {}),
+            }));
+        if (JSON.stringify(next) === JSON.stringify(partnership.participants ?? [])) return false;
+
+        this.beginMutation();
+        if (next.length > 0) partnership.participants = next;
+        else delete partnership.participants;
         const p1 = auditPersonName(this.data.persons[partnership.person1Id]);
         const p2 = auditPersonName(this.data.persons[partnership.person2Id]);
         this.commitMutation(strings.undo.editPartnership(p1, p2));

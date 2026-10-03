@@ -27,6 +27,7 @@ import {
 } from '../events.js';
 import { uiModule } from './module.js';
 import { DetailKey, refreshDetailGroup, renderAgeCheck, resetDetailGroup, ageBirthDate } from './event-details-ui.js';
+import { factStatusHtml } from './fact-status.js';
 
 function esc(text: string): string {
     return text
@@ -98,7 +99,7 @@ export const coupleEventsMethods = uiModule({
             const meta = dateAndPlace(ev);
             const second = this.coupleEventSecondLine(ev);
             const inner = `
-                <span class="couple-event-main"><span class="couple-event-type">${esc(label)}</span><span class="couple-event-dash"> — </span><span class="couple-event-meta">${esc(meta)}</span></span>
+                <span class="couple-event-main"><span class="couple-event-type">${esc(label)}</span><span class="couple-event-dash"> — </span><span class="couple-event-meta">${esc(meta)}</span>${factStatusHtml(ev.status)}</span>
                 ${second ? `<span class="couple-event-sub">${esc(second)}</span>` : ''}`;
             return readOnly
                 ? `<div class="couple-event-row readonly">${inner}</div>`

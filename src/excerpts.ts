@@ -71,7 +71,7 @@ export function imageSizeFromDataUrl(dataUrl: string): { width: number; height: 
  */
 export function excerptFromDataUrl(
     dataUrl: string,
-    extra: Partial<Pick<SourceExcerpt, 'caption' | 'pageUrl' | 'fromAttachmentId' | 'region' | 'width' | 'height' | 'clip' | 'originalSha'>> = {},
+    extra: Partial<Pick<SourceExcerpt, 'caption' | 'pageUrl' | 'fromAttachmentId' | 'region' | 'width' | 'height' | 'clip' | 'originalSha' | 'orient'>> = {},
 ): SourceExcerpt | null {
     if (!isSafeExcerptDataUrl(dataUrl)) return null;
     const size = extra.width && extra.height
@@ -90,5 +90,56 @@ export function excerptFromDataUrl(
     if (extra.region) exc.region = extra.region;
     if (extra.clip) exc.clip = extra.clip;
     if (extra.originalSha) exc.originalSha = extra.originalSha;
+    if (extra.orient && extra.orient >= 2 && extra.orient <= 8) {
+        exc.orient = extra.orient;
+        // Orientations 5–8 turn the image a quarter: its shown size is the stored one crossed.
+        if (extra.orient >= 5 && !(extra.width && extra.height)) {
+            [exc.width, exc.height] = [exc.height, exc.width];
+        }
+    }
     return exc;
+}
+
+/**
+ * A JPEG data URL with an EXIF block saying `orientation`, so the browser
+ * shows it turned (every <img> and canvas applies EXIF orientation). Used for
+ * a research crop that lies as its original is stored (SourceExcerpt.orient).
+ * A JPEG that already has an EXIF block, or another format, comes back as is.
+ */
+export function withExifOrientation(dataUrl: string, orientation: number): string {
+    if (orientation < 2 || orientation > 8 || !/^data:image\/jpeg;base64,/i.test(dataUrl)) return dataUrl;
+    const comma = dataUrl.indexOf(',');
+    let bin: string;
+    try { bin = atob(dataUrl.slice(comma + 1)); } catch { return dataUrl; }
+    if (bin.charCodeAt(0) !== 0xFF || bin.charCodeAt(1) !== 0xD8) return dataUrl;
+    // After SOI and a JFIF APP0 when there is one; an APP1 there already wins.
+    let at = 2;
+    if (bin.charCodeAt(2) === 0xFF && bin.charCodeAt(3) === 0xE0) at = 4 + (bin.charCodeAt(4) << 8 | bin.charCodeAt(5));
+    if (bin.charCodeAt(at) === 0xFF && bin.charCodeAt(at + 1) === 0xE1) return dataUrl;
+    // APP1: "Exif\0\0", a big-endian TIFF header and one IFD with the Orientation tag.
+    const app1 = [
+        0xFF, 0xE1, 0x00, 0x22,
+        0x45, 0x78, 0x69, 0x66, 0x00, 0x00,
+        0x4D, 0x4D, 0x00, 0x2A, 0x00, 0x00, 0x00, 0x08,
+        0x00, 0x01,
+        0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, orientation, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+    ];
+    return `${dataUrl.slice(0, comma + 1)}${btoa(bin.slice(0, at) + String.fromCharCode(...app1) + bin.slice(at))}`;
+}
+
+/** Turned crops already built, by orientation and image (a crop renders in many places). */
+const turnedCache = new Map<string, string>();
+
+/** The URL to show an excerpt by: upright when it is a research crop lying as stored. */
+export function excerptImageUrl(exc: Pick<SourceExcerpt, 'dataUrl' | 'orient'>): string {
+    if (!exc.orient || exc.orient < 2) return exc.dataUrl;
+    const key = `${exc.orient}:${exc.dataUrl.length}:${exc.dataUrl.slice(-48)}`;
+    let url = turnedCache.get(key);
+    if (url === undefined) {
+        url = withExifOrientation(exc.dataUrl, exc.orient);
+        if (turnedCache.size > 64) turnedCache.clear();
+        turnedCache.set(key, url);
+    }
+    return url;
 }

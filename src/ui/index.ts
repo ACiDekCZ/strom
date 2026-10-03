@@ -75,6 +75,7 @@ import { storyCompareMethods } from './story-compare-ui.js';
 import { cardFieldsUiMethods } from './card-fields-ui.js';
 import { personResearchMethods } from './person-research-ui.js';
 import { researchAdoptMethods } from './research-adopt-ui.js';
+import { researchInstallMethods } from './research-install-ui.js';
 import { evidenceUiMethods } from './evidence-ui.js';
 import { cardSignalsUiMethods } from './card-signals-ui.js';
 import { researchOverviewMethods } from './research-overview-ui.js';
@@ -229,6 +230,15 @@ export class UIClass {
      * whole field vanish under the user's hands.
      */
     eventParticipantsPinned = false;
+    /**
+     * Set while the wedding witnesses editor is open: the partnership whose
+     * witnesses `eventParticipants` holds (the rows are the event editor's).
+     */
+    /** Settles the open "Couldn't connect to the research" dialog as Close (Escape). */
+    researchConnectFailedResolve: (() => void) | null = null;
+    weddingWitnessesPartnershipId: PartnershipId | null = null;
+    /** The witnesses editor's rows as opened (for the "unsaved changes" question). */
+    weddingWitnessesSnapshot: string | null = null;
     /** Set while the person picker is open, so Cancel/Escape can settle it. */
     participantPickerResolve: (() => void) | null = null;
 
@@ -509,6 +519,10 @@ Object.assign(UIClass.prototype, personResearchMethods);
 type ResearchAdoptMethods = typeof researchAdoptMethods;
 export interface UIClass extends ResearchAdoptMethods {}
 Object.assign(UIClass.prototype, researchAdoptMethods);
+
+type ResearchInstallMethods = typeof researchInstallMethods;
+export interface UIClass extends ResearchInstallMethods {}
+Object.assign(UIClass.prototype, researchInstallMethods);
 
 type EvidenceUiMethods = typeof evidenceUiMethods;
 export interface UIClass extends EvidenceUiMethods {}

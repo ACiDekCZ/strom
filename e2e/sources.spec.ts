@@ -118,12 +118,16 @@ test('wedding witnesses: imported ones show, and one can be added and removed', 
     const panel = page.locator('#relationships-modal');
     await expect(panel.locator('.partnership-witnesses .source-chip')).toContainText('Vaclav Sedlak');
 
-    // Add a second one through the prompt.
+    // Add a second one in the witnesses editor (rows like godparents at a baptism).
     await panel.locator('.partnership-witness-btn').click();
-    const prompt = page.locator('#confirmation-modal');
-    await expect(prompt).toBeVisible();
-    await prompt.locator('#prompt-input').fill('Anna Kmotrova');
-    await prompt.locator('#confirm-ok-btn').click();
+    const editor = page.locator('#wedding-witnesses-modal');
+    await expect(editor).toBeVisible();
+    await expect(editor.locator('.participant-row')).toHaveCount(1);
+    await editor.getByRole('button', { name: '+ Add' }).click();
+    await editor.locator('.participant-row').last().locator('.participant-name').fill('Anna Kmotrova');
+    await expect(editor.locator('.participant-row').last().locator('.participant-role')).toHaveValue('witness');
+    await editor.getByRole('button', { name: 'Save' }).click();
+    await expect(editor).toBeHidden();
     await expect(panel.locator('.partnership-witnesses .source-chip')).toHaveCount(2);
 
     // …and it is really on the partnership, not just on screen.

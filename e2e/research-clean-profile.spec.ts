@@ -8,7 +8,7 @@ import { openApp, createFirstPerson, card, importJsonAsNewTree } from './helpers
  * this computer (127.0.0.1, localhost on another port, [::1]), no
  * strom-research:// launch, no dot, button, block, pill or setting of the
  * research, nothing remembered about it. The only trace is the explanation
- * item "AI ancestor research" (the way to install it), which is not part of
+ * item "Ancestor research" (the way to install it), which is not part of
  * this check. Covers the desktop (where the research runs) with edits, a tree
  * switch and the page going hidden, past the two minutes after which a
  * research tree would send by itself.
@@ -93,6 +93,19 @@ test.describe('no Strom Research on this computer: nothing of it shows or runs',
         await expect(page.locator('#settings-modal')).toBeVisible();
         await expect(page.locator('#research-links-row')).toBeHidden();
         await expect(page.locator('#research-edge-settings')).toBeHidden();
+
+        await page.keyboard.press('Escape');
+
+        // The install dialog opened and closed without "Install": nothing asked, nothing kept.
+        await page.locator('.actions-menu-btn').click();
+        await page.locator('#research-menu-row').click();
+        await expect(page.locator('#research-info-modal .research-install-dialog')).toBeVisible();
+        await page.locator('#research-info-modal [data-dismiss]').click();
+        await expect(page.locator('#research-info-modal')).toHaveCount(0);
+        expect(await page.evaluate(() => localStorage.getItem('strom-install'))).toBeNull();
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.researchAdoptToken)).toBeUndefined();
+        // No dot for the item on ⋯, not even while it is new.
+        await expect(page.locator('#actions-menu-dot')).toBeHidden();
 
         expect(local, 'requests to a bridge on this computer').toEqual([]);
         expect(await page.evaluate(() => (window as unknown as { __launched: string[] }).__launched)).toEqual([]);

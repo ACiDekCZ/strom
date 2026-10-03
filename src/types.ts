@@ -112,6 +112,22 @@ export interface EventParticipant {
     note?: string;
 }
 
+/**
+ * How well Strom Research holds a fact (GEDCOM `2 _STROM_STATUS` under the
+ * fact): a lead nothing documents yet, possible, probable, or proven by a
+ * record. The research decides it — the app shows it and never changes it,
+ * and a new version of the research replaces it.
+ */
+export type FactStatus = 'lead' | 'possible' | 'probable' | 'proven';
+
+export const FACT_STATUSES: readonly FactStatus[] = ['lead', 'possible', 'probable', 'proven'];
+
+/** The status a `_STROM_STATUS` value names, or undefined for one the app does not know. */
+export function parseFactStatus(value: string | undefined): FactStatus | undefined {
+    const v = value?.trim().toLowerCase();
+    return (FACT_STATUSES as readonly string[]).includes(v ?? '') ? v as FactStatus : undefined;
+}
+
 export interface LifeEvent {
     id: string;
     type: LifeEventType;
@@ -131,6 +147,8 @@ export interface LifeEvent {
     sourceIds?: string[];
     /** Godparents, witnesses, the officiating priest… (see EventParticipant). */
     participants?: EventParticipant[];
+    /** The research's status of the event (see FactStatus). */
+    status?: FactStatus;
 }
 
 /**
@@ -162,6 +180,14 @@ export interface SourceExcerpt {
      * `region` it tells Strom Research where on its full-quality file the crop lies.
      */
     originalSha?: string;
+    /**
+     * EXIF orientation (2–8) of the original a research crop was cut from
+     * (`2 _STROM_ORIENT`). Strom Research cuts the file as it is stored, so
+     * such a crop lies as stored and is turned upright only for display
+     * (excerptImageUrl); the image itself stays as the research sent it.
+     * width / height are the crop as shown.
+     */
+    orient?: number;
 }
 
 /** The UI offers at most this many excerpts per source (an entry across a page break). */
@@ -282,6 +308,9 @@ export interface Person {
     deathAge?: string;
     /** House or address of the death (DEAT > ADDR). */
     deathAddress?: string;
+    /** The research's status of the birth and of the death fields (see FactStatus). */
+    birthStatus?: FactStatus;
+    deathStatus?: FactStatus;
     notes?: string;
     /**
      * User reference number (GEDCOM REFN): the person's id in a paper archive
@@ -579,6 +608,9 @@ export interface Partnership {
     endDate?: string;
     /** Place of the divorce (DIV > PLAC). */
     endPlace?: string;
+    /** The research's status of the wedding and of the divorce fields (see FactStatus). */
+    startStatus?: FactStatus;
+    endStatus?: FactStatus;
     /** House or address of the wedding, usually the bride's (MARR > ADDR). */
     address?: string;
     /** Each partner's age at the wedding as recorded, by person id (MARR > HUSB/WIFE > AGE). */
@@ -638,6 +670,8 @@ export interface CoupleEvent {
     sourceIds?: string[];
     /** Witnesses and others the record names. */
     participants?: EventParticipant[];
+    /** The research's status of the event (see FactStatus). */
+    status?: FactStatus;
 }
 
 /** The partnership fields the relationships panel edits (DataManager.updatePartnership). */
@@ -922,7 +956,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.8';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.9';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {

@@ -191,7 +191,7 @@ test.describe('Actions → Research', () => {
         await expect(page.locator('#research-info-modal')).toBeVisible();
     });
 
-    test('research known here: another tree has no "AI ancestor research" (no way to its website)', async ({ page }) => {
+    test('research known here: another tree has no "Ancestor research" (no way to its website)', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await seed(page, ALL);
         await openApp(page);
@@ -201,13 +201,13 @@ test.describe('Actions → Research', () => {
         await expect(page.locator('#actions-menu-new-dot')).toBeHidden();
     });
 
-    test('nothing announced here: another tree keeps "AI ancestor research"', async ({ page }) => {
+    test('nothing announced here: another tree keeps "Ancestor research"', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await seed(page, []);
         await openApp(page);
         await page.locator('.actions-menu-btn').click();
         await expect(page.locator('#research-menu-row')).toBeVisible();
-        await expect(page.locator('#research-menu-row')).toContainText('AI ancestor research');
+        await expect(page.locator('#research-menu-row')).toContainText('Ancestor research');
     });
 
     test('a touch device: nothing of the research in the menus', async ({ browser }) => {

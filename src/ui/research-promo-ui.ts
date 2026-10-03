@@ -1,6 +1,6 @@
 /**
  * Strom Research in the app (3.0) — the DOM half:
- *  - the welcome-screen offer (`.research-offer`, straight to the website),
+ *  - the welcome-screen offer (`.research-offer`, the install dialog),
  *  - the permanent "AI ancestor research" menu item (desktop ⋯ actions menu,
  *    mobile "More" sheet) with its "New" label and the trigger dots,
  *  - the in-app explanation dialog the menu item opens,
@@ -139,7 +139,8 @@ export const researchPromoMethods = uiModule({
      * it does.
      */
     researchMenuItemLabel(): string {
-        return this.researchRunsHereKnown() ? strings.research.startWithTree : strings.research.menuItem;
+        if (this.researchRunsHereKnown()) return strings.research.startWithTree;
+        return this.researchInstallPending() ? strings.install.menuResume : strings.research.menuItem;
     },
 
     /** After the first real render: light the markers, maybe show the card. */
@@ -196,7 +197,8 @@ export const researchPromoMethods = uiModule({
             const text = row.querySelector<HTMLElement>('.research-menu-label');
             if (text) {
                 text.textContent = label;
-                text.dataset.i18n = this.researchRunsHereKnown() ? 'research.startWithTree' : 'research.menuItem';
+                text.dataset.i18n = this.researchRunsHereKnown() ? 'research.startWithTree'
+                    : this.researchInstallPending() ? 'install.menuResume' : 'research.menuItem';
             }
             row.setAttribute('aria-label', active ? `${label}, ${s.newSr}` : label);
             const badge = row.querySelector<HTMLElement>('.research-new-badge');
@@ -247,6 +249,12 @@ export const researchPromoMethods = uiModule({
      * menu trigger it came from.
      */
     showResearchInfoDialog(): void {
+        // Not here yet: the way to install it (the research, once here, takes the tree over).
+        if (!this.researchAdoptActiveAvailable()) {
+            document.getElementById(INFO_MODAL_ID)?.remove();
+            this.showResearchInstall();
+            return;
+        }
         this.closeActionsMenu();
         this.hideBottomSheet();
         this.hideWhatsNewCard();
@@ -338,6 +346,7 @@ export const researchPromoMethods = uiModule({
     },
 
     closeResearchInfoDialog(): void {
+        if (this.researchInstallOpen()) { this.closeResearchInstall(); return; }
         document.getElementById(INFO_MODAL_ID)?.remove();
         this.dialogStack = this.dialogStack.filter(d => d !== INFO_MODAL_ID);
     },

@@ -79,7 +79,7 @@ test.describe('actions menu "Tree:" submenu', () => {
         expect(rows[2]).toMatch(/^Anniversaries/);
         expect(rows[3]).toBe('Export… whole tree or current view');
         expect(rows.slice(4, 6)).toEqual(['Poster…', 'Slideshow (TV mode)']);
-        expect(rows[6]).toMatch(/^(Research|AI ancestor research)/);
+        expect(rows[6]).toMatch(/^(Research|Ancestor research)/);
         expect(rows[7]).toMatch(/^Tree:/);
         expect(rows[8]).toBe('Settings');
         expect(rows).toHaveLength(9);
