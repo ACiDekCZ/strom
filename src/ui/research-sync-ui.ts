@@ -1136,6 +1136,7 @@ export const researchSyncMethods = uiModule({
             case 'send': case 'retry': case 'sendAgain': void this.researchSendNow(); break;
             case 'sendThenLoad': void this.researchSendNow({ thenLoad: true }); break;
             case 'showChanges': this.showResearchChanges('send'); break;
+            case 'showOriginals': this.showOriginalsQueue(); break;
             case 'showWritten': this.showResearchChanges('written'); break;
             case 'loadNewer': void this.researchLoadNewer(); break;
             case 'reload': window.location.reload(); break;
@@ -1427,6 +1428,19 @@ export const researchSyncMethods = uiModule({
             set('is-warn', '<span class="research-sync-pill-mark" aria-hidden="true">!</span>'
                 + `<span class="research-sync-pill-label" onclick="${call('openResearchSyncMenu')}">${esc(w.text)}</span>`
                 + `<button type="button" class="research-sync-pill-send" data-action="${w.action}" onclick="event.stopPropagation(); ${call('researchSyncAction', `'${w.action}'`)}">${esc(w.button)}</button>`, w.text);
+            pill.setAttribute('aria-live', 'polite');
+            return;
+        }
+        // Originals waiting 3 days or more, or their space nearly full: the amber pill "Originals waiting"
+        // (not over the Send button while changes wait to go by hand).
+        if (this.originalsQueueWarn() && (auto || kind !== 'unsent') && !safariBrowser()) {
+            this.closeResearchSyncNote();
+            const canStart = this.researchLinkAvailable('open') || this.researchLinkAvailable('live');
+            const action = canStart ? 'startResearch' : 'showOriginals';
+            set('is-warn is-media', '<span class="research-sync-pill-mark" aria-hidden="true">!</span>'
+                + `<span class="research-sync-pill-label" onclick="${call('showOriginalsQueue')}">${esc(strings.mediaQueue.pill)}</span>`
+                + `<button type="button" class="research-sync-pill-send" data-action="${action}" onclick="event.stopPropagation(); ${call('researchSyncAction', `'${action}'`)}">`
+                + `${esc(canStart ? s.pillStart : strings.mediaQueue.show)}</button>`, strings.mediaQueue.pill);
             pill.setAttribute('aria-live', 'polite');
             return;
         }

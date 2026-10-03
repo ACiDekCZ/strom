@@ -636,6 +636,8 @@ export const originalsMethods = uiModule({
             queuedSizes.set(key, rec.bytes);
             queuedAt.set(key, rec.addedAt);
         }
+        // The state lines and the toolbar know now what waits (a pill for originals waiting days).
+        if (queuedKeys.size) this.refreshResearchSyncUi();
     },
 
     /**

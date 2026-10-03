@@ -226,6 +226,40 @@ test.describe('originals: the full UI (beta.10)', () => {
         expect(b.mediaPuts).toEqual([]);
     });
 
+    test('originals waiting 3 days: the amber pill "Originals waiting" in the toolbar, its label opens the queue', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true, auto: true });
+        await poll(page);
+        b.down = true;
+        await attachToJan(page);
+        await page.keyboard.press('Escape');
+        await expect.poll(async () => (await queued(page)).length).toBe(1);
+        const pill = page.locator('#research-sync-pill');
+        await expect(pill).not.toContainText('Originals waiting');
+        // Four days later (the record's time moved back), the page opened again.
+        await page.evaluate(() => new Promise<void>((resolve) => {
+            const req = indexedDB.open('strom-db');
+            req.onsuccess = () => {
+                const store = req.result.transaction('originals', 'readwrite').objectStore('originals');
+                const all = store.getAll();
+                all.onsuccess = () => {
+                    const keys = store.getAllKeys();
+                    keys.onsuccess = () => {
+                        (all.result as any[]).forEach((rec, i) => store.put({ ...rec, addedAt: Date.now() - 4 * 86_400_000 }, keys.result[i]));
+                        store.transaction.oncomplete = () => { req.result.close(); resolve(); };
+                    };
+                };
+            };
+        }));
+        await page.reload();
+        await expect(pill).toContainText('Originals waiting');
+        await expect(pill.locator('.research-sync-pill-send')).toBeVisible();
+        // (The label is hidden below 1600 px, as on the other amber pills; the pill's title says it.)
+        await expect(pill).toHaveAttribute('title', 'Originals waiting');
+        await pill.locator('.research-sync-pill-label').dispatchEvent('click');
+        await expect(page.locator('#media-queue-row')).toHaveAttribute('open', '');
+    });
+
     test('deleting an attachment whose original waits: discard it (ticked), or send it anyway', async ({ page }) => {
         const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
         await openResearch(page, { media: true });
