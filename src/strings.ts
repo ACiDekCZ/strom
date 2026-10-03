@@ -958,7 +958,7 @@ const stringsEN = {
     // Research for this tree (dialog)
     treeSettings: {
         originals: 'Send original files',
-        originalsDesc: 'The tree keeps a preview. The research stores the full-quality original outside git.',
+        originalsDesc: 'The tree keeps a preview. The research stores the full-quality original outside git. Material you send yourself always goes.',
         originalsEncrypted: "The tree is encrypted: when the research isn't running, only the preview is kept.",
         title: 'Research for this tree',
         subtitle: (tree: string, research: string, n: number) => `${tree} → research “${research}” · ${nEn(n, 'person', 'people')}`,
@@ -1081,7 +1081,15 @@ const stringsEN = {
         savedArchiveToast: (n: number, p: string) => `Saved to the archive: ${nEn(n,'file','files')} for ${p}.`,
         queuedToast: (n: number) => `${nEn(n,'file waits','files wait')} in this browser and will be sent once the research runs.`,
         noIdToast: (n: number) => `${nEn(n,'file','files')} will be sent once the research knows the person.`,
-        partialToast: (k: number, n: number, f: string, r: string) => `Sent ${k} of ${n}. The research refused ${f}: ${r}.`,
+        partialToast: (k: number, n: number, f: string, r: string) => `Sent ${k} of ${n}. ${f} wasn't sent: ${r}.`,
+        sendFiles: 'Send files',
+        whyTooLarge: (s: string) => `it's larger than the research takes (${s})`,
+        whyNoRoom: "it didn't fit into the space for waiting files",
+        whySafari: "Safari can't reach the research; use Chrome, Edge or Firefox",
+        whyEncrypted: "the tree is encrypted, so the file can't wait in the browser; start the research",
+        whyNotTaken: "the research doesn't take files",
+        whyUnreadable: "the file couldn't be read",
+        whyFailed: "the browser couldn't keep it",
     },
 
     // "Couldn't connect to the research": why, as far as the browser tells
@@ -4107,7 +4115,7 @@ const stringsCZ: StringsType = {
     // Research for this tree (dialog)
     treeSettings: {
         originals: 'Posílat originály souborů',
-        originalsDesc: 'Ve stromu zůstane náhled. Originál v plné kvalitě uloží výzkum mimo git.',
+        originalsDesc: 'Ve stromu zůstane náhled. Originál v plné kvalitě uloží výzkum mimo git. Materiál, který pošlete sami, odejde vždy.',
         originalsEncrypted: 'Strom je šifrovaný: když výzkum neběží, uloží se jen náhled.',
         title: 'Výzkum u stromu',
         subtitle: (tree: string, research: string, n: number) => `${tree} → výzkum „${research}“ · ${nCs(n, 'osoba', 'osoby', 'osob')}`,
@@ -4230,7 +4238,15 @@ const stringsCZ: StringsType = {
         savedArchiveToast: (n: number, p: string) => `Uloženo v archivu: ${nCs(n,'soubor','soubory','souborů')} k osobě ${p}.`,
         queuedToast: (n: number) => `${nCs(n,'soubor čeká','soubory čekají','souborů čeká')} v tomto prohlížeči a pošle se, až výzkum poběží.`,
         noIdToast: (n: number) => `${nCs(n,'soubor se pošle','soubory se pošlou','souborů se pošle')}, až výzkum osobu pozná.`,
-        partialToast: (k: number, n: number, f: string, r: string) => `Posláno ${k} z ${n}. ${f} výzkum odmítl: ${r}.`,
+        partialToast: (k: number, n: number, f: string, r: string) => `Posláno ${k} z ${n}. ${f} se neposlal: ${r}.`,
+        sendFiles: 'Poslat soubory',
+        whyTooLarge: (s: string) => `je větší, než výzkum přijme (${s})`,
+        whyNoRoom: 'nevešel se do místa pro čekající soubory',
+        whySafari: 'Safari se k výzkumu nedostane; použijte Chrome, Edge nebo Firefox',
+        whyEncrypted: 'strom je šifrovaný, soubor nemůže čekat v prohlížeči; spusťte výzkum',
+        whyNotTaken: 'výzkum soubory nepřijímá',
+        whyUnreadable: 'soubor se nepodařilo přečíst',
+        whyFailed: 'prohlížeč ho nedokázal uložit',
     },
 
     // "Couldn't connect to the research": why, as far as the browser tells
@@ -7250,7 +7266,7 @@ const stringsDE: StringsType = {
     // Research for this tree (dialog)
     treeSettings: {
         originals: 'Originaldateien senden',
-        originalsDesc: 'Im Stammbaum bleibt eine Vorschau. Das Original in voller Qualität speichert die Forschung außerhalb von Git.',
+        originalsDesc: 'Im Stammbaum bleibt eine Vorschau. Das Original in voller Qualität speichert die Forschung außerhalb von Git. Material, das Sie selbst senden, wird immer gesendet.',
         originalsEncrypted: 'Der Stammbaum ist verschlüsselt: Läuft die Forschung nicht, wird nur die Vorschau gespeichert.',
         title: 'Forschung für diesen Stammbaum',
         subtitle: (tree: string, research: string, n: number) => `${tree} → Forschung „${research}“ · ${nDe(n, 'Person', 'Personen')}`,
@@ -7373,7 +7389,15 @@ const stringsDE: StringsType = {
         savedArchiveToast: (n: number, p: string) => `Im Archiv gespeichert: ${nDe(n,'Datei','Dateien')} zu ${p}.`,
         queuedToast: (n: number) => `${nDe(n,'Datei wartet','Dateien warten')} in diesem Browser und werden gesendet, sobald die Forschung läuft.`,
         noIdToast: (n: number) => `${nDe(n,'Datei wird','Dateien werden')} gesendet, sobald die Forschung die Person kennt.`,
-        partialToast: (k: number, n: number, f: string, r: string) => `${k} von ${n} gesendet. ${f} hat die Forschung abgelehnt: ${r}.`,
+        partialToast: (k: number, n: number, f: string, r: string) => `${k} von ${n} gesendet. ${f} wurde nicht gesendet: ${r}.`,
+        sendFiles: 'Dateien senden',
+        whyTooLarge: (s: string) => `sie ist größer, als die Forschung annimmt (${s})`,
+        whyNoRoom: 'sie passte nicht in den Platz für wartende Dateien',
+        whySafari: 'Safari erreicht die Forschung nicht; verwenden Sie Chrome, Edge oder Firefox',
+        whyEncrypted: 'der Stammbaum ist verschlüsselt, die Datei kann nicht im Browser warten; starten Sie die Forschung',
+        whyNotTaken: 'die Forschung nimmt keine Dateien an',
+        whyUnreadable: 'die Datei konnte nicht gelesen werden',
+        whyFailed: 'der Browser konnte sie nicht speichern',
     },
 
     // "Couldn't connect to the research": why, as far as the browser tells

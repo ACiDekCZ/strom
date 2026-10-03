@@ -345,13 +345,73 @@ test.describe('Send material… (beta.10)', () => {
         expect(await queued(page)).toEqual([]);
     });
 
+    test('no file yet: the main button is off and says "Send files"', async ({ page }) => {
+        await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => (window.Strom.UI as any).showMaterialDialog({ personId: Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan')!.id }));
+        const go = page.locator('#material-modal .material-go');
+        await expect(go).toHaveText('Send files');
+        await expect(go).toBeDisabled();
+        await page.locator('#material-input').setInputFiles(AVATAR);
+        await expect(go).toHaveText('Send 1 file');
+        await expect(go).toBeEnabled();
+    });
+
+    test('"Send original files" off: material is sent on purpose, so it goes anyway', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => {
+            const tm = window.Strom.TreeManager;
+            tm.patchResearchLink(tm.getActiveTreeId()!, { sendMedia: false });
+        });
+        await page.evaluate(() => (window.Strom.UI as any).showMaterialDialog({ personId: Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan')!.id }));
+        const dialog = page.locator('#material-modal');
+        await dialog.locator('#material-input').setInputFiles(AVATAR);
+        await dialog.getByRole('button', { name: 'Send 1 file' }).click();
+        await expect(page.locator('.toast')).toContainText('Sent to the research: 1 file for Jan Víšek');
+        await expect(page.locator('.toast')).not.toContainText('refused');
+        expect(b.mediaPuts).toHaveLength(1);
+    });
+
+    test('the bridge answered a while ago (not fresh): sent straight away, the toast says sent, not waiting', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        // The last answer older than the freshness window: still "up".
+        await page.evaluate(() => (window.Strom.UI as any).researchBridgeFresh = () => false);
+        await page.evaluate(() => (window.Strom.UI as any).showMaterialDialog({ personId: Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan')!.id }));
+        const dialog = page.locator('#material-modal');
+        await dialog.locator('#material-input').setInputFiles(AVATAR);
+        await expect(dialog.locator('.material-box')).not.toContainText("isn't running");
+        await dialog.getByRole('button', { name: 'Send 1 file' }).click();
+        await expect(page.locator('.toast')).toContainText('Sent to the research: 1 file');
+        await expect(page.locator('.toast')).not.toContainText('waits');
+        expect(b.mediaPuts).toHaveLength(1);
+        expect(await queued(page)).toEqual([]);
+    });
+
+    test('a file larger than the research takes: the toast says that, not that the research refused it', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: { ...MEDIA_ACCEPTS, media: { ...MEDIA_ACCEPTS.media, max: 100 } } });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => (window.Strom.UI as any).showMaterialDialog({ personId: Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan')!.id }));
+        const dialog = page.locator('#material-modal');
+        await dialog.locator('#material-input').setInputFiles(AVATAR);
+        await dialog.getByRole('button', { name: 'Send 1 file' }).click();
+        await expect(page.locator('.toast')).toContainText("Sent 0 of 1. avatar.png wasn't sent: it's larger than the research takes");
+        await expect(page.locator('.toast')).not.toContainText("couldn't be loaded");
+        expect(b.mediaPuts).toEqual([]);
+    });
+
     test('the research not running: the files wait in the browser and go later', async ({ page }) => {
         const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
         await openResearch(page, { media: true });
         await poll(page);
         const sub = await openPersonResearch(page);
         b.down = true;
-        await page.evaluate(() => (window.Strom.UI as any).researchBridgeFresh = () => false);
+        await page.evaluate(() => (window.Strom.UI as any).researchBridgeUp = () => false);
         await sub.getByText('Send material…').first().click();
         const dialog = page.locator('#material-modal');
         await dialog.locator('#material-input').setInputFiles(AVATAR);
@@ -360,7 +420,7 @@ test.describe('Send material… (beta.10)', () => {
         await expect(page.locator('.toast')).toContainText('1 file waits in this browser');
         expect((await queued(page)).length).toBe(1);
         b.down = false;
-        await page.evaluate(() => { delete (window.Strom.UI as any).researchBridgeFresh; });
+        await page.evaluate(() => { delete (window.Strom.UI as any).researchBridgeUp; });
         await poll(page);
         await expect.poll(() => b.mediaPuts.length).toBe(1);
         await expect.poll(() => queued(page)).toEqual([]);

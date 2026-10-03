@@ -20,7 +20,7 @@ import { exifOrientation, originalTargets } from '../originals.js';
 import { dataUrlByteSize } from '../photo.js';
 import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES } from '../attachments.js';
 import { personSubtitle } from './person-sources-ui.js';
-import { formatBytesShort } from './originals-ui.js';
+import { formatBytesShort, QueueOutcome } from './originals-ui.js';
 import { bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
 
@@ -101,7 +101,7 @@ export const materialMethods = uiModule({
             ? m.toPerson(personSubtitle(target.personId), '')
             : m.toSource(data.sources?.[target.sourceId]?.title ?? '');
         const archive = this.researchModeOf(link.researchId) === 'archive';
-        const up = this.researchBridgeFresh(link.researchId);
+        const up = this.researchBridgeUp(link.researchId);
         const ready = originalTargets(isPerson ? { personId: target.personId } : { sourceId: target.sourceId }, data).ready;
         const bytes = picked.reduce((sum, f) => sum + f.size, 0);
         const cantWait = !up && (SettingsManager.isEncryptionEnabled() || bridgeFailure(null) === 'safari');
@@ -115,13 +115,13 @@ export const materialMethods = uiModule({
             primary = { label: strings.sync.startResearch, act: 'start' };
         } else if (!ready) {
             box = m.infoNoId;
-            primary = { label: m.sendN(Math.max(1, picked.length)), act: 'send' };
+            primary = { label: picked.length ? m.sendN(picked.length) : m.sendFiles, act: 'send' };
         } else if (!up) {
             box = m.infoQueue;
             primary = { label: m.sendLater, act: 'send' };
         } else {
             box = archive ? m.infoArchive : isPerson ? m.infoAgent : m.infoAgentSource;
-            primary = { label: archive ? m.saveArchive : m.sendN(Math.max(1, picked.length)), act: 'send' };
+            primary = { label: archive ? m.saveArchive : picked.length ? m.sendN(picked.length) : m.sendFiles, act: 'send' };
         }
         const note = (overlay.querySelector('#material-note') as HTMLTextAreaElement | null)?.value ?? '';
         const attach = (overlay.querySelector('#material-attach') as HTMLInputElement | null)?.checked ?? false;
@@ -223,9 +223,9 @@ export const materialMethods = uiModule({
         const attach = 'personId' in target && !!(overlay.querySelector('#material-attach') as HTMLInputElement | null)?.checked;
         const files = [...picked];
         const go = overlay.querySelector<HTMLButtonElement>('.material-go');
-        let sent = 0;
-        let queuedN = 0;
-        let refused: string | null = null;
+        const queuedShas: string[] = [];
+        /** Files not sent nor waiting, with why (the first one is named). */
+        const failed: { name: string; why: string }[] = [];
         const archive = this.researchModeOf(link.researchId) === 'archive';
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
@@ -237,39 +237,44 @@ export const materialMethods = uiModule({
                 original = { sha256, name: file.name, mimeType: file.type || 'application/octet-stream', bytes: file.size,
                     ...(orientation > 1 ? { orientation } : {}) };
             } catch {
-                refused = refused ?? file.name;
+                failed.push({ name: file.name, why: m.whyUnreadable });
                 continue;
             }
             if (attach && 'personId' in target) await this.attachMaterialFile(target.personId, file, original);
             const outcome = await this.queueOriginal(original, file, { ...target, note, material: true });
-            if (outcome === 'sent') sent++;
-            else if (outcome === 'queued') queuedN++;
-            else refused = refused ?? file.name;
+            if (outcome === 'queued') queuedShas.push(original.sha256);
+            else if (outcome !== 'sent') failed.push({ name: file.name, why: this.materialWhy(outcome, link.researchId) });
         }
-        // What waits goes now when the bridge runs (one at a time).
-        await this.researchOriginalsKick();
-        const stillWaiting = await this.materialStillWaiting(link.treeId, files.length);
+        // What waits goes now when the bridge runs (one at a time); waited for, so the toast tells what is left.
+        if (queuedShas.length) await this.researchOriginalsKick();
+        const stillWaiting = queuedShas.filter(sha => this.originalStillQueued(link.treeId, sha)).length;
         busy = false;
         this.closeMaterialDialog();
         this.renderAttachmentsList();
         const name = 'personId' in target ? personSubtitle(target.personId).split(' · ')[0]
             : DataManager.getData().sources?.[target.sourceId]?.title ?? '';
         const ready = originalTargets('personId' in target ? { personId: target.personId } : { sourceId: target.sourceId }, DataManager.getData()).ready;
-        const done = files.length - stillWaiting - (refused ? 1 : 0);
-        if (refused && done + stillWaiting < files.length) {
-            this.showToast(m.partialToast(done, files.length, refused, strings.media.loadFailed), 6000, { closable: true });
+        const done = files.length - stillWaiting - failed.length;
+        if (failed.length) {
+            this.showToast(m.partialToast(done, files.length, failed[0].name, failed[0].why), 8000, { closable: true });
         } else if (stillWaiting > 0) {
             this.showToast(ready ? m.queuedToast(stillWaiting) : m.noIdToast(stillWaiting), 6000, { closable: true });
         } else {
             this.showToast(archive ? m.savedArchiveToast(files.length, name) : m.sentToast(files.length, name), 6000, { closable: true });
         }
-        void sent; void queuedN;
     },
 
-    /** How many of the run's files still wait in the queue (not confirmed by the research). */
-    async materialStillWaiting(treeId: string, max: number): Promise<number> {
-        const line = this.originalsQueueLine();
-        return line && treeId === DataManager.getCurrentTreeId() ? Math.min(max, line.n) : 0;
+    /** Why a file of the material went nowhere (the app's own reason: it never reached the research). */
+    materialWhy(outcome: QueueOutcome, researchId: string): string {
+        const m = strings.material;
+        switch (outcome) {
+            case 'tooLarge': return m.whyTooLarge(formatBytesShort(this.researchMediaAccepts(researchId)?.maxBytes ?? 0));
+            case 'noRoom': return m.whyNoRoom;
+            case 'safari': return m.whySafari;
+            case 'encrypted': return m.whyEncrypted;
+            case 'notTaken': case 'notLinked': return m.whyNotTaken;
+            default: return m.whyFailed;
+        }
     },
 
     /** "Also add as an attachment": a preview in the tree like a normal attachment (an image or a PDF). */

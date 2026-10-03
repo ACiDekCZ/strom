@@ -86,6 +86,9 @@ const previewOnlyWhy = new Map<string, PreviewOnlyWhy>();
 const goneShas = new Set<string>();
 let queueLoaded = false;
 let sending = false;
+/** The kick under way (callers wait for it) and whether another pass is wanted after it. */
+let kickRun: Promise<void> | null = null;
+let kickAgain = false;
 
 /** The research's id for each hash it confirmed, per research (this browser). */
 function sentMap(researchId: string): Record<string, string> {
@@ -220,11 +223,12 @@ export const originalsMethods = uiModule({
         const accepts = this.researchMediaAccepts(link.researchId);
         const why = (w: PreviewOnlyWhy): void => { previewOnlyWhy.set(original.sha256, w); };
         if (!accepts) { why('older'); return 'notTaken'; }
-        if (TreeManager.getTreeMetadata(link.treeId)?.research?.sendMedia === false) { why('off'); return 'off'; }
+        // The switch is about attachments' originals; material is sent on purpose and goes anyway.
+        if (!target.material && TreeManager.getTreeMetadata(link.treeId)?.research?.sendMedia === false) { why('off'); return 'off'; }
         // Safari does not reach the research: a queue would never empty.
         if (bridgeFailure(null) === 'safari') { why('safari'); return 'safari'; }
         if (file.size > accepts.maxBytes) return 'tooLarge';
-        if (target.material && this.researchBridgeFresh(link.researchId)) {
+        if (target.material && this.researchBridgeUp(link.researchId)) {
             if (await this.sendOriginalNow(link, original, file, target)) return 'sent';
         }
         if (SettingsManager.isEncryptionEnabled()) {
@@ -398,6 +402,11 @@ export const originalsMethods = uiModule({
     researchMediaOlder(): boolean {
         const link = this.researchOriginalsLink();
         return !!link && !this.researchMediaAccepts(link.researchId);
+    },
+
+    /** Is this file still waiting in the browser for the tree's research? */
+    originalStillQueued(treeId: string, sha256: string): boolean {
+        return queuedKeys.has(queueKey(treeId, sha256));
     },
 
     /** What waits for the open tree's research: how many, how large, the oldest for how many days (null: nothing). */
@@ -635,8 +644,9 @@ export const originalsMethods = uiModule({
      * research has it now.
      */
     async sendOriginalNow(link: { treeId: TreeId; researchId: string }, original: MediaOriginal, file: Blob,
-        target: { personId?: PersonId; sourceId?: string; region?: Region; note?: string }): Promise<boolean> {
-        if (!this.researchBridgeFresh(link.researchId)) return false;
+        target: { personId?: PersonId; sourceId?: string; region?: Region; note?: string; material?: boolean }): Promise<boolean> {
+        // Material: tried whenever the last answer was "up" (a failure leaves it to the queue).
+        if (!(target.material ? this.researchBridgeUp(link.researchId) : this.researchBridgeFresh(link.researchId))) return false;
         const bridge = parseLiveBridge(storedResearchBridge(link.researchId)?.base);
         if (!bridge) return false;
         const rec: QueuedOriginal = {
@@ -663,7 +673,19 @@ export const originalsMethods = uiModule({
      * the bridge answers. Called when a file is queued and after each answer
      * of the bridge.
      */
-    async researchOriginalsKick(): Promise<void> {
+    researchOriginalsKick(): Promise<void> {
+        // A pass under way: one more after it for what was queued meanwhile; the caller waits for both.
+        if (kickRun) { kickAgain = true; return kickRun; }
+        kickRun = (async () => {
+            do {
+                kickAgain = false;
+                await this.researchOriginalsKickOnce();
+            } while (kickAgain);
+        })().finally(() => { kickRun = null; });
+        return kickRun;
+    },
+
+    async researchOriginalsKickOnce(): Promise<void> {
         if (sending) return;
         const link = this.researchOriginalsLink();
         if (!link || !this.researchMediaAccepts(link.researchId)) return;

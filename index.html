@@ -3077,6 +3077,8 @@
             color: var(--on-primary);
         }
         .modal button.primary:hover { background: var(--primary-dark); }
+        .modal button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .modal button.primary:disabled:hover { background: var(--primary); }
         /* Ghost secondary: transparent with a hairline border (round 13 tokens). */
         .modal button.secondary {
             background: transparent;
