@@ -21,7 +21,7 @@ import { newAdoptToken, researchNewUrl, isSafariBrowser } from '../research-link
 import { isPromoAvailable } from '../research-promo.js';
 import {
     InstallOs, InstallRecord, INSTALL_OSES, INSTALL_RELEASE_URL,
-    detectInstallOs, installLine, npmLines, installPhase, newInstallRecord, INSTALL_KEY,
+    detectInstallOs, installLine, npmLines, installAppUrl, installPhase, newInstallRecord, INSTALL_KEY,
     readInstallRecord, writeInstallRecord, clearInstallRecord,
 } from '../research-install.js';
 import { onComputer } from './research-ui.js';
@@ -220,8 +220,10 @@ export const researchInstallMethods = uiModule({
         const names = OS_NAMES();
         const steps = os === 'mac' ? s.stepsMac : os === 'win' ? s.stepsWin : s.stepsLinux;
         const what = os === 'mac' ? s.whatMac : os === 'win' ? s.whatWin : s.whatLinux;
-        const line = installLine(os, record.token);
-        const [npm1, npm2] = npmLines(os, record.token);
+        // Another copy than the public app (the beta): the research must open this one.
+        const appUrl = installAppUrl(window.location.href);
+        const line = installLine(os, record.token, appUrl);
+        const [npm1, npm2] = npmLines(os, record.token, appUrl);
         return `
             <div class="modal-content install-body">
                 <div class="install-os-row">

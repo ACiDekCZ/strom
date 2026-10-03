@@ -18,18 +18,39 @@ export const INSTALL_OSES: readonly InstallOs[] = ['mac', 'win', 'linux'];
 export const INSTALL_RELEASE_URL = 'https://github.com/ACiDekCZ/strom-research/releases/latest';
 const DOWNLOAD = `${INSTALL_RELEASE_URL}/download`;
 
-/** The line for Terminal (macOS, Linux) or Win + R (Windows), with the tree's token. */
-export function installLine(os: InstallOs, token: string): string {
-    return os === 'win'
-        ? `powershell -ExecutionPolicy Bypass -c "$env:STROM_FROM_APP='${token}'; irm ${DOWNLOAD}/install.ps1 | iex"`
-        : `curl -fsSL ${DOWNLOAD}/install.sh | STROM_FROM_APP=${token} sh`;
+/** The public app: the research opens it by itself, its address needs no saying. */
+export const PUBLIC_APP_URL = 'https://stromapp.info/run/';
+
+/**
+ * The app's own address for the line, when it is another copy than the public
+ * one (the beta, a development copy on this computer): the research then
+ * opens THIS app with ?adopt=, not stromapp.info (whose trees are others).
+ * Only the app's pages (stromapp.info, beta.stromapp.info, localhost /
+ * 127.0.0.1), only characters safe in a shell line. Null: say nothing.
+ */
+export function installAppUrl(href: string): string | null {
+    let u: URL;
+    try { u = new URL(href); } catch { return null; }
+    const appOrigin = u.origin === 'https://stromapp.info' || u.origin === 'https://beta.stromapp.info'
+        || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(u.origin);
+    if (!appOrigin || u.username || u.password) return null;
+    const url = `${u.origin}${u.pathname}`;
+    if (url === PUBLIC_APP_URL || !/^[A-Za-z0-9:/._~-]+$/.test(url)) return null;
+    return url;
 }
 
-/** The npm way for technical users: install, then start with the token. */
-export function npmLines(os: InstallOs, token: string): [string, string] {
+/** The line for Terminal (macOS, Linux) or Win + R (Windows), with the tree's token (and this app's address, see installAppUrl). */
+export function installLine(os: InstallOs, token: string, appUrl: string | null = null): string {
+    return os === 'win'
+        ? `powershell -ExecutionPolicy Bypass -c "$env:STROM_FROM_APP='${token}'; ${appUrl ? `$env:STROM_APP_URL='${appUrl}'; ` : ''}irm ${DOWNLOAD}/install.ps1 | iex"`
+        : `curl -fsSL ${DOWNLOAD}/install.sh | STROM_FROM_APP=${token} ${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}sh`;
+}
+
+/** The npm way for technical users: install, then start with the token (and this app's address). */
+export function npmLines(os: InstallOs, token: string, appUrl: string | null = null): [string, string] {
     return ['npm i -g strom-research', os === 'win'
-        ? `$env:STROM_FROM_APP='${token}'; strom-research`
-        : `STROM_FROM_APP=${token} strom-research`];
+        ? `$env:STROM_FROM_APP='${token}'; ${appUrl ? `$env:STROM_APP_URL='${appUrl}'; ` : ''}strom-research`
+        : `STROM_FROM_APP=${token} ${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}strom-research`];
 }
 
 /**

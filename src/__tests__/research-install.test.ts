@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    detectInstallOs, installLine, npmLines, sanitizeInstallRecord, newInstallRecord, installPhase,
+    detectInstallOs, installLine, npmLines, installAppUrl, sanitizeInstallRecord, newInstallRecord, installPhase,
     readInstallRecord, writeInstallRecord, clearInstallRecord, INSTALL_KEY, INSTALL_TTL_MS, INSTALL_LONG_MS,
 } from '../research-install.js';
 import { TreeId } from '../types.js';
@@ -32,6 +32,24 @@ describe('installing the research from the app', () => {
         expect(win.length).toBeLessThanOrEqual(259);
         expect(npmLines('mac', TOKEN)).toEqual(['npm i -g strom-research', `STROM_FROM_APP=${TOKEN} strom-research`]);
         expect(npmLines('win', TOKEN)[1]).toBe(`$env:STROM_FROM_APP='${TOKEN}'; strom-research`);
+    });
+
+    it('names this app in the line when it is not the public one (the beta, a copy on this computer)', () => {
+        expect(installAppUrl('https://stromapp.info/run/')).toBeNull();
+        expect(installAppUrl('https://stromapp.info/run/?research=install#x')).toBeNull();
+        expect(installAppUrl('https://beta.stromapp.info/run/')).toBe('https://beta.stromapp.info/run/');
+        expect(installAppUrl('http://localhost:8765/strom.html?x=1')).toBe('http://localhost:8765/strom.html');
+        expect(installAppUrl('http://127.0.0.1:5173/run/index.html')).toBe('http://127.0.0.1:5173/run/index.html');
+        expect(installAppUrl('https://evil.example/run/')).toBeNull();
+        expect(installAppUrl('file:///Users/jan/strom.html')).toBeNull();
+        expect(installAppUrl('http://localhost:8765/a b.html')).toBeNull();
+        const beta = 'https://beta.stromapp.info/run/';
+        expect(installLine('mac', TOKEN, beta)).toBe(`curl -fsSL https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.sh | STROM_FROM_APP=${TOKEN} STROM_APP_URL=${beta} sh`);
+        const win = installLine('win', TOKEN, beta);
+        expect(win).toBe(`powershell -ExecutionPolicy Bypass -c "$env:STROM_FROM_APP='${TOKEN}'; $env:STROM_APP_URL='${beta}'; irm https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.ps1 | iex"`);
+        expect(win.length).toBeLessThanOrEqual(259);
+        expect(npmLines('mac', TOKEN, beta)[1]).toBe(`STROM_FROM_APP=${TOKEN} STROM_APP_URL=${beta} strom-research`);
+        expect(npmLines('win', TOKEN, beta)[1]).toBe(`$env:STROM_FROM_APP='${TOKEN}'; $env:STROM_APP_URL='${beta}'; strom-research`);
     });
 
     it('keeps the record 24 h: waiting, long after 15 minutes, then expired', () => {
