@@ -58,6 +58,16 @@ export function worldBoundingBox(
     return { minX, minY, maxX, maxY };
 }
 
+/**
+ * Where a click or drag in the minimap may centre the view: inside the tree's
+ * box, the same stop on all four sides (the frame overhangs the tree by at
+ * most half of itself, and the view never lands in empty space).
+ */
+export function clampToBox(wx: number, wy: number, box: WorldBox | null): [number, number] {
+    if (!box) return [wx, wy];
+    return [Math.min(Math.max(wx, box.minX), box.maxX), Math.min(Math.max(wy, box.minY), box.maxY)];
+}
+
 export const minimapMethods = uiModule({
     /** Wire the minimap once at startup (canvas handlers + ZoomPan sync). */
     initMinimap(): void {
@@ -72,7 +82,8 @@ export const minimapMethods = uiModule({
             const rect = canvas.getBoundingClientRect();
             const mmX = clientX - rect.left;
             const mmY = clientY - rect.top;
-            ZoomPan.centerOnWorldPoint((mmX - t.offsetX) / t.scale, (mmY - t.offsetY) / t.scale);
+            const [wx, wy] = clampToBox((mmX - t.offsetX) / t.scale, (mmY - t.offsetY) / t.scale, this.minimapBox);
+            ZoomPan.centerOnWorldPoint(wx, wy);
         };
 
         canvas.addEventListener('pointerdown', (e) => {
@@ -190,13 +201,12 @@ export const minimapMethods = uiModule({
             const vy = wy0 * t.scale + t.offsetY;
             const vw = (vpW / scale) * t.scale;
             const vh = (vpH / scale) * t.scale;
+            // The part of the frame inside the minimap, cut the same way on every side.
+            const x0 = Math.max(0, vx), y0 = Math.max(0, vy);
+            const x1 = Math.min(MINIMAP_W, vx + vw), y1 = Math.min(MINIMAP_H, vy + vh);
             ctx.strokeStyle = frameColor;
             ctx.lineWidth = 1.5;
-            ctx.strokeRect(
-                Math.max(0, vx), Math.max(0, vy),
-                Math.min(vw, MINIMAP_W - Math.max(0, vx)),
-                Math.min(vh, MINIMAP_H - Math.max(0, vy)),
-            );
+            if (x1 > x0 && y1 > y0) ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
         }
     },
 });

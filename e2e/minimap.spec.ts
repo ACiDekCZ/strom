@@ -32,6 +32,51 @@ test.describe('Minimap', () => {
         await expect(panel).toBeHidden();
     });
 
+    // Dragging the frame stops the same way on all four sides: the view's centre
+    // at the tree's edge (the frame overhangs it by half of itself at most),
+    // however far past the minimap the pointer goes.
+    test('dragging the frame stops at the tree on all four sides', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 850 });
+        await openApp(page);
+        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await expect(card(page, 'Johan')).toBeVisible();
+        for (let i = 0; i < 4; i++) await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
+        await expect(page.locator('#minimap-panel')).toBeVisible();
+        // The control block settles after the panel appears: measure once it stands still.
+        const where = async () => JSON.stringify(await page.locator('#minimap-canvas').boundingBox());
+        let last = '';
+        await expect.poll(async () => { const now = await where(); const still = now === last; last = now; return still; }).toBe(true);
+        const mm = (await page.locator('#minimap-canvas').boundingBox())!;
+        const cx = mm.x + mm.width / 2, cy = mm.y + mm.height / 2;
+        const view = () => page.evaluate(() => {
+            const zp = window.Strom.ZoomPan;
+            const { scale, tx, ty } = zp.getTransform();
+            const { width, height } = zp.getViewportSize();
+            const box = (window.Strom.UI as unknown as { minimapBox: { minX: number; minY: number; maxX: number; maxY: number } }).minimapBox;
+            return { x: (width / 2 - tx) / scale, y: (height / 2 - ty) / scale, box };
+        });
+        const sides = [
+            { name: 'left', to: [mm.x - 400, cy], axis: 'x', edge: 'minX' },
+            { name: 'right', to: [mm.x + mm.width + 400, cy], axis: 'x', edge: 'maxX' },
+            { name: 'top', to: [cx, mm.y - 400], axis: 'y', edge: 'minY' },
+            { name: 'bottom', to: [cx, mm.y + mm.height + 400], axis: 'y', edge: 'maxY' },
+        ] as const;
+        for (const side of sides) {
+            await page.mouse.move(cx, cy);
+            await page.mouse.down();
+            // A first step along the drag: the view now follows the pointer.
+            await page.mouse.move(side.axis === 'x' ? cx + Math.sign(side.to[0] - cx) : cx, side.axis === 'y' ? cy + Math.sign(side.to[1] - cy) : cy);
+            const start = await view();
+            await page.mouse.move(side.to[0], side.to[1], { steps: 8 });
+            const end = await view();
+            await page.mouse.up();
+            expect(Math.abs(end[side.axis] - end.box[side.edge]), side.name).toBeLessThan(1);
+            // Straight out: the other axis stays where it was.
+            const other = side.axis === 'x' ? 'y' : 'x';
+            expect(Math.abs(end[other] - start[other]), side.name).toBeLessThan(1);
+        }
+    });
+
     /**
      * Regression guard: the minimap must stay docked in its bottom-right control
      * block wherever it is shown, and disappear together with that block when a

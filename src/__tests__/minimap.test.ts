@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { computeMinimapTransform, worldBoundingBox, WorldBox } from '../ui/minimap.js';
+import { computeMinimapTransform, worldBoundingBox, clampToBox, WorldBox } from '../ui/minimap.js';
 import { PersonId, Position } from '../types.js';
 
 const MM_W = 180, MM_H = 120, PAD = 8;
@@ -60,5 +60,19 @@ describe('worldBoundingBox', () => {
         ]);
         const box = worldBoundingBox(m, cardW, cardH)!;
         expect(box).toEqual({ minX: 0, minY: 0, maxX: 300 + cardW, maxY: 200 + cardH });
+    });
+});
+
+describe('clampToBox (where a minimap drag may centre the view)', () => {
+    const box: WorldBox = { minX: -100, minY: 50, maxX: 400, maxY: 300 };
+    it('the same stop on all four sides', () => {
+        expect(clampToBox(-900, 100, box)).toEqual([-100, 100]);
+        expect(clampToBox(900, 100, box)).toEqual([400, 100]);
+        expect(clampToBox(0, -900, box)).toEqual([0, 50]);
+        expect(clampToBox(0, 900, box)).toEqual([0, 300]);
+    });
+    it('a point inside stays; no box, nothing to stop at', () => {
+        expect(clampToBox(10, 60, box)).toEqual([10, 60]);
+        expect(clampToBox(-900, 900, null)).toEqual([-900, 900]);
     });
 });
