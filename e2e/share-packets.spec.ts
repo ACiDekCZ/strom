@@ -96,7 +96,7 @@ function persons(page: Page): Promise<PersonLite[]> {
     return page.evaluate(() => Object.values(window.Strom.DataManager.getData().persons) as PersonLite[]);
 }
 
-test('change packet with edits on both sides: preview names the fields, Accept keeps the owner\'s edits', async ({ page, browser }, testInfo) => {
+test('change packet with edits on both sides: preview names the fields, Accept keeps the owner\'s edits', { tag: '@smoke' }, async ({ page, browser }, testInfo) => {
     const sharedPath = await shareOwnerTree(page, testInfo);
 
     // ---- RECIPIENT ----

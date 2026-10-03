@@ -88,7 +88,7 @@ async function seedPlaces(page: Page): Promise<void> {
     await setPlaces(page, { 'Johan': 'Greenwich', 'Peter': 'Pembroke' });
 }
 
-test('the sample tree is on the map the moment it loads', async ({ page }) => {
+test('the sample tree is on the map the moment it loads', { tag: '@smoke' }, async ({ page }) => {
     await stubTiles(page);
     // No geocoder stub on purpose: if the demo needed a lookup, this route would
     // never be called and the test would show an empty map.

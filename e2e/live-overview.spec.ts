@@ -264,6 +264,8 @@ test.describe('back from another tree', () => {
 
 test.describe('the agent at work', () => {
     test('an arc circles the avatar of whom it works on now; its queue only in the tooltip', async ({ page }) => {
+        // The arc's turning itself is checked here.
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
         // Anna (no conflict of her own, which would come first) is worked on; Josef is only queued.
         await follow(page, { width: 1440, height: 900 }, (b) => { b.waiting = []; b.workPerson = 'P0002'; });
         const anna = card(page, 'Anna');

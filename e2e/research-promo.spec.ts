@@ -142,7 +142,7 @@ async function shot(page: Page, name: string, testInfo: TestInfo, target?: strin
 
 test.describe('welcome screen offer', () => {
     for (const size of [DESKTOP, { width: 400, height: 800 }, { width: 700, height: 900 }]) {
-        test(`is shown at ${size.width}px and opens the site (EN, no language parameter)`, async ({ page, context }) => {
+        test(`is shown at ${size.width}px and opens the site (EN, no language parameter)`, { tag: '@smoke' }, async ({ page, context }) => {
             await stubSite(context);
             await page.setViewportSize(size);
             await openApp(page, { researchPromo: true });

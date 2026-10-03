@@ -27,7 +27,7 @@ async function tree(page: Page, persons: Record<string, Record<string, unknown>>
 const person = (page: Page, id: string) => page.evaluate((pid) => window.Strom.DataManager.getPerson(pid as never), id);
 
 test.describe('birth and death citations', () => {
-    test('a birth cited on its own shows under the birth even with advanced fields off', async ({ page }) => {
+    test('a birth cited on its own shows under the birth even with advanced fields off', { tag: '@smoke' }, async ({ page }) => {
         await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', birthSourceIds: ['s1'] } });
         await page.evaluate(() => window.Strom.UI.showEditPersonModal('j' as never));
         const birth = page.locator('#birth-sources-group');

@@ -9,7 +9,7 @@ function realPersonCount(page: Page): Promise<number> {
     );
 }
 
-test('the add-person modal opens without a horizontal scrollbar', async ({ page }) => {
+test('the add-person modal opens without a horizontal scrollbar', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     // Empty-state "Add person" opens the modal fresh.
     await page.locator('#empty-state button').first().click();
@@ -21,7 +21,7 @@ test('the add-person modal opens without a horizontal scrollbar', async ({ page 
     expect(overflow).toBeLessThanOrEqual(1);
 });
 
-test('a created person and every edited field survive a reload', async ({ page }) => {
+test('a created person and every edited field survive a reload', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 

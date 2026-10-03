@@ -6,7 +6,7 @@ import { openApp, createFirstPerson, card, cardAction, waitForPersist } from './
  * then restore the backup and verify the earlier state comes back.
  */
 test.describe('Backups', () => {
-    test('a manual backup survives a delete, restores, and the restore is undoable', async ({ page }) => {
+    test('a manual backup survives a delete, restores, and the restore is undoable', { tag: '@smoke' }, async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Beta', 'Root');
         await expect(card(page, 'Beta')).toBeVisible();

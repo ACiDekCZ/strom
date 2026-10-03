@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { openApp, createFirstPerson, card } from './helpers.js';
 
-test('empty state shows and the first person can be created', async ({ page }) => {
+test('empty state shows and the first person can be created', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await expect(page.locator('#empty-state')).toBeVisible();
     // Once loaded, the boot class is gone (see startup-flash.spec.ts).

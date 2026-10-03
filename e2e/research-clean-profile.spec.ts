@@ -44,7 +44,7 @@ async function recordLaunches(page: Page): Promise<void> {
 test.describe('no Strom Research on this computer: nothing of it shows or runs', () => {
     test.use({ viewport: DESKTOP });
 
-    test('a clean profile: no bridge request, no research UI, nothing remembered', async ({ page, baseURL }) => {
+    test('a clean profile: no bridge request, no research UI, nothing remembered', { tag: '@smoke' }, async ({ page, baseURL }) => {
         const appOrigin = new URL(baseURL!).origin;
         const local: string[] = [];
         page.on('request', (req) => { if (isLocalBridge(req, appOrigin)) local.push(req.url()); });

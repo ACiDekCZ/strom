@@ -6,7 +6,7 @@ const APP_VERSION = JSON.parse(readFileSync('package.json', 'utf-8')).version;
 // A couple of flows with the UI forced to Czech (system language = cs-CZ).
 test.use({ locale: 'cs-CZ' });
 
-test('Czech UI: create the first person', async ({ page }) => {
+test('Czech UI: create the first person', { tag: '@smoke' }, async ({ page }) => {
     await page.goto('/strom.html');
     await expect(page.locator('.toolbar')).toBeVisible();
     await expect(page.locator('#empty-state')).toBeVisible();

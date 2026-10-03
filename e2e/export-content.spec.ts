@@ -19,7 +19,7 @@ async function openJsonExportDialog(page: Page) {
     return pwd;
 }
 
-test('export dialog shows the Content section: four checkboxes on by default, three presets, live estimate', async ({ page }) => {
+test('export dialog shows the Content section: four checkboxes on by default, three presets, live estimate', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1950' });
 

@@ -7,7 +7,7 @@ import { openApp, createFirstPerson, card } from './helpers.js';
  * with their descriptions and disabled states.
  */
 
-test('undo toast appears after adding a person; Undo reverts and confirms', async ({ page }) => {
+test('undo toast appears after adding a person; Undo reverts and confirms', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     await expect(card(page, 'Jan')).toBeVisible();

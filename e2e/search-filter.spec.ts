@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { openApp, createFirstPerson, card, cardAction, addRelation } from './helpers.js';
 
-test('search filter highlights matching cards and dims the rest; clear resets', async ({ page }) => {
+test('search filter highlights matching cards and dims the rest; clear resets', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     await addRelation(page, 'Jan', 'partner', 'Marie', 'Novak', 'female');

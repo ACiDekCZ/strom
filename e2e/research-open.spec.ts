@@ -57,7 +57,7 @@ const treeNames = (page: Page) => page.evaluate(
 const cors = { 'access-control-allow-origin': '*' };
 
 test.describe('open a research', () => {
-    test('drop a Strom Research file → its tree; drop again → the same tree is updated', async ({ page }) => {
+    test('drop a Strom Research file → its tree; drop again → the same tree is updated', { tag: '@smoke' }, async ({ page }) => {
         await openApp(page);
         await dropFile(page, 'tree-strom.ged', researchGed());
         await expect(page.locator('.toast')).toContainText('Opened the research Víškovi from Strom Research — 3 people, 1 family');

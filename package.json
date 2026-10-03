@@ -14,7 +14,8 @@
     "test:real": "npx tsx scripts/test-real-data.ts",
     "gen:etalon": "tsx scripts/generate-etalon.ts",
     "gen:devel-demo": "tsx scripts/generate-devel-demo.ts",
-    "test:e2e": "npm run build && playwright test"
+    "test:e2e": "npm run build && playwright test",
+    "test:e2e:smoke": "npm run build && playwright test --grep @smoke"
   },
   "keywords": [
     "family-tree",

@@ -85,7 +85,7 @@ async function probe(page: Page) {
     });
 }
 
-test('toolbar regimes have no duplicated or missing controls at any width', async ({ page }) => {
+test('toolbar regimes have no duplicated or missing controls at any width', { tag: '@smoke' }, async ({ page }) => {
     await page.setViewportSize({ width: 1400, height: 850 });
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');

@@ -6,7 +6,7 @@ import { openApp, createFirstPerson, card } from './helpers.js';
  * browser's IndexedDB, outside the tree data — so they never grow the exported
  * file, and they are not a substitute for exporting it.
  */
-test('a single backup can be deleted, and the tree is not touched', async ({ page }) => {
+test('a single backup can be deleted, and the tree is not touched', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1900' });
     await page.evaluate(async () => {

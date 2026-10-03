@@ -123,7 +123,7 @@ async function readBack(page: Page, first: string, last: string) {
     }, [first, last] as const);
 }
 
-test('GEDCOM export carries the images and a re-import brings them back', async ({ page }) => {
+test('GEDCOM export carries the images and a re-import brings them back', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     const img = await makeImages(page);
     const tree = treeWithImages(img);

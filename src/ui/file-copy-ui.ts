@@ -130,6 +130,10 @@ function pulse(el: HTMLElement | null): void {
     void el.offsetWidth;   // restart the animation
     el.classList.add('storage-pulse');
     el.addEventListener('animationend', () => el.classList.remove('storage-pulse'), { once: true });
+    // Reduced motion: the CSS runs no animation, so no animationend comes.
+    if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        setTimeout(() => el.classList.remove('storage-pulse'), 1500);
+    }
 }
 
 /** Draw the eye to every visible form of the indicator. */

@@ -10,7 +10,7 @@ async function createTree(page: Page, name: string): Promise<void> {
     await expect(dialog).toBeHidden();
 }
 
-test('trees: create a new tree, switch between trees', async ({ page }) => {
+test('trees: create a new tree, switch between trees', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     const original = (await page.locator('.tree-switcher-btn .tree-name').textContent())?.trim() || '';
@@ -27,7 +27,7 @@ test('trees: create a new tree, switch between trees', async ({ page }) => {
     await expect(card(page, 'Jan')).toBeVisible();
 });
 
-test('trees: rename and delete a tree from the tree manager', async ({ page }) => {
+test('trees: rename and delete a tree from the tree manager', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     await createTree(page, 'Temp');

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { openApp, createFirstPerson, cardAction, personModal, waitForPersist } from './helpers.js';
 
-test('life events: add an event, it survives a page reload', async ({ page }) => {
+test('life events: add an event, it survives a page reload', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 

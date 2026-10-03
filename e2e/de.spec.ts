@@ -73,7 +73,7 @@ async function closeWithEscape(page: Page, dialog: Locator): Promise<void> {
     await expect(dialog).toBeHidden();
 }
 
-test('German UI: html lang and the main dialogs are free of English words', async ({ page }) => {
+test('German UI: html lang and the main dialogs are free of English words', { tag: '@smoke' }, async ({ page }) => {
     await page.goto('/strom.html');
     await expect(page.locator('.toolbar')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.lang)).toBe('de');

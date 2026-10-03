@@ -68,7 +68,7 @@ async function buildFamily(page: Page): Promise<void> {
     await waitForPersist(page, 'Petr');
 }
 
-test('an exported HTML app imports through "From HTML file" as a new tree with its counts', async ({ page }, testInfo) => {
+test('an exported HTML app imports through "From HTML file" as a new tree with its counts', { tag: '@smoke' }, async ({ page }, testInfo) => {
     await openApp(page);
     await buildFamily(page);
     const file = await exportAppFile(page, testInfo, 'family.html');

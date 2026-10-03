@@ -50,7 +50,7 @@ function queued(page: Page): Promise<{ sha256: string; personId?: string; bytes:
 test.describe('originals go to the research', () => {
     test.use({ viewport: DESKTOP });
 
-    test('a file added to a person goes to the research as it was, with the person', async ({ page }) => {
+    test('a file added to a person goes to the research as it was, with the person', { tag: '@smoke' }, async ({ page }) => {
         const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
         await openResearch(page, { media: true });
         const modal = await attachToJan(page);
@@ -73,7 +73,7 @@ test.describe('originals go to the research', () => {
         expect(await queued(page)).toEqual([]);
     });
 
-    test('the bridge down: the original waits in the browser and goes when it answers', async ({ page }) => {
+    test('the bridge down: the original waits in the browser and goes when it answers', { tag: '@smoke' }, async ({ page }) => {
         const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
         await openResearch(page, { media: true });
         b.down = true;

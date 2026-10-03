@@ -84,7 +84,7 @@ const jan = { firstName: 'Jan', lastName: 'Novák', birthDate: '1865', partnersh
 const marie = { firstName: 'Marie', lastName: 'Nováková', gender: 'female', birthDate: '1868', partnerships: ['u1'] };
 
 test.describe('deleting a source', () => {
-    test('the question names it and counts its places; Cancel keeps it; Delete removes every citation; Undo brings them back', async ({ page }) => {
+    test('the question names it and counts its places; Cancel keeps it; Delete removes every citation; Undo brings them back', { tag: '@smoke' }, async ({ page }) => {
         await tree(page, {
             persons: {
                 j: { ...jan, sourceIds: ['s1'], birthSourceIds: ['s1'], events: [{ id: 'e1', type: 'baptism', date: '1865', sourceIds: ['s1', 's2'] }] },

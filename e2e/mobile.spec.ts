@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, createFirstPerson, card } from './helpers.js';
 
-test('the search dropdown sizes to long names, not the narrow mobile input', async ({ page }) => {
+test('the search dropdown sizes to long names, not the narrow mobile input', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     // A name far wider than the ~140px mobile toolbar search field.
     await createFirstPerson(page, 'Bartholomew', 'Featherstonehaugh-Wellington');

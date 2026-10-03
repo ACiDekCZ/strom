@@ -72,7 +72,7 @@ async function family(page: Page): Promise<void> {
 
 // ---------------------------------------------------------------- duplicate
 
-test('Duplicate in a tree row makes an independent copy: editing it leaves the original alone', async ({ page }) => {
+test('Duplicate in a tree row makes an independent copy: editing it leaves the original alone', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await family(page);
     const original = await activeTreeName(page);

@@ -109,7 +109,7 @@ async function submitPassword(page: Page, password: string): Promise<void> {
 }
 
 test.describe('Local encryption', () => {
-    test('cancelled unlock leaves an Unlock banner and a read-only app; unlocking restores editing', async ({ page }) => {
+    test('cancelled unlock leaves an Unlock banner and a read-only app; unlocking restores editing', { tag: '@smoke' }, async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
         await addRelation(page, 'Jan', 'partner', 'Marie', 'Novak', 'female');
@@ -189,7 +189,7 @@ test.describe('Local encryption', () => {
         expect(trees).toHaveLength(1);
     });
 
-    test('the Unlock banner reopens the prompt and unlocks the tree', async ({ page }) => {
+    test('the Unlock banner reopens the prompt and unlocks the tree', { tag: '@smoke' }, async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
         await waitForPersist(page, 'Jan');

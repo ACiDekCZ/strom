@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { openApp, createFirstPerson, cardAction, personModal, waitForPersist } from './helpers.js';
 
-test('attachments: add an image, it survives a reload, then delete it', async ({ page }) => {
+test('attachments: add an image, it survives a reload, then delete it', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     // Attachments are a research field — off by default (see advanced-fields.spec).
     await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));

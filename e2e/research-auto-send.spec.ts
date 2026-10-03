@@ -50,7 +50,7 @@ async function hide(page: Page): Promise<void> {
 }
 
 test.describe('sending by itself', () => {
-    test('an edit goes after two quiet minutes, once; another edit moves the time on', async ({ page }) => {
+    test('an edit goes after two quiet minutes, once; another edit moves the time on', { tag: '@smoke' }, async ({ page }) => {
         const bridge = await autoTree(page);
         writesAtOnce(bridge);
         await editJan(page);
@@ -68,7 +68,7 @@ test.describe('sending by itself', () => {
         expect(bridge.posts).toHaveLength(1);
     });
 
-    test('switching trees and leaving the page send at once', async ({ page }) => {
+    test('switching trees and leaving the page send at once', { tag: '@smoke' }, async ({ page }) => {
         const bridge = await autoTree(page);
         writesAtOnce(bridge);
         const first = await treeId(page);

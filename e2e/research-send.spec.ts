@@ -81,7 +81,7 @@ const send = (page: Page) => page.evaluate((b) => window.Strom.UI.sendChangesToR
 const dialog = (page: Page) => page.locator('#confirmation-modal');
 
 test.describe('send changes back to the research', () => {
-    test('the header _STROM_HEAD is kept; one tied tree → confirm → one POST of a faithful GEDCOM', async ({ page }) => {
+    test('the header _STROM_HEAD is kept; one tied tree → confirm → one POST of a faithful GEDCOM', { tag: '@smoke' }, async ({ page }) => {
         await openResearch(page, true);
         const meta = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata());
         expect(meta.research.head).toBe(HEAD);

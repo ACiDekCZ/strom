@@ -9,7 +9,7 @@ import { openApp, createFirstPerson, card, addRelation } from './helpers.js';
  * and sends the file back -> the sender imports the reply in-app and gets the
  * merge offer whose preview contains the addition.
  */
-test('share round-trip: welcome, collaboration bar, reply merge offer', async ({ page, browser }, testInfo) => {
+test('share round-trip: welcome, collaboration bar, reply merge offer', { tag: '@smoke' }, async ({ page, browser }, testInfo) => {
     // ---- SENDER: build a small tree and share it with a message ----
     await openApp(page);
     await createFirstPerson(page, 'Milan', 'Odesilatel');

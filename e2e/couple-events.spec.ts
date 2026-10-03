@@ -63,7 +63,7 @@ const coupleEvents = (page: Page) => page.locator('#relationships-modal .couple-
 const rows = (page: Page) => page.locator('#relationships-modal .couple-event-row');
 
 test.describe("couple's events", () => {
-    test('a couple without events looks as before; the advanced mode offers "+ couple event"', async ({ page }) => {
+    test('a couple without events looks as before; the advanced mode offers "+ couple event"', { tag: '@smoke' }, async ({ page }) => {
         await setup(page);
         await openPanel(page, 'Anna');
         await expect(coupleEvents(page)).toHaveCount(0);

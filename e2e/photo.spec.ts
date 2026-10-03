@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { openApp, createFirstPerson, card, cardAction, personModal } from './helpers.js';
 
-test('photo: uploading shows an avatar on the card; removing it clears the avatar', async ({ page }) => {
+test('photo: uploading shows an avatar on the card; removing it clears the avatar', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 

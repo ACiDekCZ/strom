@@ -16,7 +16,7 @@ import {
 
 
 test.describe('the state of the tree and sending straight', () => {
-    test('changes the research lacks: the block and the dot; Send posts without a dialog; then sent and waiting, no dot', async ({ page }) => {
+    test('changes the research lacks: the block and the dot; Send posts without a dialog; then sent and waiting, no dot', { tag: '@smoke' }, async ({ page }) => {
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page);
         await poll(page);
@@ -46,7 +46,7 @@ test.describe('the state of the tree and sending straight', () => {
         await expect(page.locator('body')).not.toContainText('saved in the research');
     });
 
-    test('nothing to send; in sync quietly, no dot', async ({ page }) => {
+    test('nothing to send; in sync quietly, no dot', { tag: '@smoke' }, async ({ page }) => {
         await openResearch(page);
         const bridge = await fakeBridge(page);
         await poll(page);

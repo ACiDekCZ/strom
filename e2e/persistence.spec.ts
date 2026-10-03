@@ -34,7 +34,7 @@ async function addPerson(page: Page, firstName: string): Promise<void> {
     await expect(page.locator('#person-modal')).toBeHidden();
 }
 
-test('edits no file holds: an information-only notice, the indicator until the next save', async ({ page }) => {
+test('edits no file holds: an information-only notice, the indicator until the next save', { tag: '@smoke' }, async ({ page }) => {
     await stubPersistence(page, false);
     await openApp(page, { fileCopyReminders: true });
     const notice = page.locator('#file-copy-notice');
@@ -99,7 +99,7 @@ test('edits no file holds: an information-only notice, the indicator until the n
     await expect(dialog).toContainText('Changes made since then are only in the browser');
 });
 
-test('bottom-bar regime: the state rides the More tab as a warning triangle and tops its sheet; gone after a save', async ({ page }) => {
+test('bottom-bar regime: the state rides the More tab as a warning triangle and tops its sheet; gone after a save', { tag: '@smoke' }, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await stubPersistence(page, false);
     await openApp(page);

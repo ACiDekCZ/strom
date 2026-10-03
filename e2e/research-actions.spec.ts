@@ -86,7 +86,7 @@ async function personMenu(page: Page, name: string): Promise<string[]> {
 }
 
 test.describe('Actions → Research', () => {
-    test('announced: the items in order, the AI label, the note, the waiting count and dot', async ({ page }) => {
+    test('announced: the items in order, the AI label, the note, the waiting count and dot', { tag: '@smoke' }, async ({ page }) => {
         await setup(page, ALL, [{ id: 'T0001', what: 'Confirm the father of Jan' }, { id: 'T0002', what: 'Which Anna?' }]);
         await expect(page.locator('#actions-menu-dot')).toBeVisible();
         await page.locator('.actions-menu-btn').click();

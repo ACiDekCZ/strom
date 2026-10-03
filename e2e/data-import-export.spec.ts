@@ -16,7 +16,7 @@ function personCount(page: Page): Promise<number> {
     return page.evaluate(() => Object.keys(window.Strom.DataManager.getData().persons).length);
 }
 
-test('JSON round-trip: export a 3-person tree, re-import it as a new tree', async ({ page }) => {
+test('JSON round-trip: export a 3-person tree, re-import it as a new tree', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await buildFamily(page);
 
@@ -34,7 +34,7 @@ test('JSON round-trip: export a 3-person tree, re-import it as a new tree', asyn
     expect(await personCount(page)).toBe(3);
 });
 
-test('JSON import carries rich fields: photo, note and a life event survive the real file path', async ({ page }) => {
+test('JSON import carries rich fields: photo, note and a life event survive the real file path', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Seed', 'Person');
 

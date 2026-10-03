@@ -123,7 +123,7 @@ async function confirmPlainExport(page: Page, privacy: 'full' | 'initials' | 'mi
 
 // ---------------------------------------------------------------------------
 
-test('XSS: markup and a quote-breaking id in an imported JSON stay inert text in every view', async ({ page }, testInfo) => {
+test('XSS: markup and a quote-breaking id in an imported JSON stay inert text in every view', { tag: '@smoke' }, async ({ page }, testInfo) => {
     const fired = trackDialogs(page);
     await openApp(page);
     await createFirstPerson(page, 'Seed', 'Person');

@@ -21,7 +21,7 @@ async function addRelation(
     await expect(modal).toBeHidden();
 }
 
-test('add partner, child and parent via the context menu; cards render', async ({ page }) => {
+test('add partner, child and parent via the context menu; cards render', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 

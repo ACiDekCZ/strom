@@ -103,7 +103,7 @@ async function dragTree(page: Page): Promise<void> {
 const btn = (page: Page) => page.locator('#live-follow');
 
 test.describe('follow the agent in the tree', () => {
-    test('on: from the fan to the family view, the worked-on person focused and centred', async ({ page }) => {
+    test('on: from the fan to the family view, the worked-on person focused and centred', { tag: '@smoke' }, async ({ page }) => {
         await follow(page);
         await page.evaluate(() => window.Strom.UI.setDisplayViewMode('fan'));
         await expect(btn(page)).toHaveAttribute('aria-pressed', 'false');

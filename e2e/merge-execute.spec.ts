@@ -126,7 +126,7 @@ async function personCountOf(page: Page, treeId: string): Promise<number> {
 
 // ---------------------------------------------------------------------------
 
-test('tree merge runs to completion: filters, confirm, execute — the new tree holds the union, inputs untouched', async ({ page }) => {
+test('tree merge runs to completion: filters, confirm, execute — the new tree holds the union, inputs untouched', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Seed', 'Person');
 

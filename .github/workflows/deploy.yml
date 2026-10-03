@@ -17,6 +17,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
@@ -26,12 +27,6 @@ jobs:
 
       - name: Unit tests
         run: npx vitest run
-
-      - name: Install Playwright
-        run: npx playwright install --with-deps chromium
-
-      - name: E2E tests
-        run: npx playwright test
 
       - name: Get version info
         id: version
@@ -48,8 +43,107 @@ jobs:
           name: strom-build
           path: strom.html
 
-  deploy-pwa:
+  # Type errors esbuild lets through; alongside the browser suite.
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+  # The browser suite against the very strom.html built above, in 4 parallel
+  # shards (each with fewer workers than vCPUs: an overloaded runner flakes).
+  # Not on a tag: a release tag is the commit main has just tested.
+  e2e:
     needs: build
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build
+        uses: actions/download-artifact@v4
+        with:
+          name: strom-build
+
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system libraries
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: E2E tests (shard ${{ matrix.shard }}/4)
+        run: npx playwright test --shard=${{ matrix.shard }}/4
+
+      - name: Flaky tests in the summary
+        if: always()
+        run: |
+          node -e '
+            const fs = require("fs");
+            if (!fs.existsSync("e2e-results.json")) process.exit(0);
+            const r = JSON.parse(fs.readFileSync("e2e-results.json", "utf8"));
+            const st = r.stats || {};
+            const flaky = [];
+            const walk = (suite, path) => {
+              for (const s of suite.suites || []) walk(s, [...path, s.title]);
+              for (const spec of suite.specs || []) {
+                for (const t of spec.tests || []) if (t.status === "flaky") flaky.push([...path, spec.title].filter(Boolean).join(" › "));
+              }
+            };
+            for (const s of r.suites || []) walk(s, [s.title]);
+            const line = `Shard ${process.env.SHARD}/4: ${st.expected ?? 0} passed, ${st.flaky ?? 0} flaky, ${st.unexpected ?? 0} failed, ${Math.round((st.duration ?? 0) / 1000)} s`;
+            let md = `### ${line}\n`;
+            for (const f of flaky) { md += `- flaky: ${f}\n`; console.log(`::warning title=Flaky e2e test::${f}`); }
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
+            console.log(line);
+          '
+        env:
+          SHARD: ${{ matrix.shard }}
+
+      - name: Upload failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-traces-${{ matrix.shard }}
+          path: test-results/
+          retention-days: 7
+
+  deploy-pwa:
+    needs: [build, e2e, typecheck]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
@@ -87,7 +181,7 @@ jobs:
   # public app (/run/ on main), the `latest` pre-release and the tagged
   # releases are untouched.
   deploy-beta:
-    needs: build
+    needs: [build, e2e, typecheck]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/beta'
     steps:
@@ -120,7 +214,7 @@ jobs:
           git push origin beta
 
   release-latest:
-    needs: build
+    needs: [build, e2e, typecheck]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     permissions:

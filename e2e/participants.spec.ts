@@ -6,7 +6,7 @@ import { openApp, createFirstPerson, cardAction, addRelation } from './helpers.j
  * usually NOT in the tree — a neighbour — so a name alone has to be enough,
  * while a godparent who IS a relative can be linked.
  */
-test('a godparent can be recorded by name alone, and is visible without reopening', async ({ page }) => {
+test('a godparent can be recorded by name alone, and is visible without reopening', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
     await cardAction(page, 'Jan', 'edit');

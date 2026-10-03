@@ -5,7 +5,7 @@ function activeTreeId(page: Page): Promise<string> {
     return page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
 }
 
-test('locking the tree hides editing controls; unlocking restores them', async ({ page }) => {
+test('locking the tree hides editing controls; unlocking restores them', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 

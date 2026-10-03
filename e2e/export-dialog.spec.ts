@@ -39,7 +39,7 @@ async function addPerson(page: Page, firstName: string): Promise<void> {
 
 const dialog = (page: Page) => page.locator('#export-password-modal');
 
-test('export opens on the button: no password fields, encryption off', async ({ page }) => {
+test('export opens on the button: no password fields, encryption off', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await page.evaluate(() => { window.Strom.UI.showExportDialog(); void window.Strom.UI.exportTargetTreeJSON(); });
     await expect(dialog(page)).toHaveClass(/active/);

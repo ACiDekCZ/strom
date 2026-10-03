@@ -4,7 +4,7 @@ import { openApp, card, createFirstPerson } from './helpers.js';
 /**
  * Fan chart view: semicircular ancestor diagram as the fourth display mode.
  */
-test('fan view shows ancestor sectors and clicking one refocuses', async ({ page }) => {
+test('fan view shows ancestor sectors and clicking one refocuses', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Johan')).toBeVisible();

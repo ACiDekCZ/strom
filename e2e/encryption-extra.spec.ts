@@ -87,7 +87,7 @@ async function submitPrompt(page: Page, password: string): Promise<void> {
     await prompt.locator('#password-prompt-input').press('Enter');
 }
 
-test('password setup refuses a short password and a mismatch; Cancel leaves encryption off', async ({ page }) => {
+test('password setup refuses a short password and a mismatch; Cancel leaves encryption off', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     await waitForPersist(page, 'Jan');

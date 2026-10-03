@@ -28,14 +28,24 @@ export default defineConfig({
     testDir: './e2e',
     fullyParallel: true,
     forbidOnly: !!process.env.CI,
-    retries: 0,
-    // GitHub's runner has 4 vCPUs; one worker ran the suite serially (~16 min).
-    workers: process.env.CI ? 4 : undefined,
-    reporter: [['list']],
+    // One retry on CI: a flake does not stop a deploy, and the run reports it
+    // as "flaky" (the workflow puts the count in the job summary).
+    retries: process.env.CI ? 1 : 0,
+    // CI runs the suite in 4 shards (deploy.yml); a GitHub runner has 4 vCPUs,
+    // and 4 Chromium workers on it overloaded it into flakes — 3 per shard.
+    // Locally E2E_WORKERS overrides Playwright's default (half the cores).
+    workers: process.env.CI ? 3 : process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : undefined,
+    reporter: process.env.CI
+        ? [['list'], ['json', { outputFile: 'e2e-results.json' }]]
+        : [['list']],
     timeout: 30_000,
     use: {
         baseURL: `http://localhost:${PORT}/strom.html`,
         locale: 'en-US',
+        // No animations: a glide or a fade still running when a test acts
+        // was the main cause of flakes. Specs that check the motion itself
+        // switch it back with page.emulateMedia({ reducedMotion: 'no-preference' }).
+        contextOptions: { reducedMotion: 'reduce' },
         screenshot: 'only-on-failure',
         trace: 'retain-on-failure',
     },
