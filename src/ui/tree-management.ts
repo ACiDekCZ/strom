@@ -245,8 +245,8 @@ export const treeManagementMethods = uiModule({
         if (auditRow) auditRow.style.display = SettingsManager.isAuditLogEnabled() ? '' : 'none';
         const sourcesRow = document.getElementById('actions-sources-row');
         if (sourcesRow) sourcesRow.style.display = this.isSourcesMenuOffered() ? '' : 'none';
-        // Strom Research "New" marker (its dot yields to the anniversaries dot).
-        this.refreshResearchNewMarker(count);
+        // Strom Research "New" label on its menu row.
+        this.refreshResearchNewMarker();
         this.refreshUndoRedoToolbar();
     },
 

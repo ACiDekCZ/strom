@@ -873,8 +873,12 @@ export interface ResearchAccepts {
     sources: boolean;
     /** It knows how much a transcript weighs (`_STROM_TRANSCRIPTS`, `_STROM_VERIFIED`). */
     verified: boolean;
-    /** It takes original files (a later step); false until then. */
+    /** It takes original files (`PUT /media/<sha256>`, `accepts.media` is an object). */
     media: boolean;
+    /** The largest file it takes (`accepts.media.max`); null when it does not say. */
+    mediaMaxBytes: number | null;
+    /** It takes a crop's region with a file (`accepts.media.region`). */
+    mediaRegion: boolean;
     /** It works with an agent, or as an archive of the user's data without one (`mode: "archive"`). */
     mode: 'agent' | 'archive';
     /** A send waits in the research's inbox for the user (`sync.auto: "off"`). */
@@ -898,6 +902,10 @@ export interface ResearchInbox {
 }
 
 /** `/status.accepts`, or null when the research does not say (older than 1.12). Untrusted. */
+function mediaMaxBytes(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
+}
+
 export function sanitizeAccepts(value: unknown): ResearchAccepts | null {
     const r = asRecord(value);
     if (!r) return null;
@@ -908,6 +916,8 @@ export function sanitizeAccepts(value: unknown): ResearchAccepts | null {
         sources: r.sources === true,
         verified: r.verified === true,
         media: !!asRecord(r.media),
+        mediaMaxBytes: mediaMaxBytes(asRecord(r.media)?.max ?? asRecord(r.media)?.maxBytes),
+        mediaRegion: asRecord(r.media)?.region === true,
         mode: r.mode === 'archive' ? 'archive' : 'agent',
         review: auto === 'off' && r.mode !== 'archive',
     };

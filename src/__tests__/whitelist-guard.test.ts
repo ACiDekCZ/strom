@@ -73,6 +73,7 @@ function fullTree(): Required<StromData> {
             [ALICE]: { ...person(ALICE, 'Alice'), attachments: [{
                 id: 'att1', name: 'page-57.jpg', mimeType: 'image/jpeg',
                 dataUrl: 'data:image/jpeg;base64,AA==', sizeBytes: 1,
+                original: { sha256: 'b'.repeat(64), name: 'page-57.tif', mimeType: 'image/tiff', bytes: 148_000_000, orientation: 6 },
             }] },
             [BOB]: person(BOB, 'Bob'),
         },
@@ -85,6 +86,7 @@ function fullTree(): Required<StromData> {
                     id: 'exc1', dataUrl: 'data:image/jpeg;base64,AA==', width: 10, height: 4,
                     sizeBytes: 1, fromAttachmentId: 'att1', region: { x: 0.1, y: 0.2, w: 0.5, h: 0.1 },
                     pageUrl: 'https://archive.example/page/57', caption: 'left page',
+                    originalSha: 'b'.repeat(64),
                 }],
             },
         },

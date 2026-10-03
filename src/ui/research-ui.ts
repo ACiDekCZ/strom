@@ -530,8 +530,25 @@ export function researchGedcom(data: StromData, treeName: string, link: Research
     return exportToGedcom(data, treeName, { research: link }).content;
 }
 
-async function fetchStatus(url: string): Promise<LiveStatus | null> {
-    const res = await fetchWithTimeout(url, 10000);
+/**
+ * The first contact from a link the research opened (?live= / ?send= /
+ * ?adopt=): long enough for the browser's question about access to the local
+ * network (Chrome holds the request until the user answers it).
+ */
+export const CONNECT_TIMEOUT_MS = 60000;
+/** After this long the user is told what is being waited for. */
+const CONNECT_HINT_MS = 1500;
+
+/** Why a bridge could not be reached: it timed out (a prompt unanswered, or blocked), it refused, or Safari. */
+export type BridgeFailure = 'timeout' | 'unreachable' | 'safari';
+
+export function bridgeFailure(err: unknown): BridgeFailure {
+    if (typeof navigator !== 'undefined' && isSafariBrowser(navigator.userAgent || '')) return 'safari';
+    return err instanceof DOMException && (err.name === 'AbortError' || err.name === 'TimeoutError') ? 'timeout' : 'unreachable';
+}
+
+async function fetchStatus(url: string, ms = 10000): Promise<LiveStatus | null> {
+    const res = await fetchWithTimeout(url, ms);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const status = sanitizeLiveStatus(await res.json());
     // The bridge runs on this computer: what it announces holds here.
@@ -946,6 +963,38 @@ export const researchUiMethods = uiModule({
     },
 
     /** The browser refused the local address: explain, offer the file picker. */
+    /**
+     * Wait for a bridge the user just came from; after a moment say what is
+     * waited for (the browser may be asking about the local network).
+     */
+    async connectResearchBridge<T>(ask: () => Promise<T>): Promise<T> {
+        const hint = setTimeout(() => this.showToast(strings.research.connecting, CONNECT_TIMEOUT_MS,
+            { spinner: true, kind: 'research-connect' }), CONNECT_HINT_MS);
+        try {
+            return await ask();
+        } finally {
+            clearTimeout(hint);
+            document.querySelector('.toast[data-kind="research-connect"]')?.remove();
+        }
+    },
+
+    /**
+     * The research could not be reached from a link it opened: say why (as
+     * far as the browser lets us know) instead of leaving an empty tree.
+     * Resolves true when the user wants to try again. Safari: the ways that
+     * work there.
+     */
+    async showResearchConnectFailed(err: unknown): Promise<boolean> {
+        const why = bridgeFailure(err);
+        const r = strings.research;
+        if (why === 'safari') {
+            await this.offerManualImport(r.safariBlocked);
+            return false;
+        }
+        return this.showConfirm(`${why === 'timeout' ? r.connectTimeout : r.connectUnreachable}\n\n${r.connectHelp}`,
+            r.connectFailedTitle, { ok: r.connectRetry, cancel: r.close });
+    },
+
     async offerManualImport(message: string): Promise<void> {
         // Safari blocks the local connection for good: say so and point to
         // the ways that work there (another browser, or drag the file in).
@@ -1200,9 +1249,13 @@ export const researchUiMethods = uiModule({
         }
         let status: LiveStatus | null = null;
         try {
-            status = await fetchStatus(bridge.status);
+            status = await this.connectResearchBridge(() => fetchStatus(bridge.status, CONNECT_TIMEOUT_MS));
         } catch (err) {
             console.warn('The research bridge did not answer', err);
+            if (await this.showResearchConnectFailed(err)) {
+                void this.sendChangesToResearch(raw);
+                return;
+            }
         }
         if (!status?.treeId) {
             await this.offerResearchGedcom(r.sendUnreachable, null);
@@ -1507,7 +1560,9 @@ export const researchUiMethods = uiModule({
             let status: LiveStatus | null;
             let text: string;
             try {
-                status = await fetchStatus(bridge.status);
+                status = opts.resume
+                    ? await fetchStatus(bridge.status)
+                    : await this.connectResearchBridge(() => fetchStatus(bridge.status, CONNECT_TIMEOUT_MS));
                 if (!status) throw new Error('bad status');
                 if (!status.treeId) {
                     await this.showAlert(strings.research.liveNoTree, 'error');
@@ -1523,7 +1578,7 @@ export const researchUiMethods = uiModule({
                     this.showToast(strings.research.ended, 4000);
                     return;
                 }
-                await this.offerManualImport(strings.research.liveFailed);
+                if (await this.showResearchConnectFailed(err)) void this.startLiveFollow(raw);
                 return;
             }
             const header = readResearchHeader(text);

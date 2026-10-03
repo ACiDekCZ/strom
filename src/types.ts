@@ -157,6 +157,11 @@ export interface SourceExcerpt {
      * through a re-crop here so "Full quality" still finds the original.
      */
     clip?: string;
+    /**
+     * SHA-256 of the original scan the crop was cut from (`_STROM_SHA`): with
+     * `region` it tells Strom Research where on its full-quality file the crop lies.
+     */
+    originalSha?: string;
 }
 
 /** The UI offers at most this many excerpts per source (an entry across a page break). */
@@ -222,6 +227,24 @@ export type SourceReadBy = 'user' | 'research' | 'both';
  * letter…). Images are compressed to a bounded JPEG; PDFs are kept as-is up to
  * a size cap. The payload lives inline so it travels with the single-file export.
  */
+/**
+ * The file the user added, before the app shrank it into the attachment's
+ * preview: its identity in Strom Research (`PUT /media/<sha256>`,
+ * `_STROM_SHA`). The bytes themselves are never in the tree — they go to the
+ * research (or wait in the browser's originals queue until it runs).
+ */
+export interface MediaOriginal {
+    /** SHA-256 of the original file, lowercase hex. */
+    sha256: string;
+    /** File name as picked. */
+    name: string;
+    /** Its type — may be one the app cannot show (TIFF, HEIC). */
+    mimeType: string;
+    bytes: number;
+    /** EXIF orientation of the file (2–8); missing = stored upright. */
+    orientation?: number;
+}
+
 export interface Attachment {
     id: string;
     /** Original file name (UX). */
@@ -233,6 +256,8 @@ export interface Attachment {
     note?: string;
     /** Optional link to a Source (StromData.sources). */
     sourceId?: string;
+    /** The original file behind the preview (a tree linked to Strom Research). */
+    original?: MediaOriginal;
 }
 
 export interface Person {
@@ -897,7 +922,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.5';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.6';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {

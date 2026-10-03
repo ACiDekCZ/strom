@@ -13,6 +13,7 @@ import {
     generateParticipantId,
 } from '../types.js';
 import { PersonPicker } from '../person-picker.js';
+import { extraParticipantRole } from '../godparents.js';
 import { strings } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { SELECTABLE_EVENT_TYPES, sortLifeEvents, eventTakesParticipants, eventValueIsOnTag } from '../events.js';
@@ -137,7 +138,8 @@ export const personEventsMethods = uiModule({
         return (event.participants ?? []).map(p => {
             const person = p.personId ? DataManager.getPerson(p.personId) : null;
             const name = person ? `${person.firstName} ${person.lastName}`.trim() : (p.name ?? '');
-            return `${strings.events.roles[p.role]}: ${name}`;
+            const extra = extraParticipantRole(p);
+            return `${extra ? strings.events.extraRoles[extra.role] : strings.events.roles[p.role]}: ${name}`;
         }).join('  ·  ');
     },
 
@@ -227,16 +229,20 @@ export const personEventsMethods = uiModule({
         list.innerHTML = this.eventParticipants.map((p, i) => {
             const linked = p.personId ? DataManager.getPerson(p.personId) : null;
             const shownName = linked ? `${linked.firstName} ${linked.lastName}`.trim() : (p.name ?? '');
+            // A role the app has no name for (a midwife from the research): its
+            // own word on the "Present" option, the rest of the note in the field.
+            const extra = extraParticipantRole(p);
             const roles = (['godparent', 'witness', 'officiant', 'other'] as ParticipantRole[])
-                .map(r => `<option value="${r}"${p.role === r ? ' selected' : ''}>${esc(strings.events.roles[r])}</option>`)
+                .map(r => `<option value="${r}"${p.role === r ? ' selected' : ''}>${esc(r === 'other' && extra ? strings.events.extraRoles[extra.role] : strings.events.roles[r])}</option>`)
                 .join('');
+            const noteShown = extra ? extra.rest : (p.note ?? '');
             return `
                 <div class="participant-row" data-index="${i}">
                     <select class="participant-role" aria-label="${esc(strings.events.participants)}">${roles}</select>
                     <input type="text" class="participant-name${linked ? ' is-linked' : ''}"
                            value="${esc(shownName)}" placeholder="${esc(strings.events.participantName)}"
                            aria-label="${esc(strings.events.participantName)}"${linked ? ' readonly' : ''}>
-                    <input type="text" class="participant-note" value="${esc(p.note ?? '')}"
+                    <input type="text" class="participant-note" value="${esc(noteShown)}"
                            placeholder="${esc(strings.events.participantNote)}"
                            aria-label="${esc(strings.events.participantNote)}">
                     <button type="button" class="participant-btn secondary participant-link${linked ? ' linked' : ''}"
@@ -250,14 +256,25 @@ export const personEventsMethods = uiModule({
 
         list.querySelectorAll('.participant-row').forEach(row => {
             const i = Number(row.getAttribute('data-index'));
+            const extra = extraParticipantRole(this.eventParticipants[i]);
             (row.querySelector('.participant-role') as HTMLSelectElement).onchange = (e) => {
-                this.eventParticipants[i].role = (e.target as HTMLSelectElement).value as ParticipantRole;
+                const p = this.eventParticipants[i];
+                const now = extraParticipantRole(p);
+                p.role = (e.target as HTMLSelectElement).value as ParticipantRole;
+                // A role picked here replaces the file's word for it.
+                if (now && p.role !== 'other') {
+                    if (now.rest) p.note = now.rest;
+                    else delete p.note;
+                }
             };
             (row.querySelector('.participant-name') as HTMLInputElement).oninput = (e) => {
                 this.eventParticipants[i].name = (e.target as HTMLInputElement).value;
             };
             (row.querySelector('.participant-note') as HTMLInputElement).oninput = (e) => {
-                this.eventParticipants[i].note = (e.target as HTMLInputElement).value;
+                const value = (e.target as HTMLInputElement).value;
+                const p = this.eventParticipants[i];
+                // The file's role word stays in front ("Midwife — …"), as the research reads it.
+                p.note = extra && p.role === 'other' ? (value.trim() ? `${extra.word} — ${value}` : extra.word) : value;
             };
             (row.querySelector('.participant-link') as HTMLButtonElement).onclick = () => this.toggleParticipantLink(i);
             (row.querySelector('.participant-del') as HTMLButtonElement).onclick = () => {

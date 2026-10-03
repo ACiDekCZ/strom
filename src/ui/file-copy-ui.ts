@@ -25,6 +25,8 @@ import { iconSvg } from '../icons.js';
 
 /** Last known storage state (refreshed on every check; best-effort until known). */
 let knownState: PersistenceState = 'best-effort';
+/** The storage state was read at least once (before that nothing is painted from it). */
+let stateRead = false;
 
 function currentAdvice(): StorageAdvice {
     const nav = typeof navigator !== 'undefined' ? navigator : undefined;
@@ -79,6 +81,8 @@ let quickSaveAnnouncedAt = 0;
 let unsavedShown = false;
 /** The toolbar pill's brief "Saved to file" after an export. */
 let savedFlashTimer: ReturnType<typeof setTimeout> | null = null;
+/** Re-render when a research's hold on a tree's edits runs out. */
+let holdTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Paint a storage pill (toolbar or storage dialog) in one of its states. */
 function setPillState(el: HTMLElement, state: PillState): void {
@@ -106,21 +110,17 @@ function isBottomBarRegime(): boolean {
 }
 
 /**
- * The bottom bar's "More" tab speaks for what its dots show: edits only in the
- * browser (this module) and the Strom Research "New" item (research-promo-ui),
- * each flagged on the tab's dataset. No flag: the visible label names it.
+ * The bottom bar's "More" tab speaks for what its dot shows: edits only in the
+ * browser, flagged on the tab's dataset. No flag: the visible label names it.
  */
 export function syncMoreTabLabel(): void {
     const tab = document.getElementById('bb-view-more');
     if (!tab) return;
-    const storage = tab.dataset.storage === '1';
-    const isNew = tab.dataset.newItem === '1';
-    if (!storage && !isNew) {
+    if (tab.dataset.storage !== '1') {
         tab.removeAttribute('aria-label');
         return;
     }
-    const base = storage ? strings.fileCopy.moreHint : strings.mobileMenu.more;
-    tab.setAttribute('aria-label', isNew ? `${base}, ${strings.research.triggerNewSr}` : base);
+    tab.setAttribute('aria-label', strings.fileCopy.moreHint);
 }
 
 /** Two ring pulses (CSS; none with reduced motion). */
@@ -144,8 +144,32 @@ export const fileCopyMethods = uiModule({
     /** Show or hide the "only in browser" state for the open tree. */
     async refreshUnsavedIndicator(): Promise<void> {
         knownState = await getPersistenceState();
+        stateRead = true;
         this.renderUnsavedIndicator();
         this.renderFileCopyNotice();
+    },
+
+    /**
+     * Trees whose edits no file holds — minus those Strom Research holds (or
+     * is about to: edits unsent for under 10 minutes). Re-checks when a
+     * research's hold runs out.
+     */
+    unsavedOutsideResearch(): TreeMetadata[] {
+        const now = Date.now();
+        let next = Infinity;
+        const out = unsavedTreeList().filter(t => {
+            const hold = this.researchHoldsTree(t.id, now);
+            if (hold.until) next = Math.min(next, hold.until);
+            return !hold.holds;
+        });
+        if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+        if (next < Infinity) holdTimer = setTimeout(() => { holdTimer = null; this.renderUnsavedIndicator(); }, next - now + 500);
+        return out;
+    },
+
+    /** What a research holds changed: paint the pill again (once the storage state is known). */
+    refreshUnsavedForResearch(): void {
+        if (stateRead) this.renderUnsavedIndicator();
     },
 
     /** The state was showing at the last render (the "More" sheet asks). */
@@ -156,7 +180,7 @@ export const fileCopyMethods = uiModule({
     renderUnsavedIndicator(): void {
         const show = shouldShowUnsavedIndicator({
             state: knownState,
-            unsavedCount: unsavedTreeList().length,
+            unsavedCount: this.unsavedOutsideResearch().length,
             viewMode: DataManager.isViewMode(),
         });
         unsavedShown = show;
@@ -220,6 +244,7 @@ export const fileCopyMethods = uiModule({
         const wasShown = unsavedShown;
         // An edit's save asks for persistent storage: act on the answer.
         knownState = await settledPersistenceState();
+        stateRead = true;
         this.renderUnsavedIndicator();
         if (wasShown && !unsavedShown) this.flashSavedToFile();
         if (!wasShown && unsavedShown) pulseIndicators();
@@ -244,7 +269,7 @@ export const fileCopyMethods = uiModule({
             personCount: personCount(),
             viewMode: DataManager.isViewMode(),
             enabled: SettingsManager.isFileCopyRemindersEnabled(),
-        });
+        }) && !this.researchHoldsTree(fresh.id).holds;
         const existing = document.getElementById('file-copy-notice');
         if (!show || !fresh) {
             existing?.remove();

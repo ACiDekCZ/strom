@@ -21,7 +21,7 @@ import {
     AdoptOffer,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { onComputer, fetchWithTimeout, postSync, postCancel, readTree } from './research-ui.js';
+import { onComputer, fetchWithTimeout, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
 
 const ADOPT_ID = 'research-adopt-modal';
@@ -90,10 +90,13 @@ export const researchAdoptMethods = uiModule({
         document.querySelector('.toast')?.remove();
         let offer: AdoptOffer | null = null;
         try {
-            const res = await fetchWithTimeout(`${bridge.base}/adopt`, 10000);
+            const res = await this.connectResearchBridge(() => fetchWithTimeout(`${bridge.base}/adopt`, CONNECT_TIMEOUT_MS));
             if (res.ok) offer = sanitizeAdoptOffer(await res.json());
         } catch (err) {
             console.warn('The research bridge did not answer', err);
+            // Not reached at all (the local network blocked, or the research gone): say so.
+            if (await this.showResearchConnectFailed(err)) void this.adoptFromResearch(raw);
+            return;
         }
         const tree = offer ? TreeManager.findTreeByAdoptToken(offer.token, TOKEN_MAX_AGE_MS) : null;
         if (!offer || !tree) {

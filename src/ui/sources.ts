@@ -14,7 +14,7 @@ import { DataManager, CitedFact, personCitationField } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
 import { SettingsManager } from '../settings.js';
-import { PersonId, PartnershipId, Source, SourceExcerpt, MAX_EXCERPTS_UI } from '../types.js';
+import { PersonId, PartnershipId, Source, SourceExcerpt, MediaOriginal, MAX_EXCERPTS_UI } from '../types.js';
 import { strings } from '../strings.js';
 import { personEvidence } from '../evidence-level.js';
 import { uiModule } from './module.js';
@@ -42,6 +42,10 @@ export interface ExcerptDraft {
     original?: Blob;
     /** The whole page to save as an attachment of this person on Save. */
     pendingPage?: { personId: PersonId; dataUrl: string; name: string };
+    /** `original`'s identity (a tree linked to Strom Research): it goes to the research on Save. */
+    originalMeta?: MediaOriginal;
+    /** Where the crop lies on `original` (as shown), unless the page was turned in the editor. */
+    cropRegion?: CropRegion;
 }
 
 /** HTML-escape a user string for safe innerHTML insertion. */
@@ -683,19 +687,30 @@ export const sourcesMethods = uiModule({
         const drafts = this.excerptDrafts;
         const editingId = this.editingSourceId;
         const citeAfterCreate = this.citeSourceAfterCreate;
+        // Originals to hand to the research once the source has its id.
+        const originals: { meta: MediaOriginal; blob: Blob; personId?: PersonId; region?: CropRegion }[] = [];
+        let savedSourceId: string | null = editingId;
 
         // One user action, one undo step: pages kept as attachments, the source
         // and (from the picker) its citation.
         DataManager.runBatch(editingId ? strings.undo.editSource(title) : strings.undo.addSource(title), () => {
             const excerpts: SourceExcerpt[] = drafts.map(d => {
                 const exc = { ...d.excerpt };
+                if (d.originalMeta) exc.originalSha = d.originalMeta.sha256;
                 if (d.pendingPage) {
                     const att = DataManager.addAttachment(d.pendingPage.personId, {
                         name: d.pendingPage.name, mimeType: 'image/jpeg',
                         dataUrl: d.pendingPage.dataUrl, sizeBytes: dataUrlByteSize(d.pendingPage.dataUrl),
+                        ...(d.originalMeta ? { original: d.originalMeta } : {}),
                     });
                     if (att) exc.fromAttachmentId = att.id;
                     else delete exc.region;
+                }
+                if (d.originalMeta && d.original) {
+                    originals.push({
+                        meta: d.originalMeta, blob: d.original, personId: d.pendingPage?.personId,
+                        region: exc.region ?? d.cropRegion,
+                    });
                 }
                 return exc;
             });
@@ -717,6 +732,7 @@ export const sourcesMethods = uiModule({
                 });
             } else {
                 const created = DataManager.addSource(payload);
+                savedSourceId = created?.id ?? null;
                 // Created from the picker (or "same register" from a chip) →
                 // immediately cite it to that context.
                 if (created && citeAfterCreate) {
@@ -733,6 +749,11 @@ export const sourcesMethods = uiModule({
         if (drafts.some(d => d.pendingPage)) this.renderAttachmentsList();
         // A source cited on a partnership shows in the relationships panel.
         if (citedPartnership) this.refreshRelationshipsPanel();
+        for (const o of originals) {
+            void this.queueOriginal(o.meta, o.blob, {
+                personId: o.personId, sourceId: savedSourceId ?? undefined, region: o.region,
+            });
+        }
     },
 
     // ==================== EXCERPTS (editor) ====================
@@ -882,10 +903,12 @@ export const sourcesMethods = uiModule({
             return;
         }
         try {
+            const metaP = this.prepareOriginal(blob, blob instanceof File && blob.name ? blob.name : 'pasted.png');
             const out = await compressWholeImage(blob);
             const exc = excerptFromDataUrl(out.dataUrl, { width: out.width, height: out.height });
             if (!exc) throw new Error('not an image');
-            this.putExcerptDraft({ excerpt: exc, original: blob }, target);
+            const meta = await metaP;
+            this.putExcerptDraft({ excerpt: exc, original: blob, ...(meta ? { originalMeta: meta } : {}) }, target);
         } catch {
             this.showAlert(strings.sources.excerptReadError, 'warning');
         }
@@ -899,11 +922,18 @@ export const sourcesMethods = uiModule({
         }
         const pagePerson = this.keepPagePersonId();
         try {
+            // Hashed while the user crops (a large scan takes a moment).
+            const metaP = this.prepareOriginal(file, file.name);
             const result = await openCropEditor(file, { allowKeepPage: pagePerson !== null });
             if (!result) return;
             const exc = excerptFromDataUrl(result.dataUrl, { width: result.width, height: result.height });
             if (!exc) throw new Error('not an image');
             const draft: ExcerptDraft = { excerpt: exc, original: file };
+            const meta = await metaP;
+            if (meta) {
+                draft.originalMeta = meta;
+                if (!result.rotated) draft.cropRegion = result.region;
+            }
             if (result.keepPage && result.pageDataUrl && pagePerson) {
                 exc.region = result.region;
                 draft.pendingPage = { personId: pagePerson, dataUrl: result.pageDataUrl, name: file.name || 'page.jpg' };
@@ -928,6 +958,7 @@ export const sourcesMethods = uiModule({
             const exc = excerptFromDataUrl(result.dataUrl, {
                 width: result.width, height: result.height,
                 caption: d.excerpt.caption, pageUrl: d.excerpt.pageUrl, clip: d.excerpt.clip,
+                originalSha: d.excerpt.originalSha,
             });
             if (!exc) return;
             // A rotated page no longer matches the stored one: the link goes.
@@ -935,7 +966,10 @@ export const sourcesMethods = uiModule({
                 exc.region = result.region;
                 if (att) exc.fromAttachmentId = att.id;
             }
-            this.excerptDrafts[index] = { ...d, excerpt: exc, pendingPage: result.rotated ? undefined : d.pendingPage };
+            const cropRegion = !fromPage && !result.rotated ? result.region : fromPage ? d.cropRegion : undefined;
+            this.excerptDrafts[index] = {
+                ...d, excerpt: exc, pendingPage: result.rotated ? undefined : d.pendingPage, cropRegion,
+            };
             this.renderExcerptBlock();
         } catch {
             this.showAlert(strings.sources.excerptReadError, 'warning');
@@ -971,9 +1005,13 @@ export const sourcesMethods = uiModule({
         try {
             const result = await openCropEditor(page.dataUrl, {});
             if (!result) return;
-            const extra: { width: number; height: number; fromAttachmentId?: string; region?: CropRegion } =
+            const extra: { width: number; height: number; fromAttachmentId?: string; region?: CropRegion; originalSha?: string } =
                 { width: result.width, height: result.height };
             if (!result.rotated) { extra.fromAttachmentId = page.id; extra.region = result.region; }
+            // The page's original in the research: the crop lies on it too.
+            const pageSha = Object.values(DataManager.getData().persons)
+                .flatMap(p => p.attachments ?? []).find(a => a.id === page.id)?.original?.sha256;
+            if (pageSha && !result.rotated) extra.originalSha = pageSha;
             const exc = excerptFromDataUrl(result.dataUrl, extra);
             if (exc) this.putExcerptDraft({ excerpt: exc }, target);
         } catch {

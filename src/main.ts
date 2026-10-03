@@ -411,6 +411,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         UI.initExternalOpen();
         // Where a research tree stands with its research (a research that says so).
         UI.initResearchSync();
+        // Originals waiting for a research (their state lines).
+        void UI.initOriginalsQueue();
 
         // Handle URL import parameter (from offline version redirect)
         handleUrlImportParam();

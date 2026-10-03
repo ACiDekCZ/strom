@@ -3675,7 +3675,6 @@
         .research-new-badge[hidden] { display: none; }
         .research-new-badge--sheet { font-size: 11px; }
         /* Copper dot on the ⋯ trigger (the red anniversaries dot wins). */
-        .actions-menu-new-dot { background: var(--accent); }
 
         /* Explanation dialog. */
         .research-info-lead { margin: 0 0 16px; font-size: 14px; line-height: 1.5; color: var(--text); }
@@ -10837,6 +10836,8 @@
         .attachment-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
         .attachment-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .attachment-size { color: var(--text-secondary, #777); font-size: 12px; }
+        .attachment-original { color: var(--text-secondary, #777); font-size: 12px; }
+        .attachment-original.is-queued { font-style: italic; }
         .attachment-note-input {
             width: 100%; box-sizing: border-box; font-size: 12px; padding: 2px 4px;
             border: 1px solid var(--border-color, #ddd); border-radius: 6px; background: transparent;
@@ -11230,7 +11231,7 @@
 
         <!-- Actions menu (⋯) — desktop only; the mobile ⋯ + "More" sheet cover smaller screens -->
         <div class="actions-menu desktop-only">
-            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><svg class="actions-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span><span id="actions-menu-research-dot" class="actions-menu-dot actions-menu-research-dot" style="display:none;" aria-hidden="true"></span><span id="actions-menu-new-dot" class="actions-menu-dot actions-menu-new-dot" style="display:none;" aria-hidden="true"></span><span class="actions-menu-dot actions-menu-storage-dot is-storage storage-dot storage-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="tri" d="M10.27 3.2a2 2 0 0 1 3.46 0l8.5 14.8A2 2 0 0 1 20.5 21h-17a2 2 0 0 1-1.73-3z"/><path class="mark" d="M12 9.5v4M12 17h.01"/></svg></span></button>
+            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><svg class="actions-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span><span id="actions-menu-research-dot" class="actions-menu-dot actions-menu-research-dot" style="display:none;" aria-hidden="true"></span><span class="actions-menu-dot actions-menu-storage-dot is-storage storage-dot storage-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="tri" d="M10.27 3.2a2 2 0 0 1 3.46 0l8.5 14.8A2 2 0 0 1 20.5 21h-17a2 2 0 0 1-1.73-3z"/><path class="mark" d="M12 9.5v4M12 17h.01"/></svg></span></button>
             <div id="actions-menu-dropdown" class="tree-switcher-dropdown actions-menu-dropdown" role="menu">
                 <div id="actions-storage-row" class="tree-switcher-action actions-storage-row storage-dot" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showStorageStatusDialog()" tabindex="0" role="menuitem">
                     <span class="actions-storage-icon" aria-hidden="true"></span>

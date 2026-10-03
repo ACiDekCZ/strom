@@ -23,7 +23,9 @@
  */
 
 import { researchHeaderLines, ResearchHeaderInfo } from './research-link.js';
-import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType } from './types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment } from './types.js';
+import { normalizeSha256 } from './sha256.js';
+import { regionHeader, regionToStored } from './originals.js';
 import { strings } from './strings.js';
 import { COUPLE_EVENT_TAG, eventValueIsOnTag, sortCoupleEvents } from './events.js';
 import { placeKey } from './places.js';
@@ -565,7 +567,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
         // Media: portrait first (marked), then attachments. Data URLs are
         // CONC-wrapped to keep physical lines within the spec limit.
-        const pushMedia = (file: string, title: string, kind: 'photo' | '', note?: string, srcId?: string): void => {
+        const pushMedia = (file: string, title: string, kind: 'photo' | '', note?: string, srcId?: string, original?: MediaOriginal): void => {
             const mime = file.startsWith('data:') ? file.slice(5, file.indexOf(';')) : '';
             const form = mime.includes('/') ? mime.split('/')[1] : 'jpeg';
             lines.push('1 OBJE');
@@ -577,13 +579,20 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             // multimedia link, hence the underscore tag.
             const srcRef = srcId ? sourceIdMap.get(srcId) : undefined;
             if (srcRef) lines.push(`2 _SOUR ${srcRef}`);
+            // The original behind the preview, by its hash: Strom Research holds it.
+            const sha = normalizeSha256(original?.sha256);
+            if (sha) {
+                lines.push(`2 _STROM_SHA ${sha}`);
+                const o = original?.orientation;
+                if (o && o >= 2 && o <= 8) lines.push(`2 _STROM_ORIENT ${o}`);
+            }
             pushWrapped(lines, 2, 'FILE', file);
         };
         if (person.photo) {
             pushMedia(person.photo, person.photoOriginalName ?? '', 'photo');
         }
         for (const att of person.attachments ?? []) {
-            pushMedia(att.dataUrl, att.name, '', att.note, att.sourceId);
+            pushMedia(att.dataUrl, att.name, '', att.note, att.sourceId, att.original);
         }
 
         // Family as spouse (FAMS) - partnerships where this person is a partner
@@ -766,6 +775,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     }
 
     // ==================== SOURCES ====================
+    // Page attachments by id: an excerpt cut from one says where on its original it lies.
+    const attachmentById = new Map<string, Attachment>();
+    for (const p of Object.values(data.persons)) for (const a of p.attachments ?? []) attachmentById.set(a.id, a);
     // Standard 5.5.1: repositories are separate @Rx@ records referenced by
     // pointer; the reference/page lives on citations (see pushCitation). PAGE
     // is still emitted on the record too, purely for our own round-trip of
@@ -796,6 +808,15 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             lines.push('2 _STROM_KIND excerpt');
             if (exc.pageUrl) pushWrapped(lines, 2, '_URL', exc.pageUrl);
             if (exc.clip) lines.push(`2 _STROM_CLIP ${exc.clip}`);
+            // The original it was cut from and where on it (its stored pixels), for the research's Clip.
+            const sha = normalizeSha256(exc.originalSha);
+            if (sha) {
+                lines.push(`2 _STROM_SHA ${sha}`);
+                const page = exc.fromAttachmentId ? attachmentById.get(exc.fromAttachmentId) : undefined;
+                if (exc.region && page?.original && normalizeSha256(page.original.sha256) === sha) {
+                    lines.push(`2 _STROM_REGION ${regionHeader(regionToStored(exc.region, page.original.orientation))}`);
+                }
+            }
             pushWrapped(lines, 2, 'FILE', exc.dataUrl);
         }
     }

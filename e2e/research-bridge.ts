@@ -54,6 +54,14 @@ export interface FakeBridge {
     syncDelayMs?: number;
     /** A write at once (the research's reply has `inbox: false` and no `pending`): the version it makes. */
     onWrite?: (posted: string) => { head: string; ged: string };
+    /** Originals it has (by SHA-256) and the id it gives them. */
+    mediaKnown: Map<string, string>;
+    /** Every `PUT /media/<sha>`: the hash, the headers it carried and the body's size. */
+    mediaPuts: { sha: string; headers: Record<string, string>; bytes: number }[];
+    /** Every `GET /media/<sha>` asked. */
+    mediaAsks: string[];
+    /** Status of a PUT (200 = taken). */
+    mediaPutStatus: number;
 }
 
 export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
@@ -66,12 +74,31 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         down: false,
         links: ['send', 'open', 'live', 'app', 'setup'],
         posts: [],
+        mediaKnown: new Map(), mediaPuts: [], mediaAsks: [], mediaPutStatus: 200,
         ...init,
     };
     await page.route(`${BRIDGE}/**`, async (route) => {
         if (b.down) return route.abort('connectionrefused');
         const url = new URL(route.request().url());
         const json = (status: number, body: unknown) => route.fulfill({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+        if (route.request().method() === 'OPTIONS') {
+            return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-methods': 'GET, PUT, POST', 'access-control-allow-headers': '*' } });
+        }
+        const media = /\/media\/([0-9a-f]{64})$/.exec(url.pathname);
+        if (media) {
+            const sha = media[1];
+            if (route.request().method() === 'PUT') {
+                const body = route.request().postDataBuffer();
+                b.mediaPuts.push({ sha, headers: route.request().headers(), bytes: body?.length ?? 0 });
+                if (b.mediaPutStatus !== 200) return json(b.mediaPutStatus, { error: 'no' });
+                const id = `I${String(100 + b.mediaPuts.length).padStart(4, '0')}`;
+                b.mediaKnown.set(sha, id);
+                return json(200, { input: id });
+            }
+            b.mediaAsks.push(sha);
+            const known = b.mediaKnown.get(sha);
+            return known ? json(200, { known }) : json(404, { error: 'unknown' });
+        }
         if (url.pathname.endsWith('/status')) {
             return json(200, {
                 tree: { id: UUID, name: 'Víškovi' }, head: b.head, links: b.links,
@@ -116,7 +143,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
 }
 
 /** The research opened in the app; its bridge remembered (as after a ?live= / ?send=); optionally changed. */
-export async function openResearch(page: Page, opts: { edit?: boolean; bridge?: boolean; capable?: boolean; auto?: boolean } = {}): Promise<void> {
+export async function openResearch(page: Page, opts: { edit?: boolean; bridge?: boolean; capable?: boolean; auto?: boolean; media?: boolean } = {}): Promise<void> {
     await openApp(page);
     await page.evaluate(() => {
         // Opening links in the system is not testable: record them instead.
@@ -130,7 +157,7 @@ export async function openResearch(page: Page, opts: { edit?: boolean; bridge?: 
         // As after a ?live= / ?send= from a research that says what it takes.
         await page.evaluate(({ uuid, base, accepts }) => {
             localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, ...(accepts ? { accepts } : {}) }));
-        }, { uuid: UUID, base: BRIDGE, accepts: opts.capable === false ? null : { sync: { auto: 'off' }, sources: true, verified: true } });
+        }, { uuid: UUID, base: BRIDGE, accepts: opts.capable === false ? null : { sync: { auto: 'off' }, sources: true, verified: true, ...(opts.media ? { media: { max: 500 * 1024 * 1024, region: true } } : {}) } });
     }
     // These tests are about sending by hand (sending by itself: research-auto-send.spec.ts).
     if (!opts.auto) {

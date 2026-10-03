@@ -89,7 +89,16 @@ async function existingTreeFirstRun(page: Page): Promise<void> {
 }
 
 const whatsNew = (page: Page) => page.locator('.whats-new[role="dialog"]');
+/**
+ * The promotion lights only the "New" label on its menu row: a dot on ⋯ or on
+ * "More" means something needs attention, and a promotion does not (Milan,
+ * 3 Oct 2026). `newDot` stays to prove there is none.
+ */
 const newDot = (page: Page) => page.locator('#actions-menu-new-dot');
+/** The "New" label is lit (its element is there even while the menu is closed). */
+async function expectNewLit(page: Page, lit = true): Promise<void> {
+    await expect(page.locator('#research-menu-row .research-new-badge')).toHaveJSProperty('hidden', !lit);
+}
 const moreDot = (page: Page) => page.locator('#bottom-bar-more-dot');
 const menuRow = (page: Page) => page.locator('#research-menu-row');
 const infoDialog = (page: Page) => page.locator('#research-info-modal');
@@ -222,8 +231,9 @@ test.describe('existing tree on desktop', () => {
         expect(geo.width).toBeCloseTo(384, 0);
         expect(geo.inner - geo.right).toBeGreaterThanOrEqual(16);
         expect(Math.abs(geo.arrowCentre - geo.btnCentre)).toBeLessThanOrEqual(2);
-        // The "New" dot is lit meanwhile.
-        await expect(newDot(page)).toBeVisible();
+        // The "New" label is lit meanwhile, with no dot on the trigger.
+        await expectNewLit(page);
+        await expect(newDot(page)).toHaveCount(0);
 
         expect(await popupUrlAfter(page, () => cardEl.getByRole('button', { name: /Learn more/ }).click())).toBe(SITE);
         await expect(cardEl).toHaveCount(0);
@@ -244,7 +254,7 @@ test.describe('existing tree on desktop', () => {
         await expect(whatsNew(page)).toHaveCount(0);
     });
 
-    test('"Not now" closes the card and puts the dot and the label out', async ({ page }) => {
+    test('"Not now" closes the card and puts the label out', async ({ page }) => {
         await existingTreeFirstRun(page);
         await expect(whatsNew(page)).toBeVisible();
         await whatsNew(page).getByRole('button', { name: 'Not now' }).click();
@@ -263,21 +273,18 @@ test.describe('existing tree on desktop', () => {
         await page.waitForTimeout(1200);
         await expect(whatsNew(page)).toHaveCount(0);
         // … and the "New" marker is still lit (only the buttons put it out).
-        await expect(newDot(page)).toBeVisible();
+        await expectNewLit(page);
     });
 
-    test('the "New" dot on Actions; the item opens the dialog, which puts "New" out; the item stays', async ({ page, context }) => {
+    test('no dot on Actions; the item opens the dialog, which puts "New" out; the item stays', async ({ page, context }) => {
         await stubSite(context);
         await existingTreeFirstRun(page);
         await expect(whatsNew(page)).toBeVisible();
         const actionsBtn = page.locator('.actions-menu-btn');
-        await expect(newDot(page)).toBeVisible();
-        await expect(actionsBtn).toHaveAttribute('aria-label', 'Actions, new item');
-        // The red anniversaries dot wins: only one dot on the trigger.
-        await page.evaluate(() => window.Strom.UI.refreshResearchNewMarker(1));
-        await expect(newDot(page)).toBeHidden();
-        await page.evaluate(() => window.Strom.UI.refreshResearchNewMarker(0));
-        await expect(newDot(page)).toBeVisible();
+        await expectNewLit(page);
+        await expect(newDot(page)).toHaveCount(0);
+        await expect(actionsBtn.locator('.actions-menu-dot:not(.actions-menu-storage-dot)').filter({ visible: true })).toHaveCount(0);
+        await expect(actionsBtn).toHaveAttribute('aria-label', 'Actions');
 
         // Opening the menu closes the card (without putting "New" out).
         await openActionsMenu(page);
@@ -359,7 +366,7 @@ test.describe('existing tree on desktop', () => {
 
     test('30 days after it was first shown the "New" label is out by itself', async ({ page }) => {
         await existingTreeFirstRun(page);
-        await expect(newDot(page)).toBeVisible();
+        await expectNewLit(page);
         const firstSeen = (await readSettings(page)).researchNewFirstSeen;
         expect(typeof firstSeen).toBe('string');
         const past = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
@@ -434,16 +441,15 @@ test.describe('existing tree on desktop', () => {
 test.describe('existing tree on a phone', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-    test('the card is a bottom sheet; "Not now" puts the More dot out; the item stays in the More sheet', async ({ page }) => {
+    test('the card is a bottom sheet with no dot on More; "Not now" closes it; the item stays in the More sheet', async ({ page }) => {
         await existingTreeFirstRun(page);
         const sheet = whatsNew(page);
         await expect(sheet).toBeVisible();
         await expect(sheet).toHaveClass(/bottom-sheet/);
         await expect(sheet).toContainText('Runs on a computer (Windows, Mac, Linux)');
-        // The dot rides the bottom-bar "More" tab only — never the top ⋯.
-        await expect(moreDot(page)).toBeVisible();
-        // Other states may prefix it ("More – changes only in the browser"); the new item is always said.
-        await expect(page.locator('#bb-view-more')).toHaveAttribute('aria-label', /^More.*, new item$/);
+        // No dot for the promotion, neither on "More" nor on the top ⋯.
+        await expect(moreDot(page)).toBeHidden();
+        await expect(page.locator('#bb-view-more')).not.toHaveAttribute('aria-label', /new item/);
         await expect(page.locator('.mobile-more-btn [class*="dot"]:not(.is-storage)')).toHaveCount(0);
         await expect(newDot(page)).toBeHidden();
 
@@ -470,7 +476,7 @@ test.describe('existing tree on a phone', () => {
         await setPromoSettings(page, { whatsNew30Shown: true });
         await page.reload();
         await expect(card(page, 'Jan')).toBeVisible();
-        await expect(moreDot(page)).toBeVisible();
+        await expect(moreDot(page)).toBeHidden();
 
         await page.locator('#bb-view-more').click();
         const items = page.locator('.bottom-sheet-menu .bottom-sheet-items > *');
@@ -501,11 +507,11 @@ test.describe('existing tree on a phone', () => {
 test.describe('existing tree on a tablet (bottom navigation up to 1024px)', () => {
     test.use({ viewport: { width: 1024, height: 768 } });
 
-    test('the card is the sheet and the dot sits on the More tab', async ({ page }) => {
+    test('the card is the sheet, with no dot on the More tab', async ({ page }) => {
         await existingTreeFirstRun(page);
         await expect(whatsNew(page)).toBeVisible();
         await expect(whatsNew(page)).toHaveClass(/whats-new-sheet/);
-        await expect(moreDot(page)).toBeVisible();
+        await expect(moreDot(page)).toBeHidden();
         await page.keyboard.press('Escape');
         await expect(whatsNew(page)).toHaveCount(0);
         await expect(moreDot(page)).toBeHidden();
@@ -630,7 +636,7 @@ test.describe('hidden', () => {
         await expect(card(page, 'Jan')).toBeVisible();
         await page.waitForTimeout(1200);
         await expect(whatsNew(page)).toHaveCount(0);
-        await expect(newDot(page)).toBeVisible();
+        await expectNewLit(page);
         expect((await readSettings(page)).whatsNew30Shown).toBeUndefined();
     });
 });

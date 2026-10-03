@@ -208,9 +208,9 @@ describe('what the bridge says', () => {
     it('accepts: the gate the other way round; null from an older research', () => {
         expect(sanitizeAccepts(undefined)).toBeNull();
         expect(sanitizeAccepts({ sync: { auto: 'additions' }, sources: true, verified: true, media: null }))
-            .toEqual({ syncAuto: 'additions', sources: true, verified: true, media: false, mode: 'agent', review: false });
+            .toEqual({ syncAuto: 'additions', sources: true, verified: true, media: false, mediaMaxBytes: null, mediaRegion: false, mode: 'agent', review: false });
         expect(sanitizeAccepts({ sync: { auto: 'everything' }, sources: 'yes' }))
-            .toEqual({ syncAuto: 'off', sources: false, verified: false, media: false, mode: 'agent', review: true });
+            .toEqual({ syncAuto: 'off', sources: false, verified: false, media: false, mediaMaxBytes: null, mediaRegion: false, mode: 'agent', review: true });
     });
 
     it('accepts: how a send is written and the mode (Strom Research with the immediate write)', () => {

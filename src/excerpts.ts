@@ -71,7 +71,7 @@ export function imageSizeFromDataUrl(dataUrl: string): { width: number; height: 
  */
 export function excerptFromDataUrl(
     dataUrl: string,
-    extra: Partial<Pick<SourceExcerpt, 'caption' | 'pageUrl' | 'fromAttachmentId' | 'region' | 'width' | 'height' | 'clip'>> = {},
+    extra: Partial<Pick<SourceExcerpt, 'caption' | 'pageUrl' | 'fromAttachmentId' | 'region' | 'width' | 'height' | 'clip' | 'originalSha'>> = {},
 ): SourceExcerpt | null {
     if (!isSafeExcerptDataUrl(dataUrl)) return null;
     const size = extra.width && extra.height
@@ -89,5 +89,6 @@ export function excerptFromDataUrl(
     if (extra.fromAttachmentId) exc.fromAttachmentId = extra.fromAttachmentId;
     if (extra.region) exc.region = extra.region;
     if (extra.clip) exc.clip = extra.clip;
+    if (extra.originalSha) exc.originalSha = extra.originalSha;
     return exc;
 }

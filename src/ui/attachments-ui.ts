@@ -78,12 +78,18 @@ export const attachmentsMethods = uiModule({
                         <button type="button" class="attachment-delete-btn" title="${esc(strings.attachments.delete)}" aria-label="${esc(strings.attachments.delete)}"
                             data-attachment-id="${esc(att.id)}">${iconSvg('trash')}</button>
                     </div>`;
+                // Where its original stands (only a tree whose research takes originals).
+                const origState = this.originalStateOf(att.original?.sha256);
+                const origLine = origState
+                    ? `<span class="attachment-original is-${origState}">${esc(origState === 'sent' ? strings.attachments.originalSent : strings.attachments.originalQueued)}</span>`
+                    : '';
                 return `
                     <div class="attachment-row">
                         ${thumb}
                         <div class="attachment-main">
                             <span class="attachment-name">${esc(att.name)}</span>
                             <span class="attachment-size">${esc(formatBytes(att.sizeBytes))}</span>
+                            ${origLine}
                             ${noteField}
                         </div>
                         ${del}
@@ -127,6 +133,10 @@ export const attachmentsMethods = uiModule({
         const file = input.files?.[0];
         input.value = '';
         if (!file || !this.currentId) return;
+        const personId = this.currentId;
+        // The original's identity before it is shrunk (a tree linked to a research only).
+        const original = ATTACHMENT_IMAGE_TYPES.includes(file.type) || file.type === 'application/pdf'
+            ? await this.prepareOriginal(file, file.name) : null;
 
         let dataUrl: string;
         let mimeType: string;
@@ -151,13 +161,18 @@ export const attachmentsMethods = uiModule({
             return;
         }
 
-        DataManager.addAttachment(this.currentId, {
+        DataManager.addAttachment(personId, {
             name: file.name,
             mimeType,
             dataUrl,
             sizeBytes: dataUrlByteSize(dataUrl),
+            ...(original ? { original } : {}),
         });
         this.renderAttachmentsList();
+        if (original) {
+            await this.queueOriginal(original, file, { personId });
+            this.renderAttachmentsList();
+        }
     },
 
     /** Image → fullscreen overlay; PDF → new tab via an object URL. */

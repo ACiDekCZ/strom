@@ -223,3 +223,15 @@ describe('wedding witnesses count too', () => {
         expect(recurringParticipants(data)).toEqual([]);
     });
 });
+
+describe('roles the app has no name for (from Strom Research or another program)', () => {
+    it('reads the word in front of the note as the role, the rest as the note', async () => {
+        const { extraParticipantRole } = await import('../godparents.js');
+        expect(extraParticipantRole({ role: 'other', note: 'Midwife' })).toEqual({ role: 'midwife', word: 'Midwife', rest: '' });
+        expect(extraParticipantRole({ role: 'other', note: 'Midwife — z Týnce' })).toEqual({ role: 'midwife', word: 'Midwife', rest: 'z Týnce' });
+        expect(extraParticipantRole({ role: 'other', note: 'Informant' })).toMatchObject({ role: 'informant' });
+        expect(extraParticipantRole({ role: 'other', note: 'soused' })).toBeNull();
+        expect(extraParticipantRole({ role: 'witness', note: 'Midwife' })).toBeNull();
+        expect(extraParticipantRole({ role: 'other' })).toBeNull();
+    });
+});

@@ -131,7 +131,10 @@ function writeBridge(researchId: string, value: StoredResearchBridge): void {
             base: value.base,
             ...(value.accepts ? { accepts: {
                 sync: { auto: value.accepts.syncAuto }, sources: value.accepts.sources,
-                verified: value.accepts.verified, ...(value.accepts.media ? { media: {} } : {}),
+                verified: value.accepts.verified, ...(value.accepts.media ? { media: {
+                    ...(value.accepts.mediaMaxBytes ? { max: value.accepts.mediaMaxBytes } : {}),
+                    ...(value.accepts.mediaRegion ? { region: true } : {}),
+                } } : {}),
                 ...(value.accepts.mode === 'archive' ? { mode: 'archive' } : {}),
             } } : {}),
             ...(value.head ? { head: value.head } : {}),
@@ -179,6 +182,8 @@ export interface ResearchAutoState {
     offerSeen?: true;
     /** Edits since the last send ("3 changes waiting"). */
     edits?: number;
+    /** When the first of those edits was made (ISO): the "only in browser" pill waits 10 minutes from it. */
+    unsentSince?: string;
     /** The reasons a refusal was already told (once each). */
     toldRefused?: string[];
 }
@@ -204,6 +209,7 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (typeof p.modeSince === 'string' && Number.isFinite(Date.parse(p.modeSince))) out.modeSince = p.modeSince;
         if (p.offerSeen === true) out.offerSeen = true;
         if (typeof p.edits === 'number' && p.edits > 0) out.edits = Math.min(Math.floor(p.edits), 99999);
+        if (typeof p.unsentSince === 'string' && Number.isFinite(Date.parse(p.unsentSince))) out.unsentSince = p.unsentSince;
         if (Array.isArray(p.toldRefused)) out.toldRefused = p.toldRefused.filter((r): r is string => typeof r === 'string').slice(-10);
         return out;
     } catch {

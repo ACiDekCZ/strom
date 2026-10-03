@@ -13,7 +13,6 @@
  * opens in a new tab on the user's click.
  */
 
-import { syncMoreTabLabel } from './file-copy-ui.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { DataManager } from '../data.js';
@@ -168,12 +167,11 @@ export const researchPromoMethods = uiModule({
         return isNewMarkerActive(SettingsManager.getResearchPromoState(), this.researchPromoContext(), new Date());
     },
 
-    /** Re-evaluate availability + markers (dots, label, accessible names). */
+    /** Re-evaluate availability + the marker (label, accessible names). */
     refreshResearchPromo(): void {
         try {
             this.syncResearchPromoAvailability();
-            // refreshActionMenuBadges ends with refreshResearchNewMarker so
-            // the anniversaries dot and the "New" dot are decided together.
+            // refreshActionMenuBadges ends with refreshResearchNewMarker.
             this.refreshActionMenuBadges();
         } catch (err) {
             console.warn('Research promo refresh failed', err);
@@ -181,11 +179,9 @@ export const researchPromoMethods = uiModule({
     },
 
     /**
-     * Paint the "New" marker. `anniversaryCount` is the red anniversaries
-     * signal: on the desktop ⋯ trigger it takes precedence (one dot only);
-     * the mobile "More" dot is shared (it is the accent colour anyway).
+     * Paint the "New" marker: the label on the menu row only.
      */
-    refreshResearchNewMarker(anniversaryCount: number): void {
+    refreshResearchNewMarker(): void {
         const active = this.isResearchNewActive();
         if (active && !SettingsManager.getResearchPromoState().researchNewFirstSeen) {
             SettingsManager.setResearchNewFirstSeen(new Date().toISOString());
@@ -207,20 +203,8 @@ export const researchPromoMethods = uiModule({
             if (badge) badge.hidden = !active;
         }
 
-        const newDot = document.getElementById('actions-menu-new-dot');
-        if (newDot) newDot.style.display = active && anniversaryCount === 0 ? 'block' : 'none';
-        const moreDot = document.getElementById('bottom-bar-more-dot');
-        if (moreDot && active) moreDot.style.display = 'block';
-
-        const actionsBtn = document.querySelector('.actions-menu-btn');
-        if (actionsBtn) {
-            actionsBtn.setAttribute('aria-label', active ? `${strings.menu.actions}, ${s.triggerNewSr}` : strings.menu.actions);
-        }
-        const moreTab = document.getElementById('bb-view-more');
-        if (moreTab) {
-            moreTab.dataset.newItem = active ? '1' : '';
-            syncMoreTabLabel();
-        }
+        // The triggers (⋯, the mobile "More") carry no dot for it: a dot there
+        // means something needs attention, and a promotion does not.
     },
 
     /** The "New" marker goes out for good. */

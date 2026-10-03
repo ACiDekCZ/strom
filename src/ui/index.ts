@@ -100,6 +100,7 @@ import { fileAccessMethods } from './file-access-ui.js';
 import { fileCopyMethods } from './file-copy-ui.js';
 import { researchUiMethods } from './research-ui.js';
 import { researchSyncMethods } from './research-sync-ui.js';
+import { originalsMethods } from './originals-ui.js';
 import { researchTreeSettingsMethods } from './research-tree-settings-ui.js';
 import { tourMethods, TourStepDef } from './tour.js';
 
@@ -604,6 +605,10 @@ Object.assign(UIClass.prototype, researchUiMethods);
 type ResearchSyncMethods = typeof researchSyncMethods;
 export interface UIClass extends ResearchSyncMethods {}
 Object.assign(UIClass.prototype, researchSyncMethods);
+
+type OriginalsMethods = typeof originalsMethods;
+export interface UIClass extends OriginalsMethods {}
+Object.assign(UIClass.prototype, originalsMethods);
 
 type ResearchTreeSettingsMethods = typeof researchTreeSettingsMethods;
 export interface UIClass extends ResearchTreeSettingsMethods {}

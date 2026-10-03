@@ -25,6 +25,7 @@ import {
     PartnershipStatus,
     StromData,
     LifeEvent,
+    SourceExcerpt,
     CoupleEvent,
     CoupleEventType,
     EventParticipant,
@@ -58,6 +59,8 @@ import { coupleEventTypeOfTag, eventValueIsOnTag } from './events';
 import { strings, getStringsForLang } from './strings';
 import { SURNAME_GROUPS_MARKER, SURNAME_GROUP_SEP } from './ged-exporter';
 import { excerptFromDataUrl } from './excerpts';
+import { normalizeSha256 } from './sha256';
+import { parseRegion, regionFromStored } from './originals';
 
 /**
  * Words that name a role in RELA, in the languages registers and genealogy
@@ -559,6 +562,10 @@ interface RawMedia {
     note?: string;
     /** _SOUR @Sx@ — the source the scan belongs to (Strom extension). */
     sourceXref?: string;
+    /** _STROM_SHA: the original file behind the preview (Strom extension). */
+    sha?: string;
+    /** _STROM_ORIENT: that original's EXIF orientation. */
+    orient?: number;
 }
 
 interface RawEvent {
@@ -673,6 +680,10 @@ interface RawSourceMedia {
     pageUrl?: string;
     /** _STROM_CLIP: the crop's id in Strom Research. */
     clip?: string;
+    /** _STROM_SHA: the original scan the crop was cut from. */
+    sha?: string;
+    /** _STROM_REGION: where on that original (its stored pixels). */
+    region?: string;
 }
 
 // ==================== TYPES ====================
@@ -1834,6 +1845,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     else if (tag === 'TITL') media.title = value;
                     else if (tag === '_URL') media.pageUrl = value;
                     else if (tag === '_STROM_CLIP' && /^[A-Za-z0-9-]{1,32}$/.test(value.trim())) media.clip = value.trim();
+                    else if (tag === '_STROM_SHA') media.sha = normalizeSha256(value) ?? undefined;
+                    else if (tag === '_STROM_REGION') media.region = value;
                     // FORM, _STROM_KIND, _REGION: nothing to keep — the data URL
                     // says the format, and every image on a source is its excerpt.
                 }
@@ -2280,6 +2293,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                         else if (tag === '_STROM_KIND') currentMedia.stromKind = value;
                         else if (tag === 'NOTE') currentMedia.note = value;
                         else if (tag === '_SOUR' || tag === 'SOUR') currentMedia.sourceXref = value;
+                        else if (tag === '_STROM_SHA') currentMedia.sha = normalizeSha256(value) ?? undefined;
+                        else if (tag === '_STROM_ORIENT' && /^[2-8]$/.test(value.trim())) currentMedia.orient = Number(value.trim());
                         else if ((tag === '_PRIM' || tag === '_PERSONALPHOTO') && value === 'Y') currentMedia.primary = true;
                     } else if (NOTED_INDI_TAGS.has(currentSubTag ?? '') && indi.noteFacts.length > 0) {
                         attachToFact(indi.noteFacts[indi.noteFacts.length - 1], tag, value);
@@ -2558,6 +2573,8 @@ export function parseGedcom(content: string): ParsedGedcom {
  */
 export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     const { individuals, families, sources: gedSources, droppedTags } = gedcom;
+    /** Excerpts with a `_STROM_REGION` on their original, until the page attachments exist. */
+    const excerptRegions = new Map<SourceExcerpt, { x: number; y: number; w: number; h: number }>();
 
     // Family roles disambiguate individuals with SEX U/missing: a HUSB is
     // male, a WIFE female. Without any role we fall back to female (legacy
@@ -2594,8 +2611,11 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         // folder) or any other payload is skipped and counted.
         for (const media of raw.media) {
             const exc = media.file.startsWith('data:')
-                ? excerptFromDataUrl(media.file, { caption: media.title, pageUrl: media.pageUrl, clip: media.clip })
+                ? excerptFromDataUrl(media.file, { caption: media.title, pageUrl: media.pageUrl, clip: media.clip, originalSha: media.sha })
                 : null;
+            // Its place on the original: re-linked to the page attachment once persons are in.
+            const region = exc?.originalSha ? parseRegion(media.region) : null;
+            if (exc && region) excerptRegions.set(exc, region);
             if (!exc) {
                 skippedMedia++;
                 droppedTags.set('OBJE', (droppedTags.get('OBJE') ?? 0) + 1);
@@ -2829,6 +2849,12 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                         sizeBytes: Math.round((media.file.length - media.file.indexOf(',') - 1) * 0.75),
                     };
                     if (media.note) att.note = media.note;
+                    if (media.sha) {
+                        att.original = {
+                            sha256: media.sha, name: att.name, mimeType: att.mimeType, bytes: 0,
+                            ...(media.orient ? { orientation: media.orient } : {}),
+                        };
+                    }
                     const attSource = media.sourceXref ? sourceIdMap.get(media.sourceXref) : undefined;
                     if (attSource) att.sourceId = attSource;
                     (person.attachments ??= []).push(att);
@@ -3207,6 +3233,21 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             const child = persons[childId];
             child.notes = child.notes ? `${child.notes}\n${line}` : line;
             otherFamilyLinks++;
+        }
+    }
+
+    // A crop cut from a page kept as an attachment: the same original (by its
+    // hash) links them again, its region back in the page as shown.
+    if (excerptRegions.size > 0) {
+        const pages = new Map<string, Attachment>();
+        for (const p of Object.values(persons)) {
+            for (const a of p.attachments ?? []) if (a.original) pages.set(a.original.sha256, a);
+        }
+        for (const [exc, region] of excerptRegions) {
+            const page = exc.originalSha ? pages.get(exc.originalSha) : undefined;
+            if (!page) continue;
+            exc.fromAttachmentId = page.id;
+            exc.region = regionFromStored(region, page.original?.orientation);
         }
     }
 

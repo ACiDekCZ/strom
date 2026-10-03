@@ -216,8 +216,8 @@ settings (`seedResearchPromoSeen`); `research-promo.spec.ts` opts out with
 | Welcome-screen offer at 1440 / 400 / 700px, between "I have data elsewhere" and the demo link; opens the site in a new tab (EN bare, CS `?lang=cs`, DE `?lang=de`) | `research-promo.spec.ts` | covered | popup via `context.waitForEvent('page')`; new user gets `whatsNew30Shown` right away |
 | "Runs on a computer" line at 400px and on touch, not on desktop | `research-promo.spec.ts` | covered | touch = `hasTouch` + `isMobile` at 820px |
 | One-time 3.0 card on an existing tree: desktop card anchored under Actions (14px gap, 384px, arrow on the button centre, ≥16px from the edge); shown once (also when just ignored) | `research-promo.spec.ts` | covered | "Learn more" opens the site; reload shows nothing |
-| "Not now" / "Learn more" / Esc / backdrop tap put the dot and the label out | `research-promo.spec.ts` | covered | desktop, phone sheet, 1024px tablet sheet |
-| Dot on Actions (desktop) and on the bottom-bar More tab (≤1024px); none on the top ⋯; red anniversaries dot wins | `research-promo.spec.ts` | covered | `aria-label` "Actions, new item" / "More, new item" while lit |
+| "Not now" / "Learn more" / Esc / backdrop tap put the label out | `research-promo.spec.ts` | covered | desktop, phone sheet, 1024px tablet sheet |
+| No dot on Actions or on the bottom-bar More tab for the promotion (a dot means "needs attention"); only the "New" label on the item | `research-promo.spec.ts` | covered | triggers keep their plain `aria-label` |
 | Menu item (desktop menu and More sheet right above "Strom:") → explanation dialog; dialog puts "New" out; item stays; primary opens the site; Close / outside click close | `research-promo.spec.ts` | covered | ≤499px: stacked full-width buttons, primary on top, ≥48px |
 | "New" out after 30 days | `research-promo.spec.ts` | covered | `researchNewFirstSeen` moved 31 days back |
 | Hidden: view mode (exported HTML with data), exported app from disk, locked data / password prompt, research tree (card + label, item stays), command-line open (card; "New" stays) | `research-promo.spec.ts` | covered | CLI open simulated with `?open=file` |
@@ -226,6 +226,9 @@ settings (`seedResearchPromoSeen`); `research-promo.spec.ts` opts out with
 | State only in browser settings — not in IndexedDB tree data, not in the JSON export | `research-promo.spec.ts` | covered | |
 | 360 × 780 in German: offer, 3.0 sheet, More sheet and dialog without horizontal overflow | `research-promo.spec.ts` | covered | |
 | Real `window.open` behaviour of Safari / installed PWA | — | n-a | headless Chromium only |
+| A clean profile (no research ever on this computer): no request to 127.0.0.1 / localhost / [::1] other than the app, no `strom-research://` launch, no research mark / pill / dot / submenu / person "Research ›" / settings rows, nothing `strom-research*` stored — after edits, a tree switch, the page hidden and 5 minutes on the clock | `research-clean-profile.spec.ts` | covered | the explanation item is the only trace |
+| Originals (step C base): a person's attachment on a research tree that takes originals goes as it was (`GET` then `PUT /media/<sha>`, person REFN, name; preview stays in the tree, `Attachment.original`); bridge down → queued in IndexedDB, sent at the next answer; already known → not sent; person without REFN waits; a crop goes with the source and its region on the stored file, only the allowed headers; a research without `accepts.media` and a tree without a research see nothing | `research-originals.spec.ts` | covered | fake bridge `mediaPuts` / `mediaAsks`; >64 MB worker hashing: vitest only |
+| The storage pill on a research tree: out while the research holds the edits or they are fresh, on after 10 minutes unsent, out once sent | `research-storage-pill.spec.ts` | covered | clock fast-forward |
 
 ## Security & privacy
 

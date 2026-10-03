@@ -150,3 +150,26 @@ export function godparentLeads(data: StromData): RecurringParticipant[] {
     return recurringParticipants(data)
         .filter(p => !p.alreadyRelated && p.subjects.length >= 2);
 }
+
+/** Roles a file names that the app has no own role for: kept as 'other' with the word in front of the note. */
+export type ExtraParticipantRole = 'midwife' | 'informant';
+const EXTRA_ROLE_WORDS: Record<ExtraParticipantRole, RegExp> = {
+    midwife: /^(midwife|hebamme|porodn[ií] b[aá]ba)$/i,
+    informant: /^(informant|oznamovatel|anzeigender?)$/i,
+};
+
+/**
+ * A participant recorded as 'other' whose note starts with a role word the
+ * app has no role for ("Midwife", "Midwife — z Týnce" — the form Strom
+ * Research and the importer write): that role, and the rest of the note.
+ * The data keeps the word, so it goes back to the research as it came.
+ */
+export function extraParticipantRole(p: { role: string; note?: string }): { role: ExtraParticipantRole; word: string; rest: string } | null {
+    if (p.role !== 'other' || !p.note) return null;
+    const m = /^([^—]+?)(?:\s+—\s+([\s\S]*))?$/.exec(p.note.trim());
+    if (!m) return null;
+    for (const role of Object.keys(EXTRA_ROLE_WORDS) as ExtraParticipantRole[]) {
+        if (EXTRA_ROLE_WORDS[role].test(m[1].trim())) return { role, word: m[1].trim(), rest: (m[2] ?? '').trim() };
+    }
+    return null;
+}

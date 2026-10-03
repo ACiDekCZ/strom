@@ -551,12 +551,7 @@ export const relationshipsPanelMethods = uiModule({
                             }).join('')}
                             <button type="button" class="partnership-cite-btn" data-partnership-id="${this.escapeHtml(partnership.id)}">${iconSvg('book', { size: 13 })} ${strings.sources.citePartnership}</button>
                         </div>
-                        <div class="partnership-witnesses sources-chips"${
-                            // Wedding witnesses: research, like the citation
-                            // above — shown on request, never hidden once the
-                            // marriage entry actually named someone.
-                            SettingsManager.isAdvancedFields() || partnership.participants?.length
-                                ? '' : ' style="display:none"'}>
+                        <div class="partnership-witnesses sources-chips">
                             ${(partnership.participants ?? []).map(part => {
                                 const linked = part.personId ? DataManager.getPerson(part.personId) : null;
                                 const name = linked ? `${linked.firstName} ${linked.lastName}`.trim() : (part.name ?? '');

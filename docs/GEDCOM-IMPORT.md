@@ -356,6 +356,12 @@ all belong to that entry, and every fact it proves cites it.
   it but is not required: every image on a source record is read as its
   excerpt. A path, a URL or any other payload in `FILE` is skipped and reported
   (`OBJE`). `FORM` and a `_REGION` line are not read.
+- `2 _STROM_SHA <sha256>` under an excerpt's `OBJE` — the original scan the
+  crop was cut from (64 hex characters; Strom Research holds the file). With
+  `2 _STROM_REGION x,y,w,h` (fractions 0–1 of the original's **stored**
+  pixels, EXIF orientation not applied) it says where on the original the crop
+  lies. On import an excerpt whose hash matches a document of a person (below)
+  is linked to that page again, its region turned back into the page as shown.
 - `1 _STROM_VERIFIED Y` — the user read the transcript from the record
   ("Transcription verified"). Strom Research takes it as the first reading of
   the entry. Written only when the source has a `TEXT`.
@@ -439,6 +445,13 @@ Two sub-lines of a document's `OBJE` are read as well: `2 NOTE` (with `CONT` /
 `CONC`) becomes the document's note, and `2 _SOUR @Sx@` links the document to
 that source record (5.5.1 has no `SOUR` under a multimedia link; a plain
 `2 SOUR @Sx@` is accepted too). Strom writes both on export.
+
+A document added to a tree tied to Strom Research keeps the identity of the
+file the user picked, before the app shrank it: `2 _STROM_SHA <sha256>` (the
+original's SHA-256, 64 hex characters) and, for a photo taken turned,
+`2 _STROM_ORIENT 2–8` (its EXIF orientation). The original itself goes to the
+research (`PUT /media/<sha256>` on its bridge), never into the file. A
+malformed hash or orientation is ignored.
 
 Strom's export embeds photos and documents this way unless the export dialog's
 content options leave them out — other programs cannot read data URLs, so a

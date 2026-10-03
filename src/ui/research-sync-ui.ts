@@ -33,7 +33,7 @@ import { SettingsManager } from '../settings.js';
 import { stripMedia } from '../attachments.js';
 import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
-    parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, carryOverMedia, researchPersonRef,
+    parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, carryOverMedia, researchPersonRef, ResearchAccepts,
 } from '../research-link.js';
 import {
     noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, storedResearchBridge, researchLinksEnabled,
@@ -86,6 +86,8 @@ interface BridgeRuntime {
 }
 
 const runtime = new Map<string, BridgeRuntime>();
+/** Edits unsent this long are "only in the browser" again (the storage pill shows). */
+const RESEARCH_HOLD_MS = 10 * 60 * 1000;
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
 /** When the scheduled ask runs (ms). */
 let pollDueAt = 0;
@@ -251,6 +253,11 @@ export const researchSyncMethods = uiModule({
         return treeId && link ? { treeId, link } : null;
     },
 
+    /** What the research takes (its last status, else what it said before), or null. */
+    researchAcceptsOf(researchId: string): ResearchAccepts | null {
+        return runtime.get(researchId)?.status?.accepts ?? storedResearchBridge(researchId)?.accepts ?? null;
+    },
+
     /** The research said what it takes (now or before): sending straight and the states are on. */
     researchSyncCapable(researchId: string): boolean {
         return !!(runtime.get(researchId)?.status?.accepts ?? storedResearchBridge(researchId)?.accepts);
@@ -395,6 +402,8 @@ export const researchSyncMethods = uiModule({
         }
         this.refreshResearchSyncUi();
         if (status && opts.reschedule !== false) void this.researchAutoCheck();
+        // Originals waiting for it go while it answers.
+        if (status) void this.researchOriginalsKick();
         return !!status;
     },
 
@@ -521,7 +530,11 @@ export const researchSyncMethods = uiModule({
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (!link || !this.researchSyncCapable(link.id)) return;
         fpCache = null;
-        patchResearchAutoState(treeId, { edits: (researchAutoState(treeId).edits ?? 0) + 1 });
+        const st = researchAutoState(treeId);
+        patchResearchAutoState(treeId, {
+            edits: (st.edits ?? 0) + 1,
+            ...(st.unsentSince ? {} : { unsentSince: new Date().toISOString() }),
+        });
         autoDue.delete(treeId);
         // The bridge not answering and now changes wait for it: look for it sooner.
         if (DataManager.getCurrentTreeId() === treeId && !runtime.get(link.id)?.up) this.scheduleResearchPoll(true);
@@ -728,7 +741,7 @@ export const researchSyncMethods = uiModule({
             ...(opts.auto ? {} : { manual: true }),
         };
         TreeManager.patchResearchLink(treeId, { refused: undefined, sentSources: sourceReadings(data), sent });
-        patchResearchAutoState(treeId, { edits: undefined, toldRefused: undefined });
+        patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined, toldRefused: undefined });
         autoDue.delete(treeId);
         // The commit the write made is the research's version now.
         if (written && reply.head) {
@@ -877,7 +890,7 @@ export const researchSyncMethods = uiModule({
             ...(head ? { head } : {}),
             ...(header.mode === 'archive' ? { mode: 'archive' as const } : {}),
         });
-        patchResearchAutoState(treeId, { edits: undefined });
+        patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined });
         fpCache = null;
         const after = openConflictCounts(DataManager.getData());
         const conflictPersons: PersonId[] = [];
@@ -1071,6 +1084,36 @@ export const researchSyncMethods = uiModule({
     refreshResearchSyncUi(): void {
         this.refreshActionMenuBadges();
         this.renderResearchSyncPill();
+        // "Only in browser" depends on what the research holds.
+        this.refreshUnsavedForResearch();
+    },
+
+    /**
+     * Does the research hold this tree's edits, so the "only in browser"
+     * pill need not show? Yes when it has everything (in sync, or the last
+     * send taken in), and while edits are fresh — they go within minutes;
+     * no once they stay unsent for RESEARCH_HOLD_MS (the bridge down, refused,
+     * by hand and not sent). `until`: when a "yes" turns into "no".
+     * Only on a computer, for a research that says what it takes.
+     */
+    researchHoldsTree(treeId: TreeId, now = Date.now()): { holds: boolean; until?: number } {
+        const meta = TreeManager.getTreeMetadata(treeId);
+        const link = meta?.research;
+        if (!link || !onComputer() || !researchLinksEnabled() || !this.researchSyncCapable(link.id)) return { holds: false };
+        const st = researchAutoState(treeId);
+        const sentGone = link.sent?.state === 'discarded' || link.sent?.state === 'undone';
+        let unsent: boolean;
+        if (treeId === DataManager.getCurrentTreeId()) {
+            const fps = this.researchSyncFingerprints(treeId, link);
+            unsent = !fps.matchesBase && (sentGone || fps.current !== link.sent?.fingerprint);
+        } else {
+            unsent = sentGone || !!st.unsentSince;
+        }
+        if (!unsent) return { holds: true };
+        const since = Date.parse(st.unsentSince ?? (sentGone ? link.sent?.at ?? '' : meta?.changedAt ?? ''));
+        if (!Number.isFinite(since)) return { holds: false };
+        const until = since + RESEARCH_HOLD_MS;
+        return now < until ? { holds: true, until } : { holds: false };
     },
 
     /** The state block at the top of ⋯ → Research ('' when there is none). */
