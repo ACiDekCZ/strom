@@ -152,6 +152,10 @@ test.describe('the research\'s numbers after a hand-over', () => {
         await page.evaluate((u) => window.Strom.UI.openExternalRequest(new URLSearchParams({ 'import-url': u })), `${BRIDGE}/tree.ged`);
         await expect(page.locator('.toast')).toContainText('Test Win4');
         expect(await refns(page)).toEqual(['1:P0001', '2:P0002', '3:P0003']);
+        // The loads are no edits of the user's: nothing counted as waiting (finding 31).
+        const auto = await page.evaluate(() => JSON.parse(localStorage.getItem(`strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`) ?? '{}'));
+        expect(auto.unsentSince).toBeUndefined();
+        expect(auto.edits).toBeUndefined();
         await renameOne(page);
         await send(page);
         await expect.poll(() => b.posts.length).toBe(1);

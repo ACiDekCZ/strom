@@ -213,6 +213,28 @@ test('the research names the conflicts in its reply: the note names the person',
     await expect(note.getByRole('button', { name: 'Jan Víšek ›' })).toBeVisible();
 });
 
+test('a window narrower than the toolbar\'s mark (1100 px): a new conflict is told by a toast with the person', async ({ page }) => {
+    const bridge = await autoTree(page);
+    await page.setViewportSize({ width: 1100, height: 900 });
+    writesAtOnce(bridge);
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0003', person: 'P0003', fact: 'BIRT' }] } };
+    await editJan(page);
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    const toast = page.locator('.toast', { hasText: 'Written, 1 conflict to decide' });
+    await expect(toast.getByRole('button', { name: 'Jan Víšek' })).toBeVisible();
+});
+
+test('waiting for the quiet time: the mark and the block say when the changes go', async ({ page }) => {
+    await autoTree(page);
+    await editJan(page);
+    await expect(mark(page)).toHaveAttribute('title', /^Your changes will be sent at \d{1,2}:\d{2}/);
+    await openResearchMenu(page);
+    await expect(block(page)).toHaveAttribute('data-state', 'autoWaiting');
+    await expect(block(page)).toContainText(/sent at \d{1,2}:\d{2}/);
+    await expect(block(page).getByRole('button', { name: 'Send now' })).toBeVisible();
+});
+
 test('a written send taken back in the research: told once, not sent again by itself, the new version asks before it loads', async ({ page }) => {
     const bridge = await autoTree(page);
     writesAtOnce(bridge);

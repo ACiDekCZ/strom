@@ -123,6 +123,8 @@ let sendingTree: TreeId | null = null;
 /** The quiet-time timer of the open tree. */
 let autoTimer: ReturnType<typeof setTimeout> | null = null;
 let autoTimerTree: TreeId | null = null;
+/** When the running quiet time ends (ms), for "sent at 16:57". */
+let autoDueAt = 0;
 /** Trees whose quiet time ran out while the bridge was not there: sent when it comes back. */
 const autoDue = new Set<TreeId>();
 /** The ✓ shown on the mark for a moment after a write. */
@@ -661,17 +663,25 @@ export const researchSyncMethods = uiModule({
     scheduleResearchAutoSend(treeId: TreeId, delay = AUTO_QUIET_MS): void {
         this.clearResearchAutoTimer();
         autoTimerTree = treeId;
+        autoDueAt = Date.now() + delay;
         autoTimer = setTimeout(() => {
             autoTimer = null;
             autoTimerTree = null;
+            autoDueAt = 0;
             void this.researchAutoSend(treeId, 'quiet');
         }, delay);
+    },
+
+    /** "16:57": when the open tree's quiet time ends and its changes go ('' = no timer runs for it). */
+    researchAutoDueClock(treeId: TreeId | null | undefined): string {
+        return treeId && autoTimerTree === treeId && autoDueAt > 0 ? when(new Date(autoDueAt).toISOString()) : '';
     },
 
     clearResearchAutoTimer(): void {
         if (autoTimer) clearTimeout(autoTimer);
         autoTimer = null;
         autoTimerTree = null;
+        autoDueAt = 0;
     },
 
     /** Leaving the page (hidden): the open tree's changes go now, the request outliving the page when small. */
@@ -814,6 +824,7 @@ export const researchSyncMethods = uiModule({
             // Its people carry the research's numbers already (the mark outlived them, e.g. set by a
             // refusal of a send that named them): nothing to wait for.
             TreeManager.patchResearchLink(treeId, { awaitingIds: undefined });
+            patchResearchAutoState(treeId, { toldRefused: (researchAutoState(treeId).toldRefused ?? []).filter(r => r !== NO_IDS) });
         } else if (link.awaitingIds) {
             // Another tree (sent on a switch): it waits, and is told once it is open.
             if (!active) return;
@@ -1464,7 +1475,8 @@ export const researchSyncMethods = uiModule({
                 actions: [{ action: 'sendAgain', label: s.sendAgain }] }),
             stale: () => ({ tone: 'warn', title: s.stateStale, sub: s.staleSub, actions: [{ action: 'reload', label: strings.storageSafety.reload }] }),
             safari: () => ({ tone: 'neutral', title: s.stateSafari, sub: s.safariSub, actions: [{ action: 'downloadGedcom', label: s.downloadGedcom, asLink: true }] }),
-            autoWaiting: () => ({ tone: 'quiet', title: s.autoWaitingTitle, sub: changed ? s.changedAt(changed) : undefined,
+            autoWaiting: () => ({ tone: 'quiet', title: s.autoWaitingTitle,
+                sub: [changed ? s.changedAt(changed) : '', this.researchAutoDueClock(treeId) ? s.autoSendsAt(this.researchAutoDueClock(treeId)) : ''].filter(Boolean).join(' · ') || undefined,
                 actions: [{ action: 'send', label: s.sendNow, asLink: true }] }),
             sending: () => ({ tone: 'quiet', title: archive ? s.markWriting : s.markSending, spinner: true }),
             autoBridgeDown: () => archive
@@ -1645,7 +1657,7 @@ export const researchSyncMethods = uiModule({
             label = archive ? s.markWriting : s.markSending;
         } else if (kind === 'autoWaiting') {
             look = 'ring';
-            label = s.markWaiting;
+            label = s.markWaiting(this.researchAutoDueClock(ctx.treeId));
         } else if (kind === 'sentPending') {
             look = 'ring';
             label = s.markPending(when(state.sent?.at));
@@ -1675,10 +1687,15 @@ export const researchSyncMethods = uiModule({
 
     /** The note under the mark: a send by itself left a new conflict. */
     showResearchConflictNote(conflicts: number, persons: readonly PersonId[]): void {
-        if (!toolbarWide()) return;
         const s = strings.sync;
         const one = persons.length === 1 ? DataManager.getPerson(persons[0]) : null;
         const name = one ? `${one.firstName} ${one.lastName}`.trim() : '';
+        // No room for the note under the mark: a toast says it, with the way to the conflicts.
+        if (!toolbarWide()) {
+            this.showToast(s.flyConflict(conflicts), CONFLICT_NOTE_MS,
+                { action: { label: name || s.showConflicts, run: () => this.researchShowConflicts([...persons]) } });
+            return;
+        }
         const ids = JSON.stringify(persons).replace(/"/g, '&quot;');
         this.setResearchSyncNote('conflict', `<span class="research-sync-note-text">${esc(s.flyConflict(conflicts))}</span>`
             + `<button type="button" class="research-sync-note-link" onclick="${call('researchShowConflicts', ids)}">${esc(name || s.showConflicts)} ›</button>`

@@ -55,6 +55,22 @@ const TREE_INDEX_VERSION = 1;
 /** IDB key for the tree index inside 'trees' store */
 const INDEX_KEY = '_index';
 
+/** Per-tree research keys in localStorage (the tree's id follows the prefix). */
+const RESEARCH_TREE_KEYS = ['strom-research-auto:', 'strom-research-base-fp:', 'strom-research-written:'];
+
+/** Drop the research keys of trees no longer in the index (deleted before a delete removed them too). */
+function forgetResearchKeysOfGoneTrees(ids: ReadonlySet<string>): void {
+    try {
+        const gone: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            const prefix = key ? RESEARCH_TREE_KEYS.find(p => key.startsWith(p)) : undefined;
+            if (key && prefix && !ids.has(key.slice(prefix.length))) gone.push(key);
+        }
+        for (const key of gone) localStorage.removeItem(key);
+    } catch { /* no storage */ }
+}
+
 /** A tree's data were stored with another research base than this window's link (see ResearchBase). */
 export const RESEARCH_BASE_EVENT = 'strom:research-base-changed';
 
@@ -126,6 +142,7 @@ class TreeManagerClass {
             this.initialized = true;
             // Self-heal: an earlier bug could persist a hidden ACTIVE tree.
             this.ensureActiveVisible();
+            forgetResearchKeysOfGoneTrees(new Set(storedIndex.trees.map(t => t.id)));
             return;
         }
 
@@ -391,6 +408,7 @@ class TreeManagerClass {
         try {
             localStorage.removeItem(`strom-research-base-fp:${id}`);
             localStorage.removeItem(`strom-research-written:${id}`);
+            localStorage.removeItem(`strom-research-auto:${id}`);
         } catch { /* nothing kept */ }
         SettingsManager.forgetRecentSources(id);
 

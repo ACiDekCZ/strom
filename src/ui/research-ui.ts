@@ -51,7 +51,7 @@ import { formatRelativeDateTime } from '../format.js';
 import { safeFileName } from '../filenames.js';
 import {
     noteResearchLinks, announcedResearchLinks, researchLinksEnabled, noteResearchWaiting, storedResearchWaiting,
-    noteResearchBridge, noteResearchBridgeStatus,
+    noteResearchBridge, noteResearchBridgeStatus, patchResearchAutoState,
 } from '../research-device.js';
 import { rememberBridgeStatus } from './research-sync-ui.js';
 import { sourceReadings } from '../research-sync.js';
@@ -1285,6 +1285,8 @@ export const researchUiMethods = uiModule({
                 ...(head ? { head } : {}),
                 ...(source.mode === 'archive' ? { mode: 'archive' as const } : {}),
             });
+            // The load itself counted as an edit (it went through the edit path before the tie moved on): nothing waits now.
+            patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined });
             this.researchKeepCopy(treeId, DataManager.getCurrentTreeId() === treeId ? DataManager.getData() : data);
         }
         const loadedAfterSend = !created && (holdsSent || (!!opts.afterSend && opts.afterSend === treeId));
