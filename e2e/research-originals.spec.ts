@@ -155,6 +155,30 @@ test.describe('originals go to the research', () => {
         expect(Object.keys(h).filter(k => k.startsWith('x-strom-')).sort()).toEqual(['x-strom-name', 'x-strom-region', 'x-strom-source']);
     });
 
+    test('a large file: its row says "Preparing the original…" while it is read', async ({ page }) => {
+        await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        // Hashing held until released (a large file takes a while).
+        await page.evaluate(() => {
+            const ui = window.Strom.UI as any;
+            const prepare = ui.prepareOriginal.bind(ui);
+            ui.prepareOriginal = async (file: Blob, name: string) => {
+                await new Promise<void>(resolve => { (window as any).__release = resolve; });
+                return prepare(file, name);
+            };
+        });
+        await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
+        await cardAction(page, 'Jan', 'edit');
+        const modal = personModal(page);
+        await modal.locator('#input-attachment').setInputFiles({ name: 'sken.pdf', mimeType: 'application/pdf', buffer: Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(5 * 1024 * 1024)]) });
+        const row = modal.locator('.attachment-preparing');
+        await expect(row).toContainText('sken.pdf');
+        await expect(row).toContainText('Preparing the original');
+        await page.evaluate(() => (window as any).__release());
+        await expect(row).toHaveCount(0);
+    });
+
     test('a research that does not take originals: nothing goes; one quiet line by the heading, no toast', async ({ page }) => {
         const b = await fakeBridge(page);
         await openResearch(page);

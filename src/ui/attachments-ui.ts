@@ -7,7 +7,7 @@
  */
 
 import { DataManager } from '../data.js';
-import { Attachment } from '../types.js';
+import { Attachment, PersonId } from '../types.js';
 import { strings } from '../strings.js';
 import { dataUrlByteSize } from '../photo.js';
 import {
@@ -19,6 +19,9 @@ import { openImageViewer, ViewerOriginal } from './image-viewer.js';
 import { emptyStateHtml } from './empty-state.js';
 
 import { iconSvg } from '../icons.js';
+
+/** From this size a file for a research shows "Preparing the original…" while it is read. */
+const PREPARING_MIN_BYTES = 4 * 1024 * 1024;
 function esc(text: string): string {
     return text
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -146,6 +149,30 @@ export const attachmentsMethods = uiModule({
         input.value = '';
         if (!file || !this.currentId) return;
         const personId = this.currentId;
+        // A large file for a research: its row says "Preparing the original…" while it is read (hash, preview).
+        const preparing = file.size >= PREPARING_MIN_BYTES && this.researchOriginalsLink() ? this.showPreparingRow(file.name, file.size) : null;
+        try {
+            await this.addAttachmentFile(personId, file);
+        } finally {
+            preparing?.remove();
+        }
+    },
+
+    /** A row at the end of the list while a file is being prepared (removed when it is added or fails). */
+    showPreparingRow(name: string, bytes: number): HTMLElement | null {
+        const container = document.getElementById('attachments-list');
+        if (!container) return null;
+        const row = document.createElement('div');
+        row.className = 'attachment-row attachment-preparing';
+        row.setAttribute('role', 'status');
+        row.innerHTML = `<span class="attachment-preparing-spin research-sync-spinner" aria-hidden="true"></span>`
+            + `<div class="attachment-main"><span class="attachment-name"></span><span class="media-state">${this.escapeHtml(strings.media.preparing(formatBytes(bytes)))}</span></div>`;
+        row.querySelector('.attachment-name')!.textContent = name;
+        container.appendChild(row);
+        return row;
+    },
+
+    async addAttachmentFile(personId: PersonId, file: File): Promise<void> {
         // The original's identity before it is shrunk (a tree linked to a research only).
         const original = ATTACHMENT_IMAGE_TYPES.includes(file.type) || file.type === 'application/pdf'
             ? await this.prepareOriginal(file, file.name) : null;
