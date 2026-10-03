@@ -541,7 +541,8 @@ export const researchSyncMethods = uiModule({
         }
         const closed: ResearchSend = {
             ...sent, state: fate.state, closedAt: fate.at || new Date().toISOString(),
-            ...(fate.reason ? { reason: fate.reason } : {}),
+            // A discard keeps the user's own words from the research; a failed write's bridge text is not shown.
+            ...(fate.reason && !fate.failed ? { reason: fate.reason } : {}),
             ...(fate.nothing ? { changes: 0 } : {}),
             ...(fate.failed ? { failed: true } : {}),
             ...(fate.inherited ? { inherited: true } : {}),
@@ -552,7 +553,7 @@ export const researchSyncMethods = uiModule({
         if (fate.state === 'discarded') {
             if (!sent.noticed) {
                 TreeManager.patchResearchLink(treeId, { sent: { ...closed, noticed: true } });
-                this.showToast(fate.failed ? s.failedToast(when(sent.at), fate.reason) : s.rejectedToast(when(sent.at), fate.reason), Infinity, {
+                this.showToast(fate.failed ? s.failedToast(when(sent.at)) : s.rejectedToast(when(sent.at), fate.reason), Infinity, {
                     closable: true,
                     action: { label: s.sendAgain, run: () => { void this.researchSendTree(treeId); } },
                 });
@@ -837,10 +838,12 @@ export const researchSyncMethods = uiModule({
             return;
         }
         if (!res.ok || !reply.ok) {
-            TreeManager.patchResearchLink(treeId, { refused: { reason: reply.error, at: new Date().toISOString() } });
+            // The bridge's own sentence is in the research's language: not put into this app's sentences
+            // (until it sends a code to say it here). Its technical reason only as the dialog's details, to pass on.
+            TreeManager.patchResearchLink(treeId, { refused: { reason: '', at: new Date().toISOString() } });
             this.refreshResearchSyncUi();
-            if (opts.auto) this.tellResearchAutoStopped(treeId, reply.error);
-            else await this.showResearchRefused(reply.error, opts);
+            if (opts.auto) this.tellResearchAutoStopped(treeId, '');
+            else await this.showResearchRefused('', { ...opts, details: reply.reason });
             return;
         }
         const now = new Date().toISOString();
@@ -886,6 +889,11 @@ export const researchSyncMethods = uiModule({
             const open = this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }) : null;
             this.showToast(s.sentToast(reply.changes), 6000, open
                 ? { action: { label: s.openResearch, run: () => this.launchResearchLink(open) } } : {});
+        }
+        // Written, but some changes it could not write and skipped (1.12): said in this app's words
+        // (the research's `why` is its own text — shown once it sends a code to say it here).
+        if (reply.skipped.length) {
+            this.showToast(s.skippedToast(reply.skipped.length, ''), 12000, { closable: true });
         }
         // Edited while it was on its way: the quiet time starts again.
         this.researchAutoArm();
@@ -936,7 +944,7 @@ export const researchSyncMethods = uiModule({
         if (told.includes(reason)) return;
         patchResearchAutoState(treeId, { toldRefused: [...told, reason] });
         const s = strings.sync;
-        this.showToast(s.autoStoppedToast(reason || '?'), Infinity, {
+        this.showToast(s.autoStoppedToast(reason), Infinity, {
             closable: true,
             action: { label: s.sendAgain, run: () => { void this.researchSendTree(treeId); } },
         });
@@ -1057,12 +1065,13 @@ export const researchSyncMethods = uiModule({
     },
 
     /** The bridge refused the send: say why, offer to try again. */
-    async showResearchRefused(reason: string, opts: { thenLoad?: boolean } = {}): Promise<void> {
+    async showResearchRefused(reason: string, opts: { thenLoad?: boolean; details?: string } = {}): Promise<void> {
         const s = strings.sync;
-        const message = [reason ? s.refusedReason(reason) : '', s.refusedBody].filter(Boolean).join('\n\n');
+        const details = opts.details && opts.details !== reason ? s.refusedDetails(opts.details) : '';
+        const message = [reason ? s.refusedReason(reason) : '', s.refusedBody, details].filter(Boolean).join('\n\n');
         const pick = await this.showChoice(message, s.refusedTitle, [{ id: 'retry', label: s.retry }], undefined,
             { cancelLabel: strings.buttons.close });
-        if (pick === 'retry') await this.researchSendNow(opts);
+        if (pick === 'retry') await this.researchSendNow({ thenLoad: opts.thenLoad });
     },
 
     /**
@@ -1309,7 +1318,7 @@ export const researchSyncMethods = uiModule({
                     sub: auto ? s.undoneAutoSub(when(state.sent?.closedAt)) : s.undoneSub(when(state.sent?.closedAt)),
                     actions: [{ action: 'sendAgain', label: s.sendAgain }] }
                 : state.sent?.failed
-                    ? { tone: 'warn', title: s.stateFailed(when(state.sent?.at)), sub: s.failedSub(state.sent?.reason ?? ''),
+                    ? { tone: 'warn', title: s.stateFailed(when(state.sent?.at)), sub: s.failedSub(''),
                         actions: [{ action: 'sendAgain', label: s.sendAgain }] }
                 : ({ tone: 'warn', title: s.stateRejected(when(state.sent?.at)),
                 sub: auto
@@ -1433,7 +1442,9 @@ export const researchSyncMethods = uiModule({
             this.closeResearchSyncNote();
             set('is-warn', '<span class="research-sync-pill-mark" aria-hidden="true">!</span>'
                 + `<span class="research-sync-pill-label" onclick="${call('openResearchSyncMenu')}">${esc(w.text)}</span>`
-                + `<button type="button" class="research-sync-pill-send" data-action="${w.action}" onclick="event.stopPropagation(); ${call('researchSyncAction', `'${w.action}'`)}">${esc(w.button)}</button>`, w.text);
+                + `<button type="button" class="research-sync-pill-send" data-action="${w.action}" onclick="event.stopPropagation(); ${call('researchSyncAction', `'${w.action}'`)}">${esc(w.button)}</button>`,
+                // The research's reason, when it gave one, on hover too (not only in the block).
+                kind === 'rejected' && !state.sent?.failed && state.sent?.reason ? `${w.text}: ${state.sent.reason}` : w.text);
             pill.setAttribute('aria-live', 'polite');
             return;
         }
@@ -1602,8 +1613,8 @@ export const researchSyncMethods = uiModule({
         if (DataManager.getCurrentTreeId() !== treeId) return lastLine;
         const state = this.currentResearchSyncState();
         switch (state.core) {
-            case 'autoPaused': return { text: t.statusStopped(state.reason || '?'), warn: true, action: 'sendAgain' };
-            case 'refused': return { text: `${strings.sync.stateRefused}: ${state.reason || '?'}.`, warn: true, action: 'sendAgain' };
+            case 'autoPaused': return { text: t.statusStopped(state.reason ?? ''), warn: true, action: 'sendAgain' };
+            case 'refused': return { text: state.reason ? `${strings.sync.stateRefused}: ${state.reason}.` : `${strings.sync.stateRefused}.`, warn: true, action: 'sendAgain' };
             case 'rejected': return { text: state.sent?.state === 'undone' ? t.statusUndone(when(state.sent?.at)) : t.statusRejected(when(state.sent?.at)), warn: true, action: 'sendAgain' };
             case 'sentPending': case 'waitThenLoad': return { text: strings.sync.markPending(when(state.sent?.at)), warn: false };
             case 'autoBridgeDown':

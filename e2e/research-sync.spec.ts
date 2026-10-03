@@ -58,18 +58,28 @@ test.describe('the state of the tree and sending straight', () => {
         expect(bridge.posts).toHaveLength(0);
     });
 
-    test('refused: a dialog with the reason; Try again sends again', async ({ page }) => {
+    test('refused: a dialog in the app\'s words, the technical reason as details; Try again sends again', async ({ page }) => {
         await openResearch(page, { edit: true });
-        const bridge = await fakeBridge(page, { syncReply: { status: 409, body: { error: 'strom ve výzkumu je zamčený jiným sezením' } } });
+        const bridge = await fakeBridge(page, { syncReply: { status: 500, body: { error: 'výzkum úpravy nezapsal', reason: 'P0002 already has birth parents in F0001' } } });
         await poll(page);
         void page.evaluate(() => window.Strom.UI.researchSendNow());
         const dialog = page.locator('#confirmation-modal');
         await expect(dialog).toContainText("The research didn't accept the changes");
-        await expect(dialog).toContainText('Reason from the research: strom ve výzkumu je zamčený jiným sezením');
+        await expect(dialog).toContainText('Details (to pass on): P0002 already has birth parents in F0001');
+        await expect(dialog).not.toContainText('nezapsal');
         bridge.syncReply = { status: 200, body: { ok: true, changes: 6, inbox: true } };
         await dialog.getByRole('button', { name: 'Try again' }).click();
         await expect(page.locator('.toast')).toContainText('Sent to the research, 6 changes');
         expect(bridge.posts).toHaveLength(2);
+    });
+
+    test('written with a change skipped (1.12): said so in the app\'s words', async ({ page }) => {
+        await openResearch(page, { edit: true });
+        await fakeBridge(page, { syncReply: { status: 200, body: { ok: true, inbox: false, changes: 3, applied: 2,
+            skipped: [{ n: 3, kind: 'family', why: 'P0002 already has birth parents in F0001' }] } } });
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect(page.locator('.toast')).toContainText('The research wrote the rest but skipped 1 change. Those changes stay only in the app.');
     });
 
     test('the bridge not running: the changes wait; Send takes the old way (the research starts it)', async ({ page }) => {

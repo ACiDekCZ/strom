@@ -309,6 +309,14 @@ export const researchPromoMethods = uiModule({
         content.appendChild(points);
         if (adoptTreeId) {
             content.appendChild(el('p', 'research-info-cost', s.adoptCost));
+            // Announced here once, maybe uninstalled since: the way to install it again.
+            const install = el('button', 'link-button research-info-install', s.adoptNotInstalled);
+            install.type = 'button';
+            install.addEventListener('click', () => {
+                this.closeResearchInfoDialog();
+                this.showResearchInstall('install');
+            });
+            content.appendChild(install);
         } else {
             const need = el('div', 'research-info-need');
             need.append(el('div', 'research-info-need-title', s.needTitle), el('p', 'research-info-need-text', s.needText));

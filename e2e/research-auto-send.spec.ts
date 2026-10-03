@@ -113,7 +113,9 @@ test.describe('sending by itself', () => {
         await editJan(page);
         await page.clock.fastForward(QUIET + 1000);
         await expect.poll(() => bridge.posts.length).toBe(1);
-        await expect(page.locator('.toast')).toContainText('Automatic sending stopped. The research didn\'t accept the changes: zamčeno jiným sezením.');
+        // The bridge's sentence (the research's language) is not put into this app's sentence.
+        await expect(page.locator('.toast')).toContainText('Automatic sending stopped. The research didn\'t accept the changes.');
+        await expect(page.locator('.toast')).not.toContainText('zamčeno');
         await expect(pill(page)).toContainText("Research didn't accept the changes");
         await expect(dot(page)).toBeVisible();
         await openResearchMenu(page);

@@ -56,7 +56,7 @@ export const researchTreeSettingsMethods = uiModule({
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
         if (!meta || !link) return;
-        document.getElementById(SETTINGS_ID)?.remove();
+        document.querySelectorAll(`#${SETTINGS_ID}`).forEach(el => el.remove());
         const t = strings.treeSettings;
         const current: ResearchTranscripts = link.transcripts === 'evidence' ? 'evidence' : 'lead';
         const option = (value: ResearchTranscripts, title: string, desc: string, isDefault: boolean): string => `
@@ -227,7 +227,8 @@ export const researchTreeSettingsMethods = uiModule({
     },
 
     closeResearchTreeSettings(): void {
-        document.getElementById(SETTINGS_ID)?.remove();
+        // Every copy of it (opened twice, the button of the upper one closed only the lower).
+        document.querySelectorAll(`#${SETTINGS_ID}`).forEach(el => el.remove());
         this.dialogStack = this.dialogStack.filter(d => d !== SETTINGS_ID);
     },
 

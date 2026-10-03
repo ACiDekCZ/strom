@@ -20,10 +20,11 @@ import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import {
     parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint, researchSchemeUrl,
-    AdoptOffer,
+    readResearchHeader, AdoptOffer,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { onComputer, fetchWithTimeout, fetchStatus, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
+import { onComputer, fetchWithTimeout, fetchStatus, fetchGedcomText, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
+import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { normalizeModal } from './modal-skeleton.js';
 
 const ADOPT_ID = 'research-adopt-modal';
@@ -69,7 +70,9 @@ export const researchAdoptMethods = uiModule({
         this.handOverResearchLink(url);
         // No time limit: setting up takes as long as it takes. Closing the
         // toast keeps the token — the research can still come back.
-        this.showToast(strings.research.awaitingAdopt, Infinity, { spinner: true, closable: true, kind: 'adopt' });
+        // The link may have opened nothing (the research was uninstalled, or never was here): the install line.
+        this.showToast(strings.research.awaitingAdopt, Infinity, { spinner: true, closable: true, kind: 'adopt',
+            action: { label: strings.research.awaitingNotInstalled, run: () => this.showResearchInstall('install') } });
     },
 
     /** Tree manager row menu: start research with that tree. */
@@ -164,6 +167,17 @@ export const researchAdoptMethods = uiModule({
         let status: Awaited<ReturnType<typeof fetchStatus>> = null;
         try { status = await fetchStatus(`${bridge.base}/status`, 4000); } catch { /* connected at the next open */ }
         if (status?.treeId !== reply.tree) noteResearchBridge(reply.tree, bridge.base);
+        // The research's own version of what it took (its numbers, its families) becomes the tree now:
+        // the next send is compared to that there and here, even when the research opens no ?import-url=.
+        try {
+            const text = await fetchGedcomText(bridge.ged);
+            const header = readResearchHeader(text);
+            if (header.isStromResearch && header.treeId === reply.tree) {
+                await this.applyResearch(convertToStrom(parseGedcom(text)).data, header, { quiet: true, ...(reply.head ? { head: reply.head } : {}) });
+            }
+        } catch (err) {
+            console.warn('Loading the research version after the hand-over failed', err);
+        }
         this.refreshResearchSyncUi();
         this.updateTreeSwitcher();
         this.updateTreeManagerList();

@@ -218,6 +218,23 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
         await expect(page.locator('.toast')).toContainText('linked to the research');
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.id)).toBe(UUID);
         expect(b.requests.filter(r => r.method === 'POST' && r.path === 'adopt')).toHaveLength(1);
+        // Its own version loaded right after (its numbers): the next send is the research's tree by its ids.
+        expect(b.requests.some(r => r.path === 'tree.ged')).toBe(true);
+        await expect.poll(() => page.evaluate(() => Object.values(window.Strom.DataManager.getData().persons)
+            .filter((p: any) => p.refn).length)).toBeGreaterThan(0);
+    });
+
+    test('Start research where the research was announced once (maybe uninstalled since): the way to install it again', async ({ page }) => {
+        await bridge111(page);
+        await openResearch(page, { capable: false });
+        await page.evaluate(() => {
+            const tm = window.Strom.TreeManager;
+            tm.setResearchLink(tm.getActiveTreeId()!, undefined);
+            localStorage.setItem('strom-research-links', JSON.stringify({ actions: ['new', 'send', 'open'], at: new Date().toISOString() }));
+            window.Strom.UI.showResearchInfoDialog();
+        });
+        await page.locator('.research-info-install').click();
+        await expect(page.locator('#research-info-modal .install-line').first()).toBeVisible();
     });
 });
 

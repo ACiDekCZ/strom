@@ -1568,11 +1568,15 @@ export interface SyncReply {
     conflictPersons: string[];
     /** Things the send lacked that the research kept (an archive takes away only what this app tree had). */
     kept: number | null;
+    /** The technical reason of a send not written (`reason`, English; '' = not said): shown as details. */
+    reason: string;
+    /** Changes the research could not write and skipped, the rest written (`skipped: [{n, kind, why}]`, 1.12). */
+    skipped: { kind: string; why: string }[];
 }
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], kept: null };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], kept: null, reason: '', skipped: [] };
     return {
         ok: r.ok === true,
         changes: asCount(r.changes),
@@ -1585,6 +1589,10 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
         conflicts: conflictCount(r.conflicts),
         conflictPersons: conflictPersons(r.conflicts),
         kept: asCount(r.kept),
+        reason: cleanText(r.reason, 400),
+        skipped: (Array.isArray(r.skipped) ? r.skipped.slice(0, 50) : [])
+            .map(x => asRecord(x)).filter((x): x is Record<string, unknown> => !!x)
+            .map(x => ({ kind: cleanText(x.kind, 40), why: cleanText(x.why, 300) })),
     };
 }
 
