@@ -48,6 +48,8 @@ export interface QueuedOriginal {
     addedAt: number;
     /** Failed sends so far. */
     attempts: number;
+    /** Its attachment was deleted with "keep the original": sent anyway (the research detaches it). */
+    sendAnyway?: boolean;
 }
 
 export function queueKey(treeId: string, sha256: string): string {

@@ -1301,6 +1301,7 @@ export const researchSyncMethods = uiModule({
             + `<div class="research-sync-title">${b.spinner ? '<span class="research-sync-spinner" aria-hidden="true"></span>' : ''}${esc(b.title)}</div>`
             + (b.sub ? `<div class="research-sync-sub">${esc(b.sub)}</div>` : '')
             + (buttons ? `<div class="research-sync-actions">${buttons}</div>` : '')
+            + this.originalsQueueLineHtml()
             + '</div>';
     },
 
@@ -1308,7 +1309,7 @@ export const researchSyncMethods = uiModule({
     researchSyncAttention(): boolean {
         const state = this.currentResearchSyncState();
         const kind = state.kind;
-        const attention = researchSyncWantsAttention(kind);
+        const attention = researchSyncWantsAttention(kind) || this.originalsQueueWarn();
         const btn = document.querySelector<HTMLElement>('.actions-menu-btn');
         if (btn) {
             if (btn.dataset.baseLabel === undefined) btn.dataset.baseLabel = btn.getAttribute('aria-label') ?? '';

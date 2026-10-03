@@ -15,7 +15,7 @@ import {
     MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES, pdfBlobFromDataUrl,
 } from '../attachments.js';
 import { uiModule } from './module.js';
-import { openImageViewer } from './image-viewer.js';
+import { openImageViewer, ViewerOriginal } from './image-viewer.js';
 import { emptyStateHtml } from './empty-state.js';
 
 import { iconSvg } from '../icons.js';
@@ -78,11 +78,10 @@ export const attachmentsMethods = uiModule({
                         <button type="button" class="attachment-delete-btn" title="${esc(strings.attachments.delete)}" aria-label="${esc(strings.attachments.delete)}"
                             data-attachment-id="${esc(att.id)}">${iconSvg('trash')}</button>
                     </div>`;
-                // Where its original stands (only a tree whose research takes originals).
-                const origState = this.originalStateOf(att.original?.sha256);
-                const origLine = origState
-                    ? `<span class="attachment-original is-${origState}">${esc(origState === 'sent' ? strings.attachments.originalSent : strings.attachments.originalQueued)}</span>`
-                    : '';
+                // Where its original stands (only a tree linked to a research).
+                const { line: origLine, link: fullLink } = this.mediaStateHtml(
+                    { sha: att.original?.sha256, bytes: att.original?.bytes, personId: this.currentId ?? undefined, previewBytes: att.sizeBytes },
+                    att.original?.mimeType ?? att.mimeType, `data-attachment-id="${esc(att.id)}"`);
                 return `
                     <div class="attachment-row">
                         ${thumb}
@@ -92,6 +91,7 @@ export const attachmentsMethods = uiModule({
                             ${origLine}
                             ${noteField}
                         </div>
+                        ${fullLink}
                         ${del}
                     </div>`;
             }).join('');
@@ -106,6 +106,9 @@ export const attachmentsMethods = uiModule({
             });
             container.querySelectorAll<HTMLElement>('.attachment-delete-btn[data-attachment-id]').forEach(el => {
                 el.addEventListener('click', () => { void this.deleteAttachment(el.dataset.attachmentId ?? ''); });
+            });
+            container.querySelectorAll<HTMLElement>('.media-full-quality[data-attachment-id]').forEach(el => {
+                el.addEventListener('click', () => this.openAttachmentFullQuality(el.dataset.attachmentId ?? ''));
             });
         }
 
@@ -125,6 +128,12 @@ export const attachmentsMethods = uiModule({
 
         const addBtn = document.getElementById('btn-add-attachment');
         if (addBtn) addBtn.style.display = locked ? 'none' : '';
+        // A research that does not take originals yet: one quiet line by the heading.
+        const older = document.getElementById('attachments-older-research');
+        if (older) {
+            older.hidden = !this.researchMediaOlder();
+            older.textContent = strings.media.olderResearch;
+        }
     },
 
     /** Handle a picked file: compress images, size-check PDFs, then attach. */
@@ -170,7 +179,8 @@ export const attachmentsMethods = uiModule({
         });
         this.renderAttachmentsList();
         if (original) {
-            await this.queueOriginal(original, file, { personId });
+            const outcome = await this.queueOriginal(original, file, { personId });
+            this.noteOriginalOutcome(outcome, file.size, { personId });
             this.renderAttachmentsList();
         }
     },
@@ -181,7 +191,9 @@ export const attachmentsMethods = uiModule({
         const att = DataManager.getPerson(this.currentId)?.attachments?.find(a => a.id === attachmentId);
         if (!att) return;
         if (isImage(att)) {
-            this.showAttachmentImage(att.dataUrl);
+            const sha = att.original?.sha256;
+            const mode = this.fullQualityMode(sha, att.original?.mimeType ?? '', att.original?.bytes ?? 0);
+            openImageViewer(att.dataUrl, undefined, mode === 'app' && sha ? this.viewerOriginal(sha) : undefined);
         } else {
             // Only a PDF is ever opened, and always as application/pdf.
             const blob = pdfBlobFromDataUrl(att.dataUrl, att.mimeType);
@@ -193,6 +205,95 @@ export const attachmentsMethods = uiModule({
             window.open(url, '_blank');
             // The tab keeps its own reference; revoke shortly after.
             setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        }
+    },
+
+    /** "Full quality" on an attachment's row: here (from the bridge) or in the research. */
+    openAttachmentFullQuality(attachmentId: string): void {
+        if (!this.currentId) return;
+        const att = DataManager.getPerson(this.currentId)?.attachments?.find(a => a.id === attachmentId);
+        const sha = att?.original?.sha256;
+        if (!att || !sha) return;
+        this.openFullQuality(sha, att.original?.mimeType ?? att.mimeType, att.original?.bytes ?? 0, isImage(att) ? att.dataUrl : null);
+    },
+
+    /**
+     * Open an original in full quality: an image in the viewer (the preview
+     * first, the original loading over it), a PDF in a new tab, anything else
+     * (or too large, or the bridge not running) in the research.
+     */
+    openFullQuality(sha: string, mimeType: string, bytes: number, previewUrl: string | null): void {
+        const mode = this.fullQualityMode(sha, mimeType, bytes);
+        if (mode === 'external' || (mode === null && this.researchLinkAvailable('media'))) {
+            this.openOriginalInResearch(sha);
+            return;
+        }
+        if (mode !== 'app') return;
+        if (mimeType === 'application/pdf') {
+            const ctl = new AbortController();
+            void this.fetchOriginal(sha, () => { /* a tab opens when it is here */ }, ctl.signal).then(({ url }) => {
+                window.open(url, '_blank');
+                setTimeout(() => URL.revokeObjectURL(url), 60_000);
+            }, () => this.showToast(strings.media.loadFailed, 6000));
+            return;
+        }
+        openImageViewer(previewUrl ?? '', undefined, { ...this.viewerOriginal(sha), autoLoad: true });
+    },
+
+    /** The image viewer's "Full quality": the original fetched from the bridge, with its progress. */
+    viewerOriginal(sha: string): ViewerOriginal {
+        const m = strings.media;
+        return {
+            label: strings.research.fullQuality,
+            title: strings.research.fullQualityAppTitle,
+            loading: m.loadingOriginal,
+            loadedOf: (a, b) => m.loadedOf(formatBytes(a), formatBytes(b)),
+            chip: (w, h, size) => m.originalChip(String(w), String(h), formatBytes(size)),
+            back: m.backToPreview,
+            cancel: strings.buttons.cancel,
+            load: (progress, signal) => this.fetchOriginal(sha, progress, signal),
+            onError: (err) => {
+                if ((err as Error)?.name === 'AbortError') return;
+                this.showToast(this.originalGone(sha) ? m.gone : m.loadFailed, 6000);
+                this.renderAttachmentsList();
+            },
+        };
+    },
+
+    /**
+     * The third line of a row (attachment, excerpt) saying where its original
+     * stands, and the "Full quality" link beside it. Empty for a tree without
+     * a research.
+     */
+    mediaStateHtml(item: { sha?: string | null; bytes?: number; personId?: string; sourceId?: string; previewBytes?: number; fromResearch?: boolean },
+        mimeType: string, dataAttr: string): { line: string; link: string } {
+        const state = this.mediaStateOf({ ...item, personId: item.personId as never });
+        if (!state) return { line: '', link: '' };
+        const m = strings.media;
+        const line = (icon: string, text: string, cls: string, title = ''): string =>
+            `<span class="media-state ${cls}"${title ? ` title="${esc(title)}"` : ''}>${icon}<span>${esc(text)}</span></span>`;
+        const ring = '<span class="media-ring" aria-hidden="true"></span>';
+        const spin = '<span class="media-spinner" aria-hidden="true"></span>';
+        switch (state.kind) {
+            case 'queued': {
+                const bigger = state.bytes > 0 && item.previewBytes !== undefined && Math.abs(state.bytes - item.previewBytes) > 1024;
+                return { line: line(ring, state.noId ? m.queuedNoId : bigger ? m.queuedSize(formatBytes(state.bytes)) : m.queued, 'is-queued'), link: '' };
+            }
+            case 'sending': return { line: line(spin, m.sending, 'is-sending'), link: '' };
+            case 'gone': return { line: line('', m.gone, 'is-quiet'), link: '' };
+            case 'previewOnly': {
+                const why = state.why === 'room' ? m.previewOnlyWhyRoom : state.why === 'encrypted' ? m.previewOnlyWhyEncrypted
+                    : state.why === 'off' ? m.previewOnlyWhyOff : state.why === 'older' ? m.previewOnlyWhyOlder
+                    : state.why === 'safari' ? m.safariPreviewOnly : '';
+                return { line: line('', m.previewOnly, 'is-quiet', why), link: '' };
+            }
+            case 'inResearch': {
+                const mode = this.fullQualityMode(item.sha, mimeType, item.bytes ?? 0);
+                if (!mode) return { line: line('<span class="media-dot" aria-hidden="true"></span>', m.inResearch, 'is-in'), link: '' };
+                const label = mode === 'app' ? strings.research.fullQuality : strings.research.fullQualityExternal;
+                const title = mode === 'app' ? strings.research.fullQualityAppTitle : strings.research.fullQualityTitle;
+                return { line: '', link: `<button type="button" class="link-button media-full-quality" ${dataAttr} title="${esc(title)}">${esc(label)}</button>` };
+            }
         }
     },
 
@@ -214,9 +315,22 @@ export const attachmentsMethods = uiModule({
         const att = person?.attachments?.find(a => a.id === attachmentId);
         if (!att) return;
         const d = strings.danger;
-        const confirmed = await this.showConfirm(d.undoHint, d.deleteAttachmentTitle(att.name),
-            { confirmLabel: d.deleteAttachment, variant: 'danger', note: this.researchArchiveDeleteNote() });
+        const m = strings.media;
+        // Its original: waiting → discard it too (ticked), or send it and let the research detach it;
+        // in the research → it stays there, only detached.
+        const state = this.mediaStateOf({ sha: att.original?.sha256, bytes: att.original?.bytes, personId: this.currentId });
+        const queuedOriginal = state?.kind === 'queued' || state?.kind === 'sending';
+        const archiveNote = this.researchArchiveDeleteNote();
+        const note = state?.kind === 'inResearch'
+            ? { tag: archiveNote?.tag ?? strings.research.brand, text: m.deleteDetach }
+            : archiveNote;
+        const confirmed = await this.showConfirm(d.undoHint, d.deleteAttachmentTitle(att.name), {
+            confirmLabel: d.deleteAttachment, variant: 'danger', note,
+            ...(queuedOriginal ? { checkbox: { label: m.deleteDiscard(formatBytes(att.original?.bytes ?? 0)), hint: m.deleteDiscardHint, checked: true } } : {}),
+        });
         if (!confirmed) return;
+        const sha = att.original?.sha256;
+        if (queuedOriginal && sha) await this.settleQueuedOriginal(sha, this.confirmChecked);
         DataManager.removeAttachment(this.currentId, attachmentId);
         this.renderAttachmentsList();
     },

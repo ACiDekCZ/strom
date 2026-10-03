@@ -211,7 +211,7 @@ test.describe('installing the research from the app', () => {
             }
             if (path.endsWith('/status')) {
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
-                    body: JSON.stringify({ path: '/Users/jan/Strom/Novakovi', accepts: { mode: 'archive' } }) });
+                    body: JSON.stringify({ tree: { id: UUID, name: 'Novákovi', lang: 'cs' }, path: '/Users/jan/Strom/Novakovi', accepts: { mode: 'archive' } }) });
             }
             return route.fulfill({ status: 404, headers: cors, body: '' });
         });

@@ -76,6 +76,7 @@ import { cardFieldsUiMethods } from './card-fields-ui.js';
 import { personResearchMethods } from './person-research-ui.js';
 import { researchAdoptMethods } from './research-adopt-ui.js';
 import { researchInstallMethods } from './research-install-ui.js';
+import { materialMethods } from './material-ui.js';
 import { evidenceUiMethods } from './evidence-ui.js';
 import { cardSignalsUiMethods } from './card-signals-ui.js';
 import { researchOverviewMethods } from './research-overview-ui.js';
@@ -234,6 +235,8 @@ export class UIClass {
      * Set while the wedding witnesses editor is open: the partnership whose
      * witnesses `eventParticipants` holds (the rows are the event editor's).
      */
+    /** The confirm dialog's checkbox as it was when confirmed (ConfirmOptions.checkbox). */
+    confirmChecked = false;
     /** Settles the open "Couldn't connect to the research" dialog as Close (Escape). */
     researchConnectFailedResolve: (() => void) | null = null;
     weddingWitnessesPartnershipId: PartnershipId | null = null;
@@ -523,6 +526,10 @@ Object.assign(UIClass.prototype, researchAdoptMethods);
 type ResearchInstallMethods = typeof researchInstallMethods;
 export interface UIClass extends ResearchInstallMethods {}
 Object.assign(UIClass.prototype, researchInstallMethods);
+
+type MaterialMethods = typeof materialMethods;
+export interface UIClass extends MaterialMethods {}
+Object.assign(UIClass.prototype, materialMethods);
 
 type EvidenceUiMethods = typeof evidenceUiMethods;
 export interface UIClass extends EvidenceUiMethods {}

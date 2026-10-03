@@ -253,11 +253,122 @@ function wire(): void {
     window.addEventListener('resize', onResize);
 }
 
-/** Open the viewer on an image (data URL); `close` runs after it closes. */
-export function openImageViewer(dataUrl: string, close?: () => void): void {
+/**
+ * The original behind a preview, in full quality (Strom Research): the bar's
+ * button loads it over the preview with its progress; once here, a chip
+ * names its size and "Back to preview" returns. All texts come with it.
+ */
+export interface ViewerOriginal {
+    label: string;
+    title: string;
+    loading: string;
+    loadedOf: (loaded: number, total: number) => string;
+    chip: (width: number, height: number, bytes: number) => string;
+    back: string;
+    cancel: string;
+    load: (progress: (loaded: number, total: number) => void, signal: AbortSignal) => Promise<{ url: string; bytes: number }>;
+    onError: (err: unknown) => void;
+    /** Start loading at once (opened from "Full quality"). */
+    autoLoad?: boolean;
+}
+
+/** The preview the viewer opened on, and the original loaded over it (an object URL, revoked on close). */
+let previewSrc = '';
+let originalUrl: string | null = null;
+let originalAbort: AbortController | null = null;
+
+function mediaBar(): HTMLElement | null { return el('image-viewer-media'); }
+
+/** Show an image in the stage, keeping the view fitted. */
+function showSrc(src: string): void {
+    const image = img();
+    if (!image) return;
+    image.onload = () => { measure(); fit(); image.style.visibility = ''; };
+    image.src = src;
+}
+
+/** Draw the media bar for `original`: the button, the progress, or the chip with "Back to preview". */
+function renderMediaBar(original: ViewerOriginal | undefined, state: { loading?: { loaded: number; total: number }; loaded?: { bytes: number } } = {}): void {
+    const bar = mediaBar();
+    if (!bar) return;
+    bar.innerHTML = '';
+    bar.hidden = !original;
+    if (!original) return;
+    const button = (text: string, onClick: () => void, title = ''): HTMLButtonElement => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'image-viewer-media-btn';
+        b.textContent = text;
+        if (title) b.title = title;
+        b.addEventListener('click', onClick);
+        return b;
+    };
+    if (state.loading) {
+        const { loaded, total } = state.loading;
+        const text = document.createElement('span');
+        text.className = 'image-viewer-media-text';
+        text.textContent = `${original.loading} · ${original.loadedOf(loaded, total)}`;
+        const track = document.createElement('span');
+        track.className = 'image-viewer-media-track';
+        const fill = document.createElement('span');
+        fill.style.width = `${total > 0 ? Math.min(100, Math.round(loaded / total * 100)) : 0}%`;
+        track.appendChild(fill);
+        bar.append(text, track, button(original.cancel, () => originalAbort?.abort()));
+        return;
+    }
+    if (state.loaded) {
+        const image = img();
+        const chip = document.createElement('span');
+        chip.className = 'image-viewer-media-text image-viewer-media-chip';
+        chip.textContent = original.chip(image?.naturalWidth ?? 0, image?.naturalHeight ?? 0, state.loaded.bytes);
+        bar.append(chip, button(original.back, () => {
+            showSrc(previewSrc);
+            renderMediaBar(original);
+        }));
+        return;
+    }
+    bar.append(button(original.label, () => { void loadOriginal(original); }, original.title));
+}
+
+async function loadOriginal(original: ViewerOriginal): Promise<void> {
+    if (originalUrl) {
+        const url = originalUrl;
+        const image = img();
+        showSrc(url);
+        image?.addEventListener('load', () => renderMediaBar(original, { loaded: { bytes: loadedBytes } }), { once: true });
+        return;
+    }
+    originalAbort?.abort();
+    const ctl = new AbortController();
+    originalAbort = ctl;
+    renderMediaBar(original, { loading: { loaded: 0, total: 0 } });
+    try {
+        const { url, bytes } = await original.load((loaded, total) => {
+            if (!ctl.signal.aborted) renderMediaBar(original, { loading: { loaded, total } });
+        }, ctl.signal);
+        if (ctl.signal.aborted || !isOpen()) { URL.revokeObjectURL(url); return; }
+        originalUrl = url;
+        loadedBytes = bytes;
+        const image = img();
+        showSrc(url);
+        image?.addEventListener('load', () => renderMediaBar(original, { loaded: { bytes } }), { once: true });
+    } catch (err) {
+        renderMediaBar(original);
+        if (!ctl.signal.aborted) original.onError(err);
+    } finally {
+        if (originalAbort === ctl) originalAbort = null;
+    }
+}
+let loadedBytes = 0;
+
+/** Open the viewer on an image (data URL); `close` runs after it closes. `original`: its full quality from the research. */
+export function openImageViewer(dataUrl: string, close?: () => void, original?: ViewerOriginal): void {
     const image = img();
     const ov = overlay();
     if (!image || !ov || !dataUrl) return;
+    previewSrc = dataUrl;
+    renderMediaBar(original);
+    if (original?.autoLoad) queueMicrotask(() => { void loadOriginal(original); });
     wire();
     onClose = close ?? null;
     pointers.clear();
@@ -285,6 +396,12 @@ export function closeImageViewer(): void {
     ov.classList.remove('active', 'is-zoomed', 'is-panning', 'is-animating');
     const image = img();
     if (image) { image.onload = null; image.removeAttribute('src'); image.style.transform = ''; }
+    // The original stays in memory only while it is shown.
+    originalAbort?.abort();
+    originalAbort = null;
+    if (originalUrl) URL.revokeObjectURL(originalUrl);
+    originalUrl = null;
+    renderMediaBar(undefined);
     document.removeEventListener('keydown', onKey, true);
     dismissHint();
     pointers.clear();

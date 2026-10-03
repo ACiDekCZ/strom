@@ -190,7 +190,9 @@ export const researchAdoptMethods = uiModule({
             if (res.ok) {
                 const st = await res.json() as { path?: unknown; agent?: unknown };
                 if (typeof st.path === 'string') where = st.path.slice(0, 300);
-                if (typeof st.agent === 'string') agent = st.agent.slice(0, 60);
+                // `agent: { id, name, where? }` (an archive has none); a bare name from an older shape too.
+                const named = st.agent && typeof st.agent === 'object' ? (st.agent as { name?: unknown }).name : st.agent;
+                if (typeof named === 'string') agent = named.slice(0, 60);
             }
         } catch { /* the rows the status gives are left out */ }
         document.getElementById(READY_ID)?.remove();

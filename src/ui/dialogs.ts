@@ -53,6 +53,11 @@ export interface ConfirmOptions {
     variant?: 'default' | 'danger';
     /** A small line under the message with a label before it (a delete in a research archive). */
     note?: { tag: string; text: string };
+    /**
+     * A checkbox under the message ("Also discard the original waiting…");
+     * its state at the confirm is in `UI.confirmChecked`.
+     */
+    checkbox?: { label: string; hint?: string; checked: boolean };
 }
 
 export const dialogsMethods = uiModule({
@@ -150,10 +155,18 @@ export const dialogsMethods = uiModule({
 
             // No options in a simple confirm; a note goes there when given.
             if (optionsEl) {
-                optionsEl.innerHTML = options?.note
+                const note = options?.note
                     ? `<p class="confirm-note"><span class="research-sync-tag research-sync-tag--inline">${this.escapeHtml(options.note.tag)}</span> ${this.escapeHtml(options.note.text)}</p>`
                     : '';
+                const check = options?.checkbox ? `
+                    <label class="confirm-check">
+                        <input type="checkbox" id="confirm-check-input"${options.checkbox.checked ? ' checked' : ''}>
+                        <span><span class="confirm-check-label">${this.escapeHtml(options.checkbox.label)}</span>${options.checkbox.hint
+                            ? `<span class="confirm-check-hint">${this.escapeHtml(options.checkbox.hint)}</span>` : ''}</span>
+                    </label>` : '';
+                optionsEl.innerHTML = check + note;
             }
+            this.confirmChecked = !!options?.checkbox?.checked;
 
             // Show Cancel and OK buttons
             const cancelLabel = options?.cancel || strings.buttons.cancel;
@@ -182,6 +195,8 @@ export const dialogsMethods = uiModule({
 
             if (okBtn) {
                 okBtn.onclick = () => {
+                    const box = document.getElementById('confirm-check-input') as HTMLInputElement | null;
+                    if (box) this.confirmChecked = box.checked;
                     closeAndReturn();
                     resolve(true);
                 };

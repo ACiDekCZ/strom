@@ -120,9 +120,13 @@ export const contextMenuMethods = uiModule({
         // variant of the menu (nothing there changes the app).
         const knows = this.personResearchKnows(personId);
         const researchActions = this.personResearchActions(personId);
+        // Files about the person, to the research (right after what it knows).
+        const material: PersonMenuAction[] = !isViewMode && this.materialAvailable()
+            ? [{ action: 'research-material', label: strings.material.send }] : [];
+        const head = [...(knows ? [knows] : []), ...material];
         const research = submenuRow('research', strings.research.personSection, [
-            ...(knows ? [knows] : []),
-            ...researchActions.map((a, i) => (i === 0 && knows ? { ...a, divider: true } : a)),
+            ...head,
+            ...researchActions.map((a, i) => (i === 0 && head.length ? { ...a, divider: true } : a)),
         ]);
 
         if (isViewMode) {
@@ -253,6 +257,10 @@ export const contextMenuMethods = uiModule({
             case 'research-knows':
                 this.clearDialogStack();
                 this.showPersonResearchDialog(personId);
+                break;
+            case 'research-material':
+                this.clearDialogStack();
+                this.showMaterialDialog({ personId });
                 break;
             case 'research-review':
             case 'research-ancestors':

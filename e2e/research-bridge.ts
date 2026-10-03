@@ -62,6 +62,8 @@ export interface FakeBridge {
     mediaAsks: string[];
     /** Status of a PUT (200 = taken). */
     mediaPutStatus: number;
+    /** Files it can serve in full (`GET /media/<sha>?file=1`); others answer 410. */
+    mediaFiles: Map<string, { type: string; body: Buffer }>;
 }
 
 export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
@@ -74,7 +76,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         down: false,
         links: ['send', 'open', 'live', 'app', 'setup'],
         posts: [],
-        mediaKnown: new Map(), mediaPuts: [], mediaAsks: [], mediaPutStatus: 200,
+        mediaKnown: new Map(), mediaPuts: [], mediaAsks: [], mediaPutStatus: 200, mediaFiles: new Map(),
         ...init,
     };
     await page.route(`${BRIDGE}/**`, async (route) => {
@@ -94,6 +96,12 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 const id = `I${String(100 + b.mediaPuts.length).padStart(4, '0')}`;
                 b.mediaKnown.set(sha, id);
                 return json(200, { input: id });
+            }
+            if (url.searchParams.get('file') === '1') {
+                const file = b.mediaFiles.get(sha);
+                return file
+                    ? route.fulfill({ status: 200, headers: { ...cors, 'content-type': file.type, 'content-length': String(file.body.length) }, body: file.body })
+                    : json(410, { error: 'gone' });
             }
             b.mediaAsks.push(sha);
             const known = b.mediaKnown.get(sha);

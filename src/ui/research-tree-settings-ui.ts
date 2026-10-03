@@ -17,6 +17,8 @@ import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { onComputer, readTree } from './research-ui.js';
 import { researchDisplayName, researchSendMode } from './research-sync-ui.js';
+import { SettingsManager } from '../settings.js';
+import { formatBytesShort } from './originals-ui.js';
 
 const SETTINGS_ID = 'research-tree-settings-modal';
 
@@ -92,6 +94,22 @@ export const researchTreeSettingsMethods = uiModule({
                     ? `<p class="research-send-device">${esc(t.deviceNote)}</p>`
                     : `<p class="research-not-retroactive research-send-effect"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span>${esc(effect)}</span></p>
                        <div class="research-send-status" id="research-send-status" hidden></div>`}`;
+        // Originals: on a computer (not on a compact screen), for a research that tells what it takes.
+        const mediaOn = link.sendMedia !== false;
+        const takesMedia = !!this.researchMediaAccepts(link.id);
+        const queue = this.originalsQueueLine();
+        const mediaLine = SettingsManager.isEncryptionEnabled() ? strings.treeSettings.originalsEncrypted
+            : !takesMedia ? strings.media.olderResearch : '';
+        const originalsHtml = compact || !sendingShown ? '' : `
+                <label class="settings-checkbox research-originals-toggle">
+                    <input type="checkbox" id="research-originals-toggle"${mediaOn && takesMedia ? ' checked' : ''}${takesMedia ? '' : ' disabled'}>
+                    <span class="settings-text">
+                        <span class="settings-name">${esc(strings.treeSettings.originals)}</span>
+                        <span class="settings-desc">${esc(strings.treeSettings.originalsDesc)}</span>
+                        ${mediaLine ? `<span class="settings-desc">${esc(mediaLine)}</span>` : ''}
+                        ${queue ? `<span class="settings-desc research-originals-queue">${esc(strings.mediaQueue.summary(queue.n, formatBytesShort(queue.bytes)))} <button type="button" class="link-button" id="research-originals-show">${esc(strings.mediaQueue.show)}</button></span>` : ''}
+                    </span>
+                </label>`;
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.id = SETTINGS_ID;
@@ -114,6 +132,7 @@ export const researchTreeSettingsMethods = uiModule({
                 <p class="research-not-retroactive"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span>${esc(t.notRetroactive)}</span></p>
                 <button type="button" class="link-button research-older-sources" id="research-older-sources" hidden></button>
                 ${sendingHtml}
+                ${originalsHtml}
                 <div class="buttons research-tree-settings-buttons">
                     ${setup ? `<button type="button" class="link-button research-settings-in-research" id="research-settings-in-research">${esc(strings.research.settingsInResearch)} ↗</button>` : ''}
                     <button type="button" class="primary" id="research-tree-settings-done" data-dismiss>${esc(t.done)}</button>
@@ -175,6 +194,15 @@ export const researchTreeSettingsMethods = uiModule({
             });
         });
         renderStatus();
+        overlay.querySelector<HTMLInputElement>('#research-originals-toggle')?.addEventListener('change', (e) => {
+            const on = (e.target as HTMLInputElement).checked;
+            TreeManager.patchResearchLink(treeId, { sendMedia: on ? undefined : false });
+            this.renderAttachmentsList();
+        });
+        overlay.querySelector<HTMLButtonElement>('#research-originals-show')?.addEventListener('click', () => {
+            close();
+            this.showOriginalsQueue();
+        });
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
         await renderOlder();
         overlay.querySelector<HTMLInputElement>('input[name="research-transcripts"]:checked')?.focus();

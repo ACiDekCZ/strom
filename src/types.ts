@@ -956,7 +956,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.9';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.10';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -1157,6 +1157,11 @@ export interface ResearchLink {
      * Survives updates from the research.
      */
     sendMode?: ResearchSendMode;
+    /**
+     * Send original files to the research (the tree keeps a preview); false
+     * turns it off for this tree. Missing = on. Survives updates from the research.
+     */
+    sendMedia?: boolean;
     /**
      * The research works without an agent (an archive of the user's data), as
      * the file it came from said (`_STROM_MODE archive`); a running bridge's

@@ -274,6 +274,8 @@ export const miscMethods = uiModule({
         if (researchRow) researchRow.hidden = announcedResearchLinks().length === 0 || window.matchMedia?.('(pointer: coarse)').matches === true;
         const researchToggle = document.getElementById('research-links-toggle') as HTMLInputElement | null;
         if (researchToggle) researchToggle.checked = researchLinksEnabled();
+        // Originals waiting for the research (only while some wait).
+        void this.renderOriginalsQueueRow();
 
         const densitySelect = document.getElementById('card-density-select') as HTMLSelectElement | null;
         if (densitySelect) densitySelect.value = SettingsManager.getCardDensity();
@@ -785,6 +787,10 @@ export const miscMethods = uiModule({
                     }
                     if (currentDialog === 'person-research-modal') {
                         this.closePersonResearchDialog();
+                        return;
+                    }
+                    if (currentDialog === 'material-modal') {
+                        this.closeMaterialDialog();
                         return;
                     }
                     if (currentDialog === 'research-connect-failed') {

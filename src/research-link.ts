@@ -23,7 +23,7 @@ export const STROM_LINKS_TAG = '_STROM_LINKS';
 export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
-    'direction', 'finish',
+    'direction', 'finish', 'media',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
@@ -103,6 +103,8 @@ export interface ResearchLinkParams {
     directionDo?: ResearchDirectionDo;
     /** The agent's session to finish ("N0132"). */
     session?: string;
+    /** An original by its SHA-256 (`media`: open it in the system's image viewer). */
+    sha?: string;
     /** A story: approve it (or its waiting new version), or keep the approved one. */
     storyDo?: ResearchStoryDo;
     /** A couple's story: the other partner (with `person`). */
@@ -173,6 +175,10 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
         case 'finish': {
             const session = researchSessionRef(p.session);
             return session ? `${base}&session=${session}` : null;
+        }
+        case 'media': {
+            const sha = typeof p.sha === 'string' && /^[0-9a-f]{64}$/.test(p.sha) ? p.sha : null;
+            return sha ? `${base}&sha=${sha}` : null;
         }
         case 'task': {
             const task = researchTaskRef(p.task);
@@ -896,6 +902,8 @@ export interface ResearchAccepts {
     mediaMaxBytes: number | null;
     /** It takes a crop's region with a file (`accepts.media.region`). */
     mediaRegion: boolean;
+    /** The kinds of file it takes (`accepts.media.types`); null when it does not say. */
+    mediaTypes: { mime: string; ext: string[] }[] | null;
     /** It works with an agent, or as an archive of the user's data without one (`mode: "archive"`). */
     mode: 'agent' | 'archive';
     /** A send waits in the research's inbox for the user (`sync.auto: "off"`). */
@@ -923,6 +931,19 @@ function mediaMaxBytes(value: unknown): number | null {
     return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
 }
 
+/** `accepts.media.types`: `[{ mime, ext: [".jpg"] }]`, or null when the research does not say. Untrusted. */
+function mediaTypes(value: unknown): { mime: string; ext: string[] }[] | null {
+    if (!Array.isArray(value)) return null;
+    const out: { mime: string; ext: string[] }[] = [];
+    for (const item of value.slice(0, 100)) {
+        const t = asRecord(item);
+        const mime = typeof t?.mime === 'string' && /^[a-z]+\/[a-z0-9.+-]+$/i.test(t.mime) ? t.mime.toLowerCase() : '';
+        const ext = Array.isArray(t?.ext) ? (t!.ext as unknown[]).filter((e): e is string => typeof e === 'string' && /^\.[a-z0-9]{1,8}$/i.test(e)).slice(0, 20) : [];
+        if (mime || ext.length) out.push({ mime, ext });
+    }
+    return out.length ? out : null;
+}
+
 export function sanitizeAccepts(value: unknown): ResearchAccepts | null {
     const r = asRecord(value);
     if (!r) return null;
@@ -935,6 +956,7 @@ export function sanitizeAccepts(value: unknown): ResearchAccepts | null {
         media: !!asRecord(r.media),
         mediaMaxBytes: mediaMaxBytes(asRecord(r.media)?.max ?? asRecord(r.media)?.maxBytes),
         mediaRegion: asRecord(r.media)?.region === true,
+        mediaTypes: mediaTypes(asRecord(r.media)?.types),
         mode: r.mode === 'archive' ? 'archive' : 'agent',
         review: auto === 'off' && r.mode !== 'archive',
     };

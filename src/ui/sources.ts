@@ -420,6 +420,18 @@ export const sourcesMethods = uiModule({
         if (editBtn) editBtn.hidden = !editable;
         const sameBook = document.getElementById('source-viewer-same-book');
         if (sameBook) sameBook.hidden = !editable;
+        const material = document.getElementById('source-viewer-material');
+        if (material) material.hidden = !this.materialAvailable() || DataManager.isReadOnly();
+    },
+
+    /** "Send material for this source…" in the viewer's footer. */
+    materialForViewedSource(): void {
+        if (this.sourceViewerId) this.showMaterialDialog({ sourceId: this.sourceViewerId });
+    },
+
+    /** …and under the editor's excerpts (an existing source). */
+    materialForEditedSource(): void {
+        if (this.editingSourceId) this.showMaterialDialog({ sourceId: this.editingSourceId });
     },
 
     /** "Edit" in the viewer: the editor on top; the viewer comes back when it closes. */
@@ -751,10 +763,23 @@ export const sourcesMethods = uiModule({
         // A source cited on a partnership shows in the relationships panel.
         if (citedPartnership) this.refreshRelationshipsPanel();
         for (const o of originals) {
-            void this.queueOriginal(o.meta, o.blob, {
-                personId: o.personId, sourceId: savedSourceId ?? undefined, region: o.region,
-            });
+            const target = { personId: o.personId, sourceId: savedSourceId ?? undefined };
+            void this.queueOriginal(o.meta, o.blob, { ...target, region: o.region })
+                .then(outcome => this.noteOriginalOutcome(outcome, o.blob.size, target));
         }
+    },
+
+    /**
+     * Where an excerpt's original stands (the source editor's row): waiting,
+     * in the research with "Full quality", preview only. A crop the research
+     * sent back (`clip`) names an original the research has.
+     */
+    excerptMediaHtml(exc: SourceExcerpt, index: number): string {
+        if (!exc.originalSha) return '';
+        const { line, link } = this.mediaStateHtml(
+            { sha: exc.originalSha, sourceId: this.editingSourceId ?? undefined, fromResearch: !!exc.clip },
+            'image/jpeg', `data-excerpt-full="${index}"`);
+        return line + link;
     },
 
     // ==================== EXCERPTS (editor) ====================
@@ -773,6 +798,7 @@ export const sourcesMethods = uiModule({
                         <input type="text" class="excerpt-caption" value="${esc(d.excerpt.caption ?? '')}"
                             placeholder="${esc(s.excerptCaption)}" aria-label="${esc(s.excerptCaption)}" data-action="caption">
                         <span class="excerpt-size">${esc(formatBytes(d.excerpt.sizeBytes))}</span>
+                        ${this.excerptMediaHtml(d.excerpt, i)}
                         ${canCrop ? `<button type="button" class="secondary" data-action="crop">${esc(s.excerptCrop)}</button>` : ''}
                         <button type="button" class="secondary" data-action="replace">${esc(s.excerptReplace)}</button>
                         <button type="button" class="excerpt-remove" data-action="remove" title="${esc(s.excerptRemove)}"
@@ -787,6 +813,12 @@ export const sourcesMethods = uiModule({
                 ? `<button type="button" class="link-button excerpt-add-second" data-action="add-second">+ ${esc(s.excerptAddSecond)}</button>`
                 : '';
         box.innerHTML = items + adder;
+        const material = document.getElementById('source-editor-material');
+        if (material) material.hidden = !this.editingSourceId || !this.materialAvailable();
+        box.querySelectorAll<HTMLElement>('.media-full-quality[data-excerpt-full]').forEach(el => el.addEventListener('click', () => {
+            const sha = this.excerptDrafts[Number(el.dataset.excerptFull)]?.excerpt.originalSha;
+            if (sha) this.openFullQuality(sha, 'image/jpeg', 0, null);
+        }));
 
         box.querySelectorAll<HTMLElement>('[data-action]').forEach(el => {
             const index = Number(el.closest<HTMLElement>('[data-index]')?.dataset.index ?? -1);

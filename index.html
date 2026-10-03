@@ -3684,6 +3684,39 @@
         .research-new-badge--sheet { font-size: 11px; }
         /* Copper dot on the ⋯ trigger (the red anniversaries dot wins). */
 
+        /* "Send material…" to the research (material-ui.ts). */
+        .material-dialog { width: 520px; max-width: calc(100vw - 32px); }
+        .material-drop {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px;
+            border: 1.5px dashed var(--border); border-radius: var(--r-lg); background: var(--surface-2);
+        }
+        .material-drop.is-over { border-color: var(--primary); background: var(--primary-soft); }
+        .material-drop-hint { font-size: 13px; color: var(--text-light); }
+        .material-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow: auto; }
+        .material-item { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto 28px; gap: 8px; align-items: center; font-size: 13px; }
+        .material-tile {
+            width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-sm);
+            background: var(--surface-2); border: 1px solid var(--border); font-size: 9px; font-weight: 700; color: var(--text-light);
+        }
+        .material-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+        .material-size { color: var(--text-light); font-size: 12px; }
+        .material-remove { border: none; background: none; font-size: 18px; color: var(--text-light); cursor: pointer; }
+        .material-rejected { margin: 6px 0 0; font-size: 12px; color: var(--warning-text); }
+        .material-note-label { display: block; margin: 12px 0 4px; font-size: 13px; font-weight: 600; color: var(--text); }
+        .material-dialog textarea { width: 100%; box-sizing: border-box; }
+        .material-note-count { text-align: right; font-size: 11px; color: var(--text-faint); }
+        .material-box { display: flex; gap: 8px; margin: 10px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .material-box.is-warn { color: var(--warning-text); }
+        .source-material { margin-right: auto; }
+        @media (max-width: 499px) { .material-dialog { max-width: calc(100vw - 16px); } .material-item { grid-template-columns: 32px minmax(0, 1fr) 28px; } .material-size { display: none; } }
+        @media (min-width: 500px) and (max-width: 900px) { .material-dialog { width: 480px; } }
+
+        /* A checkbox in the confirm dialog ("Also discard the original waiting to be sent"). */
+        .confirm-check { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0 4px; font-size: 14px; cursor: pointer; }
+        .confirm-check input { margin-top: 3px; flex-shrink: 0; }
+        .confirm-check-label { display: block; color: var(--text); }
+        .confirm-check-hint { display: block; margin-top: 2px; font-size: 12px; color: var(--text-light); line-height: 1.4; }
+
         /* "Couldn't connect to the research": the reason, the way to allow it (research-ui.ts). */
         .research-connect-failed { width: 480px; max-width: calc(100vw - 32px); }
         .connect-reason { display: flex; align-items: center; gap: 6px; }
@@ -10784,6 +10817,7 @@
 
         /* Source viewer */
         #source-viewer-modal { z-index: 250; }
+        #material-modal { z-index: 260; }
         .source-viewer { max-width: 720px; }
         .source-viewer-header { align-items: flex-start; }
         .source-viewer-heading { min-width: 0; }
@@ -10983,8 +11017,59 @@
         .attachment-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
         .attachment-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .attachment-size { color: var(--text-secondary, #777); font-size: 12px; }
-        .attachment-original { color: var(--text-secondary, #777); font-size: 12px; }
-        .attachment-original.is-queued { font-style: italic; }
+        /* Where an attachment's / excerpt's original stands (originals-ui.ts, the same vocabulary as the toolbar mark):
+           an empty ring = the research does not have it yet, a dot = it has it, nothing = nothing to say. */
+        .media-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary, #777); line-height: 1.35; }
+        .media-state.is-quiet { color: var(--text-faint); }
+        .media-ring { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--text-light); box-sizing: border-box; flex-shrink: 0; display: inline-block; }
+        .media-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex-shrink: 0; display: inline-block; }
+        .media-spinner {
+            width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; display: inline-block;
+            border: 2px solid color-mix(in srgb, var(--primary) 25%, transparent); border-top-color: var(--primary);
+            animation: media-spin 0.9s linear infinite;
+        }
+        @keyframes media-spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { .media-spinner { animation: none; } }
+        .media-full-quality { flex-shrink: 0; font-size: 13px; font-weight: 600; color: var(--primary); align-self: center; white-space: nowrap; }
+        .media-older-note { font-size: 12px; color: var(--text-faint); font-weight: 400; }
+        .media-older-note[hidden] { display: none; }
+        /* The research block's second line (originals waiting) and the queue in Settings → Data. */
+        .research-sync-line2 {
+            display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px;
+            border-top: 1px solid var(--divider); font-size: 12px; color: var(--text-light);
+        }
+        .research-sync-line2 .media-ring { width: 9px; height: 9px; }
+        .research-sync-line2.is-warn { color: var(--warning-text); }
+        .media-warn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--signal-warn); flex-shrink: 0; display: inline-block; }
+        .research-sync-line2-text { flex: 1; min-width: 0; }
+        .media-queue-row summary { cursor: pointer; list-style: revert; }
+        .media-queue-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+        .media-queue-undo { margin: 0; font-size: 13px; color: var(--text); }
+        .media-queue-budget { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+        .media-queue-budget span { display: block; height: 100%; background: var(--primary); }
+        .media-queue-budget.is-full span { background: var(--warning); }
+        .media-queue-budget-text { margin: 0; font-size: 12px; color: var(--text-light); }
+        .media-queue-info { display: flex; gap: 8px; margin: 0; font-size: 12px; color: var(--text-light); line-height: 1.4; }
+        .media-queue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+        .media-queue-item {
+            display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 2px 10px; align-items: center;
+            padding: 6px 0; border-top: 1px solid var(--divider); font-size: 13px;
+        }
+        .media-queue-name { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+        .media-queue-target { grid-column: 1; font-size: 12px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .media-queue-size { grid-column: 2; grid-row: 1; font-size: 12px; color: var(--text-light); }
+        .media-queue-since { grid-column: 2; grid-row: 2; font-size: 12px; color: var(--text-faint); }
+        .media-queue-discard { grid-column: 3; grid-row: 1 / span 2; color: var(--danger); }
+        .media-queue-item.is-refused .media-queue-name { color: var(--text-faint); }
+        .media-queue-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+        @media (max-width: 499px) {
+            .media-queue-item { grid-template-columns: minmax(0, 1fr) auto; }
+            .media-queue-since { display: none; }
+            .media-queue-discard { grid-column: 2; grid-row: 2; }
+        }
+        @media (min-width: 500px) and (max-width: 900px) {
+            .media-full-quality { font-size: 12.5px; }
+        }
         .attachment-note-input {
             width: 100%; box-sizing: border-box; font-size: 12px; padding: 2px 4px;
             border: 1px solid var(--border-color, #ddd); border-radius: 6px; background: transparent;
@@ -11035,6 +11120,22 @@
         .image-viewer-btn:disabled { opacity: 0.35; cursor: default; background: transparent; }
         .image-viewer-level { min-width: 64px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
         .image-viewer-close { font-size: 26px; margin-left: 4px; }
+        /* Full quality from the research: the button, the progress, the original's chip. */
+        .image-viewer-media {
+            position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px;
+            max-width: calc(100vw - 260px); display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            padding: 6px 8px; border-radius: 22px; color: #fff; font-size: 13px;
+            background: rgba(20,20,20,0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+        }
+        .image-viewer-media[hidden] { display: none; }
+        .image-viewer-media-btn {
+            min-height: 32px; padding: 0 12px; border: 1px solid rgba(255,255,255,0.35); border-radius: 999px;
+            background: transparent; color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+        }
+        .image-viewer-media-btn:hover { background: rgba(255,255,255,0.14); }
+        .image-viewer-media-text { padding: 0 4px; }
+        .image-viewer-media-track { display: inline-block; width: 120px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.25); overflow: hidden; }
+        .image-viewer-media-track span { display: block; height: 100%; background: #fff; }
         .image-viewer-hint {
             position: absolute; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px));
             transform: translateX(-50%); max-width: calc(100vw - 32px);
@@ -11046,6 +11147,10 @@
         @media (max-width: 499px) {
             .image-viewer-tools { right: 8px; }
             .image-viewer-level { min-width: 56px; }
+            .image-viewer-media { left: 8px; right: 8px; top: auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); max-width: none; }
+        }
+        @media (min-width: 500px) and (max-width: 900px) {
+            .image-viewer-media { max-width: calc(100vw - 250px); }
         }
         @media (prefers-reduced-motion: reduce) {
             #attachment-overlay.is-animating .image-viewer-stage img { transition: none; }
@@ -11906,7 +12011,7 @@
                         <button type="button" class="secondary" id="btn-cite-person" onclick="window.Strom.UI.showSourcePickerForPerson()" data-i18n="sources.cite"></button>
                     </div>
                     <div class="form-group" id="attachments-section">
-                        <label data-i18n="attachments.title"></label>
+                        <label data-i18n="attachments.title"></label> <span class="media-older-note" id="attachments-older-research" hidden></span>
                         <div id="attachments-list" class="attachments-list"></div>
                         <div id="attachments-total" class="attachments-total"></div>
                         <input type="file" id="input-attachment" accept="image/jpeg,image/png,application/pdf" style="display:none" onchange="window.Strom.UI.handleAttachmentInput(event)">
@@ -12089,6 +12194,8 @@
                 <div id="source-excerpts" class="source-excerpts" role="group" aria-labelledby="source-excerpt-label"></div>
                 <input type="file" id="source-excerpt-file" accept="image/jpeg,image/png,image/webp" hidden
                     onchange="window.Strom.UI.handleExcerptFile(this)">
+                <button type="button" class="link-button source-material" id="source-editor-material" hidden
+                    onclick="window.Strom.UI.materialForEditedSource()" data-i18n="material.sendToSource"></button>
             </div>
             <div class="form-row">
                 <div class="form-group half">
@@ -12159,6 +12266,8 @@
             </div>
             <div class="source-viewer-body" id="source-viewer-body"></div>
             <div class="buttons source-viewer-footer">
+                <button type="button" class="link-button source-material" id="source-viewer-material" hidden
+                    onclick="window.Strom.UI.materialForViewedSource()" data-i18n="material.sendToSource"></button>
                 <button type="button" class="link-button source-same-book" id="source-viewer-same-book"
                     onclick="window.Strom.UI.startSameBookEntry()" data-i18n="sources.sameBook"></button>
                 <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeSourceViewer()" data-i18n="buttons.close"></button>
@@ -12223,6 +12332,7 @@
         <div id="image-viewer-stage" class="image-viewer-stage">
             <img id="attachment-overlay-img" alt="" draggable="false">
         </div>
+        <div id="image-viewer-media" class="image-viewer-media" hidden></div>
         <div class="image-viewer-tools">
             <button type="button" id="image-viewer-out" class="image-viewer-btn" data-i18n-aria-label="imageViewer.zoomOut" data-i18n-title="imageViewer.zoomOut">&minus;</button>
             <button type="button" id="image-viewer-level" class="image-viewer-btn image-viewer-level" data-i18n-title="imageViewer.fit">100 %</button>

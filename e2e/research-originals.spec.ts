@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { createHash } from 'crypto';
 import { readFileSync } from 'fs';
 import { cardAction, personModal } from './helpers.js';
-import { fakeBridge, openResearch, poll, BRIDGE, UUID } from './research-bridge.js';
+import { fakeBridge, openResearch, openResearchMenu, poll, BRIDGE, UUID } from './research-bridge.js';
 
 /**
  * Originals for Strom Research (step C, the base without its full UI): a file
@@ -69,7 +69,11 @@ test.describe('originals go to the research', () => {
         const att = await janAttachment(page);
         expect(att.original).toEqual({ sha256: AVATAR_SHA, name: 'avatar.png', mimeType: 'image/png', bytes: AVATAR_BYTES });
         expect(att.mimeType).toBe('image/jpeg');
-        await expect(modal.locator('.attachment-original')).toHaveText('Original in the research');
+        // In the research: with the bridge running no state line, the original opens in full quality.
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.renderAttachmentsList());
+        await expect(modal.locator('.media-full-quality')).toHaveText('Full quality');
+        await expect(modal.locator('.media-state')).toHaveCount(0);
         expect(await queued(page)).toEqual([]);
     });
 
@@ -78,7 +82,7 @@ test.describe('originals go to the research', () => {
         await openResearch(page, { media: true });
         b.down = true;
         const modal = await attachToJan(page);
-        await expect(modal.locator('.attachment-original')).toHaveText('Original waits for the research');
+        await expect(modal.locator('.media-state.is-queued')).toContainText('waiting to be sent to the research');
         const waiting = await queued(page);
         expect(waiting.map(r => [r.sha256, r.bytes])).toEqual([[AVATAR_SHA, AVATAR_BYTES]]);
         expect(b.mediaPuts).toEqual([]);
@@ -88,14 +92,16 @@ test.describe('originals go to the research', () => {
         await expect.poll(() => b.mediaPuts.length).toBe(1);
         expect(b.mediaPuts[0].headers['x-strom-person']).toBe('P0003');
         await expect.poll(() => queued(page)).toEqual([]);
-        await expect(modal.locator('.attachment-original')).toHaveText('Original in the research');
+        await expect(modal.locator('.media-full-quality')).toBeVisible();
+        await expect(modal.locator('.media-state')).toHaveCount(0);
     });
 
     test('a file the research already has is not sent again', async ({ page }) => {
         const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS, mediaKnown: new Map([[AVATAR_SHA, 'M0007']]) });
         await openResearch(page, { media: true });
         const modal = await attachToJan(page);
-        await expect(modal.locator('.attachment-original')).toHaveText('Original in the research');
+        // The bridge not asked lately: the original is in the research, said with a dot.
+        await expect(modal.locator('.media-state.is-in')).toHaveText('The original is in the research');
         expect(b.mediaAsks).toEqual([AVATAR_SHA]);
         expect(b.mediaPuts).toEqual([]);
     });
@@ -109,7 +115,7 @@ test.describe('originals go to the research', () => {
             delete jan.refn;
         });
         const modal = await attachToJan(page);
-        await expect(modal.locator('.attachment-original')).toHaveText('Original waits for the research');
+        await expect(modal.locator('.media-state.is-queued')).toHaveText('The original will be sent after the next tree send');
         await poll(page);
         expect(b.mediaPuts).toEqual([]);
         expect((await queued(page)).length).toBe(1);
@@ -149,14 +155,16 @@ test.describe('originals go to the research', () => {
         expect(Object.keys(h).filter(k => k.startsWith('x-strom-')).sort()).toEqual(['x-strom-name', 'x-strom-region', 'x-strom-source']);
     });
 
-    test('a research that does not take originals: nothing goes, nothing is said', async ({ page }) => {
+    test('a research that does not take originals: nothing goes; one quiet line by the heading, no toast', async ({ page }) => {
         const b = await fakeBridge(page);
         await openResearch(page);
         const modal = await attachToJan(page);
         await poll(page);
         expect(b.mediaAsks).toEqual([]);
         expect(b.mediaPuts).toEqual([]);
-        await expect(modal.locator('.attachment-original')).toHaveCount(0);
+        await expect(modal.locator('#attachments-older-research')).toHaveText("The research doesn't accept originals yet.");
+        await expect(modal.locator('.media-state')).toHaveText('preview only');
+        await expect(page.locator('.toast', { hasText: /original/i })).toHaveCount(0);
         expect(await queued(page)).toEqual([]);
     });
 
@@ -176,5 +184,202 @@ test.describe('originals go to the research', () => {
         expect((await janAttachment(page)).original).toBeUndefined();
         expect(await queued(page)).toEqual([]);
         expect(requests.filter(u => u.includes('/media/'))).toEqual([]);
+    });
+});
+
+test.describe('originals: the full UI (beta.10)', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('waiting originals: the block\'s second line, Settings → Data with the budget, Discard with Undo, Discard all', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true });
+        b.down = true;
+        const modal = await attachToJan(page);
+        await expect(modal.locator('.media-state.is-queued')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(modal).toBeHidden();
+
+        // ⋯ → Research: the second line of the block.
+        await openResearchMenu(page);
+        const line = page.locator('#research-sync-block .research-sync-line2');
+        await expect(line).toContainText('1 original waiting');
+        await line.getByRole('button', { name: 'Show…' }).click();
+
+        const row = page.locator('#media-queue-row');
+        await expect(row).toHaveAttribute('open', '');
+        await expect(row.locator('.media-queue-item')).toHaveCount(1);
+        await expect(row.locator('.media-queue-item')).toContainText('avatar.png');
+        await expect(row.locator('.media-queue-item')).toContainText('Jan Víšek');
+        await expect(row.locator('.media-queue-budget-text')).toContainText('reserved for waiting originals');
+        await expect(row.locator('.media-queue-info')).toContainText('only in this browser');
+
+        await row.locator('.media-queue-discard').click();
+        await expect(row.locator('.media-queue-undo')).toContainText('Original discarded.');
+        await expect.poll(() => queued(page)).toEqual([]);
+        await row.locator('.media-queue-undo-btn').click();
+        await expect.poll(async () => (await queued(page)).length).toBe(1);
+        await expect(row).toBeVisible();
+
+        await row.locator('.media-queue-discard-all').click();
+        await page.locator('#confirm-ok-btn').click();
+        await expect.poll(() => queued(page)).toEqual([]);
+        expect(b.mediaPuts).toEqual([]);
+    });
+
+    test('deleting an attachment whose original waits: discard it (ticked), or send it anyway', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true });
+        b.down = true;
+        const modal = await attachToJan(page);
+        await modal.locator('.attachment-delete-btn').click();
+        const confirm = page.locator('#confirmation-modal');
+        await expect(confirm.locator('#confirm-check-input')).toBeChecked();
+        await expect(confirm).toContainText('Also discard the original waiting to be sent');
+        await confirm.locator('#confirm-ok-btn').click();
+        await expect.poll(() => queued(page)).toEqual([]);
+
+        // Once more, unticked: the original stays and goes when the bridge answers.
+        await modal.locator('#input-attachment').setInputFiles(AVATAR);
+        await expect(modal.locator('#attachments-list .attachment-row')).toHaveCount(1);
+        await modal.locator('.attachment-delete-btn').click();
+        await confirm.locator('#confirm-check-input').uncheck();
+        await confirm.locator('#confirm-ok-btn').click();
+        await expect(modal.locator('#attachments-list .attachment-row')).toHaveCount(0);
+        expect((await queued(page)).length).toBe(1);
+        b.down = false;
+        await poll(page);
+        await expect.poll(() => b.mediaPuts.length).toBe(1);
+        await expect.poll(() => queued(page)).toEqual([]);
+    });
+
+    test('"Send original files" off for the tree: preview only, said why, nothing goes', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => (window.Strom.UI as any).showResearchTreeSettings(window.Strom.TreeManager.getActiveTreeId()));
+        const toggle = page.locator('#research-originals-toggle');
+        await expect(toggle).toBeChecked();
+        await toggle.uncheck();
+        await page.locator('#research-tree-settings-done').click();
+        const modal = await attachToJan(page);
+        await expect(modal.locator('.media-state')).toHaveText('preview only');
+        await expect(modal.locator('.media-state')).toHaveAttribute('title', 'Sending originals is turned off for this tree.');
+        await poll(page);
+        expect(b.mediaPuts).toEqual([]);
+        expect(await queued(page)).toEqual([]);
+    });
+
+    test('Full quality: the original loads into the viewer from the bridge, with its size; back to the preview', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        b.mediaFiles.set(AVATAR_SHA, { type: 'image/png', body: readFileSync(AVATAR) });
+        await openResearch(page, { media: true });
+        const modal = await attachToJan(page);
+        await expect.poll(() => b.mediaPuts.length).toBe(1);
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.renderAttachmentsList());
+        await modal.locator('.media-full-quality').click();
+        const viewer = page.locator('#attachment-overlay');
+        await expect(viewer).toHaveClass(/active/);
+        const bar = page.locator('#image-viewer-media');
+        await expect(bar).toContainText(/Original · \d+ × \d+ px/);
+        await bar.getByRole('button', { name: 'Back to preview' }).click();
+        await expect(bar.getByRole('button', { name: 'Full quality' })).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(viewer).not.toHaveClass(/active/);
+    });
+
+    test('Full quality of an original the research no longer has: said so, the link goes', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true });
+        const modal = await attachToJan(page);
+        await expect.poll(() => b.mediaPuts.length).toBe(1);
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.renderAttachmentsList());
+        await modal.locator('.media-full-quality').click();
+        await expect(page.locator('.toast')).toContainText('The original is no longer in the research');
+        await page.keyboard.press('Escape');
+        await expect(modal.locator('.media-state')).toHaveText('The original is no longer in the research');
+        await expect(modal.locator('.media-full-quality')).toHaveCount(0);
+    });
+});
+
+test.describe('Send material… (beta.10)', () => {
+    test.use({ viewport: DESKTOP });
+
+    /** The person menu: "Send material…" (alone it sits in the menu itself, else under "Research ›"). */
+    const openPersonResearch = async (page: Page) => {
+        await page.locator('.person-card', { hasText: 'Jan' }).first().click();
+        const research = page.locator('.context-menu [data-menu="research"]');
+        if (await research.count()) await research.click();
+        return page.locator('.context-menu, .context-submenu');
+    };
+
+    test('to a person: files with a note go to the research; a program is refused', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        const sub = await openPersonResearch(page);
+        await sub.getByText('Send material…').first().click();
+        const dialog = page.locator('#material-modal');
+        await expect(dialog.locator('h2')).toHaveText('Send material to the research');
+        await expect(dialog.locator('.audit-log-subtitle')).toContainText('Jan Víšek');
+        await dialog.locator('#material-input').setInputFiles([
+            { name: 'avatar.png', mimeType: 'image/png', buffer: readFileSync(AVATAR) },
+            { name: 'dopis.txt', mimeType: 'text/plain', buffer: Buffer.from('Milá Anno…') },
+            { name: 'setup.exe', mimeType: 'application/octet-stream', buffer: Buffer.from('MZ') },
+        ]);
+        await expect(dialog.locator('.material-item')).toHaveCount(2);
+        await expect(dialog.locator('.material-rejected')).toContainText('1 file the research won\'t take');
+        await dialog.locator('#material-note').fill('Z krabice od babičky');
+        await expect(dialog.locator('.material-box')).toContainText('Nothing is added to the tree');
+        await dialog.getByRole('button', { name: 'Send 2 files' }).click();
+        await expect(dialog).toHaveCount(0);
+        await expect(page.locator('.toast')).toContainText('Sent to the research: 2 files for Jan Víšek');
+        expect(b.mediaPuts).toHaveLength(2);
+        for (const put of b.mediaPuts) {
+            expect(put.headers['x-strom-person']).toBe('P0003');
+            expect(decodeURIComponent(put.headers['x-strom-note'])).toBe('Z krabice od babičky');
+        }
+        // Nothing in the tree, nothing left waiting.
+        expect(await janAttachment(page)).toBeNull();
+        expect(await queued(page)).toEqual([]);
+    });
+
+    test('the research not running: the files wait in the browser and go later', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        const sub = await openPersonResearch(page);
+        b.down = true;
+        await page.evaluate(() => (window.Strom.UI as any).researchBridgeFresh = () => false);
+        await sub.getByText('Send material…').first().click();
+        const dialog = page.locator('#material-modal');
+        await dialog.locator('#material-input').setInputFiles(AVATAR);
+        await expect(dialog.locator('.material-box')).toContainText("The research isn't running");
+        await dialog.getByRole('button', { name: 'Send when the research runs' }).click();
+        await expect(page.locator('.toast')).toContainText('1 file waits in this browser');
+        expect((await queued(page)).length).toBe(1);
+        b.down = false;
+        await page.evaluate(() => { delete (window.Strom.UI as any).researchBridgeFresh; });
+        await poll(page);
+        await expect.poll(() => b.mediaPuts.length).toBe(1);
+        await expect.poll(() => queued(page)).toEqual([]);
+    });
+
+    test('to a source from its viewer: the file goes with the source', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => {
+            const src = Object.values(window.Strom.DataManager.getData().sources ?? {}).find((s: any) => s.refn === 'S0001') as any;
+            window.Strom.UI.showSourceViewer(src.id, null);
+        });
+        await page.locator('#source-viewer-material').click();
+        const dialog = page.locator('#material-modal');
+        await expect(dialog.locator('.audit-log-subtitle')).toContainText('Oddací matrika Čáslav');
+        await dialog.locator('#material-input').setInputFiles(AVATAR);
+        await dialog.getByRole('button', { name: 'Send 1 file' }).click();
+        await expect.poll(() => b.mediaPuts.length).toBe(1);
+        expect(b.mediaPuts[0].headers['x-strom-source']).toBe('S0001');
     });
 });
