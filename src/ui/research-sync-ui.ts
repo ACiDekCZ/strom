@@ -974,11 +974,15 @@ export const researchSyncMethods = uiModule({
         // By hand, what would go is shown first and Send there sends — unless the user said "next time
         // without the preview"; the first send out of "only load" always shows it. ("Send again" and
         // "send, then load" are their own decisions.)
+        // Never skipped while something waits: a list that cannot be told exactly here (its base moved:
+        // a restore before loading, a send taken back) says so in the panel, and Send there sends (A of rc.34).
         if (!opts.previewed && !opts.undoAgain && !opts.thenLoad && researchSendMode(link) !== 'off'
             && (link.previewDue || !researchSendPreviewSkipped(treeId))) {
             const list = await this.researchChangesReady();
-            if (list && list.length > 0) {
-                this.showResearchChanges('send', { confirm: true });
+            const fps = this.researchSyncFingerprints(treeId, link);
+            const waiting = !fps.matchesBase && fps.current !== link.sent?.fingerprint;
+            if ((list && list.length > 0) || waiting) {
+                this.showResearchChanges('send', { confirm: true, inexact: !list || list.length === 0 });
                 return;
             }
         }

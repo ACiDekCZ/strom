@@ -4,6 +4,7 @@
  */
 
 import { DataManager, auditPersonName } from '../data.js';
+import { countFamilies } from '../ged-exporter.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -586,7 +587,8 @@ export const treeManagementMethods = uiModule({
 
             // Get tree data for additional stats
             const treeData = await TreeManager.getTreeData(tree.id);
-            const familyCount = treeData ? Object.keys(treeData.partnerships).length : 0;
+            // As the research and GEDCOM count them: a single parent's family too.
+            const familyCount = treeData ? countFamilies(treeData) : 0;
 
             // Get tree size from metadata
             const treeSize = tree.sizeBytes;

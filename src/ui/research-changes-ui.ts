@@ -179,7 +179,7 @@ export const researchChangesMethods = uiModule({
     // ==================== THE PANEL ====================
 
     /** Open "What will be sent" / "What was written" under the toolbar's button (or the ⋯ button). */
-    showResearchChanges(mode: 'send' | 'written', opts: { confirm?: boolean } = {}): void {
+    showResearchChanges(mode: 'send' | 'written', opts: { confirm?: boolean; inexact?: boolean } = {}): void {
         this.closeActionsMenu();
         this.closeResearchChanges();
         const ctx = this.researchSyncLink();
@@ -251,7 +251,10 @@ export const researchChangesMethods = uiModule({
         } else {
             list = this.researchChangesNow() ?? [];
             title = c.willSendTitle;
-            sub = auto ? c.willSendAutoSub(list.length) : c.willSendSub(list.length, clock(ctx.link.syncedAt));
+            // Changed since the research last had the tree: its version loaded, or the last send it wrote.
+            const lastWritten = ctx.link.sent?.state === 'written' ? ctx.link.sent.closedAt ?? ctx.link.sent.at : '';
+            const since = lastWritten && Date.parse(lastWritten) > Date.parse(ctx.link.syncedAt) ? lastWritten : ctx.link.syncedAt;
+            sub = auto ? c.willSendAutoSub(list.length) : c.willSendSub(list.length, clock(since));
             foot = auto && !opts.confirm
                 ? `<button type="button" class="research-sync-link" data-act="send">${esc(s.sendNow)}</button>`
                 : (opts.confirm && !ctx.link.previewDue
@@ -279,6 +282,7 @@ export const researchChangesMethods = uiModule({
                 <div class="research-changes-title">${esc(title)}</div>
                 <div class="research-changes-sub">${esc(sub)}</div>
             </div>
+            ${mode === 'send' && (opts.inexact || (rows === '' && opts.confirm)) ? `<p class="research-changes-inexact">${esc(c.inexact)}</p>` : ''}
             ${notWrittenHtml}
             ${writtenHead && (rows || moreWritten) ? `<div class="research-changes-section">${esc(writtenHead)}</div>` : ''}
             ${rows ? `<ul class="research-changes-list${writtenHead ? ' is-quiet' : ''}">${rows}</ul>` : ''}

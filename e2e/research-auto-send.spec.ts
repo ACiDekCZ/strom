@@ -1678,6 +1678,29 @@ test.describe('"What will be sent" before sending by hand', () => {
         expect(bridge.posts).toHaveLength(2);
     });
 
+    test('A of rc.34: after "Restore the state before loading" an edit by hand still goes through the preview (the list cannot be told exactly: said so)', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page);
+        const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null } });
+        writesAtOnce(bridge);
+        await previewOn(page);
+        await poll(page);
+        bridge.head = 'fe11fe11fe11';
+        bridge.treeGed = researchGed('fe11fe11fe11', ['1 BIRT', '2 PLAC Praha', '1 OCCU tesař']);
+        await poll(page);
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await acceptLoad(page);
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('fe11fe11fe11');
+        await page.evaluate(() => window.Strom.UI.researchRestoreBeforeLoad(window.Strom.TreeManager.getActiveTreeId()!));
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(HEAD);
+        await editJan(page, 'Kolín');
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect(panel(page)).toBeVisible();
+        expect(bridge.posts).toHaveLength(0);
+        await panel(page).locator('[data-act="send"]').click();
+        await expect.poll(() => bridge.posts.length).toBe(1);
+    });
+
     test('out of "only load" into "by itself" with changes made meanwhile: nothing goes by itself until the first send went through the list (always shown)', async ({ page }) => {
         const bridge = await autoTree(page);
         writesAtOnce(bridge);
