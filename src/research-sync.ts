@@ -32,7 +32,10 @@ export type ResearchSyncKind =
     // One-time notices:
     | 'switched' | 'offerAuto' | 'autoIntro'
     // Written, with conflicts left, and the research's version (their values in those places) not loaded:
-    | 'writtenConflicts';
+    | 'writtenConflicts'
+    // Data protection (3.9), over the state of the sends: the last send left changes unwritten; changes piled up
+    // out of "only load" (nothing goes before the preview); the research's version loaded lately; only loading.
+    | 'notWritten' | 'piled' | 'loaded' | 'off';
 
 export interface ResearchSyncInput {
     /** The tree's tie to its research (none: not a research tree). */
@@ -75,6 +78,12 @@ export interface ResearchSyncInput {
     offerDue?: boolean;
     /** "Changes now go by themselves" is due as a block (no toolbar mark at this width). */
     introDue?: boolean;
+    /** The last send was written with changes the research did not write (it stays the state until the next send). */
+    notWritten?: boolean;
+    /** Out of "only load" with changes made meanwhile: the first send goes through the preview (link.previewDue). */
+    piled?: boolean;
+    /** The research's version was loaded within the hour and nothing edited since ("Restore the state before loading"). */
+    loaded?: boolean;
 }
 
 export interface ResearchSyncState {
@@ -89,8 +98,25 @@ export interface ResearchSyncState {
     switchedNote?: boolean;
 }
 
-/** The one state to show, by priority (see ZADANI_DEV_archiv-a-automatika 1.2). */
+/**
+ * The one state to show, by priority (ZADANI_DEV_archiv-a-automatika 1.2, ZADANI_DEV_ochrana-dat-vyzkum 6):
+ * the states of the sends, then over them what data protection adds (the toolbar keeps `core`).
+ */
 export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
+    const st = sendsState(input);
+    const k = st.kind;
+    if (k === 'none') return st;
+    // Not written: before every state but what has to come first (nothing may be sent, a send taken back, a send on its way).
+    if (input.notWritten && input.link?.sent?.state === 'written'
+        && !['safari', 'stale', 'unsentAndNewer', 'rejected', 'sending'].includes(k)) return { ...st, kind: 'notWritten' };
+    if (input.piled && (k === 'unsent' || k === 'unsentBridgeDown' || k === 'autoWaiting')) return { ...st, kind: 'piled' };
+    const quiet = k === 'inSync' || k === 'written';
+    if (input.loaded && (quiet || k === 'offerAuto')) return { ...st, kind: 'loaded' };
+    if (input.sendOff && quiet) return { ...st, kind: 'off' };
+    return st;
+}
+
+function sendsState(input: ResearchSyncInput): ResearchSyncState {
     const { link } = input;
     if (!link || !input.capable || !input.shown) return { kind: 'none', core: 'none' };
     // A switch of mode is said beside a state of the sends, never in its place (A2 of the rc.19 round):
@@ -144,7 +170,7 @@ export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
 export function researchSyncWantsAttention(kind: ResearchSyncKind): boolean {
     return kind === 'unsentBridgeDown' || kind === 'newer' || kind === 'unsentAndNewer'
         || kind === 'refused' || kind === 'rejected' || kind === 'autoPaused' || kind === 'autoBridgeDown'
-        || kind === 'switched' || kind === 'stale' || kind === 'writtenConflicts';
+        || kind === 'switched' || kind === 'stale' || kind === 'writtenConflicts' || kind === 'notWritten';
 }
 
 /** A changes-not-sent state (the ⋯ label and the data window say so). */

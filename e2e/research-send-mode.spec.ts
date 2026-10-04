@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { editJan, fakeBridge, FakeBridge, openResearch, openResearchMenu, poll } from './research-bridge.js';
+import { editJan, fakeBridge, FakeBridge, openResearch, openResearchMenu, poll, researchGed, NEW_HEAD, HEAD } from './research-bridge.js';
 
 /**
  * How changes go to the research, as one set of cards everywhere (the
@@ -132,6 +132,29 @@ test.describe('Research for this tree', () => {
         await expect.poll(() => bridge.posts.length).toBe(1);
     });
 
+    test('out of "only load": ⋯ → Research says what piled up (neutral), "What will be sent" opens the preview; only load is a quiet line with Change', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        const bridge = await manualTree(page);
+        const id = await treeId(page);
+        await page.evaluate((id) => window.Strom.UI.setResearchSendMode(id as never, 'off'), id);
+        await openResearchMenu(page);
+        const block = page.locator('#research-sync-block');
+        await expect(block).toHaveAttribute('data-state', 'off');
+        await expect(block).toContainText('Changes are not sent to the research');
+        await expect(block.getByRole('button', { name: 'Change' })).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        await editJan(page);
+        await page.evaluate((id) => window.Strom.UI.setResearchSendMode(id as never, 'manual'), id);
+        await openResearchMenu(page);
+        await expect(block).toHaveAttribute('data-state', 'piled');
+        await expect(block).toHaveClass(/research-sync-block--neutral/);
+        await expect(block).toContainText('Since the last send you changed 1 person.');
+        await block.getByRole('button', { name: 'What will be sent' }).click();
+        await expect(page.locator('#research-changes-panel')).toBeVisible();
+        await expect(page.locator('#research-changes-skip')).toHaveCount(0);
+        expect(bridge.posts).toHaveLength(0);
+    });
+
     test('only load: no "Send changes" in ⋯ → Research', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await manualTree(page);
@@ -143,5 +166,37 @@ test.describe('Research for this tree', () => {
         await openResearchMenu(page);
         await expect(page.locator('#actions-research-submenu')).toBeVisible();
         await expect(page.locator('#research-item-send')).toHaveCount(0);
+    });
+});
+
+test.describe('V-I: changes not in the research while it has a newer version', () => {
+    test('Send in the toolbar goes through "What will be sent" and loads nothing (loading only when asked)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.clock.install();
+        await openResearch(page, { edit: true });
+        await page.evaluate(() => {
+            const key = `strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`;
+            const st = JSON.parse(localStorage.getItem(key) ?? '{}');
+            delete st.skipPreview;
+            localStorage.setItem(key, JSON.stringify(st));
+        });
+        const bridge = await fakeBridge(page, { accepts: ACCEPTS, head: NEW_HEAD, treeGed: researchGed(NEW_HEAD) });
+        bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0050' } };
+        bridge.onWrite = () => ({ head: 'ab12cd34ef56', ged: researchGed('ab12cd34ef56') });
+        await poll(page);
+        const pill = page.locator('#research-sync-pill');
+        await expect(pill).toContainText('Changes not in the research');
+        await pill.locator('[data-action="send"]').click();
+        const panel = page.locator('#research-changes-panel');
+        await expect(panel).toBeVisible();
+        expect(bridge.posts).toHaveLength(0);
+        await panel.locator('[data-act="send"]').click();
+        await expect.poll(() => bridge.posts.length).toBe(1);
+        await page.clock.fastForward(5000);
+        // Not loaded: the tree still builds on the head it had; the newer version waits for "Load".
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(HEAD);
+        await openResearchMenu(page);
+        await expect(page.locator('#research-sync-block')).toHaveAttribute('data-state', 'newer');
+        await expect(page.locator('#research-sync-block')).toContainText('A backup is saved before loading.');
     });
 });

@@ -67,7 +67,7 @@ test.describe('open a research', () => {
         expect(meta.research.id).toBe(UUID);
 
         await dropFile(page, 'tree-strom.ged', researchGed({ extra: true }));
-        await expect(page.locator('.toast')).toContainText('Updated the research Víškovi from Strom Research — 4 people');
+        await expect(page.locator('.toast')).toContainText('Research version loaded.');
         await expect(card(page, 'Ludmila')).toBeVisible();
         // No duplicate: still exactly one tree.
         expect(await treeNames(page)).toEqual(['Víškovi']);
@@ -145,7 +145,7 @@ test.describe('open a research', () => {
         await dropFile(page, 'tree-strom.ged', researchGed({ extra: true }));
         const dialog = page.locator('#confirmation-modal');
         await dialog.getByRole('button', { name: 'Update' }).click();
-        await expect(page.locator('.toast')).toContainText('Updated the research Víškovi');
+        await expect(page.locator('.toast')).toContainText('Research version loaded.');
         await expect(card(page, 'Jan')).toBeVisible();
         await expect(card(page, 'Ludmila')).toBeVisible();
         expect(await treeNames(page)).toEqual(['Víškovi']);

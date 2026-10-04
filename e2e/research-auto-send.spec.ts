@@ -883,7 +883,51 @@ test('rc.25: what the research did not write is listed with its reason (notWritt
     await expect.poll(() => bridge.posts.length).toBe(1);
     const toast = page.locator('.toast', { hasText: '1 change was not written to the research' });
     await toast.getByRole('button', { name: 'Show' }).click();
-    await expect(page.locator('#confirmation-modal')).toContainText('Jan Víšek · Birth: no common ground: choose in the research');
+    // "What was written": not written first, with the reason; the person named there is not listed as written.
+    const panel = page.locator('#research-changes-panel');
+    await expect(panel.locator('.research-changes-section.is-warn')).toHaveText('Not written · 1');
+    await expect(panel.locator('.research-changes-row.is-not-written')).toContainText('Jan Víšek');
+    await expect(panel.locator('.research-changes-row.is-not-written')).toContainText('Birth');
+    await expect(panel.locator('.research-changes-row.is-not-written')).toContainText('no common ground: choose in the research');
+    await expect(panel.locator('.research-changes-row:not(.is-not-written)')).toHaveCount(0);
+});
+
+test('V-J: what the research did not write is the state until the next send (a dot until seen); loading over it asks first; nothing loads after a send that left it', async ({ page }) => {
+    await page.clock.install();
+    await openResearch(page);
+    const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null } });
+    await poll(page);
+    // Kept there: the change and the citation with it, said only as "BIRT kept".
+    bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 3, applied: 2, input: 'I0072',
+        notWritten: [{ kind: 'event.edit', person: 'P0003', fact: 'BIRT', why: 'kept' }] } };
+    bridge.onWrite = () => ({ head: 'd7d7d7d7d7d7', ged: researchGed('d7d7d7d7d7d7') });
+    await editJan(page);
+    await page.evaluate(() => window.Strom.UI.researchSendNow());
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    await expect(page.locator('.toast', { hasText: 'Written 2, not written 1.' })).toBeVisible();
+    await expect(dot(page)).toBeVisible();
+    await openResearchMenu(page);
+    await expect(block(page)).toHaveAttribute('data-state', 'notWritten');
+    await expect(block(page)).toContainText('Written 2, not written 1');
+    await expect(block(page)).toContainText('What was not written stays here in the app.');
+    await block(page).getByRole('button', { name: 'Show' }).click();
+    const panel = page.locator('#research-changes-panel');
+    await expect(panel.locator('.research-changes-row.is-not-written')).toContainText('Jan Víšek');
+    // Jan is not claimed as written (V-J): his citation went with the change kept there.
+    await expect(panel.locator('.research-changes-list.is-quiet')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    // Seen: no dot, the block stays (neutral) until the next send.
+    await expect(dot(page)).toBeHidden();
+    // The research has a newer version: loading it would drop the change here — asked first.
+    bridge.head = 'e7e7e7e7e7e7';
+    bridge.treeGed = researchGed('e7e7e7e7e7e7');
+    await poll(page);
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    const ask = page.locator('#confirmation-modal');
+    await expect(ask).toContainText('1 change of your last send was not written to the research.');
+    await ask.getByRole('button', { name: 'Cancel' }).click();
+    expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).not.toBe('e7e7e7e7e7e7');
+    expect(await janPlace(page)).toBe('Praha');
 });
 
 test('rc.26: the numbers the research gave what a send added (ids, by its xrefs) are kept, quietly — no new send, the next names them', async ({ page }) => {
@@ -1222,8 +1266,8 @@ test.describe('the research as an archive', () => {
         await expect(dot(page)).toBeHidden();
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'offerAuto');
-        await expect(block(page)).toContainText('You send regularly');
-        await block(page).getByRole('button', { name: 'Keep manual' }).click();
+        await expect(block(page)).toContainText('You send regularly. Send changes by themselves?');
+        await block(page).getByRole('button', { name: 'No, thanks' }).click();
         await openResearchMenu(page);
         await expect(block(page)).not.toHaveAttribute('data-state', 'offerAuto');
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('manual');
@@ -1231,7 +1275,7 @@ test.describe('the research as an archive', () => {
         await page.evaluate(() => localStorage.setItem(`strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`, JSON.stringify({ modeAsked: true, manualWrites: 5 })));
         await poll(page);
         await openResearchMenu(page);
-        await block(page).getByRole('button', { name: 'Send automatically' }).click();
+        await block(page).getByRole('button', { name: 'Yes' }).click();
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('auto');
     });
 
@@ -1360,12 +1404,14 @@ test.describe('data protection around the research', () => {
         await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('fe11fe11fe11');
         expect((await backupReasons(page))[0]).toBe('pre-research-load');
-        const toast = page.locator('.toast', { hasText: 'Loaded' });
+        const toast = page.locator('.toast', { hasText: 'Research version loaded.' });
         await expect(toast.getByRole('button', { name: 'Restore the state before loading' })).toBeVisible();
-        // Still offered in Research while nothing was edited.
+        // Still offered in Research while nothing was edited: the first hour as the block.
         await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'loaded');
+        await expect(block(page)).toContainText('Research version loaded');
         await block(page).getByRole('button', { name: 'Restore the state before loading' }).click();
-        await expect(page.locator('.toast', { hasText: 'The tree is back as it was before loading' })).toBeVisible();
+        await expect(page.locator('.toast', { hasText: 'Restored to the state before loading.' }).getByRole('button', { name: 'Undo' })).toBeVisible();
         const occu = await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any).occupation ?? '');
         expect(occu).not.toBe('tesař');
         expect(await janPlace(page)).toBe('Praha');
@@ -1382,6 +1428,29 @@ test.describe('data protection around the research', () => {
         await expect.poll(() => bridge.posts.length).toBe(2);
         expect(bridge.posts[1]).toContain(`1 _STROM_HEAD ${HEAD}`);
         expect(bridge.posts[1]).toContain(`1 _STROM_SINCE ${first}`);
+    });
+
+    test('V-H: "Restore the state before loading" stands until the next edit: the block for an hour, then the menu row; gone after an edit', async ({ page }) => {
+        const bridge = await autoTree(page);
+        writesAtOnce(bridge);
+        bridge.head = 'fe11fe11fe11';
+        bridge.treeGed = researchGed('fe11fe11fe11', ['1 BIRT', '2 PLAC Praha', '1 OCCU tesař']);
+        await poll(page);
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('fe11fe11fe11');
+        // After the hour: no block, the row with when it was loaded.
+        await page.clock.fastForward(61 * 60_000);
+        await openResearchMenu(page);
+        await expect(block(page)).not.toHaveAttribute('data-state', 'loaded');
+        await expect(page.locator('#research-item-restore')).toContainText('Restore the state before loading');
+        await expect(page.locator('#research-item-restore')).toContainText('loaded');
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        // An edit: never offered again, not even when undone back to what was loaded.
+        await editJan(page, 'Kolín');
+        await page.evaluate(() => window.Strom.UI.performUndo());
+        await openResearchMenu(page);
+        await expect(page.locator('#research-item-restore')).toHaveCount(0);
+        await expect(block(page)).not.toHaveAttribute('data-state', 'loaded');
     });
 
     test('V-A: back to the value the research had before a written send is a change to send (compared with the copy sent)', async ({ page }) => {

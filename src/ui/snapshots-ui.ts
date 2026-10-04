@@ -220,8 +220,11 @@ export const snapshotsUiMethods = uiModule({
         list.innerHTML = snaps.map((s: SnapshotMeta) => {
             const date = snapshotWhen(s.createdAt);
             const reason = strings.snapshots.reasons[s.reason] || s.reason;
+            // Backups around the research stand out among the automatic ones (bold).
+            const around = s.reason === 'pre-research-load' || s.reason === 'pre-first-send';
             // The column header is a heading, not a count — reusing it gave "1 people".
-            const meta = [reason, strings.snapshots.persons(s.personCount), snapshotSize(costs.get(s.id) ?? s.sizeBytes)]
+            const meta = [around ? `<strong class="snapshot-reason-research">${reason}</strong>` : reason,
+                strings.snapshots.persons(s.personCount), snapshotSize(costs.get(s.id) ?? s.sizeBytes)]
                 .filter(Boolean).join(' · ');
             return `<div class="snapshot-row">
                 <div class="snapshot-main">

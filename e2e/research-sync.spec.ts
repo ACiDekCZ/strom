@@ -287,7 +287,7 @@ test.describe('updating over changes the research does not have', () => {
         bridge.head = 'aa11bb22cc33';
         bridge.treeGed = researchGed('aa11bb22cc33').replace('1 NAME Jan /Víšek/', '1 NAME Jan /Víšek/\n1 BIRT\n2 PLAC Praha');
         await poll(page);
-        await expect(page.locator('.toast')).toContainText("Loaded the research's new version, made after it wrote your send.");
+        await expect(page.locator('.toast')).toContainText('Research version loaded.');
         // Sent by hand, nothing to send: only the Send button's empty place stays.
         await expect(pill).not.toHaveClass(/is-warn|is-wait/);
         await expect(pill.locator('#research-sync-send')).toHaveCount(0);
@@ -329,7 +329,7 @@ test.describe('updating over changes the research does not have', () => {
         await expect(dialog).toContainText("You have changes the research doesn't have");
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).toBe(researchTreeId);
         await dialog.locator('.confirm-aside-btn').click();
-        await expect(page.locator('.toast')).toContainText('Updated the research');
+        await expect(page.locator('.toast')).toContainText('Research version loaded.');
         const otherAfter = await page.evaluate((id) => window.Strom.TreeManager.getTreeData(id).then(d => JSON.stringify(d)), otherId);
         expect(otherAfter).toBe(otherBefore);
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata().research.head)).toBe(NEW_HEAD);

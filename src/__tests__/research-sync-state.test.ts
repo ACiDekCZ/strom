@@ -173,9 +173,31 @@ describe('sending by itself, the archive, one-time notices', () => {
         expect(researchSyncState(input({ archive: true, offerDue: true })).kind).toBe('offerAuto');
         expect(researchSyncState(input({ offerDue: false })).kind).toBe('inSync');
         expect(researchSyncState(input({ auto: true, offerDue: true })).kind).toBe('inSync');
-        expect(researchSyncState(input({ sendOff: true, offerDue: true })).kind).toBe('inSync');
+        // Only loading: never offered; the quiet "not sent" line stands in the place of the state (the toolbar keeps in sync).
+        expect(researchSyncState(input({ sendOff: true, offerDue: true }))).toMatchObject({ kind: 'off', core: 'inSync' });
         // Something to do comes first.
         expect(researchSyncState(input({ offerDue: true, remoteHead: 'bbbbbbb' })).kind).toBe('newer');
+    });
+
+    it('data protection over the state of the sends: not written, piled up, loaded, only loading — the toolbar keeps its state', () => {
+        const written = link({ sent: sent({ state: 'written' }) });
+        // Not written: before unsent and newer, until the next send; not over a send on its way or a stale copy.
+        expect(researchSyncState(input({ link: written, notWritten: true }))).toMatchObject({ kind: 'notWritten', core: 'inSync' });
+        expect(researchSyncState(input({ link: written, notWritten: true, matchesBase: false, current: 'fp-new' }))).toMatchObject({ kind: 'notWritten', core: 'unsent' });
+        expect(researchSyncState(input({ link: written, notWritten: true, remoteHead: 'bbbbbbb' })).kind).toBe('notWritten');
+        expect(researchSyncState(input({ link: written, notWritten: true, sending: true })).kind).toBe('sending');
+        expect(researchSyncState(input({ link: written, notWritten: true, stale: true })).kind).toBe('stale');
+        expect(researchSyncState(input({ notWritten: true })).kind).toBe('inSync');
+        // Piled up out of only loading: in place of "not sent", the toolbar still has its Send.
+        expect(researchSyncState(input({ piled: true, matchesBase: false, current: 'fp-new' }))).toMatchObject({ kind: 'piled', core: 'unsent' });
+        expect(researchSyncState(input({ piled: true })).kind).toBe('inSync');
+        // Loaded within the hour: over in sync and the offer, never over something to do.
+        expect(researchSyncState(input({ loaded: true })).kind).toBe('loaded');
+        expect(researchSyncState(input({ loaded: true, offerDue: true })).kind).toBe('loaded');
+        expect(researchSyncState(input({ loaded: true, remoteHead: 'bbbbbbb' })).kind).toBe('newer');
+        // Only loading: a real state of the research outranks the quiet line.
+        expect(researchSyncState(input({ sendOff: true, remoteHead: 'bbbbbbb' })).kind).toBe('newer');
+        expect(researchSyncState(input({ sendOff: true, matchesBase: false, current: 'fp-new' })).kind).toBe('off');
     });
 
     it('the first start of sending by itself as a block (no toolbar mark at this width)', () => {

@@ -46,7 +46,7 @@ import { activeDirections, directionsMulti, queueDirectionFilter, setQueueDirect
 import { iconSvg } from '../icons.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
-import { exportToGedcom } from '../ged-exporter.js';
+import { exportToGedcom, countFamilies } from '../ged-exporter.js';
 import { formatRelativeDateTime } from '../format.js';
 import { safeFileName } from '../filenames.js';
 import {
@@ -1354,14 +1354,15 @@ export const researchUiMethods = uiModule({
         // Count real people only: "?" placeholders (unknown partners) are not
         // part of the research and would inflate the summary.
         const persons = Object.values(stored.persons).filter(p => !p.isPlaceholder).length;
-        const families = Object.keys(stored.partnerships).length;
+        const families = countFamilies(stored);
         const restore = backupId
             ? { action: { label: strings.sync.restoreBeforeLoad, run: () => { void this.researchRestoreBeforeLoad(treeId); } } } : {};
-        if (loadedAfterSend) this.showToast(strings.sync.loadedAfterSend, 8000, restore);
+        // Loaded over the tree: "Research version loaded · Restore the state before loading" (10 s).
+        if (loadedAfterSend) this.showToast(strings.sync.loadedToast, 10000, restore);
         else if (!opts.quiet) {
-            this.showToast(created
-                ? strings.research.opened(name, persons, families, dateLabel)
-                : strings.research.updated(name, persons, families, dateLabel), backupId ? 8000 : 6000, restore);
+            if (created) this.showToast(strings.research.opened(name, persons, families, dateLabel), 6000);
+            else if (backupId) this.showToast(strings.sync.loadedToast, 10000, restore);
+            else this.showToast(strings.research.updated(name, persons, families, dateLabel), 6000);
         }
         this.refreshResearchSyncUi();
         return treeId;

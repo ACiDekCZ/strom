@@ -33,7 +33,7 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
     parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, researchPersonRef, ResearchAccepts,
-    researchIdsByContent, holdsResearchIds, ResearchSendRecord, SyncNotWritten, AdoptIds, ExportXrefs, applySyncIds,
+    researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
 import {
@@ -48,7 +48,6 @@ import {
     researchKeepsTakenBack, latestUndone, nextUndone, openUndone,
 } from '../research-sync.js';
 import { setResearchConflictsProvider } from '../card-signals.js';
-import { researchFactLabel } from './person-research-ui.js';
 import { uiModule } from './module.js';
 import { researchWrittenList } from './research-changes-ui.js';
 import {
@@ -162,6 +161,9 @@ function esc(text: string): string {
 
 const call = (method: string, arg = ''): string => `window.Strom.UI.${method}(${arg})`;
 
+/** "Research version loaded" stands as a block this long after a load (then only the menu row, O2). */
+const LOADED_BLOCK_MS = 60 * 60 * 1000;
+
 function safariBrowser(): boolean {
     return typeof navigator !== 'undefined' && isSafariBrowser(navigator.userAgent || '')
         && /apple/i.test(navigator.vendor || '');
@@ -192,7 +194,7 @@ function anyDialogOpen(): boolean {
 }
 
 /** The app's persons the research's refs name ("P0012"), in order, found ones only. */
-function personsByResearchRefs(data: StromData, refs: readonly string[]): PersonId[] {
+export function personsByResearchRefs(data: StromData, refs: readonly string[]): PersonId[] {
     const out: PersonId[] = [];
     for (const ref of refs) {
         const hit = Object.entries(data.persons ?? {}).find(([, p]) => researchPersonRef(p?.refn) === ref);
@@ -492,6 +494,12 @@ export const researchSyncMethods = uiModule({
             // By hand and written a few times: sending by itself is offered, once (never at once).
             offerDue: researchSendMode(link) === 'manual' && !st.offerSeen && (st.manualWrites ?? 0) >= OFFER_AFTER_WRITES,
             introDue: auto && !toolbarWide() && !researchAutoIntroSeen(),
+            notWritten: !!st.notWritten && link.sent?.state === 'written' && st.notWritten.fingerprint === link.sent.fingerprint,
+            piled: !!link.previewDue && researchSendMode(link) !== 'off',
+            loaded: (() => {
+                const lb = this.researchLoadBackup(treeId);
+                return !!lb && Date.now() - Date.parse(lb.at) < LOADED_BLOCK_MS;
+            })(),
         });
     },
 
@@ -784,6 +792,9 @@ export const researchSyncMethods = uiModule({
     /** The user edited a tree: count it, and the quiet time starts again. */
     researchNoteUserChange(treeId: TreeId): void {
         if (quietLoading) return;
+        // "Restore the state before loading" stands until the next edit of the tree (O2, V-H): never offered
+        // again, not even when an undo brings the tree back to what was loaded.
+        if (researchAutoState(treeId).loadBackup) patchResearchAutoState(treeId, { loadBackup: undefined });
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (!link || !this.researchSyncCapable(link.id)) return;
         fpCache = null;
@@ -1163,15 +1174,21 @@ export const researchSyncMethods = uiModule({
             + (reply.notWritten.length ? reply.notWritten.length : reply.takenBack ?? 0);
         const unexplained = written && reply.applied !== null && reply.changes !== null ? reply.changes - reply.applied - explained : 0;
         const listed = reply.notWritten.filter(n => n.why !== 'takenBack');
-        if (written && (listed.length > 0 || unexplained > 0)) {
+        const notWrittenCount = written ? listed.length + Math.max(0, unexplained) : 0;
+        if (notWrittenCount > 0) {
             if (unexplained > 0) console.warn('The research wrote fewer changes than it counted, without saying why', reply);
-            const count = listed.length + Math.max(0, unexplained);
+            // What it wrote is its `applied`, never what this app sent: the rest is kept as not written (the
+            // state, "What was written") until the next send is written (V-J).
+            patchResearchAutoState(treeId, { notWritten: { at: now, fingerprint: sentFp, written: Math.max(0, changes ?? 0),
+                items: listed.slice(0, 50).map(n => ({ person: n.person, fact: n.fact, why: n.why })), unexplained: Math.max(0, unexplained) } });
             // "Written N, not written M · Show": by hand and by itself alike (the written count is in it).
             toldNotWritten = sentFp;
-            this.showToast(`${s.writtenCount(Math.max(0, changes ?? 0), count)} ${listed.length ? s.notWrittenListed(count) : s.notWrittenToast(count)}`, Infinity, {
+            this.showToast(`${s.writtenCount(Math.max(0, changes ?? 0), notWrittenCount)} ${listed.length ? s.notWrittenListed(notWrittenCount) : s.notWrittenToast(notWrittenCount)}`, Infinity, {
                 closable: true,
-                ...(listed.length ? { action: { label: s.showConflicts, run: () => { void this.showResearchNotWritten(data, listed, Math.max(0, unexplained)); } } } : {}),
+                action: { label: s.showConflicts, run: () => this.showResearchChanges('written') },
             });
+        } else if (written && reply.changes !== 0) {
+            patchResearchAutoState(treeId, { notWritten: undefined });
         }
         const sent: ResearchSend = {
             fingerprint: sentFp, at: now, changes, head,
@@ -1245,7 +1262,8 @@ export const researchSyncMethods = uiModule({
         } else if (written) {
             // A write that left conflicts never loads after itself: told as any write (the note, the
             // conflicts), its version waits for the user — it holds the research's values in place of theirs.
-            if (opts.thenLoad && active && !((reply.conflicts ?? 0) > 0)) {
+            // Nor one that left changes unwritten: loading would drop them here without a word (V-J).
+            if (opts.thenLoad && active && !((reply.conflicts ?? 0) > 0) && notWrittenCount === 0) {
                 patchResearchAutoState(treeId, { lastWritten: { at: now, changes, conflicts: 0, ...(sent.intake ? { intake: sent.intake } : {}), fingerprint: sentFp } });
                 if (!opts.auto) this.showToast(s.writtenToast(changes ?? 0), 6000);
                 await this.researchLoadNewer({ afterSend: true });
@@ -1460,7 +1478,7 @@ export const researchSyncMethods = uiModule({
         await TreeRenderer.renderAsync();
         this.refreshSearch();
         this.refreshResearchSyncUi();
-        this.showToast(strings.sync.restoredBeforeLoad, 6000);
+        this.showToast(strings.sync.restoredBeforeLoad, 8000, { action: { label: strings.undo.undo, run: () => this.performUndo() } });
     },
 
     /** "Only load from the research" and the user asked to send: said, with the way to change it. */
@@ -1514,6 +1532,15 @@ export const researchSyncMethods = uiModule({
                     await this.postResearchSend(treeId, { auto: true, thenLoad: true });
                     return;
                 }
+            }
+            // The last send left changes unwritten and they are still here only: loading would drop them
+            // without a word (V-J) — asked first.
+            const nw = researchAutoState(treeId).notWritten;
+            if (!opts.afterSend && nw && link.sent?.state === 'written' && nw.fingerprint === link.sent.fingerprint) {
+                const m = nw.items.length + nw.unexplained;
+                const ok = await this.showConfirm(strings.sync.loadOverNotWritten(m), strings.sync.stateNewer,
+                    { confirmLabel: strings.sync.loadOverwrite, cancel: strings.buttons.cancel });
+                if (!ok) return;
             }
             await this.importResearchFromUrl(`${bridge.base}/tree.ged`, opts.afterSend ? { afterSend: treeId } : {});
             return;
@@ -1620,6 +1647,7 @@ export const researchSyncMethods = uiModule({
             case 'acceptUndo': void this.researchAcceptUndo(); break;
             case 'sendThenLoad': void this.researchSendNow({ thenLoad: true }); break;
             case 'showChanges': this.showResearchChanges('send'); break;
+            case 'showChangesFirst': this.showResearchChanges('send', { confirm: true }); break;
             case 'showOriginals': this.showOriginalsQueue(); break;
             case 'showWritten': this.showResearchChanges('written'); break;
             case 'loadNewer': void this.researchLoadNewer(); break;
@@ -1675,7 +1703,7 @@ export const researchSyncMethods = uiModule({
     researchWrittenConflictPersons(treeId: TreeId): PersonId[] {
         const persons = (researchAutoState(treeId).lastWritten?.persons ?? []) as PersonId[];
         // The research's version not loaded: its new conflicts are not in this tree yet — the people it named.
-        const kind = this.currentResearchSyncState().kind;
+        const kind = this.currentResearchSyncState().core;
         if (kind === 'writtenConflicts' || (kind === 'rejected' && this.researchUndoneConflicts(treeId) > 0)) {
             const held = kind === 'writtenConflicts' ? (this.researchHeld(treeId)?.takeovers ?? []) as PersonId[] : [];
             return [...new Set([...persons, ...held])].filter(id => DataManager.getPerson(id));
@@ -1800,9 +1828,30 @@ export const researchSyncMethods = uiModule({
                 sub: s.statePendingSub, actions: this.researchLinkAvailable('open') ? [{ action: 'openResearch', label: s.openResearch, asLink: true }] : [] }),
             newer: () => {
                 const at = rt?.status?.headAt;
-                return { tone: 'neutral', title: s.stateNewer, sub: at ? s.fromTime(when(at)) : undefined, actions: [{ action: 'loadNewer', label: s.loadNewer }] };
+                return { tone: 'neutral', title: s.stateNewer, sub: s.newerSub(at ? when(at) : ''), actions: [{ action: 'loadNewer', label: s.load }] };
             },
-            unsentAndNewer: () => ({ tone: 'warn', title: s.stateUnsent, sub: s.unsentNewerSub, actions: [{ action: 'sendThenLoad', label: s.sendThenLoad }] }),
+            // The last send left changes unwritten: amber (a dot) until the list was seen, then neutral; until the next send.
+            notWritten: () => {
+                const nw = autoState.notWritten;
+                const m = (nw?.items.length ?? 0) + (nw?.unexplained ?? 0);
+                return { tone: nw?.seen ? 'neutral' : 'warn', title: s.writtenCount(nw?.written ?? 0, m).replace(/\.$/, ''),
+                    sub: s.notWrittenSub(when(nw?.at)), actions: [{ action: 'showWritten', label: s.showConflicts, asLink: true }] };
+            },
+            // Out of "only load": what piled up meanwhile, nothing goes before it is seen.
+            piled: () => {
+                const n = this.researchChangesNow()?.length ?? 0;
+                return { tone: 'neutral', title: n ? strings.treeSettings.piled(n) : s.stateUnsent,
+                    actions: [{ action: 'showChangesFirst', label: strings.treeSettings.whatWillBeSent }] };
+            },
+            // The research's version loaded within the hour: the way back in sight (later only the menu row).
+            loaded: () => {
+                const lb = treeId ? this.researchLoadBackup(treeId) : null;
+                return { tone: 'quiet', title: s.loadedTitle(when(lb?.at)), actions: [{ action: 'restoreBeforeLoad', label: s.restoreBeforeLoad, asLink: true }] };
+            },
+            // Only loading: a quiet line in place of the state, with the way to change it.
+            off: () => ({ tone: 'quiet', title: s.sendOffLine, actions: [{ action: 'changeSendMode', label: s.sendOffChange, asLink: true }] }),
+            // Send goes as any send (by hand through "What will be sent"); the newer version loads only when asked (V-I).
+            unsentAndNewer: () => ({ tone: 'warn', title: s.stateUnsent, sub: s.unsentNewerSub, actions: [{ action: 'send', label: s.send }] }),
             waitThenLoad: () => ({ tone: 'neutral', title: s.stateSent(when(state.sent?.at), state.sent?.changes ?? null),
                 sub: s.waitThenLoadSub, actions: [{ action: 'cancelLoad', label: s.cancelLoad, asLink: true }] }),
             bridgeDown: () => rt?.why === 'hung'
@@ -1838,7 +1887,7 @@ export const researchSyncMethods = uiModule({
             switched: () => archive
                 ? { tone: 'neutral', title: s.switchedToArchiveTitle, sub: s.switchedToArchiveSub, actions: [{ action: 'gotIt', label: s.gotIt, asLink: true }] }
                 : { tone: 'neutral', title: s.switchedToAgentTitle, sub: s.switchedToAgentSub, actions: [{ action: 'gotIt', label: s.gotIt, asLink: true }], tag: false },
-            offerAuto: () => ({ tone: 'neutral', title: s.offerAutoTitle, sub: s.offerAutoSub,
+            offerAuto: () => ({ tone: 'neutral', title: s.offerAutoTitle,
                 actions: [{ action: 'offerYes', label: s.offerAutoYes }, { action: 'offerNo', label: s.offerAutoNo, asLink: true }] }),
             autoIntro: () => ({ tone: 'neutral', title: s.autoIntroTitle, sub: s.autoWhen,
                 actions: [{ action: 'introSeen', label: s.gotIt, asLink: true }, { action: 'introChange', label: s.autoIntroChange, asLink: true }] }),
@@ -1871,21 +1920,8 @@ export const researchSyncMethods = uiModule({
         } else if (state.kind === 'written' && treeId && researchWrittenList(treeId)?.list.length && researchSendMode(link) !== 'off') {
             b.actions = [...(b.actions ?? []), { action: 'showWritten', label: strings.changes.whatWasWritten, asLink: true }];
         }
-        // "Only load from the research": said in every state, with the way to change it.
-        if (link && researchSendMode(link) === 'off') {
-            // Never "in sync" while nothing goes: what is here may differ from there.
-            // (nor what an earlier send wrote: beside "not sent" it reads as if something went — V-G).
-            if (state.kind === 'inSync' || state.kind === 'written') {
-                b.title = s.sendOffLine;
-                if (state.kind === 'written') b.sub = connNote ? [`${connNote.title}.`, connNote.sub].filter(Boolean).join(' ') : undefined;
-            }
-            else b.sub = [b.sub, s.sendOffLine].filter(Boolean).join(' · ');
-            b.actions = [...(b.actions ?? []), { action: 'changeSendMode', label: s.sendOffChange, asLink: true }];
-        }
-        // The research's version loaded lately and nothing edited since: the way back stays in sight.
-        if (treeId && this.researchLoadBackup(treeId)) {
-            b.actions = [...(b.actions ?? []), { action: 'restoreBeforeLoad', label: s.restoreBeforeLoad, asLink: true }];
-        }
+        // ("Only load from the research" is the quiet `off` block; a real state of the research outranks it.
+        // "Restore the state before loading" is the `loaded` block for an hour, then a row of the menu.)
         const sendingNow = !!treeId && sendingTree === treeId;
         const buttons = (b.actions ?? []).map(a => {
             const busy = sendingNow && !a.asLink && ['send', 'sendThenLoad', 'retry', 'sendAgain'].includes(a.action);
@@ -2037,21 +2073,6 @@ export const researchSyncMethods = uiModule({
         void this.researchOriginalsKick();
     },
 
-    /** What a send carried that the research did not write, line by line: whom, which fact, why. */
-    async showResearchNotWritten(data: StromData, items: SyncNotWritten[], unexplained: number): Promise<void> {
-        const s = strings.sync;
-        const lines = items.map(n => {
-            const id = n.person ? personsByResearchRefs(data, [n.person])[0] : undefined;
-            const p = id ? data.persons[id] : undefined;
-            const who = p ? `${p.firstName} ${p.lastName}`.trim() : n.person || n.family || '';
-            const what = n.fact ? researchFactLabel(n.fact) : '';
-            const why = n.why === 'kept' ? s.notWrittenKept : n.why === 'report' ? s.notWrittenReport : n.why === 'pick' ? s.notWrittenPick : s.notWrittenUnknown;
-            return `• ${[who, what].filter(Boolean).join(' · ')}${who || what ? ': ' : ''}${why}`;
-        });
-        if (unexplained > 0) lines.push(`• ${s.notWrittenToast(unexplained)}`);
-        await this.showAlert(lines.join('\n'), 'info');
-    },
-
     /** Conflicts a send written beside a send taken back left open (0: none). */
     researchUndoneConflicts(treeId: TreeId): number {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
@@ -2064,17 +2085,22 @@ export const researchSyncMethods = uiModule({
     researchSyncAttention(): boolean {
         const state = this.currentResearchSyncState();
         const kind = state.kind;
-        const attention = researchSyncWantsAttention(kind) || this.originalsQueueWarn();
+        // Not written: a dot until its list was seen.
+        const ctx = this.researchSyncLink();
+        const notWrittenSeen = kind === 'notWritten' && !!ctx && !!researchAutoState(ctx.treeId).notWritten?.seen;
+        const attention = (researchSyncWantsAttention(kind) && !notWrittenSeen) || this.originalsQueueWarn();
+        // Changes not sent, as the toolbar has them (a block over them, e.g. "piled up", does not hide them).
+        const unsentCore = state.core === 'unsent';
         const btn = document.querySelector<HTMLElement>('.actions-menu-btn');
         if (btn) {
             if (btn.dataset.baseLabel === undefined) btn.dataset.baseLabel = btn.getAttribute('aria-label') ?? '';
-            btn.setAttribute('aria-label', researchSyncUnsent(kind) ? strings.sync.moreHint : btn.dataset.baseLabel || strings.menu.actions);
+            btn.setAttribute('aria-label', researchSyncUnsent(kind) || researchSyncUnsent(state.core) ? strings.sync.moreHint : btn.dataset.baseLabel || strings.menu.actions);
         }
         // Sent by hand: where the toolbar has no Send button, a dot on ⋯ instead (CSS hides it from 1180 px).
         const narrowDot = document.getElementById('actions-menu-research-dot');
-        if (narrowDot) narrowDot.style.display = kind === 'unsent' ? 'block' : 'none';
+        if (narrowDot) narrowDot.style.display = unsentCore ? 'block' : 'none';
         const rowDot = document.getElementById('actions-research-dot');
-        if (rowDot) rowDot.style.display = attention || kind === 'unsent' ? 'inline-block' : 'none';
+        if (rowDot) rowDot.style.display = attention || unsentCore ? 'inline-block' : 'none';
         return attention;
     },
 
@@ -2115,7 +2141,7 @@ export const researchSyncMethods = uiModule({
         };
         // Attention: the amber pill (sent by hand, only when changes would be lost).
         const warn: Partial<Record<ResearchSyncKind, { text: string; button: string; action: string }>> = {
-            unsentAndNewer: { text: s.barUnsent, button: s.barSend, action: 'sendThenLoad' },
+            unsentAndNewer: { text: s.barUnsent, button: s.barSend, action: 'send' },
             stale: { text: s.pillStale, button: strings.storageSafety.reload, action: 'reload' },
             // A write left conflicts: they stay in sight until decided or the version is loaded (finding 40).
             // A send taken back or discarded: in sight however changes go (sent by hand too, B1).

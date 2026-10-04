@@ -11,6 +11,7 @@
  */
 
 import { DataManager, CitedFact, personCitationField } from '../data.js';
+import { bookReference, entryDateLine } from '../source-page.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
 import { SettingsManager } from '../settings.js';
@@ -1467,14 +1468,20 @@ export const sourcesMethods = uiModule({
         this.citeSourceAfterCreate = true;
         this.sourceEditorContext = this.citationContext;
         document.getElementById('source-picker-modal')?.classList.remove('active');
-        // The note of the book, without lines that name that entry's own page (they would point the new one there).
+        // The note of the book, without lines that belong to that entry: its own page, its recording date
+        // (they would point the new one there).
         const page = (book.reference ?? '').trim();
-        const note = (book.note ?? '').split('\n').filter(line => !page || !line.includes(page)).join('\n').trim();
+        const note = (book.note ?? '').split('\n').filter(line => (!page || !line.includes(page)) && !entryDateLine(line)).join('\n').trim();
+        // The book's reference without its page ("Voss, Ministerialbok 1820–1835, s. "): the user types the page.
+        const reference = bookReference(page);
         this.showAddSourceModal({
             title: book.title, repository: book.repository, url: book.url, note,
+            ...(reference ? { reference } : {}),
             ...(book.quality !== undefined ? { quality: book.quality } : {}),
         });
-        (document.getElementById('input-source-reference') as HTMLInputElement | null)?.focus();
+        const input = document.getElementById('input-source-reference') as HTMLInputElement | null;
+        input?.focus();
+        input?.setSelectionRange(input.value.length, input.value.length);
     },
 
     /** "New source…" in the picker: open the editor with a title from the context. */

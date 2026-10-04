@@ -492,7 +492,7 @@ test.describe('a research update', () => {
         await expect(check).toBeChecked();
         await check.uncheck();
         await dlg.getByRole('button', { name: 'Update' }).click();
-        await expect(page.locator('.toast')).toContainText('Updated the research');
+        await expect(page.locator('.toast')).toContainText('Research version loaded.');
         const src = await page.evaluate(() => Object.values(window.Strom.DataManager.getData().sources as Record<string, any>)[0]);
         expect(src.title).toBe('Křest Josefa');
         // No new images came in; the excerpt the tree had stays.

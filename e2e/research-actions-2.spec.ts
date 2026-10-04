@@ -546,7 +546,7 @@ test.describe('Start research with this tree (G3)', () => {
     test('adopted tree: "load the new version" without edits keeps the photos and attachments', async ({ page }) => {
         const { img, att } = await adoptWithImages(page);
         await dropFile(page, adoptedGed(true));
-        await expect(page.locator('.toast')).toContainText('Updated the research');
+        await expect(page.locator('.toast')).toContainText('Research version loaded.');
         await expect(page.locator('#confirmation-modal')).toBeHidden();
         await expect(card(page, 'Marie')).toBeVisible();
         expect(await media(page)).toEqual({ karel: img, petr: [att] });
@@ -559,7 +559,7 @@ test.describe('Start research with this tree (G3)', () => {
     test('adopted tree, a photo added in the app: the dialog says images stay, "Update" keeps them', async ({ page }) => {
         const { img, att } = await adoptWithImages(page);
         await dropFile(page, adoptedGed());
-        await expect(page.locator('.toast')).toContainText('Updated the research');
+        await expect(page.locator('.toast')).toContainText('Research version loaded.');
         const other = await page.evaluate(() => {
             const dm = window.Strom.DataManager;
             const petr = (Object.values(dm.getData().persons) as any[]).find(p => p.firstName === 'Petr');
@@ -572,7 +572,7 @@ test.describe('Start research with this tree (G3)', () => {
         await expect(dialog).toContainText('was changed in this app');
         await expect(dialog).toContainText('Photos, attachments and excerpts you added in the app stay');
         await dialog.getByRole('button', { name: 'Update' }).click();
-        await expect(page.locator('.toast')).toContainText('Updated the research');
+        await expect(page.locator('.toast')).toContainText('Research version loaded.');
         await expect(card(page, 'Marie')).toBeVisible();
         expect(await media(page)).toEqual({ karel: img, petr: [att] });
         expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[])
@@ -582,7 +582,7 @@ test.describe('Start research with this tree (G3)', () => {
     test('the research dropped a person with a photo: never silently, a dialog warns', async ({ page }) => {
         await adoptWithImages(page);
         await dropFile(page, adoptedGed());
-        await expect(page.locator('.toast')).toContainText('Updated the research');
+        await expect(page.locator('.toast')).toContainText('Research version loaded.');
         const onlyPetr = adoptedGed().replace(/0 @P0001@ INDI[\s\S]*?(?=0 @P0002@)/, '').replace('1 HUSB @P0001@\n', '');
         await dropFile(page, onlyPetr);
         const dialog = page.locator('#confirmation-modal');

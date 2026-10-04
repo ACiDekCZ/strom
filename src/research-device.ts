@@ -272,6 +272,24 @@ export interface ResearchAutoState {
     manualWrites?: number;
     /** "Send without preview next time": sending by hand goes at once (unless the tie asks for a preview). */
     skipPreview?: true;
+    /**
+     * The last written send left changes unwritten: what the research named (person, fact, why) and how
+     * many it did not name, by the send's fingerprint. It stays the state until the next send is written;
+     * `seen` once the list was shown (no dot then).
+     */
+    notWritten?: ResearchNotWritten;
+}
+
+/** What a written send did not write (`ResearchAutoState.notWritten`). */
+export interface ResearchNotWritten {
+    at: string;
+    fingerprint: string;
+    /** Changes the research wrote (its `applied`). */
+    written: number;
+    items: { person: string; fact: string; why: string }[];
+    /** Changes it counted but neither wrote nor named. */
+    unexplained: number;
+    seen?: true;
 }
 
 /** The tie as it stood before the research's version was loaded: what a restore of that backup builds on again (V-B). */
@@ -369,6 +387,18 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (p.modeAsked === true) out.modeAsked = true;
         if (typeof p.manualWrites === 'number' && p.manualWrites > 0) out.manualWrites = Math.min(Math.floor(p.manualWrites), 9999);
         if (p.skipPreview === true) out.skipPreview = true;
+        const nw = p.notWritten as Record<string, unknown> | undefined;
+        if (nw && typeof nw.at === 'string' && typeof nw.fingerprint === 'string' && Array.isArray(nw.items)) {
+            out.notWritten = {
+                at: nw.at, fingerprint: nw.fingerprint,
+                written: typeof nw.written === 'number' && nw.written >= 0 ? Math.floor(nw.written) : 0,
+                items: nw.items.slice(0, 50).map(i => i as Record<string, unknown>).filter(i => !!i && typeof i === 'object')
+                    .map(i => ({ person: typeof i.person === 'string' ? i.person.slice(0, 12) : '', fact: typeof i.fact === 'string' ? i.fact.slice(0, 8) : '',
+                        why: typeof i.why === 'string' ? i.why.slice(0, 12) : '' })),
+                unexplained: typeof nw.unexplained === 'number' && nw.unexplained > 0 ? Math.floor(nw.unexplained) : 0,
+                ...(nw.seen === true ? { seen: true as const } : {}),
+            };
+        }
         return out;
     } catch {
         return {};

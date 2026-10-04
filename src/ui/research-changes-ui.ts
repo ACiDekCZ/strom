@@ -16,8 +16,9 @@ import { PersonId, StromData, TreeId } from '../types.js';
 import { formatLiveClock } from '../live-time.js';
 import { ChangeKind, PersonChange, diffByPerson, baseCopy } from '../research-changes.js';
 import { saveResearchCopy, loadResearchCopy } from '../research-copy.js';
-import { researchAutoState, noteResearchSendPreviewSkipped } from '../research-device.js';
-import { researchSendMode } from './research-sync-ui.js';
+import { researchAutoState, patchResearchAutoState, noteResearchSendPreviewSkipped } from '../research-device.js';
+import { researchSendMode, personsByResearchRefs } from './research-sync-ui.js';
+import { researchFactLabel } from './person-research-ui.js';
 import { uiModule } from './module.js';
 
 const PANEL_ID = 'research-changes-panel';
@@ -195,14 +196,54 @@ export const researchChangesMethods = uiModule({
         let title: string;
         let sub: string;
         let foot = '';
+        let notWrittenHtml = '';
+        let writtenHead = '';
+        let moreWritten = 0;
         if (mode === 'written') {
             const w = researchWrittenList(ctx.treeId);
-            const lw = researchAutoState(ctx.treeId).lastWritten;
+            const st = researchAutoState(ctx.treeId);
+            const lw = st.lastWritten;
             list = w?.list ?? [];
             title = c.writtenTitle(clock(w?.at ?? lw?.at));
             const k = lw?.changes ?? list.length;
             const conflicts = lw?.conflicts ?? 0;
             sub = conflicts ? `${s.changesN(k)} · ${s.conflictsN(conflicts)}` : s.changesN(k);
+            // What the research did not write (its `applied`, not what went, V-J): first, amber, with its reason;
+            // the people it named are not listed as written.
+            const nw = st.notWritten && (st.notWritten.fingerprint === ctx.link.sent?.fingerprint || st.notWritten.fingerprint === lw?.fingerprint) ? st.notWritten : null;
+            if (nw) {
+                if (!nw.seen) patchResearchAutoState(ctx.treeId, { notWritten: { ...nw, seen: true } });
+                const data = DataManager.getData();
+                const named = new Set<string>();
+                const items = nw.items.map(n => {
+                    const id = n.person ? personsByResearchRefs(data, [n.person])[0] : undefined;
+                    if (id) named.add(id);
+                    const p = id ? data.persons[id] : undefined;
+                    const who = p ? `${p.firstName} ${p.lastName}`.trim() : n.person;
+                    const what = n.fact ? researchFactLabel(n.fact) : '';
+                    const why = n.why === 'kept' ? s.notWrittenKept : n.why === 'report' ? s.notWrittenReport : n.why === 'pick' ? s.notWrittenPick : c.noReason;
+                    const name = id && p
+                        ? `<button type="button" class="research-changes-name" data-person="${esc(id)}">${esc(who)}</button>`
+                        : `<span class="research-changes-name">${esc(who || '?')}</span>`;
+                    return `<li class="research-changes-row is-not-written"><span class="research-changes-icon is-warn" aria-hidden="true">!</span>`
+                        + `<span class="research-changes-text">${name}${what ? `<span class="research-changes-kinds">${esc(what)}</span>` : ''}`
+                        + `<span class="research-changes-why">${esc(why)}</span></span></li>`;
+                });
+                if (nw.unexplained > 0) {
+                    items.push(`<li class="research-changes-row is-not-written"><span class="research-changes-icon is-warn" aria-hidden="true">!</span>`
+                        + `<span class="research-changes-text"><span class="research-changes-name">${esc(c.unnamed(nw.unexplained))}</span>`
+                        + `<span class="research-changes-why">${esc(c.noReason)}</span></span></li>`);
+                }
+                const m = nw.items.length + nw.unexplained;
+                notWrittenHtml = `<div class="research-changes-section is-warn">${esc(c.notWrittenSection(m))}</div><ul class="research-changes-list">${items.join('')}</ul>`;
+                list = list.filter(ch => !named.has(ch.personId));
+                writtenHead = c.writtenSection(nw.written);
+                sub = s.writtenCount(nw.written, m);
+                // Quiet rows: the first three, then "and N more".
+                moreWritten = Math.max(0, list.length - 3);
+                list = list.slice(0, 3);
+                this.refreshResearchSyncUi();
+            }
             if (archive) foot = `<span class="research-changes-note">${esc(c.archiveNoConflicts)}</span>`;
             else if (conflicts && this.researchDecideUrl(ctx.treeId)) {
                 foot = `<button type="button" class="research-sync-link" data-act="decide">${esc(s.decideInResearch)}</button>`;
@@ -238,7 +279,10 @@ export const researchChangesMethods = uiModule({
                 <div class="research-changes-title">${esc(title)}</div>
                 <div class="research-changes-sub">${esc(sub)}</div>
             </div>
-            ${rows ? `<ul class="research-changes-list">${rows}</ul>` : ''}
+            ${notWrittenHtml}
+            ${writtenHead && (rows || moreWritten) ? `<div class="research-changes-section">${esc(writtenHead)}</div>` : ''}
+            ${rows ? `<ul class="research-changes-list${writtenHead ? ' is-quiet' : ''}">${rows}</ul>` : ''}
+            ${moreWritten ? `<div class="research-changes-more">${esc(c.andMore(moreWritten))}</div>` : ''}
             ${foot ? `<div class="research-changes-foot">${foot}</div>` : ''}`;
         document.body.appendChild(panel);
         this.positionResearchChanges();

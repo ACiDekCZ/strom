@@ -187,6 +187,12 @@ export const researchActionsMethods = uiModule({
             if (this.isFollowingActiveResearch()) look.push({ id: 'research-item-overview', label: strings.live.overviewTitle, run: call('researchActionOverview') });
             const known = this.researchWaiting();
             const work: SubmenuItem[] = [...sendRow];
+            // "Restore the state before loading" until the next edit (or 7 days); its first hour is the block above.
+            const loadBackup = ctx ? this.researchLoadBackup(ctx.treeId) : null;
+            if (loadBackup && this.currentResearchSyncState().kind !== 'loaded') {
+                work.push({ id: 'research-item-restore', label: strings.sync.restoreBeforeLoad, run: call('researchSyncAction', "'restoreBeforeLoad'"),
+                    sub: strings.sync.loadedAt(formatLiveClock(Date.parse(loadBackup.at), Date.now(), getCurrentLanguage())) });
+            }
             const intake = known?.lastIntake;
             const sentAt = intake ? Date.parse(intake.at) : NaN;
             // Taking the last send back is the user's (an archive too); not while the research's mode is not known here.

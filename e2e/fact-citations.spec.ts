@@ -86,6 +86,25 @@ test.describe('birth and death citations', () => {
         expect(page2.excerpts ?? []).toEqual([]);
     });
 
+    test('V-D: "Another page" keeps the book of the reference (the page left to type, the cursor at its end), not the entry\'s recording date', async ({ page }) => {
+        await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', deathDate: '1932', birthSourceIds: ['s1'] } }, true);
+        await page.evaluate(() => {
+            window.Strom.DataManager.updateSource('s1', { note: 'Farní úřad Voss\nZapsáno: 20 MAR 1825', reference: 'Voss, Ministerialbok 1820–1835, s. 112' } as never);
+        });
+        await page.evaluate(() => window.Strom.UI.showEditPersonModal('j' as never));
+        await page.locator('#death-sources-group .fact-cite-btn').click();
+        await page.locator('#source-picker-modal .source-picker-row', { hasText: 'Matrika' }).getByRole('button', { name: 'Another page' }).click();
+        const ref = page.locator('#source-editor-modal #input-source-reference');
+        await expect(ref).toHaveValue('Voss, Ministerialbok 1820–1835, s. ');
+        await expect(ref).toBeFocused();
+        expect(await ref.evaluate((el: HTMLInputElement) => el.selectionStart)).toBe('Voss, Ministerialbok 1820–1835, s. '.length);
+        await page.keyboard.type('113');
+        await page.locator('#source-editor-modal').getByRole('button', { name: 'Save' }).click();
+        const j = await person(page, 'j');
+        const page2 = await page.evaluate((id) => window.Strom.DataManager.getData().sources![id], j!.deathSourceIds![0]);
+        expect(page2).toMatchObject({ reference: 'Voss, Ministerialbok 1820–1835, s. 113', note: 'Farní úřad Voss' });
+    });
+
     test('× on the death chip takes the citation off the death only', async ({ page }) => {
         await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', deathDate: '1932', sourceIds: ['s1'], deathSourceIds: ['s1'] } });
         await page.evaluate(() => window.Strom.UI.showEditPersonModal('j' as never));
