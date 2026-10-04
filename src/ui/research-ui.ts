@@ -115,6 +115,8 @@ export interface LiveSession {
     seenWaiting: Set<string>;
     /** Changes seen with the Changes section open (for "N new"). */
     seenInSection: number;
+    /** A backup of the tree was taken before following first replaced it. */
+    backedUp?: boolean;
     /** When following began, and the tree's people and sources then. */
     startedAt: number;
     startPersons: number;
@@ -1290,6 +1292,8 @@ export const researchUiMethods = uiModule({
         const previousTreeId = DataManager.getCurrentTreeId();
         let treeId: TreeId;
         let created = false;
+        /** The backup of the tree as it was before the research's version replaced it. */
+        let backupId: string | null = null;
         if (!existing || asCopy) {
             // The new tree takes the updates: the next open of this research
             // updates it. The tree the user changed stays exactly as it is and
@@ -1306,8 +1310,8 @@ export const researchUiMethods = uiModule({
                 if (!await DataManager.switchTree(treeId)) return null;
                 TreeRenderer.restoreFromSession();
             }
-            // The user's own changes are about to be replaced: keep a backup.
-            if (action === 'ask') await DataManager.snapshotNow('pre-import');
+            // Always a backup first (whatever the setting): the load can be taken back.
+            backupId = await DataManager.snapshotNow('pre-research-load');
             DataManager.loadStromData(stable);
         }
 
@@ -1323,6 +1327,10 @@ export const researchUiMethods = uiModule({
             // The load itself counted as an edit (it went through the edit path before the tie moved on): nothing waits now.
             patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined });
             this.researchKeepCopy(treeId, DataManager.getCurrentTreeId() === treeId ? DataManager.getData() : data);
+        }
+        // "Restore the state before loading", offered while the tree is just what was loaded.
+        if (backupId && DataManager.getCurrentTreeId() === treeId) {
+            patchResearchAutoState(treeId, { loadBackup: { id: backupId, at: new Date().toISOString(), fingerprint: contentFingerprint(DataManager.getData()) } });
         }
         const loadedAfterSend = !created && (holdsSent || (!!opts.afterSend && opts.afterSend === treeId));
 
@@ -1343,11 +1351,13 @@ export const researchUiMethods = uiModule({
         // part of the research and would inflate the summary.
         const persons = Object.values(stored.persons).filter(p => !p.isPlaceholder).length;
         const families = Object.keys(stored.partnerships).length;
-        if (loadedAfterSend) this.showToast(strings.sync.loadedAfterSend, 6000);
+        const restore = backupId
+            ? { action: { label: strings.sync.restoreBeforeLoad, run: () => { void this.researchRestoreBeforeLoad(treeId); } } } : {};
+        if (loadedAfterSend) this.showToast(strings.sync.loadedAfterSend, 8000, restore);
         else if (!opts.quiet) {
             this.showToast(created
                 ? strings.research.opened(name, persons, families, dateLabel)
-                : strings.research.updated(name, persons, families, dateLabel), 6000);
+                : strings.research.updated(name, persons, families, dateLabel), backupId ? 8000 : 6000, restore);
         }
         this.refreshResearchSyncUi();
         return treeId;
@@ -1379,9 +1389,11 @@ export const researchUiMethods = uiModule({
         const names = treeId === DataManager.getCurrentTreeId() ? await this.researchOverwriteNames() : '';
         if (bridgeUp) {
             const message = [u.unsentBody(treeName), names, mediaLine].filter(Boolean).join('\n\n');
+            // "Only load from the research": sending first is no way out here.
+            const sendOff = link?.sendMode === 'off';
             const pick = await this.showChoice(message, u.unsentTitle, [
                 { id: 'copy', label: r.openCopy },
-                { id: 'sendThenLoad', label: strings.sync.sendThenLoad },
+                ...(sendOff ? [] : [{ id: 'sendThenLoad', label: strings.sync.sendThenLoad }]),
             ], images, { subtitle: `${treeName} · ${u.newerSub}`, aside: { id: 'update', label: u.loadWithout, sub: u.loadWithoutSub } });
             return pick as 'sendThenLoad' | 'update' | 'copy' | null;
         }
@@ -2099,6 +2111,8 @@ export const researchUiMethods = uiModule({
         // Images added in the app before following stay (the research has none of them).
         const stable = migrateData(previous ? carryOverMedia(stabilizeIds(data, previous), previous).data : data);
         if (active) {
+            // Following replaces the tree again and again: one backup, before the first time.
+            if (!s.backedUp) s.backedUp = !!await DataManager.snapshotNow('pre-research-load');
             DataManager.replaceWithSourceData(stable);
             this.refreshSearch();
         } else {

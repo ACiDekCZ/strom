@@ -30,11 +30,9 @@ import { formatLiveClock } from '../live-time.js';
 import { isTreeStale } from '../tab-sync.js';
 import { formatFlexDate } from '../dates.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
-import { SettingsManager } from '../settings.js';
-import { stripMedia } from '../attachments.js';
 import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
-    parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, carryOverMedia, researchPersonRef, ResearchAccepts,
+    parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, researchPersonRef, ResearchAccepts,
     researchIdsByContent, holdsResearchIds, ResearchSendRecord, SyncNotWritten, AdoptIds, ExportXrefs, applySyncIds,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
@@ -45,7 +43,7 @@ import {
 } from '../research-device.js';
 import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
-    pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, researchSendVouches, conflictTakeovers, heldConflicts,
+    pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, conflictTakeovers, heldConflicts,
     researchKeepsTakenBack, latestUndone, nextUndone, openUndone,
 } from '../research-sync.js';
 import { setResearchConflictsProvider } from '../card-signals.js';
@@ -138,14 +136,16 @@ let autoTimerTree: TreeId | null = null;
 let autoDueAt = 0;
 /** Trees whose quiet time ran out while the bridge was not there: sent when it comes back. */
 const autoDue = new Set<TreeId>();
+/** The send whose "Written N, not written M" was told (its plain "Written" toast is then not shown too). */
+let toldNotWritten = '';
+/** "Restore the state before loading" is offered this long after a load (and only while the tree is unchanged). */
+const LOAD_BACKUP_MS = 7 * 24 * 60 * 60 * 1000;
 /** The ✓ shown on the mark for a moment after a write. */
 let justWritten: { treeId: TreeId; until: number } | null = null;
 /** The open tree as last seen (a switch sends the one left). */
 let lastActiveTree: TreeId | null = null;
-/** The quiet load is replacing the tree: that is not the user's edit. */
+/** The research's numbers are going onto the tree: that is not the user's edit. */
 let quietLoading = false;
-/** A research version not loaded quietly (it would drop the user's images): not fetched again. */
-let quietSkippedHead = '';
 /** The fingerprints of the active tree, worked out lazily (cleared by every edit). */
 let fpCache: { treeId: TreeId; current: string; matchesBase: boolean; base: string } | null = null;
 /** The note under the mark (a new conflict, the first start of sending by itself). */
@@ -188,16 +188,6 @@ function anyDialogOpen(): boolean {
     return typeof document !== 'undefined' && !!document.querySelector('.modal-overlay.active');
 }
 
-/** Open conflicts per person (to tell which ones a write added). */
-function openConflictCounts(data: StromData): Map<PersonId, number> {
-    const out = new Map<PersonId, number>();
-    for (const [id, p] of Object.entries(data.persons ?? {})) {
-        const n = (p?.research?.conflicts ?? []).filter(c => c.status === 'open').length;
-        if (n > 0) out.set(id as PersonId, n);
-    }
-    return out;
-}
-
 /** The app's persons the research's refs name ("P0012"), in order, found ones only. */
 function personsByResearchRefs(data: StromData, refs: readonly string[]): PersonId[] {
     const out: PersonId[] = [];
@@ -234,9 +224,9 @@ export function researchDisplayName(researchId: string): string {
     return runtime.get(researchId)?.status?.name || strings.research.defaultName;
 }
 
-/** How a tree's changes go to its research (missing: by themselves). */
+/** How a tree's changes go to its research (missing: by themselves, a tie from before 3.9). */
 export function researchSendMode(link: ResearchLink | undefined): ResearchSendMode {
-    return link?.sendMode === 'manual' ? 'manual' : 'auto';
+    return link?.sendMode === 'manual' || link?.sendMode === 'off' ? link.sendMode : 'auto';
 }
 
 export const researchSyncMethods = uiModule({
@@ -469,9 +459,11 @@ export const researchSyncMethods = uiModule({
             bridgeUp: !!rt?.up,
             safari,
             remoteHead,
+            ownHead: link.sent?.state === 'written' && link.sent.ownBase ? link.sent.replyHead ?? '' : '',
             stale: isTreeStale(treeId),
             heldConflicts: (this.researchHeld(treeId)?.takeovers.length ?? 0) > 0,
             auto,
+            sendOff: researchSendMode(link) === 'off',
             archive: mode === 'archive',
             sending: sendingTree === treeId,
             autoDue: autoDue.has(treeId),
@@ -635,6 +627,8 @@ export const researchSyncMethods = uiModule({
             ...(fate.nothing ? { changes: 0 } : {}),
             ...(fate.failed ? { failed: true } : {}),
             ...(fate.inherited ? { inherited: true } : {}),
+            // The research's version with this write in it: its own, not "a newer version" to load.
+            ...(fate.state === 'written' && sent.ownBase && status.head && status.head !== sent.head ? { replyHead: status.head } : {}),
         };
         delete closed.writing;
         TreeManager.patchResearchLink(treeId, { sent: closed });
@@ -873,12 +867,11 @@ export const researchSyncMethods = uiModule({
             this.refreshResearchSyncUi();
             return;
         }
-        // The research newer: load its version after the write.
-        const newer = why === 'newer' || (active && this.currentResearchSyncState().core === 'unsentAndNewer');
-        await this.postResearchSend(treeId, { auto: true, thenLoad: newer, keepalive: why === 'leave' });
+        // The research newer: its version stays "newer" after the write, loaded only when the user asks.
+        await this.postResearchSend(treeId, { auto: true, keepalive: why === 'leave' });
     },
 
-    /** After an answer from the bridge: what waited for it goes now; a written send's new version loads quietly. */
+    /** After an answer from the bridge: what waited for it goes now (the research's version loads only when asked). */
     async researchAutoCheck(): Promise<void> {
         const ctx = this.researchSyncLink();
         if (!ctx) return;
@@ -893,7 +886,6 @@ export const researchSyncMethods = uiModule({
             if (kind === 'unsentAndNewer' && !conflictsLeft) { await this.researchAutoSend(treeId, 'newer'); return; }
             if (autoDue.has(treeId)) { await this.researchAutoSend(treeId, kind === 'unsentAndNewer' ? 'newer' : 'bridge'); return; }
         }
-        await this.researchQuietLoad(treeId);
     },
 
     // ==================== SENDING ====================
@@ -959,6 +951,11 @@ export const researchSyncMethods = uiModule({
         const link = meta?.research;
         if (!link || sendingTree) return;
         const s = strings.sync;
+        // "Only load from the research": nothing goes, ever — said when the user asked to send.
+        if (researchSendMode(link) === 'off') {
+            if (!opts.auto) this.tellResearchSendOff(treeId);
+            return;
+        }
         // Another window stored this tree since: what this one holds would
         // take back what that one has. Never send it; a reload brings it up to date.
         if (isTreeStale(treeId) || !await TreeManager.researchBaseMatches(treeId)) {
@@ -1014,6 +1011,8 @@ export const researchSyncMethods = uiModule({
             return this.postResearchSendNow(treeId, opts);
         }
         const head = runtime.get(link.id)?.status?.head ?? '';
+        // The research had nothing this tree lacks: its write of this copy is this tree's own version.
+        const ownBase = !head || head === link.head || (link.sent?.state === 'written' && !!link.sent.ownBase && head === link.sent.replyHead);
         // "Send again" by hand for a send the research took back (`strom sync undo`): the research
         // writes it again from what it kept, on the state it was sent from (POST /sync/<R…>/again,
         // 1.12). A copy sent instead reads there as "removed by the research": nothing written (finding 35).
@@ -1023,9 +1022,11 @@ export const researchSyncMethods = uiModule({
         // The research took in an earlier copy of this tree and its version was not loaded here since: this copy
         // is that one plus the edits since — said, so the research takes that copy as the base (a bridge that says
         // sync.since), whether that send was written, brought nothing new, or went beside a send taken back (A4).
+        // Always when known, whatever the bridge said it takes (its status may not be read yet; an older
+        // research passes the line by): without it the research guesses the base (finding N1). Only a version
+        // of the research loaded here since makes it wrong — that version (_STROM_HEAD) is the base then.
         const lastCopy = researchAutoState(treeId).lastCopy;
-        const since = runtime.get(link.id)?.status?.features?.includes('sync.since') && lastCopy && lastCopy.base === (link.head ?? '')
-            ? lastCopy.intake : undefined;
+        const since = lastCopy && lastCopy.base === (link.head ?? '') ? lastCopy.intake : undefined;
         const exported = again ? null : researchGedcomExport(data, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
             ...(since ? { since } : {}),
@@ -1034,6 +1035,11 @@ export const researchSyncMethods = uiModule({
         // What this send carries, person by person (what was written, once it is).
         if (!again) this.researchNoteSending(treeId, data, fps.current);
         sendingTree = treeId;
+        // Before this tree first goes to the research from this browser: a backup, whatever the setting
+        // (not while the page is being left — the send must go at once).
+        if (active && !again && !opts.keepalive && !researchAutoState(treeId).firstSendBackup) {
+            if (await DataManager.snapshotNow('pre-first-send')) patchResearchAutoState(treeId, { firstSendBackup: true });
+        }
         if (autoTimerTree === treeId) this.clearResearchAutoTimer();
         this.refreshResearchSyncUi();
         let res: Response;
@@ -1124,7 +1130,9 @@ export const researchSyncMethods = uiModule({
         if (written && (listed.length > 0 || unexplained > 0)) {
             if (unexplained > 0) console.warn('The research wrote fewer changes than it counted, without saying why', reply);
             const count = listed.length + Math.max(0, unexplained);
-            this.showToast(listed.length ? s.notWrittenListed(count) : s.notWrittenToast(count), Infinity, {
+            // "Written N, not written M · Show": by hand and by itself alike (the written count is in it).
+            toldNotWritten = sentFp;
+            this.showToast(`${s.writtenCount(Math.max(0, changes ?? 0), count)} ${listed.length ? s.notWrittenListed(count) : s.notWrittenToast(count)}`, Infinity, {
                 closable: true,
                 ...(listed.length ? { action: { label: s.showConflicts, run: () => { void this.showResearchNotWritten(data, listed, Math.max(0, unexplained)); } } } : {}),
             });
@@ -1138,6 +1146,7 @@ export const researchSyncMethods = uiModule({
             ...(writing ? { writing: true } : {}),
             ...(opts.auto ? {} : { manual: true }),
             ...(written && reply.head ? { replyHead: reply.head } : {}),
+            ...(ownBase ? { ownBase: true } : {}),
         };
         // The copy still carries sends the research took back since its base (`undoneSince`, 1.12): what
         // it wrote stands, but the app and the research differ by those — never shown as in step, nor
@@ -1225,9 +1234,9 @@ export const researchSyncMethods = uiModule({
     },
 
     /**
-     * A send the research wrote: remember it, show the ✓, load the new version
-     * quietly when nothing here changed since, and tell the conflicts it left
-     * (by hand: a toast; by itself: the note under the mark, for new ones only).
+     * A send the research wrote: remember it, show the ✓ and tell the conflicts
+     * it left (by hand: a toast; by itself: the note under the mark, for new
+     * ones only). Its new version is not loaded: only when the user asks.
      */
     async researchAfterWrite(treeId: TreeId, sent: ResearchSend, known?: KnownConflicts): Promise<void> {
         const at = sent.closedAt ?? new Date().toISOString();
@@ -1242,16 +1251,13 @@ export const researchSyncMethods = uiModule({
             const now = TreeManager.getTreeMetadata(treeId)?.research;
             if (now?.sent && now.sent.at === sent.at) TreeManager.patchResearchLink(treeId, { sent: { ...now.sent, conflicts: known.conflicts! } });
         }
-        const loaded = await this.researchQuietLoad(treeId);
-        // The research's own word on the conflicts first; else what the new version shows.
+        // The research's version is loaded only when the user asks (all modes): the research's word on the
+        // conflicts, and what its conflicts say now, read from that version without loading it (finding 40).
         const active = DataManager.getCurrentTreeId() === treeId;
         const data = active ? DataManager.getData() : null;
-        const persons = known && known.conflicts !== null
-            ? (data ? personsByResearchRefs(data, known.refs) : [])
-            : loaded?.conflictPersons ?? [];
-        const conflicts = known && known.conflicts !== null ? known.conflicts : loaded?.conflicts ?? 0;
-        // Not loaded (it holds the research's values there): what its conflicts say now, read from it (finding 40).
-        if (!loaded && (conflicts > 0 || this.researchHeld(treeId))) await this.researchReadHeld(treeId);
+        const persons = known && known.conflicts !== null && data ? personsByResearchRefs(data, known.refs) : [];
+        const conflicts = known && known.conflicts !== null ? known.conflicts : 0;
+        if (conflicts > 0 || this.researchHeld(treeId)) await this.researchReadHeld(treeId);
         if (conflicts > 0) {
             patchResearchAutoState(treeId, { lastWritten: { ...base, conflicts, persons: persons.slice(0, 20),
                 ...(known?.ids?.length ? { conflictIds: known.ids.slice(0, 20) } : {}) } });
@@ -1263,8 +1269,9 @@ export const researchSyncMethods = uiModule({
             if (conflicts > 0) {
                 this.showToast(s.writtenConflictToast(sent.changes ?? 0, conflicts), 8000,
                     { action: { label: s.showConflicts, run: () => this.researchShowConflicts(persons) } });
-            } else if (sent.changes !== 0) {
-                // (0 written: nothing to say here — what was left out or skipped is told on its own.)
+            } else if (sent.changes !== 0 && toldNotWritten !== sent.fingerprint) {
+                // (0 written: nothing to say here — what was left out or skipped is told on its own;
+                // "Written N, not written M" said it already.)
                 this.showToast(s.writtenToast(sent.changes ?? 0), 6000);
             }
         } else if (conflicts > 0) {
@@ -1386,113 +1393,39 @@ export const researchSyncMethods = uiModule({
     },
 
     /**
-     * Load the research's version over the open tree without asking, after a
-     * write: the last send was written there, nothing changed here since, no
-     * dialog or editor is open, its head moved on, and nothing would be lost
-     * (the app's images carried over; none belongs to a record the research dropped).
-     * The view stays (zoom, place, focus); no toast. Returns the conflicts it
-     * brought, or null when it did not load.
+     * The backup taken before the research's version was last loaded, while
+     * the open tree is still just what was loaded (no edit since) and for a
+     * week at most: "Restore the state before loading".
      */
-    async researchQuietLoad(treeId: TreeId): Promise<{ conflicts: number; conflictPersons: PersonId[] } | null> {
-        if (DataManager.getCurrentTreeId() !== treeId || DataManager.isTreeLocked() || DataManager.isReadOnly()) return null;
+    researchLoadBackup(treeId: TreeId): { id: string; at: string } | null {
+        const lb = researchAutoState(treeId).loadBackup;
         const link = TreeManager.getTreeMetadata(treeId)?.research;
-        const sent = link?.sent;
-        // Only a send that vouches for the research's version (something written, no conflict left).
-        if (!link || !sent || !researchSendVouches(sent) || link.copy) return null;
-        // Written as another window's send (it replaced ours), or this window's
-        // copy is stale: what the research has is not this state — load on request only.
-        if (sent.inherited || isTreeStale(treeId)) return null;
-        // Following live refreshes the tree by itself.
-        if (this.isFollowingActiveResearch()) return null;
-        if (anyDialogOpen()) return null;
-        if (this.researchSyncFingerprints(treeId, link).current !== sent.fingerprint) return null;
-        const remote = runtime.get(link.id)?.status?.head ?? '';
-        if (!remote || remote === link.head || remote === quietSkippedHead) return null;
-        const bridge = parseLiveBridge(storedResearchBridge(link.id)?.base);
-        if (!bridge) return null;
-        let text: string;
-        try {
-            text = await fetchGedcomText(bridge.ged);
-        } catch {
-            return null;
+        if (!lb || !link || DataManager.getCurrentTreeId() !== treeId) return null;
+        if (Date.now() - Date.parse(lb.at) > LOAD_BACKUP_MS) return null;
+        return this.researchSyncFingerprints(treeId, link).current === lb.fingerprint ? lb : null;
+    },
+
+    /** Back to the tree as it was before the research's version was loaded (Ctrl+Z brings the load back). */
+    async researchRestoreBeforeLoad(treeId: TreeId): Promise<void> {
+        const lb = researchAutoState(treeId).loadBackup;
+        if (!lb || DataManager.getCurrentTreeId() !== treeId || DataManager.isReadOnly()) return;
+        const restored = await DataManager.restoreSnapshot(lb.id).catch(() => null);
+        if (!restored) {
+            this.showToast(strings.storageSafety.snapshotFailed, 5000);
+            return;
         }
-        const header = readResearchHeader(text);
-        if (!header.isStromResearch || header.treeId !== link.id) return null;
-        let data: StromData;
-        try {
-            data = convertToStrom(parseGedcom(text)).data;
-        } catch {
-            return null;
-        }
-        // Asked nothing: the setting decides about images (as following live).
-        if (!SettingsManager.isImportImages()) data = stripMedia(data);
-        // Meanwhile: an edit, a switch, a dialog — then not now.
-        const fresh = TreeManager.getTreeMetadata(treeId)?.research;
-        if (DataManager.getCurrentTreeId() !== treeId || !fresh || anyDialogOpen()) return null;
+        patchResearchAutoState(treeId, { loadBackup: undefined });
         fpCache = null;
-        if (this.researchSyncFingerprints(treeId, fresh).current !== sent.fingerprint) return null;
-        const previous = DataManager.getData();
-        // The app's images stay with their people and sources; images of
-        // records the research dropped would go — that is asked, never quiet.
-        const carried = carryOverMedia(stabilizeIds(data, previous), previous);
-        if (carried.lost > 0) {
-            quietSkippedHead = header.head ?? remote;
-            return null;
-        }
-        const stable = carried.data;
-        // A conflict still open there over a value the user has here: their value would go (finding 37) —
-        // that version is loaded only when asked.
-        if (conflictTakeovers(previous, stable).length > 0) {
-            quietSkippedHead = header.head ?? remote;
-            // What its conflicts say now (the user's latest value in them) is shown without loading it.
-            patchResearchAutoState(treeId, { held: heldConflicts(previous, stable, link.head ?? '', header.head || remote) });
-            this.refreshResearchSyncUi();
-            TreeRenderer.render();
-            return null;
-        }
-        const before = openConflictCounts(previous);
-        // One window loads (another window of this tree may be at it too).
-        if (!await this.researchWindowLock(treeId, true, async () => {
-            // A backup of the state before (auto backups on): the load can be undone, and here is the proof.
-            await DataManager.snapshotNow('pre-import');
-            // Edited while the backup was written: then not now (the edit must not be loaded over).
-            fpCache = null;
-            const now = TreeManager.getTreeMetadata(treeId)?.research;
-            if (DataManager.getCurrentTreeId() !== treeId || anyDialogOpen() || !now
-                || this.researchSyncFingerprints(treeId, now).current !== sent.fingerprint) return;
-            quietLoading = true;
-            try {
-                DataManager.loadStromData(stable);
-            } finally {
-                quietLoading = false;
-            }
-        }) || DataManager.getData() === previous) return null;
-        const head = header.head || remote;
-        TreeManager.setResearchLink(treeId, {
-            id: link.id,
-            fingerprint: contentFingerprint(DataManager.getData()),
-            syncedAt: new Date().toISOString(),
-            ...(head ? { head } : {}),
-            ...(header.mode === 'archive' ? { mode: 'archive' as const } : {}),
-        });
-        patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined, held: undefined });
-        fpCache = null;
-        this.researchKeepCopy(treeId, DataManager.getData());
-        const after = openConflictCounts(DataManager.getData());
-        const conflictPersons: PersonId[] = [];
-        let conflicts = 0;
-        for (const [id, n] of after) {
-            const added = n - (before.get(id) ?? 0);
-            if (added > 0) {
-                conflicts += added;
-                conflictPersons.push(id);
-            }
-        }
-        this.updateTreeSwitcher();
         await TreeRenderer.renderAsync();
         this.refreshSearch();
         this.refreshResearchSyncUi();
-        return { conflicts, conflictPersons };
+        this.showToast(strings.sync.restoredBeforeLoad, 6000);
+    },
+
+    /** "Only load from the research" and the user asked to send: said, with the way to change it. */
+    tellResearchSendOff(treeId: TreeId): void {
+        this.showToast(strings.sync.sendOffToast, 8000,
+            { action: { label: strings.sync.sendOffChange, run: () => { void this.showResearchTreeSettings(treeId); } } });
     },
 
     /** Tree menus' "Send changes": the same send for any tree (switched to first when a running research takes it straight). */
@@ -1585,8 +1518,18 @@ export const researchSyncMethods = uiModule({
     setResearchSendMode(treeId: TreeId, mode: ResearchSendMode): void {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (!link || researchSendMode(link) === mode) return;
+        const wasOff = researchSendMode(link) === 'off';
         TreeManager.patchResearchLink(treeId, { sendMode: mode });
-        if (mode === 'manual') {
+        // Out of "only load": what piled up meanwhile is said, with what would go (nothing goes at once).
+        if (wasOff && DataManager.getCurrentTreeId() === treeId) {
+            fpCache = null;
+            const list = this.researchChangesNow();
+            if (list && list.length > 0) {
+                this.showToast(strings.sync.offPiledUp(list.length), 10000,
+                    { action: { label: strings.changes.whatWillBeSent, run: () => this.showResearchChanges('send') } });
+            }
+        }
+        if (mode !== 'auto') {
             if (autoTimerTree === treeId) this.clearResearchAutoTimer();
             autoDue.delete(treeId);
         } else {
@@ -1640,6 +1583,8 @@ export const researchSyncMethods = uiModule({
                 break;
             }
             case 'downloadGedcom': void this.downloadResearchGedcom(ctx.treeId); break;
+            case 'restoreBeforeLoad': void this.researchRestoreBeforeLoad(ctx.treeId); break;
+            case 'changeSendMode': this.closeActionsMenu(); void this.showResearchTreeSettings(ctx.treeId); break;
             case 'showConflicts': this.researchShowConflicts(this.researchWrittenConflictPersons(ctx.treeId)); break;
             case 'conflicts': this.openResearchSyncMenu(); break;
             case 'decideInResearch': {
@@ -1871,6 +1816,17 @@ export const researchSyncMethods = uiModule({
             }
         } else if (state.kind === 'written' && treeId && researchWrittenList(treeId)?.list.length) {
             b.actions = [...(b.actions ?? []), { action: 'showWritten', label: strings.changes.whatWasWritten, asLink: true }];
+        }
+        // "Only load from the research": said in every state, with the way to change it.
+        if (link && researchSendMode(link) === 'off') {
+            // Never "in sync" while nothing goes: what is here may differ from there.
+            if (state.kind === 'inSync' || state.kind === 'written') b.title = s.sendOffLine;
+            else b.sub = [b.sub, s.sendOffLine].filter(Boolean).join(' · ');
+            b.actions = [...(b.actions ?? []), { action: 'changeSendMode', label: s.sendOffChange, asLink: true }];
+        }
+        // The research's version loaded lately and nothing edited since: the way back stays in sight.
+        if (treeId && this.researchLoadBackup(treeId)) {
+            b.actions = [...(b.actions ?? []), { action: 'restoreBeforeLoad', label: s.restoreBeforeLoad, asLink: true }];
         }
         const sendingNow = !!treeId && sendingTree === treeId;
         const buttons = (b.actions ?? []).map(a => {
@@ -2160,6 +2116,15 @@ export const researchSyncMethods = uiModule({
         // Sent by hand: the Send button while changes wait and the bridge runs.
         if (!auto) {
             if (safariBrowser()) { hide(); return; }
+            // "Only load from the research": never a Send button — the quiet mark says nothing goes.
+            if (researchSendMode(link) === 'off') {
+                const down = kind === 'bridgeDown';
+                const label = down ? s.markBridgeDown('') : s.sendOffLine;
+                set('is-send', `<button type="button" class="research-sync-mark" id="research-sync-mark" data-look="${down ? 'ghost' : 'off'}"`
+                    + ` title="${esc(label)}" aria-label="${esc(label)}" onclick="${call('openResearchSyncMenu')}">`
+                    + `<span class="research-sync-mark-${down ? 'ghost' : 'dot'}" aria-hidden="true"></span></button>`);
+                return;
+            }
             // Nothing to send: the button's place stays (empty), so the toolbar does not move when it comes.
             if (kind !== 'unsent') {
                 // In its place the quiet mark (in step, or the research not running), at the end next to the tree switcher.

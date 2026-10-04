@@ -51,10 +51,14 @@ export interface ResearchSyncInput {
     safari: boolean;
     /** The research's head as last seen ('' = unknown). */
     remoteHead: string;
+    /** The research's head right after the last send it wrote: that version is this tree's own, not newer. */
+    ownHead?: string;
     /** Another window saved the tree since this one read it: nothing of it may be sent. */
     stale?: boolean;
     /** Changes go by themselves (sendMode 'auto'). */
     auto?: boolean;
+    /** Nothing is sent (sendMode 'off'): changes stay in the app, the research's version loads when asked. */
+    sendOff?: boolean;
     /** The research is an archive (no agent). */
     archive?: boolean;
     /** A send of this tree is on its way. */
@@ -104,8 +108,11 @@ export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
     const st = (kind: ResearchSyncKind, extra: Partial<ResearchSyncState> = {}): ResearchSyncState =>
         notice({ kind, core: kind, ...extra });
     // What the research does not have: changed since its version and not the state sent.
-    const unsent = !input.matchesBase && input.current !== sent?.fingerprint;
-    const newer = !!input.remoteHead && !!link.head && input.remoteHead !== link.head;
+    const unsent = !input.sendOff && !input.matchesBase && input.current !== sent?.fingerprint;
+    // Moved on since the version loaded here; "newer" (to load) only past the research's own write of
+    // this tree's send — that one is nothing new (its version loads only when the user asks).
+    const moved = !!input.remoteHead && !!link.head && input.remoteHead !== link.head;
+    const newer = moved && input.remoteHead !== input.ownHead;
     // A send the research took back waits for the user before anything else goes: a copy sent now
     // would carry what was taken back and write it there again (finding 43).
     if (sent?.state === 'undone') return st('rejected', { sent });
@@ -122,7 +129,7 @@ export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
     // Its version holds the research's values where the conflicts are: not "a newer version" to load,
     // the conflicts to decide (finding 40); loading it stays possible, asked.
     // Also after a later send that left none: the version still holds them (finding 40).
-    if (newer && ((sent?.state === 'written' && (sent.conflicts ?? 0) > 0) || input.heldConflicts)) return st('writtenConflicts', sent ? { sent } : {});
+    if (moved && ((sent?.state === 'written' && (sent.conflicts ?? 0) > 0) || input.heldConflicts)) return st('writtenConflicts', sent ? { sent } : {});
     if (newer) return st('newer');
     const quiet: ResearchSyncState = !input.bridgeUp
         ? { kind: 'bridgeDown', core: 'bridgeDown' }

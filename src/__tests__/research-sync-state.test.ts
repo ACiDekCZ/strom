@@ -45,6 +45,17 @@ describe('the state of a research tree', () => {
         expect(researchSyncState(input({ bridgeUp: false })).kind).toBe('bridgeDown');
     });
 
+    it('the research\'s own write of this tree\'s send is not "newer"; moving past it is (loaded only when asked)', () => {
+        const own = link({ sent: sent({ state: 'written', replyHead: 'ccccccc', ownBase: true }) });
+        expect(researchSyncState(input({ link: own, matchesBase: false, current: 'fp-sent', remoteHead: 'ccccccc', ownHead: 'ccccccc' })).kind).toBe('inSync');
+        expect(researchSyncState(input({ link: own, matchesBase: false, current: 'fp-sent', remoteHead: 'ddddddd', ownHead: 'ccccccc' })).kind).toBe('newer');
+        // Edited since: unsent, not "unsent and newer".
+        expect(researchSyncState(input({ link: own, matchesBase: false, current: 'fp-later', remoteHead: 'ccccccc', ownHead: 'ccccccc' })).kind).toBe('unsent');
+        // A write that left a conflict: its version holds the research's value there — the conflict, not in sync.
+        const conflicted = link({ sent: sent({ state: 'written', replyHead: 'ccccccc', ownBase: true, conflicts: 1 }) });
+        expect(researchSyncState(input({ link: conflicted, matchesBase: false, current: 'fp-sent', remoteHead: 'ccccccc', ownHead: 'ccccccc' })).kind).toBe('writtenConflicts');
+    });
+
     it('unsent, with the bridge down, together with a newer version', () => {
         expect(researchSyncState(input({ matchesBase: false })).kind).toBe('unsent');
         expect(researchSyncState(input({ matchesBase: false, bridgeUp: false })).kind).toBe('unsentBridgeDown');

@@ -247,6 +247,14 @@ export interface ResearchAutoState {
      * taken back alike.
      */
     lastCopy?: { intake: string; base: string };
+    /**
+     * The backup taken before the research's version was last loaded, and the
+     * tree's fingerprint right after that load: "Restore the state before
+     * loading" is offered while the tree is still just that (no edit since).
+     */
+    loadBackup?: { id: string; at: string; fingerprint: string };
+    /** A backup was taken before this tree's first send from this browser. */
+    firstSendBackup?: true;
 }
 
 /**
@@ -321,6 +329,10 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         const lc = p.lastCopy as Record<string, unknown> | undefined;
         if (lc && typeof lc.intake === 'string' && lc.intake.length <= 80 && typeof lc.base === 'string') out.lastCopy = { intake: lc.intake, base: lc.base };
         if (Array.isArray(p.resent)) out.resent = p.resent.filter((r): r is string => typeof r === 'string' && r.length <= 80).slice(-30);
+        const lb = p.loadBackup as Record<string, unknown> | undefined;
+        if (lb && typeof lb.id === 'string' && lb.id.length <= 80 && typeof lb.at === 'string' && Number.isFinite(Date.parse(lb.at))
+            && typeof lb.fingerprint === 'string') out.loadBackup = { id: lb.id, at: lb.at, fingerprint: lb.fingerprint };
+        if (p.firstSendBackup === true) out.firstSendBackup = true;
         return out;
     } catch {
         return {};

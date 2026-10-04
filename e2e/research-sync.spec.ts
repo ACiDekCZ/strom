@@ -148,7 +148,7 @@ test.describe('the state of the tree and sending straight', () => {
 });
 
 test.describe('after a send the research wrote', () => {
-    test('the new version loads by itself (nothing here the research lacks), the view kept; the window coming back asks at once', async ({ page }) => {
+    test('the window coming back asks at once; the write is told, its version is not loaded (only when the user asks)', async ({ page }) => {
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page);
         await poll(page);
@@ -162,14 +162,15 @@ test.describe('after a send the research wrote', () => {
         bridge.treeGed = researchGed('aa11bb22cc33').replace('1 NAME Jan /Víšek/', '1 NAME Jan /Víšek/\n1 BIRT\n2 PLAC Praha');
         await page.waitForTimeout(5100);   // past the "just asked" window
         await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('aa11bb22cc33');
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.replyHead)).toBe('aa11bb22cc33');
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).not.toBe('aa11bb22cc33');
         await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'written');
         await expect(dot(page)).toBeHidden();
     });
 
-    test('the user\'s own images stay with their people and sources when the new version loads by itself; images of a person the research dropped are asked about', async ({ page }) => {
+    test('the user\'s own images stay with their people and sources when the written version is loaded; images of a person the research dropped are asked about', async ({ page }) => {
         await openResearch(page);
         const bridge = await fakeBridge(page);
         await poll(page);
@@ -194,6 +195,9 @@ test.describe('after a send the research wrote', () => {
         bridge.head = 'aa11bb22cc33';
         bridge.treeGed = researchGed('aa11bb22cc33');
         await poll(page);
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.replyHead)).toBe('aa11bb22cc33');
+        // Loaded only when asked.
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('aa11bb22cc33');
         expect(await kept()).toEqual({ photo: true, excerpts: 1 });
         await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);

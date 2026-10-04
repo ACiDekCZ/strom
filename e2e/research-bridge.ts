@@ -233,13 +233,11 @@ export async function openResearch(page: Page, opts: { edit?: boolean; bridge?: 
             localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, ...(accepts ? { accepts } : {}) }));
         }, { uuid: UUID, base: BRIDGE, accepts: opts.capable === false ? null : { sync: { auto: 'off' }, sources: true, verified: true, ...(opts.media ? { media: { max: 500 * 1024 * 1024, region: true } } : {}) } });
     }
-    // These tests are about sending by hand (sending by itself: research-auto-send.spec.ts).
-    if (!opts.auto) {
-        await page.evaluate(() => {
-            const tm = window.Strom.TreeManager;
-            tm.patchResearchLink(tm.getActiveTreeId()!, { sendMode: 'manual' });
-        });
-    }
+    // By hand, a new tie's default (sending by itself: research-auto-send.spec.ts, chosen here).
+    await page.evaluate((auto) => {
+        const tm = window.Strom.TreeManager;
+        tm.patchResearchLink(tm.getActiveTreeId()!, { sendMode: auto ? 'auto' : 'manual' });
+    }, !!opts.auto);
     if (opts.edit) await editJan(page);
 }
 

@@ -90,9 +90,11 @@ export const researchTreeSettingsMethods = uiModule({
         const sendingHtml = !sendingShown ? (olderLine ? `<p class="research-older-line">${olderLine}</p>` : '') : `
                 <fieldset class="research-transcripts research-send-mode">
                     <legend>${esc(t.sending)}</legend>
-                    ${sendOption('auto', t.auto, compact ? t.autoDescShort : t.autoDesc, true)}
-                    ${sendOption('manual', t.manual, compact ? t.manualDescShort : t.manualDesc, false)}
+                    ${sendOption('manual', t.manual, compact ? t.manualDescShort : t.manualDesc, true)}
+                    ${sendOption('auto', t.auto, compact ? t.autoDescShort : t.autoDesc, false)}
+                    ${sendOption('off', t.off, compact ? t.offDescShort : t.offDesc, false)}
                 </fieldset>
+                <ul class="research-send-principles">${t.principles.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
                 ${compact
                     ? `<p class="research-send-device">${esc(t.deviceNote)}</p>`
                     : `<p class="research-not-retroactive research-send-effect"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span>${esc(effect)}</span></p>
@@ -193,7 +195,7 @@ export const researchTreeSettingsMethods = uiModule({
         overlay.querySelectorAll<HTMLInputElement>('input[name="research-send-mode"]').forEach(input => {
             input.addEventListener('change', () => {
                 if (!input.checked) return;
-                this.setResearchSendMode(treeId, input.value === 'manual' ? 'manual' : 'auto');
+                this.setResearchSendMode(treeId, input.value === 'manual' || input.value === 'off' ? input.value : 'auto');
                 renderStatus();
             });
         });

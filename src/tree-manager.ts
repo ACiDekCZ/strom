@@ -1207,6 +1207,8 @@ class TreeManagerClass {
             if (prev?.olderSources && link.olderSources === undefined) kept.olderSources = prev.olderSources;
             if (prev?.sentSources && link.sentSources === undefined) kept.sentSources = prev.sentSources;
             if (prev?.sendMode && link.sendMode === undefined) kept.sendMode = prev.sendMode;
+            // A new tie sends by hand until the user chooses otherwise (a tie from before 3.9 keeps "by itself").
+            if (!prev && link.sendMode === undefined) kept.sendMode = 'manual';
             if (prev?.sendMedia === false && link.sendMedia === undefined) kept.sendMedia = false;
             tree.research = { ...kept, ...link, id };
         } else delete tree.research;

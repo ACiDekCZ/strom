@@ -21,7 +21,8 @@ import {
 } from './media-pool.js';
 
 /** `other-window`: this window's state when another window (an older app too) saved over its tree. */
-export type SnapshotReason = 'auto' | 'manual' | 'pre-import' | 'pre-merge' | 'other-window';
+/** `pre-research-load` / `pre-first-send`: before the research's version replaced the tree, before its first send. */
+export type SnapshotReason = 'auto' | 'manual' | 'pre-import' | 'pre-merge' | 'other-window' | 'pre-research-load' | 'pre-first-send';
 
 export interface SnapshotMeta {
     id: string;

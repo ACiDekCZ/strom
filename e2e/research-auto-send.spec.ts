@@ -157,15 +157,22 @@ test.describe('sending by itself', () => {
         await expect.poll(() => bridge.posts.length).toBe(2);
     });
 
-    test('not sent and the research has a newer version: sent at once, then the new version loads', async ({ page }) => {
+    test('not sent and the research has a newer version: sent at once; its version is loaded only when asked (newer, Load)', async ({ page }) => {
         const bridge = await autoTree(page);
         writesAtOnce(bridge);
+        const headBefore = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head);
         await editJan(page);
         bridge.head = NEW_HEAD;
         await poll(page);
         await expect.poll(() => bridge.posts.length).toBe(1);
-        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('ab10cd10ef10');
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).toBe('written');
+        await page.clock.fastForward(30_000);
+        await poll(page);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(headBefore);
         await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
+        // The research had moved on before the write: its version is newer, to load when the user wants.
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'newer');
     });
 
     test('Load new version with changes the research lacks: sent first, no question', async ({ page }) => {
@@ -178,28 +185,30 @@ test.describe('sending by itself', () => {
         await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
     });
 
-    test('a write at once: ✓, the new version loaded quietly (the view kept); a new conflict gets the note, with the person', async ({ page }) => {
+    test('a write at once: ✓, its version not loaded (only when asked), the view kept; a new conflict gets the note, with the person', async ({ page }) => {
         const bridge = await autoTree(page);
-        writesAtOnce(bridge, ['1 _STROM_CONFLICT X0007', '2 TYPE BIRT', '2 STAT open', '2 VAL Praha', '2 VAL Čáslav']);
+        writesAtOnce(bridge);
+        bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0007', person: 'P0003', fact: 'BIRT' }] } };
         const view = () => page.evaluate(() => window.Strom.ZoomPan.getTransform());
         const before = await view();
+        const headBefore = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head);
         await editJan(page);
         await page.clock.fastForward(QUIET + 1000);
         await expect.poll(() => bridge.posts.length).toBe(1);
-        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('ab10cd10ef10');
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.replyHead)).toBe('ab10cd10ef10');
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(headBefore);
         const note = page.locator('.research-sync-note');
         await expect(note).toContainText('Written, 1 conflict to decide');
         await expect(note.getByRole('button', { name: 'Jan Víšek ›' })).toBeVisible();
         expect(await view()).toEqual(before);
-        // Gone after 8 s.
+        // Gone after 8 s; the conflict stays in sight (its version, holding the research's value, not loaded).
         await page.clock.fastForward(9000);
         await expect(note).toHaveCount(0);
-        await expect(mark(page)).toHaveAttribute('data-look', 'dot');
+        await expect(pill(page)).toContainText('Written, 1 conflict to decide');
         await openResearchMenu(page);
-        await expect(block(page)).toHaveAttribute('data-state', 'written');
-        await expect(block(page)).toContainText('6 changes · 1 conflict to decide');
-        await block(page).getByRole('button', { name: 'Jan Víšek ›' }).click();
-        await expect(page.locator('#person-research-modal, .person-research-modal').first()).toBeVisible();
+        await expect(block(page)).toHaveAttribute('data-state', 'writtenConflicts');
+        await expect(block(page)).toContainText('1 conflict to decide');
+        await expect(block(page).locator('[data-action="showConflicts"]')).toBeVisible();
     });
 });
 
@@ -242,7 +251,7 @@ test('a written send taken back in the research: told once, not sent again by it
     writesAtOnce(bridge);
     await editJan(page);
     await page.clock.fastForward(QUIET + 1000);
-    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('ab10cd10ef10');
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.replyHead)).toBe('ab10cd10ef10');
     Object.assign(bridge.sends[0], { state: 'undone', decidedAt: new Date().toISOString() });
     bridge.head = 'ee77ff88aa99';
     bridge.treeGed = researchGed('ee77ff88aa99');
@@ -265,7 +274,7 @@ async function writtenThenUndone(page: Page, init: Partial<FakeBridge> = {}): Pr
     writesAtOnce(bridge);
     await editJan(page);
     await page.clock.fastForward(QUIET + 1000);
-    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('ab10cd10ef10');
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.replyHead)).toBe('ab10cd10ef10');
     Object.assign(bridge.sends[0], { state: 'undone', decidedAt: new Date().toISOString() });
     bridge.head = 'ee77ff88aa99';
     bridge.treeGed = researchGed('ee77ff88aa99');
@@ -282,9 +291,8 @@ test('finding 35: Send again after a send taken back asks the research to write 
     await expect.poll(() => bridge.againAsks ?? []).toEqual([first]);
     expect(bridge.posts).toHaveLength(1);
     await expect(pill(page)).not.toContainText('Send taken back');
-    // Written again: its version (with the changes) loaded quietly, nothing taken back any more.
-    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(bridge.head);
-    expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).not.toBe('undone');
+    // Written again: nothing taken back any more (its version loads only when asked).
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).not.toBe('undone');
     expect(await janPlace(page)).toBe('Praha');
 });
 
@@ -432,7 +440,7 @@ test('findings 38/39: a copy carrying a send taken back, the next send written w
     writesAtOnce(bridge);
     await editJan(page);
     await page.clock.fastForward(QUIET + 1000);
-    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('ab10cd10ef10');
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.replyHead)).toBe('ab10cd10ef10');
     // Taken back in the research without this app hearing of it: the next copy still carries it.
     const undone = bridge.sends[0];
     await page.clock.fastForward(5 * 60_000);
@@ -753,7 +761,7 @@ test('the rc.22 round: opened again by ?live= with nothing new there and changes
     expect(await janWhere(page)).not.toBe('');
 });
 
-test('rc.23: a copy built on a written send whose version was not loaded says so (_STROM_SINCE), to a bridge with sync.since only', async ({ page }) => {
+test('rc.23 / N1: a copy built on a written send whose version was not loaded says so (_STROM_SINCE), always when known; a version loaded since is the base then', async ({ page }) => {
     const bridge = await autoTree(page, { features: ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.since'] });
     bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0001', person: 'P0003', fact: 'NAME' }] } };
     bridge.onWrite = () => ({ head: 'c1c1c1c1c1c1', ged: nameConflictGed('c1c1c1c1c1c1') });
@@ -770,13 +778,24 @@ test('rc.23: a copy built on a written send whose version was not loaded says so
     await expect.poll(() => bridge.posts.length).toBe(2);
     expect(bridge.posts[1]).toContain(`1 _STROM_SINCE ${first}`);
     expect(bridge.posts[1]).toContain('1 _STROM_HEAD');
-    // A bridge that does not say sync.since: never.
+    const second = bridge.sends[0].intake;
+    // A bridge that does not say sync.since (or whose status is not read yet): still said (N1).
     bridge.features = ['sync.again'];
     await poll(page);
     await janBirthPlace(page, 'Brno');
     await page.clock.fastForward(QUIET + 1000);
     await expect.poll(() => bridge.posts.length).toBe(3);
-    expect(bridge.posts[2]).not.toContain('_STROM_SINCE');
+    expect(bridge.posts[2]).toContain(`1 _STROM_SINCE ${second}`);
+    // The research's version loaded here (asked): it is the base — no SINCE of an older copy.
+    const loaded = bridge.head;
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    await page.locator('.dialog-confirm').getByRole('button', { name: 'Update' }).click({ timeout: 3000 }).catch(() => undefined);
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(loaded);
+    await janBirthPlace(page, 'Kolín');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(4);
+    expect(bridge.posts[3]).not.toContain('_STROM_SINCE');
+    expect(bridge.posts[3]).toContain(`1 _STROM_HEAD ${loaded}`);
 });
 
 /** A write that left a conflict over the user's value: its version not loaded, the conflict in sight. */
@@ -831,7 +850,7 @@ test('the rc.23 round: ?live= again with an open conflict and nothing new there:
 test('the rc.23 round: _STROM_SINCE after a send taken back too — the last copy the research took in (A4)', async ({ page }) => {
     const bridge = await writtenThenUndone(page, { features: ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.since'] });
     const first = bridge.sends.find(r => r.state === 'undone')!.intake;
-    // The send went before the version loaded quietly: the tree builds on that version now, no SINCE needed.
+    // Nothing loads by itself: each copy names the last one the research took in.
     bridge.syncReply = { status: 200, body: { ...WRITE.body, input: 'I0060', changes: 1, applied: 1, undoneSince: [first], takenBack: 0 } };
     await renameJan(page, 'Jenda');
     await page.clock.fastForward(QUIET + 1000);
@@ -921,7 +940,7 @@ test('the rc.27 round: the pill counts every conflict open there (as the cards d
     }).toPass();
 });
 
-test('a write that takes longer (202): "writing" until the status says written, then loaded quietly', async ({ page }) => {
+test('a write that takes longer (202): "writing" until the status says written; its version is this tree\'s own (not "newer"), loaded only when asked', async ({ page }) => {
     const bridge = await autoTree(page);
     bridge.syncReply = { status: 202, body: { ok: true, inbox: false, pending: true, changes: 6 } };
     await editJan(page);
@@ -935,8 +954,11 @@ test('a write that takes longer (202): "writing" until the status says written, 
     bridge.head = 'aa11bb22cc33';
     bridge.treeGed = researchGed('aa11bb22cc33', ['1 BIRT', '2 PLAC Praha']);
     await poll(page);
-    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('aa11bb22cc33');
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.replyHead)).toBe('aa11bb22cc33');
+    expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).not.toBe('aa11bb22cc33');
     await expect(mark(page)).toHaveAttribute('data-look', /check|dot/);
+    await openResearchMenu(page);
+    await expect(block(page)).toHaveAttribute('data-state', 'written');
 });
 
 test.describe('the toolbar', () => {
@@ -1290,3 +1312,104 @@ test.describe('Research for this tree: sending changes', () => {
 
 // Unused import guards (shared helpers).
 void BRIDGE; void UUID; void HEAD;
+
+// ==================== DATA PROTECTION AROUND THE RESEARCH (3.9) ====================
+
+/** The tree's backups as stored: their reasons, newest first. */
+const backupReasons = (page: Page) => page.evaluate(() => new Promise<string[]>((resolve, reject) => {
+    const req = indexedDB.open('strom-db');
+    req.onsuccess = () => {
+        const all = req.result.transaction('snapshots', 'readonly').objectStore('snapshots').getAll();
+        all.onsuccess = () => resolve(all.result
+            .filter((s: { meta?: unknown }) => s.meta)
+            .map((s: { meta: { reason: string; createdAt: number } }) => s.meta)
+            .sort((a: { createdAt: number }, b: { createdAt: number }) => b.createdAt - a.createdAt)
+            .map((m: { reason: string }) => m.reason));
+        all.onerror = () => reject(all.error);
+    };
+    req.onerror = () => reject(req.error);
+}));
+
+test.describe('data protection around the research', () => {
+    test('a backup before the first send and before every load, whatever the backup setting; "Restore the state before loading" brings the tree back', async ({ page }) => {
+        const bridge = await autoTree(page);
+        writesAtOnce(bridge);
+        await page.evaluate(() => window.Strom.TreeManager.setAutoBackups(window.Strom.TreeManager.getActiveTreeId()!, false));
+        await editJan(page);
+        await page.clock.fastForward(QUIET + 1000);
+        await expect.poll(() => bridge.posts.length).toBe(1);
+        await expect.poll(() => backupReasons(page)).toContain('pre-first-send');
+        // The research moves on with something of its own; the user loads it.
+        bridge.head = 'fe11fe11fe11';
+        bridge.treeGed = researchGed('fe11fe11fe11', ['1 BIRT', '2 PLAC Praha', '1 OCCU tesař']);
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'newer');
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('fe11fe11fe11');
+        expect((await backupReasons(page))[0]).toBe('pre-research-load');
+        const toast = page.locator('.toast', { hasText: 'Loaded' });
+        await expect(toast.getByRole('button', { name: 'Restore the state before loading' })).toBeVisible();
+        // Still offered in Research while nothing was edited.
+        await openResearchMenu(page);
+        await block(page).getByRole('button', { name: 'Restore the state before loading' }).click();
+        await expect(page.locator('.toast', { hasText: 'The tree is back as it was before loading' })).toBeVisible();
+        const occu = await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any).occupation ?? '');
+        expect(occu).not.toBe('tesař');
+        expect(await janPlace(page)).toBe('Praha');
+    });
+
+    test('"Only load from the research": nothing goes by itself or by hand, said with the way to change it; back to by hand, what piled up is told', async ({ page }) => {
+        const bridge = await autoTree(page);
+        writesAtOnce(bridge);
+        await page.evaluate(() => window.Strom.UI.setResearchSendMode(window.Strom.TreeManager.getActiveTreeId()!, 'off'));
+        await editJan(page);
+        await page.clock.fastForward(QUIET * 2);
+        expect(bridge.posts).toHaveLength(0);
+        // No Send button, only the quiet mark saying so.
+        await expect(page.locator('#research-sync-send')).toHaveCount(0);
+        await expect(mark(page)).toHaveAttribute('title', 'Changes are not sent to the research');
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect(page.locator('.toast', { hasText: 'not sent to the research' }).getByRole('button', { name: 'Change' })).toBeVisible();
+        expect(bridge.posts).toHaveLength(0);
+        await openResearchMenu(page);
+        await expect(block(page)).toContainText('Changes are not sent to the research');
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        // Settings: three choices, by hand the recommended one, and the three sentences.
+        await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
+        const dialog = page.locator('#research-tree-settings-modal');
+        await expect(dialog.locator('input[name="research-send-mode"]')).toHaveCount(3);
+        await expect(dialog.locator('input[value="off"]')).toBeChecked();
+        await expect(dialog).toContainText('Your tree in the app is the main one.');
+        await dialog.locator('input[name="research-send-mode"][value="manual"]').check();
+        await expect(page.locator('.toast', { hasText: 'Since then you changed 1 person' }).getByRole('button', { name: 'What will be sent' })).toBeVisible();
+        expect(bridge.posts).toHaveLength(0);
+    });
+
+    test('a new tie sends by hand; a tie from before 3.9 (no choice stored) keeps sending by itself', async ({ page }) => {
+        await openResearch(page, { auto: true });
+        // (The helper stores "by itself" as a tie from before 3.9 would have it: no choice made.)
+        await page.evaluate(() => window.Strom.TreeManager.patchResearchLink(window.Strom.TreeManager.getActiveTreeId()!, { sendMode: undefined }));
+        await poll(page).catch(() => undefined);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBeUndefined();
+        // A new tie (another research id): by hand.
+        await page.evaluate(() => {
+            const tm = window.Strom.TreeManager;
+            const link = tm.getActiveTreeMetadata().research;
+            tm.setResearchLink(tm.getActiveTreeId()!, { id: '0b0b0b0b-1111-4222-8333-444455556666', fingerprint: link.fingerprint, syncedAt: link.syncedAt });
+        });
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('manual');
+    });
+
+    test('"Written N, not written M · Show" when sending by itself too', async ({ page }) => {
+        const bridge = await autoTree(page);
+        writesAtOnce(bridge);
+        bridge.syncReply = { status: 200, body: { ...WRITE.body, changes: 3, applied: 2,
+            notWritten: [{ kind: 'event.edit', person: 'P0003', fact: 'OCCU', why: 'kept' }] } };
+        await editJan(page);
+        await page.clock.fastForward(QUIET + 1000);
+        await expect.poll(() => bridge.posts.length).toBe(1);
+        await expect(page.locator('.toast', { hasText: 'Written 2, not written 1.' }).getByRole('button', { name: 'Show' })).toBeVisible();
+    });
+});

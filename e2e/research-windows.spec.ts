@@ -48,6 +48,12 @@ async function autoTree(page: Page): Promise<FakeBridge> {
     return bridge;
 }
 
+/** The written send's version, loaded as the user asks for it (nothing loads by itself). */
+async function loadWritten(page: Page): Promise<void> {
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.replyHead)).toBe('ab10cd10ef10');
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+}
+
 /** A second window of the app in the same browser, on the same tree and bridge. */
 async function secondWindow(first: Page): Promise<{ page: Page; bridge: FakeBridge }> {
     const page = await first.context().newPage();
@@ -61,10 +67,11 @@ async function secondWindow(first: Page): Promise<{ page: Page; bridge: FakeBrid
 test.describe('more than one window on one research', () => {
     test.use({ viewport: DESKTOP });
 
-    test('undoing the quiet load takes the head back with the data', async ({ page }) => {
+    test('undoing a load of the research\'s version takes the head back with the data', async ({ page }) => {
         const bridge = await autoTree(page);
         await editJan(page);
         await page.clock.fastForward(QUIET + 1000);
+        await loadWritten(page);
         await expect.poll(() => head(page)).toBe('ab10cd10ef10');
         await expect.poll(async () => (await storedBase(page))?.head).toBe('ab10cd10ef10');
 
@@ -108,9 +115,10 @@ test.describe('more than one window on one research', () => {
     test('a window left behind by another window\'s write sends nothing, also when the research has the newer version', async ({ page }) => {
         await autoTree(page);
         const second = await secondWindow(page);
-        // The first window writes and loads the research's new version.
+        // The first window writes, and loads the research's new version (asked).
         await editJan(page);
         await page.clock.fastForward(QUIET + 1000);
+        await loadWritten(page);
         await expect.poll(() => head(page)).toBe('ab10cd10ef10');
         await expect(second.page.locator('#other-tab-notice')).toBeVisible();
 
@@ -141,9 +149,10 @@ test.describe('more than one window on one research', () => {
     test('a window with an older copy does not save over the newer data; a third window opens them with their head', async ({ page }) => {
         await autoTree(page);
         const second = await secondWindow(page);
-        // The first window writes and loads the research's new version (head ab10…).
+        // The first window writes, and loads the research's new version (asked; head ab10…).
         await editJan(page);
         await page.clock.fastForward(QUIET + 1000);
+        await loadWritten(page);
         await expect.poll(() => head(page)).toBe('ab10cd10ef10');
         await expect(second.page.locator('#other-tab-notice')).toBeVisible();
         // The second window still holds the older data and head; its edit is not written over the newer tree.

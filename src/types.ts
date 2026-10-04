@@ -983,7 +983,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.40';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.41';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -1180,8 +1180,9 @@ export interface ResearchLink {
     sentSources?: Record<string, string>;
     /**
      * Sending changes to the research: by themselves after a quiet while
-     * ('auto', the default when missing) or with the Send button ('manual').
-     * Survives updates from the research.
+     * ('auto'; missing on a tree tied before 3.9), with the Send button
+     * ('manual', a new tie's default) or never ('off': only load from the
+     * research, when the user asks). Survives updates from the research.
      */
     sendMode?: ResearchSendMode;
     /**
@@ -1205,7 +1206,7 @@ export interface ResearchLink {
 }
 
 /** How changes go to the research (see ResearchLink.sendMode). */
-export type ResearchSendMode = 'auto' | 'manual';
+export type ResearchSendMode = 'auto' | 'manual' | 'off';
 
 /** How the research takes the user's transcripts (see ResearchLink.transcripts). */
 export type ResearchTranscripts = 'lead' | 'evidence';
@@ -1244,6 +1245,12 @@ export interface ResearchSend {
     takenBack?: number;
     /** Written at once: the research's head after the write (its version holds this copy). */
     replyHead?: string;
+    /**
+     * The research had nothing this tree lacked when it went (its head was the
+     * version loaded here or this tree's own last write): its write is this
+     * tree's own version, not a newer one to load (`ownHead` of the sync state).
+     */
+    ownBase?: boolean;
     /**
      * Written as part of a newer send of this tree that replaced it (another
      * window of the same app tree sent since): what was written is not this

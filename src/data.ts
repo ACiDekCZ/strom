@@ -1292,10 +1292,20 @@ class DataManagerClass {
         await createSnapshot(treeId, this.data, 'other-window', Date.now());
     }
 
-    async snapshotNow(reason: SnapshotReason): Promise<void> {
-        if (this.viewMode || !this.currentTreeId) return;
-        if (reason !== 'manual' && !TreeManager.isAutoBackupEnabled(this.currentTreeId)) return;
-        await createSnapshot(this.currentTreeId, this.data, reason, Date.now());
+    async snapshotNow(reason: SnapshotReason): Promise<string | null> {
+        if (this.viewMode || !this.currentTreeId) return null;
+        // Around the research a backup is taken whatever the setting: the app never trusts the research blindly.
+        const always = reason === 'manual' || reason === 'pre-research-load' || reason === 'pre-first-send';
+        if (!always && !TreeManager.isAutoBackupEnabled(this.currentTreeId)) return null;
+        if (reason === 'pre-research-load' || reason === 'pre-first-send') {
+            try {
+                return (await createSnapshot(this.currentTreeId, this.data, reason, Date.now())).id;
+            } catch (err) {
+                console.warn('The backup before the research could not be written', err);
+                return null;
+            }
+        }
+        return (await createSnapshot(this.currentTreeId, this.data, reason, Date.now())).id;
     }
 
     /**

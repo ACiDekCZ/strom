@@ -92,7 +92,7 @@ for (const locale of ['en-US', 'cs-CZ', 'de-DE']) {
             // Research for this tree.
             await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
             await expect(page.locator('#research-tree-settings-modal')).toBeVisible();
-            await expect(page.locator('#research-tree-settings-modal input[name="research-send-mode"]')).toHaveCount(2);
+            await expect(page.locator('#research-tree-settings-modal input[name="research-send-mode"]')).toHaveCount(3);
             await expect(page.locator('#research-tree-settings-modal input[name="research-transcripts"]')).toHaveCount(0);
             expectNoAgent('Research for this tree', await shownText(page, '#research-tree-settings-modal'));
             await page.evaluate(() => window.Strom.UI.closeResearchTreeSettings());
