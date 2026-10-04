@@ -11,7 +11,7 @@
  * little beyond the tree itself.
  */
 
-import { StromData } from './types.js';
+import { StromData, uniqueIdSuffix } from './types.js';
 import { StorageManager } from './storage.js';
 import { SettingsManager } from './settings.js';
 import { CryptoSession, EncryptedData } from './crypto.js';
@@ -149,7 +149,7 @@ export function createSnapshot(
     }
     return withPoolLock(async () => {
         const personCount = Object.values(data.persons).filter(p => !p.isPlaceholder).length;
-        const id = `snap_${now}_${Math.random().toString(36).slice(2, 7)}`;
+        const id = `snap_${now}_${uniqueIdSuffix()}`;
         const meta = await writeSnapshot(data, { id, treeId, createdAt: now, personCount, sizeBytes: 0, reason });
         await enforceRetention(treeId);
         await collectPoolGarbageLocked();

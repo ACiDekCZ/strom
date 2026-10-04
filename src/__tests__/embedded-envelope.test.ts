@@ -52,8 +52,8 @@ describe('generateExportId', () => {
         const parts = id.split('_');
         const randomPart = parts[2];
 
-        // Random part should be 5 characters (from .slice(2, 7))
-        expect(randomPart.length).toBe(5);
+        // A 4-character counter of the page, then 5 random characters (uniqueIdSuffix)
+        expect(randomPart.length).toBe(9);
         // Should be alphanumeric
         expect(/^[a-z0-9]+$/.test(randomPart)).toBe(true);
     });

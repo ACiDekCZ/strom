@@ -21,39 +21,52 @@ export function toPartnershipId(id: string): PartnershipId {
     return id as PartnershipId;
 }
 
+let idSeq = 0;
+
+/**
+ * The end of a generated id: a counter of this page, then randomness. The
+ * counter makes ids made within one millisecond unique (a GEDCOM import makes
+ * thousands at once, and 5 random characters alone collided: a person lost);
+ * the randomness keeps two windows apart.
+ */
+export function uniqueIdSuffix(): string {
+    idSeq = (idSeq + 1) % 1679616;
+    return `${idSeq.toString(36).padStart(4, '0')}${Math.random().toString(36).slice(2, 7)}`;
+}
+
 /** Generate unique PersonId */
 export function generatePersonId(): PersonId {
-    return `p_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` as PersonId;
+    return `p_${Date.now()}_${uniqueIdSuffix()}` as PersonId;
 }
 
 /** Generate unique PartnershipId */
 export function generatePartnershipId(): PartnershipId {
-    return `u_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` as PartnershipId;
+    return `u_${Date.now()}_${uniqueIdSuffix()}` as PartnershipId;
 }
 
 /** Generate unique LifeEvent id */
 export function generateLifeEventId(): string {
-    return `ev_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    return `ev_${Date.now()}_${uniqueIdSuffix()}`;
 }
 
 /** Generate unique EventParticipant id */
 export function generateParticipantId(): string {
-    return `pt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    return `pt_${Date.now()}_${uniqueIdSuffix()}`;
 }
 
 /** Generate unique Source id */
 export function generateSourceId(): string {
-    return `src_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    return `src_${Date.now()}_${uniqueIdSuffix()}`;
 }
 
 /** Generate unique SourceExcerpt id */
 export function generateExcerptId(): string {
-    return `exc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    return `exc_${Date.now()}_${uniqueIdSuffix()}`;
 }
 
 /** Generate unique Attachment id */
 export function generateAttachmentId(): string {
-    return `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    return `att_${Date.now()}_${uniqueIdSuffix()}`;
 }
 
 // ==================== CORE ENTITIES ====================
@@ -879,7 +892,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.8.1';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.8.2';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -914,7 +927,7 @@ export interface EncryptedDataRef {
 
 /** Generate unique export ID */
 export function generateExportId(): string {
-    return `exp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    return `exp_${Date.now()}_${uniqueIdSuffix()}`;
 }
 
 /** Check if object is an embedded data envelope */
@@ -980,7 +993,7 @@ export function toTreeId(id: string): TreeId {
 
 /** Generate unique TreeId */
 export function generateTreeId(): TreeId {
-    return `tree_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` as TreeId;
+    return `tree_${Date.now()}_${uniqueIdSuffix()}` as TreeId;
 }
 
 /** Metadata for a tree (lightweight, always in memory) */
