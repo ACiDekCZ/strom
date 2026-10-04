@@ -830,6 +830,13 @@ interface GedcomFamily {
     stat?: string;
     /** The CHIL line being read (its _FREL/_MREL follow it). */
     lastChil?: string;
+    /**
+     * 1 _STROM_NO_COUPLE: the parents of these children who are not a couple
+     * (one parent alone, or two who were never partners). Strom writes it for
+     * parent links outside any partnership; read back, no partnership and no
+     * stand-in partner is made.
+     */
+    noCouple?: boolean;
 }
 
 /** Parsed GEDCOM data */
@@ -2069,6 +2076,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                             // Strom's relationship status (see resolveStatTag).
                             fam.stat = value;
                             break;
+                        case '_STROM_NO_COUPLE':
+                            fam.noCouple = value !== 'N';
+                            break;
                         case 'NOTE':
                             fam.note = fam.note ? `${fam.note}\n${value}` : value;
                             break;
@@ -3076,17 +3086,22 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     };
     const unionOfCouple = new Map<string, PartnershipId>();
 
-    /** Hang one child under a partnership (both parents, PEDI, _FREL/_MREL). */
+    /**
+     * Hang one child under a partnership (both parents, PEDI, _FREL/_MREL) —
+     * or, with no partnership, under the real parents alone (_STROM_NO_COUPLE).
+     */
     const linkChild = (
-        partnership: Partnership, childGedId: string, gedFamId: string, fam: GedcomFamily,
+        partnership: Partnership | null, childGedId: string, gedFamId: string, fam: GedcomFamily,
         realParents: { husb?: PersonId; wife?: PersonId },
     ): void => {
         const childId = personIdMap.get(childGedId);
         if (!childId || !persons[childId]) return;
-        const { person1Id, person2Id } = partnership;
-        if (!partnership.childIds.includes(childId)) partnership.childIds.push(childId);
+        if (partnership && !partnership.childIds.includes(childId)) partnership.childIds.push(childId);
         const child = persons[childId];
-        for (const pid of [person1Id, person2Id]) {
+        const parents = partnership
+            ? [partnership.person1Id, partnership.person2Id]
+            : [realParents.husb, realParents.wife].filter((pid): pid is PersonId => !!pid);
+        for (const pid of parents) {
             if (!child.parentIds.includes(pid)) child.parentIds.push(pid);
             if (!persons[pid].childIds.includes(childId)) persons[pid].childIds.push(childId);
         }
@@ -3111,7 +3126,31 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (realParents.wife) setParentRel(child, realParents.wife, childRelType(rels?.mrel));
     };
 
+    /**
+     * Families Strom wrote for parents who are not a couple: the children hang
+     * from those parents directly, as they did in the tree that wrote the file
+     * — no partnership, no "?" partner. Only while the family holds nothing a
+     * couple would (a wedding, events, notes, citations): then it is a couple
+     * after all and goes the usual way.
+     */
+    const noCoupleFamilies = new Set<string>();
     for (const [gedFamId, fam] of families) {
+        if (!fam.noCouple) continue;
+        if (fam.unionEvents.length || fam.events.length || fam.note || fam.noteFacts.length
+            || fam.sourceRefs.length || fam.marriageParticipants.length || fam.story || fam.stat) continue;
+        const husb = fam.husb ? personIdMap.get(fam.husb) : undefined;
+        const wife = fam.wife ? personIdMap.get(fam.wife) : undefined;
+        const real = {
+            ...(husb && persons[husb] ? { husb } : {}),
+            ...(wife && persons[wife] && wife !== husb ? { wife } : {}),
+        };
+        if (!real.husb && !real.wife) continue;
+        noCoupleFamilies.add(gedFamId);
+        for (const childGedId of childrenOf(gedFamId, fam)) linkChild(null, childGedId, gedFamId, fam, real);
+    }
+
+    for (const [gedFamId, fam] of families) {
+        if (noCoupleFamilies.has(gedFamId)) continue;
         const partnershipId = partnershipIdMap.get(gedFamId)!;
 
         // Resolve the spouse pointers FIRST: a HUSB/WIFE of @VOID@ (or any
@@ -3167,6 +3206,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     // Handle single-parent families (only HUSB or only WIFE)
     // Create placeholder for the missing parent + partnership so layout engine can render children
     for (const [gedFamId, fam] of families) {
+        if (noCoupleFamilies.has(gedFamId)) continue;
         // Same pointer resolution as above: a @VOID@/unresolvable spouse is a
         // missing spouse. Skip only families where BOTH resolved (processed
         // above); one resolved parent belongs here.

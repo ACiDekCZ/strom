@@ -359,6 +359,42 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         familyCounter++;
     }
 
+    // Parent links outside any partnership (a parent added alone, the other
+    // parent deleted, a couple taken apart): GEDCOM knows parents only through
+    // a family, so they get a family of their own — one per set of such
+    // parents, marked _STROM_NO_COUPLE so Strom reads them back without
+    // making a couple (or a "?" partner) of them. Left out, the link was lost.
+    const looseFamilies: { gedcomId: string; parentIds: PersonId[]; childIds: PersonId[] }[] = [];
+    const looseFamiliesOf = new Map<PersonId, string[]>();
+    {
+        const byParents = new Map<string, { gedcomId: string; parentIds: PersonId[]; childIds: PersonId[] }>();
+        const covered = new Set<string>();
+        for (const u of Object.values(data.partnerships) as Partnership[]) {
+            for (const cid of u.childIds) covered.add(`${cid}|${u.person1Id}`).add(`${cid}|${u.person2Id}`);
+        }
+        for (const [childId, child] of Object.entries(data.persons) as [PersonId, Person][]) {
+            const loose = child.parentIds.filter(pid => personIdMap.has(pid) && !covered.has(`${childId}|${pid}`));
+            if (loose.length === 0) continue;
+            const key = [...loose].sort().join('|');
+            let family = byParents.get(key);
+            if (!family) {
+                family = { gedcomId: `@F${familyCounter}@`, parentIds: loose, childIds: [] };
+                familyCounter++;
+                byParents.set(key, family);
+                looseFamilies.push(family);
+                for (const pid of loose) {
+                    const list = looseFamiliesOf.get(pid) ?? [];
+                    list.push(family.gedcomId);
+                    looseFamiliesOf.set(pid, list);
+                }
+            }
+            family.childIds.push(childId);
+            const list = looseFamiliesOf.get(childId) ?? [];
+            list.push(family.gedcomId);
+            looseFamiliesOf.set(childId, list);
+        }
+    }
+
     // Map all sources to GEDCOM IDs (@S1@ ...)
     const sourceIdMap = new Map<string, string>();
     let sourceCounter = 1;
@@ -618,6 +654,23 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             }
         }
 
+        // Families of parent links outside a partnership (see looseFamilies):
+        // as a parent FAMS, as a child FAMC with PEDI as below.
+        const looseFamilyOf = (famId: string) => looseFamilies.find(f => f.gedcomId === famId)!;
+        for (const famId of looseFamiliesOf.get(personId) ?? []) {
+            if (looseFamilyOf(famId).parentIds.includes(personId)) lines.push(`1 FAMS ${famId}`);
+        }
+        for (const famId of looseFamiliesOf.get(personId) ?? []) {
+            const family = looseFamilyOf(famId);
+            if (!family.childIds.includes(personId)) continue;
+            lines.push(`1 FAMC ${famId}`);
+            const rels = person.parentRelTypes ?? {};
+            const famRels = family.parentIds.map(pid => rels[pid]);
+            const pedi = famRels.includes('adoptive') ? 'adopted'
+                : famRels.includes('foster') ? 'foster' : null;
+            if (pedi) lines.push(`2 PEDI ${pedi}`);
+        }
+
         // Family as child (FAMC) - find partnerships where this person is a child
         for (const [partnershipId, partnership] of Object.entries(data.partnerships) as [PartnershipId, Partnership][]) {
             if (partnership.childIds.includes(personId)) {
@@ -792,6 +845,33 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
     }
 
+    // Parents who are not a couple, with their children (see looseFamilies).
+    for (const family of looseFamilies) {
+        lines.push(`0 ${family.gedcomId} FAM`);
+        // HUSB/WIFE by gender as for a couple; two of one gender keep their order.
+        const [a, b] = family.parentIds;
+        let husbId: PersonId | undefined = a;
+        let wifeId: PersonId | undefined = b;
+        if (!b) {
+            husbId = data.persons[a]?.gender === 'male' ? a : undefined;
+            wifeId = husbId ? undefined : a;
+        } else if ((data.persons[a]?.gender === 'male') !== (data.persons[b]?.gender === 'male')) {
+            husbId = data.persons[a]?.gender === 'male' ? a : b;
+            wifeId = husbId === a ? b : a;
+        }
+        if (husbId) lines.push(`1 HUSB ${personIdMap.get(husbId)}`);
+        if (wifeId) lines.push(`1 WIFE ${personIdMap.get(wifeId)}`);
+        for (const childId of family.childIds) {
+            lines.push(`1 CHIL ${personIdMap.get(childId)}`);
+            const rels = data.persons[childId]?.parentRelTypes ?? {};
+            const toHusb = husbId ? rels[husbId] ?? 'biological' : undefined;
+            const toWife = wifeId ? rels[wifeId] ?? 'biological' : undefined;
+            if (toHusb && (toHusb !== (toWife ?? toHusb) || toHusb === 'step')) lines.push(`2 _FREL ${GEDCOM_CHILD_REL[toHusb]}`);
+            if (toWife && (toWife !== (toHusb ?? toWife) || toWife === 'step')) lines.push(`2 _MREL ${GEDCOM_CHILD_REL[toWife]}`);
+        }
+        lines.push('1 _STROM_NO_COUPLE Y');
+    }
+
     // ==================== SOURCES ====================
     // Page attachments by id: an excerpt cut from one says where on its original it lies.
     const attachmentById = new Map<string, Attachment>();
@@ -854,7 +934,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         content: lines.join('\n'),
         stats: {
             individuals: personIdMap.size,
-            families: partnershipIdMap.size
+            families: partnershipIdMap.size + looseFamilies.length
         },
         xrefs: { persons: personIdMap, sources: sourceIdMap },
     };

@@ -909,13 +909,16 @@ test('the rc.27 round: ?live= with an old token says the research turned it down
 
 test('the rc.27 round: the pill counts every conflict open there (as the cards do), not only the last write\'s', async ({ page }) => {
     await conflictLeft(page);
-    await page.evaluate(() => {
-        const dm = window.Strom.DataManager;
-        const josef = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Josef') as any;
-        josef.research = { conflicts: [{ id: 'X0009', fact: 'BIRT', status: 'open', values: [{ value: '1840' }, { value: '1841' }] }] };
-        window.Strom.UI.refreshResearchSyncUi();
-    });
-    await expect(pill(page)).toContainText('Written, 2 conflicts to decide');
+    // Set on the tree as it is now (a busy run may still be settling the write's state).
+    await expect(async () => {
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const josef = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Josef') as any;
+            josef.research = { conflicts: [{ id: 'X0009', fact: 'BIRT', status: 'open', values: [{ value: '1840' }, { value: '1841' }] }] };
+            window.Strom.UI.refreshResearchSyncUi();
+        });
+        await expect(pill(page)).toContainText('Written, 2 conflicts to decide', { timeout: 1000 });
+    }).toPass();
 });
 
 test('a write that takes longer (202): "writing" until the status says written, then loaded quietly', async ({ page }) => {
