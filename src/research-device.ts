@@ -216,6 +216,14 @@ export interface ResearchAutoState {
     held?: ResearchHeldConflicts;
     /** Sends taken back that this app had written again (`/again`), by their marks: never offered again (finding B2). */
     resent?: string[];
+    /**
+     * The last copy of this tree the research took in (its mark), and the head
+     * the tree stood on when it went: while the tree still stands there (the
+     * research's version not loaded since), the next copy is that one plus the
+     * edits since (`_STROM_SINCE`) — written, nothing new, or beside a send
+     * taken back alike.
+     */
+    lastCopy?: { intake: string; base: string };
 }
 
 /**
@@ -287,6 +295,8 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (Array.isArray(p.toldRefused)) out.toldRefused = p.toldRefused.filter((r): r is string => typeof r === 'string').slice(-10);
         const held = heldConflictsFrom(p.held);
         if (held) out.held = held;
+        const lc = p.lastCopy as Record<string, unknown> | undefined;
+        if (lc && typeof lc.intake === 'string' && lc.intake.length <= 80 && typeof lc.base === 'string') out.lastCopy = { intake: lc.intake, base: lc.base };
         if (Array.isArray(p.resent)) out.resent = p.resent.filter((r): r is string => typeof r === 'string' && r.length <= 80).slice(-30);
         return out;
     } catch {

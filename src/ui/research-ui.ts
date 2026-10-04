@@ -51,7 +51,7 @@ import { formatRelativeDateTime } from '../format.js';
 import { safeFileName } from '../filenames.js';
 import {
     noteResearchLinks, announcedResearchLinks, researchLinksEnabled, noteResearchWaiting, storedResearchWaiting,
-    noteResearchBridge, noteResearchBridgeStatus, patchResearchAutoState,
+    noteResearchBridge, noteResearchBridgeStatus, patchResearchAutoState, researchAutoState,
 } from '../research-device.js';
 import { rememberBridgeStatus } from './research-sync-ui.js';
 import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
@@ -1709,7 +1709,12 @@ export const researchUiMethods = uiModule({
     async researchReconnectOnly(status: LiveStatus): Promise<boolean> {
         const existing = status.treeId ? TreeManager.findTreeByResearchId(status.treeId) : null;
         const link = existing?.research;
-        if (!existing || !link || link.copy || !status.head || link.head !== status.head || !status.accepts) return false;
+        if (!existing || !link || link.copy || !status.head || !status.accepts) return false;
+        // Nothing new there: its head is the one the tree builds on, the one this app's last write made, or
+        // the one a conflict kept from loading (its conflicts read already) — A3 of the rc.23 round.
+        const held = researchAutoState(existing.id).held;
+        const known = [link.head, link.sent?.replyHead, held && held.base === (link.head ?? '') ? held.head : undefined];
+        if (!known.includes(status.head)) return false;
         const previous = await readTree(existing.id);
         if (!previous || fingerprintLike(previous, link.fingerprint) === link.fingerprint) return false;
         if (DataManager.getCurrentTreeId() !== existing.id) {

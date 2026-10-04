@@ -413,6 +413,20 @@ export const researchSyncMethods = uiModule({
         return !!runtime.get(researchId)?.up;
     },
 
+    /**
+     * How the research's bridge is reached, when not: not running, not
+     * responding (stuck), or turning this app down — with what to do. Null
+     * while it answers. Said beside any state, never hidden by one (A1).
+     */
+    researchConnectionNote(researchId: string): { title: string; sub: string; warn: boolean } | null {
+        const rt = runtime.get(researchId);
+        if (!rt || rt.up) return null;
+        const s = strings.sync;
+        if (rt.why === 'hung') return { title: s.stateNotResponding, sub: s.notRespondingSub, warn: true };
+        if (rt.why === 'refused') return { title: s.stateAddressRefused, sub: s.addressRefusedSub, warn: true };
+        return { title: s.stateBridgeDown, sub: s.bridgeDownSub, warn: false };
+    },
+
     /** The bridge was asked in this page and did not answer (stopped): what it listed waits until it runs. */
     researchBridgeKnownDown(researchId: string): boolean {
         const rt = runtime.get(researchId);
@@ -902,9 +916,24 @@ export const researchSyncMethods = uiModule({
         // Asked for one tree: never send another (the open tree changed meanwhile).
         if (opts.treeId && ctx.treeId !== opts.treeId) return;
         const { treeId, link } = ctx;
-        if (!this.researchSyncCapable(link.id) || !await this.researchBridgeReady(link.id)) {
-            // The old way: the research starts it in the terminal (?send= comes back).
+        if (!this.researchSyncCapable(link.id)) {
+            // An older research: the old way, it starts it in the terminal (?send= comes back).
             await this.sendTreeToResearch(treeId);
+            return;
+        }
+        if (!await this.researchBridgeReady(link.id)) {
+            const conn = this.researchConnectionNote(link.id);
+            // Not running and it can be started from here: the research starts and takes the send.
+            if (!conn?.warn && this.researchLinkAvailable('send')) {
+                await this.sendTreeToResearch(treeId);
+                return;
+            }
+            // Stuck, turned down, or not running with no way to start it from here: said, the changes
+            // stay and wait — never the old manual way, which this research no longer has (A2, B6).
+            this.showToast(conn?.warn ? `${conn.title}. ${conn.sub}` : strings.sync.sendWhenRunning, Infinity, {
+                closable: true,
+                action: { label: strings.sync.retry, run: () => { void this.researchSendTree(treeId, { thenLoad: opts.thenLoad, undoAgain: opts.undoAgain }); } },
+            });
             return;
         }
         if (!await this.ensureLocalUnlocked()) return;
@@ -990,11 +1019,12 @@ export const researchSyncMethods = uiModule({
         const again = opts.undoAgain && !opts.auto && link.sent?.state === 'undone' && link.sent.intake ? link.sent : null;
         // What goes over is then the state that send had, not this one (edits since go after it).
         const sentFp = again ? again.fingerprint : fps.current;
-        // Its last send written there and that version not loaded here: this copy is that send's copy plus
-        // the edits since — said, so the research takes that copy as the base (a bridge that says sync.since).
-        const prior = link.sent;
-        const since = runtime.get(link.id)?.status?.features?.includes('sync.since') && prior?.state === 'written'
-            && prior.intake && prior.replyHead && prior.replyHead !== link.head ? prior.intake : undefined;
+        // The research took in an earlier copy of this tree and its version was not loaded here since: this copy
+        // is that one plus the edits since — said, so the research takes that copy as the base (a bridge that says
+        // sync.since), whether that send was written, brought nothing new, or went beside a send taken back (A4).
+        const lastCopy = researchAutoState(treeId).lastCopy;
+        const since = runtime.get(link.id)?.status?.features?.includes('sync.since') && lastCopy && lastCopy.base === (link.head ?? '')
+            ? lastCopy.intake : undefined;
         const gedcom = again ? '' : researchGedcom(data, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
             ...(since ? { since } : {}),
@@ -1031,6 +1061,8 @@ export const researchSyncMethods = uiModule({
         let reply = sanitizeSyncReply(null);
         try { reply = sanitizeSyncReply(await res.json()); } catch { /* a refusal without a reason */ }
         sendingTree = null;
+        // The research has this copy now (any answer with its mark; a send written again is the old copy, not this one).
+        if (res.ok && reply.ok && reply.intake && !again) patchResearchAutoState(treeId, { lastCopy: { intake: reply.intake, base: link.head ?? '' } });
         // Busy (503): not a refusal — it goes again at the next look.
         if (res.status === 503) {
             if (opts.auto) autoDue.add(treeId);
@@ -1080,6 +1112,14 @@ export const researchSyncMethods = uiModule({
         const writing = reply.inbox === false && reply.pending;
         const written = (reply.inbox === false && !reply.pending) || reply.changes === 0;
         const changes = reply.applied ?? reply.changes;
+        // Changes the research counted but neither wrote nor said why (not skipped, not left out as taken
+        // back, not a conflict): never silent — the user's edits would stand here only (A5 of the rc.23 round).
+        const unexplained = written && reply.applied !== null && reply.changes !== null
+            ? reply.changes - reply.applied - reply.skipped.length - (reply.takenBack ?? 0) - (reply.conflicts ?? 0) : 0;
+        if (unexplained > 0) {
+            console.warn('The research wrote fewer changes than it counted, without saying why', reply);
+            this.showToast(s.notWrittenToast(unexplained), Infinity, { closable: true });
+        }
         const sent: ResearchSend = {
             fingerprint: sentFp, at: now, changes, head,
             ...(reply.intake ? { intake: reply.intake } : {}),
@@ -1739,10 +1779,10 @@ export const researchSyncMethods = uiModule({
                 if (treeId && this.researchDecideUrl(treeId)) actions.push({ action: 'decideInResearch', label: s.decideInResearch, asLink: true });
                 if (persons.length) actions.push({ action: 'showConflicts', label: name ? `${name} ›` : `${s.showConflicts} ›`, asLink: true });
                 actions.push({ action: 'loadNewer', label: s.loadVersion, asLink: true });
-                // The research stopped: said beside the conflict (it outranks "not running" as the state).
-                const down = !!rt && !rt.up;
-                return { tone: 'neutral', title: s.flyConflict(conflicts),
-                    sub: [down ? s.stateBridgeDown : '', s.writtenAt(when(lw?.at ?? state.sent?.closedAt)), s.writtenConflictsSub].filter(Boolean).join(' · '), actions };
+                // How the research is reached, said beside the conflict (it outranks the connection as the state).
+                const conn = link ? this.researchConnectionNote(link.id) : null;
+                return { tone: conn && conn.warn ? 'warn' : 'neutral', title: s.flyConflict(conflicts),
+                    sub: [conn ? `${conn.title}.` : '', conn?.sub ?? '', s.writtenAt(when(lw?.at ?? state.sent?.closedAt)), s.writtenConflictsSub].filter(Boolean).join(' '), actions };
             },
             unsent: () => ({ tone: 'warn', title: s.stateUnsent, sub: changed ? s.changedAt(changed) : undefined, actions: [{ action: 'send', label: s.send }] }),
             sentPending: () => ({ tone: 'neutral', title: s.stateSent(when(state.sent?.at), state.sent?.changes ?? null),
@@ -1793,6 +1833,12 @@ export const researchSyncMethods = uiModule({
                 actions: [{ action: 'introSeen', label: s.gotIt, asLink: true }, { action: 'introChange', label: s.autoIntroChange, asLink: true }] }),
         };
         const b = blocks[state.kind]();
+        // How the research is reached, said in every other state too (A1): not running, stuck, or turning this app down.
+        const connNote = link ? this.researchConnectionNote(link.id) : null;
+        if (connNote && !['bridgeDown', 'unsentBridgeDown', 'autoBridgeDown', 'writtenConflicts', 'rejected', 'safari', 'stale'].includes(state.kind)) {
+            b.sub = [b.sub, `${connNote.title}.`, connNote.sub].filter(Boolean).join(' ');
+            if (connNote.warn) b.tone = 'warn';
+        }
         // The bridge there but stuck, or answering not to this app: said as such whatever waits (B4, B5).
         if (rt && !rt.up && (rt.why === 'hung' || rt.why === 'refused') && ['unsentBridgeDown', 'autoBridgeDown'].includes(state.kind)) {
             b.tone = 'warn';
@@ -1851,7 +1897,8 @@ export const researchSyncMethods = uiModule({
         // The others taken back too: each comes after this one, with its own Send again.
         const others = treeId && link ? this.researchOtherUndone(treeId, link) : [];
         if (others.length) sub.push(s.undoneMore(others.map(r => when(r.at)).join(', ')));
-        if (link && this.researchBridgeKnownDown(link.id)) sub.unshift(`${s.stateBridgeDown}.`);
+        const conn = link ? this.researchConnectionNote(link.id) : null;
+        if (conn) sub.unshift(`${conn.title}.`, ...(conn.warn ? [conn.sub] : []));
         if (treeId && conflicts > 0) {
             sub.push(`${s.flyConflict(conflicts)} (${when(researchAutoState(treeId).lastWritten?.at)}).`);
             const persons = this.researchWrittenConflictPersons(treeId);
@@ -2000,7 +2047,7 @@ export const researchSyncMethods = uiModule({
                 ? [s.pillUndone, this.researchUndoneConflicts(ctx.treeId) > 0 ? s.conflictsN(this.researchUndoneConflicts(ctx.treeId)) : ''].filter(Boolean).join(' · ')
                 : state.sent?.failed ? s.pillFailed : s.pillRejected, button: s.sendAgain, action: 'sendAgain' },
             writtenConflicts: { text: [s.flyConflict(this.researchHeldConflictCount(ctx.treeId, state.sent)),
-                this.researchBridgeKnownDown(ctx.link.id) ? s.stateBridgeDown : ''].filter(Boolean).join(' · '), button: s.showConflicts, action: 'conflicts' },
+                this.researchConnectionNote(ctx.link.id)?.title ?? ''].filter(Boolean).join(' · '), button: s.showConflicts, action: 'conflicts' },
             ...(auto ? {
                 autoBridgeDown: { text: archive ? s.pillBridgeDownWaiting(Math.max(1, researchAutoState(ctx.treeId).edits ?? 1)) : s.pillBridgeDown,
                     button: s.pillStart, action: 'startResearch' },
@@ -2009,11 +2056,14 @@ export const researchSyncMethods = uiModule({
         };
         // The bridge there but stuck, or answering not to this app: in sight, never the quiet mark (B4, B5).
         const rtNow = runtime.get(link!.id);
+        // (Beside another warning it is said in that one's text; alone, in its own — whatever the state, A1.)
         const badBridge = !!rtNow && !rtNow.up && (rtNow.why === 'hung' || rtNow.why === 'refused')
-            && (kind === 'bridgeDown' || kind === 'unsentBridgeDown' || kind === 'autoBridgeDown');
+            && (!warn[kind] || kind === 'unsentBridgeDown' || kind === 'autoBridgeDown') && kind !== 'safari' && kind !== 'stale';
+        const conn = this.researchConnectionNote(link!.id);
+        const base = warn[kind];
         const w = badBridge
             ? { text: rtNow!.why === 'hung' ? s.stateNotResponding : s.stateAddressRefused, button: s.showConflicts, action: 'conflicts' }
-            : warn[kind];
+            : base && conn?.warn && kind !== 'writtenConflicts' ? { ...base, text: `${base.text} · ${conn.title}` } : base;
         // A new conflict's note (with the person) first; the pill once it goes.
         const noteFirst = kind === 'writtenConflicts' && note?.kind === 'conflict';
         if (w && !noteFirst && (w.action !== 'startResearch' || this.researchLinkAvailable('open') || this.researchLinkAvailable('live'))) {
