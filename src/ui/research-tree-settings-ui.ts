@@ -14,6 +14,7 @@ import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
 import { TreeId, ResearchTranscripts, ResearchSendMode, StromData } from '../types.js';
 import { researchSchemeUrl } from '../research-link.js';
+import { researchAutoState, patchResearchAutoState } from '../research-device.js';
 import { sourceReadingHash, unverifiedOlderSources } from '../research-sync.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
@@ -23,6 +24,7 @@ import { SettingsManager } from '../settings.js';
 import { formatBytesShort } from './originals-ui.js';
 
 const SETTINGS_ID = 'research-tree-settings-modal';
+const ASK_ID = 'research-mode-ask-modal';
 
 /** A phone-sized or touch screen: short card texts, and a note instead of the effect box and the status line. */
 function compactScreen(): boolean {
@@ -33,6 +35,39 @@ function esc(text: string): string {
     return text
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/**
+ * The three ways changes go to the research, as cards (one checked), and the
+ * three sentences under them: the same in "Research for this tree", the
+ * hand-over and the one-time question. By hand is the recommended one.
+ */
+export function researchSendModeCardsHtml(current: ResearchSendMode, compact = compactScreen()): string {
+    const t = strings.treeSettings;
+    const card = (value: ResearchSendMode, title: string, desc: string, recommended: boolean): string => `
+            <label class="research-transcripts-card">
+                <input type="radio" name="research-send-mode" value="${value}"${value === current ? ' checked' : ''}>
+                <span class="research-transcripts-text">
+                    <span class="research-transcripts-title">${esc(title)}${recommended ? ` <span class="research-transcripts-default">${esc(t.recommended)}</span>` : ''}</span>
+                    <span class="research-transcripts-desc">${esc(desc)}</span>
+                </span>
+            </label>`;
+    return card('manual', t.manual, compact ? t.manualDescShort : t.manualDesc, true)
+        + card('auto', t.auto, compact ? t.autoDescShort : t.autoDesc, false)
+        + card('off', t.off, compact ? t.offDescShort : t.offDesc, false);
+}
+
+/** The three sentences under the choice (and where to change it later, when asked). */
+export function researchSendPrinciplesHtml(changeLater = false): string {
+    const t = strings.treeSettings;
+    return `<ul class="research-send-principles">${t.principles.map(p => `<li>${esc(p)}</li>`).join('')}</ul>`
+        + (changeLater ? `<p class="research-send-later">${esc(t.changeLater)}</p>` : '');
+}
+
+/** The choice the cards hold now. */
+export function researchSendModeChecked(root: ParentNode): ResearchSendMode | null {
+    const v = root.querySelector<HTMLInputElement>('input[name="research-send-mode"]:checked')?.value;
+    return v === 'manual' || v === 'auto' || v === 'off' ? v : null;
 }
 
 /** Sources the research has when the tree switches to evidence: sent from here, or numbered by it. */
@@ -77,24 +112,14 @@ export const researchTreeSettingsMethods = uiModule({
         const sendingShown = this.researchSyncCapable(link.id);
         const compact = compactScreen();
         const sendMode = researchSendMode(link);
-        const sendOption = (value: ResearchSendMode, title: string, desc: string, isDefault: boolean): string => `
-            <label class="research-transcripts-card">
-                <input type="radio" name="research-send-mode" value="${value}"${value === sendMode ? ' checked' : ''}>
-                <span class="research-transcripts-text">
-                    <span class="research-transcripts-title">${esc(title)}${isDefault ? ` <span class="research-transcripts-default">${esc(t.default)}</span>` : ''}</span>
-                    <span class="research-transcripts-desc">${esc(desc)}</span>
-                </span>
-            </label>`;
         const effect = archive ? t.effectArchive : this.researchReviewOn(link.id) ? t.effectReview : t.effectAgent;
         const olderLine = sendingShown ? '' : this.researchOlderLineHtml('settings');
         const sendingHtml = !sendingShown ? (olderLine ? `<p class="research-older-line">${olderLine}</p>` : '') : `
                 <fieldset class="research-transcripts research-send-mode">
                     <legend>${esc(t.sending)}</legend>
-                    ${sendOption('manual', t.manual, compact ? t.manualDescShort : t.manualDesc, true)}
-                    ${sendOption('auto', t.auto, compact ? t.autoDescShort : t.autoDesc, false)}
-                    ${sendOption('off', t.off, compact ? t.offDescShort : t.offDesc, false)}
+                    ${researchSendModeCardsHtml(sendMode, compact)}
                 </fieldset>
-                <ul class="research-send-principles">${t.principles.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
+                ${researchSendPrinciplesHtml()}
                 ${compact
                     ? `<p class="research-send-device">${esc(t.deviceNote)}</p>`
                     : `<p class="research-not-retroactive research-send-effect"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span>${esc(effect)}</span></p>
@@ -228,6 +253,60 @@ export const researchTreeSettingsMethods = uiModule({
                 olderSources: data ? sourcesAtSwitch(data, link.sentSources) : {},
             });
         }
+        this.refreshResearchSyncUi();
+    },
+
+    /**
+     * Once per tree tied to a research (one from before 3.9, or opened from
+     * the research rather than handed over): how should changes go? Asked when
+     * the tree is open, its research running and nothing else on screen; the
+     * way it goes now is checked — nothing changes unless the user says so.
+     */
+    maybeAskResearchSendMode(treeId: TreeId): void {
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        if (!link || link.copy || !onComputer() || DataManager.getCurrentTreeId() !== treeId || DataManager.isReadOnly()) return;
+        if (researchAutoState(treeId).modeAsked || document.getElementById(ASK_ID)) return;
+        if (document.querySelector('.modal-overlay.active') || this.isFollowingActiveResearch()) return;
+        const t = strings.treeSettings;
+        const current = researchSendMode(link);
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay active';
+        overlay.id = ASK_ID;
+        overlay.innerHTML = `
+            <div class="modal modal--md research-mode-ask" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="research-mode-ask-title">
+                <div class="modal-header">
+                    <div class="audit-log-heading">
+                        <h2 id="research-mode-ask-title">${esc(t.askTitle)}</h2>
+                        <div class="audit-log-subtitle">${esc(TreeManager.getTreeMetadata(treeId)?.name ?? '')} · ${esc(researchDisplayName(link.id))}</div>
+                    </div>
+                </div>
+                <fieldset class="research-transcripts research-send-mode research-mode-ask-cards" aria-labelledby="research-mode-ask-title">
+                    ${researchSendModeCardsHtml(current)}
+                </fieldset>
+                ${researchSendPrinciplesHtml(true)}
+                <div class="buttons">
+                    <button type="button" class="secondary" id="research-mode-ask-keep" data-dismiss>${esc(t.askKeep)}</button>
+                    <button type="button" class="primary" id="research-mode-ask-save">${esc(t.askSave)}</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        this.pushDialog(ASK_ID);
+        normalizeModal(overlay.querySelector('.modal') as HTMLElement);
+        (overlay.querySelector('#research-mode-ask-keep') as HTMLButtonElement).onclick = () => this.closeResearchModeAsk(treeId, null);
+        (overlay.querySelector('#research-mode-ask-save') as HTMLButtonElement).onclick = () => this.closeResearchModeAsk(treeId, researchSendModeChecked(overlay));
+        (overlay.querySelector('#research-mode-ask-save') as HTMLButtonElement).focus();
+    },
+
+    /** The one-time question answered: the choice (null: keep how it goes) stored explicitly, never asked again. */
+    closeResearchModeAsk(treeId: TreeId, choice: ResearchSendMode | null): void {
+        document.querySelectorAll(`#${ASK_ID}`).forEach(el => el.remove());
+        this.dialogStack = this.dialogStack.filter(d => d !== ASK_ID);
+        patchResearchAutoState(treeId, { modeAsked: true });
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        if (!link) return;
+        const mode = choice ?? researchSendMode(link);
+        if (mode !== researchSendMode(link)) this.setResearchSendMode(treeId, mode);
+        else if (link.sendMode !== mode) TreeManager.patchResearchLink(treeId, { sendMode: mode });
         this.refreshResearchSyncUi();
     },
 

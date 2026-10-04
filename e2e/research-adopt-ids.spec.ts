@@ -87,7 +87,7 @@ async function routeBridge(page: Page, token: string, init: Partial<Bridge> = {}
 }
 
 /** A new tree with "1", "2" and their child "3" (no dates), handed to the research; sending by hand. */
-async function handOver(page: Page, init: Partial<Bridge> = {}): Promise<Bridge> {
+async function handOver(page: Page, init: Partial<Bridge> = {}, pick?: (page: Page) => Promise<void>): Promise<Bridge> {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.addInitScript(() => {
         if (sessionStorage.getItem('seeded')) return;
@@ -116,12 +116,15 @@ async function handOver(page: Page, init: Partial<Bridge> = {}): Promise<Bridge>
     const url = (await page.evaluate(() => (window as unknown as { __launched: string[] }).__launched))[0];
     const b = await routeBridge(page, url.match(TOKEN_RE)![1], init);
     await page.evaluate((base) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: base })), BRIDGE);
+    if (pick) await pick(page);
     await page.locator('#research-adopt-confirm').click();
     await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.');
-    await page.evaluate(() => {
-        const tm = window.Strom.TreeManager;
-        tm.patchResearchLink(tm.getActiveTreeId()!, { sendMode: 'manual' });
-    });
+    if (!pick) {
+        await page.evaluate(() => {
+            const tm = window.Strom.TreeManager;
+            tm.patchResearchLink(tm.getActiveTreeId()!, { sendMode: 'manual' });
+        });
+    }
     return b;
 }
 
@@ -139,6 +142,23 @@ async function renameOne(page: Page): Promise<void> {
 const send = (page: Page) => page.evaluate(() => window.Strom.UI.researchSendNow());
 
 const SENT_WITH_IDS = [{ name: 'jedna', refn: 'P0001' }, { name: '2', refn: 'P0002' }, { name: '3', refn: 'P0003' }];
+
+test.describe('how changes go, chosen at the hand-over', () => {
+    test('three choices, by hand checked and recommended, with the three sentences; the choice is the tie\'s, never asked again', async ({ page }) => {
+        await handOver(page, {}, async (page) => {
+            const dialog = page.locator('#research-adopt-modal');
+            await expect(dialog.locator('input[name="research-send-mode"]')).toHaveCount(3);
+            await expect(dialog.locator('input[name="research-send-mode"][value="manual"]')).toBeChecked();
+            await expect(dialog).toContainText('Recommended');
+            await expect(dialog).toContainText('The research keeps its own copy.');
+            await expect(dialog.locator('#research-adopt-confirm')).toBeInViewport();
+            await dialog.locator('input[name="research-send-mode"][value="off"]').check();
+        });
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('off');
+        const st = await page.evaluate(() => JSON.parse(localStorage.getItem(`strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`) ?? '{}'));
+        expect(st.modeAsked).toBe(true);
+    });
+});
 
 test.describe('the research\'s numbers after a hand-over', () => {
     test('the sequence from Windows: the research\'s version back, a rename; the send names all three by REFN', async ({ page }) => {

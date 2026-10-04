@@ -138,6 +138,8 @@ let autoDueAt = 0;
 const autoDue = new Set<TreeId>();
 /** The send whose "Written N, not written M" was told (its plain "Written" toast is then not shown too). */
 let toldNotWritten = '';
+/** Sends by hand the research wrote before sending by itself is offered. */
+const OFFER_AFTER_WRITES = 5;
 /** "Restore the state before loading" is offered this long after a load (and only while the tree is unchanged). */
 const LOAD_BACKUP_MS = 7 * 24 * 60 * 60 * 1000;
 /** The ✓ shown on the mark for a moment after a write. */
@@ -469,7 +471,8 @@ export const researchSyncMethods = uiModule({
             autoDue: autoDue.has(treeId),
             written: st.lastWritten ?? null,
             switched: !!st.modeSeen && st.modeSeen !== mode,
-            offerUnseen: !st.offerSeen,
+            // By hand and written a few times: sending by itself is offered, once (never at once).
+            offerDue: researchSendMode(link) === 'manual' && !st.offerSeen && (st.manualWrites ?? 0) >= OFFER_AFTER_WRITES,
             introDue: auto && !toolbarWide() && !researchAutoIntroSeen(),
         });
     },
@@ -876,6 +879,8 @@ export const researchSyncMethods = uiModule({
         const ctx = this.researchSyncLink();
         if (!ctx) return;
         const { treeId, link } = ctx;
+        // Once per tree: how should changes go (asked while its research runs).
+        if (runtime.get(link.id)?.up && this.researchSyncCapable(link.id)) this.maybeAskResearchSendMode(treeId);
         if (this.researchAutoOn(link) && this.researchBridgeFresh(link.id) && !sendingTree) {
             const kind = this.currentResearchSyncState().core;
             // Not sent, and the research has a newer version: send now (it loads after the write) — unless
@@ -1265,6 +1270,7 @@ export const researchSyncMethods = uiModule({
             if (link?.sent && link.sent.at === sent.at) TreeManager.patchResearchLink(treeId, { sent: { ...link.sent, conflicts } });
         }
         const s = strings.sync;
+        if (sent.manual && sent.changes !== 0) patchResearchAutoState(treeId, { manualWrites: (researchAutoState(treeId).manualWrites ?? 0) + 1 });
         if (sent.manual) {
             if (conflicts > 0) {
                 this.showToast(s.writtenConflictToast(sent.changes ?? 0, conflicts), 8000,

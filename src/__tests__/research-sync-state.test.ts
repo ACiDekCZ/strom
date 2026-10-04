@@ -168,13 +168,14 @@ describe('sending by itself, the archive, one-time notices', () => {
         expect(researchSyncState(input({ switched: true })).kind).toBe('switched');
     });
 
-    it('the offer to send by itself: an archive sent by hand, until answered', () => {
-        expect(researchSyncState(input({ archive: true, offerUnseen: true })).kind).toBe('offerAuto');
-        expect(researchSyncState(input({ archive: true, offerUnseen: false })).kind).toBe('inSync');
-        expect(researchSyncState(input({ archive: true, auto: true, offerUnseen: true })).kind).toBe('inSync');
-        expect(researchSyncState(input({ offerUnseen: true })).kind).toBe('inSync');
+    it('the offer to send by itself: due after a few sends by hand, until answered; never when sending by itself or not at all', () => {
+        expect(researchSyncState(input({ offerDue: true })).kind).toBe('offerAuto');
+        expect(researchSyncState(input({ archive: true, offerDue: true })).kind).toBe('offerAuto');
+        expect(researchSyncState(input({ offerDue: false })).kind).toBe('inSync');
+        expect(researchSyncState(input({ auto: true, offerDue: true })).kind).toBe('inSync');
+        expect(researchSyncState(input({ sendOff: true, offerDue: true })).kind).toBe('inSync');
         // Something to do comes first.
-        expect(researchSyncState(input({ archive: true, offerUnseen: true, remoteHead: 'bbbbbbb' })).kind).toBe('newer');
+        expect(researchSyncState(input({ offerDue: true, remoteHead: 'bbbbbbb' })).kind).toBe('newer');
     });
 
     it('the first start of sending by itself as a block (no toolbar mark at this width)', () => {

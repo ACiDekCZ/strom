@@ -1204,20 +1204,31 @@ test.describe('the research as an archive', () => {
         await expect(dialog).toContainText('The research writes every send straight away.');
     });
 
-    test('the offer to send by itself (an archive sent by hand): either answer closes it for good', async ({ page }) => {
+    test('the offer to send by itself: only after five sends by hand were written; either answer closes it for good', async ({ page }) => {
         await page.clock.install();
         await openResearch(page);
         await fakeBridge(page, { accepts: ARCHIVE });
+        const writes = (n: number) => page.evaluate((n) => {
+            const key = `strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`;
+            localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), manualWrites: n }));
+        }, n);
+        await writes(4);
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).not.toHaveAttribute('data-state', 'offerAuto');
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        await writes(5);
         await poll(page);
         await expect(dot(page)).toBeHidden();
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'offerAuto');
+        await expect(block(page)).toContainText('You send regularly');
         await block(page).getByRole('button', { name: 'Keep manual' }).click();
         await openResearchMenu(page);
         await expect(block(page)).not.toHaveAttribute('data-state', 'offerAuto');
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('manual');
         // Another tree of the same archive: Send automatically.
-        await page.evaluate(() => localStorage.removeItem(`strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`));
+        await page.evaluate(() => localStorage.setItem(`strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`, JSON.stringify({ modeAsked: true, manualWrites: 5 })));
         await poll(page);
         await openResearchMenu(page);
         await block(page).getByRole('button', { name: 'Send automatically' }).click();
@@ -1411,5 +1422,61 @@ test.describe('data protection around the research', () => {
         await page.clock.fastForward(QUIET + 1000);
         await expect.poll(() => bridge.posts.length).toBe(1);
         await expect(page.locator('.toast', { hasText: 'Written 2, not written 1.' }).getByRole('button', { name: 'Show' })).toBeVisible();
+    });
+});
+
+test.describe('the one-time question: how should changes go', () => {
+    const forget = (page: Page) => page.evaluate(() => {
+        const tm = window.Strom.TreeManager;
+        const id = tm.getActiveTreeId()!;
+        // As a tree tied before 3.9: no choice stored, never asked.
+        tm.patchResearchLink(id, { sendMode: undefined });
+        const key = `strom-research-auto:${id}`;
+        const st = JSON.parse(localStorage.getItem(key) ?? '{}');
+        delete st.modeAsked;
+        localStorage.setItem(key, JSON.stringify(st));
+    });
+    const ask = (page: Page) => page.locator('#research-mode-ask-modal');
+
+    test('a tree tied before 3.9: asked once while its research runs, how it goes now checked; Keep stores it, never asked again', async ({ page }) => {
+        await autoTree(page);
+        await forget(page);
+        await poll(page);
+        await expect(ask(page)).toBeVisible();
+        await expect(ask(page).locator('input[value="auto"]')).toBeChecked();
+        await expect(ask(page)).toContainText('Whatever the research does not write, you will always see.');
+        await ask(page).getByRole('button', { name: 'Keep' }).click();
+        await expect(ask(page)).toHaveCount(0);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('auto');
+        await page.clock.fastForward(30_000);
+        await poll(page);
+        await expect(ask(page)).toHaveCount(0);
+    });
+
+    test('Save takes the choice (by hand); Escape keeps how it goes; never while the research is not running or a dialog is open', async ({ page }) => {
+        const bridge = await autoTree(page);
+        await forget(page);
+        bridge.down = true;
+        await poll(page);
+        await expect(ask(page)).toHaveCount(0);
+        bridge.down = false;
+        await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
+        await poll(page);
+        await expect(ask(page)).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.closeResearchTreeSettings());
+        await poll(page);
+        await expect(ask(page)).toBeVisible();
+        await ask(page).locator('input[value="manual"]').check();
+        await ask(page).getByRole('button', { name: 'Save' }).click();
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('manual');
+        // Another time, Escape: how it goes stays.
+        await forget(page);
+        await page.evaluate(() => window.Strom.TreeManager.patchResearchLink(window.Strom.TreeManager.getActiveTreeId()!, { sendMode: 'off' }));
+        await page.clock.fastForward(30_000);
+        await poll(page);
+        await expect(ask(page)).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(ask(page)).toHaveCount(0);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('off');
     });
 });

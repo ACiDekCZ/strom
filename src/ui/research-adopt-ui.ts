@@ -12,9 +12,9 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
-import { TreeId, TreeMetadata, StromData, STROM_DATA_VERSION } from '../types.js';
+import { TreeId, TreeMetadata, StromData, STROM_DATA_VERSION, ResearchSendMode } from '../types.js';
 import { readInstallRecord, installPhase, INSTALL_TTL_MS } from '../research-install.js';
-import { noteResearchBridge } from '../research-device.js';
+import { noteResearchBridge, patchResearchAutoState } from '../research-device.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom } from '../ged-exporter.js';
@@ -26,6 +26,7 @@ import { uiModule } from './module.js';
 import { onComputer, fetchWithTimeout, fetchStatus, fetchGedcomText, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { normalizeModal } from './modal-skeleton.js';
+import { researchSendModeCardsHtml, researchSendPrinciplesHtml, researchSendModeChecked } from './research-tree-settings-ui.js';
 
 const ADOPT_ID = 'research-adopt-modal';
 const READY_ID = 'research-ready-modal';
@@ -175,7 +176,10 @@ export const researchAdoptMethods = uiModule({
             syncedAt: new Date().toISOString(),
             ...(reply.head ? { head: reply.head } : {}),
             ...(!numbered && hasPeople ? { awaitingIds: true as const } : {}),
+            // As the user chose in the hand-over (asked there: no question later).
+            sendMode: choice.sendMode,
         });
+        patchResearchAutoState(tree.id, { modeAsked: true });
         // What the research took is its version now: changes per person count from here.
         this.researchKeepCopy(tree.id, taken);
         TreeManager.setResearchAdoptToken(tree.id, null);
@@ -307,7 +311,7 @@ export const researchAdoptMethods = uiModule({
      * sources; photos and attachments by choice). Resolves null for "Don't
      * hand over". A decision: no ×, Escape = don't.
      */
-    askResearchAdopt(tree: TreeMetadata, offer: AdoptOffer, data: ReturnType<typeof DataManager.getData>, opts: { install?: boolean } = {}): Promise<{ images: boolean } | null> {
+    askResearchAdopt(tree: TreeMetadata, offer: AdoptOffer, data: ReturnType<typeof DataManager.getData>, opts: { install?: boolean } = {}): Promise<{ images: boolean; sendMode: ResearchSendMode } | null> {
         document.getElementById(ADOPT_ID)?.remove();
         const r = strings.research;
         // As the research counts them: people with a name (an unnamed "?" stays out of its count).
@@ -325,7 +329,7 @@ export const researchAdoptMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = ADOPT_ID;
         overlay.innerHTML = `
-            <div class="modal modal--sm research-adopt-modal" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="research-adopt-title">
+            <div class="modal modal--md research-adopt-modal" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="research-adopt-title">
                 <div class="modal-header">
                     <div class="audit-log-heading">
                         <h2 id="research-adopt-title">${esc(opts.install ? strings.install.adoptTitle : r.adoptTitle)}</h2>
@@ -339,6 +343,11 @@ export const researchAdoptMethods = uiModule({
                     <span>${esc(r.adoptImages)} <span class="research-adopt-size">${esc(r.adoptImagesSize(files, (images.bytes / (1024 * 1024)).toFixed(1)))}</span></span>
                 </label>` : ''}
                 <p class="research-adopt-after">${esc(r.adoptAfter)}</p>
+                <fieldset class="research-transcripts research-send-mode research-adopt-send">
+                    <legend>${esc(strings.treeSettings.askTitle)}</legend>
+                    ${researchSendModeCardsHtml('manual')}
+                </fieldset>
+                ${researchSendPrinciplesHtml(true)}
                 <div class="buttons">
                     <button type="button" class="secondary" id="research-adopt-cancel" data-dismiss>${esc(r.adoptCancel)}</button>
                     <button type="button" class="primary" id="research-adopt-confirm">${esc(r.adoptConfirm)}</button>
@@ -349,7 +358,7 @@ export const researchAdoptMethods = uiModule({
         this.pushDialog(ADOPT_ID);
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
         return new Promise((resolve) => {
-            const finish = (value: { images: boolean } | null): void => {
+            const finish = (value: { images: boolean; sendMode: ResearchSendMode } | null): void => {
                 this.closeResearchAdoptDialog();
                 resolve(value);
             };
@@ -357,7 +366,7 @@ export const researchAdoptMethods = uiModule({
             (overlay.querySelector('#research-adopt-cancel') as HTMLButtonElement).onclick = () => finish(null);
             (overlay.querySelector('#research-adopt-confirm') as HTMLButtonElement).onclick = () => {
                 const box = overlay.querySelector<HTMLInputElement>('#research-adopt-images');
-                finish({ images: box ? box.checked : false });
+                finish({ images: box ? box.checked : false, sendMode: researchSendModeChecked(overlay) ?? 'manual' });
             };
             (overlay.querySelector('#research-adopt-confirm') as HTMLButtonElement).focus();
         });

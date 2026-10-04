@@ -233,10 +233,13 @@ export async function openResearch(page: Page, opts: { edit?: boolean; bridge?: 
             localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, ...(accepts ? { accepts } : {}) }));
         }, { uuid: UUID, base: BRIDGE, accepts: opts.capable === false ? null : { sync: { auto: 'off' }, sources: true, verified: true, ...(opts.media ? { media: { max: 500 * 1024 * 1024, region: true } } : {}) } });
     }
-    // By hand, a new tie's default (sending by itself: research-auto-send.spec.ts, chosen here).
+    // By hand, a new tie's default (sending by itself: research-auto-send.spec.ts, chosen here) — chosen,
+    // so the one-time question does not come (its own tests take it away).
     await page.evaluate((auto) => {
         const tm = window.Strom.TreeManager;
-        tm.patchResearchLink(tm.getActiveTreeId()!, { sendMode: auto ? 'auto' : 'manual' });
+        const id = tm.getActiveTreeId()!;
+        tm.patchResearchLink(id, { sendMode: auto ? 'auto' : 'manual' });
+        localStorage.setItem(`strom-research-auto:${id}`, JSON.stringify({ ...JSON.parse(localStorage.getItem(`strom-research-auto:${id}`) ?? '{}'), modeAsked: true }));
     }, !!opts.auto);
     if (opts.edit) await editJan(page);
 }

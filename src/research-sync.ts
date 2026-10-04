@@ -71,8 +71,8 @@ export interface ResearchSyncInput {
     heldConflicts?: boolean;
     /** The research switched between agent and archive since the user last saw it. */
     switched?: boolean;
-    /** The one-time offer to send by itself was not answered yet. */
-    offerUnseen?: boolean;
+    /** Sending by itself is offered (once): sent by hand, written a few times, not answered yet. */
+    offerDue?: boolean;
     /** "Changes now go by themselves" is due as a block (no toolbar mark at this width). */
     introDue?: boolean;
 }
@@ -135,7 +135,7 @@ export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
         ? { kind: 'bridgeDown', core: 'bridgeDown' }
         : input.written ? { kind: 'written', core: 'written' } : { kind: 'inSync', core: 'inSync' };
     if (input.switched) return { ...quiet, kind: 'switched' };
-    if (input.archive && !auto && input.offerUnseen) return { ...quiet, kind: 'offerAuto' };
+    if (!auto && !input.sendOff && input.offerDue) return { ...quiet, kind: 'offerAuto' };
     if (auto && input.introDue) return { ...quiet, kind: 'autoIntro' };
     return quiet;
 }

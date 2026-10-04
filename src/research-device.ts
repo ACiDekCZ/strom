@@ -255,6 +255,10 @@ export interface ResearchAutoState {
     loadBackup?: { id: string; at: string; fingerprint: string };
     /** A backup was taken before this tree's first send from this browser. */
     firstSendBackup?: true;
+    /** How changes go was chosen or asked once (the hand-over, or the one-time question after 3.9). */
+    modeAsked?: true;
+    /** Sends by hand the research wrote: after a few, sending by itself is offered (once). */
+    manualWrites?: number;
 }
 
 /**
@@ -333,6 +337,8 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (lb && typeof lb.id === 'string' && lb.id.length <= 80 && typeof lb.at === 'string' && Number.isFinite(Date.parse(lb.at))
             && typeof lb.fingerprint === 'string') out.loadBackup = { id: lb.id, at: lb.at, fingerprint: lb.fingerprint };
         if (p.firstSendBackup === true) out.firstSendBackup = true;
+        if (p.modeAsked === true) out.modeAsked = true;
+        if (typeof p.manualWrites === 'number' && p.manualWrites > 0) out.manualWrites = Math.min(Math.floor(p.manualWrites), 9999);
         return out;
     } catch {
         return {};
