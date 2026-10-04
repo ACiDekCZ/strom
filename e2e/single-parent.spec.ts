@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, addRelation, card, focusViaSearch } from './helpers.js';
+import { openApp, createFirstPerson, addRelation, card, focusViaSearch, cardAction } from './helpers.js';
 
 /**
  * A child with one known parent, made either way in the app: "Add child"
@@ -47,6 +47,33 @@ test.describe('a child with one known parent', () => {
         expect(await parentsOf(page, 'Ida')).toEqual(['Marta', 'Ole']);
         expect(await unionCount(page)).toBe(1);
         expect((await persons(page)).filter(p => p.placeholder)).toHaveLength(0);
+    });
+
+    test('the other parent for one child of a "?" family: the siblings are offered unticked; only a ticked one gets the parent too', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Ole', 'Berg', 'male');
+        await addRelation(page, 'Ole', 'child', 'Ida', 'Berg', 'female');
+        await addRelation(page, 'Ole', 'child', 'Kari', 'Berg', 'female');
+        await addRelation(page, 'Ole', 'child', 'Nils', 'Berg', 'male');
+        // All three in the one "?" family ("Add child" with the "?" partner offered).
+        expect(await unionCount(page)).toBe(1);
+        await focusViaSearch(page, 'Ida');
+        await cardAction(page, 'Ida', 'parent');
+        const modal = page.locator('#relation-modal');
+        const also = modal.locator('#rel-also-children');
+        await expect(also).toBeVisible();
+        await expect(also.locator('label')).toHaveText(['Kari Berg', 'Nils Berg']);
+        await expect(also.locator('input:checked')).toHaveCount(0);
+        await also.locator('label', { hasText: 'Kari' }).locator('input').check();
+        await modal.locator('#rel-firstname').fill('Marta');
+        await modal.locator('#rel-lastname').fill('Berg');
+        await modal.locator('#rel-gender').selectOption('female');
+        await modal.locator('#rel-submit-btn').click();
+        await expect(modal).toBeHidden();
+        expect(await parentsOf(page, 'Ida')).toEqual(['Marta', 'Ole']);
+        expect(await parentsOf(page, 'Kari')).toEqual(['Marta', 'Ole']);
+        expect(await parentsOf(page, 'Nils')).toEqual(['?', 'Ole']);
+        expect(await unionCount(page)).toBe(2);
     });
 
     test('GEDCOM and JSON there and back, both ways: no nameless person, the same families, the child still drawn under its parent', async ({ page }) => {

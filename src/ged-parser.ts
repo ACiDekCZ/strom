@@ -3260,10 +3260,14 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             const id = personIdMap.get(c);
             return !!id && !!persons[id];
         });
-        if (ownChildren.length === 0) continue;
-
         const knownParentId = husbId ?? wifeId;
         const parentId = knownParentId && persons[knownParentId] ? knownParentId : undefined;
+        // Childless, one spouse — kept only when the family says something of its own (a dated or placed
+        // wedding, a note, a source…): Strom writes a "?" partner's family so, without a record for the "?".
+        const saysSomething = fam.unionEvents.some(e => e.date) || !!fam.marriageDate || !!fam.marriagePlace
+            || fam.events.length > 0 || !!fam.note || fam.noteFacts.length > 0 || fam.sourceRefs.length > 0
+            || fam.marriageParticipants.length > 0 || !!fam.story;
+        if (ownChildren.length === 0 && !(parentId && saysSomething)) continue;
 
         // A family naming children but neither parent still says they are
         // SIBLINGS. The model knows siblings only through shared parents, so

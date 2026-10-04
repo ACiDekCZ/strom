@@ -9,6 +9,7 @@
  */
 
 import { StromData, PersonId, ResearchLink, Source, APP_VERSION } from './types.js';
+import { withoutConvertedStandIns } from './single-parent.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
 export const STROM_RESEARCH_SOURCE = 'STROM_RESEARCH';
@@ -404,7 +405,10 @@ function fnv1a(text: string, seed: number): number {
 }
 
 /** The parts of a tree the user can change (see contentFingerprint). */
-function fingerprintParts(data: StromData): unknown[] {
+function fingerprintParts(raw: StromData): unknown[] {
+    // The "?" families the conversion made count as the parent links they were (src/single-parent.ts):
+    // a tree in step with the research before the conversion stays in step after it.
+    const data = withoutConvertedStandIns(raw);
     return [
         data.persons ?? {},
         data.partnerships ?? {},

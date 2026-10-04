@@ -1645,6 +1645,18 @@ class DataManagerClass {
             // — only between the anchor's actual two parents, never between a
             // new parent and someone who is not the anchor's other parent.
             let parentUnion: PartnershipId | undefined;
+            // One parent known: the anchor and the siblings entered with it share the unknown other one —
+            // one family with a "?" (siblings in the wizard are children of the same parents).
+            if (anchor.parentIds.length === 1 && !this.data.persons[anchor.parentIds[0]]?.isPlaceholder
+                && !Object.values(this.data.partnerships).some(u => u.childIds.includes(spec.anchorId))) {
+                const known = this.data.persons[anchor.parentIds[0]];
+                const stand = this.createPerson({ firstName: '?', lastName: '', gender: known.gender === 'male' ? 'female' : 'male' }, true);
+                const u = this.createPartnership(known.id, stand.id);
+                if (u) {
+                    this.addParentChild(stand.id, spec.anchorId, u.id);
+                    this.addParentChild(known.id, spec.anchorId, u.id);
+                }
+            }
             const parents = [...anchor.parentIds];
             if (parents.length === 2) {
                 const u = this.createPartnership(parents[0], parents[1]);
@@ -2565,7 +2577,13 @@ class DataManagerClass {
 
     // ==================== PARENT-CHILD OPERATIONS ====================
 
-    addParentChild(parentId: PersonId, childId: PersonId, partnershipId?: PartnershipId): boolean {
+    /**
+     * Link a parent and a child. A child with two parents, one of them the
+     * "?" stand-in: the parent takes its place — for this child, and for the
+     * siblings of that "?" family in `alsoChildren` (the user said so), never
+     * for the others.
+     */
+    addParentChild(parentId: PersonId, childId: PersonId, partnershipId?: PartnershipId, alsoChildren: readonly PersonId[] = []): boolean {
         const parent = this.data.persons[parentId];
         const child = this.data.persons[childId];
         if (!parent || !child) return false;
@@ -2580,7 +2598,7 @@ class DataManagerClass {
         // Two parents already, one of them the "?" stand-in: the real parent takes its place (one family, never a second).
         const stand = !child.parentIds.includes(parentId) && child.parentIds.length >= 2
             ? child.parentIds.find(pid => isPurePlaceholder(this.data, pid)) : undefined;
-        if (stand) fillPlaceholder(this.data, stand, parentId);
+        if (stand) fillPlaceholder(this.data, stand, parentId, [childId, ...alsoChildren]);
 
         // Add to parent's childIds if not already there
         if (!parent.childIds.includes(childId)) {

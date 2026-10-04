@@ -81,7 +81,7 @@ describe('GEDCOM: a child with one known parent', () => {
         expect(body(exportGed(importGed(second)))).toBe(body(first));
     });
 
-    it('a mother alone (a link without a family) is the WIFE; her children share one family, read back as one "?" family', () => {
+    it('a mother alone (links without a family) is the WIFE of a family per child, read back as a "?" family each', () => {
         const anna = person('Anna', 'female');
         const petr = person('Petr', 'male');
         const eva = person('Eva', 'female');
@@ -90,14 +90,15 @@ describe('GEDCOM: a child with one known parent', () => {
 
         const ged = exportGed(DataManager.getData());
         noNameless(ged);
-        expect(famCount(ged)).toBe(1);
-        expect(ged).toMatch(/0 @F1@ FAM\n1 WIFE @I1@\n1 CHIL @I2@\n1 CHIL @I3@\n0 /);
+        // Two children of one mother need not share the father: a family each.
+        expect(famCount(ged)).toBe(2);
+        expect(ged).toMatch(/0 @F1@ FAM\n1 WIFE @I1@\n1 CHIL @I2@\n0 @F2@ FAM\n1 WIFE @I1@\n1 CHIL @I3@\n0 /);
 
         const back = importGed(ged);
         expect(parentNames(back, 'Petr')).toEqual(['?', 'Anna']);
         expect(parentNames(back, 'Eva')).toEqual(['?', 'Anna']);
-        expect(Object.keys(back.partnerships)).toHaveLength(1);
-        expect(standIns(back)).toHaveLength(1);
+        expect(Object.keys(back.partnerships)).toHaveLength(2);
+        expect(standIns(back)).toHaveLength(2);
         expect(body(exportGed(back))).toBe(body(ged));
     });
 
@@ -186,15 +187,16 @@ describe('GEDCOM: a child with one known parent', () => {
         expect(body(exportGed(importGed(out)))).toBe(body(out));
     });
 
-    it('Strom\'s older single-parent family (_STROM_NO_COUPLE, one parent) reads as the "?" family', () => {
+    it('Strom\'s older single-parent family (_STROM_NO_COUPLE, one parent) reads as "?" families, one per child', () => {
         const ged = '0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n'
             + '0 @I1@ INDI\n1 NAME Ole /Berg/\n1 SEX M\n1 FAMS @F1@\n'
             + '0 @I2@ INDI\n1 NAME Ida /Berg/\n1 SEX F\n1 FAMC @F1@\n'
             + '0 @I3@ INDI\n1 NAME Kari /Berg/\n1 SEX F\n1 FAMC @F1@\n'
             + '0 @F1@ FAM\n1 HUSB @I1@\n1 CHIL @I2@\n1 CHIL @I3@\n1 _STROM_NO_COUPLE Y\n0 TRLR\n';
         const data = importGed(ged);
-        expect(Object.keys(data.partnerships)).toHaveLength(1);
-        expect(standIns(data)).toHaveLength(1);
+        // The mark said "no couple", not that the two share the other parent.
+        expect(Object.keys(data.partnerships)).toHaveLength(2);
+        expect(standIns(data)).toHaveLength(2);
         expect(parentNames(data, 'Ida')).toEqual(['?', 'Ole']);
         expect(parentNames(data, 'Kari')).toEqual(['?', 'Ole']);
     });

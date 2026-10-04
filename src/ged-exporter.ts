@@ -335,15 +335,24 @@ function pushStory(lines: string[], level: number, story: Story): void {
 }
 
 /**
- * A "?" stand-in with nothing of its own whose every family has children:
- * left out of GEDCOM (its families read back as one-parent families with a
- * stand-in). One in a childless family is kept: the family would be lost.
+ * A "?" stand-in with nothing of its own, whose children are all in its
+ * families: left out of GEDCOM (other programs would show a nameless
+ * spouse). Its families read back as one-parent families with a stand-in;
+ * a childless one keeps its wedding with the known spouse alone, or goes
+ * when it says nothing (familySaysNothing).
  */
 function standsInOnly(data: StromData, id: PersonId): boolean {
     if (!isPurePlaceholder(data, id)) return false;
     const p = data.persons[id];
     const unions = p.partnerships.map(uid => data.partnerships[uid]).filter(Boolean);
-    return unions.length > 0 && unions.every(u => u.childIds.length > 0) && p.childIds.every(cid => unions.some(u => u.childIds.includes(cid)));
+    return unions.length > 0 && p.childIds.every(cid => unions.some(u => u.childIds.includes(cid)));
+}
+
+/** A family of a left-out stand-in with no children and nothing of its own (no date, place, note…): nothing to write. */
+function familySaysNothing(data: StromData, u: Partnership): boolean {
+    if (u.childIds.length > 0 || !(standsInOnly(data, u.person1Id) || standsInOnly(data, u.person2Id))) return false;
+    return !u.startDate && !u.startPlace && !u.address && !u.endDate && !u.endPlace && !u.note && !(u.sourceIds?.length)
+        && !(u.events?.length) && !Object.values(u.ages ?? {}).some(a => a.trim()) && !u.story;
 }
 
 /**
@@ -390,6 +399,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
     // Map all partnerships to GEDCOM IDs
     for (const partnershipId of Object.keys(data.partnerships) as PartnershipId[]) {
+        if (familySaysNothing(data, data.partnerships[partnershipId])) continue;
         partnershipIdMap.set(partnershipId, `@F${familyCounter}@`);
         familyCounter++;
     }
@@ -410,7 +420,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         for (const [childId, child] of Object.entries(data.persons) as [PersonId, Person][]) {
             const loose = child.parentIds.filter(pid => personIdMap.has(pid) && !covered.has(`${childId}|${pid}`));
             if (loose.length === 0) continue;
-            const key = [...loose].sort().join('|');
+            // One parent alone: a family per child (two such children need not share the other parent).
+            const key = [...loose].sort().join('|') + (loose.length === 1 ? `|${childId}` : '');
             let family = byParents.get(key);
             if (!family) {
                 family = { gedcomId: `@F${familyCounter}@`, parentIds: loose, childIds: [] };

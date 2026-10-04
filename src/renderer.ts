@@ -773,9 +773,10 @@ class TreeRendererClass {
                 toolbarFocusName.textContent = displayName;
             }
 
-            // Update person count (visible / total)
-            const visibleCount = this.positions.size;
-            const countText = strings.focus.personCount(visibleCount, totalCount);
+            // Update person count (visible / total) — people, not the "?" stand-ins for unknown parents.
+            const isPerson = (id: PersonId): boolean => !DataManager.getPerson(id)?.isPlaceholder;
+            const visibleCount = [...this.positions.keys()].filter(isPerson).length;
+            const countText = strings.focus.personCount(visibleCount, DataManager.getAllPersons().filter(p => !p.isPlaceholder).length);
 
             if (focusCount) {
                 focusCount.textContent = countText;

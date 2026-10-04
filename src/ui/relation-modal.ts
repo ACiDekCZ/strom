@@ -4,6 +4,7 @@
  */
 
 import { DataManager, auditPersonName } from '../data.js';
+import { placeholderSiblings } from '../single-parent.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -134,6 +135,30 @@ export const relationModalMethods = uiModule({
                 otherParentGroup.style.display = '';
             } else {
                 otherParentGroup.style.display = 'none';
+            }
+        }
+
+        // Add parent to a child whose other parent is a "?": the siblings of that "?" family are listed —
+        // the new parent is theirs too only where the user ticks it (they may have another father).
+        const alsoGroup = document.getElementById('rel-also-children');
+        const alsoList = document.getElementById('rel-also-children-list');
+        const alsoLabel = document.getElementById('rel-also-children-label');
+        if (alsoGroup && alsoList && alsoLabel) {
+            const siblings = this.relationContext.relationType === 'parent'
+                ? placeholderSiblings(DataManager.getData(), this.relationContext.personId) : [];
+            alsoGroup.hidden = siblings.length === 0;
+            alsoLabel.textContent = strings.relationModal.alsoParentOf;
+            alsoList.innerHTML = '';
+            for (const sid of siblings) {
+                const sib = DataManager.getPerson(sid);
+                if (!sib) continue;
+                const label = document.createElement('label');
+                label.className = 'rel-also-child';
+                const box = document.createElement('input');
+                box.type = 'checkbox';
+                box.value = sid;
+                label.append(box, document.createTextNode(`${sib.firstName} ${sib.lastName}`.trim()));
+                alsoList.appendChild(label);
             }
         }
 
@@ -502,7 +527,8 @@ export const relationModalMethods = uiModule({
             }
 
             case 'parent': {
-                DataManager.addParentChild(newPersonId, personId);
+                const also = [...document.querySelectorAll<HTMLInputElement>('#rel-also-children-list input:checked')].map(b => b.value as PersonId);
+                DataManager.addParentChild(newPersonId, personId, undefined, also);
                 const child = DataManager.getPerson(personId);
                 if (child && child.parentIds.length === 2) {
                     const otherParentId = child.parentIds.find(pid => pid !== newPersonId);

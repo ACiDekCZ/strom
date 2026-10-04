@@ -9131,6 +9131,12 @@
         .research-changes-foot button.secondary { border: 1px solid var(--border); background: transparent; color: var(--text); font-weight: 400; }
         .research-changes-foot button.secondary:hover:not(:disabled) { background: var(--hover-bg); }
         .research-changes-note { font-size: 12px; color: var(--text-light); margin-right: auto; }
+        /* Add parent to a child of a "?" family: which siblings share the new parent (none by default). */
+        .rel-also-children { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--divider); border-radius: 8px; }
+        .rel-also-children[hidden] { display: none; }
+        .rel-also-children legend { padding: 0 4px; font-size: 13px; font-weight: 600; }
+        .modal label.rel-also-child { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; font-size: 14px; font-weight: 400; }
+        .modal .rel-also-child input { width: auto; margin: 0; }
         .research-changes-inexact { margin: 6px 14px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); font-size: 12px; line-height: 1.4; color: var(--text-light); }
         /* The note under the mark: a new conflict, the first start of sending by itself. */
         .research-sync-note {
@@ -12664,6 +12670,10 @@
                 <label for="rel-other-parent-select" id="rel-other-parent-label"></label>
                 <select id="rel-other-parent-select"></select>
             </div>
+            <fieldset id="rel-also-children" class="rel-also-children" hidden>
+                <legend id="rel-also-children-label"></legend>
+                <div id="rel-also-children-list"></div>
+            </fieldset>
             <div id="new-person-fields">
                 <div class="form-group">
                     <label for="rel-firstname" data-i18n="labels.firstName"></label>

@@ -7,6 +7,7 @@
  */
 
 import { StromData } from './types.js';
+import { normalizeSingleParents } from './single-parent.js';
 import { saveBaseline, loadBaseline, deleteBaselinesForTree } from './share-baselines.js';
 import { baseCopy } from './research-changes.js';
 
@@ -24,7 +25,11 @@ export async function saveResearchCopy(treeId: string, data: StromData): Promise
 /** The research's version of the tree as last kept, or null (none, or locked). */
 export async function loadResearchCopy(treeId: string): Promise<StromData | null> {
     try {
-        return await loadBaseline(key(treeId));
+        const base = await loadBaseline(key(treeId));
+        // Kept before a child with one known parent got its "?" family: the same conversion as the tree
+        // had on load (same ids), so the changes per person do not show those families as weddings.
+        if (base) normalizeSingleParents(base);
+        return base;
     } catch {
         return null;
     }

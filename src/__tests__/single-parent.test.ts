@@ -15,7 +15,7 @@ import { UndoManager } from '../undo.js';
 import { normalizeSingleParents, isPurePlaceholder } from '../single-parent.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
-import { stabilizeIds } from '../research-link.js';
+import { stabilizeIds, contentFingerprint } from '../research-link.js';
 import { validateTreeData } from '../validation.js';
 import { StromData, PersonId, TreeId, Gender, Person } from '../types.js';
 
@@ -87,7 +87,7 @@ describe('a child with one known parent', () => {
         consistent(data());
     });
 
-    it('older trees with a parent link without a family load as that family (deterministic, once), nothing lost', () => {
+    it('older trees with a parent link without a family load as that family — one per child (deterministic, once), nothing lost', () => {
         const old = {
             version: 10, partnerships: {},
             persons: {
@@ -99,8 +99,9 @@ describe('a child with one known parent', () => {
         const a = migrateData(structuredClone(old));
         const b = migrateData(structuredClone(old));
         expect(a).toEqual(b);
-        expect(unions(a)).toHaveLength(1);
-        expect(standIns(a)).toHaveLength(1);
+        // Ida and Kari each with Ole and a "?" of their own: nothing said they share the other parent.
+        expect(unions(a)).toHaveLength(2);
+        expect(standIns(a)).toHaveLength(2);
         expect(parentsOf(a, 'ida' as PersonId)).toEqual(['?', 'Ole']);
         expect(a.persons['kari' as PersonId].parentRelTypes).toEqual({ ole: 'adoptive' });
         // Loaded again: nothing more.
@@ -124,7 +125,7 @@ describe('a child with one known parent', () => {
     });
 
     for (const way of ['Add child ("?")', 'Add parent (one parent)'] as const) {
-        it(`${way}: the other parent added later takes the "?" place — one family, the "?" gone, every child of it`, () => {
+        it(`${way}: the other parent added later takes the "?" place for that child only — a sibling of the "?" family only when named`, () => {
             const ole = person('Ole', 'male');
             let ida: PersonId;
             if (way === 'Add child ("?")') {
@@ -134,21 +135,47 @@ describe('a child with one known parent', () => {
                 DataManager.addParentChild(ole, ida);
                 DataManager.ensureSingleParentFamilies();
             }
-            const famBefore = unions(data())[0].id;
-            // A sibling in the same family.
+            const fam = unions(data())[0];
+            const standId = fam.person1Id === ole ? fam.person2Id : fam.person1Id;
+            // Two siblings in the same "?" family (as "Add child" with the "?" partner chosen makes them).
             const kari = person('Kari', 'female');
-            DataManager.addParentChild(ole, kari, famBefore);
-            DataManager.addParentChild(data().partnerships[famBefore].person2Id === ole ? data().partnerships[famBefore].person1Id : data().partnerships[famBefore].person2Id, kari, famBefore);
+            const nils = person('Nils', 'male');
+            for (const c of [kari, nils]) {
+                DataManager.addParentChild(ole, c, fam.id);
+                DataManager.addParentChild(standId, c, fam.id);
+            }
             const marta = person('Marta', 'female');
             expect(DataManager.canAddParentChild(marta, ida)).toBe(true);
-            expect(DataManager.addParentChild(marta, ida)).toBe(true);
+            // Marta for Ida, and (ticked) for Kari — not for Nils.
+            expect(DataManager.addParentChild(marta, ida, undefined, [kari])).toBe(true);
             expect(parentsOf(data(), ida)).toEqual(['Marta', 'Ole']);
             expect(parentsOf(data(), kari)).toEqual(['Marta', 'Ole']);
+            expect(parentsOf(data(), nils)).toEqual(['?', 'Ole']);
+            expect(unions(data())).toHaveLength(2);
+            expect(standIns(data())).toHaveLength(1);
+            consistent(data());
+            // Nils's mother later: the same family as Marta's when it is Marta (never a second one), the "?" gone.
+            expect(DataManager.addParentChild(marta, nils)).toBe(true);
             expect(unions(data())).toHaveLength(1);
             expect(standIns(data())).toHaveLength(0);
             consistent(data());
         });
     }
+
+    it('a sibling never gets the other parent unasked', () => {
+        const ole = person('Ole', 'male');
+        const ida = addChildAlone(ole, 'Ida');
+        const fam = unions(data())[0];
+        const standId = fam.person1Id === ole ? fam.person2Id : fam.person1Id;
+        const kari = person('Kari', 'female');
+        DataManager.addParentChild(ole, kari, fam.id);
+        DataManager.addParentChild(standId, kari, fam.id);
+        const marta = person('Marta', 'female');
+        DataManager.addParentChild(marta, ida);
+        expect(parentsOf(data(), ida)).toEqual(['Marta', 'Ole']);
+        expect(parentsOf(data(), kari)).toEqual(['?', 'Ole']);
+        consistent(data());
+    });
 
     it('filled in when the two already had a family: the children move into it (never a second family)', () => {
         const ole = person('Ole', 'male');
@@ -251,5 +278,45 @@ describe('a child with one known parent', () => {
         expect(parentsOf(merged, idaThere.id)).toEqual(['?', 'Ole']);
         expect(merged.persons[ida] ? merged.persons[ida].id : idaThere.id).toBeTruthy();
         consistent(merged);
+    });
+
+    it('C: a tree in step with the research before the conversion is in step after it (the "?" families it made do not count); anything added to them does', () => {
+        const old = {
+            version: 10, partnerships: {},
+            persons: {
+                ole: { id: 'ole', firstName: 'Ole', lastName: 'Berg', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: ['ida'] },
+                ida: { id: 'ida', firstName: 'Ida', lastName: 'Berg', gender: 'female', isPlaceholder: false, partnerships: [], parentIds: ['ole'], childIds: [] },
+            },
+        } as unknown as StromData;
+        const before = contentFingerprint(old);
+        const converted = migrateData(structuredClone(old));
+        expect(standIns(converted)).toHaveLength(1);
+        expect(contentFingerprint(converted)).toBe(before);
+        // A wedding date on that family is a change to send.
+        const dated = structuredClone(converted);
+        unions(dated)[0].startDate = '1820';
+        expect(contentFingerprint(dated)).not.toBe(before);
+        // So is the mother named in place of the "?".
+        const named = structuredClone(converted);
+        const st = standIns(named)[0];
+        named.persons[st.id] = { ...st, firstName: 'Marta', isPlaceholder: false };
+        expect(contentFingerprint(named)).not.toBe(before);
+    });
+
+    it('D: a childless "?" partner is no nameless person in GEDCOM; with a wedding date the family stays (the known spouse alone), without anything it goes', () => {
+        const ole = person('Ole', 'male');
+        const stand = DataManager.createPerson({ firstName: '?', lastName: '', gender: 'female' }, true).id;
+        const u = DataManager.createPartnership(ole, stand)!;
+        let out = ged(data());
+        expect(out).not.toContain('1 NAME //');
+        expect(out.split('\n').filter(l => / FAM$/.test(l))).toHaveLength(0);
+        data().partnerships[u.id].startDate = '1820';
+        out = ged(data());
+        expect(out).not.toContain('1 NAME //');
+        expect(out).toMatch(/0 @F1@ FAM\n1 HUSB @I1@\n1 MARR\n2 DATE 1820/);
+        const back = fromGed(out);
+        expect(unions(back)).toHaveLength(1);
+        expect(unions(back)[0].startDate).toBe('1820');
+        expect(standIns(back)).toHaveLength(1);
     });
 });

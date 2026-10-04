@@ -2025,6 +2025,7 @@ const stringsEN = {
     // Relation modal
     relationModal: {
         addParent: 'Add parent',
+        alsoParentOf: 'Also the parent of (siblings whose other parent is unknown):',
         addPartner: 'Add partner',
         addChild: 'Add child',
         addSibling: 'Add sibling',
@@ -3738,7 +3739,7 @@ const stringsCZ: StringsType = {
         trimmed: (tree: string, kept: number) => `Zálohy stromu „${tree}“ zabírají hodně místa (skeny a fotky), proto se starší automatické zálohy mažou dřív — drží se ${nCs(kept, 'záloha', 'zálohy', 'záloh')}. Trvalou kopii si uložte exportem do souboru.`,
         trimmedFull: (kept: number) => `Úložiště prohlížeče je téměř plné, proto se drží jen ${nCs(kept, 'nejnovější záloha', 'nejnovější zálohy', 'nejnovějších záloh')}. Exportujte stromy do souborů a uvolněte místo.`,
         budgetNote: (size: string) => `Zálohy tohoto stromu jsou velké: nejstarší se mažou, jakmile zaberou víc než ${size}; tři nejnovější zůstávají vždy.`,
-        inBrowser: 'Zálohy žijí v tomto prohlížeči, ne ve tvém souboru se stromem — nezvětšují ho, ale zmizí s vymazáním dat prohlížeče nebo na jiném počítači. Zálohu, kterou si opravdu odložíš, uděláš exportem stromu.',
+        inBrowser: 'Zálohy žijí v tomto prohlížeči, ne ve vašem souboru se stromem — nezvětšují ho, ale zmizí s vymazáním dat prohlížeče nebo na jiném počítači. Zálohu, kterou si opravdu odložíte, uděláte exportem stromu.',
         menu: 'Zálohy',
         title: 'Historie záloh',
         empty: 'Zatím žádné zálohy',
@@ -5467,6 +5468,7 @@ const stringsCZ: StringsType = {
     // Relation modal
     relationModal: {
         addParent: 'Přidat rodiče',
+        alsoParentOf: 'Je rodičem také (sourozenci s neznámým druhým rodičem):',
         addPartner: 'Přidat partnera',
         addChild: 'Přidat dítě',
         addSibling: 'Přidat sourozence',
@@ -8881,6 +8883,7 @@ const stringsDE: StringsType = {
     // Relation modal
     relationModal: {
         addParent: 'Elternteil hinzufügen',
+        alsoParentOf: 'Auch Elternteil von (Geschwister mit unbekanntem zweitem Elternteil):',
         addPartner: 'Partner hinzufügen',
         addChild: 'Kind hinzufügen',
         addSibling: 'Geschwister hinzufügen',
