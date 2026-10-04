@@ -43,6 +43,8 @@ describe('the state of a research tree', () => {
         expect(researchSyncState(input()).kind).toBe('inSync');
         expect(researchSyncState(input({ remoteHead: 'bbbbbbb' })).kind).toBe('newer');
         expect(researchSyncState(input({ bridgeUp: false })).kind).toBe('bridgeDown');
+        // A newer version seen before the bridge went (or got stuck): it cannot be loaded now, only that is said.
+        expect(researchSyncState(input({ remoteHead: 'bbbbbbb', bridgeUp: false })).kind).toBe('bridgeDown');
     });
 
     it('the research\'s own write of this tree\'s send is not "newer"; moving past it is (loaded only when asked)', () => {

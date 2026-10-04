@@ -8,8 +8,8 @@
  * in src/ui/research-ui.ts. Nothing here touches the DOM or storage.
  */
 
-import { StromData, PersonId, ResearchLink, Source, APP_VERSION } from './types.js';
-import { withoutConvertedStandIns } from './single-parent.js';
+import { StromData, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION } from './types.js';
+import { withoutConvertedStandIns, isPurePlaceholder } from './single-parent.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
 export const STROM_RESEARCH_SOURCE = 'STROM_RESEARCH';
@@ -705,6 +705,45 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
     }
 
     return { data: { ...next, persons, ...(sources ? { sources } : {}) }, lost };
+}
+
+/**
+ * A family of one known spouse and a "?" with no children ("married, the
+ * spouse unknown") that a research version lacks: a research that does not
+ * keep such a family (no `family.alone` in its features) drops it, so it is
+ * carried over from the previous state onto `next` (already through
+ * stabilizeIds), the "?" and the family under their own ids. Only for a
+ * spouse `next` still has, who has no such family there yet. Returns a new
+ * object (or `next` itself when nothing is carried); neither input is changed.
+ */
+export function carryOverUnknownPartners(next: StromData, previous: StromData): StromData {
+    const persons = { ...(next.persons ?? {}) };
+    const partnerships = { ...(next.partnerships ?? {}) };
+    const lone = (data: StromData, u: Partnership): PersonId | null => {
+        if (u.childIds.length) return null;
+        if (isPurePlaceholder(data, u.person2Id) && !isPurePlaceholder(data, u.person1Id)) return u.person1Id;
+        if (isPurePlaceholder(data, u.person1Id) && !isPurePlaceholder(data, u.person2Id)) return u.person2Id;
+        return null;
+    };
+    const hasOne = new Set<PersonId>();
+    for (const u of Object.values(next.partnerships ?? {}) as Partnership[]) {
+        const known = lone(next, u);
+        if (known) hasOne.add(known);
+    }
+    let carried = false;
+    for (const u of Object.values(previous.partnerships ?? {}) as Partnership[]) {
+        const known = lone(previous, u);
+        if (!known || hasOne.has(known) || !persons[known] || partnerships[u.id]) continue;
+        const standId = u.person1Id === known ? u.person2Id : u.person1Id;
+        const stand = previous.persons[standId];
+        if (!stand || persons[standId]) continue;
+        persons[standId] = { ...stand, partnerships: [u.id], childIds: [], parentIds: [] };
+        persons[known] = { ...persons[known], partnerships: [...persons[known].partnerships, u.id] };
+        partnerships[u.id as PartnershipId] = { ...u, childIds: [] };
+        hasOne.add(known);
+        carried = true;
+    }
+    return carried ? { ...next, persons, partnerships } : next;
 }
 
 /**

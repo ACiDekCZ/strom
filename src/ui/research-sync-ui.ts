@@ -355,6 +355,11 @@ export const researchSyncMethods = uiModule({
         return runtime.get(researchId)?.status?.version ?? '';
     },
 
+    /** The research keeps a family of one spouse and no children (its `family.alone`); not known: no. */
+    researchKeepsLoneFamilies(researchId: string): boolean {
+        return !!runtime.get(researchId)?.status?.features?.includes('family.alone');
+    },
+
     /** The research said what it takes (now or before): sending straight and the states are on. */
     researchSyncCapable(researchId: string): boolean {
         return !!(runtime.get(researchId)?.status?.accepts ?? storedResearchBridge(researchId)?.accepts);
@@ -2242,7 +2247,7 @@ export const researchSyncMethods = uiModule({
             // "Only load from the research": never a Send button — the quiet mark says nothing goes.
             if (researchSendMode(link) === 'off') {
                 const down = kind === 'bridgeDown';
-                const label = down ? s.markBridgeDown('') : s.sendOffLine;
+                const label = down ? s.stateBridgeDown : s.sendOffLine;
                 set('is-send', `<button type="button" class="research-sync-mark" id="research-sync-mark" data-look="${down ? 'ghost' : 'off'}"`
                     + ` title="${esc(label)}" aria-label="${esc(label)}" onclick="${call('openResearchSyncMenu')}">`
                     + `<span class="research-sync-mark-${down ? 'ghost' : 'dot'}" aria-hidden="true"></span></button>`);
@@ -2253,7 +2258,7 @@ export const researchSyncMethods = uiModule({
                 // In its place the quiet mark (in step, or the research not running), at the end next to the tree switcher.
                 const down = kind === 'bridgeDown' || kind === 'unsentBridgeDown';
                 const lwm = researchAutoState(ctx.treeId).lastWritten;
-                const label = down ? s.markBridgeDown(lwm ? when(lwm.at) : '') : lwm ? s.writtenAt(when(lwm.at)) : s.stateInSync;
+                const label = down ? (lwm ? s.markBridgeDown(when(lwm.at)) : s.stateBridgeDown) : lwm ? s.writtenAt(when(lwm.at)) : s.stateInSync;
                 set('is-send is-reserved', `<button type="button" class="research-sync-mark research-sync-mark--reserved" id="research-sync-mark" data-look="${down ? 'ghost' : 'dot'}"`
                     + ` title="${esc(label)}" aria-label="${esc(label)}" onclick="${call('openResearchSyncMenu')}">`
                     + `<span class="research-sync-mark-${down ? 'ghost' : 'dot'}" aria-hidden="true"></span></button>`
@@ -2292,7 +2297,7 @@ export const researchSyncMethods = uiModule({
             label = s.markPending(when(state.sent?.at));
         } else if (kind === 'bridgeDown' || kind === 'autoBridgeDown') {
             look = 'ghost';
-            label = s.markBridgeDown(lw ? when(lw.at) : '');
+            label = lw ? s.markBridgeDown(when(lw.at)) : s.stateBridgeDown;
         } else {
             look = 'dot';
             label = writtenAt;

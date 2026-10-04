@@ -1474,8 +1474,13 @@ export const sourcesMethods = uiModule({
         const note = (book.note ?? '').split('\n').filter(line => (!page || !line.includes(page)) && !entryDateLine(line)).join('\n').trim();
         // The book's reference without its page ("Voss, Ministerialbok 1820–1835, s. "): the user types the page.
         const reference = bookReference(page);
+        // An entry titled after its person ("Baptism of Ota Hora 1915") names someone else here: the title
+        // made from what is cited instead (N6 of the final round), the book's own title otherwise.
+        const namesPerson = Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder && !!p.firstName && !!p.lastName
+            && book.title.toLocaleLowerCase().includes(`${p.firstName} ${p.lastName}`.toLocaleLowerCase()));
+        const suggested = namesPerson ? this.suggestedSourceTitle() : '';
         this.showAddSourceModal({
-            title: book.title, repository: book.repository, url: book.url, note,
+            title: suggested || book.title, repository: book.repository, url: book.url, note,
             ...(reference ? { reference } : {}),
             ...(book.quality !== undefined ? { quality: book.quality } : {}),
         });

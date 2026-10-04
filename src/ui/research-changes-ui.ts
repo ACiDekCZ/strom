@@ -249,12 +249,17 @@ export const researchChangesMethods = uiModule({
                 foot = `<button type="button" class="research-sync-link" data-act="decide">${esc(s.decideInResearch)}</button>`;
             }
         } else {
-            list = this.researchChangesNow() ?? [];
+            const now = this.researchChangesNow();
+            list = now ?? [];
             title = c.willSendTitle;
-            // Changed since the research last had the tree: its version loaded, or the last send it wrote.
-            const lastWritten = ctx.link.sent?.state === 'written' ? ctx.link.sent.closedAt ?? ctx.link.sent.at : '';
-            const since = lastWritten && Date.parse(lastWritten) > Date.parse(ctx.link.syncedAt) ? lastWritten : ctx.link.syncedAt;
-            sub = auto ? c.willSendAutoSub(list.length) : c.willSendSub(list.length, clock(since));
+            // Changed since the research last had the tree: its version loaded, or the last send it wrote
+            // (also when a later send is still on its way or was taken back).
+            const lastSent = ctx.link.sent?.state === 'written' ? ctx.link.sent.closedAt ?? ctx.link.sent.at : '';
+            const since = [lastSent, researchAutoState(ctx.treeId).lastWritten?.at ?? '', ctx.link.syncedAt]
+                .filter(t => Number.isFinite(Date.parse(t))).sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+            // No count when the exact list cannot be told ("0 people" would say nothing changed).
+            const inexact = now === null || !!opts.inexact;
+            sub = inexact ? c.changedSince(clock(since)) : auto ? c.willSendAutoSub(list.length) : c.willSendSub(list.length, clock(since));
             foot = auto && !opts.confirm
                 ? `<button type="button" class="research-sync-link" data-act="send">${esc(s.sendNow)}</button>`
                 : (opts.confirm && !ctx.link.previewDue

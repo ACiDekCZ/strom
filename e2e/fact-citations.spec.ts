@@ -105,6 +105,22 @@ test.describe('birth and death citations', () => {
         expect(page2).toMatchObject({ reference: 'Voss, Ministerialbok 1820–1835, s. 113', note: 'Farní úřad Voss' });
     });
 
+    test('"Another page" of an entry titled after another person: the title made from what is cited, not that person\'s', async ({ page }) => {
+        await tree(page, {
+            j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', deathDate: '1932' },
+            o: { firstName: 'Ota', lastName: 'Hora', birthDate: '1915', birthSourceIds: ['s3'] },
+        }, true);
+        await page.evaluate(() => {
+            window.Strom.DataManager.getData().sources!['s3' as never] = { id: 's3', title: 'Baptism of Ota Hora 1915', reference: 'fol. 15' } as never;
+        });
+        await page.evaluate(() => window.Strom.UI.showEditPersonModal('j' as never));
+        await page.locator('#birth-sources-group .fact-cite-btn').click();
+        await page.locator('#source-picker-modal .source-picker-row', { hasText: 'Ota Hora' }).getByRole('button', { name: 'Another page' }).click();
+        const title = page.locator('#source-editor-modal #input-source-title');
+        await expect(title).not.toHaveValue(/Ota Hora/);
+        await expect(title).toHaveValue(/Jan Víšek/);
+    });
+
     test('× on the death chip takes the citation off the death only', async ({ page }) => {
         await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', deathDate: '1932', sourceIds: ['s1'], deathSourceIds: ['s1'] } });
         await page.evaluate(() => window.Strom.UI.showEditPersonModal('j' as never));

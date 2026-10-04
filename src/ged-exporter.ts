@@ -338,21 +338,15 @@ function pushStory(lines: string[], level: number, story: Story): void {
  * A "?" stand-in with nothing of its own, whose children are all in its
  * families: left out of GEDCOM (other programs would show a nameless
  * spouse). Its families read back as one-parent families with a stand-in;
- * a childless one keeps its wedding with the known spouse alone, or goes
- * when it says nothing (familySaysNothing).
+ * a childless one is the known spouse's family alone with its status
+ * ("married, the spouse unknown"): only the user keeps one (tidyPlaceholders
+ * drops one left empty).
  */
 function standsInOnly(data: StromData, id: PersonId): boolean {
     if (!isPurePlaceholder(data, id)) return false;
     const p = data.persons[id];
     const unions = p.partnerships.map(uid => data.partnerships[uid]).filter(Boolean);
     return unions.length > 0 && p.childIds.every(cid => unions.some(u => u.childIds.includes(cid)));
-}
-
-/** A family of a left-out stand-in with no children and nothing of its own (no date, place, note…): nothing to write. */
-function familySaysNothing(data: StromData, u: Partnership): boolean {
-    if (u.childIds.length > 0 || !(standsInOnly(data, u.person1Id) || standsInOnly(data, u.person2Id))) return false;
-    return !u.startDate && !u.startPlace && !u.address && !u.endDate && !u.endPlace && !u.note && !(u.sourceIds?.length)
-        && !(u.events?.length) && !Object.values(u.ages ?? {}).some(a => a.trim()) && !u.story;
 }
 
 /**
@@ -399,7 +393,6 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
     // Map all partnerships to GEDCOM IDs
     for (const partnershipId of Object.keys(data.partnerships) as PartnershipId[]) {
-        if (familySaysNothing(data, data.partnerships[partnershipId])) continue;
         partnershipIdMap.set(partnershipId, `@F${familyCounter}@`);
         familyCounter++;
     }
@@ -789,7 +782,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
         // Marriage event (for married or divorced status) — not the bare status of a family whose other
         // parent is only a "?" stand-in (it would read as a wedding to someone unknown).
-        const withStandIn = !personIdMap.has(p1Id) || !personIdMap.has(p2Id);
+        // A childless one says it: its status is all it has ("married, the spouse unknown").
+        const withStandIn = (!personIdMap.has(p1Id) || !personIdMap.has(p2Id)) && partnership.childIds.length > 0;
         const hasMarriage = ((partnership.status === 'married' || partnership.status === 'divorced') && !withStandIn) ||
             !!partnership.startDate || !!partnership.startPlace || !!partnership.address
             || Object.values(partnership.ages ?? {}).some(a => a.trim());

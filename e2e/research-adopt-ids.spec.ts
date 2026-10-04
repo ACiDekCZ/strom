@@ -337,3 +337,52 @@ test.describe('a tree from older data, handed over by hand', () => {
         await expect(page.locator('#research-sync-send')).toHaveCount(0);
     });
 });
+
+test.describe('"married, the spouse unknown" through a hand-over', () => {
+    test('the family goes in the hand-over; a research version without it leaves it in the tree, nothing to send', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await page.evaluate(async () => {
+            const launched: string[] = [];
+            (window as unknown as { __launched: string[] }).__launched = launched;
+            window.Strom.UI.handOverResearchLink = (url: string) => { launched.push(url); };
+            const p = (id: string, firstName: string, gender: string, extra: Record<string, unknown> = {}) => ({
+                id, firstName, lastName: '', gender, isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...extra,
+            });
+            // As 3.8.2 kept it: "1" married to a "?", no children.
+            await window.Strom.DataManager.importAsNewTree({
+                persons: {
+                    a: p('a', '1', 'male', { partnerships: ['u'] }),
+                    q: p('q', '?', 'female', { isPlaceholder: true, partnerships: ['u'] }),
+                },
+                partnerships: { u: { id: 'u', person1Id: 'a', person2Id: 'q', childIds: [], status: 'married' } },
+            } as never, 'Test Win4');
+            window.Strom.UI.updateTreeSwitcher();
+            window.Strom.UI.startResearchAdopt(window.Strom.DataManager.getCurrentTreeId());
+        });
+        const url = (await page.evaluate(() => (window as unknown as { __launched: string[] }).__launched))[0];
+        // The research (without family.alone) keeps no family of one spouse and no children.
+        const version = [
+            '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 3 OCT 2026', `1 _STROM_TREE ${UUID}`, '1 _STROM_HEAD abc1234', '1 CHAR UTF-8', '1 NOTE Test Win4',
+            '0 @P0001@ INDI', '1 NAME 1 //', '1 SEX M', '1 REFN P0001', '2 TYPE strom-research', '0 TRLR',
+        ].join('\n');
+        const bridge = await routeBridge(page, url.match(TOKEN_RE)![1], { ids: true, treeGed: version });
+        await page.evaluate((base) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: base })), BRIDGE);
+        await page.locator('#research-adopt-confirm').click();
+        await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.');
+        // What went over says it: the known spouse's family with the wedding, no nameless person.
+        expect(bridge.adopted[0]).toMatch(/0 @F1@ FAM\n1 HUSB @I1@\n1 MARR\n/);
+        expect(bridge.adopted[0]).not.toContain('1 NAME //');
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('abc1234');
+        await expect.poll(() => bridge.gedAsks).toBeGreaterThan(0);
+        await page.waitForTimeout(500);
+        const after = await page.evaluate(() => {
+            const d = window.Strom.DataManager.getData();
+            return Object.values(d.partnerships).map((u: any) => ({ status: u.status, people: [u.person1Id, u.person2Id].map((id: string) => d.persons[id as never]?.isPlaceholder ? '?' : d.persons[id as never]?.firstName).sort() }));
+        });
+        expect(after).toEqual([{ status: 'married', people: ['1', '?'] }]);
+        await page.evaluate(() => window.Strom.UI.pollResearchBridge());
+        await page.waitForTimeout(1000);
+        expect((await page.evaluate(() => window.Strom.UI.currentResearchSyncState())).core).not.toBe('unsent');
+    });
+});

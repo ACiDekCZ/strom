@@ -35,6 +35,11 @@ import {
     unpoolJson, unpoolObject, registerPoolReferences, forgetPoolScope, seedPoolScope, notePoolSizes,
 } from './media-pool.js';
 
+/** People in a tree, without the "?" stand-ins (as the focus bar counts them). */
+function realPersonCount(data: StromData): number {
+    return Object.values(data.persons ?? {}).filter(p => p && !p.isPlaceholder).length;
+}
+
 /**
  * Outcome of reading a tree record. `locked` / `undecryptable` are NOT the
  * same as an empty tree: loading them as empty and saving afterwards used to
@@ -457,7 +462,7 @@ class TreeManagerClass {
             name: newName,
             createdAt: now,
             lastModifiedAt: now,
-            personCount: Object.keys(sourceData.persons).length,
+            personCount: realPersonCount(sourceData),
             partnershipCount: Object.keys(sourceData.partnerships).length,
             sizeBytes,
             // A duplicate of a research tree can be sent back too, as a copy.
@@ -870,7 +875,7 @@ class TreeManagerClass {
         const tree = this.index.trees.find(t => t.id === id);
         if (tree) {
             tree.lastModifiedAt = new Date().toISOString();
-            tree.personCount = Object.keys(data.persons).length;
+            tree.personCount = realPersonCount(data);
             tree.partnershipCount = Object.keys(data.partnerships).length;
             tree.sizeBytes = sizeBytes;
             this.saveIndex();
@@ -908,7 +913,7 @@ class TreeManagerClass {
             name,
             createdAt: now,
             lastModifiedAt: now,
-            personCount: Object.keys(data.persons).length,
+            personCount: realPersonCount(data),
             partnershipCount: Object.keys(data.partnerships).length,
             sizeBytes,
             // The file it came from is a copy (a split-off part is not).

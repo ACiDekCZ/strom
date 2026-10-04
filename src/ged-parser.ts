@@ -3262,9 +3262,10 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         });
         const knownParentId = husbId ?? wifeId;
         const parentId = knownParentId && persons[knownParentId] ? knownParentId : undefined;
-        // Childless, one spouse — kept only when the family says something of its own (a dated or placed
-        // wedding, a note, a source…): Strom writes a "?" partner's family so, without a record for the "?".
-        const saysSomething = fam.unionEvents.some(e => e.date) || !!fam.marriageDate || !!fam.marriagePlace
+        // Childless, one spouse — kept only when the family says something of its own (a wedding or a
+        // divorce, even undated, a status, a note, a source…): Strom writes a "?" partner's family so,
+        // without a record for the "?" ("married, the spouse unknown").
+        const saysSomething = fam.unionEvents.length > 0 || fam.divorced || !!fam.stat || !!fam.marriageDate || !!fam.marriagePlace
             || fam.events.length > 0 || !!fam.note || fam.noteFacts.length > 0 || fam.sourceRefs.length > 0
             || fam.marriageParticipants.length > 0 || !!fam.story;
         if (ownChildren.length === 0 && !(parentId && saysSomething)) continue;

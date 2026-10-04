@@ -32,7 +32,7 @@ import { formatLiveTime, formatLiveClock } from '../live-time.js';
 import { isMobile } from '../breakpoints.js';
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
-    decideResearchOpen, stabilizeIds, carryOverMedia, sanitizeLiveStatus, sanitizeLiveChange,
+    decideResearchOpen, stabilizeIds, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
@@ -1335,7 +1335,9 @@ export const researchUiMethods = uiModule({
         } else {
             treeId = existing.id;
             if (existing.isHidden) TreeManager.setTreeVisibility(treeId, false);
-            const stable = carryOverMedia(stabilizeIds(data, previous!), previous!).data;
+            const kept = carryOverMedia(stabilizeIds(data, previous!), previous!).data;
+            // "Married, the spouse unknown": a research that drops such a family never takes it from here (N1).
+            const stable = source.treeId && this.researchKeepsLoneFamilies(source.treeId) ? kept : carryOverUnknownPartners(kept, previous!);
             if (DataManager.getCurrentTreeId() !== treeId) {
                 if (!await DataManager.switchTree(treeId)) return null;
                 TreeRenderer.restoreFromSession();
@@ -2143,7 +2145,8 @@ export const researchUiMethods = uiModule({
         const active = DataManager.getCurrentTreeId() === s.treeId;
         const previous = await readTree(s.treeId);
         // Images added in the app before following stay (the research has none of them).
-        const stable = migrateData(previous ? carryOverMedia(stabilizeIds(data, previous), previous).data : data);
+        const kept = previous ? carryOverMedia(stabilizeIds(data, previous), previous).data : data;
+        const stable = migrateData(previous && !this.researchKeepsLoneFamilies(s.researchId) ? carryOverUnknownPartners(kept, previous) : kept);
         if (active) {
             // Following replaces the tree again and again: one backup, before the first time.
             if (!s.backedUp) s.backedUp = !!await DataManager.snapshotNow('pre-research-load');

@@ -156,7 +156,8 @@ function sendsState(input: ResearchSyncInput): ResearchSyncState {
     // the conflicts to decide (finding 40); loading it stays possible, asked.
     // Also after a later send that left none: the version still holds them (finding 40).
     if (moved && ((sent?.state === 'written' && (sent.conflicts ?? 0) > 0) || input.heldConflicts)) return st('writtenConflicts', sent ? { sent } : {});
-    if (newer) return st('newer');
+    // Loading it needs the bridge: not running or stuck, only that is said (N4 of the final round).
+    if (newer && input.bridgeUp) return st('newer');
     const quiet: ResearchSyncState = !input.bridgeUp
         ? { kind: 'bridgeDown', core: 'bridgeDown' }
         : input.written ? { kind: 'written', core: 'written' } : { kind: 'inSync', core: 'inSync' };

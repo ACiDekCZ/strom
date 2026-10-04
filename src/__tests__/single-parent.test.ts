@@ -303,18 +303,32 @@ describe('a child with one known parent', () => {
         expect(contentFingerprint(named)).not.toBe(before);
     });
 
-    it('D: a childless "?" partner is no nameless person in GEDCOM; with a wedding date the family stays (the known spouse alone), without anything it goes', () => {
+    it('D: a childless "?" partner is no nameless person in GEDCOM; its family stays (the known spouse alone with the status) and reads back', () => {
         const ole = person('Ole', 'male');
         const stand = DataManager.createPerson({ firstName: '?', lastName: '', gender: 'female' }, true).id;
         const u = DataManager.createPartnership(ole, stand)!;
+        // "Married, the spouse unknown": nothing else, still said (N1 of the final round: lost on a hand-over).
         let out = ged(data());
         expect(out).not.toContain('1 NAME //');
-        expect(out.split('\n').filter(l => / FAM$/.test(l))).toHaveLength(0);
+        expect(out).toMatch(/0 @F1@ FAM\n1 HUSB @I1@\n1 MARR\n0 /);
+        let back = fromGed(out);
+        expect(unions(back)).toHaveLength(1);
+        expect(unions(back)[0].status).toBe('married');
+        expect(standIns(back)).toHaveLength(1);
+        // Divorced and separated keep their status too.
+        data().partnerships[u.id].status = 'divorced';
+        back = fromGed(ged(data()));
+        expect(unions(back).map(x => x.status)).toEqual(['divorced']);
+        data().partnerships[u.id].status = 'separated';
+        back = fromGed(ged(data()));
+        expect(unions(back).map(x => x.status)).toEqual(['separated']);
+        // With a wedding date: the date too.
+        data().partnerships[u.id].status = 'married';
         data().partnerships[u.id].startDate = '1820';
         out = ged(data());
         expect(out).not.toContain('1 NAME //');
         expect(out).toMatch(/0 @F1@ FAM\n1 HUSB @I1@\n1 MARR\n2 DATE 1820/);
-        const back = fromGed(out);
+        back = fromGed(out);
         expect(unions(back)).toHaveLength(1);
         expect(unions(back)[0].startDate).toBe('1820');
         expect(standIns(back)).toHaveLength(1);
