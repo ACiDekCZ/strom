@@ -80,6 +80,7 @@ export function validateTreeData(data: StromData): ValidationResult {
     checkPossibleDuplicates(data, addIssue);
     checkPlaceSpellings(data, addIssue);
     checkRecurringGodparents(data, addIssue);
+    checkImportMerges(data, addIssue);
 
     const stats = {
         errors: issues.filter(i => i.severity === 'error').length,
@@ -686,13 +687,21 @@ export function isSafePhotoDataUrl(url: string): boolean {
     return SAFE_IMAGE_DATA_URL.test(url);
 }
 
-/** An attachment may also be a base64 PDF — nothing else (no HTML, SVG, script). */
-/** An attachment held only as its original by the research: no data here, the file named by its hash. */
+/**
+ * The picture of an attachment held only as its original (a page icon, 163
+ * bytes). Older apps (3.8.x) drop an attachment whose data is not an image or
+ * a PDF when they load a tree; with this one they keep it — and the original's
+ * hash with it — when they save a tree 3.9 wrote. Never shown here.
+ */
+export const ORIGINAL_ONLY_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAIAAADYYG7QAAAAaklEQVR42u3YsQ2AMAwEwOw/AGuwGDtAQRsky2Aw0n3h+qT/NBlbswwgICCgyyzhvAfaA7lpKgGdtxcobSoE5Uy1oISpatTpd/c8aEoEAmoPWgNRGZBRqwzIqFUGBAT0PSgdP2hAQED/AR2hzcxJL1f+tQAAAABJRU5ErkJggg==';
+
+/** An attachment held only as its original by the research: no data of its own here, the file named by its hash. */
 export function isOriginalOnlyAttachment(att: { dataUrl?: unknown; originalOnly?: unknown; original?: { sha256?: unknown } }): boolean {
-    return att.originalOnly === true && att.dataUrl === '' && typeof att.original?.sha256 === 'string'
-        && /^[0-9a-f]{64}$/.test(att.original.sha256);
+    return att.originalOnly === true && (att.dataUrl === '' || att.dataUrl === ORIGINAL_ONLY_DATA_URL)
+        && typeof att.original?.sha256 === 'string' && /^[0-9a-f]{64}$/.test(att.original.sha256);
 }
 
+/** An attachment may also be a base64 PDF — nothing else (no HTML, SVG, script). */
 export function isSafeAttachmentDataUrl(url: string): boolean {
     return SAFE_IMAGE_DATA_URL.test(url) || SAFE_PDF_DATA_URL.test(url);
 }
@@ -737,6 +746,8 @@ export function stripUnsafeMediaDataUrls(data: StromData): number {
             const kept = person.attachments.filter(att =>
                 att && typeof att.dataUrl === 'string' && (isSafeAttachmentDataUrl(att.dataUrl) || isOriginalOnlyAttachment(att)));
             dropped += person.attachments.length - kept.length;
+            // Held as an original only: the page icon as its data, so a 3.8.x app keeps it (see ORIGINAL_ONLY_DATA_URL).
+            for (const att of kept) if (att.dataUrl === '' && isOriginalOnlyAttachment(att)) att.dataUrl = ORIGINAL_ONLY_DATA_URL;
             if (kept.length > 0) person.attachments = kept;
             else delete person.attachments;
         }
@@ -1053,6 +1064,44 @@ function checkPossibleDuplicates(
 }
 
 /**
+ * Strom 3.8.1 and older could give two people of a large GEDCOM import the
+ * same id: the later one replaced the earlier, and the one left holds both
+ * people's relations (more than two parents, two fathers or two mothers, a
+ * partner of the same sex, children born before or soon after them, itself
+ * among its parents, children or partners). One clear sign, or two weaker
+ * ones together: reported with the way out — import the original file again.
+ */
+function checkImportMerges(data: StromData, addIssue: AddIssue): void {
+    const CHILD_MIN_GAP = 12;
+    for (const [id, person] of Object.entries(data.persons) as [PersonId, Person][]) {
+        if (!person) continue;
+        const strong = new Set<string>();
+        const weak = new Set<string>();
+        const parents = person.parentIds.map(pid => data.persons[pid]).filter((p): p is Person => !!p);
+        if (person.parentIds.length > 2) strong.add('parents');
+        else if (parents.length === 2 && parents[0].gender === parents[1].gender && (parents[0].gender === 'male' || parents[0].gender === 'female')) weak.add('parentsSameSex');
+        if (person.parentIds.includes(id) || person.childIds.includes(id)) strong.add('self');
+        for (const uid of person.partnerships) {
+            const u = data.partnerships[uid];
+            if (!u) continue;
+            const otherId = u.person1Id === id ? u.person2Id : u.person1Id;
+            if (otherId === id) { strong.add('self'); continue; }
+            const other = data.persons[otherId];
+            if (other && other.gender === person.gender && (person.gender === 'male' || person.gender === 'female')) weak.add('partnerSameSex');
+        }
+        const born = parseYear(person.birthDate);
+        if (born !== null && person.childIds.some(cid => {
+            const childBorn = parseYear(data.persons[cid]?.birthDate);
+            return childBorn !== null && childBorn - born < CHILD_MIN_GAP;
+        })) weak.add('childTooEarly');
+        if (strong.size === 0 && weak.size < 2) continue;
+        addIssue('error', 'importMerge',
+            `${getPersonName(person)} looks like two people merged into one at a GEDCOM import (${[...strong, ...weak].join(', ')})`,
+            [id, ...person.parentIds.filter(pid => pid !== id)]);
+    }
+}
+
+/**
  * A godparent at one baptism is a neighbour; the same name at three baptisms in
  * one family is almost always a relative. That pattern is the whole reason for
  * recording godparents as data, and nobody sees it by reading one event at a
@@ -1137,6 +1186,7 @@ const VALIDATION_TYPE_KEYS: Record<string, string> = {
     'placeSpelling': 'valPlaceSpelling',
     'recurringGodparent': 'valRecurringGodparent',
     'photoUnsafeData': 'valPhotoUnsafeData',
+    'importMerge': 'valImportMerge',
 };
 
 /** Localized message for a validation issue type (falls back to the raw type). */

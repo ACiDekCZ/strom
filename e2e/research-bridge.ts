@@ -76,6 +76,10 @@ export interface FakeBridge {
     batches?: unknown[];
     /** A file it has, sent again with a person or a note: it adds them to its input (`added`, Strom Research 1.12). */
     knownAdds?: boolean;
+    /** The research's version it says in `/status` (`strom`). */
+    strom?: string;
+    /** Tasks waiting for the user (`/status.waiting`). */
+    waiting?: unknown[];
 }
 
 export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
@@ -136,6 +140,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 tree: { id: UUID, name: 'Víškovi' }, head: b.head, links: b.links,
                 accepts: b.accepts, inbox: { trees: b.inbox, material: 0 }, lastIntake: b.lastIntake,
                 ...(b.batches ? { batches: b.batches } : {}),
+                ...(b.strom ? { strom: b.strom } : {}),
+                ...(b.waiting ? { waiting: b.waiting } : {}),
                 ...(b.accepts ? { sends: b.sends } : {}),
             });
         }

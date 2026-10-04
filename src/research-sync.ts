@@ -5,8 +5,9 @@
  * Pure: the UI feeds it what it knows and shows the one state that matters most.
  */
 
-import { ResearchLink, ResearchSend, Source, StromData, Person, PersonId } from './types.js';
+import { ResearchLink, ResearchSend, Source, StromData, Person, PersonId, ResearchConflict } from './types.js';
 import { ResearchInbox, LiveIntake, ResearchSendRecord } from './research-link.js';
+import { ResearchHeldConflicts, trimHeldConflicts } from './research-device.js';
 
 /**
  * A send the research wrote vouches for its version (that version holds
@@ -62,6 +63,8 @@ export interface ResearchSyncInput {
     autoDue?: boolean;
     /** The last send the research wrote (it outlives loading the new version). */
     written?: { at: string; changes: number | null; conflicts: number } | null;
+    /** The research's version, read but not loaded, would take over values where conflicts are open (finding 40). */
+    heldConflicts?: boolean;
     /** The research switched between agent and archive since the user last saw it. */
     switched?: boolean;
     /** The one-time offer to send by itself was not answered yet. */
@@ -99,8 +102,11 @@ export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
     // What the research does not have: changed since its version and not the state sent.
     const unsent = !input.matchesBase && input.current !== sent?.fingerprint;
     const newer = !!input.remoteHead && !!link.head && input.remoteHead !== link.head;
+    // A send the research took back waits for the user before anything else goes: a copy sent now
+    // would carry what was taken back and write it there again (finding 43).
+    if (sent?.state === 'undone') return st('rejected', { sent });
     if (unsent && newer && input.bridgeUp) return st('unsentAndNewer');
-    if (sent?.state === 'discarded' || sent?.state === 'undone') return st('rejected', { sent });
+    if (sent?.state === 'discarded') return st('rejected', { sent });
     if (link.refused) return st(auto ? 'autoPaused' : 'refused', { reason: link.refused.reason });
     if (unsent && auto && input.autoDue && !input.bridgeUp && !input.sending) return st('autoBridgeDown');
     if (unsent && !auto) return st(input.bridgeUp ? 'unsent' : 'unsentBridgeDown');
@@ -111,7 +117,8 @@ export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
     if (sent?.state === 'pending') return st('sentPending', { sent });
     // Its version holds the research's values where the conflicts are: not "a newer version" to load,
     // the conflicts to decide (finding 40); loading it stays possible, asked.
-    if (newer && sent?.state === 'written' && (sent.conflicts ?? 0) > 0) return st('writtenConflicts', { sent });
+    // Also after a later send that left none: the version still holds them (finding 40).
+    if (newer && ((sent?.state === 'written' && (sent.conflicts ?? 0) > 0) || input.heldConflicts)) return st('writtenConflicts', sent ? { sent } : {});
     if (newer) return st('newer');
     const quiet: ResearchSyncState = !input.bridgeUp
         ? { kind: 'bridgeDown', core: 'bridgeDown' }
@@ -303,4 +310,40 @@ export function conflictTakeovers(previous: StromData, incoming: StromData): Per
         if (replaced) out.push(p.id);
     }
     return out;
+}
+
+/**
+ * The research's conflicts as a version it did not load has them (finding 40):
+ * per person, the research's list where it differs from the tree's (a conflict
+ * that took the user's newer value, one decided there, a new one), and whose
+ * values that version would take over. `incoming` carries the app's ids.
+ */
+export function heldConflicts(previous: StromData, incoming: StromData, base: string, head: string): ResearchHeldConflicts {
+    const persons: Record<string, ResearchConflict[]> = {};
+    for (const p of Object.values(incoming.persons ?? {})) {
+        const before = p ? previous.persons?.[p.id] : undefined;
+        if (!p || !before) continue;
+        const theirs = p.research?.conflicts ?? [];
+        const ours = before.research?.conflicts ?? [];
+        if (theirs.length === 0 && ours.length === 0) continue;
+        if (JSON.stringify(theirs) !== JSON.stringify(ours)) persons[p.id] = theirs;
+    }
+    return trimHeldConflicts({ base, head, persons, takeovers: conflictTakeovers(previous, incoming) });
+}
+
+/**
+ * The research leaves out of a copy what a send taken back since its base
+ * brought (`takenBack`, Strom Research 1.12.0-rc.19): edits after an undo may
+ * go by themselves. An older bridge would write the send taken back again
+ * (finding 43), so there nothing goes until the user decides. '' = not known.
+ */
+export function researchKeepsTakenBack(version: string): boolean {
+    const m = /^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?/.exec(version.trim());
+    if (!m) return false;
+    const [major, minor, patch] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    const rc = m[4] === undefined ? Infinity : Number(m[4]);
+    if (major !== 1) return major > 1;
+    if (minor !== 12) return minor > 12;
+    if (patch > 0) return true;
+    return rc >= 19;
 }

@@ -63,6 +63,7 @@ import { strings, getStringsForLang } from './strings';
 import { SURNAME_GROUPS_MARKER, SURNAME_GROUP_SEP } from './ged-exporter';
 import { excerptFromDataUrl } from './excerpts';
 import { normalizeSha256 } from './sha256';
+import { ORIGINAL_ONLY_DATA_URL } from './validation';
 import { parseRegion, regionFromStored } from './originals';
 
 /**
@@ -2897,7 +2898,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
                 const name = media.title || media.file.split(/[\\/]/).pop() || 'file';
                 const mimeType = originalMimeOf(media.file) || originalMimeOf(name);
                 const att: Attachment = {
-                    id: generateId('att'), name, mimeType, dataUrl: '', sizeBytes: 0, originalOnly: true,
+                    id: generateId('att'), name, mimeType, dataUrl: ORIGINAL_ONLY_DATA_URL, sizeBytes: 0, originalOnly: true,
                     original: { sha256: media.sha, name, mimeType, bytes: 0, ...(media.orient ? { orientation: media.orient } : {}) },
                 };
                 if (media.note) att.note = media.note;

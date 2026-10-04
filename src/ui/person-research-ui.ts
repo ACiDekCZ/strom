@@ -76,13 +76,14 @@ function sourceTitle(v: ResearchConflictValue | undefined): string {
 export const personResearchMethods = uiModule({
     /** The person's open conflicts (what the edit form marks). */
     personOpenConflicts(personId: PersonId): ResearchConflict[] {
-        return (DataManager.getPerson(personId)?.research?.conflicts ?? []).filter(c => c.status === 'open');
+        return this.researchConflictsOf(personId).filter(c => c.status === 'open');
     },
 
     /** "What the research knows" for the person menu, or null when the research wrote nothing. */
     personResearchKnows(personId: PersonId): PersonMenuAction | null {
         const r = DataManager.getPerson(personId)?.research;
-        if (!r || !((r.conflicts?.length ?? 0) + (r.hypotheses?.length ?? 0) + (r.searched?.length ?? 0) + (r.edge ? 1 : 0))) return null;
+        const conflicts = this.researchConflictsOf(personId).length;
+        if (!(conflicts + (r?.hypotheses?.length ?? 0) + (r?.searched?.length ?? 0) + (r?.edge ? 1 : 0))) return null;
         const open = this.personOpenConflicts(personId).length;
         const label = strings.research.knows;
         return open > 0
@@ -100,7 +101,9 @@ export const personResearchMethods = uiModule({
     showPersonResearchDialog(personId: PersonId, opts: { edge?: boolean } = {}): void {
         document.getElementById(DIALOG_ID)?.remove();
         const person = DataManager.getPerson(personId);
-        const research = person?.research;
+        // The conflicts as the research has them now (its version not loaded may say more, finding 40).
+        const conflicts = this.researchConflictsOf(personId);
+        const research = person?.research ?? (conflicts.length ? {} : undefined);
         if (!person || !research) return;
         const r = strings.research;
         const asOf = DataManager.getData().researchAsOf;
@@ -115,7 +118,6 @@ export const personResearchMethods = uiModule({
             if (!id) return '<span class="person-research-nosource">–</span>';
             return `<button type="button" class="link-button person-research-source" data-source="${esc(id)}">${esc(sources[id].title)}</button>`;
         };
-        const conflicts = research.conflicts ?? [];
         const openHtml = conflicts.filter(c => c.status === 'open').map(c => {
             const id = researchConflictRef(c.id);
             return `

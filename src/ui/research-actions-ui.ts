@@ -182,8 +182,8 @@ export const researchActionsMethods = uiModule({
             const work: SubmenuItem[] = [...sendRow];
             const intake = known?.lastIntake;
             const sentAt = intake ? Date.parse(intake.at) : NaN;
-            // An archive keeps its history itself: taking a send back happens there.
-            if (!noAgent && intake && this.researchLinkAvailable('sync-undo') && Number.isFinite(sentAt) && Date.now() - sentAt < UNDO_MAX_AGE_MS) {
+            // Taking the last send back is the user's (an archive too); not while the research's mode is not known here.
+            if ((archive || !noAgent) && intake && this.researchLinkAvailable('sync-undo') && Number.isFinite(sentAt) && Date.now() - sentAt < UNDO_MAX_AGE_MS) {
                 work.push({ id: 'research-item-undo', label: r.undoSend, run: call('researchActionUndoSend'), ext: true,
                     sub: r.sentAt(formatLiveClock(sentAt, Date.now(), getCurrentLanguage())) });
             }

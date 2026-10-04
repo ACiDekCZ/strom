@@ -260,8 +260,8 @@ test('a written send taken back in the research: told once, not sent again by it
 });
 
 /** A send written at once, then taken back in the research (`strom sync undo`): the app told so. */
-async function writtenThenUndone(page: Page): Promise<FakeBridge> {
-    const bridge = await autoTree(page);
+async function writtenThenUndone(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
+    const bridge = await autoTree(page, init);
     writesAtOnce(bridge);
     await editJan(page);
     await page.clock.fastForward(QUIET + 1000);
@@ -427,13 +427,18 @@ test('finding 40: a write that left a conflict stays in sight after the note goe
 });
 
 test('findings 38/39: a copy carrying a send taken back, the next send written with a conflict: the conflict told and kept, the bar names the send taken back at its own time', async ({ page }) => {
-    const bridge = await writtenThenUndone(page);
-    const undone = bridge.sends.find(r => r.state === 'undone')!;
+    await page.setViewportSize({ width: 1600, height: 900 });
+    const bridge = await autoTree(page);
+    writesAtOnce(bridge);
+    await editJan(page);
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('ab10cd10ef10');
+    // Taken back in the research without this app hearing of it: the next copy still carries it.
+    const undone = bridge.sends[0];
     await page.clock.fastForward(5 * 60_000);
     bridge.syncReply = { status: 200, body: { ...WRITE.body, input: 'I0043', conflicts: [{ id: 'X0002', person: 'P0003', fact: 'NAME' }], undoneSince: [undone.intake] } };
     bridge.onWrite = () => ({ head: 'd2d2d2d2d2d2', ged: nameConflictGed('d2d2d2d2d2d2') });
     await renameJan(page, 'Jenda');
-    // By itself (by hand, Send again would ask the research to write the send taken back).
     await page.clock.fastForward(QUIET + 1000);
     await expect.poll(() => bridge.posts.length).toBe(2);
     await expect(page.locator('.toast', { hasText: 'The research took back a send this copy of the tree still carries' })).toBeVisible();
@@ -443,6 +448,113 @@ test('findings 38/39: a copy carrying a send taken back, the next send written w
     expect(lw).toMatchObject({ conflicts: 1, conflictIds: ['X0002'] });
     await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).toBe('undone');
     expect(await janFirst(page)).toBe('Jenda');
+    // Both in sight: the send taken back, and what this send wrote with its conflict (finding 39).
+    await expect(pill(page)).toContainText('Send taken back · 1 conflict to decide');
+    await openResearchMenu(page);
+    await expect(block(page)).toHaveAttribute('data-state', 'rejected');
+    await expect(block(page)).toContainText('Written, 1 conflict');
+    await expect(block(page).locator('[data-action="showConflicts"]')).toBeVisible();
+    await expect(block(page).getByRole('button', { name: 'Send again' })).toBeVisible();
+});
+
+test('finding 43: after a send taken back, an unrelated edit does not go by itself (it would write the send taken back again); Send again first, then the edit goes', async ({ page }) => {
+    const bridge = await writtenThenUndone(page);
+    const first = bridge.sends.find(r => r.state === 'undone')!.intake;
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET * 3);
+    await poll(page);
+    expect(bridge.posts).toHaveLength(1);
+    await expect(pill(page)).toContainText('Send taken back');
+    await openResearchMenu(page);
+    await expect(block(page)).toHaveAttribute('data-state', 'rejected');
+    await expect(block(page)).toContainText('Nothing more is sent by itself until you choose');
+    // Leaving the tree does not send it either.
+    await page.evaluate(() => window.Strom.UI.researchAutoLeave());
+    expect(bridge.posts).toHaveLength(1);
+    // The user's choice: written again from what the research kept; the rename goes after it.
+    await block(page).getByRole('button', { name: 'Send again' }).click();
+    await expect.poll(() => bridge.againAsks ?? []).toEqual([first]);
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    expect(bridge.posts[1]).toContain('Jenda');
+});
+
+test('finding 43, research 1.12.0-rc.19: it leaves out what a send taken back brought (takenBack), so edits go as usual; said, with Send again', async ({ page }) => {
+    const bridge = await writtenThenUndone(page, { strom: '1.12.0-rc.19' });
+    const first = bridge.sends.find(r => r.state === 'undone')!.intake;
+    await openResearchMenu(page);
+    await expect(block(page)).toContainText('new edits go to the research as usual');
+    await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, input: 'I0044', changes: 1, applied: 1, undoneSince: [first], takenBack: 1 } };
+    bridge.onWrite = () => ({ head: 'e3e3e3e3e3e3', ged: researchGed('e3e3e3e3e3e3') });
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    const toast = page.locator('.toast', { hasText: '1 change from the send taken back was not written' });
+    await expect(toast.getByRole('button', { name: 'Send again' })).toBeVisible();
+    await expect(pill(page)).toContainText('Send taken back');
+    await openResearchMenu(page);
+    await expect(block(page)).toContainText('1 change from the send taken back was not written again');
+    // Send again: the research writes the send taken back from what it kept.
+    await block(page).getByRole('button', { name: 'Send again' }).click();
+    await expect.poll(() => bridge.againAsks ?? []).toEqual([first]);
+    expect(await janFirst(page)).toBe('Jenda');
+});
+
+test('finding 40: a conflict the next rename updates shows its new value in What the research knows, and stays on the toolbar after an unrelated send', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    const bridge = await autoTree(page);
+    const conflictGed = (head: string, user: string, birth: string[] = []) => researchGed(head, [...birth,
+        '1 _STROM_CONFLICT X0001', '2 TYPE NAME', '2 STAT open', '2 VAL Jan /Víšek/', `2 VAL ${user} /Víšek/`]);
+    const conflicts = [{ id: 'X0001', person: 'P0003', fact: 'NAME' }];
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts } };
+    bridge.onWrite = () => ({ head: 'c1c1c1c1c1c1', ged: conflictGed('c1c1c1c1c1c1', 'Jenda') });
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    // The next rename: the research writes the user's newer word into the open conflict (same id).
+    bridge.onWrite = () => ({ head: 'c2c2c2c2c2c2', ged: conflictGed('c2c2c2c2c2c2', 'Jendula') });
+    await renameJan(page, 'Jendula');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    const janId = await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jendula') as any).id);
+    await expect.poll(() => page.evaluate((id) => window.Strom.UI.researchConflictsOf(id).flatMap((c: any) => c.values.map((v: any) => v.value)), janId))
+        .toContain('Jendula /Víšek/');
+    await page.evaluate((id) => window.Strom.UI.showPersonResearchDialog(id), janId);
+    await expect(page.locator('.modal-overlay.active').last()).toContainText('Jendula');
+    await page.keyboard.press('Escape');
+    // An unrelated send, written without a conflict: the conflict is still there, and so is the mark.
+    bridge.syncReply = WRITE;
+    bridge.onWrite = () => ({ head: 'c3c3c3c3c3c3', ged: conflictGed('c3c3c3c3c3c3', 'Jendula', ['1 BIRT', '2 PLAC Praha']) });
+    await janBirthPlace(page, 'Praha');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(3);
+    await page.clock.fastForward(30_000);
+    await poll(page);
+    await expect(pill(page)).toContainText('Written, 1 conflict to decide');
+    expect(await janFirst(page)).toBe('Jendula');
+    expect(await janWhere(page)).toBe('Praha');
+});
+
+test('the bridge stops: "not running" at its next ask (within 20 s), and the tasks it listed wait until it runs again', async ({ page }) => {
+    const bridge = await autoTree(page, { waiting: [{ id: 'T0010', what: 'Confirm the baptism', at: new Date().toISOString() }] });
+    await poll(page);
+    await openResearchMenu(page);
+    const sub = page.locator('#actions-research-submenu');
+    await expect(sub.locator('#research-item-waiting')).toBeVisible();
+    await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+    bridge.down = true;
+    await page.clock.fastForward(21_000);
+    await expect.poll(() => page.evaluate(() => window.Strom.UI.currentResearchSyncState().kind)).toBe('bridgeDown');
+    await openResearchMenu(page);
+    await expect(block(page)).toHaveAttribute('data-state', 'bridgeDown');
+    await expect(sub.locator('#research-item-waiting')).toHaveCount(0);
+    await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+    // Back: the tasks again.
+    bridge.down = false;
+    await poll(page);
+    await openResearchMenu(page);
+    await expect(sub.locator('#research-item-waiting')).toBeVisible();
 });
 
 test('a write that takes longer (202): "writing" until the status says written, then loaded quietly', async ({ page }) => {
@@ -610,9 +722,11 @@ test.describe('the research as an archive', () => {
         await expect(sub.locator('#research-item-version')).toHaveCount(0);
         await expect(sub.locator('#research-item-open')).toBeVisible();
         await expect(sub.locator('#research-item-tree-settings')).toBeVisible();
-        for (const id of ['research-item-chat', 'research-item-undo', 'research-item-live', 'research-item-send']) {
+        for (const id of ['research-item-chat', 'research-item-live', 'research-item-send']) {
             await expect(sub.locator(`#${id}`)).toHaveCount(0);
         }
+        // Taking the last send back stays the user's in an archive.
+        await expect(sub.locator('#research-item-undo')).toBeVisible();
         await expect(block(page).locator('.research-sync-tag')).toHaveText('Archive');
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         const actions = await page.evaluate(() => {

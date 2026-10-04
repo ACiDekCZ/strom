@@ -571,7 +571,10 @@ function sourceKey(src: Source): string {
 
 /** Two attachments are the same document when they carry the same bytes. */
 function sameAttachment(a: Attachment, b: Attachment): boolean {
-    return a.id === b.id || (!!a.dataUrl && a.dataUrl === b.dataUrl);
+    if (a.id === b.id) return true;
+    // Originals only share the page icon as their data: the same document by the original's hash.
+    if (a.originalOnly || b.originalOnly) return !!a.originalOnly && !!b.originalOnly && !!a.original?.sha256 && a.original.sha256 === b.original?.sha256;
+    return !!a.dataUrl && a.dataUrl === b.dataUrl;
 }
 
 /**

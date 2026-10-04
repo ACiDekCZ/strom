@@ -11,6 +11,7 @@ import { TreeManager } from '../tree-manager.js';
 import { Attachment, PersonId } from '../types.js';
 import { strings } from '../strings.js';
 import { dataUrlByteSize } from '../photo.js';
+import { ORIGINAL_ONLY_DATA_URL } from '../validation.js';
 import {
     compressImageAttachment, readFileAsDataUrl, personMedia,
     MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES, pdfBlobFromDataUrl,
@@ -412,7 +413,7 @@ export const attachmentsMethods = uiModule({
         const original = { ...prepared, mimeType };
         const outcome = await this.queueOriginal(original, file, { personId });
         if (outcome === 'queued' || outcome === 'sent' || outcome === 'known' || outcome === 'knownFilled') {
-            DataManager.addAttachment(personId, { name: file.name, mimeType, dataUrl: '', sizeBytes: 0, original, originalOnly: true });
+            DataManager.addAttachment(personId, { name: file.name, mimeType, dataUrl: ORIGINAL_ONLY_DATA_URL, sizeBytes: 0, original, originalOnly: true });
             this.renderAttachmentsList();
             this.noteOriginalOutcome(outcome, file.size, { personId });
             return true;

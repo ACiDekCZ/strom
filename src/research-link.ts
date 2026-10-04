@@ -665,10 +665,11 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
         }
         const have = cur.attachments ?? [];
         const ids = new Set(have.map(a => a.id));
-        const urls = new Set(have.map(a => a.dataUrl).filter(Boolean));
+        // An original only carries the shared page icon as its data: found by its hash, never by that.
+        const urls = new Set(have.filter(a => !a.originalOnly).map(a => a.dataUrl).filter(Boolean));
         const shas = new Set(have.map(a => a.original?.sha256).filter(Boolean));
         const extra = (old.attachments ?? [])
-            .filter(a => !ids.has(a.id) && !(a.dataUrl && urls.has(a.dataUrl)) && !(a.originalOnly && shas.has(a.original?.sha256)))
+            .filter(a => !ids.has(a.id) && !(a.dataUrl && !a.originalOnly && urls.has(a.dataUrl)) && !(a.originalOnly && shas.has(a.original?.sha256)))
             .map(a => {
                 if (a.sourceId === undefined || sourceExists(a.sourceId)) return a;
                 const { sourceId: _gone, ...rest } = a;
@@ -1593,11 +1594,13 @@ export interface SyncReply {
     code: string;
     /** Sends the research took back after the state this copy was made from (`undoneSince`, their marks; 1.12). */
     undoneSince: string[];
+    /** Changes of the copy left out because a send taken back brought them (`takenBack`, 1.12.0-rc.19); null: not said. */
+    takenBack: number | null;
 }
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [] };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null };
     return {
         ok: r.ok === true,
         changes: asCount(r.changes),
@@ -1618,6 +1621,7 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
         code: typeof r.code === 'string' && /^[a-z0-9.-]{1,40}$/.test(r.code) ? r.code : '',
         undoneSince: Array.isArray(r.undoneSince)
             ? r.undoneSince.slice(0, 30).map(v => headerToken(v)).filter((v): v is string => !!v) : [],
+        takenBack: asCount(r.takenBack),
     };
 }
 

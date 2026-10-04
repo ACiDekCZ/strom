@@ -536,7 +536,7 @@ export const importExportMethods = uiModule({
         // Fix attachment sizes from data URLs (compression changed them).
         for (const person of Object.values(this.gedcomResult.data.persons)) {
             for (const att of person.attachments ?? []) {
-                if (!att.sizeBytes) att.sizeBytes = dataUrlByteSize(att.dataUrl);
+                if (!att.sizeBytes && !att.originalOnly) att.sizeBytes = dataUrlByteSize(att.dataUrl);
             }
         }
 

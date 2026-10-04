@@ -11,6 +11,7 @@ import {
     ResearchLinkAction, LiveWaiting, LiveIntake, ResearchAccepts, sanitizeResearchLinks, sanitizeWaiting, sanitizeUpdate, sanitizeIntake,
     sanitizeAccepts, parseLiveBridge, isResearchHead,
 } from './research-link.js';
+import { ResearchConflict } from './types.js';
 
 const LINKS_KEY = 'strom-research-links';
 const OFF_KEY = 'strom-research-links-off';
@@ -211,6 +212,51 @@ export interface ResearchAutoState {
     unsentSince?: string;
     /** The reasons a refusal was already told (once each). */
     toldRefused?: string[];
+    /** The research's conflicts read from a version that was not loaded (see ResearchHeldConflicts). */
+    held?: ResearchHeldConflicts;
+}
+
+/**
+ * The research's conflicts as its version has them, read without loading that
+ * version (it holds the research's values where they are open, finding 40):
+ * what a conflict says now — the user's latest value in it — and whose values
+ * that version would take over. Stands while the tree builds on `base`.
+ */
+export interface ResearchHeldConflicts {
+    /** The research's head the tree builds on (its link's head) when read. */
+    base: string;
+    /** The research's head read. */
+    head: string;
+    /** Person id → the research's conflicts of that person, where they differ from the tree's. */
+    persons: Record<string, ResearchConflict[]>;
+    /** People whose values that version would replace over an open conflict. */
+    takeovers: string[];
+}
+
+/** At most this many people's conflicts are kept (a large first write). */
+const HELD_MAX_PERSONS = 50;
+
+function heldConflictsFrom(v: unknown): ResearchHeldConflicts | undefined {
+    if (!v || typeof v !== 'object') return undefined;
+    const h = v as Record<string, unknown>;
+    if (typeof h.base !== 'string' || typeof h.head !== 'string' || !h.persons || typeof h.persons !== 'object') return undefined;
+    const persons: Record<string, ResearchConflict[]> = {};
+    for (const [id, list] of Object.entries(h.persons as Record<string, unknown>).slice(0, HELD_MAX_PERSONS)) {
+        if (!Array.isArray(list)) continue;
+        persons[id] = list.filter((c): c is ResearchConflict => !!c && typeof c === 'object'
+            && typeof (c as ResearchConflict).id === 'string' && Array.isArray((c as ResearchConflict).values)
+            && ((c as ResearchConflict).status === 'open' || (c as ResearchConflict).status === 'decided'));
+    }
+    const takeovers = Array.isArray(h.takeovers) ? h.takeovers.filter((x): x is string => typeof x === 'string').slice(0, HELD_MAX_PERSONS) : [];
+    return { base: h.base, head: h.head, persons, takeovers };
+}
+
+/** Keep at most HELD_MAX_PERSONS people of a reading (the takeovers first). */
+export function trimHeldConflicts(held: ResearchHeldConflicts): ResearchHeldConflicts {
+    const ids = Object.keys(held.persons);
+    if (ids.length <= HELD_MAX_PERSONS) return held;
+    const keep = [...held.takeovers.filter(id => id in held.persons), ...ids.filter(id => !held.takeovers.includes(id))].slice(0, HELD_MAX_PERSONS);
+    return { ...held, persons: Object.fromEntries(keep.map(id => [id, held.persons[id]])) };
 }
 
 export function researchAutoState(treeId: string): ResearchAutoState {
@@ -237,6 +283,8 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (typeof p.edits === 'number' && p.edits > 0) out.edits = Math.min(Math.floor(p.edits), 99999);
         if (typeof p.unsentSince === 'string' && Number.isFinite(Date.parse(p.unsentSince))) out.unsentSince = p.unsentSince;
         if (Array.isArray(p.toldRefused)) out.toldRefused = p.toldRefused.filter((r): r is string => typeof r === 'string').slice(-10);
+        const held = heldConflictsFrom(p.held);
+        if (held) out.held = held;
         return out;
     } catch {
         return {};

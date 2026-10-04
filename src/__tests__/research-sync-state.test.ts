@@ -8,8 +8,9 @@ import { describe, it, expect } from 'vitest';
 import {
     researchSyncState, researchSyncWantsAttention, pendingSendFate, verifiedOffer, isOlderSource,
     researchReadSource, sourceReadingHash, unverifiedOlderSources, ResearchSyncInput, conflictTakeovers,
+    heldConflicts, researchKeepsTakenBack,
 } from '../research-sync.js';
-import { sanitizeAccepts, sanitizeInbox, sanitizeLiveStatus, researchHeaderLines, stabilizeIds } from '../research-link.js';
+import { sanitizeAccepts, sanitizeInbox, sanitizeLiveStatus, researchHeaderLines, stabilizeIds, sanitizeSyncReply } from '../research-link.js';
 import { ResearchLink, ResearchSend, Source, StromData, STROM_DATA_VERSION } from '../types.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
@@ -132,8 +133,11 @@ describe('sending by itself, the archive, one-time notices', () => {
     it('a written send taken back in the research: its own warning, unchanged it is not sent again', () => {
         const undone = link({ fingerprint: '', sent: sent({ state: 'undone' }) });
         expect(researchSyncState(input({ auto: true, link: undone, matchesBase: false, current: 'fp-sent' })).kind).toBe('rejected');
-        // Edited since: goes again by itself.
+        // Edited since: still waits for the user (a copy would write the send taken back again, finding 43),
+        // the research's version newer or not.
         expect(researchSyncState(input({ auto: true, link: undone, matchesBase: false, current: 'fp-edited' })).kind).toBe('rejected');
+        expect(researchSyncState(input({ auto: true, link: undone, matchesBase: false, current: 'fp-edited', remoteHead: 'bbbbbbb' })).kind).toBe('rejected');
+        expect(researchSyncState(input({ link: undone, matchesBase: false, current: 'fp-edited', remoteHead: 'bbbbbbb' })).kind).toBe('rejected');
         expect(researchSyncWantsAttention('rejected')).toBe(true);
     });
 
@@ -416,5 +420,51 @@ describe('conflictTakeovers (finding 37)', () => {
     });
     it('no conflict there: the research may change it (written as sent)', () => {
         expect(conflictTakeovers(tree({ p1: person('p1', 'Marianna') }), tree({ p1: person('p1', 'Marie') }))).toEqual([]);
+    });
+});
+
+describe('the research\'s conflicts from a version not loaded (finding 40)', () => {
+    const person = (id: string, first: string, extra: Record<string, unknown> = {}) =>
+        ({ id, firstName: first, lastName: 'Nováková', gender: 'female', partnerships: [], childIds: [], ...extra });
+    const tree = (persons: Record<string, unknown>) => ({ version: STROM_DATA_VERSION, persons, partnerships: {} }) as unknown as StromData;
+    const conflict = (user: string) => ({ research: { conflicts: [{ id: 'X0001', fact: 'NAME', status: 'open', values: [{ value: 'Marie' }, { value: user }] }] } });
+
+    it('the conflict with the user\'s newer value is read, and whose values that version would take over', () => {
+        const app = tree({ p1: person('p1', 'Marietta', conflict('Marianna')), p2: person('p2', 'Jan') });
+        const research = tree({ p1: person('p1', 'Marie', conflict('Marietta')), p2: person('p2', 'Jan') });
+        const held = heldConflicts(app, research, 'c1c1', 'c2c2');
+        expect(held).toMatchObject({ base: 'c1c1', head: 'c2c2', takeovers: ['p1'] });
+        expect(held.persons.p1[0].values.map(v => v.value)).toEqual(['Marie', 'Marietta']);
+        expect(held.persons.p2).toBeUndefined();
+    });
+
+    it('the same conflicts as the tree has: nothing kept; one decided there: kept', () => {
+        const same = tree({ p1: person('p1', 'Marie', conflict('Marianna')) });
+        expect(heldConflicts(same, same, 'a', 'b')).toMatchObject({ persons: {}, takeovers: [] });
+        const decided = tree({ p1: person('p1', 'Marie', { research: { conflicts: [{ ...conflict('Marianna').research.conflicts[0], status: 'decided' }] } }) });
+        expect(heldConflicts(same, decided, 'a', 'b').persons.p1[0].status).toBe('decided');
+    });
+
+    it('a later send without a conflict: the written conflict stays the state while that version holds it', () => {
+        const written = link({ sent: sent({ state: 'written', closedAt: '2026-10-02T14:33:00Z', conflicts: 0 }) });
+        const base = { link: written, matchesBase: false, current: 'fp-sent', remoteHead: 'bbbbbbb' };
+        expect(researchSyncState(input(base)).kind).toBe('newer');
+        expect(researchSyncState(input({ ...base, heldConflicts: true })).kind).toBe('writtenConflicts');
+    });
+});
+
+describe('a research that leaves out what a send taken back brought (finding 43)', () => {
+    it('Strom Research 1.12.0-rc.19 and later', () => {
+        expect(researchKeepsTakenBack('1.12.0-rc.18')).toBe(false);
+        expect(researchKeepsTakenBack('1.12.0-rc.19')).toBe(true);
+        expect(researchKeepsTakenBack('1.12.0')).toBe(true);
+        expect(researchKeepsTakenBack('1.12.1')).toBe(true);
+        expect(researchKeepsTakenBack('1.13.0-rc.1')).toBe(true);
+        expect(researchKeepsTakenBack('1.11.4')).toBe(false);
+        expect(researchKeepsTakenBack('')).toBe(false);
+    });
+    it('the reply says how many changes it left out', () => {
+        expect(sanitizeSyncReply({ ok: true, takenBack: 2, undoneSince: ['R1'] })).toMatchObject({ takenBack: 2, undoneSince: ['R1'] });
+        expect(sanitizeSyncReply({ ok: true }).takenBack).toBeNull();
     });
 });

@@ -1580,7 +1580,9 @@ export const researchUiMethods = uiModule({
         const stored = researchId ? storedResearchWaiting(researchId) : null;
         if (!stored) return null;
         // An archive has no tasks for the user (whatever its status or an old list says); its update and last send stay.
-        return { ...stored, items: this.activeResearchArchive() ? [] : stored.items, live: false };
+        // A research that stopped running here has none either until it runs again ("not running" shows instead).
+        const none = this.activeResearchArchive() || (!!researchId && this.researchBridgeKnownDown(researchId));
+        return { ...stored, items: none ? [] : stored.items, live: false };
     },
 
     /** Research menu "Waiting for you": the live panel open at that section, or the last known state. */

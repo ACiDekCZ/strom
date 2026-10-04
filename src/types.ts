@@ -753,9 +753,10 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   and .orient).
  * All additive/backward-compatible for reading; the bump makes an older app
  * warn ("newer version") before it silently drops the new fields on re-save.
- * 3.8.x (v10) keeps most v11 fields on a round trip, but an attachment kept as
- * an original only (no data URL) is dropped there; transcriptVerified stays on
- * a transcript edited in 3.8.x.
+ * 3.8.x (v10) keeps the v11 fields on a round trip: an attachment kept as an
+ * original only carries a page icon as its data (ORIGINAL_ONLY_DATA_URL), which
+ * 3.8.x keeps (it drops an attachment without image or PDF data);
+ * transcriptVerified stays on a transcript edited in 3.8.x.
  */
 export const STROM_DATA_VERSION = 11;
 
@@ -982,7 +983,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.28';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.29';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -1239,6 +1240,8 @@ export interface ResearchSend {
     manual?: boolean;
     /** Discarded because the research could not write it (`failed`), not by the user. */
     failed?: boolean;
+    /** Taken back: changes of a later copy the research left out because this send brought them (`takenBack`). */
+    takenBack?: number;
     /**
      * Written as part of a newer send of this tree that replaced it (another
      * window of the same app tree sent since): what was written is not this

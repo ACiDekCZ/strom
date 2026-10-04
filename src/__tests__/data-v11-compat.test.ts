@@ -15,6 +15,7 @@ import { migrateData } from '../data.js';
 import { validateJsonImport } from '../merge/validation.js';
 import { buildChangePacket, applyPacketOntoData, applyChangePacket } from '../share-diff.js';
 import { StromData, STROM_DATA_VERSION } from '../types.js';
+import { ORIGINAL_ONLY_DATA_URL } from '../validation.js';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const SHA = 'ab'.repeat(32);
@@ -76,7 +77,7 @@ function v11Tree(): StromData {
     d.persons.p1.events[0].status = 'possible';
     d.persons.p1.attachments[0].original = { sha256: SHA, name: 'page.tif', mimeType: 'image/tiff', bytes: 1234, orientation: 6 };
     d.persons.p1.attachments.push({
-        id: 'a2', name: 'scan.tif', mimeType: 'image/tiff', dataUrl: '', sizeBytes: 0, originalOnly: true,
+        id: 'a2', name: 'scan.tif', mimeType: 'image/tiff', dataUrl: ORIGINAL_ONLY_DATA_URL, sizeBytes: 0, originalOnly: true,
         original: { sha256: SHA, name: 'scan.tif', mimeType: 'image/tiff', bytes: 99999 },
     });
     d.partnerships.u1.startStatus = 'probable';
