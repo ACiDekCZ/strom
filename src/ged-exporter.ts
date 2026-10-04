@@ -334,6 +334,24 @@ function pushStory(lines: string[], level: number, story: Story): void {
 }
 
 /**
+ * Families as GEDCOM has them: every partnership, plus one for each set of
+ * parents linked to children without a couple between them (a single parent;
+ * exported as a family with _STROM_NO_COUPLE). What the counts in the app say.
+ */
+export function countFamilies(data: StromData): number {
+    const covered = new Set<string>();
+    for (const u of Object.values(data.partnerships) as Partnership[]) {
+        for (const cid of u.childIds) covered.add(`${cid}|${u.person1Id}`).add(`${cid}|${u.person2Id}`);
+    }
+    const loose = new Set<string>();
+    for (const [childId, child] of Object.entries(data.persons) as [PersonId, Person][]) {
+        const parents = child.parentIds.filter(pid => data.persons[pid] && !covered.has(`${childId}|${pid}`));
+        if (parents.length) loose.add([...parents].sort().join('|'));
+    }
+    return Object.keys(data.partnerships).length + loose.size;
+}
+
+/**
  * Export StromData to GEDCOM 5.5.1 format
  */
 export function exportToGedcom(data: StromData, treeName?: string, options: GedcomExportOptions = {}): GedcomExportResult {

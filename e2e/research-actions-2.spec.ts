@@ -479,7 +479,7 @@ test.describe('Start research with this tree (G3)', () => {
         await expect(dialog.locator('.close-btn')).toHaveCount(0);
         await expect(dialog.locator('.audit-log-subtitle')).toHaveText('Dvořákovi → research “Dvořákovi – výzkum”');
         // What goes over, as tiles; "trial" beside the title, the backup said by the buttons.
-        await expect(dialog.locator('.research-adopt-tile')).toHaveText(['2people', '0families', '0sources']);
+        await expect(dialog.locator('.research-adopt-tile')).toHaveText(['2people', '1family', '0sources']);
         await expect(dialog.locator('.research-trial-tag')).toHaveText('trial');
         await expect(dialog.locator('.research-send-dialog-note')).toHaveText('A backup is saved before handing over.');
         await expect(dialog.locator('#research-adopt-images')).toHaveCount(0);

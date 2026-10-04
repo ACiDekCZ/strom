@@ -17,7 +17,7 @@ import { readInstallRecord, installPhase, INSTALL_TTL_MS } from '../research-ins
 import { noteResearchBridge, patchResearchAutoState } from '../research-device.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
-import { exportToGedcom } from '../ged-exporter.js';
+import { exportToGedcom, countFamilies } from '../ged-exporter.js';
 import {
     parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint, researchSchemeUrl,
     readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds,
@@ -321,7 +321,7 @@ export const researchAdoptMethods = uiModule({
         const r = strings.research;
         // As the research counts them: people with a name (an unnamed "?" stays out of its count).
         const persons = Object.values(data.persons).filter(p => !p.isPlaceholder).length;
-        const families = Object.keys(data.partnerships).length;
+        const families = countFamilies(data);
         const sources = Object.keys(data.sources ?? {}).length;
         const images = countImages(data);
         // "Include photos and attachments" waits until the research takes them over.
@@ -337,7 +337,7 @@ export const researchAdoptMethods = uiModule({
             <div class="modal modal--md research-adopt-modal research-send-dialog" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="research-adopt-title">
                 <div class="modal-header">
                     <div class="audit-log-heading">
-                        <h2 id="research-adopt-title" class="research-title-with-tag">${esc(opts.install ? strings.install.adoptTitle : r.adoptTitle)} ${researchTrialTagHtml()}</h2>
+                        <div class="research-title-row"><h2 id="research-adopt-title">${esc(opts.install ? strings.install.adoptTitle : r.adoptTitle)}</h2>${researchTrialTagHtml()}</div>
                         <div class="audit-log-subtitle">${esc(opts.install ? strings.install.adoptSub(tree.name, persons, researchName) : `${tree.name} → ${r.adoptTarget(researchName)}`)}</div>
                         <div class="research-adopt-counts-line">${esc(t.handoffCounts(persons, families, sources))}</div>
                     </div>

@@ -221,7 +221,7 @@ export const researchTreeSettingsMethods = uiModule({
             <div class="modal modal--md research-tree-settings" role="dialog" data-dialog-kind="settings" aria-modal="true" aria-labelledby="research-tree-settings-title">
                 <div class="modal-header">
                     <div class="audit-log-heading">
-                        <h2 id="research-tree-settings-title" class="research-title-with-tag">${esc(t.title)}${archive ? ` <span class="research-sync-tag research-sync-tag--inline">${esc(s.archiveTag)}</span>` : ''} ${researchTrialTagHtml()}</h2>
+                        <div class="research-title-row"><h2 id="research-tree-settings-title">${esc(t.title)}${archive ? ` <span class="research-sync-tag research-sync-tag--inline">${esc(s.archiveTag)}</span>` : ''}</h2>${researchTrialTagHtml()}</div>
                         <div class="audit-log-subtitle">${esc(t.subtitle(meta.name, researchDisplayName(link.id), meta.personCount))}</div>
                         <div class="research-trial-sentence">${esc(t.trialSentence)}</div>
                         ${modeLine ? `<div class="research-mode-line">${esc(modeLine)}</div>` : ''}
