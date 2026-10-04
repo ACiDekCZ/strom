@@ -26,13 +26,13 @@ import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { StromData, TreeId, PersonId } from '../types.js';
-import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate } from '../ged-parser.js';
+import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate, sexGuessedIn } from '../ged-parser.js';
 import { formatFlexDate } from '../dates.js';
 import { formatLiveTime, formatLiveClock } from '../live-time.js';
 import { isMobile } from '../breakpoints.js';
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
-    decideResearchOpen, stabilizeIds, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
+    decideResearchOpen, stabilizeIds, keepKnownSex, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
@@ -1204,6 +1204,8 @@ export const researchUiMethods = uiModule({
         if (existing) {
             const unreadable = TreeManager.isTreeUnreadable(existing.id);
             previous = unreadable ? null : await readTree(existing.id);
+            // A sex the research leaves unknown is no change to Female (the importer's guess): the tree's stays.
+            if (previous) data = keepKnownSex(data, previous, sexGuessedIn(data));
             action = decideResearchOpen(existing.research, previous ? fingerprintLike(previous, existing.research?.fingerprint) : null);
             // The app's images stay (carryOverMedia); those of people or sources
             // the research dropped would go — never without asking, even over a
@@ -2162,6 +2164,7 @@ export const researchUiMethods = uiModule({
         } catch {
             return null;
         }
+        const guessed = sexGuessedIn(data);
         // Following live asks nothing: the setting decides about images.
         if (!SettingsManager.isImportImages()) data = stripMedia(data);
         if (!TreeManager.getTreeMetadata(s.treeId)) {
@@ -2172,7 +2175,7 @@ export const researchUiMethods = uiModule({
         const active = DataManager.getCurrentTreeId() === s.treeId;
         const previous = await readTree(s.treeId);
         // Images added in the app before following stay (the research has none of them).
-        const kept = previous ? carryOverMedia(stabilizeIds(data, previous), previous).data : data;
+        const kept = previous ? carryOverMedia(stabilizeIds(keepKnownSex(data, previous, guessed), previous), previous).data : data;
         const stable = migrateData(previous && !this.researchKeepsLoneFamilies(s.researchId) ? carryOverUnknownPartners(kept, previous) : kept);
         if (active) {
             // Following replaces the tree again and again: one backup, before the first time.

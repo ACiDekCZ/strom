@@ -29,10 +29,10 @@ import { TreeId, PersonId, ResearchLink, ResearchSend, ResearchSendMode, StromDa
 import { formatLiveClock } from '../live-time.js';
 import { isTreeStale } from '../tab-sync.js';
 import { formatFlexDate } from '../dates.js';
-import { parseGedcom, convertToStrom } from '../ged-parser.js';
+import { parseGedcom, convertToStrom, sexGuessedIn } from '../ged-parser.js';
 import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
-    parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, researchPersonRef, ResearchAccepts,
+    parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, keepKnownSex, researchPersonRef, ResearchAccepts,
     researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
@@ -1277,8 +1277,9 @@ export const researchSyncMethods = uiModule({
         }
         // The research's numbers for what this send added (`ids`, rc.26): kept on those people and sources,
         // so the next sends name them even while its version is not loaded here (no duplicate person).
-        if (written && reply.ids && exported && active) this.researchTakeSyncIds(treeId, exported.xrefs, reply.ids, sentFp);
-        if (written && reply.changes !== 0) this.researchNoteWritten(treeId, sentFp, now);
+        const retagged = written && reply.ids && exported && active ? this.researchTakeSyncIds(treeId, exported.xrefs, reply.ids, sentFp) : null;
+        // The research's version is the state sent with its numbers: the copy goes under the fingerprint the send now has.
+        if (written && reply.changes !== 0) this.researchNoteWritten(treeId, sentFp, now, retagged ?? undefined);
         // Edits since the send taken back were not in it: they still wait.
         if (sentFp === fps.current) patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined, toldRefused: undefined });
         else patchResearchAutoState(treeId, { toldRefused: undefined });
@@ -2093,6 +2094,7 @@ export const researchSyncMethods = uiModule({
         const now = TreeManager.getTreeMetadata(treeId)?.research;
         if (DataManager.getCurrentTreeId() !== treeId || !now || now.head !== link.head) return false;
         const previous = DataManager.getData();
+        data = keepKnownSex(data, previous, sexGuessedIn(data));
         const head = header.head || runtime.get(link.id)?.status?.head || '';
         patchResearchAutoState(treeId, { held: heldConflicts(previous, stabilizeIds(data, previous), link.head ?? '', head) });
         this.refreshResearchSyncUi();
@@ -2114,14 +2116,15 @@ export const researchSyncMethods = uiModule({
      * Numbers the research gave what a send added, by that file's xrefs, onto
      * the open tree's people and sources without one — quietly: a number of
      * the research is no edit of the user's. When nothing was edited since the
-     * send, the sent state takes them in too (it is not "changes to send").
+     * send, the sent state takes them in too (it is not "changes to send"),
+     * and that state with its fingerprint is returned (else null).
      */
-    researchTakeSyncIds(treeId: TreeId, xrefs: ExportXrefs, ids: AdoptIds, sentFp: string): void {
-        if (DataManager.getCurrentTreeId() !== treeId || DataManager.isReadOnly() || DataManager.isTreeLocked()) return;
+    researchTakeSyncIds(treeId: TreeId, xrefs: ExportXrefs, ids: AdoptIds, sentFp: string): { fingerprint: string; data: StromData } | null {
+        if (DataManager.getCurrentTreeId() !== treeId || DataManager.isReadOnly() || DataManager.isTreeLocked()) return null;
         const before = DataManager.getData();
         const unchanged = contentFingerprint(before) === sentFp;
         const { data, changed } = applySyncIds(before, xrefs, ids);
-        if (!changed) return;
+        if (!changed) return null;
         quietLoading = true;
         try {
             DataManager.replaceWithSourceData(data);
@@ -2129,13 +2132,18 @@ export const researchSyncMethods = uiModule({
             quietLoading = false;
         }
         fpCache = null;
+        let retagged: { fingerprint: string; data: StromData } | null = null;
         if (unchanged) {
             const link = TreeManager.getTreeMetadata(treeId)?.research;
             const fp = contentFingerprint(DataManager.getData());
-            if (link?.sent && link.sent.fingerprint === sentFp) TreeManager.patchResearchLink(treeId, { sent: { ...link.sent, fingerprint: fp } });
+            if (link?.sent && link.sent.fingerprint === sentFp) {
+                TreeManager.patchResearchLink(treeId, { sent: { ...link.sent, fingerprint: fp } });
+                retagged = { fingerprint: fp, data: DataManager.getData() };
+            }
         }
         // Originals that waited for these people or sources to be known there go now (F2).
         void this.researchOriginalsKick();
+        return retagged;
     },
 
     /** Conflicts a send written beside a send taken back left open (0: none). */

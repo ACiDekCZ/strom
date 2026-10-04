@@ -183,8 +183,13 @@ export const researchChangesMethods = uiModule({
         pendingSent.set(treeId, { fingerprint, data: baseCopy(data), list });
     },
 
-    /** The research wrote the send with this fingerprint: its data is the research's version, its list what was written. */
-    researchNoteWritten(treeId: TreeId, fingerprint: string, at: string): void {
+    /**
+     * The research wrote the send with this fingerprint: its data is the
+     * research's version, its list what was written. `retagged`: the sent
+     * state took the research's numbers since, so the copy is that state
+     * under its fingerprint (the send's fingerprint now).
+     */
+    researchNoteWritten(treeId: TreeId, fingerprint: string, at: string, retagged?: { fingerprint: string; data: StromData }): void {
         const p = pendingSent.get(treeId);
         if (!p || p.fingerprint !== fingerprint) return;
         pendingSent.delete(treeId);
@@ -194,10 +199,12 @@ export const researchChangesMethods = uiModule({
             try { localStorage.setItem(FP_PREV_KEY + treeId, copy.fp); } catch { /* not trusted next time */ }
             void saveResearchPrevCopy(treeId, copy.base);
         }
-        copy = { treeId, base: p.data, fp: fingerprint };
+        const base = retagged ? baseCopy(retagged.data) : p.data;
+        const fp = retagged?.fingerprint ?? fingerprint;
+        copy = { treeId, base, fp };
         memo = null;
-        try { localStorage.setItem(FP_KEY + treeId, fingerprint); } catch { /* not trusted next time */ }
-        void saveResearchCopy(treeId, p.data);
+        try { localStorage.setItem(FP_KEY + treeId, fp); } catch { /* not trusted next time */ }
+        void saveResearchCopy(treeId, base);
         if (p.list) storeWritten(treeId, at, p.list);
     },
 

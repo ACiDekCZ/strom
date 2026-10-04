@@ -486,6 +486,29 @@ export function decideResearchOpen(
 
 // ==================== STABLE IDS ACROSS UPDATES ====================
 
+/**
+ * People whose sex the research's version leaves unknown (SEX U, no family
+ * role; the importer guesses female) keep the sex they have in the previous
+ * state, matched by REFN: the app knows no "unknown", and a guess is no
+ * change of the research's (N58-2). Returns a new object when any changed.
+ */
+export function keepKnownSex(next: StromData, previous: StromData, guessed: ReadonlySet<PersonId>): StromData {
+    if (guessed.size === 0) return next;
+    const prevByRefn = uniqueRefns(previous);
+    let persons: StromData['persons'] | null = null;
+    for (const id of guessed) {
+        const p = next.persons?.[id];
+        const refn = p?.refn?.trim();
+        if (!p || !refn) continue;
+        const prevId = prevByRefn.get(refn);
+        const was = prevId ? previous.persons[prevId]?.gender : undefined;
+        if (!was || was === p.gender) continue;
+        persons ??= { ...next.persons };
+        persons[id] = { ...p, gender: was };
+    }
+    return persons ? { ...next, persons } : next;
+}
+
 /** Reference numbers that occur exactly once, mapped to their person id. */
 function uniqueRefns(data: StromData): Map<string, PersonId> {
     const seen = new Map<string, PersonId | null>();

@@ -2666,6 +2666,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (fam.wife) wifeIds.add(fam.wife);
     }
     let unknownSexPersons = 0;
+    const sexGuessed = new Set<PersonId>();
     let otherFamilyLinks = 0;
     let skippedMedia = 0;
 
@@ -2745,6 +2746,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         else {
             unknownSexPersons++;
             gender = husbIds.has(gedId) ? 'male' : 'female';
+            if (!husbIds.has(gedId) && !wifeIds.has(gedId)) sexGuessed.add(personId);
         }
         // A placeholder is someone the file gives no name at all. A surname
         // alone ("1 NAME /Nováková/") is a real, known person — treating her
@@ -3387,7 +3389,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     // A parent alone with children (Strom's own _STROM_NO_COUPLE families): the "?" family the app keeps.
     normalizeSingleParents({ persons, partnerships } as StromData);
 
-    return {
+    const result: GedcomConversionResult = {
         externalMedia,
         data: {
             persons,
@@ -3413,4 +3415,14 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             totalGedFamilies: families.size
         }
     };
+    if (sexGuessed.size > 0) guessedSex.set(result.data, sexGuessed);
+    return result;
+}
+
+/** People of a converted tree whose sex the file left unknown (SEX U or none, no family role): set to female as a guess. */
+const guessedSex = new WeakMap<StromData, ReadonlySet<PersonId>>();
+
+/** The people convertToStrom gave a guessed sex in this tree (by its new ids; empty for any other object). */
+export function sexGuessedIn(data: StromData): ReadonlySet<PersonId> {
+    return guessedSex.get(data) ?? new Set();
 }

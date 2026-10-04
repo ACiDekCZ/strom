@@ -391,3 +391,52 @@ test('the send preview opens under the research\'s place in the toolbar from the
     await page.evaluate(() => window.Strom.UI.researchSendNow());
     await under();
 });
+
+test('after a send that added a person (the research gave its number) the next edit\'s preview lists what will be sent (N58-1)', async ({ page }) => {
+    const { openResearch, fakeBridge, poll, editJan, researchGed } = await import('./research-bridge.js');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openResearch(page);
+    const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null } });
+    await poll(page);
+    await page.evaluate(() => window.Strom.DataManager.createPerson({ firstName: 'Zuzana', lastName: 'Nová', gender: 'female' }));
+    const written = 'abcdef123456';
+    bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0062' } };
+    bridge.onWrite = () => ({ head: written, ged: researchGed(written, ['0 @P0018@ INDI', '1 NAME Zuzana /Nová/', '1 SEX F', '1 REFN P0018', '2 TYPE strom-research']) });
+    bridge.replyExtra = (posted) => {
+        const xref = /0 (@I\d+@) INDI\n1 NAME Zuzana/.exec(posted)?.[1];
+        return xref ? { ids: { persons: { [xref]: 'P0018' }, sources: {} } } : {};
+    };
+    await page.evaluate(() => window.Strom.UI.researchSendNow({ previewed: true }));
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    await expect.poll(() => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Zuzana') as any)?.refn)).toBe('P0018');
+    await editJan(page, 'Praha');
+    const list = await page.evaluate(async () => (await window.Strom.UI.researchChangesReady())?.map(c => c.name) ?? null);
+    expect(list).toEqual(['Jan Víšek']);
+    // The same after a reload (the copy kept under the send's fingerprint).
+    await page.reload();
+    await expect.poll(() => page.evaluate(async () => (await window.Strom.UI.researchChangesReady())?.length ?? null)).toBe(1);
+});
+
+test('a sex the research leaves unknown (SEX U) is no change to Female: the load dialog lists none, the tree keeps its sex (N58-2)', async ({ page }) => {
+    const { openResearch, fakeBridge, poll, researchGed, NEW_HEAD } = await import('./research-bridge.js');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openResearch(page);
+    const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null } });
+    await poll(page);
+    bridge.head = NEW_HEAD;
+    bridge.treeGed = researchGed(NEW_HEAD, ['0 @P0017@ INDI', '1 NAME Bohumil /Víšek/', '1 SEX M', '1 REFN P0017', '2 TYPE strom-research'])
+        .replace('1 NAME Jan /Víšek/\n1 SEX M', '1 NAME Jan /Víšek/\n1 SEX U');
+    await poll(page);
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    const names = () => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).map(p => p.firstName));
+    const dialog = page.locator('#research-load-modal');
+    await expect.poll(async () => (await names()).includes('Bohumil') || await dialog.isVisible()).toBe(true);
+    if (await dialog.isVisible()) {
+        await expect(dialog).toContainText('Added from the research: + 1 person');
+        await expect(dialog).toContainText('Nothing here will be overwritten.');
+        await expect(dialog).not.toContainText('Female');
+        await dialog.locator('#research-load-ok').click();
+    }
+    await expect.poll(names).toContain('Bohumil');
+    expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any).gender)).toBe('male');
+});
