@@ -1614,6 +1614,8 @@ export interface SyncReply {
     takenBack: number | null;
     /** Every change not written and why (`notWritten`, 1.12.0-rc.25): taken back, kept by an archive, only reported, to pick. */
     notWritten: SyncNotWritten[];
+    /** The research's numbers for the people and sources this send added, by the sent file's xrefs (`ids`, 1.12.0-rc.26). */
+    ids: AdoptIds | null;
 }
 
 /** One change a send carried that the research did not write (`notWritten[]`). */
@@ -1628,7 +1630,10 @@ export interface SyncNotWritten {
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [] };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], ids: null };
+    const idsRec = asRecord(r.ids);
+    const idPersons = adoptIdMap(idsRec?.persons, /^P\d{1,9}$/);
+    const idSources = adoptIdMap(idsRec?.sources, /^S\d{1,9}$/);
     return {
         ok: r.ok === true,
         changes: asCount(r.changes),
@@ -1659,6 +1664,7 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
                 fact: typeof x.fact === 'string' && /^[A-Z_]{2,8}$/.test(x.fact) ? x.fact : '',
                 why: x.why === 'takenBack' || x.why === 'kept' || x.why === 'report' || x.why === 'pick' ? x.why : '',
             })),
+        ids: Object.keys(idPersons).length || Object.keys(idSources).length ? { persons: idPersons, sources: idSources } : null,
     };
 }
 
@@ -1760,6 +1766,20 @@ export function applyAdoptIds(data: StromData, xrefs: ExportXrefs, ids: AdoptIds
         }
     }
     return { data: { ...data, persons, ...(sources ? { sources } : {}) }, persons: np, sources: ns };
+}
+
+/**
+ * The research's numbers from a send's answer (`ids`, by the sent file's
+ * xrefs) onto the people and sources that have none yet — never over a number
+ * one has. Returns the tree (a new object, or the same when nothing changed).
+ */
+export function applySyncIds(data: StromData, xrefs: ExportXrefs, ids: AdoptIds): { data: StromData; changed: number } {
+    const missing = (refn: string | undefined): boolean => !refn || !refn.trim();
+    const persons = new Map([...xrefs.persons].filter(([id]) => missing(data.persons[id as PersonId]?.refn)));
+    const sources = new Map([...xrefs.sources].filter(([id]) => missing(data.sources?.[id]?.refn)));
+    const out = applyAdoptIds(data, { persons, sources }, ids);
+    const changed = out.persons + out.sources;
+    return { data: changed ? out.data : data, changed };
 }
 
 /**

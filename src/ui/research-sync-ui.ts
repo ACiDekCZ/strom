@@ -35,7 +35,7 @@ import { stripMedia } from '../attachments.js';
 import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
     parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, carryOverMedia, researchPersonRef, ResearchAccepts,
-    researchIdsByContent, holdsResearchIds, ResearchSendRecord, SyncNotWritten,
+    researchIdsByContent, holdsResearchIds, ResearchSendRecord, SyncNotWritten, AdoptIds, ExportXrefs, applySyncIds,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
 import {
@@ -53,7 +53,7 @@ import { researchFactLabel } from './person-research-ui.js';
 import { uiModule } from './module.js';
 import { researchWrittenList } from './research-changes-ui.js';
 import {
-    fetchWithTimeout, fetchGedcomText, postSync, onComputer, readTree, researchGedcom,
+    fetchWithTimeout, fetchGedcomText, postSync, onComputer, readTree, researchGedcom, researchGedcomExport,
 } from './research-ui.js';
 
 /** The "told once" mark of sending held for want of the research's numbers (see tellResearchNoIds). */
@@ -1026,10 +1026,11 @@ export const researchSyncMethods = uiModule({
         const lastCopy = researchAutoState(treeId).lastCopy;
         const since = runtime.get(link.id)?.status?.features?.includes('sync.since') && lastCopy && lastCopy.base === (link.head ?? '')
             ? lastCopy.intake : undefined;
-        const gedcom = again ? '' : researchGedcom(data, meta?.name ?? '', {
+        const exported = again ? null : researchGedcomExport(data, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
             ...(since ? { since } : {}),
         });
+        const gedcom = exported?.content ?? '';
         // What this send carries, person by person (what was written, once it is).
         if (!again) this.researchNoteSending(treeId, data, fps.current);
         sendingTree = treeId;
@@ -1159,6 +1160,9 @@ export const researchSyncMethods = uiModule({
                     closedAt: next.decidedAt || now, noticed: true } });
             }
         }
+        // The research's numbers for what this send added (`ids`, rc.26): kept on those people and sources,
+        // so the next sends name them even while its version is not loaded here (no duplicate person).
+        if (written && reply.ids && exported && active) this.researchTakeSyncIds(treeId, exported.xrefs, reply.ids, sentFp);
         if (written && reply.changes !== 0) this.researchNoteWritten(treeId, sentFp, now);
         // Edits since the send taken back were not in it: they still wait.
         if (sentFp === fps.current) patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined, toldRefused: undefined });
@@ -1983,6 +1987,32 @@ export const researchSyncMethods = uiModule({
     researchHoldsForUndo(link: ResearchLink): boolean {
         return link.sent?.state === 'undone'
             && !researchKeepsTakenBack(this.researchBridgeVersion(link.id), runtime.get(link.id)?.status?.features);
+    },
+
+    /**
+     * Numbers the research gave what a send added, by that file's xrefs, onto
+     * the open tree's people and sources without one — quietly: a number of
+     * the research is no edit of the user's. When nothing was edited since the
+     * send, the sent state takes them in too (it is not "changes to send").
+     */
+    researchTakeSyncIds(treeId: TreeId, xrefs: ExportXrefs, ids: AdoptIds, sentFp: string): void {
+        if (DataManager.getCurrentTreeId() !== treeId || DataManager.isReadOnly() || DataManager.isTreeLocked()) return;
+        const before = DataManager.getData();
+        const unchanged = contentFingerprint(before) === sentFp;
+        const { data, changed } = applySyncIds(before, xrefs, ids);
+        if (!changed) return;
+        quietLoading = true;
+        try {
+            DataManager.replaceWithSourceData(data);
+        } finally {
+            quietLoading = false;
+        }
+        fpCache = null;
+        if (unchanged) {
+            const link = TreeManager.getTreeMetadata(treeId)?.research;
+            const fp = contentFingerprint(DataManager.getData());
+            if (link?.sent && link.sent.fingerprint === sentFp) TreeManager.patchResearchLink(treeId, { sent: { ...link.sent, fingerprint: fp } });
+        }
     },
 
     /** What a send carried that the research did not write, line by line: whom, which fact, why. */

@@ -88,6 +88,8 @@ export interface FakeBridge {
     statusCode?: number;
     /** A send fails on the way (the connection drops). */
     syncAbort?: boolean;
+    /** More of a written send's answer, made from what was posted (e.g. `ids` by its xrefs). */
+    replyExtra?: (posted: string) => Record<string, unknown>;
 }
 
 export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
@@ -184,7 +186,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 b.head = v.head;
                 b.treeGed = v.ged;
                 b.sends.unshift({ intake, at: new Date().toISOString(), state: 'written', changes: 6, tree: appTree, sent, decidedAt: new Date().toISOString() });
-                return json(200, { ...reply, head: v.head, intake });
+                return json(200, { ...reply, head: v.head, intake, ...(b.replyExtra?.(body) ?? {}) });
             }
             if (b.syncReply.status === 202 || reply.pending) {
                 b.sends.unshift({ intake, at: new Date().toISOString(), state: 'pending', changes: 6, tree: appTree, sent });

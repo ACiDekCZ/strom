@@ -37,7 +37,7 @@ import {
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
-    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, ResearchHeaderInfo,
+    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, ResearchHeaderInfo, ExportXrefs,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { withAppVersion, changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry } from '../research-link.js';
@@ -534,6 +534,12 @@ export function postCancel(url: string, reason: SendCancelReason): void {
 /** The GEDCOM the research gets back: the whole tree, as is, naming its research and version. */
 export function researchGedcom(data: StromData, treeName: string, link: ResearchHeaderInfo): string {
     return exportToGedcom(data, treeName, { research: link }).content;
+}
+
+/** researchGedcom with the xrefs it gave the records (a send's `ids` answer by them). */
+export function researchGedcomExport(data: StromData, treeName: string, link: ResearchHeaderInfo): { content: string; xrefs: ExportXrefs } {
+    const r = exportToGedcom(data, treeName, { research: link });
+    return { content: r.content, xrefs: r.xrefs };
 }
 
 /**

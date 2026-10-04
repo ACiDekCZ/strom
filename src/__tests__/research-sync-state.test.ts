@@ -497,3 +497,21 @@ describe('the send taken back a reply names (finding B)', () => {
         expect(sanitizeLiveStatus({ tree: { id: RID }, sends: [{ intake: 'R2', state: 'undone', resent: true }] })?.sends?.[0].again).toBe('yes');
     });
 });
+
+describe('the numbers a send got (ids, rc.26)', () => {
+    it('kept on people and sources without a number, never over one; the answer read', async () => {
+        const { applySyncIds, sanitizeSyncReply } = await import('../research-link.js');
+        const data = { version: STROM_DATA_VERSION, persons: {
+            a: { id: 'a', firstName: 'Petr', lastName: 'V', gender: 'male', partnerships: [], parentIds: [], childIds: [] },
+            b: { id: 'b', firstName: 'Jan', lastName: 'V', gender: 'male', refn: 'P0003', partnerships: [], parentIds: [], childIds: [] },
+        }, partnerships: {}, sources: { s: { id: 's', title: 'Matrika' } } } as unknown as StromData;
+        const xrefs = { persons: new Map([['a', '@I1@'], ['b', '@I2@']]), sources: new Map([['s', '@S1@']]) };
+        const reply = sanitizeSyncReply({ ok: true, ids: { persons: { '@I1@': 'P0099', '@I2@': 'P0100', '@bad': 'P1' }, sources: { '@S1@': 'S0007' } } });
+        const out = applySyncIds(data, xrefs, reply.ids!);
+        expect(out.changed).toBe(2);
+        expect(out.data.persons['a' as never].refn).toBe('P0099');
+        expect(out.data.persons['b' as never].refn).toBe('P0003');
+        expect(out.data.sources!.s.refn).toBe('S0007');
+        expect(applySyncIds(out.data, xrefs, reply.ids!).changed).toBe(0);
+    });
+});

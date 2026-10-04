@@ -867,6 +867,29 @@ test('rc.25: what the research did not write is listed with its reason (notWritt
     await expect(page.locator('#confirmation-modal')).toContainText('Jan Víšek · Birth: no common ground: choose in the research');
 });
 
+test('rc.26: the numbers the research gave what a send added (ids, by its xrefs) are kept, quietly — no new send, the next names them', async ({ page }) => {
+    const bridge = await conflictLeft(page);
+    await page.evaluate(() => window.Strom.DataManager.createPerson({ firstName: 'Petr', lastName: 'Víšek', gender: 'male' }));
+    bridge.syncReply = WRITE;
+    bridge.onWrite = () => ({ head: 'c2c2c2c2c2c2', ged: nameConflictGed('c2c2c2c2c2c2') });
+    bridge.replyExtra = (posted) => {
+        const xref = /0 (@I\d+@) INDI\n1 NAME Petr/.exec(posted)?.[1];
+        return xref ? { ids: { persons: { [xref]: 'P0099' }, sources: {} } } : {};
+    };
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    await expect.poll(() => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Petr') as any)?.refn)).toBe('P0099');
+    // Not a change to send: nothing goes by itself after the quiet time.
+    await page.clock.fastForward(QUIET * 2);
+    await poll(page);
+    expect(bridge.posts).toHaveLength(2);
+    // The next send names him by the research's number.
+    await janBirthPlace(page, 'Kolín');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(3);
+    expect(bridge.posts[2]).toMatch(/1 NAME Petr[\s\S]*?1 REFN P0099/);
+});
+
 test('a write that takes longer (202): "writing" until the status says written, then loaded quietly', async ({ page }) => {
     const bridge = await autoTree(page);
     bridge.syncReply = { status: 202, body: { ok: true, inbox: false, pending: true, changes: 6 } };
