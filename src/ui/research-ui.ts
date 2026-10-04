@@ -1210,6 +1210,7 @@ export const researchUiMethods = uiModule({
             if (opts.afterSend === existing.id && takesOver && previous) {
                 patchResearchAutoState(existing.id, { held: heldConflicts(previous, stabilizeIds(data, previous), existing.research?.head ?? '', opts.head || source.head || '') });
                 this.refreshResearchSyncUi();
+                TreeRenderer.render();
                 return null;
             }
             const holdsChanges = edited && lost === 0 && sentIsTree && researchSendVouches(sent) && !takesOver;

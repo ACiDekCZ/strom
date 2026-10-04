@@ -81,14 +81,18 @@ export interface ResearchSyncState {
     sent?: ResearchSend;
     /** Why the bridge refused (refused / autoPaused). */
     reason?: string;
+    /** The research switched mode and the user has not said "Got it": said beside this state (it outranks the notice). */
+    switchedNote?: boolean;
 }
 
 /** The one state to show, by priority (see ZADANI_DEV_archiv-a-automatika 1.2). */
 export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
     const { link } = input;
     if (!link || !input.capable || !input.shown) return { kind: 'none', core: 'none' };
+    // A switch of mode is said beside a state of the sends, never in its place (A2 of the rc.19 round):
+    // what was taken back, not written or left in conflict stays in sight. Alone, it is the block.
     const notice = (core: ResearchSyncState): ResearchSyncState => {
-        if (input.switched) return { ...core, kind: 'switched' };
+        if (input.switched) return { ...core, switchedNote: true };
         return core;
     };
     // Safari never reaches the bridge: nothing goes by itself and nothing can be sent.
@@ -357,17 +361,30 @@ export function researchKeepsTakenBack(version: string, features?: readonly stri
  * status does not list (it keeps only its last sends) count as older and still
  * taken back. Without the research's records, its last mark. '' = none.
  */
-export function latestUndone(undoneSince: readonly string[], sends: readonly ResearchSendRecord[] | null | undefined): string {
-    if (undoneSince.length === 0) return '';
-    if (!sends) return undoneSince[undoneSince.length - 1];
-    const rec = (intake: string) => sends.find(r => r.intake === intake);
-    // The reply is now; the status may be older than the undo: only a send written again (`again`) is left out.
-    const open = undoneSince.filter(x => !rec(x)?.again);
+export function latestUndone(undoneSince: readonly string[], sends: readonly ResearchSendRecord[] | null | undefined,
+    resent: readonly string[] = []): string {
+    const rec = (intake: string) => sends?.find(r => r.intake === intake);
+    // The reply is now; the status may be older than the undo: only a send written again (`again`, or by
+    // this app — `resent`) is left out.
+    const open = undoneSince.filter(x => !rec(x)?.again && !resent.includes(x));
     if (open.length === 0) return '';
+    if (!sends) return open[open.length - 1];
     const time = (intake: string): number => {
         const t = Date.parse(rec(intake)?.at ?? '');
         return Number.isFinite(t) ? t : -Infinity;
     };
     if (open.every(x => time(x) === -Infinity)) return open[open.length - 1];
     return open.reduce((best, x) => (time(x) > time(best) ? x : best));
+}
+
+/**
+ * After a send taken back was written again: the latest other send of this
+ * tree the research still has as taken back (`undone`, not written again, not
+ * written again by this app), or null. It stays the one to offer (finding B2).
+ */
+export function nextUndone(sends: readonly ResearchSendRecord[] | null | undefined, ours: (tree: string) => boolean,
+    resent: readonly string[]): ResearchSendRecord | null {
+    const left = (sends ?? []).filter(r => r.state === 'undone' && !r.again && !resent.includes(r.intake) && ours(r.tree));
+    if (left.length === 0) return null;
+    return left.reduce((best, r) => (Date.parse(r.at || '') > Date.parse(best.at || '') ? r : best));
 }

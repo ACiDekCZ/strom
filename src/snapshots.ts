@@ -20,7 +20,8 @@ import {
     collectPoolGarbageLocked, registerPoolReferences, bytesToBase64, base64ToBytes,
 } from './media-pool.js';
 
-export type SnapshotReason = 'auto' | 'manual' | 'pre-import' | 'pre-merge';
+/** `other-window`: this window's state when another window (an older app too) saved over its tree. */
+export type SnapshotReason = 'auto' | 'manual' | 'pre-import' | 'pre-merge' | 'other-window';
 
 export interface SnapshotMeta {
     id: string;

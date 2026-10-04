@@ -273,6 +273,8 @@ class DataManagerClass {
      */
     private liveTreeId: TreeId | null = null;
     private embeddedEnvelope: EmbeddedDataEnvelope | null = null;
+    /** Trees this window already kept a backup of when another window saved over them. */
+    private otherWindowSnapshots = new Set<TreeId>();
     private embeddedAllTrees: Record<string, { name: string; data: StromData; isHidden?: boolean }> | null = null;
     private activeEmbeddedTreeId: string | null = null;
 
@@ -518,6 +520,25 @@ class DataManagerClass {
     /**
      * Check if there is an existing tree from the same export
      */
+    /**
+     * The stored tree of this file was changed after the file was made (its
+     * `changedAt` later than the export): "Update storage" would replace those
+     * changes. Null when not, or not known.
+     */
+    async storedNewerThanEmbedded(): Promise<{ changedAt: string; exportedAt: string } | null> {
+        const envelope = this.embeddedEnvelope;
+        if (!envelope) return null;
+        const tree = TreeManager.findTreeByExportId(envelope.exportId);
+        const changed = Date.parse(tree?.changedAt ?? '');
+        const exported = Date.parse(envelope.exportedAt ?? '');
+        if (!tree?.changedAt || !Number.isFinite(changed) || !Number.isFinite(exported) || changed <= exported) return null;
+        // Saved from this file and not changed since: nothing newer (its time is the save's, not an edit's).
+        const stored = await TreeManager.getTreeData(tree.id);
+        const content = (d: StromData): string => JSON.stringify([d.persons, d.partnerships, d.sources ?? null, d.places ?? null]);
+        if (!stored || content(migrateData(stored)) === content(this.viewMode ? this.data : migrateData(structuredClone(envelope.data)))) return null;
+        return { changedAt: tree.changedAt, exportedAt: envelope.exportedAt };
+    }
+
     getExistingTreeFromExport(): { id: TreeId; name: string } | null {
         if (!this.embeddedEnvelope) return null;
         const tree = TreeManager.findTreeByExportId(this.embeddedEnvelope.exportId);
@@ -738,8 +759,12 @@ class DataManagerClass {
             }
 
             case 'update': {
-                // Update existing tree
+                // Update existing tree — a backup of what it held first (as any import over a tree).
                 if (existingTree) {
+                    if (TreeManager.isAutoBackupEnabled(existingTree.id)) {
+                        const before = await TreeManager.getTreeData(existingTree.id);
+                        if (before) await createSnapshot(existingTree.id, before, 'pre-import', Date.now());
+                    }
                     TreeManager.updateTreeFromImport(existingTree.id, data);
                     this.currentTreeId = existingTree.id;
                     TreeManager.setActiveTree(existingTree.id);
@@ -1259,6 +1284,14 @@ class DataManagerClass {
      * Take a snapshot of the current tree now (manual / pre-import / pre-merge).
      * The automatic ones are skipped when the tree has automatic backups off.
      */
+    /** This window's state of a tree another window just saved over: a backup, once per window and tree. */
+    async snapshotOtherWindow(treeId: TreeId): Promise<void> {
+        if (this.viewMode || this.currentTreeId !== treeId || this.otherWindowSnapshots.has(treeId)) return;
+        if (!TreeManager.isAutoBackupEnabled(treeId) || this.isTreeLocked()) return;
+        this.otherWindowSnapshots.add(treeId);
+        await createSnapshot(treeId, this.data, 'other-window', Date.now());
+    }
+
     async snapshotNow(reason: SnapshotReason): Promise<void> {
         if (this.viewMode || !this.currentTreeId) return;
         if (reason !== 'manual' && !TreeManager.isAutoBackupEnabled(this.currentTreeId)) return;

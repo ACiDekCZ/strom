@@ -214,6 +214,8 @@ export interface ResearchAutoState {
     toldRefused?: string[];
     /** The research's conflicts read from a version that was not loaded (see ResearchHeldConflicts). */
     held?: ResearchHeldConflicts;
+    /** Sends taken back that this app had written again (`/again`), by their marks: never offered again (finding B2). */
+    resent?: string[];
 }
 
 /**
@@ -285,6 +287,7 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (Array.isArray(p.toldRefused)) out.toldRefused = p.toldRefused.filter((r): r is string => typeof r === 'string').slice(-10);
         const held = heldConflictsFrom(p.held);
         if (held) out.held = held;
+        if (Array.isArray(p.resent)) out.resent = p.resent.filter((r): r is string => typeof r === 'string' && r.length <= 80).slice(-30);
         return out;
     } catch {
         return {};

@@ -243,6 +243,9 @@ function registerAppListeners(): void {
 
     onTreeSavedElsewhere((treeId) => {
         if (DataManager.isViewMode() || treeId !== DataManager.getCurrentTreeId()) return;
+        // What this window holds is kept as a backup, once: another window — an older app too, which
+        // knows no stale-copy guard — may have saved over this window's saved work (N2).
+        void DataManager.snapshotOtherWindow(treeId as TreeId);
         // A research tree says it too: nothing of this copy is sent until a reload.
         UI.refreshResearchSyncUi();
         UI.showStorageNotice('other-tab-notice', strings.storageSafety.otherTabSaved, {

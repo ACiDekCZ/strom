@@ -148,10 +148,12 @@ describe('sending by itself, the archive, one-time notices', () => {
         expect(researchSyncState(input({ auto: true, link: discarded, matchesBase: false, current: 'fp-sent' })).kind).toBe('rejected');
     });
 
-    it('a switch of mode comes first, the toolbar keeps the real state', () => {
+    it('a switch of mode is said beside a state of the sends (never in its place); alone, it is the block', () => {
         const st = researchSyncState(auto({ remoteHead: 'bbbbbbb', switched: true }));
-        expect(st.kind).toBe('switched');
-        expect(st.core).toBe('unsentAndNewer');
+        expect(st.kind).toBe('unsentAndNewer');
+        expect(st.switchedNote).toBe(true);
+        const undone = link({ fingerprint: '', sent: sent({ state: 'undone' }) });
+        expect(researchSyncState(input({ auto: true, link: undone, matchesBase: false, current: 'fp-edited', switched: true })).kind).toBe('rejected');
         expect(researchSyncState(input({ switched: true })).kind).toBe('switched');
     });
 
@@ -492,5 +494,6 @@ describe('the send taken back a reply names (finding B)', () => {
         expect(latestUndone(['R1', 'R2'], sends)).toBe('R1');
         expect(latestUndone(['R2'], sends)).toBe('');
         expect(sanitizeLiveStatus({ tree: { id: RID }, sends: [{ intake: 'R2', state: 'undone', again: 'R4' }] })?.sends?.[0].again).toBe('R4');
+        expect(sanitizeLiveStatus({ tree: { id: RID }, sends: [{ intake: 'R2', state: 'undone', resent: true }] })?.sends?.[0].again).toBe('yes');
     });
 });

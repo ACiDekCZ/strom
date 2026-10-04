@@ -11,7 +11,7 @@
  * card); the tooltip keeps its status rows either way. Pure.
  */
 
-import { Partnership, Person, StromData } from './types.js';
+import { Partnership, Person, PersonId, ResearchConflict, StromData } from './types.js';
 import { EvidenceLevel, PersonEvidence, personEvidence } from './evidence-level.js';
 import type { CardSignals } from './settings.js';
 
@@ -52,6 +52,13 @@ export function setResearchCardInfoProvider(provider: (() => Map<string, Researc
 
 export function researchCardInfoNow(): Map<string, ResearchCardInfo> {
     return researchInfoProvider?.() ?? new Map();
+}
+
+/** The research's conflicts of a person as its version not loaded has them (finding 40); null: the tree's own. */
+let researchConflictsProvider: ((id: PersonId) => ResearchConflict[] | null) | null = null;
+
+export function setResearchConflictsProvider(provider: ((id: PersonId) => ResearchConflict[] | null) | null): void {
+    researchConflictsProvider = provider;
 }
 
 /** Everything evaluated once per render and shared by all cards. */
@@ -96,7 +103,7 @@ export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInf
     const evidence = ctx.treeHasSources ? personEvidence(p, ctx.data, ctx.unions) : null;
     const story = p.story?.text?.trim() ? (p.story.status === 'draft' ? 'draft' : 'final') : null;
     const research = p.refn ? ctx.research.get(p.refn) : undefined;
-    const conflicts = (p.research?.conflicts ?? []).filter(c => c.status !== 'decided').length;
+    const conflicts = (researchConflictsProvider?.(p.id) ?? p.research?.conflicts ?? []).filter(c => c.status !== 'decided').length;
     const info: CardSignalInfo = {
         evidence,
         story,

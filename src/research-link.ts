@@ -871,7 +871,7 @@ export interface ResearchSendRecord {
     conflicts: number | null;
     /** The persons those conflicts are about (research refs). */
     conflictPersons: string[];
-    /** Taken back and written again since (`again`: the mark of that send, or true); '' = not. */
+    /** Taken back and written again since (`resent: true`, or `again`: the mark of that send); absent = not. */
     again?: string;
 }
 
@@ -901,7 +901,8 @@ export function sanitizeSends(value: unknown): ResearchSendRecord[] | null {
             reason: cleanText(r.reason, 200),
             conflicts: conflictCount(r.conflicts),
             conflictPersons: conflictPersons(r.conflicts),
-            ...(r.again === true ? { again: 'yes' } : headerToken(r.again) ? { again: headerToken(r.again)! } : {}),
+            // Written again since: `resent: true` (1.12.0-rc.21), or `again` (the mark of that send).
+            ...(r.resent === true || r.again === true ? { again: 'yes' } : headerToken(r.again) ? { again: headerToken(r.again)! } : {}),
         });
     }
     return out;

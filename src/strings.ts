@@ -315,6 +315,7 @@ const stringsEN = {
             manual: 'Manual',
             'pre-import': 'Before import',
             'pre-merge': 'Before merge',
+            'other-window': 'This window, before another one saved over it',
         },
     },
 
@@ -2871,7 +2872,10 @@ const stringsEN = {
         createNew: 'Import to storage',
         importSuccess: 'Tree imported successfully',
         importAllSuccess: (count: number) => `${count} tree${count !== 1 ? 's' : ''} imported successfully`,
-        updateSuccess: 'Storage updated successfully'
+        updateSuccess: 'Storage updated successfully',
+        storedNewer: (changed: string, exported: string) => `The tree in your storage was changed (${changed}) after this file was made (${exported}). Update storage would replace those changes.`,
+        storedNewerTitle: 'Replace newer changes?',
+        storedNewerConfirm: (changed: string, exported: string) => `The tree in your storage was changed (${changed}) after this file was made (${exported}). Update storage replaces those changes with the file's older content. A backup of the stored tree is kept (with automatic backups on).`
     },
 
     // Encryption
@@ -3667,6 +3671,7 @@ const stringsCZ: StringsType = {
             manual: 'Ruční',
             'pre-import': 'Před importem',
             'pre-merge': 'Před sloučením',
+            'other-window': 'Toto okno, než ho přepsalo jiné',
         },
     },
 
@@ -6229,7 +6234,10 @@ const stringsCZ: StringsType = {
         createNew: 'Importovat do úložiště',
         importSuccess: 'Strom byl úspěšně importován',
         importAllSuccess: (count: number) => `${count} ${plural('cs', count, 'strom byl úspěšně importován', 'stromy byly úspěšně importovány', 'stromů bylo úspěšně importováno')}`,
-        updateSuccess: 'Úložiště bylo aktualizováno'
+        updateSuccess: 'Úložiště bylo aktualizováno',
+        storedNewer: (changed: string, exported: string) => `Strom v úložišti byl změněn (${changed}) až po vytvoření tohoto souboru (${exported}). Aktualizace úložiště by tyto změny nahradila.`,
+        storedNewerTitle: 'Nahradit novější změny?',
+        storedNewerConfirm: (changed: string, exported: string) => `Strom v úložišti byl změněn (${changed}) až po vytvoření tohoto souboru (${exported}). Aktualizace úložiště tyto změny nahradí starším obsahem souboru. Záloha uloženého stromu zůstane (při zapnutých automatických zálohách).`
     },
 
     // Encryption
@@ -7015,6 +7023,7 @@ const stringsDE: StringsType = {
             manual: 'Manuell',
             'pre-import': 'Vor dem Import',
             'pre-merge': 'Vor dem Zusammenführen',
+            'other-window': 'Dieses Fenster, bevor ein anderes darüber speicherte',
         },
     },
 
@@ -9512,7 +9521,10 @@ const stringsDE: StringsType = {
         createNew: 'In den Speicher importieren',
         importSuccess: 'Stammbaum erfolgreich importiert',
         importAllSuccess: (count: number) => `${count} ${count === 1 ? 'Stammbaum' : 'Stammbäume'} erfolgreich importiert`,
-        updateSuccess: 'Speicher erfolgreich aktualisiert'
+        updateSuccess: 'Speicher erfolgreich aktualisiert',
+        storedNewer: (changed: string, exported: string) => `Der Stammbaum in Ihrem Speicher wurde geändert (${changed}), nachdem diese Datei erstellt wurde (${exported}). Speicher aktualisieren würde diese Änderungen ersetzen.`,
+        storedNewerTitle: 'Neuere Änderungen ersetzen?',
+        storedNewerConfirm: (changed: string, exported: string) => `Der Stammbaum in Ihrem Speicher wurde geändert (${changed}), nachdem diese Datei erstellt wurde (${exported}). Speicher aktualisieren ersetzt diese Änderungen durch den älteren Inhalt der Datei. Eine Sicherung des gespeicherten Stammbaums bleibt (bei aktivierten automatischen Sicherungen).`
     },
 
     // Encryption

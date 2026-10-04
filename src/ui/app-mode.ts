@@ -33,6 +33,12 @@ import {
     renameMergeSession
 } from '../merge/index.js';
 import { PersonPicker } from '../person-picker.js';
+
+/** "4. 10. 2026 8:12": a moment in the app's language. */
+function formatDateTime(iso: string): string {
+    const t = Date.parse(iso);
+    return Number.isFinite(t) ? new Date(t).toLocaleString(getCurrentLanguage(), { dateStyle: 'short', timeStyle: 'short' }) : '';
+}
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
 import { ThemeMode, LanguageSetting, AppMode, AuditLog, CardDensity } from '../types.js';
@@ -129,7 +135,7 @@ export const appModeMethods = uiModule({
     /**
      * Show the existing export dialog (tree from this export already exists)
      */
-    showExistingExportDialog(): void {
+    async showExistingExportDialog(): Promise<void> {
         const existingTree = DataManager.getExistingTreeFromExport();
         if (existingTree) {
             const nameEl = document.getElementById('existing-export-tree-name');
@@ -137,6 +143,15 @@ export const appModeMethods = uiModule({
                 nameEl.textContent = `"${existingTree.name}"`;
             }
         }
+        // Changed here after the file was made: said, and Update storage is no longer the default.
+        const newer = await DataManager.storedNewerThanEmbedded();
+        const note = document.getElementById('existing-export-newer');
+        if (note) {
+            note.textContent = newer ? strings.viewMode.storedNewer(formatDateTime(newer.changedAt), formatDateTime(newer.exportedAt)) : '';
+            note.hidden = !newer;
+        }
+        const update = document.getElementById('existing-export-update');
+        if (update) update.className = newer ? 'danger' : 'primary';
         document.getElementById('existing-export-modal')?.classList.add('active');
     },
 
@@ -175,6 +190,11 @@ export const appModeMethods = uiModule({
      */
     async updateStoredVersion(): Promise<void> {
         this.closeExistingExportDialog();
+        // The stored tree has newer changes: replacing them is asked (a backup is kept).
+        const newer = await DataManager.storedNewerThanEmbedded();
+        if (newer && !await this.showConfirm(
+            strings.viewMode.storedNewerConfirm(formatDateTime(newer.changedAt), formatDateTime(newer.exportedAt)),
+            strings.viewMode.storedNewerTitle, { confirmLabel: strings.viewMode.updateStored, variant: 'danger' })) return;
         if (!await this.ensureLocalUnlocked()) return;
         await DataManager.importFromViewMode('update');
         this.hideViewModeBanner();

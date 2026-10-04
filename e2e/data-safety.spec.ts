@@ -257,6 +257,10 @@ test('another tab saving the same tree shows a notice with a Reload action', asy
     await expect(notice).toContainText('saved in another window');
     // Tab B does not warn about its own save.
     await expect(pageB.locator('#other-tab-notice')).toHaveCount(0);
+    // What tab A held is kept as a backup (another window — an older app too — may have saved over its work).
+    await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
+    await expect(page.locator('#snapshots-modal .snapshot-row', { hasText: 'before another one saved over it' })).toHaveCount(1);
+    await page.evaluate(() => window.Strom.UI.closeSnapshotsDialog());
 
     // An edit in tab A now is not written over B's newer tree: said plainly.
     await page.evaluate(() => {
@@ -409,6 +413,56 @@ test('reopening an exported HTML file offers the stored tree instead of adding a
     await expect(page.locator('body')).not.toHaveClass(/view-mode/);
     await expect(card(page, 'Marie')).toBeVisible();
     expect(await storedTrees()).toBe(1);
+});
+
+test('reopening an exported HTML file after editing the stored tree: Update storage says so, asks, and keeps a backup (N1)', async ({ page }, testInfo) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await page.evaluate(() => window.Strom.UI.showExportDialog());
+    await page.evaluate(() => window.Strom.UI.exportTargetTreeApp());
+    const pwd = page.locator('#export-password-modal');
+    await pwd.locator('#export-privacy-mode').selectOption('full');
+    const [download] = await Promise.all([page.waitForEvent('download'), pwd.locator('#export-submit-btn').click()]);
+    const file = testInfo.outputPath('family.html');
+    await download.saveAs(file);
+    const fileUrl = pathToFileURL(file).href;
+
+    await page.goto(fileUrl);
+    await page.locator('#view-mode-banner').getByText('Stay with this file').click();
+    await expect(card(page, 'Jan')).toBeVisible();
+    // Opened again right away (nothing edited): no warning.
+    await page.goto(fileUrl);
+    const existing = page.locator('#existing-export-modal');
+    await expect(existing).toBeVisible();
+    await expect(existing.locator('#existing-export-newer')).toBeHidden();
+    await existing.getByRole('button', { name: 'View stored version' }).click();
+    // Edited after the file was made.
+    await page.waitForTimeout(50);
+    await addRelation(page, 'Jan', 'partner', 'Marie', 'Novak', 'female');
+    await waitForPersist(page, 'Marie');
+
+    await page.goto(fileUrl);
+    await expect(existing).toBeVisible();
+    await expect(existing.locator('#existing-export-newer')).toContainText('was changed');
+    await existing.getByRole('button', { name: 'Update storage' }).click();
+    const confirm = page.locator('#confirmation-modal');
+    await expect(confirm).toContainText('replaces those changes');
+    await confirm.locator('#confirm-cancel-btn').click();
+    // Nothing replaced.
+    await page.goto(fileUrl);
+    await expect(existing).toBeVisible();
+    await existing.getByRole('button', { name: 'View stored version' }).click();
+    await expect(card(page, 'Marie')).toBeVisible();
+
+    // Replaced, asked: the stored tree's state before is in a backup.
+    await page.goto(fileUrl);
+    await existing.getByRole('button', { name: 'Update storage' }).click();
+    await confirm.locator('#confirm-ok-btn').click();
+    await expect(page.locator('body')).not.toHaveClass(/view-mode/);
+    await expect(card(page, 'Jan')).toBeVisible();
+    await expect(card(page, 'Marie')).toHaveCount(0);
+    await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
+    await expect(page.locator('#snapshots-modal .snapshot-row').first()).toBeVisible();
 });
 
 test('deleting a tree deletes its backups, other trees keep theirs', async ({ page }) => {

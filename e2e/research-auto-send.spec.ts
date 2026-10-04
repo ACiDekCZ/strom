@@ -628,6 +628,22 @@ test('finding 43, a bridge whose features lack sync.takenBack: nothing goes by i
     expect(bridge.posts).toHaveLength(1);
 });
 
+test('A2: a switch of mode not yet acknowledged is said beside a send taken back, never in its place', async ({ page }) => {
+    await writtenThenUndone(page);
+    // The research was an archive when this browser last saw it: the switch to an agent is still to be said.
+    await page.evaluate((id) => {
+        const key = `strom-research-auto:${id}`;
+        localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), modeSeen: 'archive' }));
+    }, await treeId(page));
+    await poll(page);
+    await openResearchMenu(page);
+    await expect(block(page)).toHaveAttribute('data-state', 'rejected');
+    await expect(block(page)).toContainText('was taken back in the research');
+    await expect(block(page).getByRole('button', { name: 'Send again' })).toBeVisible();
+    await expect(block(page).getByRole('button', { name: 'Got it' })).toBeVisible();
+    await expect(pill(page)).toContainText('Send taken back');
+});
+
 test('a write that takes longer (202): "writing" until the status says written, then loaded quietly', async ({ page }) => {
     const bridge = await autoTree(page);
     bridge.syncReply = { status: 202, body: { ok: true, inbox: false, pending: true, changes: 6 } };

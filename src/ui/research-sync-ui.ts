@@ -46,8 +46,9 @@ import {
 import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
     pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, researchSendVouches, conflictTakeovers, heldConflicts,
-    researchKeepsTakenBack, latestUndone,
+    researchKeepsTakenBack, latestUndone, nextUndone,
 } from '../research-sync.js';
+import { setResearchConflictsProvider } from '../card-signals.js';
 import { uiModule } from './module.js';
 import { researchWrittenList } from './research-changes-ui.js';
 import {
@@ -234,6 +235,12 @@ export const researchSyncMethods = uiModule({
     /** Start watching the active research tree (after the first render; once). */
     initResearchSync(): void {
         if (started || typeof window === 'undefined') return;
+        // Cards count the conflicts as the research has them now (its version not loaded, finding 40).
+        setResearchConflictsProvider(id => {
+            const treeId = DataManager.getCurrentTreeId();
+            const held = treeId ? this.researchHeld(treeId) : null;
+            return held && id in held.persons ? held.persons[id] : null;
+        });
         started = true;
         lastActiveTree = DataManager.getCurrentTreeId();
         const changed = (): void => {
@@ -690,7 +697,11 @@ export const researchSyncMethods = uiModule({
         if (!link || sent?.state !== 'undone' || !sent.intake || !status.sends) return;
         const rec = status.sends.find(r => r.intake === sent.intake);
         if (!rec?.again) return;
-        TreeManager.patchResearchLink(treeId, { sent: { ...sent, state: 'written', closedAt: rec.decidedAt || new Date().toISOString(), takenBack: undefined } });
+        // Another send of this tree still taken back there stays in sight (finding B2).
+        const next = nextUndone(status.sends, tree => tree === treeId || tree === link.id, [...(researchAutoState(treeId).resent ?? []), sent.intake]);
+        TreeManager.patchResearchLink(treeId, { sent: next
+            ? { ...sent, at: next.at || sent.at, intake: next.intake, closedAt: next.decidedAt || sent.closedAt, takenBack: undefined }
+            : { ...sent, state: 'written', closedAt: rec.decidedAt || new Date().toISOString(), takenBack: undefined } });
         fpCache = null;
         this.refreshResearchSyncUi();
         this.researchAutoArm();
@@ -1030,11 +1041,22 @@ export const researchSyncMethods = uiModule({
         // loaded quietly over them. The bar "taken back" names the send taken back, at its own time
         // (findings 38, 39): Send again (theirs again) or load (the undo kept).
         // The latest of them, never simply the last mark (finding B).
-        const undoneIntake = again ? '' : latestUndone(reply.undoneSince, runtime.get(link.id)?.status?.sends);
+        const undoneIntake = again ? '' : latestUndone(reply.undoneSince, runtime.get(link.id)?.status?.sends, researchAutoState(treeId).resent);
         const undone = !!undoneIntake;
         TreeManager.patchResearchLink(treeId, { refused: undefined, sentSources: sourceReadings(data),
             sent: undone ? { ...sent, at: this.researchSendTime(treeId, link, undoneIntake) || now, state: 'undone', intake: undoneIntake,
                 closedAt: now, noticed: true, ...(reply.takenBack ? { takenBack: reply.takenBack } : {}) } : sent });
+        // Written again: never offered again (the research may still list it as taken back), and another
+        // send of this tree it still has taken back stays in sight, to be sent again in its turn (finding B2).
+        if (again && written) {
+            const resent = [...(researchAutoState(treeId).resent ?? []).filter(x => x !== again.intake), again.intake!].slice(-30);
+            patchResearchAutoState(treeId, { resent });
+            const next = nextUndone(runtime.get(link.id)?.status?.sends, tree => tree === treeId || tree === link.id, resent);
+            if (next) {
+                TreeManager.patchResearchLink(treeId, { sent: { ...sent, at: next.at || now, state: 'undone', intake: next.intake,
+                    closedAt: next.decidedAt || now, noticed: true } });
+            }
+        }
         if (written && reply.changes !== 0) this.researchNoteWritten(treeId, sentFp, now);
         // Edits since the send taken back were not in it: they still wait.
         if (sentFp === fps.current) patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined, toldRefused: undefined });
@@ -1318,6 +1340,7 @@ export const researchSyncMethods = uiModule({
             // What its conflicts say now (the user's latest value in them) is shown without loading it.
             patchResearchAutoState(treeId, { held: heldConflicts(previous, stable, link.head ?? '', header.head || remote) });
             this.refreshResearchSyncUi();
+            TreeRenderer.render();
             return null;
         }
         const before = openConflictCounts(previous);
@@ -1712,6 +1735,11 @@ export const researchSyncMethods = uiModule({
                 actions: [{ action: 'introSeen', label: s.gotIt, asLink: true }, { action: 'introChange', label: s.autoIntroChange, asLink: true }] }),
         };
         const b = blocks[state.kind]();
+        // A switch of mode not yet acknowledged: said under the state, with its "Got it".
+        if (state.switchedNote) {
+            b.sub = [b.sub, archive ? s.switchedToArchiveTitle : s.switchedToAgentTitle].filter(Boolean).join(' · ');
+            b.actions = [...(b.actions ?? []), { action: 'gotIt', label: s.gotIt, asLink: true }];
+        }
         // Changes per person: how many people, and "What will be sent ›" / "What was written ›".
         if (['unsent', 'autoWaiting', 'unsentBridgeDown', 'unsentAndNewer'].includes(state.kind)) {
             const list = this.researchChangesNow();
@@ -1821,6 +1849,7 @@ export const researchSyncMethods = uiModule({
         const head = header.head || runtime.get(link.id)?.status?.head || '';
         patchResearchAutoState(treeId, { held: heldConflicts(previous, stabilizeIds(data, previous), link.head ?? '', head) });
         this.refreshResearchSyncUi();
+        TreeRenderer.render();
         return true;
     },
 

@@ -14195,10 +14195,11 @@
             </div>
             <p class="modal-description" data-i18n="viewMode.existingMessage">A tree from this export is already in your storage.</p>
             <p id="existing-export-tree-name" class="existing-tree-name"></p>
+            <p id="existing-export-newer" class="warning-message" hidden></p>
             <div class="buttons">
                 <button class="secondary" onclick="window.Strom.UI.viewStoredVersion()" data-i18n="viewMode.viewStored">View stored version</button>
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.viewEmbeddedVersion()" data-i18n="viewMode.viewEmbedded">View embedded version</button>
-                <button class="primary" onclick="window.Strom.UI.updateStoredVersion()" data-i18n="viewMode.updateStored">Update storage</button>
+                <button class="primary" id="existing-export-update" onclick="window.Strom.UI.updateStoredVersion()" data-i18n="viewMode.updateStored">Update storage</button>
             </div>
         </div>
     </div>
