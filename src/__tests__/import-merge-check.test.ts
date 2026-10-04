@@ -40,7 +40,7 @@ function twoFamilies(): StromData {
 
 /** What a collision left: `later` took `earlier`'s id, its own record kept, every reference to either now one id. */
 function collide(data: StromData, earlier: string, later: string): StromData {
-    const json = JSON.stringify(data).replaceAll(`"${later}"`, `"${earlier}"`);
+    const json = JSON.stringify(data).split(`"${later}"`).join(`"${earlier}"`);
     const out = JSON.parse(json) as StromData;
     const kept = data.persons[later as PersonId];
     const relations = (p: Person) => ({ partnerships: p.partnerships, parentIds: p.parentIds, childIds: p.childIds });

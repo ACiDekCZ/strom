@@ -170,7 +170,10 @@ test.describe('originals go to the research', () => {
         await expect.poll(() => b.mediaPuts.length).toBe(1);
         expect(b.mediaPuts[0].headers['x-strom-person']).toBe('P0003');
         const att = await janAttachment(page);
-        expect(att).toMatchObject({ originalOnly: true, dataUrl: '', mimeType: 'image/tiff' });
+        // Its data is the page icon (a 3.8.x app keeps it on a save), never the TIFF.
+        expect(att).toMatchObject({ originalOnly: true, mimeType: 'image/tiff' });
+        expect(att.dataUrl).toMatch(/^data:image\/png;base64,/);
+        expect(att.dataUrl.length).toBeLessThan(400);
         // In the research now: opened there (a TIFF is not shown in the app).
         await expect(row.locator('.media-full-quality')).toHaveText(/↗/);
     });
