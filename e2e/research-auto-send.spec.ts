@@ -564,9 +564,11 @@ test('the bridge stops: "not running" at its next ask (within 20 s), and the tas
     await expect(block(page)).toHaveAttribute('data-state', 'bridgeDown');
     await expect(sub.locator('#research-item-waiting')).toHaveCount(0);
     await page.evaluate(() => window.Strom.UI.closeActionsMenu());
-    // Back: the tasks again.
+    // Back: the tasks again — asked at once when the window comes back (visibilitychange), no timer waited for.
     bridge.down = false;
-    await poll(page);
+    await page.clock.fastForward(6000);
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await expect.poll(() => page.evaluate(() => window.Strom.UI.currentResearchSyncState().kind)).not.toBe('bridgeDown');
     await openResearchMenu(page);
     await expect(sub.locator('#research-item-waiting')).toBeVisible();
 });
@@ -642,6 +644,59 @@ test('A2: a switch of mode not yet acknowledged is said beside a send taken back
     await expect(block(page).getByRole('button', { name: 'Send again' })).toBeVisible();
     await expect(block(page).getByRole('button', { name: 'Got it' })).toBeVisible();
     await expect(pill(page)).toContainText('Send taken back');
+});
+
+test('every send taken back is offered: an older one the research still has taken back stays in sight after another was sent again', async ({ page }) => {
+    const bridge = await writtenThenUndone(page, { features: ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.conflictEdit'] });
+    const older = bridge.sends.find(r => r.state === 'undone')!;
+    // A later send, written, then taken back too.
+    await page.clock.fastForward(60_000);
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, input: 'I0050', changes: 1, applied: 1, undoneSince: [older.intake], takenBack: 0 } };
+    bridge.onWrite = () => ({ head: 'f1f1f1f1f1f1', ged: researchGed('f1f1f1f1f1f1') });
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    const later = bridge.sends[0]; // the newest first, as the research lists them
+    Object.assign(later, { state: 'undone', decidedAt: new Date().toISOString() });
+    await page.clock.fastForward(60_000);
+    // Send again for the later one: written; the older one is still taken back there — offered next.
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, input: 'I0051', changes: 1, applied: 1, undoneSince: [later.intake, older.intake], takenBack: 1 } };
+    await renameJan(page, 'Jeník');
+    await page.evaluate(() => window.Strom.UI.researchSendNow());
+    await expect.poll(() => bridge.posts.length).toBe(3);
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.intake)).toBe(later.intake);
+    await openResearchMenu(page);
+    await block(page).getByRole('button', { name: 'Send again' }).click();
+    await expect.poll(() => bridge.againAsks ?? []).toEqual([later.intake]);
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent))
+        .toMatchObject({ state: 'undone', intake: older.intake });
+    await expect(pill(page)).toContainText('Send taken back');
+    // And the next copy, the research still listing both: the older one stays the one offered.
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, input: 'I0052', changes: 1, applied: 1, undoneSince: [later.intake, older.intake], takenBack: 1 } };
+    await renameJan(page, 'Jenda');
+    await page.evaluate(() => window.Strom.UI.researchSendNow());
+    await expect.poll(() => bridge.posts.length).toBe(4);
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent))
+        .toMatchObject({ state: 'undone', intake: older.intake });
+});
+
+test('a send taken back before this page knew (not its last write) is shown with its own Send again; one taken back before the last load is settled', async ({ page }) => {
+    const bridge = await autoTree(page);
+    const syncedAt = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.syncedAt);
+    const tree = await treeId(page);
+    const before = new Date(Date.parse(syncedAt!) - 60_000).toISOString();
+    // Taken back before the tree last loaded the research's version: the undo was kept there, nothing to say.
+    bridge.sends.push({ intake: 'R20261004050000000-old1', at: before, state: 'undone', changes: 1, tree, sent: 'x', decidedAt: before });
+    await poll(page);
+    await expect(pill(page)).not.toContainText('Send taken back');
+    // Taken back since: in sight, its own Send again.
+    const now = new Date().toISOString();
+    bridge.sends.unshift({ intake: 'R20261004060000000-new1', at: now, state: 'undone', changes: 1, tree, sent: 'y', decidedAt: now });
+    await poll(page);
+    await expect(pill(page)).toContainText('Send taken back');
+    await openResearchMenu(page);
+    await block(page).getByRole('button', { name: 'Send again' }).click();
+    await expect.poll(() => bridge.againAsks ?? []).toEqual(['R20261004060000000-new1']);
 });
 
 test('a write that takes longer (202): "writing" until the status says written, then loaded quietly', async ({ page }) => {

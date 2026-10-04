@@ -35,7 +35,7 @@ import { stripMedia } from '../attachments.js';
 import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
     parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, carryOverMedia, researchPersonRef, ResearchAccepts,
-    researchIdsByContent, holdsResearchIds,
+    researchIdsByContent, holdsResearchIds, ResearchSendRecord,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
 import {
@@ -46,7 +46,7 @@ import {
 import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
     pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, researchSendVouches, conflictTakeovers, heldConflicts,
-    researchKeepsTakenBack, latestUndone, nextUndone,
+    researchKeepsTakenBack, latestUndone, nextUndone, openUndone,
 } from '../research-sync.js';
 import { setResearchConflictsProvider } from '../card-signals.js';
 import { uiModule } from './module.js';
@@ -663,9 +663,12 @@ export const researchSyncMethods = uiModule({
     researchNoteUndone(treeId: TreeId, status: LiveStatus): void {
         const lw = researchAutoState(treeId).lastWritten;
         const link = TreeManager.getTreeMetadata(treeId)?.research;
-        if (!lw?.intake || !link || !status.sends) return;
-        const rec = status.sends.find(r => r.intake === lw.intake);
-        if (rec?.state !== 'undone') return;
+        if (!link || !status.sends) return;
+        const rec = lw?.intake ? status.sends.find(r => r.intake === lw.intake) : undefined;
+        if (!lw?.intake || rec?.state !== 'undone' || rec.again) {
+            this.researchNoteOlderUndone(treeId, link, status);
+            return;
+        }
         // The state now stands for the send taken back (the version loaded after the write is that state,
         // its ids from the research); edited since, the written state does, and the edits go again.
         const fps = this.researchSyncFingerprints(treeId, link);
@@ -683,6 +686,32 @@ export const researchSyncMethods = uiModule({
             closable: true,
             action: { label: s.sendAgain, run: () => { void this.researchSendTree(treeId, { undoAgain: true }); } },
         });
+    },
+
+    /**
+     * A send of this tree the research took back that this app was not told of
+     * as it happened (taken back before this page, or not the last write): in
+     * sight like any other, with its own Send again — unless the research's
+     * version was loaded after it (the undo kept), or it was written again.
+     */
+    researchNoteOlderUndone(treeId: TreeId, link: ResearchLink, status: LiveStatus): void {
+        if (link.sent?.state === 'undone' || link.sent?.state === 'pending' || link.copy) return;
+        const open = openUndone(status.sends, tree => tree === treeId || tree === link.id, researchAutoState(treeId).resent ?? [], link.syncedAt);
+        const rec = open[0];
+        if (!rec) return;
+        TreeManager.patchResearchLink(treeId, {
+            fingerprint: '',
+            sent: { fingerprint: link.sent?.fingerprint ?? '', at: rec.at || new Date().toISOString(), changes: rec.changes, head: '',
+                state: 'undone', closedAt: rec.decidedAt || new Date().toISOString(), intake: rec.intake, noticed: true },
+        });
+        fpCache = null;
+        this.refreshResearchSyncUi();
+    },
+
+    /** The other sends of the open tree still taken back (besides the one shown), newest first. */
+    researchOtherUndone(treeId: TreeId, link: ResearchLink): ResearchSendRecord[] {
+        return openUndone(runtime.get(link.id)?.status?.sends, tree => tree === treeId || tree === link.id,
+            researchAutoState(treeId).resent ?? [], link.syncedAt).filter(r => r.intake !== link.sent?.intake);
     },
 
     /**
@@ -1784,6 +1813,9 @@ export const researchSyncMethods = uiModule({
         const kept = !!link && auto && !this.researchHoldsForUndo(link);
         const sub = [kept ? s.undoneKeptSub(when(sent?.closedAt)) : auto ? s.undoneAutoSub(when(sent?.closedAt)) : s.undoneSub(when(sent?.closedAt))];
         if (sent?.takenBack) sub.push(s.takenBackSub(sent.takenBack));
+        // The others taken back too: each comes after this one, with its own Send again.
+        const others = treeId && link ? this.researchOtherUndone(treeId, link) : [];
+        if (others.length) sub.push(s.undoneMore(others.map(r => when(r.at)).join(', ')));
         if (link && this.researchBridgeKnownDown(link.id)) sub.unshift(`${s.stateBridgeDown}.`);
         if (treeId && conflicts > 0) {
             sub.push(`${s.flyConflict(conflicts)} (${when(researchAutoState(treeId).lastWritten?.at)}).`);

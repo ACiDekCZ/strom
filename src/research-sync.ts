@@ -378,13 +378,27 @@ export function latestUndone(undoneSince: readonly string[], sends: readonly Res
 }
 
 /**
+ * The sends of this tree the research has taken back and nobody settled:
+ * `undone`, not written again (`again`/`resent`, or by this app), and taken
+ * back after `since` (the tree's last load of the research's version — a load
+ * after the undo kept it). Newest first.
+ */
+export function openUndone(sends: readonly ResearchSendRecord[] | null | undefined, ours: (tree: string) => boolean,
+    resent: readonly string[], since = ''): ResearchSendRecord[] {
+    const after = Date.parse(since);
+    return (sends ?? [])
+        .filter(r => r.state === 'undone' && !r.again && !resent.includes(r.intake) && ours(r.tree)
+            && (!Number.isFinite(after) || !(Date.parse(r.decidedAt || r.at) <= after)))
+        .sort((a, b) => (Date.parse(b.at || '') || 0) - (Date.parse(a.at || '') || 0));
+}
+
+/**
  * After a send taken back was written again: the latest other send of this
- * tree the research still has as taken back (`undone`, not written again, not
- * written again by this app), or null. It stays the one to offer (finding B2).
+ * tree the research still has as taken back (see openUndone), or null. It
+ * stays the one to offer (finding B2).
  */
 export function nextUndone(sends: readonly ResearchSendRecord[] | null | undefined, ours: (tree: string) => boolean,
-    resent: readonly string[]): ResearchSendRecord | null {
-    const left = (sends ?? []).filter(r => r.state === 'undone' && !r.again && !resent.includes(r.intake) && ours(r.tree));
-    if (left.length === 0) return null;
-    return left.reduce((best, r) => (Date.parse(r.at || '') > Date.parse(best.at || '') ? r : best));
+    resent: readonly string[], since = ''): ResearchSendRecord | null {
+    const left = openUndone(sends, ours, resent, since);
+    return left[0] ?? null;
 }
