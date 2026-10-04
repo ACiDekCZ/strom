@@ -257,7 +257,11 @@ export const researchSyncMethods = uiModule({
         setResearchConflictsProvider(id => {
             const treeId = DataManager.getCurrentTreeId();
             const held = treeId ? this.researchHeld(treeId) : null;
-            return held && id in held.persons ? held.persons[id] : null;
+            if (held && id in held.persons) return held.persons[id];
+            // Decided in the research since this version was loaded (V-E): not open here either.
+            const settled = treeId ? this.researchSettledConflicts(treeId) : null;
+            const own = DataManager.getPerson(id)?.research?.conflicts;
+            return settled && own?.some(c => settled.has(c.id)) ? own.filter(c => !settled.has(c.id)) : null;
         });
         started = true;
         lastActiveTree = DataManager.getCurrentTreeId();
@@ -805,11 +809,16 @@ export const researchSyncMethods = uiModule({
         const mine = status.sends.filter(r => r.tree === treeId || r.tree === link.id);
         if (mine.some(r => (r.conflicts ?? 0) > 0)) return;
         TreeManager.patchResearchLink(treeId, { sent: { ...sent, conflicts: undefined } });
+        // The conflicts it named are decided there: the cards stop showing them until its version is loaded.
+        const ids = [...new Set([...(st.lastWritten?.conflictIds ?? []), ...(st.settledConflicts?.base === (link.head ?? '') ? st.settledConflicts.ids : [])])];
         patchResearchAutoState(treeId, {
             held: undefined,
+            ...(ids.length ? { settledConflicts: { base: link.head ?? '', ids } } : {}),
             ...(st.lastWritten ? { lastWritten: { ...st.lastWritten, conflicts: 0, persons: undefined, conflictIds: undefined } } : {}),
         });
         fpCache = null;
+        // The cards' conflict badges follow.
+        if (DataManager.getCurrentTreeId() === treeId) TreeRenderer.render();
     },
 
     // ==================== SENDING BY ITSELF ====================
@@ -2005,12 +2014,21 @@ export const researchSyncMethods = uiModule({
         return held && link && held.base === (link.head ?? '') ? held : null;
     },
 
-    /** A person's conflicts as the research has them now: its unloaded version's when read (finding 40), else the tree's. */
+    /** A person's conflicts as the research has them now: its unloaded version's when read (finding 40), else the tree's (less those decided there since, V-E). */
     researchConflictsOf(personId: PersonId): ResearchConflict[] {
         const treeId = DataManager.getCurrentTreeId();
         const held = treeId ? this.researchHeld(treeId) : null;
         if (held && personId in held.persons) return held.persons[personId];
-        return DataManager.getPerson(personId)?.research?.conflicts ?? [];
+        const own = DataManager.getPerson(personId)?.research?.conflicts ?? [];
+        const settled = treeId ? this.researchSettledConflicts(treeId) : null;
+        return settled ? own.filter(c => !settled.has(c.id)) : own;
+    },
+
+    /** Conflicts decided in the research since the tree's version was loaded (null: none known). */
+    researchSettledConflicts(treeId: TreeId): Set<string> | null {
+        const sc = researchAutoState(treeId).settledConflicts;
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        return sc && link && sc.base === (link.head ?? '') && sc.ids.length ? new Set(sc.ids) : null;
     },
 
     /** "Written, N conflicts to decide": every conflict open there as known here (cards count the same), at least what the research said. */

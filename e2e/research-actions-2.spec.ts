@@ -428,7 +428,7 @@ test.describe('Start research with this tree (G3)', () => {
         await page.keyboard.press('Escape');
         await page.evaluate(() => window.Strom.UI.showResearchInfoDialog());
         const dialog = page.locator('#research-info-modal');
-        await expect(dialog.locator('.research-info-lead')).toContainText('can take over your tree Dvořákovi');
+        await expect(dialog.locator('.research-info-lead')).toContainText('can take over the tree Dvořákovi');
         await expect(dialog.locator('.research-info-need')).toHaveCount(0);
         await expect(dialog.locator('.research-info-step')).toHaveCount(3);
         await expect(dialog.locator('.research-info-about')).toContainText('What is Strom Research');
@@ -574,7 +574,7 @@ test.describe('Start research with this tree (G3)', () => {
         await dropFile(page, adoptedGed(true));
         const dialog = page.locator('#confirmation-modal');
         await expect(dialog).toContainText('was changed in this app');
-        await expect(dialog).toContainText('Photos, attachments and excerpts you added in the app stay');
+        await expect(dialog).toContainText('Photos, attachments and excerpts added in the app stay');
         await dialog.getByRole('button', { name: 'Update' }).click();
         await expect(page.locator('.toast')).toContainText('Research version loaded.');
         await expect(card(page, 'Marie')).toBeVisible();

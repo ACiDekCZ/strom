@@ -66,7 +66,7 @@ test.describe('couldn\'t connect to the research', () => {
         await setup(page, 'prompt');
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
         const d = dialog(page);
-        await expect(d.locator('.connect-reason')).toHaveText('Chrome is waiting for your permission');
+        await expect(d.locator('.connect-reason')).toHaveText('Chrome is waiting for permission');
         await expect(d.locator('.connect-how')).toHaveCount(0);
         let asked = 0;
         await page.unroute(`${BRIDGE}/**`);

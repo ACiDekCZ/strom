@@ -56,7 +56,7 @@ test.describe('loading the research version', () => {
         await more.click();
         await expect(dialog(page).locator('tbody tr:visible')).toHaveCount(8);
         await expect(dialog(page).locator('.research-load-added')).toHaveText('Added from the research: 1 fact');
-        await expect(dialog(page).locator('.research-load-backup')).toHaveText('A backup is saved before loading; you can go back.');
+        await expect(dialog(page).locator('.research-load-backup')).toHaveText('A backup is saved before loading; it can be restored.');
         await expect(dialog(page).getByRole('button', { name: 'Open as copy' })).toBeVisible();
         await dialog(page).getByRole('button', { name: 'Load and overwrite' }).click();
         await expect.poll(() => head(page)).toBe(NEW_HEAD);

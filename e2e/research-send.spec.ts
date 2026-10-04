@@ -155,7 +155,7 @@ test.describe('send changes back to the research', () => {
         await openApp(page);
         const { cancels } = await bridge(page);
         const done = send(page);
-        await expect(dialog(page)).toContainText('You do not have the research “Víškovi” in the app');
+        await expect(dialog(page)).toContainText('The research “Víškovi” is not in the app');
         await dialog(page).getByRole('button', { name: 'OK' }).click();
         await done;
         await expect.poll(() => cancels).toEqual(['no-tree']);

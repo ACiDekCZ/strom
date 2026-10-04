@@ -107,7 +107,7 @@ test.describe('research directions', () => {
         await expect(sec.locator('.research-direction__name')).toHaveText(['Předci: Jan', 'Potomci: Josef', 'Revize Anny']);
         await expect(row(page, 'G0001').locator('.research-direction__icon')).toHaveText('↑');
         await expect(row(page, 'G0001').locator('.agent-mark--spin')).toHaveCount(1);
-        await expect(row(page, 'G0001').locator('.research-direction__meta')).toHaveText(/Jan Víšek.*2 tasks.*1 waiting for you/);
+        await expect(row(page, 'G0001').locator('.research-direction__meta')).toHaveText(/Jan Víšek.*2 tasks.*1 awaiting an answer/);
         // Directions sit right after Now.
         const titles = await ov(page).locator('.live-section__title').allTextContents();
         expect(titles.indexOf('Directions · 3 running')).toBe(titles.indexOf('Now') + 1);
@@ -124,7 +124,7 @@ test.describe('research directions', () => {
         await follow(page);
         await openOverview(page);
         const empty = row(page, 'G0003');
-        await expect(empty.locator('.research-direction__empty')).toHaveText('Nothing to do, you can end it.');
+        await expect(empty.locator('.research-direction__empty')).toHaveText('Nothing to do, it can be ended.');
         await empty.locator('.research-direction__do').click();
         expect(await launched(page)).toEqual([`strom-research://direction?tree=${UUID}&id=G0003&do=done`]);
     });
@@ -214,7 +214,7 @@ test.describe('research directions', () => {
         await expect(ov(page)).toBeVisible();
         await expect(ov(page).locator('.research-direction__more')).toHaveCount(0);
         await expect(ov(page).locator('.research-direction__do')).toHaveCount(0);
-        await expect(row(page, 'G0003').locator('.research-direction__empty')).toHaveText('Nothing to do · it can be ended in the research on your computer');
+        await expect(row(page, 'G0003').locator('.research-direction__empty')).toHaveText('Nothing to do · it can be ended in the research on the computer');
         const box = await row(page, 'G0001').boundingBox();
         expect(box!.height).toBeGreaterThanOrEqual(44);
         await row(page, 'G0002').locator('.research-direction__head').click();

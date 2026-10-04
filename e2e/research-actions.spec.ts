@@ -4,7 +4,7 @@ import { openApp, card, openPersonSubmenu } from './helpers.js';
 /**
  * The research's actions from the app (a Strom Research tree, on a computer):
  * Actions → Research, the "In the research" section of the person menu, the
- * "Review again" dialog, "Waiting for you" (live panel and last known state)
+ * "Review again" dialog, "Waiting for an answer" (live panel and last known state)
  * and "Find a source in the research". Every action is a strom-research://
  * link the research announced; handing it to the system is recorded instead.
  */
@@ -95,7 +95,7 @@ test.describe('Actions → Research', () => {
         await expect(row.locator('#actions-research-badge')).toHaveText('2');
         await row.click();
         await expect(submenuItems(page).locator('.research-item-label'))
-            .toHaveText(['Load new version', 'Waiting for you', 'Send changes', 'Open research', 'Continue with the agent']);
+            .toHaveText(['Load new version', 'Waiting for an answer', 'Send changes', 'Open research', 'Continue with the agent']);
         const chat = page.locator('#research-item-chat');
         await expect(chat.locator('.research-ai-badge')).toHaveText('AI');
         await expect(chat).toHaveAttribute('aria-label', 'Continue with the agent, AI, opens in the research');
@@ -157,14 +157,14 @@ test.describe('Actions → Research', () => {
         await other.close();
     });
 
-    test('"Waiting for you" without following: the last known state, no answer buttons, Esc closes', async ({ page }) => {
+    test('"Waiting for an answer" without following: the last known state, no answer buttons, Esc closes', async ({ page }) => {
         await setup(page, ALL, [{ id: 'T0001', what: 'Confirm the father of Jan', at: new Date().toISOString() }]);
         await openResearchMenu(page);
         await page.locator('#research-item-waiting').click();
         const panel = page.locator('#live-panel');
         await expect(panel).toBeVisible();
         await expect(panel).toHaveClass(/idle/);
-        await expect(panel.locator('.live-panel-heading-waiting')).toHaveText('Waiting for you · 1');
+        await expect(panel.locator('.live-panel-heading-waiting')).toHaveText('Waiting for an answer · 1');
         await expect(panel.locator('.live-waiting')).toContainText('Confirm the father of Jan');
         await expect(panel.locator('.live-waiting-answer')).toHaveCount(0);
         await expect(panel).toContainText('The research is not running.');
@@ -227,7 +227,7 @@ test.describe('Actions → Research', () => {
     });
 });
 
-test.describe('live research: Waiting for you', () => {
+test.describe('live research: Waiting for an answer', () => {
     test('above the changes, "Answer ↗" opens the task; the menu opens the panel at the section', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await seed(page, ALL);
@@ -250,9 +250,9 @@ test.describe('live research: Waiting for you', () => {
         await recordLaunches(page);
         // Order of the sections: at work → waiting → changes.
         const headings = await panel.locator('.live-section__title').allTextContents();
-        expect(headings).toEqual(['At work', 'Waiting for you · 2', 'Latest changes']);
+        expect(headings).toEqual(['At work', 'Waiting for an answer · 2', 'Latest changes']);
         await expect(panel.locator('.live-waiting .live-time').first()).toHaveText(/just now|min/);
-        await expect(panel).toContainText('You answer in the research.');
+        await expect(panel).toContainText('Answer in the research.');
         const answers = panel.locator('.live-waiting-answer');
         await expect(answers).toHaveCount(2);
         await answers.nth(0).click();

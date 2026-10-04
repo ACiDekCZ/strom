@@ -41,7 +41,7 @@ test.describe('the state of the tree and sending straight', () => {
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'sentPending');
         await expect(block(page)).toContainText('· 6 changes');
-        await expect(block(page)).toContainText('Waiting for you to confirm them in the research.');
+        await expect(block(page)).toContainText('Waiting for confirmation in the research.');
         await expect(dot(page)).toBeHidden();
         // Nothing claims it is stored in the research.
         await expect(page.locator('body')).not.toContainText('saved in the research');
@@ -91,7 +91,7 @@ test.describe('the state of the tree and sending straight', () => {
         await poll(page);
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'unsentBridgeDown');
-        await expect(block(page)).toContainText('Your changes will wait, nothing is lost.');
+        await expect(block(page)).toContainText('The changes will wait, nothing is lost.');
         await page.evaluate(() => window.Strom.UI.researchSendNow());
         expect(bridge.posts).toHaveLength(0);
         expect(await links(page)).toContain(`strom-research://send?tree=${UUID}`);
@@ -277,7 +277,7 @@ test.describe('updating over changes the research does not have', () => {
 
         await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
         const dialog = page.locator('#confirmation-modal');
-        await expect(dialog).toContainText("You have changes the research doesn't have");
+        await expect(dialog).toContainText("There are changes the research doesn't have");
         await expect(dialog.locator('.confirm-aside-btn')).toHaveText('Load without changes');
         await dialog.getByRole('button', { name: 'Send, then load' }).click();
         await expect(page.locator('.toast')).toContainText('Sent to the research');
@@ -315,7 +315,7 @@ test.describe('updating over changes the research does not have', () => {
 
         await page.evaluate((u) => { void window.Strom.UI.importResearchFromUrl(u); }, `${BRIDGE}/tree.ged`);
         const dialog = page.locator('#confirmation-modal');
-        await expect(dialog).toContainText("You have changes the research doesn't have");
+        await expect(dialog).toContainText("There are changes the research doesn't have");
         // Behind the question: the research tree, not the user's other tree.
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).toBe(researchTreeId);
         await expect(card(page, 'Jan')).toBeVisible();
@@ -329,7 +329,7 @@ test.describe('updating over changes the research does not have', () => {
         // "Load without changes" replaces the research tree only.
         await page.evaluate((id) => window.Strom.UI.switchToTree(id), otherId);
         await page.evaluate((u) => { void window.Strom.UI.importResearchFromUrl(u); }, `${BRIDGE}/tree.ged`);
-        await expect(dialog).toContainText("You have changes the research doesn't have");
+        await expect(dialog).toContainText("There are changes the research doesn't have");
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).toBe(researchTreeId);
         await dialog.locator('.confirm-aside-btn').click();
         await expect(page.locator('.toast')).toContainText('Research version loaded.');

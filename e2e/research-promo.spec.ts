@@ -149,7 +149,7 @@ test.describe('welcome screen offer', () => {
             await expect(offer).toBeVisible();
             await expect(offer).toContainText('Not sure where to start?');
             await expect(offer).toContainText('Ancestor research');
-            await expect(offer).toContainText('Research with an AI agent, or a free archive on your disk');
+            await expect(offer).toContainText('Research with an AI agent, or a free archive on disk');
             // Content stays left-aligned even where the column is centred.
             expect(await offer.evaluate(el => getComputedStyle(el).textAlign)).toBe('left');
             // Sits between "I have data elsewhere" and the demo link.

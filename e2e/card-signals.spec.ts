@@ -99,14 +99,14 @@ test.describe('card signals', () => {
         await expect(card(page, 'Jan').locator('.card-signal')).toHaveText('≠');
         await expect(card(page, 'Eva').locator('.card-signal')).toHaveText('!');
         await expect(card(page, 'Josef').locator('.card-signal')).toHaveCount(0);
-        await expect(card(page, 'Eva').locator('.card-signal')).toHaveAttribute('aria-label', 'Waiting for you: Uložte snímek oddací matriky');
+        await expect(card(page, 'Eva').locator('.card-signal')).toHaveAttribute('aria-label', 'Waiting for an answer: Uložte snímek oddací matriky');
 
         await expect(card(page, 'Jan')).toHaveAttribute('aria-label', 'Jan Víšek, documented by sources, story in draft, conflicting sources');
         const tt = card(page, 'Jan').locator('.card-tooltip .tt-signals');
         await expect(tt.locator('.tt-ev')).toHaveText('1 source · birth documented');
         await expect(tt.locator('.tt-story')).toHaveText('Story (draft)');
         await expect(tt.locator('.tt-action')).toHaveText(['1 conflict · 1 hypothesis']);
-        await expect(card(page, 'Eva').locator('.card-tooltip .tt-action')).toHaveText(['Waiting for you: Uložte snímek oddací matriky', '1 conflict']);
+        await expect(card(page, 'Eva').locator('.card-tooltip .tt-action')).toHaveText(['Waiting for an answer: Uložte snímek oddací matriky', '1 conflict']);
     });
 
     test('the badge opens what it signals, not the card menu', async ({ page }) => {
@@ -229,7 +229,7 @@ test.describe('card signals', () => {
         const preview = page.locator('#card-preview-settings .card-signals-preview');
         await expect(preview.locator('.person-card')).toBeVisible();
         await expect(preview.locator('.name-text')).toHaveText('Jan Vlk');
-        // A research tree: "Waiting for you" is offered; the agent only with the research connected here.
+        // A research tree: "Waiting for an answer" is offered; the agent only with the research connected here.
         await expect(settings.locator('input[data-signal="waiting"]')).toHaveCount(1);
         await expect(settings.locator('input[data-signal="agent"]')).toHaveCount(0);
         await settings.locator('input[data-signal="conflict"]').uncheck();

@@ -136,9 +136,9 @@ for (const locale of ['en-US', 'cs-CZ', 'de-DE']) {
             expectNoAgent('Settings', await shownText(page, '#settings-modal'));
             await page.evaluate(() => window.Strom.UI.closeSettingsDialog());
 
-            // Waiting for you and the list of changes.
+            // Waiting for an answer and the list of changes.
             await page.evaluate(() => window.Strom.UI.showResearchWaiting());
-            expectNoAgent('Waiting for you', await shownText(page, '.modal-overlay.active'));
+            expectNoAgent('Waiting for an answer', await shownText(page, '.modal-overlay.active'));
             await page.keyboard.press('Escape');
 
             // Cards: their tooltips and labels.

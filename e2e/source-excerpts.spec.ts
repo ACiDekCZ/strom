@@ -487,7 +487,7 @@ test.describe('a research update', () => {
         void page.evaluate((t) => window.Strom.UI.openGedcomText(t), researchGed(jpeg, true));
         const dlg = page.locator('#confirmation-modal');
         await expect(dlg).toBeVisible();
-        await expect(dlg).toContainText('Photos, attachments and excerpts you added in the app stay');
+        await expect(dlg).toContainText('Photos, attachments and excerpts added in the app stay');
         const check = dlg.locator('#confirm-choice-check');
         await expect(check).toBeChecked();
         await check.uncheck();

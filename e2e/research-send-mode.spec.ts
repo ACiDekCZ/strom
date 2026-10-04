@@ -119,7 +119,7 @@ test.describe('Research for this tree', () => {
         await expect(settings(page).locator('.research-originals-toggle')).toBeHidden();
         await settings(page).locator('label:has(input[value="manual"])').click();
         const piled = settings(page).locator('#research-send-piled');
-        await expect(piled).toContainText('Since the last send you changed 1 person.');
+        await expect(piled).toContainText('Changed since the last send: 1 person.');
         await expect(settings(page).locator('#research-send-effect')).toBeVisible();
         await expect(page.locator('.toast', { hasText: 'Nothing goes until you send' })).toHaveCount(0);
         expect(bridge.posts).toHaveLength(0);
@@ -149,7 +149,7 @@ test.describe('Research for this tree', () => {
         await openResearchMenu(page);
         await expect(block).toHaveAttribute('data-state', 'piled');
         await expect(block).toHaveClass(/research-sync-block--neutral/);
-        await expect(block).toContainText('Since the last send you changed 1 person.');
+        await expect(block).toContainText('Changed since the last send: 1 person.');
         await block.getByRole('button', { name: 'What will be sent' }).click();
         await expect(page.locator('#research-changes-panel')).toBeVisible();
         await expect(page.locator('#research-changes-skip')).toHaveCount(0);
@@ -210,13 +210,13 @@ test.describe('"Export all" now and then (only with a research)', () => {
         await manualTree(page);
         await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
         const box = page.locator('#snapshots-export');
-        await expect(box).toContainText('You have not exported all trees yet');
+        await expect(box).toContainText('Not all trees have been exported yet');
         await expect(box.getByRole('button', { name: 'Export all' })).toBeVisible();
         await page.evaluate(() => window.Strom.UI.closeSnapshotsDialog());
         // Never exported: the last row of the research menu, shown three times.
         for (let i = 0; i < 3; i++) {
             await openResearchMenu(page);
-            await expect(reminder(page)).toContainText('You have not exported all trees yet');
+            await expect(reminder(page)).toContainText('Not all trees have been exported yet');
             await page.evaluate(() => window.Strom.UI.closeActionsMenu());
             await page.clock.fastForward(61_000);
         }

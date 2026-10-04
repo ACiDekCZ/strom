@@ -136,7 +136,7 @@ test.describe('research edge', () => {
         await expect(stub(page, 'Anna')).toBeFocused();
         await page.keyboard.press('Enter');
         await expect(page.locator('#person-research-modal #research-edge-section .rep-end')).toHaveText('Searched, not found');
-        await expect(page.locator('#research-edge-section .rep-next')).toHaveText('Strom has nothing more to suggest. It is your call.');
+        await expect(page.locator('#research-edge-section .rep-next')).toHaveText('Strom has nothing more to suggest. A decision is needed.');
     });
 
     test('"as of" only when the research wrote it before today', async ({ page }) => {
@@ -150,7 +150,7 @@ test.describe('research edge', () => {
 
     test('modes in Settings → Tree: for you, off, all', async ({ page }) => {
         await setup(page);
-        await setMode(page, 'For you');
+        await setMode(page, 'To decide');
         await expect(stub(page, 'Anna')).toBeVisible();
         await expect(stub(page, 'Josef')).toHaveCount(0);
         await expect(stub(page, 'Jan')).toHaveCount(0);

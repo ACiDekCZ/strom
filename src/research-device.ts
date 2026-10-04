@@ -278,6 +278,8 @@ export interface ResearchAutoState {
      * `seen` once the list was shown (no dot then).
      */
     notWritten?: ResearchNotWritten;
+    /** Conflicts decided in the research since the tree's version was loaded (its head `base`): no badge for them here (V-E). */
+    settledConflicts?: { base: string; ids: string[] };
 }
 
 /** What a written send did not write (`ResearchAutoState.notWritten`). */
@@ -387,6 +389,10 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (p.modeAsked === true) out.modeAsked = true;
         if (typeof p.manualWrites === 'number' && p.manualWrites > 0) out.manualWrites = Math.min(Math.floor(p.manualWrites), 9999);
         if (p.skipPreview === true) out.skipPreview = true;
+        const sc = p.settledConflicts as Record<string, unknown> | undefined;
+        if (sc && typeof sc.base === 'string' && Array.isArray(sc.ids)) {
+            out.settledConflicts = { base: sc.base, ids: sc.ids.filter((x): x is string => typeof x === 'string' && /^X\d{1,9}$/.test(x)).slice(0, 50) };
+        }
         const nw = p.notWritten as Record<string, unknown> | undefined;
         if (nw && typeof nw.at === 'string' && typeof nw.fingerprint === 'string' && Array.isArray(nw.items)) {
             out.notWritten = {

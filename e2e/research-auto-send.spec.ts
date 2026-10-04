@@ -101,7 +101,7 @@ test.describe('sending by itself', () => {
         expect(await links(page)).toEqual([]);
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'autoBridgeDown');
-        await expect(block(page)).toContainText('will be sent once you start it');
+        await expect(block(page)).toContainText('will be sent once the research starts');
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         bridge.down = false;
         await poll(page);
@@ -122,7 +122,7 @@ test.describe('sending by itself', () => {
         await expect(dot(page)).toBeVisible();
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'autoPaused');
-        await expect(block(page)).toContainText('Automatic sending is paused until you send again.');
+        await expect(block(page)).toContainText('Automatic sending is paused until the next send.');
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         await editJan(page, 'Brno');
         await page.clock.fastForward(QUIET + 1000);
@@ -239,7 +239,7 @@ test('a window narrower than the toolbar\'s mark (1100 px): a new conflict is to
 test('waiting for the quiet time: the mark and the block say when the changes go', async ({ page }) => {
     await autoTree(page);
     await editJan(page);
-    await expect(mark(page)).toHaveAttribute('title', /^Your changes will be sent at \d{1,2}:\d{2}/);
+    await expect(mark(page)).toHaveAttribute('title', /^Changes will be sent at \d{1,2}:\d{2}/);
     await openResearchMenu(page);
     await expect(block(page)).toHaveAttribute('data-state', 'autoWaiting');
     await expect(block(page)).toContainText(/sent at \d{1,2}:\d{2}/);
@@ -256,13 +256,13 @@ test('a written send taken back in the research: told once, not sent again by it
     bridge.head = 'ee77ff88aa99';
     bridge.treeGed = researchGed('ee77ff88aa99');
     await poll(page);
-    await expect(page.locator('.toast')).toContainText('was taken back in the research. Your changes are still here.');
+    await expect(page.locator('.toast')).toContainText('was taken back in the research. The changes are still here.');
     await expect(pill(page)).toContainText('Send taken back');
     await expect(dot(page)).toBeVisible();
     await page.clock.fastForward(QUIET * 2);
     expect(bridge.posts).toHaveLength(1);
     await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
-    await expect(page.locator('#confirmation-modal')).toContainText("You have changes the research doesn't have");
+    await expect(page.locator('#confirmation-modal')).toContainText("There are changes the research doesn't have");
     await page.locator('#confirm-cancel-btn').click();
     // Praha is still here.
     expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any).birthPlace)).toBe('Praha');
@@ -427,7 +427,7 @@ test('finding 40: a write that left a conflict stays in sight after the note goe
     await expect(pill(page).getByRole('button', { name: 'Show' })).toBeVisible();
     await openResearchMenu(page);
     await expect(block(page)).toHaveAttribute('data-state', 'writtenConflicts');
-    await expect(block(page)).toContainText('Your value stays here');
+    await expect(block(page)).toContainText('The value from the app stays here');
     await block(page).getByRole('button', { name: "Load the research's version" }).click();
     await expect(page.locator('.dialog-confirm', { hasText: 'Changed in the app' })).toBeVisible();
     await page.keyboard.press('Escape');
@@ -475,7 +475,7 @@ test('finding 43: after a send taken back, an unrelated edit does not go by itse
     await expect(pill(page)).toContainText('Send taken back');
     await openResearchMenu(page);
     await expect(block(page)).toHaveAttribute('data-state', 'rejected');
-    await expect(block(page)).toContainText('Nothing more is sent by itself until you choose');
+    await expect(block(page)).toContainText('Nothing more is sent by itself until a choice is made');
     // Leaving the tree does not send it either.
     await page.evaluate(() => window.Strom.UI.researchAutoLeave());
     expect(bridge.posts).toHaveLength(1);
@@ -820,10 +820,14 @@ test('V-E: the conflict decided in the research (its record: none open) — no "
     await page.clock.fastForward(30_000);
     await poll(page);
     await expect(pill(page)).toContainText('Written, 1 conflict to decide');
+    const jan = page.locator('.person-card', { hasText: 'Jenda' }).first();
+    await expect(jan).toHaveAttribute('aria-label', /conflicting sources/);
     (bridge.sends[0] as unknown as { conflicts: number }).conflicts = 0;
     await page.clock.fastForward(30_000);
     await poll(page);
     await expect(pill(page)).not.toContainText('conflict');
+    // The card's badge follows (no load needed).
+    await expect(jan).not.toHaveAttribute('aria-label', /conflicting sources/);
     await openResearchMenu(page);
     await expect(block(page)).not.toHaveAttribute('data-state', 'writtenConflicts');
     await expect(block(page)).not.toContainText('conflict');
@@ -940,7 +944,7 @@ test('V-J: what the research did not write is the state until the next send (a d
     await poll(page);
     await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
     const ask = page.locator('#research-load-modal');
-    await expect(ask.locator('.research-load-warn')).toContainText('1 change of your last send was not written to the research.');
+    await expect(ask.locator('.research-load-warn')).toContainText('1 change of the last send was not written to the research.');
     await expect(ask.locator('#research-load-ok')).toHaveText('Load and overwrite');
     await ask.getByRole('button', { name: 'Cancel' }).click();
     expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).not.toBe('e7e7e7e7e7e7');
@@ -1071,7 +1075,7 @@ test.describe('the toolbar', () => {
         await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null } });
         await poll(page);
         const note = page.locator('.research-sync-note');
-        await expect(note).toContainText('Your changes now go to the research automatically.');
+        await expect(note).toContainText('Changes now go to the research automatically.');
         await note.getByRole('button', { name: 'Close' }).click();
         await expect(note).toHaveCount(0);
         await page.reload();
@@ -1101,7 +1105,7 @@ test.describe('the toolbar', () => {
         await expect(send).toHaveCount(0);
         await editJan(page);
         await expect.poll(() => send.innerText()).toBe('Send to research');
-        await expect(send).toHaveAttribute('title', 'Send your changes to the research');
+        await expect(send).toHaveAttribute('title', 'Send the changes to the research');
         await page.setViewportSize({ width: 1440, height: 900 });
         await expect.poll(() => send.innerText()).toBe('Send');
         await expect(page.locator('#actions-menu-research-dot')).toBeHidden();
@@ -1283,7 +1287,7 @@ test.describe('the research as an archive', () => {
         await expect(dot(page)).toBeHidden();
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'offerAuto');
-        await expect(block(page)).toContainText('You send regularly. Send changes by themselves?');
+        await expect(block(page)).toContainText('Changes are sent regularly. Send them by themselves?');
         await block(page).getByRole('button', { name: 'No, thanks' }).click();
         await openResearchMenu(page);
         await expect(block(page)).not.toHaveAttribute('data-state', 'offerAuto');
@@ -1362,7 +1366,7 @@ test.describe('Research for this tree: sending changes', () => {
     test('sync.review on: the box says changes wait for confirmation', async ({ page }) => {
         await autoTree(page, { accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null } });
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
-        await expect(page.locator('#research-tree-settings-modal')).toContainText('Changes are written in the research only after you confirm them.');
+        await expect(page.locator('#research-tree-settings-modal')).toContainText('Changes are written in the research only after confirmation.');
     });
 
     test('a phone-sized window: short texts and the note instead of the box', async ({ page }) => {
@@ -1519,16 +1523,16 @@ test.describe('data protection around the research', () => {
         const dialog = page.locator('#research-tree-settings-modal');
         await expect(dialog.locator('input[name="research-send-mode"]')).toHaveCount(3);
         await expect(dialog.locator('input[value="off"]')).toBeChecked();
-        await expect(dialog).toContainText('Your tree in the app is the main one.');
+        await expect(dialog).toContainText('The tree in the app is the main one.');
         await dialog.locator('input[name="research-send-mode"][value="manual"]').check();
         // Said in the dialog itself (research-send-mode.spec.ts), no toast over it.
-        await expect(dialog.locator('#research-send-piled')).toContainText('Since the last send you changed 1 person.');
+        await expect(dialog.locator('#research-send-piled')).toContainText('Changed since the last send: 1 person.');
         expect(bridge.posts).toHaveLength(0);
         await page.evaluate(() => window.Strom.UI.closeResearchTreeSettings());
         // Switched elsewhere (not from that dialog): the toast tells it.
         await page.evaluate(() => window.Strom.UI.setResearchSendMode(window.Strom.TreeManager.getActiveTreeId()!, 'off'));
         await page.evaluate(() => window.Strom.UI.setResearchSendMode(window.Strom.TreeManager.getActiveTreeId()!, 'manual'));
-        await expect(page.locator('.toast', { hasText: 'Since then you changed 1 person' }).getByRole('button', { name: 'What will be sent' })).toBeVisible();
+        await expect(page.locator('.toast', { hasText: 'Changed since then: 1 person' }).getByRole('button', { name: 'What will be sent' })).toBeVisible();
         expect(bridge.posts).toHaveLength(0);
     });
 
@@ -1581,9 +1585,9 @@ test.describe('the one-time question: how should changes go', () => {
         // How it went so far is marked; Recommended stays on by hand.
         await expect(ask(page).locator('label:has(input[value="auto"])')).toContainText('(so far)');
         await expect(ask(page).locator('label:has(input[value="manual"])')).toContainText('Recommended');
-        await expect(ask(page)).toContainText('you now choose how');
-        await expect(ask(page)).toContainText('Until you answer, sending stays as it was.');
-        await expect(ask(page)).toContainText('Whatever the research does not write, you will always see.');
+        await expect(ask(page)).toContainText('choose how now');
+        await expect(ask(page)).toContainText('Until answered, sending stays as it was.');
+        await expect(ask(page)).toContainText('Whatever the research does not write always stays visible.');
         // One answer button: Keep while the choice is how it goes, Save otherwise.
         await ask(page).locator('input[value="off"]').check();
         await expect(ask(page).locator('#research-mode-ask-save')).toHaveText('Save');
