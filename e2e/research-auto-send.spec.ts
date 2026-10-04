@@ -296,6 +296,22 @@ test('finding 35: Send again after a send taken back asks the research to write 
     expect(await janPlace(page)).toBe('Praha');
 });
 
+test('Send again with an edit made since the send taken back: that send is written again, then the edit goes like any send (beta.59 round, 1)', async ({ page }) => {
+    const bridge = await writtenThenUndone(page);
+    const first = bridge.sends.find(r => r.state === 'undone')!.intake;
+    await editJan(page, 'Brno');
+    await openResearchMenu(page);
+    await block(page).getByRole('button', { name: 'Send again' }).click();
+    await expect.poll(() => bridge.againAsks ?? []).toEqual([first]);
+    // By hand the preview may come first: Send there sends.
+    const panel = page.locator('#research-changes-panel');
+    await expect.poll(async () => bridge.posts.length === 2 || await panel.isVisible()).toBe(true);
+    if (bridge.posts.length < 2) await panel.getByRole('button', { name: /^Send/ }).first().click();
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    expect(bridge.posts[1]).toContain('Brno');
+    await expect(pill(page)).not.toContainText('Send taken back');
+});
+
 test('finding 35: the research no longer keeps the send taken back (404 send.none): said, the bar stays, its version offered', async ({ page }) => {
     const bridge = await writtenThenUndone(page);
     bridge.sends.length = 0;

@@ -318,6 +318,7 @@ const stringsEN = {
             'other-window': 'This window, before another one saved over it',
             'pre-research-load': "Before loading the research's version",
             'pre-first-send': 'Before the first send to the research',
+            'closed-tab': 'Backup copy from a closed tab',
         },
         exportLast: (d: string) => `Last export of all trees: ${d}`,
         exportNever: 'Not all trees have been exported yet',
@@ -1003,6 +1004,9 @@ const stringsEN = {
         loadHide: 'Hide',
         loadAdded: (p: number, f: number) => `Added from the research: ${[p ? `+ ${nEn(p, 'person', 'people')}` : '', f ? nEn(f, 'fact', 'facts') : ''].filter(Boolean).join(', ')}`,
         nothingOverwritten: 'Nothing here will be overwritten.',
+        /** A person whose sex the research leaves unknown (SEX U): the tree's stays. */
+        loadSexUnknown: (name: string, sex: string) => `${name}: the research gives no sex, ${sex} stays here.`,
+        loadSexUnknownMany: (n: number) => `The research gives no sex for ${nEn(n, 'person', 'people')}; the sex here stays.`,
         loadBackupNote: 'A backup is saved before loading; it can be restored.',
         offOverwrite: 'Changes from this tree are not sent to the research. These values here will be overwritten by the research version.',
         conflictTag: 'conflict',
@@ -2220,7 +2224,9 @@ const stringsEN = {
     // Gender
     gender: {
         male: 'Male',
-        female: 'Female'
+        female: 'Female',
+        /** A research's SEX U (the tree itself knows only male and female). */
+        unknown: 'unknown'
     },
 
     // Partnership status
@@ -3765,6 +3771,7 @@ const stringsCZ: StringsType = {
             'other-window': 'Toto okno, než ho přepsalo jiné',
             'pre-research-load': 'Před načtením verze výzkumu',
             'pre-first-send': 'Před prvním posláním do výzkumu',
+            'closed-tab': 'Záložní kopie ze zavřené záložky',
         },
         exportLast: (d: string) => `Poslední export všech stromů: ${d}`,
         exportNever: 'Všechny stromy zatím nebyly exportovány',
@@ -4447,6 +4454,8 @@ const stringsCZ: StringsType = {
         loadHide: 'Skrýt',
         loadAdded: (p: number, f: number) => `Z výzkumu přibude: ${[p ? `+ ${nCs(p, 'osoba', 'osoby', 'osob')}` : '', f ? nCs(f, 'údaj', 'údaje', 'údajů') : ''].filter(Boolean).join(', ')}`,
         nothingOverwritten: 'Tady se nic nepřepíše.',
+        loadSexUnknown: (name: string, sex: string) => `${name}: výzkum pohlaví neuvádí, tady zůstává ${sex}.`,
+        loadSexUnknownMany: (n: number) => `Výzkum neuvádí pohlaví u ${nCs(n, 'osoby', 'osob', 'osob')}; tady zůstává, jaké je.`,
         loadBackupNote: 'Před načtením se uloží záloha, půjde vrátit.',
         offOverwrite: 'Úpravy se z tohoto stromu do výzkumu neposílají. Tyto hodnoty tady se přepíšou verzí výzkumu.',
         conflictTag: 'rozpor',
@@ -5665,7 +5674,8 @@ const stringsCZ: StringsType = {
     // Gender
     gender: {
         male: 'Muž',
-        female: 'Žena'
+        female: 'Žena',
+        unknown: 'neznámé'
     },
 
     // Partnership status
@@ -7208,6 +7218,7 @@ const stringsDE: StringsType = {
             'other-window': 'Dieses Fenster, bevor ein anderes darüber speicherte',
             'pre-research-load': 'Vor dem Laden der Version der Forschung',
             'pre-first-send': 'Vor dem ersten Senden an die Forschung',
+            'closed-tab': 'Sicherungskopie aus einem geschlossenen Tab',
         },
         exportLast: (d: string) => `Letzter Export aller Stammbäume: ${d}`,
         exportNever: 'Noch nicht alle Stammbäume exportiert',
@@ -7882,6 +7893,8 @@ const stringsDE: StringsType = {
         loadHide: 'Ausblenden',
         loadAdded: (p: number, f: number) => `Aus der Forschung kommen hinzu: ${[p ? `+ ${nDe(p, 'Person', 'Personen')}` : '', f ? nDe(f, 'Angabe', 'Angaben') : ''].filter(Boolean).join(', ')}`,
         nothingOverwritten: 'Hier wird nichts überschrieben.',
+        loadSexUnknown: (name: string, sex: string) => `${name}: Die Forschung nennt kein Geschlecht, hier bleibt ${sex}.`,
+        loadSexUnknownMany: (n: number) => `Die Forschung nennt bei ${nDe(n, 'Person', 'Personen')} kein Geschlecht; das hiesige bleibt.`,
         loadBackupNote: 'Vor dem Laden wird gesichert; ein Zurück ist möglich.',
         offOverwrite: 'Änderungen aus diesem Stammbaum werden nicht an die Forschung gesendet. Diese Werte hier werden durch die Version der Forschung überschrieben.',
         conflictTag: 'Widerspruch',
@@ -9080,7 +9093,8 @@ const stringsDE: StringsType = {
     // Gender
     gender: {
         male: 'Männlich',
-        female: 'Weiblich'
+        female: 'Weiblich',
+        unknown: 'unbekannt'
     },
 
     // Partnership status

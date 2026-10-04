@@ -341,5 +341,61 @@ test('a state kept aside on leaving does not overwrite a tree stored after it', 
     await page.reload();
     await expect(page.locator('html')).not.toHaveClass(/app-loading/);
     await expect(card(page, 'Kamil')).toContainText('1895');
-    expect(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('strom-save-rescue:')).length)).toBe(0);
+    await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('strom-save-rescue:')).length)).toBe(0);
+});
+
+test('a state kept aside by a closed tab that another tab outdated goes to Backups, never lost; it restores like any backup', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Kamil', 'Novak', { birthDate: '1900' });
+    await saveBirthYear(page, '1895');
+    await expect(card(page, 'Kamil')).toContainText('1895');
+    await page.waitForTimeout(300);
+    // The closed tab's state: Kamil 1777, rescued a minute before this tab stored 1895.
+    const rescuedAt = await page.evaluate(() => {
+        const strom = (window as unknown as { Strom: { TreeManager: { getActiveTreeId(): string }; DataManager: { getData(): any } } }).Strom;
+        const data = JSON.parse(JSON.stringify(strom.DataManager.getData()));
+        for (const p of Object.values(data.persons) as any[]) if (p.firstName === 'Kamil') p.birthDate = '1777';
+        const at = Date.now() - 60_000;
+        localStorage.setItem(`strom-save-rescue:${strom.TreeManager.getActiveTreeId()}`, JSON.stringify({ at, base: null, data }));
+        return at;
+    });
+    await page.reload();
+    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+    // The newer state stays.
+    await expect(card(page, 'Kamil')).toContainText('1895');
+    await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('strom-save-rescue:')).length)).toBe(0);
+    // The rescued one is a backup, at the time it was rescued.
+    const backups = await page.evaluate(() => new Promise<{ reason: string; createdAt: number }[]>((resolve, reject) => {
+        const req = indexedDB.open('strom-db');
+        req.onsuccess = () => {
+            const all = req.result.transaction('snapshots', 'readonly').objectStore('snapshots').getAll();
+            all.onsuccess = () => resolve(all.result.filter((s: { meta?: unknown }) => s.meta).map((s: { meta: { reason: string; createdAt: number } }) => s.meta));
+            all.onerror = () => reject(all.error);
+        };
+        req.onerror = () => reject(req.error);
+    }));
+    expect(backups.filter(b => b.reason === 'closed-tab').map(b => b.createdAt)).toEqual([rescuedAt]);
+    await page.evaluate(() => (window as unknown as { Strom: { UI: { showSnapshotsDialog(): void } } }).Strom.UI.showSnapshotsDialog());
+    const row = page.locator('#snapshots-modal .snapshot-row', { hasText: 'Backup copy from a closed tab' });
+    await expect(row).toHaveCount(1);
+    await row.getByRole('button', { name: 'Restore' }).click();
+    await page.locator('#confirmation-modal').getByRole('button', { name: 'Restore backup' }).click();
+    await expect(card(page, 'Kamil')).toContainText('1777');
+});
+
+test('a state kept aside that is the stored tree anyway makes no backup', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Kamil', 'Novak', { birthDate: '1900' });
+    await saveBirthYear(page, '1895');
+    await expect(card(page, 'Kamil')).toContainText('1895');
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+        const strom = (window as unknown as { Strom: { TreeManager: { getActiveTreeId(): string }; DataManager: { getData(): unknown } } }).Strom;
+        localStorage.setItem(`strom-save-rescue:${strom.TreeManager.getActiveTreeId()}`, JSON.stringify({ at: Date.now() - 60_000, base: null, data: strom.DataManager.getData() }));
+    });
+    await page.reload();
+    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+    await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('strom-save-rescue:')).length)).toBe(0);
+    await page.evaluate(() => (window as unknown as { Strom: { UI: { showSnapshotsDialog(): void } } }).Strom.UI.showSnapshotsDialog());
+    await expect(page.locator('#snapshots-modal .snapshot-row', { hasText: 'Backup copy from a closed tab' })).toHaveCount(0);
 });

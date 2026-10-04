@@ -1030,7 +1030,17 @@ export const researchSyncMethods = uiModule({
                 return;
             }
         }
+        // "Send again" writes what was taken back; the edits made since go after it like any send, never
+        // left waiting behind the taken-back bar (beta.59 round, 1).
+        const editsSince = !!opts.undoAgain && link.sent?.state === 'undone'
+            && this.researchSyncFingerprints(treeId, link).current !== link.sent.fingerprint;
         await this.postResearchSend(treeId, { auto: false, thenLoad: opts.thenLoad, undoAgain: opts.undoAgain });
+        if (!editsSince || DataManager.getCurrentTreeId() !== treeId) return;
+        const after = TreeManager.getTreeMetadata(treeId)?.research;
+        if (!after || after.refused) return;
+        const fps = this.researchSyncFingerprints(treeId, after);
+        if (fps.matchesBase || fps.current === after.sent?.fingerprint) return;
+        await this.researchSendNow({ treeId });
     },
 
     /**

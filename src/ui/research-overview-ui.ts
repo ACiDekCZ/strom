@@ -28,6 +28,7 @@ import {
     liveState, pausedText,
 } from './research-ui.js';
 import { taskDirectionName } from './research-directions-ui.js';
+import { researchValueText } from './person-research-ui.js';
 
 /** The overview stays open over a reload / the next following (per device). */
 const OPEN_KEY = 'strom-live-overview-open';
@@ -574,7 +575,7 @@ export const researchOverviewMethods = uiModule({
             for (const c of p.research?.conflicts ?? []) {
                 if (c.status === 'decided') continue;
                 const what = c.title || facts[c.fact] || c.fact;
-                rows.push({ person: p, text: `${fullName(p)} · ${what}: ${c.values.map(v => v.value).join(' × ')}`, conflict: true });
+                rows.push({ person: p, text: `${fullName(p)} · ${what}: ${c.values.map(v => researchValueText(c.fact, v.value)).join(' × ')}`, conflict: true });
             }
             for (const h of p.research?.hypotheses ?? []) {
                 rows.push({ person: p, text: `${fullName(p)} · ${L.hypothesisRow(h.title)}`, conflict: false });

@@ -25,14 +25,14 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { StromData, TreeId, PersonId } from '../types.js';
+import { StromData, TreeId, PersonId, Gender } from '../types.js';
 import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate, sexGuessedIn } from '../ged-parser.js';
 import { formatFlexDate } from '../dates.js';
 import { formatLiveTime, formatLiveClock } from '../live-time.js';
 import { isMobile } from '../breakpoints.js';
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
-    decideResearchOpen, stabilizeIds, keepKnownSex, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
+    decideResearchOpen, stabilizeIds, keepKnownSex, sexKeptUnknown, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
@@ -1201,11 +1201,19 @@ export const researchUiMethods = uiModule({
         let holdsSent = false;
         // "Load the research version?" with the values it overwrites (asked at every load the user asks for).
         let askLoad = false;
+        let sexUnknown: { name: string; gender: Gender }[] = [];
         if (existing) {
             const unreadable = TreeManager.isTreeUnreadable(existing.id);
             previous = unreadable ? null : await readTree(existing.id);
-            // A sex the research leaves unknown is no change to Female (the importer's guess): the tree's stays.
-            if (previous) data = keepKnownSex(data, previous, sexGuessedIn(data));
+            // A sex the research leaves unknown is no change to Female (the importer's guess): the tree's stays,
+            // said in "Load the research version?".
+            if (previous) {
+                const guessed = sexGuessedIn(data);
+                const kept = sexKeptUnknown(data, previous, guessed);
+                data = keepKnownSex(data, previous, guessed);
+                const persons = data.persons;
+                sexUnknown = kept.map(id => ({ name: `${persons[id].firstName} ${persons[id].lastName}`.trim() || '?', gender: persons[id].gender }));
+            }
             action = decideResearchOpen(existing.research, previous ? fingerprintLike(previous, existing.research?.fingerprint) : null);
             // The app's images stay (carryOverMedia); those of people or sources
             // the research dropped would go — never without asking, even over a
@@ -1325,6 +1333,7 @@ export const researchUiMethods = uiModule({
                 const bytes = incomingImageBytes(data);
                 const answer = await this.askResearchLoad(existing.name, dateLabel, previous, stabilizeIds(data, previous), {
                     off: researchSendMode(existing.research) === 'off', notWritten: nw,
+                    ...(sexUnknown.length ? { sexUnknown } : {}),
                     ...(bytes > 0 ? { images: { label: strings.importImages.label, checked: includeImages, detail: strings.importImages.size((bytes / (1024 * 1024)).toFixed(1)) } } : {}),
                 });
                 if (!answer) return null;

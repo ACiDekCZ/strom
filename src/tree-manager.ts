@@ -25,6 +25,7 @@ import { isEncrypted, EncryptedData, CryptoSession, decrypt } from './crypto.js'
 import { SettingsManager } from './settings.js';
 import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
+import { createSnapshot } from './snapshots.js';
 import { researchBaseKey } from './storage-keys.js';
 import { requestPersistentStorage } from './persistence.js';
 import { asciiSlug } from './filenames.js';
@@ -767,12 +768,37 @@ class TreeManagerClass {
             try { rescued = JSON.parse(localStorage.getItem(key) ?? 'null') as RescuedSave | null; } catch { /* unreadable */ }
             const tree = this.index.trees.find(t => t.id === id);
             const storedAt = tree ? Date.parse(tree.lastModifiedAt) : NaN;
-            if (!rescued?.data || !tree || SettingsManager.isEncryptionEnabled() || (storedAt > rescued.at)) {
+            if (!rescued?.data || !tree || SettingsManager.isEncryptionEnabled()) {
                 forgetRescue(id);
+                continue;
+            }
+            // Stored again after it (another window): the newer state stays, the rescued one goes to the
+            // backups, never lost unseen.
+            if (storedAt > rescued.at) {
+                void this.backUpRescue(id, rescued);
                 continue;
             }
             rescued.data.version = STROM_DATA_VERSION;
             this.queueWrite(id, { data: rescued.data, base: rescued.base ?? null });
+        }
+    }
+
+    /**
+     * A rescued state the tree was stored past: kept as a backup at the time
+     * it was rescued (none when it is the stored state anyway), then dropped.
+     */
+    private async backUpRescue(id: TreeId, rescued: RescuedSave): Promise<void> {
+        try {
+            const stored = await this.readTreeRecord(id);
+            const same = stored.status === 'ok' && JSON.stringify({ ...stored.data, version: 0 }) === JSON.stringify({ ...rescued.data, version: 0 });
+            if (!same) {
+                rescued.data.version = STROM_DATA_VERSION;
+                await createSnapshot(id, rescued.data, 'closed-tab', rescued.at);
+            }
+            forgetRescue(id);
+        } catch (err) {
+            // Kept for the next start.
+            console.warn('The state rescued on leaving could not be kept as a backup', err);
         }
     }
 

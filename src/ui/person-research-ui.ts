@@ -52,6 +52,7 @@ export function researchValueText(fact: string, value: string): string {
         const v = value.trim().toUpperCase();
         if (v === 'M') return strings.gender.male;
         if (v === 'F') return strings.gender.female;
+        if (v === 'U') return strings.gender.unknown;
         return value;
     }
     // A claim in words ("70 years at death 1937", "12 MAR 1865, Týnec") stays as written.

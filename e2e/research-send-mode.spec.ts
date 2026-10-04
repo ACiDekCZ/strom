@@ -440,3 +440,28 @@ test('a sex the research leaves unknown (SEX U) is no change to Female: the load
     await expect.poll(names).toContain('Bohumil');
     expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any).gender)).toBe('male');
 });
+
+test('a sex the research leaves unknown is said in the load dialog and as a word in What the research knows (beta.59 round, 2)', async ({ page }) => {
+    const { openResearch, fakeBridge, poll, researchGed, NEW_HEAD } = await import('./research-bridge.js');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openResearch(page);
+    const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null } });
+    await poll(page);
+    bridge.head = NEW_HEAD;
+    bridge.treeGed = researchGed(NEW_HEAD, ['1 _STROM_CONFLICT X0001', '2 TYPE SEX', '2 STAT open', '2 VAL U', '2 VAL M',
+        '0 @P0017@ INDI', '1 NAME Bohumil /Víšek/', '1 SEX M', '1 REFN P0017', '2 TYPE strom-research'])
+        .replace('1 NAME Jan /Víšek/\n1 SEX M', '1 NAME Jan /Víšek/\n1 SEX U');
+    await poll(page);
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    const dialog = page.locator('#research-load-modal');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('.research-load-sex')).toHaveText('Jan Víšek: the research gives no sex, Male stays here.');
+    await dialog.locator('#research-load-ok').click();
+    const jan = () => page.evaluate(() => Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any);
+    await expect.poll(async () => (await jan())?.research?.conflicts?.length ?? 0).toBe(1);
+    expect((await jan()).gender).toBe('male');
+    await page.evaluate((id) => window.Strom.UI.showPersonResearchDialog(id), (await jan()).id);
+    const knows = page.locator('.modal-overlay.active').last();
+    await expect(knows).toContainText('unknown');
+    await expect(knows.locator('td').filter({ hasText: /^U$/ })).toHaveCount(0);
+});
