@@ -1,12 +1,13 @@
 /**
- * Parent links outside any partnership survive GEDCOM.
+ * A child with one known parent survives GEDCOM, whichever way it came.
  *
- * A parent added alone ("Add parents" with the father only), or the one left
- * after the other parent of a couple was deleted, has no partnership — and the
- * exporter wrote families from partnerships only, so the link vanished from
- * every GEDCOM (and from every send to the research). It now goes out as a
- * family of its own marked _STROM_NO_COUPLE and comes back as it was: no
- * partnership, no "?" partner, never a second family on the next export.
+ * The app keeps it one way: a family of the known parent with a "?" stand-in
+ * (src/single-parent.ts). A parent added alone, the one left after the other
+ * parent of a couple was deleted, and Strom's older _STROM_NO_COUPLE families
+ * all end there. In GEDCOM the stand-in has no record of its own (other
+ * programs showed it as a nameless spouse): the family holds the known parent
+ * and the children, and reads back as the same "?" family — never a second
+ * family, never a nameless person, round after round.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -44,37 +45,43 @@ const named = (data: StromData, first: string): Person =>
 const parentNames = (data: StromData, first: string): string[] =>
     named(data, first).parentIds.map(id => data.persons[id].firstName).sort();
 const famCount = (ged: string): number => ged.split('\n').filter(l => / FAM$/.test(l)).length;
+const standIns = (data: StromData): Person[] => Object.values(data.persons).filter(p => p.isPlaceholder);
+/** No record for a stand-in: no nameless person in the file. */
+const noNameless = (ged: string): void => { expect(ged).not.toContain('1 NAME //'); expect(ged).not.toMatch(/1 NAME \? \//); };
 
 function person(firstName: string, gender: Gender): PersonId {
     return DataManager.createPerson({ firstName, lastName: 'Novák', gender }).id;
 }
 
-describe('GEDCOM: a parent without a partnership', () => {
-    it('a father added alone goes out as a family and comes back alone, round after round', () => {
+describe('GEDCOM: a child with one known parent', () => {
+    it('a father added alone: a "?" family that goes out with the father only and comes back the same, round after round', () => {
         const karel = person('Karel', 'male');
         DataManager.addFamily({
             anchorId: karel, father: { firstName: 'Jiří', lastName: 'Novák', gender: 'male' },
             siblings: [], children: [],
         });
         const data = DataManager.getData();
-        expect(Object.keys(data.partnerships)).toHaveLength(0);
+        expect(Object.keys(data.partnerships)).toHaveLength(1);
+        expect(standIns(data)).toHaveLength(1);
+        expect(parentNames(data, 'Karel')).toEqual(['?', 'Jiří']);
 
         const first = exportGed(data);
+        noNameless(first);
         expect(famCount(first)).toBe(1);
-        expect(first).toMatch(/0 @F1@ FAM\n1 HUSB @I\d+@\n1 CHIL @I\d+@\n1 _STROM_NO_COUPLE Y/);
+        expect(first).toMatch(/0 @F1@ FAM\n1 HUSB @I\d+@\n1 CHIL @I\d+@\n0 /);
+        expect(first).not.toContain('_STROM_NO_COUPLE');
 
         const back = importGed(first);
-        expect(parentNames(back, 'Karel')).toEqual(['Jiří']);
-        expect(named(back, 'Jiří').childIds).toEqual([named(back, 'Karel').id]);
-        expect(Object.keys(back.partnerships)).toHaveLength(0);
-        expect(Object.values(back.persons).some(p => p.isPlaceholder)).toBe(false);
+        expect(parentNames(back, 'Karel')).toEqual(['?', 'Jiří']);
+        expect(Object.keys(back.partnerships)).toHaveLength(1);
+        expect(standIns(back)).toHaveLength(1);
 
         const second = exportGed(back);
         expect(body(second)).toBe(body(first));
         expect(body(exportGed(importGed(second)))).toBe(body(first));
     });
 
-    it('a mother alone is the WIFE; her children share one family', () => {
+    it('a mother alone (a link without a family) is the WIFE; her children share one family, read back as one "?" family', () => {
         const anna = person('Anna', 'female');
         const petr = person('Petr', 'male');
         const eva = person('Eva', 'female');
@@ -82,16 +89,19 @@ describe('GEDCOM: a parent without a partnership', () => {
         DataManager.addParentChild(anna, eva);
 
         const ged = exportGed(DataManager.getData());
+        noNameless(ged);
         expect(famCount(ged)).toBe(1);
-        expect(ged).toMatch(/0 @F1@ FAM\n1 WIFE @I1@\n1 CHIL @I2@\n1 CHIL @I3@\n1 _STROM_NO_COUPLE Y/);
+        expect(ged).toMatch(/0 @F1@ FAM\n1 WIFE @I1@\n1 CHIL @I2@\n1 CHIL @I3@\n0 /);
 
         const back = importGed(ged);
-        expect(parentNames(back, 'Petr')).toEqual(['Anna']);
-        expect(parentNames(back, 'Eva')).toEqual(['Anna']);
-        expect(Object.keys(back.partnerships)).toHaveLength(0);
+        expect(parentNames(back, 'Petr')).toEqual(['?', 'Anna']);
+        expect(parentNames(back, 'Eva')).toEqual(['?', 'Anna']);
+        expect(Object.keys(back.partnerships)).toHaveLength(1);
+        expect(standIns(back)).toHaveLength(1);
+        expect(body(exportGed(back))).toBe(body(ged));
     });
 
-    it('deleting one parent of a couple keeps the other parent in GEDCOM', () => {
+    it('deleting one parent of a couple: the other one keeps the child in a "?" family, in GEDCOM too', () => {
         const otec = person('Otec', 'male');
         const matka = person('Matka', 'female');
         const syn = person('Syn', 'male');
@@ -101,13 +111,14 @@ describe('GEDCOM: a parent without a partnership', () => {
         DataManager.deletePerson(otec);
 
         const data = DataManager.getData();
-        expect(Object.keys(data.partnerships)).toHaveLength(0);
-        expect(parentNames(data, 'Syn')).toEqual(['Matka']);
+        expect(Object.keys(data.partnerships)).toHaveLength(1);
+        expect(parentNames(data, 'Syn')).toEqual(['?', 'Matka']);
 
         const ged = exportGed(data);
+        noNameless(ged);
         expect(famCount(ged)).toBe(1);
         const back = importGed(ged);
-        expect(parentNames(back, 'Syn')).toEqual(['Matka']);
+        expect(parentNames(back, 'Syn')).toEqual(['?', 'Matka']);
         expect(body(exportGed(back))).toBe(body(ged));
     });
 
@@ -117,7 +128,6 @@ describe('GEDCOM: a parent without a partnership', () => {
         const syn = person('Syn', 'male');
         DataManager.addParentChild(otec, syn);
         DataManager.addParentChild(matka, syn);
-
         const ged = exportGed(DataManager.getData());
         expect(famCount(ged)).toBe(1);
         expect(ged).toMatch(/1 HUSB @I1@\n1 WIFE @I2@\n1 CHIL @I3@\n1 _STROM_NO_COUPLE Y/);
@@ -138,7 +148,7 @@ describe('GEDCOM: a parent without a partnership', () => {
         expect(ged).toMatch(/1 FAMC @F1@\n2 PEDI adopted/);
         const back = importGed(ged);
         const p = named(back, 'Petr');
-        expect(p.parentRelTypes).toEqual({ [named(back, 'Anna').id]: 'adoptive' });
+        expect(p.parentRelTypes?.[named(back, 'Anna').id]).toBe('adoptive');
         expect(body(exportGed(back))).toBe(body(ged));
     });
 
@@ -156,23 +166,50 @@ describe('GEDCOM: a parent without a partnership', () => {
         expect(famCount(ged)).toBe(2);
         const back = importGed(ged);
         expect(parentNames(back, 'Spolecny')).toEqual(['Matka', 'Otec']);
-        expect(parentNames(back, 'JenOtcuv')).toEqual(['Otec']);
-        expect(Object.keys(back.partnerships)).toHaveLength(1);
+        expect(parentNames(back, 'JenOtcuv')).toEqual(['?', 'Otec']);
+        expect(Object.keys(back.partnerships)).toHaveLength(2);
         expect(body(exportGed(back))).toBe(body(ged));
     });
 
-    it('a family from another program with one spouse still gets its "?" partner', () => {
+    it('a family from another program with one spouse gets its "?" partner, and goes out again without a record for it', () => {
         const ged = '0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n'
             + '0 @I1@ INDI\n1 NAME Jiří /Novák/\n1 SEX M\n1 FAMS @F1@\n'
             + '0 @I2@ INDI\n1 NAME Karel /Novák/\n1 SEX M\n1 FAMC @F1@\n'
             + '0 @F1@ FAM\n1 HUSB @I1@\n1 CHIL @I2@\n0 TRLR\n';
         const data = importGed(ged);
         expect(Object.keys(data.partnerships)).toHaveLength(1);
-        expect(Object.values(data.persons).filter(p => p.isPlaceholder)).toHaveLength(1);
-        // …and the stand-in's couple does not grow a second family on export.
+        expect(standIns(data)).toHaveLength(1);
         const out = exportGed(data);
+        noNameless(out);
         expect(famCount(out)).toBe(1);
+        expect(out.split('\n').filter(l => / INDI$/.test(l))).toHaveLength(2);
         expect(body(exportGed(importGed(out)))).toBe(body(out));
+    });
+
+    it('Strom\'s older single-parent family (_STROM_NO_COUPLE, one parent) reads as the "?" family', () => {
+        const ged = '0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n'
+            + '0 @I1@ INDI\n1 NAME Ole /Berg/\n1 SEX M\n1 FAMS @F1@\n'
+            + '0 @I2@ INDI\n1 NAME Ida /Berg/\n1 SEX F\n1 FAMC @F1@\n'
+            + '0 @I3@ INDI\n1 NAME Kari /Berg/\n1 SEX F\n1 FAMC @F1@\n'
+            + '0 @F1@ FAM\n1 HUSB @I1@\n1 CHIL @I2@\n1 CHIL @I3@\n1 _STROM_NO_COUPLE Y\n0 TRLR\n';
+        const data = importGed(ged);
+        expect(Object.keys(data.partnerships)).toHaveLength(1);
+        expect(standIns(data)).toHaveLength(1);
+        expect(parentNames(data, 'Ida')).toEqual(['?', 'Ole']);
+        expect(parentNames(data, 'Kari')).toEqual(['?', 'Ole']);
+    });
+
+    it('a "?" with something of its own (a note) is kept as a person', () => {
+        const ole = person('Ole', 'male');
+        const ida = person('Ida', 'female');
+        const stand = DataManager.createPerson({ firstName: '?', lastName: '', gender: 'female' }, true).id;
+        const union = DataManager.createPartnership(ole, stand)!;
+        DataManager.addParentChild(ole, ida, union.id);
+        DataManager.addParentChild(stand, ida, union.id);
+        DataManager.getData().persons[stand].notes = 'snad Marie z Voss';
+        const ged = exportGed(DataManager.getData());
+        expect(ged.split('\n').filter(l => / INDI$/.test(l))).toHaveLength(3);
+        expect(ged).toContain('snad Marie z Voss');
     });
 
     it('a marked family that holds a wedding is a couple after all', () => {

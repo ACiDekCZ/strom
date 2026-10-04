@@ -9083,6 +9083,12 @@
         .research-changes-list.is-quiet .research-changes-name { font-weight: 400; }
         .research-changes-more { padding: 2px 14px 6px 38px; font-size: 12px; color: var(--text-light); }
         .snapshot-reason-research { font-weight: 600; }
+        /* "Export all" reminder in Backups (only with a research tree). */
+        .snapshots-export { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-size: 13px; }
+        .snapshots-export[hidden] { display: none; }
+        .snapshots-export .link-button { font-size: 13px; font-weight: 600; }
+        .research-export-reminder { padding: 4px 14px 8px; font-size: 12px; color: var(--text-light); }
+        .research-export-reminder .link-button { display: block; margin-top: 2px; padding: 0; font-size: 13px; font-weight: 600; }
         /* "Load the research version?" (research-load-ui.ts): every value here that changes, what it adds, the backup. */
         .research-load-warn { margin: 0 0 10px; padding: 10px 12px; border-radius: 8px; background: var(--warning-soft); color: var(--warning-text); font-size: 13px; line-height: 1.45; }
         .research-load-table-wrap { border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; }
@@ -13030,6 +13036,7 @@
             <p class="snapshots-budget-note" id="snapshots-budget-note" hidden></p>
             <div id="snapshots-list" class="snapshots-list"></div>
             <p class="snapshots-persistence" id="snapshots-persistence" hidden></p>
+            <div class="snapshots-export" id="snapshots-export" hidden></div>
             <p class="snapshots-note" data-i18n="snapshots.inBrowser"></p>
             <div class="buttons snapshots-footer">
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeSnapshotsDialog()" data-i18n="buttons.close"></button>

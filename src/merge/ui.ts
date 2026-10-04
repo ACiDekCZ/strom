@@ -535,7 +535,8 @@ class MergerUIClass {
         const newCount = document.getElementById('merge-stat-new');
 
         if (importCount) importCount.textContent = String(stats.total);
-        if (existingCount) existingCount.textContent = String(Object.keys(this.mergeState!.existingData.persons).length);
+        // People, not the "?" stand-ins for unknown parents.
+        if (existingCount) existingCount.textContent = String(Object.values(this.mergeState!.existingData.persons).filter(p => !p.isPlaceholder).length);
         if (matchCount) matchCount.textContent = String(stats.matched);
         if (conflictCount) conflictCount.textContent = String(stats.withConflicts + stats.partnershipConflicts);
         // Truthful "will add N": drops to 0 in updateOnly mode, and per-match

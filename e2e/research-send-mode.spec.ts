@@ -200,3 +200,53 @@ test.describe('V-I: changes not in the research while it has a newer version', (
         await expect(page.locator('#research-sync-block')).toContainText('A backup is saved before loading.');
     });
 });
+
+test.describe('"Export all" now and then (only with a research)', () => {
+    const reminder = (page: Page) => page.locator('#research-export-reminder');
+
+    test('Backups say when all trees were last exported, with Export all; ⋯ → Research reminds at most three times, then rests three weeks', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await manualTree(page);
+        await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
+        const box = page.locator('#snapshots-export');
+        await expect(box).toContainText('You have not exported all trees yet');
+        await expect(box.getByRole('button', { name: 'Export all' })).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.closeSnapshotsDialog());
+        // Never exported: the last row of the research menu, shown three times.
+        for (let i = 0; i < 3; i++) {
+            await openResearchMenu(page);
+            await expect(reminder(page)).toContainText('You have not exported all trees yet');
+            await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+            await page.clock.fastForward(61_000);
+        }
+        await openResearchMenu(page);
+        await expect(reminder(page)).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        // Three weeks later it is back; Export all from it opens the dialog and it rests again.
+        await page.clock.fastForward(22 * 24 * 3600_000);
+        await openResearchMenu(page);
+        await reminder(page).getByRole('menuitem', { name: 'Export all' }).click();
+        await expect(page.locator('#export-all-modal')).toHaveClass(/active/);
+        await page.evaluate(() => window.Strom.UI.closeExportAllDialog());
+        await openResearchMenu(page);
+        await expect(reminder(page)).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        // A full "Export all": the date in Backups, no reminder for three weeks.
+        await page.evaluate(() => window.Strom.UI.downloadAllTreesJson(null, false, 'full', true));
+        await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
+        await expect(box).toContainText('Last export of all trees:');
+        await page.evaluate(() => window.Strom.UI.closeSnapshotsDialog());
+    });
+
+    test('a browser without a research tree: no reminder in Backups', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page, { bridge: false });
+        await page.evaluate(async () => {
+            const tm = window.Strom.TreeManager;
+            await window.Strom.DataManager.importAsNewTree({ version: 11, persons: {}, partnerships: {} } as never, 'Konopáskovi');
+            for (const t of tm.getTrees()) if (t.research) await tm.deleteTree(t.id);
+        });
+        await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
+        await expect(page.locator('#snapshots-export')).toBeHidden();
+    });
+});

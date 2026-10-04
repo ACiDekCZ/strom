@@ -8,6 +8,7 @@
  */
 
 import { DataManager } from '../data.js';
+import { isPurePlaceholder } from '../single-parent.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
 import { PersonId, Gender, FamilyWizardMember, FamilyWizardSpec } from '../types.js';
@@ -67,7 +68,9 @@ export const familyWizardMethods = uiModule({
         const fatherRow = document.querySelector<HTMLElement>('#wiz-parents .wiz-row[data-kind="father"]');
         const motherRow = document.querySelector<HTMLElement>('#wiz-parents .wiz-row[data-kind="mother"]');
         const free = [fatherRow, motherRow];
+        // A "?" stand-in is no parent to keep: its slot stays free, the parent entered takes its place.
         const parents = anchor.parentIds
+            .filter(id => !isPurePlaceholder(DataManager.getData(), id))
             .map(id => DataManager.getPerson(id))
             .filter((p): p is NonNullable<typeof p> => !!p);
         const place = (parent: NonNullable<typeof parents[number]>, row: HTMLElement | null) => {

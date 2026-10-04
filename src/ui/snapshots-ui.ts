@@ -15,6 +15,14 @@ import { uiModule } from './module.js';
 import { safeFileName } from '../filenames.js';
 import { formatRelativeDateTime, formatFileSize } from '../format.js';
 import { emptyStateHtml } from './empty-state.js';
+import { lastExportAll } from '../research-device.js';
+import { formatFlexDate } from '../dates.js';
+
+/** A day as the app writes dates (an ISO time → "12. 9. 2026"). */
+export function exportDate(iso: string): string {
+    const d = new Date(iso);
+    return formatFlexDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+}
 
 import { iconSvg } from '../icons.js';
 import { SettingsManager } from '../settings.js';
@@ -53,7 +61,30 @@ export const snapshotsUiMethods = uiModule({
         this.pushDialog('snapshots-modal');
         document.getElementById('snapshots-modal')?.classList.add('active');
         void this.renderPersistenceNote();
+        this.renderExportReminder();
         await this.renderSnapshotsList();
+    },
+
+    /** "Last export of all trees: …" · Export all — for users with a research (O3), always in Backups. */
+    renderExportReminder(): void {
+        const el = document.getElementById('snapshots-export');
+        if (!el) return;
+        const shown = TreeManager.getTrees().some(t => !!t.research);
+        el.hidden = !shown;
+        if (!shown) return;
+        const last = lastExportAll();
+        const text = document.createElement('span');
+        text.textContent = last ? strings.snapshots.exportLast(exportDate(last)) : strings.snapshots.exportNever;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'link-button';
+        btn.id = 'snapshots-export-all';
+        btn.textContent = strings.snapshots.exportAll;
+        btn.addEventListener('click', () => {
+            this.closeSnapshotsDialog();
+            this.showExportAllDialog();
+        });
+        el.replaceChildren(text, btn);
     },
 
     /** Whether the browser keeps this data for good — said where backups live. */

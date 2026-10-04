@@ -34,8 +34,8 @@ test('add partner, child and parent via the context menu; cards render', { tag: 
     await addRelation(page, 'Jan', 'parent', 'Josef', 'Novak');
     await expect(card(page, 'Josef')).toBeVisible();
 
-    // Four distinct cards now on the canvas.
-    await expect(page.locator('.person-card')).toHaveCount(4);
+    // Five cards now on the canvas: Josef came alone, so beside him a "?" for Jan's other parent.
+    await expect(page.locator('.person-card')).toHaveCount(5);
 });
 
 test('add-relation birth date is a flex-date: "~1930" saves, renders and round-trips', async ({ page }) => {

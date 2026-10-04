@@ -26,7 +26,8 @@ function exportGed(data: StromData): string {
  * on the parser/exporter preserving record order across the round-trip.
  */
 function normalize(data: StromData): StromData {
-    const pIds = Object.keys(data.persons) as PersonId[];
+    // "?" stand-ins last: one is made when its family is read, wherever that lies in the file.
+    const pIds = (Object.keys(data.persons) as PersonId[]).sort((a, b) => Number(data.persons[a].isPlaceholder) - Number(data.persons[b].isPlaceholder));
     const uIds = Object.keys(data.partnerships) as PartnershipId[];
     const sIds = Object.keys(data.sources ?? {});
     const p = new Map(pIds.map((id, i) => [id, `P${i}` as PersonId]));

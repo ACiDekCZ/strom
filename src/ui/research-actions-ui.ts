@@ -20,7 +20,8 @@ import { personSubtitle } from './person-sources-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { researchSendMode } from './research-sync-ui.js';
 import { researchTrialTagHtml } from './research-tree-settings-ui.js';
-import { researchSendPreviewSkipped } from '../research-device.js';
+import { researchSendPreviewSkipped, exportReminderDue, lastExportAll, noteExportReminderShown } from '../research-device.js';
+import { exportDate } from './snapshots-ui.js';
 
 const REVIEW_ID = 'research-review-modal';
 const SCOPE_KEY = 'strom-research-review-scope';
@@ -92,6 +93,10 @@ function submenuItemHtml(item: SubmenuItem): string {
 }
 
 const call = (method: string, arg = ''): string => `window.Strom.UI.${method}(${arg})`;
+
+/** When the export reminder last counted as shown (one count per opening of the menu). */
+let reminderCountedAt = 0;
+const REMINDER_COUNT_GAP_MS = 60_000;
 
 export const researchActionsMethods = uiModule({
     // ==================== ⋯ → RESEARCH ====================
@@ -235,10 +240,16 @@ export const researchActionsMethods = uiModule({
         if (olderLine) updateBlock = `<div class="research-update-block research-older-block" id="research-older-block">${olderLine}</div>`;
         // The group's heading with "trial" (a tree tied to a research).
         const heading = ctx ? `<div class="research-submenu-heading"><span>${esc(r.menuTitle)}</span>${researchTrialTagHtml()}</div>` : '';
+        // "Export all" now and then (O3): the last row, at most once in three weeks.
+        const lastExport = ctx && exportReminderDue() ? lastExportAll() : undefined;
+        const exportRow = lastExport === undefined ? '' : `<div class="tree-switcher-divider"></div><div class="research-export-reminder" id="research-export-reminder">`
+            + `${esc(lastExport ? strings.snapshots.exportLast(exportDate(lastExport)) : strings.snapshots.exportNever)}`
+            + `<button type="button" class="link-button" role="menuitem" onclick="${call('researchActionExportAll')}">${esc(strings.snapshots.exportAll)}</button></div>`;
         const html = heading + syncBlock + updateBlock + groups.filter(g => g.length > 0)
             .map(g => g.map(submenuItemHtml).join(''))
             .join('<div class="tree-switcher-divider"></div>')
-            + (note ? `<div class="tree-switcher-divider"></div><div class="research-submenu-note">${esc(archive ? r.submenuNoteArchive : r.submenuNote)}</div>` : '');
+            + (note ? `<div class="tree-switcher-divider"></div><div class="research-submenu-note">${esc(archive ? r.submenuNoteArchive : r.submenuNote)}</div>` : '')
+            + exportRow;
         const sub = document.getElementById('actions-research-submenu');
         // Rebuilt only when it changed: a redraw would drop keyboard focus.
         if (sub && sub.dataset.html !== html) {
@@ -264,6 +275,19 @@ export const researchActionsMethods = uiModule({
         this.positionActionsSubmenu('actions-research-submenu');
         // The state shown should be now's, not the last background ask's.
         this.refreshResearchStateSoon();
+        // The export reminder counts as shown (after the third time it rests three weeks).
+        // (Once per opening: the submenu is opened again by refreshes while the menu stays open.)
+        if (document.getElementById('research-export-reminder') && Date.now() - reminderCountedAt > REMINDER_COUNT_GAP_MS) {
+            reminderCountedAt = Date.now();
+            noteExportReminderShown();
+        }
+    },
+
+    /** ⋯ → Research → "Export all" (the reminder): it rests three weeks, the Export all dialog opens. */
+    researchActionExportAll(): void {
+        noteExportReminderShown(true);
+        this.closeActionsMenu();
+        this.showExportAllDialog();
     },
 
     closeActionsResearchSubmenu(): void {

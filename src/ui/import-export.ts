@@ -4,6 +4,7 @@
  */
 
 import type { PrivacyMode, ContentOptions } from '../privacy.js';
+import { noteExportAll } from '../research-device.js';
 import { DataManager, auditPersonName } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { sanitizeResearchField } from '../research-link.js';
@@ -1420,7 +1421,11 @@ export const importExportMethods = uiModule({
         a.download = fileName;
         a.click();
         URL.revokeObjectURL(a.href);
-        if (privacyMode === 'full') TreeManager.noteFileCopy(Object.keys(allData) as TreeId[]);
+        if (privacyMode === 'full') {
+            TreeManager.noteFileCopy(Object.keys(allData) as TreeId[]);
+            // A full backup of every tree: the "Export all" reminder rests (Backups, ⋯ → Research).
+            noteExportAll();
+        }
         return fileName;
     },
 });

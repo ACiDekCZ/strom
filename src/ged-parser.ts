@@ -17,6 +17,7 @@
  * and is dropped on export. docs/GEDCOM-IMPORT.md is the full contract.
  */
 
+import { normalizeSingleParents } from './single-parent.js';
 import {
     FactStatus,
     parseFactStatus,
@@ -3377,6 +3378,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             exc.region = regionFromStored(region, page.original?.orientation);
         }
     }
+
+    // A parent alone with children (Strom's own _STROM_NO_COUPLE families): the "?" family the app keeps.
+    normalizeSingleParents({ persons, partnerships } as StromData);
 
     return {
         externalMedia,

@@ -3,6 +3,7 @@
  * Handles persons, partnerships, and relationships with type safety
  */
 
+import { normalizeSingleParents, looseSingleParents, isPurePlaceholder, fillPlaceholder, tidyPlaceholders } from './single-parent.js';
 import {
     Person,
     PersonId,
@@ -203,6 +204,9 @@ export function migrateData(data: unknown): StromData {
     if (d.lastFocusDepthDown !== undefined) {
         result.lastFocusDepthDown = d.lastFocusDepthDown as number;
     }
+
+    // A child with one known parent is kept one way: a family with a "?" stand-in (src/single-parent.ts).
+    normalizeSingleParents(result);
 
     return result;
 }
@@ -1620,7 +1624,8 @@ class DataManagerClass {
             // either one of them (linked by existingId) or fills a FREE slot.
             // With both slots taken, a new parent is not even created — it
             // could only become a third parent (review V11).
-            let freeSlots = 2 - anchor.parentIds.length;
+            // (A "?" stand-in's slot is free: the parent entered takes its place.)
+            let freeSlots = 2 - anchor.parentIds.filter(pid => !isPurePlaceholder(this.data, pid)).length;
             const resolveParent = (m?: FamilyWizardMember): PersonId | null => {
                 if (!m) return null;
                 if (m.existingId && anchor.parentIds.includes(m.existingId)) return m.existingId;
@@ -1671,6 +1676,8 @@ class DataManagerClass {
                 if (partnerId) this.addParentChild(partnerId, cid, coupleUnion);
             }
         } finally {
+            // A parent known alone, a child without its other parent: a family with a "?".
+            this.ensureSingleParentFamilies();
             this.commitBatch(strings.undo.addFamily(auditPersonName(anchor)));
             AuditLogManager.endBatch(this.currentTreeId, 'person.create',
                 strings.auditLog.addedFamily(auditPersonName(anchor), created));
@@ -2342,6 +2349,12 @@ class DataManagerClass {
         // Capture name before deletion for audit log
         const deletedName = auditPersonName(person);
 
+        // The other parents of its families and of its children: a "?" stand-in among them is tidied after.
+        const others = [
+            ...person.partnerships.map(uid => this.data.partnerships[uid]).filter(Boolean).map(u => u.person1Id === id ? u.person2Id : u.person1Id),
+            ...person.childIds.flatMap(cid => this.data.persons[cid]?.parentIds ?? []).filter(pid => pid !== id),
+        ];
+
         // Remove from all partnerships
         for (const partnershipId of [...person.partnerships]) {
             this.removeFromPartnership(id, partnershipId);
@@ -2391,6 +2404,8 @@ class DataManagerClass {
         }
 
         delete this.data.persons[id];
+        // A stand-in left with nothing to stand for goes; a child left with one real parent gets its "?" family.
+        tidyPlaceholders(this.data, others);
         this.commitMutation(strings.undo.deletePerson(deletedName));
         // Audit log
         AuditLogManager.log(this.currentTreeId, 'person.delete', strings.auditLog.deletedPerson(deletedName));
@@ -2562,6 +2577,11 @@ class DataManagerClass {
 
         this.beginMutation();
 
+        // Two parents already, one of them the "?" stand-in: the real parent takes its place (one family, never a second).
+        const stand = !child.parentIds.includes(parentId) && child.parentIds.length >= 2
+            ? child.parentIds.find(pid => isPurePlaceholder(this.data, pid)) : undefined;
+        if (stand) fillPlaceholder(this.data, stand, parentId);
+
         // Add to parent's childIds if not already there
         if (!parent.childIds.includes(childId)) {
             parent.childIds.push(childId);
@@ -2590,6 +2610,25 @@ class DataManagerClass {
         return true;
     }
 
+    /** A parent can still be added: fewer than two, or one of them only the "?" stand-in (the new one takes its place). */
+    parentSlotFree(personId: PersonId): boolean {
+        const p = this.data.persons[personId];
+        if (!p) return false;
+        return p.parentIds.length < 2 || p.parentIds.some(pid => isPurePlaceholder(this.data, pid));
+    }
+
+    /**
+     * A child left with one real parent and no family ("Add parent" with one
+     * parent, the family wizard): its "?" family, in the same undo step.
+     */
+    ensureSingleParentFamilies(): boolean {
+        if (this.viewMode || looseSingleParents(this.data).size === 0) return false;
+        this.beginMutation();
+        normalizeSingleParents(this.data);
+        this.commitMutation(strings.undo.addRelation('?', ''), true);
+        return true;
+    }
+
     /**
      * Whether `parentId` may become a parent of `childId`: an existing link is
      * fine (idempotent); otherwise the child must have a free parent slot (at
@@ -2602,7 +2641,9 @@ class DataManagerClass {
         const child = this.data.persons[childId];
         if (!parent || !child) return false;
         if (child.parentIds.includes(parentId)) return true;
-        if (child.parentIds.length >= 2) return false;
+        // A "?" stand-in's slot is free: the real parent takes its place.
+        if (child.parentIds.length >= 2 && !child.parentIds.some(pid => pid !== parentId && isPurePlaceholder(this.data, pid))) return false;
+        if (parent.isPlaceholder && child.parentIds.some(pid => isPurePlaceholder(this.data, pid))) return false;
         return !this.isSelfOrDescendantOf(parentId, childId);
     }
 
@@ -2702,6 +2743,8 @@ class DataManagerClass {
                 partnership.childIds = partnership.childIds.filter(id => id !== childId);
             }
         }
+        // A "?" stand-in of that family keeps only what it stands for; the child with one real parent left gets its "?" family.
+        tidyPlaceholders(this.data, [parentId, ...child.parentIds]);
 
         this.commitMutation(strings.undo.removeRelation(parentName, childName));
         // Audit log

@@ -23,6 +23,7 @@
  */
 
 import { researchHeaderLines, ResearchHeaderInfo } from './research-link.js';
+import { isPurePlaceholder } from './single-parent.js';
 import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, FactStatus } from './types.js';
 import { normalizeSha256 } from './sha256.js';
 import { regionHeader, regionToStored } from './originals.js';
@@ -334,6 +335,18 @@ function pushStory(lines: string[], level: number, story: Story): void {
 }
 
 /**
+ * A "?" stand-in with nothing of its own whose every family has children:
+ * left out of GEDCOM (its families read back as one-parent families with a
+ * stand-in). One in a childless family is kept: the family would be lost.
+ */
+function standsInOnly(data: StromData, id: PersonId): boolean {
+    if (!isPurePlaceholder(data, id)) return false;
+    const p = data.persons[id];
+    const unions = p.partnerships.map(uid => data.partnerships[uid]).filter(Boolean);
+    return unions.length > 0 && unions.every(u => u.childIds.length > 0) && p.childIds.every(cid => unions.some(u => u.childIds.includes(cid)));
+}
+
+/**
  * Families as GEDCOM has them: every partnership, plus one for each set of
  * parents linked to children without a couple between them (a single parent;
  * exported as a family with _STROM_NO_COUPLE). What the counts in the app say.
@@ -365,8 +378,12 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     let personCounter = 1;
     let familyCounter = 1;
 
-    // Map all persons to GEDCOM IDs
+    // Map all persons to GEDCOM IDs — but a "?" stand-in that only marks the
+    // unknown other parent of a family with children: no record of its own
+    // (other programs would show a nameless spouse). The family keeps the known
+    // parent and the children; a one-parent family reads back as the stand-in.
     for (const personId of Object.keys(data.persons) as PersonId[]) {
+        if (standsInOnly(data, personId)) continue;
         personIdMap.set(personId, `@I${personCounter}@`);
         personCounter++;
     }
@@ -744,19 +761,25 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 lines.push(`1 CHIL ${childGedcomId}`);
                 // Different ties to the two parents: say which is which.
                 const rels = data.persons[childId]?.parentRelTypes ?? {};
-                const toHusb = rels[husbId] ?? 'biological';
-                const toWife = rels[wifeId] ?? 'biological';
+                // A "?" stand-in left out has no tie to say (as a parent alone, see looseFamilies).
+                const toHusb = personIdMap.has(husbId) ? rels[husbId] ?? 'biological' : undefined;
+                const toWife = personIdMap.has(wifeId) ? rels[wifeId] ?? 'biological' : undefined;
                 // Also when both ties are 'step': PEDI has no such value, so
                 // this is the only place a stepchild of both can be said.
-                if (toHusb !== toWife || toHusb === 'step') {
-                    lines.push(`2 _FREL ${GEDCOM_CHILD_REL[toHusb]}`);
-                    lines.push(`2 _MREL ${GEDCOM_CHILD_REL[toWife]}`);
-                }
+                if (toHusb && toWife) {
+                    if (toHusb !== toWife || toHusb === 'step') {
+                        lines.push(`2 _FREL ${GEDCOM_CHILD_REL[toHusb]}`);
+                        lines.push(`2 _MREL ${GEDCOM_CHILD_REL[toWife]}`);
+                    }
+                } else if (toHusb === 'step') lines.push(`2 _FREL ${GEDCOM_CHILD_REL[toHusb]}`);
+                else if (toWife === 'step') lines.push(`2 _MREL ${GEDCOM_CHILD_REL[toWife]}`);
             }
         }
 
-        // Marriage event (for married or divorced status)
-        const hasMarriage = partnership.status === 'married' || partnership.status === 'divorced' ||
+        // Marriage event (for married or divorced status) — not the bare status of a family whose other
+        // parent is only a "?" stand-in (it would read as a wedding to someone unknown).
+        const withStandIn = !personIdMap.has(p1Id) || !personIdMap.has(p2Id);
+        const hasMarriage = ((partnership.status === 'married' || partnership.status === 'divorced') && !withStandIn) ||
             !!partnership.startDate || !!partnership.startPlace || !!partnership.address
             || Object.values(partnership.ages ?? {}).some(a => a.trim());
         if (hasMarriage) {
@@ -887,7 +910,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             if (toHusb && (toHusb !== (toWife ?? toHusb) || toHusb === 'step')) lines.push(`2 _FREL ${GEDCOM_CHILD_REL[toHusb]}`);
             if (toWife && (toWife !== (toHusb ?? toWife) || toWife === 'step')) lines.push(`2 _MREL ${GEDCOM_CHILD_REL[toWife]}`);
         }
-        lines.push('1 _STROM_NO_COUPLE Y');
+        // Two parents who are not a couple: said so (else they would read back as one). One parent alone
+        // reads back as the "?" family the app keeps — the same as such a family goes out.
+        if (b) lines.push('1 _STROM_NO_COUPLE Y');
     }
 
     // ==================== SOURCES ====================

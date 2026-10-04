@@ -79,7 +79,12 @@ describe('DataManager.addFamily', () => {
             children: [],
         });
         expect(created).toBe(2);
-        expect(DataManager.getPerson(anchor.id)!.parentIds).toEqual([byName('Mama')!.id]);
+        // The mother alone: a family with a "?" for the father (src/single-parent.ts), Bro in it too.
+        const parents = DataManager.getPerson(anchor.id)!.parentIds;
+        expect(parents[0]).toBe(byName('Mama')!.id);
+        expect(parents).toHaveLength(2);
+        expect(DataManager.getPerson(parents[1])!.isPlaceholder).toBe(true);
+        expect(DataManager.getPerson(byName('Bro')!.id)!.parentIds).toEqual(parents);
     });
 
     it('links to an existing person instead of duplicating', () => {
@@ -95,8 +100,12 @@ describe('DataManager.addFamily', () => {
         });
 
         expect(created).toBe(0);                       // no new person
-        expect(persons().length).toBe(before);
-        expect(DataManager.getPerson(anchor.id)!.parentIds).toEqual([existingDad.id]);
+        // Only the "?" stand-in for the unknown mother.
+        expect(persons().filter(p => !p.isPlaceholder).length).toBe(before);
+        expect(persons().length).toBe(before + 1);
+        const parents = DataManager.getPerson(anchor.id)!.parentIds;
+        expect(parents[0]).toBe(existingDad.id);
+        expect(DataManager.getPerson(parents[1])!.isPlaceholder).toBe(true);
     });
 });
 

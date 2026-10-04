@@ -120,7 +120,8 @@ async function activeData(page: Page) {
 async function personCountOf(page: Page, treeId: string): Promise<number> {
     return page.evaluate(async (id) => {
         const d = await window.Strom.TreeManager.getTreeData(id);
-        return d ? Object.keys(d.persons).length : -1;
+        // People, not the "?" stand-ins for unknown parents.
+        return d ? Object.values(d.persons).filter((p: any) => !p.isPlaceholder).length : -1;
     }, treeId);
 }
 
@@ -186,17 +187,21 @@ test('tree merge runs to completion: filters, confirm, execute — the new tree 
 
     // The merged tree: Jan once, carrying both trees' facts and relations.
     const d = await activeData(page);
-    expect(d.persons).toHaveLength(4);
+    // Four people; Karel came alone as Jan's parent, so beside him a "?" for the other one (one family).
+    expect(d.persons.filter((p: any) => !p.isPlaceholder)).toHaveLength(4);
+    expect(d.persons.filter((p: any) => p.isPlaceholder)).toHaveLength(1);
     const jan = d.one('Jan');
     const karel = d.one('Karel');
     const marta = d.one('Marta');
     const lucie = d.one('Lucie');
     expect(jan.birthPlace).toBe('Praha');
     expect(jan.deathDate).toBe('2010-05-01');
-    expect(jan.parentIds).toEqual([karel.id]);
+    expect(jan.parentIds[0]).toBe(karel.id);
+    expect(jan.parentIds).toHaveLength(2);
     expect(karel.childIds).toEqual([jan.id]);
-    expect(d.unions).toHaveLength(1);
-    const union = d.unions[0];
+    const coupleUnions = d.unions.filter((u: any) => u.person1Id === jan.id || u.person2Id === jan.id);
+    expect(coupleUnions).toHaveLength(1);
+    const union = coupleUnions[0];
     expect([union.person1Id, union.person2Id].sort()).toEqual([jan.id, marta.id].sort());
     expect(union.startDate).toBe('1968-09-01');
     expect(union.childIds).toEqual([lucie.id]);
@@ -364,14 +369,15 @@ test('tree merge manual match: an unmatched person is paired by hand and lands o
     await executeAndSwitch(page, wizard, 'Schmidt Merged');
 
     const d = await activeData(page);
-    expect(d.persons).toHaveLength(3); // Wenzel, Berta, Ota — no separate Vaclav
+    expect(d.persons.filter((p: any) => !p.isPlaceholder)).toHaveLength(3); // Wenzel, Berta, Ota — no separate Vaclav
     expect(d.byFirst('Vaclav')).toHaveLength(0);
     const wenzel = d.one('Wenzel');
     const ota = d.one('Ota');
     expect(wenzel.lastName).toBe('Schmidt');        // name conflict defaults to the existing spelling
     expect(wenzel.birthPlace).toBe('Wien');
     expect(wenzel.deathDate).toBe('1944-02-02');    // filled from the matched source person
-    expect(ota.parentIds).toEqual([wenzel.id]);
+    // Ota's known parent is Wenzel (his other parent a "?", as Vaclav came alone).
+    expect(ota.parentIds[0]).toBe(wenzel.id);
     expect(wenzel.childIds).toEqual([ota.id]);
 });
 

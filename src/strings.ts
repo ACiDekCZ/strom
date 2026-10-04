@@ -319,6 +319,9 @@ const stringsEN = {
             'pre-research-load': "Before loading the research's version",
             'pre-first-send': 'Before the first send to the research',
         },
+        exportLast: (d: string) => `Last export of all trees: ${d}`,
+        exportNever: 'You have not exported all trees yet',
+        exportAll: 'Export all',
     },
 
     split: {
@@ -3759,6 +3762,9 @@ const stringsCZ: StringsType = {
             'pre-research-load': 'Před načtením verze výzkumu',
             'pre-first-send': 'Před prvním posláním do výzkumu',
         },
+        exportLast: (d: string) => `Poslední export všech stromů: ${d}`,
+        exportNever: 'Všechny stromy jste zatím neexportovali',
+        exportAll: 'Exportovat vše',
     },
 
     split: {
@@ -7195,6 +7201,9 @@ const stringsDE: StringsType = {
             'pre-research-load': 'Vor dem Laden der Version der Forschung',
             'pre-first-send': 'Vor dem ersten Senden an die Forschung',
         },
+        exportLast: (d: string) => `Letzter Export aller Stammbäume: ${d}`,
+        exportNever: 'Sie haben noch nicht alle Stammbäume exportiert',
+        exportAll: 'Alles exportieren',
     },
 
     split: {

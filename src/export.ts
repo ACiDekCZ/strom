@@ -3,6 +3,7 @@
  */
 
 import { TreeManager } from './tree-manager.js';
+import { noteExportAll } from './research-device.js';
 import { UI } from './ui.js';
 import { strings } from './strings.js';
 import { TreeId, StromData, EmbeddedDataEnvelope, APP_VERSION, generateExportId } from './types.js';
@@ -353,7 +354,11 @@ class AppExporterClass {
 
             // Download with "all-trees" filename
             this.downloadHtml(exportedHtml, 'strom-all-trees.html');
-            if (privacyMode === 'full') TreeManager.noteFileCopy(Object.keys(allTreesData) as TreeId[]);
+            if (privacyMode === 'full') {
+                TreeManager.noteFileCopy(Object.keys(allTreesData) as TreeId[]);
+                // A full backup of every tree: the "Export all" reminder rests.
+                noteExportAll();
+            }
         } catch (error) {
             console.error('Export all failed:', error);
             UI.showAlert(strings.export.failed, 'error');

@@ -160,7 +160,7 @@ export const contextMenuMethods = uiModule({
             { action: 'descendants', label: c.showDescendants },
             {
                 action: 'add', label: c.addSection, header: c.addSection, divider: true, chips: [
-                    ...(person.parentIds.length < 2 ? [chip('parent', c.chipParent, c.addParent)] : []),
+                    ...(DataManager.parentSlotFree(person.id) ? [chip('parent', c.chipParent, c.addParent)] : []),
                     chip('partner', c.chipPartner, c.addPartner),
                     chip('child', c.chipChild, c.addChild),
                     chip('sibling', c.chipSibling, c.addSibling),

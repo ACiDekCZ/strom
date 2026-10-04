@@ -346,7 +346,7 @@ export const relationModalMethods = uiModule({
             newPersonId = selectedId;
         } else {
             // A third parent is refused — before the new person exists.
-            if (relationType === 'parent' && person.parentIds.length >= 2) {
+            if (relationType === 'parent' && !DataManager.parentSlotFree(personId)) {
                 this.showLinkRefused();
                 return;
             }
@@ -515,6 +515,8 @@ export const relationModalMethods = uiModule({
                         }
                     }
                 }
+                // One parent known: a family with a "?" for the other (drawn and kept as any family).
+                DataManager.ensureSingleParentFamilies();
                 AuditLogManager.endBatch(treeId, 'person.create',
                     strings.auditLog.addedParent(auditPersonName(DataManager.getPerson(newPersonId)), auditPersonName(person)));
                 return;
