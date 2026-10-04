@@ -94,9 +94,12 @@ function submenuItemHtml(item: SubmenuItem): string {
 
 const call = (method: string, arg = ''): string => `window.Strom.UI.${method}(${arg})`;
 
-/** When the export reminder last counted as shown (one count per opening of the menu). */
-let reminderCountedAt = 0;
-const REMINDER_COUNT_GAP_MS = 60_000;
+/**
+ * The export reminder counted as shown in this opening of the menu: once per
+ * opening, and it stays until the menu closes (the third showing rests it for
+ * the next openings, not under the user's eyes when a refresh redraws the menu).
+ */
+let reminderThisOpening = false;
 
 export const researchActionsMethods = uiModule({
     // ==================== ⋯ → RESEARCH ====================
@@ -241,7 +244,7 @@ export const researchActionsMethods = uiModule({
         // The group's heading with "trial" (a tree tied to a research).
         const heading = ctx ? `<div class="research-submenu-heading"><span>${esc(r.menuTitle)}</span>${researchTrialTagHtml()}</div>` : '';
         // "Export all" now and then (O3): the last row, at most once in three weeks.
-        const lastExport = ctx && exportReminderDue() ? lastExportAll() : undefined;
+        const lastExport = ctx && (exportReminderDue() || reminderThisOpening) ? lastExportAll() : undefined;
         const exportRow = lastExport === undefined ? '' : `<div class="tree-switcher-divider"></div><div class="research-export-reminder" id="research-export-reminder">`
             + `${esc(lastExport ? strings.snapshots.exportLast(exportDate(lastExport)) : strings.snapshots.exportNever)}`
             + `<button type="button" class="link-button" role="menuitem" onclick="${call('researchActionExportAll')}">${esc(strings.snapshots.exportAll)}</button></div>`;
@@ -277,8 +280,8 @@ export const researchActionsMethods = uiModule({
         this.refreshResearchStateSoon();
         // The export reminder counts as shown (after the third time it rests three weeks).
         // (Once per opening: the submenu is opened again by refreshes while the menu stays open.)
-        if (document.getElementById('research-export-reminder') && Date.now() - reminderCountedAt > REMINDER_COUNT_GAP_MS) {
-            reminderCountedAt = Date.now();
+        if (document.getElementById('research-export-reminder') && !reminderThisOpening) {
+            reminderThisOpening = true;
             noteExportReminderShown();
         }
     },
@@ -291,6 +294,7 @@ export const researchActionsMethods = uiModule({
     },
 
     closeActionsResearchSubmenu(): void {
+        reminderThisOpening = false;
         const wrap = document.getElementById('actions-research-wrap');
         if (!wrap) return;
         wrap.classList.remove('submenu-open');
