@@ -12,6 +12,8 @@ import { saveBaseline, loadBaseline, deleteBaselinesForTree } from './share-base
 import { baseCopy } from './research-changes.js';
 
 const key = (treeId: string): string => `research-base:${treeId}`;
+/** The copy before the last written send replaced it (a send taken back puts the research there again). */
+const prevKey = (treeId: string): string => `research-base-prev:${treeId}`;
 
 /** Keep `data` as the research's version of the tree (after a load, a written send, a hand-over). */
 export async function saveResearchCopy(treeId: string, data: StromData): Promise<void> {
@@ -35,7 +37,28 @@ export async function loadResearchCopy(treeId: string): Promise<StromData | null
     }
 }
 
+/** Keep the copy a written send replaces: the research's version again when that send is taken back. */
+export async function saveResearchPrevCopy(treeId: string, data: StromData): Promise<void> {
+    try {
+        await saveBaseline(prevKey(treeId), prevKey(treeId), baseCopy(data), Date.now());
+    } catch (err) {
+        console.warn('Keeping the previous research version failed', err);
+    }
+}
+
+/** The copy before the last written send, or null. */
+export async function loadResearchPrevCopy(treeId: string): Promise<StromData | null> {
+    try {
+        const base = await loadBaseline(prevKey(treeId));
+        if (base) normalizeSingleParents(base);
+        return base;
+    } catch {
+        return null;
+    }
+}
+
 /** Forget it (the tree deleted or unlinked). */
 export async function deleteResearchCopy(treeId: string): Promise<void> {
     try { await deleteBaselinesForTree(key(treeId)); } catch { /* nothing kept */ }
+    try { await deleteBaselinesForTree(prevKey(treeId)); } catch { /* nothing kept */ }
 }

@@ -15,7 +15,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId, StromData, TreeId } from '../types.js';
 import { formatLiveClock } from '../live-time.js';
 import { ChangeKind, PersonChange, diffByPerson, baseCopy } from '../research-changes.js';
-import { saveResearchCopy, loadResearchCopy } from '../research-copy.js';
+import { saveResearchCopy, loadResearchCopy, saveResearchPrevCopy, loadResearchPrevCopy } from '../research-copy.js';
 import { researchAutoState, patchResearchAutoState, noteResearchSendPreviewSkipped } from '../research-device.js';
 import { researchSendMode, personsByResearchRefs } from './research-sync-ui.js';
 import { researchFactLabel } from './person-research-ui.js';
@@ -24,6 +24,8 @@ import { uiModule } from './module.js';
 const PANEL_ID = 'research-changes-panel';
 /** The fingerprint the kept copy stands for (the tie's base, or the written send's). */
 const FP_KEY = 'strom-research-base-fp:';
+/** The fingerprint of the copy before the last written send (the base again once that send is taken back). */
+const FP_PREV_KEY = 'strom-research-base-prev-fp:';
 /** What the last written send carried, person by person (for "What was written"). */
 const WRITTEN_KEY = 'strom-research-written:';
 /** At most this many kinds on a row, then "+ N more". */
@@ -33,6 +35,8 @@ const WRITTEN_MAX = 200;
 
 /** The copy of the open tree's research version, as loaded (base null: none kept). */
 let copy: { treeId: string; base: StromData | null; fp: string } | null = null;
+/** The copy before the last written send replaced it (loaded with `copy`). */
+let prevCopy: { treeId: string; base: StromData | null; fp: string } | null = null;
 let loading: string | null = null;
 let loadingDone: Promise<void> | null = null;
 let memo: { treeId: string; key: string; list: PersonChange[] } | null = null;
@@ -80,9 +84,11 @@ function storeWritten(treeId: string, at: string, list: PersonChange[]): void {
 export function forgetResearchChanges(treeId: string): void {
     try {
         localStorage.removeItem(FP_KEY + treeId);
+        localStorage.removeItem(FP_PREV_KEY + treeId);
         localStorage.removeItem(WRITTEN_KEY + treeId);
     } catch { /* nothing kept */ }
     if (copy?.treeId === treeId) copy = null;
+    if (prevCopy?.treeId === treeId) prevCopy = null;
     pendingSent.delete(treeId);
 }
 
@@ -108,8 +114,13 @@ export const researchChangesMethods = uiModule({
     researchKeepCopy(treeId: TreeId, data: StromData, fp?: string): void {
         const base = fp ?? TreeManager.getTreeMetadata(treeId)?.research?.fingerprint ?? '';
         copy = { treeId, base: baseCopy(data), fp: base };
+        // A new base (a load, a hand-over): no send of the old one can be taken back into it.
+        if (prevCopy?.treeId === treeId) prevCopy = null;
         memo = null;
-        try { localStorage.setItem(FP_KEY + treeId, base); } catch { /* the copy is not trusted next time */ }
+        try {
+            localStorage.setItem(FP_KEY + treeId, base);
+            localStorage.removeItem(FP_PREV_KEY + treeId);
+        } catch { /* the copy is not trusted next time */ }
         void saveResearchCopy(treeId, data);
     },
 
@@ -125,11 +136,14 @@ export const researchChangesMethods = uiModule({
         if (!copy || copy.treeId !== treeId) {
             if (loading !== treeId) {
                 loading = treeId;
-                loadingDone = loadResearchCopy(treeId).then(base => {
+                loadingDone = Promise.all([loadResearchCopy(treeId), loadResearchPrevCopy(treeId)]).then(([base, prev]) => {
                     if (loading !== treeId) return;
                     loading = null;
                     loadingDone = null;
                     copy = { treeId, base, fp: storedFp(treeId) };
+                    let prevFp = '';
+                    try { prevFp = localStorage.getItem(FP_PREV_KEY + treeId) ?? ''; } catch { /* not trusted */ }
+                    prevCopy = prev && prevFp ? { treeId, base: prev, fp: prevFp } : null;
                     memo = null;
                     this.refreshResearchSyncUi();
                 });
@@ -143,10 +157,15 @@ export const researchChangesMethods = uiModule({
             return [];
         }
         const written = link.sent?.state === 'written' ? link.sent.fingerprint : '';
-        if (!copy.base || !copy.fp || (copy.fp !== link.fingerprint && copy.fp !== written)) return null;
-        if (memo && memo.treeId === treeId && memo.key === fps.current) return memo.list;
-        const list = diffByPerson(copy.base, DataManager.getData());
-        memo = { treeId, key: fps.current, list };
+        // The send that made the copy was taken back: the research stands where it was before it (R6 of the N1 round).
+        const undone = link.sent?.state === 'undone' && copy.fp === link.sent.fingerprint && prevCopy?.treeId === treeId && prevCopy.base;
+        const base = undone ? prevCopy!.base : copy.base;
+        if (!undone && (!copy.base || !copy.fp || (copy.fp !== link.fingerprint && copy.fp !== written))) return null;
+        if (!base) return null;
+        const key = `${undone ? 'u' : 'c'}:${fps.current}`;
+        if (memo && memo.treeId === treeId && memo.key === key) return memo.list;
+        const list = diffByPerson(base, DataManager.getData());
+        memo = { treeId, key, list };
         return list;
     },
 
@@ -169,6 +188,12 @@ export const researchChangesMethods = uiModule({
         const p = pendingSent.get(treeId);
         if (!p || p.fingerprint !== fingerprint) return;
         pendingSent.delete(treeId);
+        // The copy it replaces: the research's version again if this send is taken back.
+        if (copy?.treeId === treeId && copy.base && copy.fp) {
+            prevCopy = { treeId, base: copy.base, fp: copy.fp };
+            try { localStorage.setItem(FP_PREV_KEY + treeId, copy.fp); } catch { /* not trusted next time */ }
+            void saveResearchPrevCopy(treeId, copy.base);
+        }
         copy = { treeId, base: p.data, fp: fingerprint };
         memo = null;
         try { localStorage.setItem(FP_KEY + treeId, fingerprint); } catch { /* not trusted next time */ }
@@ -219,7 +244,7 @@ export const researchChangesMethods = uiModule({
                     const id = n.person ? personsByResearchRefs(data, [n.person])[0] : undefined;
                     if (id) named.add(id);
                     const p = id ? data.persons[id] : undefined;
-                    const who = p ? `${p.firstName} ${p.lastName}`.trim() : n.person;
+                    const who = p ? `${p.firstName} ${p.lastName}`.trim() : n.name || n.person;
                     const what = n.fact ? researchFactLabel(n.fact) : '';
                     const why = n.why === 'kept' ? s.notWrittenKept : n.why === 'report' ? s.notWrittenReport : n.why === 'pick' ? s.notWrittenPick : c.noReason;
                     const name = id && p

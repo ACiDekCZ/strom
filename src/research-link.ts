@@ -1669,6 +1669,8 @@ export interface SyncNotWritten {
     family: string;
     fact: string;
     why: 'takenBack' | 'kept' | 'report' | 'pick' | '';
+    /** The person's name as the research says it (`child.gone` from rc.41): shown when the tree has no such person. */
+    name: string;
 }
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
@@ -1706,6 +1708,7 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
                 family: typeof x.family === 'string' && /^F\d{1,9}$/.test(x.family) ? x.family : '',
                 fact: typeof x.fact === 'string' && /^[A-Z_]{2,8}$/.test(x.fact) ? x.fact : '',
                 why: x.why === 'takenBack' || x.why === 'kept' || x.why === 'report' || x.why === 'pick' ? x.why : '',
+                name: cleanText(x.name, 120),
             })),
         ids: Object.keys(idPersons).length || Object.keys(idSources).length ? { persons: idPersons, sources: idSources } : null,
     };

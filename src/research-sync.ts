@@ -72,6 +72,8 @@ export interface ResearchSyncInput {
     written?: { at: string; changes: number | null; conflicts: number } | null;
     /** The research's version, read but not loaded, would take over values where conflicts are open (finding 40). */
     heldConflicts?: boolean;
+    /** A send of this tree still has conflicts open in the research (its `/status.sends`), the last one or an earlier. */
+    openConflicts?: boolean;
     /** The research switched between agent and archive since the user last saw it. */
     switched?: boolean;
     /** Sending by itself is offered (once): sent by hand, written a few times, not answered yet. */
@@ -155,7 +157,8 @@ function sendsState(input: ResearchSyncInput): ResearchSyncState {
     // Its version holds the research's values where the conflicts are: not "a newer version" to load,
     // the conflicts to decide (finding 40); loading it stays possible, asked.
     // Also after a later send that left none: the version still holds them (finding 40).
-    if (moved && ((sent?.state === 'written' && (sent.conflicts ?? 0) > 0) || input.heldConflicts)) return st('writtenConflicts', sent ? { sent } : {});
+    // And while an earlier send's conflicts stay open there, after a later send that left none (R7 of the N1 round).
+    if (moved && ((sent?.state === 'written' && (sent.conflicts ?? 0) > 0) || input.heldConflicts || input.openConflicts)) return st('writtenConflicts', sent ? { sent } : {});
     // Loading it needs the bridge: not running or stuck, only that is said (N4 of the final round).
     if (newer && input.bridgeUp) return st('newer');
     const quiet: ResearchSyncState = !input.bridgeUp

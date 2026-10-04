@@ -493,6 +493,7 @@ export const researchSyncMethods = uiModule({
             ownHead: link.sent?.state === 'written' && link.sent.ownBase ? link.sent.replyHead ?? '' : '',
             stale: isTreeStale(treeId),
             heldConflicts: (this.researchHeld(treeId)?.takeovers.length ?? 0) > 0,
+            openConflicts: this.researchSendsOpenConflicts(treeId, link) > 0,
             auto,
             sendOff: researchSendMode(link) === 'off',
             archive: mode === 'archive',
@@ -1223,7 +1224,7 @@ export const researchSyncMethods = uiModule({
             // What it wrote is its `applied`, never what this app sent: the rest is kept as not written (the
             // state, "What was written") until the next send is written (V-J).
             patchResearchAutoState(treeId, { notWritten: { at: now, fingerprint: sentFp, written: Math.max(0, changes ?? 0),
-                items: listed.slice(0, 50).map(n => ({ person: n.person, fact: n.fact, why: n.why })), unexplained: Math.max(0, unexplained) } });
+                items: listed.slice(0, 50).map(n => ({ person: n.person, fact: n.fact, why: n.why, ...(n.name ? { name: n.name } : {}) })), unexplained: Math.max(0, unexplained) } });
             // "Written N, not written M · Show": by hand and by itself alike (the written count is in it).
             toldNotWritten = sentFp;
             this.showToast(`${s.writtenCount(Math.max(0, changes ?? 0), notWrittenCount)} ${listed.length ? s.notWrittenListed(notWrittenCount) : s.notWrittenToast(notWrittenCount)}`, Infinity, {
@@ -2040,7 +2041,16 @@ export const researchSyncMethods = uiModule({
 
     /** "Written, N conflicts to decide": every conflict open there as known here (cards count the same), at least what the research said. */
     researchHeldConflictCount(treeId: TreeId, sent: ResearchSend | undefined): number {
-        return Math.max(this.researchOpenConflictTotal(treeId), sent?.conflicts ?? 0, researchAutoState(treeId).lastWritten?.conflicts ?? 0, 1);
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        return Math.max(this.researchOpenConflictTotal(treeId), sent?.conflicts ?? 0, researchAutoState(treeId).lastWritten?.conflicts ?? 0,
+            link ? this.researchSendsOpenConflicts(treeId, link) : 0, 1);
+    },
+
+    /** The conflicts still open in the research from this tree's sends, as its `/status.sends` says (0: none, or not known). */
+    researchSendsOpenConflicts(treeId: TreeId, link: ResearchLink): number {
+        const sends = runtime.get(link.id)?.status?.sends ?? [];
+        return sends.filter(r => (r.tree === treeId || r.tree === link.id) && r.state === 'written')
+            .reduce((n, r) => n + Math.max(0, r.conflicts ?? 0), 0);
     },
 
     /** The conflicts open in the research for the open tree's people: its unloaded version's where read, else the tree's. */

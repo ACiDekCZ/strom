@@ -288,7 +288,7 @@ export interface ResearchNotWritten {
     fingerprint: string;
     /** Changes the research wrote (its `applied`). */
     written: number;
-    items: { person: string; fact: string; why: string }[];
+    items: { person: string; fact: string; why: string; name?: string }[];
     /** Changes it counted but neither wrote nor named. */
     unexplained: number;
     seen?: true;

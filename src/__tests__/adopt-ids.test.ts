@@ -148,3 +148,11 @@ describe('sanitizeSyncReply: code', () => {
         expect(sanitizeSyncReply(null).code).toBe('');
     });
 });
+
+describe('sanitizeSyncReply: notWritten', () => {
+    it('keeps the name the research gives (child.gone, rc.41), as text', () => {
+        const r = sanitizeSyncReply({ ok: true, notWritten: [{ kind: 'child.gone', person: 'P0008', name: 'Pavla Svobodová', why: 'report' }, { kind: 'x', person: 'bad' }] });
+        expect(r.notWritten[0]).toMatchObject({ kind: 'child.gone', person: 'P0008', name: 'Pavla Svobodová', why: 'report' });
+        expect(r.notWritten[1]).toMatchObject({ person: '', name: '' });
+    });
+});

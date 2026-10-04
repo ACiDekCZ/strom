@@ -1743,3 +1743,34 @@ test.describe('"What will be sent" before sending by hand', () => {
         await expect.poll(() => bridge.posts.length).toBe(2);
     });
 });
+
+test('R6 of the N1 round: after a send taken back, "What will be sent" lists what the research no longer has, not "cannot be told"', async ({ page }) => {
+    await writtenThenUndone(page);
+    await page.evaluate(() => window.Strom.UI.showResearchChanges('send'));
+    const panel = page.locator('#research-changes-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText('Jan Víšek');
+    await expect(panel).not.toContainText('cannot be told');
+});
+
+test('R7 of the N1 round: a later send that leaves no conflict keeps "1 conflict to decide" while the earlier one is open there', async ({ page }) => {
+    const bridge = await autoTree(page);
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, input: 'I0043', conflicts: [{ id: 'X0002', fact: 'MARR' }] } };
+    // A conflict that is no value of a person here (a family's, a source's): only the send's record tells it.
+    bridge.onWrite = () => ({ head: 'd2d2d2d2d2d2', ged: researchGed('d2d2d2d2d2d2') });
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    // The research's record of that send: one conflict open.
+    Object.assign(bridge.sends[0], { conflicts: 1 });
+    await poll(page);
+    await expect(pill(page)).toContainText('1 conflict to decide');
+    // A later send with none.
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, input: 'I0044' } };
+    bridge.onWrite = () => ({ head: 'd3d3d3d3d3d3', ged: researchGed('d3d3d3d3d3d3') });
+    await renameJan(page, 'Jeník');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    await poll(page);
+    await expect(pill(page)).toContainText('1 conflict to decide');
+});
