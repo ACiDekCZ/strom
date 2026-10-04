@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, card } from './helpers.js';
-import { HEAD, editJan, fakeBridge, openResearch, poll, researchGed, FakeBridge } from './research-bridge.js';
+import { HEAD, acceptLoad, editJan, fakeBridge, openResearch, poll, researchGed, FakeBridge } from './research-bridge.js';
 
 /**
  * More than one window on one research (PLAN_vic-prohlizecu.md): two windows
@@ -52,6 +52,7 @@ async function autoTree(page: Page): Promise<FakeBridge> {
 async function loadWritten(page: Page): Promise<void> {
     await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.replyHead)).toBe('ab10cd10ef10');
     await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    await acceptLoad(page);
 }
 
 /** A second window of the app in the same browser, on the same tree and bridge. */

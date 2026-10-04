@@ -9083,6 +9083,29 @@
         .research-changes-list.is-quiet .research-changes-name { font-weight: 400; }
         .research-changes-more { padding: 2px 14px 6px 38px; font-size: 12px; color: var(--text-light); }
         .snapshot-reason-research { font-weight: 600; }
+        /* "Load the research version?" (research-load-ui.ts): every value here that changes, what it adds, the backup. */
+        .research-load-warn { margin: 0 0 10px; padding: 10px 12px; border-radius: 8px; background: var(--warning-soft); color: var(--warning-text); font-size: 13px; line-height: 1.45; }
+        .research-load-table-wrap { border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; }
+        .research-load-table-wrap.is-open { max-height: 50vh; overflow: auto; }
+        .research-load-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .research-load-table th { position: sticky; top: 0; padding: 7px 10px; background: var(--surface-2); text-align: left; font-size: 12px; font-weight: 600; color: var(--text-light); }
+        .research-load-table td { padding: 6px 10px; vertical-align: top; border-top: 1px solid var(--divider); }
+        .research-load-table tr:not(.is-first) td { border-top-color: transparent; }
+        .research-load-table tr[hidden] { display: none; }
+        .research-load-who { font-weight: 600; white-space: nowrap; }
+        .research-load-field { color: var(--text-light); }
+        .research-load-here { color: var(--text-light); text-decoration: line-through; }
+        .research-load-there { font-weight: 600; }
+        .research-load-conflict { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--warning-soft); color: var(--warning-text); font-size: 11px; font-weight: 600; }
+        .research-load-more { margin-top: 6px; font-size: 13px; font-weight: 600; }
+        .research-load-added, .research-load-nothing { margin: 10px 0 0; font-size: 13px; }
+        .modal label.research-load-images { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0 0; font-size: 14px; font-weight: 400; }
+        .research-load-backup-narrow { display: none; }
+        @media (max-width: 639px) {
+            .research-load-backup { display: none; }
+            .research-load-backup-narrow { display: block; margin: 10px 0 0; font-size: 12px; color: var(--text-light); }
+            .research-load-who { white-space: normal; }
+        }
         .research-changes-icon.is-check { width: auto; height: auto; margin-top: 0; border-radius: 0; font-size: 13px; font-weight: 700; line-height: 1.3; color: var(--primary); }
         .research-changes-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
         .research-changes-name {
@@ -9185,7 +9208,8 @@
         .research-submenu-heading .research-trial-tag { margin-left: 0; }
         /* The hand-over and the one-time question: header and footer stay, the body scrolls (Hand over always in view). */
         .modal.research-send-dialog { max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); }
-        .research-send-dialog-foot .research-send-dialog-note { margin-right: auto; font-size: 12px; color: var(--text-light); }
+        .modal .buttons .research-send-dialog-note { margin-right: auto; font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        .research-load-foot > button { white-space: nowrap; }
         .research-adopt-what { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
         .research-adopt-eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-light); }
         .research-adopt-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }

@@ -817,6 +817,10 @@ export const miscMethods = uiModule({
                         this.closeResearchTreeSettings();
                         return;
                     }
+                    if (currentDialog === 'research-load-modal') {
+                        this.cancelResearchLoad();
+                        return;
+                    }
                     if (currentDialog === 'research-mode-ask-modal') {
                         this.dismissResearchModeAsk();
                         return;

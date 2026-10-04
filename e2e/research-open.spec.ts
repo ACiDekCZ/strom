@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, card } from './helpers.js';
+import { acceptLoad } from './research-bridge.js';
 
 /**
  * Opening a research from Strom Research: drag & drop, ?import-url=, the
@@ -67,6 +68,10 @@ test.describe('open a research', () => {
         expect(meta.research.id).toBe(UUID);
 
         await dropFile(page, 'tree-strom.ged', researchGed({ extra: true }));
+        // What it adds is said first (nothing here is overwritten).
+        await expect(page.locator('#research-load-modal')).toContainText('Nothing here will be overwritten.');
+        await expect(page.locator('#research-load-modal')).toContainText('Added from the research: + 1 person');
+        await acceptLoad(page);
         await expect(page.locator('.toast')).toContainText('Research version loaded.');
         await expect(card(page, 'Ludmila')).toBeVisible();
         // No duplicate: still exactly one tree.

@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { card } from './helpers.js';
 import {
-    BRIDGE, UUID, HEAD, NEW_HEAD, block, dot, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, researchGed, FakeBridge,
+    BRIDGE, UUID, HEAD, NEW_HEAD, block, dot, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, researchGed, FakeBridge, acceptLoad,
 } from './research-bridge.js';
 
 /**
@@ -923,8 +923,9 @@ test('V-J: what the research did not write is the state until the next send (a d
     bridge.treeGed = researchGed('e7e7e7e7e7e7');
     await poll(page);
     await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
-    const ask = page.locator('#confirmation-modal');
-    await expect(ask).toContainText('1 change of your last send was not written to the research.');
+    const ask = page.locator('#research-load-modal');
+    await expect(ask.locator('.research-load-warn')).toContainText('1 change of your last send was not written to the research.');
+    await expect(ask.locator('#research-load-ok')).toHaveText('Load and overwrite');
     await ask.getByRole('button', { name: 'Cancel' }).click();
     expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).not.toBe('e7e7e7e7e7e7');
     expect(await janPlace(page)).toBe('Praha');
@@ -1402,6 +1403,7 @@ test.describe('data protection around the research', () => {
         await expect(block(page)).toHaveAttribute('data-state', 'newer');
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await acceptLoad(page);
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('fe11fe11fe11');
         expect((await backupReasons(page))[0]).toBe('pre-research-load');
         const toast = page.locator('.toast', { hasText: 'Research version loaded.' });
@@ -1437,6 +1439,7 @@ test.describe('data protection around the research', () => {
         bridge.treeGed = researchGed('fe11fe11fe11', ['1 BIRT', '2 PLAC Praha', '1 OCCU tesař']);
         await poll(page);
         await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await acceptLoad(page);
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('fe11fe11fe11');
         // After the hour: no block, the row with when it was loaded.
         await page.clock.fastForward(61 * 60_000);

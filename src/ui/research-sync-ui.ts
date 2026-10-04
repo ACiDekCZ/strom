@@ -1533,15 +1533,7 @@ export const researchSyncMethods = uiModule({
                     return;
                 }
             }
-            // The last send left changes unwritten and they are still here only: loading would drop them
-            // without a word (V-J) — asked first.
-            const nw = researchAutoState(treeId).notWritten;
-            if (!opts.afterSend && nw && link.sent?.state === 'written' && nw.fingerprint === link.sent.fingerprint) {
-                const m = nw.items.length + nw.unexplained;
-                const ok = await this.showConfirm(strings.sync.loadOverNotWritten(m), strings.sync.stateNewer,
-                    { confirmLabel: strings.sync.loadOverwrite, cancel: strings.buttons.cancel });
-                if (!ok) return;
-            }
+            // (Changes the last send left unwritten would go: the load dialog says so, V-J.)
             await this.importResearchFromUrl(`${bridge.base}/tree.ged`, opts.afterSend ? { afterSend: treeId } : {});
             return;
         }

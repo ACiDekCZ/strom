@@ -107,6 +107,7 @@ import { researchUiMethods } from './research-ui.js';
 import { researchSyncMethods } from './research-sync-ui.js';
 import { originalsMethods } from './originals-ui.js';
 import { researchTreeSettingsMethods } from './research-tree-settings-ui.js';
+import { researchLoadMethods } from './research-load-ui.js';
 import { tourMethods, TourStepDef } from './tour.js';
 
 export class UIClass {
@@ -276,6 +277,8 @@ export class UIClass {
     personSourcesShown: Set<string> | null = null;
     /** Ends the open "Hand the tree to the research?" dialog as "Don't hand over". */
     researchAdoptResolve: (() => void) | null = null;
+    /** Cancel of the open "Load the research version?" (research-load-ui.ts). */
+    researchLoadResolve: (() => void) | null = null;
     /** One-time wiring of the source editor's paste / drop / quality handlers. */
     sourceEditorWired = false;
     // Slideshow / TV mode
@@ -649,6 +652,10 @@ Object.assign(UIClass.prototype, originalsMethods);
 type ResearchTreeSettingsMethods = typeof researchTreeSettingsMethods;
 export interface UIClass extends ResearchTreeSettingsMethods {}
 Object.assign(UIClass.prototype, researchTreeSettingsMethods);
+
+type ResearchLoadMethods = typeof researchLoadMethods;
+export interface UIClass extends ResearchLoadMethods {}
+Object.assign(UIClass.prototype, researchLoadMethods);
 
 type ResearchPromoMethods = typeof researchPromoMethods;
 export interface UIClass extends ResearchPromoMethods {}

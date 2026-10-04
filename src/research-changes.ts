@@ -183,3 +183,141 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
         }))
         .sort((x, y) => x.name.localeCompare(y.name));
 }
+
+// ==================== VALUES THE RESEARCH'S VERSION WOULD OVERWRITE ====================
+
+/** Which value a row is about (the UI names it). */
+export type ValueField =
+    | 'name' | 'gender' | 'birthDate' | 'birthPlace' | 'deathDate' | 'deathPlace' | 'deathCause' | 'notes'
+    | 'person' | 'event' | 'eventDate' | 'eventPlace' | 'eventValue' | 'citation' | 'marriageDate' | 'marriagePlace';
+
+/** One value here that loading the research's version replaces or removes. */
+export interface ValueChange {
+    /** The person (a couple: the first partner), for the name column and selecting. */
+    personId: PersonId;
+    /** The person's name ("Jan Víšek"; a couple "Jan Víšek & Anna Víšková"). */
+    name: string;
+    field: ValueField;
+    /** The event's type for event rows; the fact a citation belongs to ('birth', 'death', 'person' or an event type). */
+    of?: string;
+    /** As it is here, and as the research's version has it ('' = none). Dates as stored (flex dates). */
+    here: string;
+    there: string;
+    /** The field holds a date (the UI formats it). */
+    date?: boolean;
+    /** An open conflict of the research is about this fact. */
+    conflict?: boolean;
+}
+
+export interface ValueDiff {
+    /** Values here that change or go, in person order. */
+    rows: ValueChange[];
+    /** People the research's version adds. */
+    addedPersons: number;
+    /** Facts it adds where there are none here (on people here and on the added ones). */
+    addedFacts: number;
+}
+
+const str = (v: unknown): string => typeof v === 'string' ? v.trim() : '';
+
+/** The open conflicts of a person in the research's version, by fact tag. */
+function openConflictFacts(p: Person | undefined): Set<string> {
+    return new Set((p?.research?.conflicts ?? []).filter(c => c.status === 'open').map(c => c.fact.toUpperCase()));
+}
+
+const EVENT_TAG: Record<string, string> = {
+    baptism: 'BAPM', burial: 'BURI', occupation: 'OCCU', residence: 'RESI', emigration: 'EMIG', immigration: 'IMMI',
+    education: 'EDUC', religion: 'RELI', confirmation: 'CONF', firstCommunion: 'FCOM', cremation: 'CREM', title: 'TITL',
+};
+
+/** The titles of sources (or their ids when unnamed), sorted. */
+function sourceTitles(ids: readonly string[], sources: Record<string, Source>): string {
+    return ids.map(id => sources[id]?.title?.trim() || id).sort((a, b) => a.localeCompare(b)).join(', ');
+}
+
+/** What a fact of a new person adds: its filled fields and events. */
+function factsOf(p: Person): number {
+    const fields: (keyof Person)[] = ['birthDate', 'birthPlace', 'deathDate', 'deathPlace', 'deathCause'];
+    return fields.filter(f => str(p[f])).length + (p.events?.length ?? 0);
+}
+
+/**
+ * Values the research's version (`there`) would put over the tree here:
+ * every value here that changes or goes, one row each (a value only there
+ * is counted as added, not listed). Matched by id — `there` stabilized to
+ * this tree's ids. Pure.
+ */
+export function diffValues(here: StromData, there: StromData): ValueDiff {
+    const rows: ValueChange[] = [];
+    let addedFacts = 0;
+    const hp = here.persons as Record<string, Person>;
+    const tp = there.persons as Record<string, Person>;
+    const hs = (here.sources ?? {}) as Record<string, Source>;
+    const ts = (there.sources ?? {}) as Record<string, Source>;
+    const people = Object.values(hp).filter(p => !p.isPlaceholder).sort((a, b) => fullName(a).localeCompare(fullName(b)));
+    const field = (p: Person, f: ValueField, a: string, b: string, extra: Partial<ValueChange> = {}): void => {
+        if (a === b) return;
+        if (!a) { if (b) addedFacts++; return; }
+        rows.push({ personId: p.id, name: fullName(p), field: f, here: a, there: b, ...extra });
+    };
+    for (const h of people) {
+        const t = tp[h.id];
+        if (!t) {
+            rows.push({ personId: h.id, name: fullName(h), field: 'person', here: fullName(h), there: '' });
+            continue;
+        }
+        if (stable(h) === stable(t)) continue;
+        const open = openConflictFacts(t);
+        field(h, 'name', fullName(h) === '?' ? '' : fullName(h), fullName(t) === '?' ? '' : fullName(t), open.has('NAME') ? { conflict: true } : {});
+        if (h.gender !== t.gender && h.gender && t.gender) rows.push({ personId: h.id, name: fullName(h), field: 'gender', here: h.gender, there: t.gender, ...(open.has('SEX') ? { conflict: true } : {}) });
+        const birth = open.has('BIRT') ? { conflict: true } : {};
+        const death = open.has('DEAT') ? { conflict: true } : {};
+        field(h, 'birthDate', str(h.birthDate), str(t.birthDate), { date: true, ...birth });
+        field(h, 'birthPlace', str(h.birthPlace), str(t.birthPlace), birth);
+        field(h, 'deathDate', str(h.deathDate), str(t.deathDate), { date: true, ...death });
+        field(h, 'deathPlace', str(h.deathPlace), str(t.deathPlace), death);
+        field(h, 'deathCause', str(h.deathCause), str(t.deathCause), death);
+        field(h, 'notes', str(h.notes), str(t.notes));
+        // Events by id: their date, place, value; one here only goes.
+        const tEvents = new Map((t.events ?? []).map(e => [e.id, e]));
+        for (const e of h.events ?? []) {
+            const o = tEvents.get(e.id);
+            const ev = { of: e.type, ...(open.has(EVENT_TAG[e.type] ?? '') ? { conflict: true } : {}) };
+            if (!o) {
+                rows.push({ personId: h.id, name: fullName(h), field: 'event', here: str(e.note) || str(e.date) || str(e.place) || e.type, there: '', ...ev,
+                    ...(!str(e.note) && str(e.date) ? { date: true } : {}) });
+                continue;
+            }
+            field(h, 'eventDate', str(e.date), str(o.date), { date: true, ...ev });
+            field(h, 'eventPlace', str(e.place), str(o.place), ev);
+            field(h, 'eventValue', str(e.note), str(o.note), ev);
+            // Its citations: a source cited here and not there goes.
+            const gone = (e.sourceIds ?? []).filter(id => !(o.sourceIds ?? []).includes(id));
+            if (gone.length) rows.push({ personId: h.id, name: fullName(h), field: 'citation', of: e.type, here: sourceTitles(gone, hs), there: sourceTitles(o.sourceIds ?? [], ts) });
+        }
+        addedFacts += (t.events ?? []).filter(e => !(h.events ?? []).some(x => x.id === e.id)).length;
+        // Citations of the person, the birth, the death: what is cited here and not there.
+        for (const [key, of] of [['sourceIds', 'person'], ['birthSourceIds', 'birth'], ['deathSourceIds', 'death']] as const) {
+            const a = h[key] ?? [];
+            const b = t[key] ?? [];
+            const gone = a.filter(id => !b.includes(id));
+            if (gone.length) rows.push({ personId: h.id, name: fullName(h), field: 'citation', of, here: sourceTitles(gone, hs), there: sourceTitles(b, ts) });
+            addedFacts += b.filter(id => !a.includes(id)).length;
+        }
+    }
+    // Couples: the wedding's date and place.
+    const hu = here.partnerships as Record<string, Partnership>;
+    const tu = there.partnerships as Record<string, Partnership>;
+    for (const u of Object.values(hu)) {
+        const o = tu[u.id];
+        const a = hp[u.person1Id];
+        const b = hp[u.person2Id];
+        if (!o || !a) continue;
+        const who = { ...a, firstName: [fullName(a), b && !b.isPlaceholder ? fullName(b) : ''].filter(Boolean).join(' & '), lastName: '' } as Person;
+        field(who, 'marriageDate', str(u.startDate), str(o.startDate), { date: true });
+        field(who, 'marriagePlace', str(u.startPlace), str(o.startPlace));
+    }
+    const added = Object.values(tp).filter(p => !p.isPlaceholder && !hp[p.id]);
+    addedFacts += added.reduce((n, p) => n + factsOf(p), 0);
+    return { rows, addedPersons: added.length, addedFacts };
+}

@@ -265,3 +265,8 @@ export async function openResearchMenu(page: Page): Promise<void> {
 
 export const block = (page: Page) => page.locator('#research-sync-block');
 export const dot = (page: Page) => page.locator('#actions-menu-dot');
+
+/** "Load the research version?" (asked at every load the user asks for): Load. */
+export async function acceptLoad(page: Page): Promise<void> {
+    await page.locator('#research-load-modal #research-load-ok').click();
+}

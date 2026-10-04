@@ -53,7 +53,7 @@ import {
     noteResearchLinks, announcedResearchLinks, researchLinksEnabled, noteResearchWaiting, storedResearchWaiting,
     noteResearchBridge, noteResearchBridgeStatus, patchResearchAutoState, researchAutoState, researchIdAtBridge, ResearchLinkBefore,
 } from '../research-device.js';
-import { rememberBridgeStatus } from './research-sync-ui.js';
+import { rememberBridgeStatus, researchSendMode } from './research-sync-ui.js';
 import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
 
 /** What a research open needs to know from the file (or the bridge). */
@@ -1189,7 +1189,7 @@ export const researchUiMethods = uiModule({
      * afterwards (asking when the user changed it in the app), switch to it.
      * Returns the tree, or null when the user cancelled.
      */
-    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean; afterSend?: TreeId; plainAsk?: boolean }): Promise<TreeId | null> {
+    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean; afterSend?: TreeId; plainAsk?: boolean; noAsk?: boolean }): Promise<TreeId | null> {
         const name = source.name || strings.research.defaultName;
         const dateLabel = researchDateLabel(source.date);
         const existing = source.treeId ? TreeManager.findTreeByResearchId(source.treeId) : null;
@@ -1199,6 +1199,8 @@ export const researchUiMethods = uiModule({
         let action = decideResearchOpen(null, null);
         let asCopy = false;
         let holdsSent = false;
+        // "Load the research version?" with the values it overwrites (asked at every load the user asks for).
+        let askLoad = false;
         if (existing) {
             const unreadable = TreeManager.isTreeUnreadable(existing.id);
             previous = unreadable ? null : await readTree(existing.id);
@@ -1241,8 +1243,12 @@ export const researchUiMethods = uiModule({
                 // Cannot be read with this session's key: never overwrite it.
                 asCopy = true;
             } else if (holdsChanges) {
-                // Replaced without asking (a backup is still kept below).
+                // Nothing here the research lacks (a backup is still kept below): what it overwrites shown first.
                 holdsSent = true;
+                askLoad = true;
+            } else if (edited && existing.research && researchSendMode(existing.research) === 'off' && !plainAsk) {
+                // Only loading from the research: these values go — said in the load dialog, never "send first".
+                askLoad = true;
             } else if (edited && existing.research && !plainAsk && this.researchSyncCapable(existing.research.id)) {
                 // (plainAsk: a copy that cannot send yet — "send first" would only come back here.)
                 // A research that tells what it has: send first, or decide knowing it.
@@ -1284,6 +1290,29 @@ export const researchUiMethods = uiModule({
                 if (choice === null) return null;
                 asCopy = choice === 'copy';
                 if (incomingImageBytes(data) > 0) includeImages = this.choiceCheckboxChecked;
+            } else {
+                askLoad = true;
+            }
+            // Asked when the user asked for the version (not after a hand-over, a send that loads after
+            // itself, or following live): each value here it changes or removes, what it adds, the backup.
+            if (askLoad && previous && !asCopy && !opts.quiet && !opts.afterSend && !opts.noAsk) {
+                if (DataManager.getCurrentTreeId() !== existing.id) {
+                    if (existing.isHidden) TreeManager.setTreeVisibility(existing.id, false);
+                    await this.switchToTree(existing.id);
+                    if (DataManager.getCurrentTreeId() !== existing.id) return null;
+                }
+                const st = researchAutoState(existing.id);
+                const sent = existing.research?.sent;
+                const nw = st.notWritten && sent?.state === 'written' && st.notWritten.fingerprint === sent.fingerprint
+                    ? st.notWritten.items.length + st.notWritten.unexplained : 0;
+                const bytes = incomingImageBytes(data);
+                const answer = await this.askResearchLoad(existing.name, dateLabel, previous, stabilizeIds(data, previous), {
+                    off: researchSendMode(existing.research) === 'off', notWritten: nw,
+                    ...(bytes > 0 ? { images: { label: strings.importImages.label, checked: includeImages, detail: strings.importImages.size((bytes / (1024 * 1024)).toFixed(1)) } } : {}),
+                });
+                if (!answer) return null;
+                asCopy = answer.choice === 'copy';
+                if (bytes > 0) includeImages = answer.images;
             }
         }
         // Images stay out when the user said so (the setting, or the checkbox).
@@ -1823,7 +1852,7 @@ export const researchUiMethods = uiModule({
             const treeId = await this.applyResearch(
                 data,
                 { treeId: status.treeId, name, date: header.date, mode: header.mode },
-                { head: status.head, quiet: opts.resume }
+                { head: status.head, quiet: opts.resume, noAsk: true }
             );
             if (!treeId) {
                 if (opts.resume) forgetLiveBridge();

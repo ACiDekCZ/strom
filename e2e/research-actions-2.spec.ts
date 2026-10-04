@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, card, openPersonSubmenu } from './helpers.js';
+import { acceptLoad } from './research-bridge.js';
 
 /**
  * Research actions, second wave: the Research submenu's update block, "Undo
@@ -546,12 +547,14 @@ test.describe('Start research with this tree (G3)', () => {
     test('adopted tree: "load the new version" without edits keeps the photos and attachments', async ({ page }) => {
         const { img, att } = await adoptWithImages(page);
         await dropFile(page, adoptedGed(true));
+        await acceptLoad(page);
         await expect(page.locator('.toast')).toContainText('Research version loaded.');
         await expect(page.locator('#confirmation-modal')).toBeHidden();
         await expect(card(page, 'Marie')).toBeVisible();
         expect(await media(page)).toEqual({ karel: img, petr: [att] });
         // And again (now matched by the research's numbers).
         await dropFile(page, adoptedGed(true));
+        await acceptLoad(page);
         await expect(page.locator('#confirmation-modal')).toBeHidden();
         await expect.poll(() => media(page)).toEqual({ karel: img, petr: [att] });
     });
@@ -559,6 +562,7 @@ test.describe('Start research with this tree (G3)', () => {
     test('adopted tree, a photo added in the app: the dialog says images stay, "Update" keeps them', async ({ page }) => {
         const { img, att } = await adoptWithImages(page);
         await dropFile(page, adoptedGed());
+        await acceptLoad(page);
         await expect(page.locator('.toast')).toContainText('Research version loaded.');
         const other = await page.evaluate(() => {
             const dm = window.Strom.DataManager;
@@ -582,6 +586,7 @@ test.describe('Start research with this tree (G3)', () => {
     test('the research dropped a person with a photo: never silently, a dialog warns', async ({ page }) => {
         await adoptWithImages(page);
         await dropFile(page, adoptedGed());
+        await acceptLoad(page);
         await expect(page.locator('.toast')).toContainText('Research version loaded.');
         const onlyPetr = adoptedGed().replace(/0 @P0001@ INDI[\s\S]*?(?=0 @P0002@)/, '').replace('1 HUSB @P0001@\n', '');
         await dropFile(page, onlyPetr);

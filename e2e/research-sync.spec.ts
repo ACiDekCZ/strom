@@ -2,6 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { openApp, card } from './helpers.js';
 import {
     BRIDGE, FakeBridge, HEAD, NEW_HEAD, UUID, block, dot, dropFile, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, researchGed,
+    acceptLoad,
 } from './research-bridge.js';
 
 /**
@@ -198,6 +199,7 @@ test.describe('after a send the research wrote', () => {
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.replyHead)).toBe('aa11bb22cc33');
         // Loaded only when asked.
         await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await acceptLoad(page);
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('aa11bb22cc33');
         expect(await kept()).toEqual({ photo: true, excerpts: 1 });
         await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
@@ -234,6 +236,7 @@ test.describe('after a send the research wrote', () => {
             tm.setResearchLink(tree, { ...link, fingerprint: fp });
         });
         await dropFile(page, 'tree-strom.ged', researchGed(NEW_HEAD));
+        await acceptLoad(page);
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(NEW_HEAD);
         await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
         expect(await page.evaluate(() => !!(Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any).photo)).toBe(true);
