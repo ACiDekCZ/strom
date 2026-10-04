@@ -35,7 +35,7 @@ import { stripMedia } from '../attachments.js';
 import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
     parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, carryOverMedia, researchPersonRef, ResearchAccepts,
-    researchIdsByContent, holdsResearchIds, ResearchSendRecord,
+    researchIdsByContent, holdsResearchIds, ResearchSendRecord, SyncNotWritten,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
 import {
@@ -49,6 +49,7 @@ import {
     researchKeepsTakenBack, latestUndone, nextUndone, openUndone,
 } from '../research-sync.js';
 import { setResearchConflictsProvider } from '../card-signals.js';
+import { researchFactLabel } from './person-research-ui.js';
 import { uiModule } from './module.js';
 import { researchWrittenList } from './research-changes-ui.js';
 import {
@@ -1114,11 +1115,18 @@ export const researchSyncMethods = uiModule({
         const changes = reply.applied ?? reply.changes;
         // Changes the research counted but neither wrote nor said why (not skipped, not left out as taken
         // back, not a conflict): never silent — the user's edits would stand here only (A5 of the rc.23 round).
-        const unexplained = written && reply.applied !== null && reply.changes !== null
-            ? reply.changes - reply.applied - reply.skipped.length - (reply.takenBack ?? 0) - (reply.conflicts ?? 0) : 0;
-        if (unexplained > 0) {
-            console.warn('The research wrote fewer changes than it counted, without saying why', reply);
-            this.showToast(s.notWrittenToast(unexplained), Infinity, { closable: true });
+        // What it lists (`notWritten`, rc.25) is said with its reason (taken back has its own word).
+        const explained = reply.skipped.length + (reply.conflicts ?? 0)
+            + (reply.notWritten.length ? reply.notWritten.length : reply.takenBack ?? 0);
+        const unexplained = written && reply.applied !== null && reply.changes !== null ? reply.changes - reply.applied - explained : 0;
+        const listed = reply.notWritten.filter(n => n.why !== 'takenBack');
+        if (written && (listed.length > 0 || unexplained > 0)) {
+            if (unexplained > 0) console.warn('The research wrote fewer changes than it counted, without saying why', reply);
+            const count = listed.length + Math.max(0, unexplained);
+            this.showToast(listed.length ? s.notWrittenListed(count) : s.notWrittenToast(count), Infinity, {
+                closable: true,
+                ...(listed.length ? { action: { label: s.showConflicts, run: () => { void this.showResearchNotWritten(data, listed, Math.max(0, unexplained)); } } } : {}),
+            });
         }
         const sent: ResearchSend = {
             fingerprint: sentFp, at: now, changes, head,
@@ -1975,6 +1983,21 @@ export const researchSyncMethods = uiModule({
     researchHoldsForUndo(link: ResearchLink): boolean {
         return link.sent?.state === 'undone'
             && !researchKeepsTakenBack(this.researchBridgeVersion(link.id), runtime.get(link.id)?.status?.features);
+    },
+
+    /** What a send carried that the research did not write, line by line: whom, which fact, why. */
+    async showResearchNotWritten(data: StromData, items: SyncNotWritten[], unexplained: number): Promise<void> {
+        const s = strings.sync;
+        const lines = items.map(n => {
+            const id = n.person ? personsByResearchRefs(data, [n.person])[0] : undefined;
+            const p = id ? data.persons[id] : undefined;
+            const who = p ? `${p.firstName} ${p.lastName}`.trim() : n.person || n.family || '';
+            const what = n.fact ? researchFactLabel(n.fact) : '';
+            const why = n.why === 'kept' ? s.notWrittenKept : n.why === 'report' ? s.notWrittenReport : n.why === 'pick' ? s.notWrittenPick : s.notWrittenUnknown;
+            return `• ${[who, what].filter(Boolean).join(' · ')}${who || what ? ': ' : ''}${why}`;
+        });
+        if (unexplained > 0) lines.push(`• ${s.notWrittenToast(unexplained)}`);
+        await this.showAlert(lines.join('\n'), 'info');
     },
 
     /** Conflicts a send written beside a send taken back left open (0: none). */

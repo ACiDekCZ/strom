@@ -1612,11 +1612,23 @@ export interface SyncReply {
     undoneSince: string[];
     /** Changes of the copy left out because a send taken back brought them (`takenBack`, 1.12.0-rc.19); null: not said. */
     takenBack: number | null;
+    /** Every change not written and why (`notWritten`, 1.12.0-rc.25): taken back, kept by an archive, only reported, to pick. */
+    notWritten: SyncNotWritten[];
+}
+
+/** One change a send carried that the research did not write (`notWritten[]`). */
+export interface SyncNotWritten {
+    kind: string;
+    /** The research's person ("P0012") / family ("F0003") / fact ("BIRT"), when said. */
+    person: string;
+    family: string;
+    fact: string;
+    why: 'takenBack' | 'kept' | 'report' | 'pick' | '';
 }
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [] };
     return {
         ok: r.ok === true,
         changes: asCount(r.changes),
@@ -1638,6 +1650,15 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
         undoneSince: Array.isArray(r.undoneSince)
             ? r.undoneSince.slice(0, 30).map(v => headerToken(v)).filter((v): v is string => !!v) : [],
         takenBack: asCount(r.takenBack),
+        notWritten: (Array.isArray(r.notWritten) ? r.notWritten.slice(0, 200) : [])
+            .map(x => asRecord(x)).filter((x): x is Record<string, unknown> => !!x)
+            .map(x => ({
+                kind: cleanText(x.kind, 40),
+                person: typeof x.person === 'string' && /^P\d{1,9}$/.test(x.person) ? x.person : '',
+                family: typeof x.family === 'string' && /^F\d{1,9}$/.test(x.family) ? x.family : '',
+                fact: typeof x.fact === 'string' && /^[A-Z_]{2,8}$/.test(x.fact) ? x.fact : '',
+                why: x.why === 'takenBack' || x.why === 'kept' || x.why === 'report' || x.why === 'pick' ? x.why : '',
+            })),
     };
 }
 

@@ -854,6 +854,19 @@ test('the rc.23 round: changes the research counted but neither wrote nor explai
     await expect(page.locator('.toast', { hasText: "1 change was not written to the research, and it didn't say why" })).toBeVisible();
 });
 
+test('rc.25: what the research did not write is listed with its reason (notWritten)', async ({ page }) => {
+    const bridge = await autoTree(page);
+    bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 2, applied: 1, input: 'I0071',
+        notWritten: [{ kind: 'event.edit', person: 'P0003', fact: 'BIRT', why: 'pick' }] } };
+    bridge.onWrite = () => ({ head: 'd8d8d8d8d8d8', ged: researchGed('d8d8d8d8d8d8') });
+    await editJan(page);
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    const toast = page.locator('.toast', { hasText: '1 change was not written to the research' });
+    await toast.getByRole('button', { name: 'Show' }).click();
+    await expect(page.locator('#confirmation-modal')).toContainText('Jan Víšek · Birth: no common ground: choose in the research');
+});
+
 test('a write that takes longer (202): "writing" until the status says written, then loaded quietly', async ({ page }) => {
     const bridge = await autoTree(page);
     bridge.syncReply = { status: 202, body: { ok: true, inbox: false, pending: true, changes: 6 } };
