@@ -587,6 +587,10 @@ export const researchSyncMethods = uiModule({
             this.researchNoteUndone(ctx.treeId, status);
             this.researchNoteWrittenAgain(ctx.treeId, status);
             this.researchNoteConflictsSettled(ctx.treeId, status);
+            // Its version moved on since its conflicts were read (a send taken back closed them, or one
+            // was decided there): read again, never counted from the old one (B1 of beta.56).
+            const held = this.researchHeld(ctx.treeId);
+            if (held && status.head && status.head !== held.head) await this.researchReadHeld(ctx.treeId);
         }
         this.refreshResearchSyncUi();
         // Updated since: it takes sends now — what waits starts its quiet time.
@@ -1099,7 +1103,12 @@ export const researchSyncMethods = uiModule({
             if (!opts.auto) this.showToast(s.noIdsLoaded, 4000);
             return this.postResearchSendNow(treeId, opts);
         }
-        const head = runtime.get(link.id)?.status?.head ?? '';
+        // Its version as it is now: one the poll has not seen yet (a person added there just before)
+        // would read as this tree's own after the write, and never be offered to load (R3 of beta.56).
+        const polledHead = runtime.get(link.id)?.status?.head ?? '';
+        const head = (opts.keepalive ? null : await this.askResearchBridge(link.id, PING_TIMEOUT_MS))?.head || polledHead;
+        // Another send started while it was asked: one at a time.
+        if (sendingTree) return;
         // The research had nothing this tree lacks: its write of this copy is this tree's own version.
         const ownBase = !head || head === link.head || (link.sent?.state === 'written' && !!link.sent.ownBase && head === link.sent.replyHead);
         // "Send again" by hand for a send the research took back (`strom sync undo`): the research

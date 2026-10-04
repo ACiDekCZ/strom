@@ -1774,3 +1774,31 @@ test('R7 of the N1 round: a later send that leaves no conflict keeps "1 conflict
     await poll(page);
     await expect(pill(page)).toContainText('1 conflict to decide');
 });
+
+test('B1 of beta.56: a send with a conflict taken back in the research (the conflict closed with it): no "1 conflict to decide" here any more', async ({ page }) => {
+    const bridge = await conflictLeft(page);
+    Object.assign(bridge.sends[0], { conflicts: 1 });
+    // A later send of something else: written, the conflict still open there.
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, input: 'I0044' } };
+    bridge.onWrite = () => ({ head: 'c2c2c2c2c2c2', ged: nameConflictGed('c2c2c2c2c2c2', ['1 BIRT', '2 PLAC Praha']) });
+    await janBirthPlace(page, 'Praha');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    await page.clock.fastForward(30_000);
+    await poll(page);
+    await expect(pill(page)).toContainText('1 conflict to decide');
+    const jan = page.locator('.person-card', { hasText: 'Jenda' }).first();
+    await expect(jan).toHaveAttribute('aria-label', /conflicting sources/);
+    // `strom sync undo` of the first send: its conflict closed, its version without it.
+    const first = bridge.sends.find(r => (r as unknown as { conflicts?: number }).conflicts === 1)!;
+    Object.assign(first, { state: 'undone', conflicts: 0, decidedAt: new Date().toISOString() });
+    bridge.head = 'c3c3c3c3c3c3';
+    bridge.treeGed = researchGed('c3c3c3c3c3c3', ['1 BIRT', '2 PLAC Praha']);
+    await page.clock.fastForward(30_000);
+    await poll(page);
+    await expect(pill(page)).toContainText('Send taken back');
+    await expect(pill(page)).not.toContainText('conflict');
+    await expect(jan).not.toHaveAttribute('aria-label', /conflicting sources/);
+    await openResearchMenu(page);
+    await expect(block(page)).not.toContainText('conflict');
+});

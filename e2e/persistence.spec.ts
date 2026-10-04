@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, fillPerson, exportTreeJson } from './helpers.js';
+import { openApp, fillPerson, exportTreeJson, createFirstPerson, cardAction, personModal, card } from './helpers.js';
 
 /** Import the 53-person fixture as a new tree (it has no version: no warning, straight to the dialog). */
 async function importBigTree(page: Page, name: string): Promise<void> {
@@ -291,3 +291,55 @@ for (const width of [1100, 1200]) {
         }
     });
 }
+
+/** Edit Kamil's birth year in the person dialog and save. */
+async function saveBirthYear(page: Page, year: string): Promise<void> {
+    await cardAction(page, 'Kamil', 'edit');
+    await personModal(page).locator('#input-birthdate').fill(year);
+    await personModal(page).getByRole('button', { name: 'Save' }).click();
+}
+
+test('an edit saved right before the page is reloaded, left or closed is kept', { tag: '@smoke' }, async ({ page, context }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Kamil', 'Novak', { birthDate: '1900' });
+    await page.waitForTimeout(500);
+
+    // Reloaded at once: the write still under way went with the page before.
+    await saveBirthYear(page, '1899');
+    await page.reload();
+    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+    await expect(card(page, 'Kamil')).toContainText('1899');
+
+    // Left for another address at once.
+    await saveBirthYear(page, '1898');
+    await page.goto('/strom.html?view=tree');
+    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+    await expect(card(page, 'Kamil')).toContainText('1898');
+
+    // The tab closed at once, the app opened again.
+    await saveBirthYear(page, '1897');
+    await page.close();
+    const again = await context.newPage();
+    await again.goto('/strom.html');
+    await expect(again.locator('html')).not.toHaveClass(/app-loading/);
+    await expect(card(again, 'Kamil')).toContainText('1897');
+    // Stored: nothing is kept aside any more.
+    await expect.poll(() => again.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('strom-save-rescue:')).length)).toBe(0);
+});
+
+test('a state kept aside on leaving does not overwrite a tree stored after it', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Kamil', 'Novak', { birthDate: '1900' });
+    await saveBirthYear(page, '1895');
+    await expect(card(page, 'Kamil')).toContainText('1895');
+    // A rescue older than the stored tree (another window stored it later).
+    await page.evaluate(() => {
+        const id = (window as unknown as { Strom: { TreeManager: { getActiveTreeId(): string } } }).Strom.TreeManager.getActiveTreeId();
+        localStorage.setItem(`strom-save-rescue:${id}`, JSON.stringify({ at: Date.now() - 60_000, base: null, data: { version: 1, persons: {}, partnerships: {} } }));
+    });
+    await page.waitForTimeout(300);
+    await page.reload();
+    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+    await expect(card(page, 'Kamil')).toContainText('1895');
+    expect(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('strom-save-rescue:')).length)).toBe(0);
+});

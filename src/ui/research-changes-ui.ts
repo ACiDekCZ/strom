@@ -357,8 +357,9 @@ export const researchChangesMethods = uiModule({
     },
 
     /**
-     * Under the "N ⌄" part of the Send button when shown, else under the Send button or the research's mark
-     * (where the research is in the toolbar, R6 of the N1 round), else under ⋯; within the window.
+     * Under the "N ⌄" part of the Send button when shown, else under the Send button, the amber pill's
+     * button, the research's mark or the pill (where the research is in the toolbar, R6 of the N1 round
+     * and of beta.56), else under ⋯; within the window.
      */
     positionResearchChanges(): void {
         const panel = document.getElementById(PANEL_ID);
@@ -367,7 +368,9 @@ export const researchChangesMethods = uiModule({
             const el = document.getElementById(id);
             return el && el.offsetParent ? el : null;
         };
-        const anchor = shown('research-sync-send-more') ?? shown('research-sync-send') ?? shown('research-sync-mark')
+        const pillSend = document.querySelector<HTMLElement>('#research-sync-pill .research-sync-pill-send');
+        const anchor = shown('research-sync-send-more') ?? shown('research-sync-send')
+            ?? (pillSend?.offsetParent ? pillSend : null) ?? shown('research-sync-mark') ?? shown('research-sync-pill')
             ?? document.querySelector<HTMLElement>('.actions-menu-btn');
         const rect = anchor?.getBoundingClientRect();
         const width = Math.min(panel.offsetWidth || 380, window.innerWidth - 16);

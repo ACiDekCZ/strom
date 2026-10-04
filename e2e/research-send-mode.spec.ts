@@ -294,22 +294,100 @@ test('"Only load from the research" and following live: changes made here are ne
     await expect.poll(birthPlace).toBe('');
 });
 
-test('following live with changes to send: "Send, then load" sends them, then following starts (R3 of the N1 round)', async ({ page }) => {
+/** "What will be sent" first on a send by hand, as for a user (openResearch skips it). */
+async function previewOn(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const id = window.Strom.TreeManager.getActiveTreeId()!;
+        const key = `strom-research-auto:${id}`;
+        localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), skipPreview: false }));
+    });
+}
+
+test('following live with changes to send: "Send, then load" sends them, loads what the research added, then following starts (R3 of the N1 round, of beta.56)', async ({ page }) => {
+    const { openResearch, fakeBridge, poll, editJan, researchGed, NEW_HEAD, BRIDGE } = await import('./research-bridge.js');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openResearch(page);
+    const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null } });
+    await poll(page);
+    await previewOn(page);
+    await editJan(page, 'Praha');
+    // The research adds a person; the app has not polled since.
+    const bohumil = ['0 @P0017@ INDI', '1 NAME Bohumil /Víšek/', '1 SEX M', '1 REFN P0017', '2 TYPE strom-research'];
+    bridge.head = NEW_HEAD;
+    bridge.treeGed = researchGed(NEW_HEAD, bohumil);
+    const written = 'abcdef123456';
+    bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0061' } };
+    bridge.onWrite = () => ({ head: written, ged: researchGed(written, ['1 BIRT', '2 PLAC Praha', ...bohumil]) });
+    await page.evaluate((b) => { void window.Strom.UI.startLiveFollow(b); }, BRIDGE);
+    await page.getByRole('button', { name: 'Send, then load' }).click();
+    // Sent at once (the choice was made in the dialog: no preview), the research's version loaded.
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    await expect(page.locator('#research-changes-panel')).toHaveCount(0);
+    const names = () => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).map(p => p.firstName));
+    await expect.poll(names).toContain('Bohumil');
+    await expect(page.locator('#live-panel')).toBeVisible();
+    // Nothing of the user's lost: the research has it.
+    expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(p => p.firstName === 'Jan').birthPlace)).toBe('Praha');
+    // The research's version after the write is not taken for the app's own: nothing newer is left.
+    await poll(page);
+    expect(await page.evaluate(() => window.Strom.UI.currentResearchSyncState().core)).not.toBe('newer');
+});
+
+test('a send made before the poll saw a person the research added: its version is offered to load, ?live= loads it (R3 of beta.56)', async ({ page }) => {
     const { openResearch, fakeBridge, poll, editJan, researchGed, NEW_HEAD, BRIDGE } = await import('./research-bridge.js');
     await page.setViewportSize({ width: 1440, height: 900 });
     await openResearch(page);
     const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null } });
     await poll(page);
     await editJan(page, 'Praha');
+    const bohumil = ['0 @P0017@ INDI', '1 NAME Bohumil /Víšek/', '1 SEX M', '1 REFN P0017', '2 TYPE strom-research'];
     bridge.head = NEW_HEAD;
-    bridge.treeGed = researchGed(NEW_HEAD);
+    bridge.treeGed = researchGed(NEW_HEAD, bohumil);
     const written = 'abcdef123456';
     bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0061' } };
-    bridge.onWrite = () => ({ head: written, ged: researchGed(written, ['1 BIRT', '2 PLAC Praha']) });
-    await page.evaluate((b) => { void window.Strom.UI.startLiveFollow(b); }, BRIDGE);
-    await page.getByRole('button', { name: 'Send, then load' }).click();
+    bridge.onWrite = () => ({ head: written, ged: researchGed(written, ['1 BIRT', '2 PLAC Praha', ...bohumil]) });
+    await page.evaluate(() => window.Strom.UI.researchSendNow({ previewed: true }));
     await expect.poll(() => bridge.posts.length).toBe(1);
+    await poll(page);
+    expect(await page.evaluate(() => window.Strom.UI.currentResearchSyncState().core)).toBe('newer');
+    // Following live loads that version (never only "connected again").
+    await page.evaluate((b) => { void window.Strom.UI.startLiveFollow(b); }, BRIDGE);
+    const names = () => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).map(p => p.firstName));
+    const load = page.locator('#research-load-ok');
+    await expect.poll(async () => (await names()).includes('Bohumil') || await load.isVisible()).toBe(true);
+    if (await load.isVisible()) await load.click();
+    await expect.poll(names).toContain('Bohumil');
     await expect(page.locator('#live-panel')).toBeVisible();
-    // Nothing of the user's lost: the research has it.
-    expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(p => p.firstName === 'Jan').birthPlace)).toBe('Praha');
+    await expect(page.locator('.toast', { hasText: 'Connected to the research again' })).toHaveCount(0);
+});
+
+test('the send preview opens under the research\'s place in the toolbar from the amber pill and from Send in the menu (R6 of beta.56)', async ({ page }) => {
+    const { openResearch, fakeBridge, poll, editJan, researchGed, NEW_HEAD } = await import('./research-bridge.js');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openResearch(page);
+    await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null } })
+        .then((bridge) => { bridge.head = NEW_HEAD; bridge.treeGed = researchGed(NEW_HEAD); });
+    await previewOn(page);
+    await editJan(page, 'Praha');
+    await poll(page);
+    // Changes here and a newer version there: the amber pill with its Send.
+    const pill = page.locator('#research-sync-pill');
+    await expect(pill).toHaveClass(/is-warn/);
+    const panel = page.locator('#research-changes-panel');
+    const under = async () => {
+        await expect(panel).toBeVisible();
+        const p = (await panel.boundingBox())!;
+        const at = (await pill.boundingBox())!;
+        // Below the pill, reaching to it — not at the right edge under the actions menu.
+        expect(p.y).toBeGreaterThan(at.y + at.height - 1);
+        expect(p.x).toBeLessThan(at.x + at.width);
+        expect(p.x + p.width).toBeLessThan(1440 / 2 + p.width / 2);
+    };
+    await pill.locator('.research-sync-pill-send').click();
+    await under();
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    // Send in the research menu (it closes the menu): the same place.
+    await page.evaluate(() => window.Strom.UI.researchSendNow());
+    await under();
 });

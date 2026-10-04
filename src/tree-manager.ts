@@ -51,6 +51,22 @@ export type TreeReadResult =
     | { status: 'locked' }
     | { status: 'undecryptable' };
 
+/** localStorage key prefix of a tree state rescued when the page was left before its save landed (tree id follows). */
+const RESCUE_PREFIX = 'strom-save-rescue:';
+/** Larger states are not rescued: localStorage holds about 5 million characters per origin. */
+const RESCUE_MAX_CHARS = 4_000_000;
+
+interface RescuedSave {
+    /** When the page was left (ms). */
+    at: number;
+    base: ResearchBase | null;
+    data: StromData;
+}
+
+function forgetRescue(id: TreeId): void {
+    try { localStorage.removeItem(RESCUE_PREFIX + id); } catch { /* no storage */ }
+}
+
 /** Separator between the readable slug and the id suffix in `?tree=`. A
  * slug never contains two hyphens in a row (asciiSlug collapses them). */
 const SLUG_ID_SEPARATOR = '--';
@@ -140,6 +156,7 @@ class TreeManagerClass {
      */
     async init(): Promise<void> {
         if (this.initialized) return;
+        this.watchLeaving();
 
         // Try to load existing tree index from IDB
         const storedIndex = await StorageManager.get<TreeIndex>('trees', INDEX_KEY);
@@ -149,6 +166,7 @@ class TreeManagerClass {
             // Self-heal: an earlier bug could persist a hidden ACTIVE tree.
             this.ensureActiveVisible();
             forgetResearchKeysOfGoneTrees(new Set(storedIndex.trees.map(t => t.id)));
+            this.restoreRescuedSaves();
             return;
         }
 
@@ -184,6 +202,15 @@ class TreeManagerClass {
         // Save the index
         this.saveIndex();
         this.initialized = true;
+    }
+
+    /** Rescue saves still under way when the page goes away (see rescueUnsettledSaves). */
+    private watchLeaving(): void {
+        if (typeof window === 'undefined' || typeof document === 'undefined') return;
+        window.addEventListener('pagehide', () => this.rescueUnsettledSaves());
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') this.rescueUnsettledSaves();
+        });
     }
 
     // ==================== INDEX MANAGEMENT ====================
@@ -393,6 +420,7 @@ class TreeManagerClass {
         this.index.trees.splice(idx, 1);
         this.unreadableTrees.delete(id);
         await this.flush(id);
+        forgetRescue(id);
 
         // Remove tree data from IDB
         await StorageManager.delete('trees', id);
@@ -689,6 +717,65 @@ class TreeManagerClass {
     /** The newest state waiting to be written per tree (coalesced saves), with the research base it builds on. */
     private pendingSaves = new Map<TreeId, { data: StromData; base: ResearchBase | null }>();
 
+    /** The newest state handed to the queue per tree until its write lands (see rescueUnsettledSaves). */
+    private unsettledSaves = new Map<TreeId, { data: StromData; base: ResearchBase | null }>();
+
+    /** A write landed: when it carried the newest state, nothing of the tree waits any more. */
+    private settle(id: TreeId, written: { data: StromData; base: ResearchBase | null }): void {
+        if (this.unsettledSaves.get(id) !== written) return;
+        this.unsettledSaves.delete(id);
+        forgetRescue(id);
+    }
+
+    /**
+     * The page is going away (pagehide, or hidden: a phone may end it without
+     * another event) while a save has not landed: IndexedDB writes still under
+     * way are dropped with the page, so an edit saved just before leaving
+     * was lost. Each such tree's newest state goes to localStorage (written
+     * at once) and the next start stores it (restoreRescuedSaves). Not for
+     * encrypted trees (it would lie there in plain text) nor for a tree too
+     * big for localStorage.
+     */
+    rescueUnsettledSaves(): void {
+        if (this.unsettledSaves.size === 0 || SettingsManager.isEncryptionEnabled()) return;
+        for (const [id, entry] of this.unsettledSaves) {
+            try {
+                const json = JSON.stringify({ at: Date.now(), base: entry.base, data: entry.data } satisfies RescuedSave);
+                if (json.length > RESCUE_MAX_CHARS) continue;
+                localStorage.setItem(RESCUE_PREFIX + id, json);
+            } catch { /* no room or no storage: best effort */ }
+        }
+    }
+
+    /**
+     * Store the states rescued when a page was left before its save landed
+     * (rescueUnsettledSaves) — unless the tree is gone or was stored again
+     * after the rescue (another window, or the write landed after all).
+     */
+    private restoreRescuedSaves(): void {
+        let keys: string[];
+        try {
+            keys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key?.startsWith(RESCUE_PREFIX)) keys.push(key);
+            }
+        } catch { return; }
+        for (const key of keys) {
+            const id = key.slice(RESCUE_PREFIX.length) as TreeId;
+            let rescued: RescuedSave | null = null;
+            try { rescued = JSON.parse(localStorage.getItem(key) ?? 'null') as RescuedSave | null; } catch { /* unreadable */ }
+            const tree = this.index.trees.find(t => t.id === id);
+            const storedAt = tree ? Date.parse(tree.lastModifiedAt) : NaN;
+            if (!rescued?.data || !tree || SettingsManager.isEncryptionEnabled() || (storedAt > rescued.at)) {
+                forgetRescue(id);
+                continue;
+            }
+            rescued.data.version = STROM_DATA_VERSION;
+            this.queueWrite(id, { data: rescued.data, base: rescued.base ?? null });
+        }
+    }
+
     /** Trees whose stored data could not be read (see readTreeData). */
     private unreadableTrees = new Set<TreeId>();
 
@@ -726,14 +813,20 @@ class TreeManagerClass {
         // shares strings (photos, scans) with the live data, so it is cheap
         // even for a tree carrying tens of MB of images.
         const snapshot = cloneTreeDataAsJson(data);
+        // The research base as this window has it NOW, with this very data.
+        this.queueWrite(id, { data: snapshot, base: this.researchBaseOf(id) });
+    }
 
+    /** Put a state on the tree's write queue (see saveTreeData). */
+    private queueWrite(id: TreeId, entry: { data: StromData; base: ResearchBase | null }): void {
+        // Not stored until its write lands: a page left before that keeps it in a rescue copy (rescueUnsettledSaves).
+        this.unsettledSaves.set(id, entry);
         // A write for this tree still waiting in the queue takes this newer
         // state instead of queueing another full copy: rapid edits used to
         // stack one whole serialized tree per edit (out of memory with big
         // image sets). Only the latest state matters, order is unchanged.
         const waiting = this.pendingSaves.has(id);
-        // The research base as this window has it NOW, with this very data.
-        this.pendingSaves.set(id, { data: snapshot, base: this.researchBaseOf(id) });
+        this.pendingSaves.set(id, entry);
         if (waiting) return;
 
         const prev = this.saveQueues.get(id) ?? Promise.resolve();
@@ -743,7 +836,10 @@ class TreeManagerClass {
             if (!pending) return;
             const latest = pending.data;
             // Deleted meanwhile: never resurrect the record (review S20).
-            if (!this.index.trees.some(t => t.id === id)) return;
+            if (!this.index.trees.some(t => t.id === id)) {
+                this.settle(id, pending);
+                return;
+            }
             const images = collectPoolable(latest);
             if (images.size > 0) {
                 await this.writePooledTree(id, latest, images, pending.base);
@@ -758,6 +854,7 @@ class TreeManagerClass {
                 await this.writeTreeRecord(id, latest, pending.base);
                 this.updateMetadata(id, latest, sizeBytes);
             }
+            this.settle(id, pending);
             // Other tabs with this tree open must learn their copy is stale.
             announceTreeSaved(id);
         }).catch((err) => {

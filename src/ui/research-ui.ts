@@ -1257,12 +1257,14 @@ export const researchUiMethods = uiModule({
                 if (choice === 'sendThenLoad') {
                     const live = opts.live;
                     if (live) {
-                        // Starting to follow live: sent first, then following starts again — the research holds
-                        // the changes now, so nothing is replaced (R3 of the N1 round).
-                        void this.researchSendTree(existing.id).then(() => {
-                            const sent = TreeManager.getTreeMetadata(existing.id)?.research?.sent;
-                            if (sent?.state === 'written' && DataManager.getCurrentTreeId() === existing.id
-                                && contentFingerprint(DataManager.getData()) === sent.fingerprint) void this.startLiveFollow(live);
+                        // Starting to follow live: sent and its version loaded (no preview — the choice was
+                        // made here), then following starts — on a tree that is the research's version now,
+                        // nothing is asked again (R3 of the N1 round, of beta.56). A write left with conflicts
+                        // or not loaded: the tree stays as it is, the research menu tells what is next.
+                        void this.researchSendTree(existing.id, { thenLoad: true }).then(() => {
+                            const link = TreeManager.getTreeMetadata(existing.id)?.research;
+                            if (link && DataManager.getCurrentTreeId() === existing.id
+                                && this.researchSyncFingerprints(existing.id, link).matchesBase) void this.startLiveFollow(live);
                         });
                         return null;
                     }
