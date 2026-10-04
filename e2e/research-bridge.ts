@@ -80,6 +80,8 @@ export interface FakeBridge {
     strom?: string;
     /** Tasks waiting for the user (`/status.waiting`). */
     waiting?: unknown[];
+    /** What the bridge says it can do (`/status.features`, 1.12.0-rc.20). */
+    features?: string[];
 }
 
 export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
@@ -142,6 +144,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ...(b.batches ? { batches: b.batches } : {}),
                 ...(b.strom ? { strom: b.strom } : {}),
                 ...(b.waiting ? { waiting: b.waiting } : {}),
+                ...(b.features ? { features: b.features } : {}),
                 ...(b.accepts ? { sends: b.sends } : {}),
             });
         }

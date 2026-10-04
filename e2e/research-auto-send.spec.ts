@@ -603,6 +603,31 @@ test('findings D/E: "Send, then load" with a conflict still open over the user\'
     await expect(block(page)).toContainText("The research isn't running");
 });
 
+test('finding 43 by the bridge\'s features (rc.20): sync.takenBack lets edits go after an undo, whatever its version; a send written again elsewhere clears the bar', async ({ page }) => {
+    const bridge = await writtenThenUndone(page, { strom: '1.11.0', features: ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.conflictEdit'] });
+    const first = bridge.sends.find(r => r.state === 'undone')!;
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, input: 'I0044', changes: 1, applied: 1, undoneSince: [first.intake], takenBack: 1 } };
+    bridge.onWrite = () => ({ head: 'e3e3e3e3e3e3', ged: researchGed('e3e3e3e3e3e3') });
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    expect(bridge.againAsks ?? []).toEqual([]);
+    await expect(pill(page)).toContainText('Send taken back');
+    // Written again in the research (another window's Send again): the bar goes at the next answer.
+    (first as { again?: string }).again = 'R20261004060000000-zzzz';
+    await poll(page);
+    await expect(pill(page)).not.toContainText('Send taken back');
+    expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).not.toBe('undone');
+});
+
+test('finding 43, a bridge whose features lack sync.takenBack: nothing goes by itself after an undo, whatever its version', async ({ page }) => {
+    const bridge = await writtenThenUndone(page, { strom: '1.12.0', features: ['sync.again'] });
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET * 2);
+    await poll(page);
+    expect(bridge.posts).toHaveLength(1);
+});
+
 test('a write that takes longer (202): "writing" until the status says written, then loaded quietly', async ({ page }) => {
     const bridge = await autoTree(page);
     bridge.syncReply = { status: 202, body: { ok: true, inbox: false, pending: true, changes: 6 } };

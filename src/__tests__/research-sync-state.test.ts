@@ -463,6 +463,13 @@ describe('a research that leaves out what a send taken back brought (finding 43)
         expect(researchKeepsTakenBack('1.11.4')).toBe(false);
         expect(researchKeepsTakenBack('')).toBe(false);
     });
+    it('by the bridge\'s features first (rc.20), its version only without them', () => {
+        expect(researchKeepsTakenBack('1.12.0-rc.18', ['sync.again', 'sync.takenBack'])).toBe(true);
+        expect(researchKeepsTakenBack('1.12.0', ['sync.again'])).toBe(false);
+        expect(researchKeepsTakenBack('1.12.0-rc.19', null)).toBe(true);
+        expect(sanitizeLiveStatus({ tree: { id: RID }, features: ['sync.again', 'sync.takenBack', 42, '<x>'] })?.features).toEqual(['sync.again', 'sync.takenBack']);
+        expect(sanitizeLiveStatus({ tree: { id: RID } })?.features).toBeNull();
+    });
     it('the reply says how many changes it left out', () => {
         expect(sanitizeSyncReply({ ok: true, takenBack: 2, undoneSince: ['R1'] })).toMatchObject({ takenBack: 2, undoneSince: ['R1'] });
         expect(sanitizeSyncReply({ ok: true }).takenBack).toBeNull();
@@ -479,5 +486,11 @@ describe('the send taken back a reply names (finding B)', () => {
         expect(latestUndone(['R8', 'R9'], sends)).toBe('R9');
         expect(latestUndone(['R1', 'R2'], null)).toBe('R2');
         expect(latestUndone([], sends)).toBe('');
+    });
+    it('a send written again since (`again`) is not taken back any more', () => {
+        const sends = [rec('R1', '2026-10-04T05:50:00Z', 'undone'), { ...(rec('R2', '2026-10-04T05:55:00Z', 'undone') as object), again: 'R4' } as never];
+        expect(latestUndone(['R1', 'R2'], sends)).toBe('R1');
+        expect(latestUndone(['R2'], sends)).toBe('');
+        expect(sanitizeLiveStatus({ tree: { id: RID }, sends: [{ intake: 'R2', state: 'undone', again: 'R4' }] })?.sends?.[0].again).toBe('R4');
     });
 });

@@ -333,11 +333,13 @@ export function heldConflicts(previous: StromData, incoming: StromData, base: st
 
 /**
  * The research leaves out of a copy what a send taken back since its base
- * brought (`takenBack`, Strom Research 1.12.0-rc.19): edits after an undo may
- * go by themselves. An older bridge would write the send taken back again
- * (finding 43), so there nothing goes until the user decides. '' = not known.
+ * brought (`takenBack`): edits after an undo may go by themselves. Its bridge
+ * says so in `features` (1.12.0-rc.20); without them, by its version
+ * (1.12.0-rc.19). An older bridge would write the send taken back again
+ * (finding 43), so there nothing goes until the user decides.
  */
-export function researchKeepsTakenBack(version: string): boolean {
+export function researchKeepsTakenBack(version: string, features?: readonly string[] | null): boolean {
+    if (features) return features.includes('sync.takenBack');
     const m = /^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?/.exec(version.trim());
     if (!m) return false;
     const [major, minor, patch] = [Number(m[1]), Number(m[2]), Number(m[3])];
@@ -350,17 +352,22 @@ export function researchKeepsTakenBack(version: string): boolean {
 
 /**
  * Which send a reply's `undoneSince` names for "Send again": the latest of
- * them by the research's records (the list may name every send taken back
- * after the copy's base, in any order — never simply its last mark, finding B).
- * Marks the status does not list (it keeps only its last sends) count as older.
- * Without the research's records, its last mark. '' = none.
+ * them not written again since (`again` in the research's records); the list may name every send taken back after the
+ * copy's base, in any order, never simply its last mark (finding B). Marks the
+ * status does not list (it keeps only its last sends) count as older and still
+ * taken back. Without the research's records, its last mark. '' = none.
  */
 export function latestUndone(undoneSince: readonly string[], sends: readonly ResearchSendRecord[] | null | undefined): string {
     if (undoneSince.length === 0) return '';
+    if (!sends) return undoneSince[undoneSince.length - 1];
+    const rec = (intake: string) => sends.find(r => r.intake === intake);
+    // The reply is now; the status may be older than the undo: only a send written again (`again`) is left out.
+    const open = undoneSince.filter(x => !rec(x)?.again);
+    if (open.length === 0) return '';
     const time = (intake: string): number => {
-        const t = Date.parse(sends?.find(r => r.intake === intake)?.at ?? '');
+        const t = Date.parse(rec(intake)?.at ?? '');
         return Number.isFinite(t) ? t : -Infinity;
     };
-    if (!sends || undoneSince.every(x => time(x) === -Infinity)) return undoneSince[undoneSince.length - 1];
-    return undoneSince.reduce((best, x) => (time(x) > time(best) ? x : best));
+    if (open.every(x => time(x) === -Infinity)) return open[open.length - 1];
+    return open.reduce((best, x) => (time(x) > time(best) ? x : best));
 }

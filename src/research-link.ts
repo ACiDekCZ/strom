@@ -814,6 +814,8 @@ export interface LiveStatus {
     sends: ResearchSendRecord[] | null;
     /** The research's own version (`strom`, "1.11.0"; '' = not said). */
     version: string;
+    /** What its bridge can do (`features`, "sync.takenBack" …; Strom Research 1.12.0-rc.20); null: not said (older). */
+    features: string[] | null;
     /** Batches of "Add materials" of the last days and any not yet sorted; null: an older research. */
     batches: LiveBatch[] | null;
 }
@@ -869,6 +871,8 @@ export interface ResearchSendRecord {
     conflicts: number | null;
     /** The persons those conflicts are about (research refs). */
     conflictPersons: string[];
+    /** Taken back and written again since (`again`: the mark of that send, or true); '' = not. */
+    again?: string;
 }
 
 const SEND_STATES = new Set(['pending', 'written', 'discarded', 'replaced', 'nothing', 'undone', 'failed']);
@@ -897,6 +901,7 @@ export function sanitizeSends(value: unknown): ResearchSendRecord[] | null {
             reason: cleanText(r.reason, 200),
             conflicts: conflictCount(r.conflicts),
             conflictPersons: conflictPersons(r.conflicts),
+            ...(r.again === true ? { again: 'yes' } : headerToken(r.again) ? { again: headerToken(r.again)! } : {}),
         });
     }
     return out;
@@ -1263,6 +1268,8 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         inbox: sanitizeInbox(r.inbox),
         sends: sanitizeSends(r.sends),
         version: researchVersion(r.strom),
+        features: Array.isArray(r.features)
+            ? r.features.slice(0, 50).filter((f): f is string => typeof f === 'string' && /^[a-z][a-zA-Z0-9.-]{0,40}$/.test(f)) : null,
         batches: sanitizeBatches(r.batches),
     };
 }

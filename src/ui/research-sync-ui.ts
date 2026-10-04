@@ -519,6 +519,7 @@ export const researchSyncMethods = uiModule({
         if (status) {
             await this.settleResearchSend(ctx.treeId, status);
             this.researchNoteUndone(ctx.treeId, status);
+            this.researchNoteWrittenAgain(ctx.treeId, status);
         }
         this.refreshResearchSyncUi();
         // Updated since: it takes sends now — what waits starts its quiet time.
@@ -675,6 +676,24 @@ export const researchSyncMethods = uiModule({
             closable: true,
             action: { label: s.sendAgain, run: () => { void this.researchSendTree(treeId, { undoAgain: true }); } },
         });
+    },
+
+    /**
+     * The send shown as taken back was written again since (`again` in its
+     * record: Send again from another window, or in the research): not taken
+     * back any more (finding B). Its changes are there again; what was edited
+     * since goes as usual.
+     */
+    researchNoteWrittenAgain(treeId: TreeId, status: LiveStatus): void {
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        const sent = link?.sent;
+        if (!link || sent?.state !== 'undone' || !sent.intake || !status.sends) return;
+        const rec = status.sends.find(r => r.intake === sent.intake);
+        if (!rec?.again) return;
+        TreeManager.patchResearchLink(treeId, { sent: { ...sent, state: 'written', closedAt: rec.decidedAt || new Date().toISOString(), takenBack: undefined } });
+        fpCache = null;
+        this.refreshResearchSyncUi();
+        this.researchAutoArm();
     },
 
     // ==================== SENDING BY ITSELF ====================
@@ -1811,7 +1830,8 @@ export const researchSyncMethods = uiModule({
      * (`takenBack`), so edits since go as usual and the send taken back stays out.
      */
     researchHoldsForUndo(link: ResearchLink): boolean {
-        return link.sent?.state === 'undone' && !researchKeepsTakenBack(this.researchBridgeVersion(link.id));
+        return link.sent?.state === 'undone'
+            && !researchKeepsTakenBack(this.researchBridgeVersion(link.id), runtime.get(link.id)?.status?.features);
     },
 
     /** Conflicts a send written beside a send taken back left open (0: none). */
