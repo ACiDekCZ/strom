@@ -70,17 +70,22 @@ export const researchLoadMethods = uiModule({
      * Ask before the research's version (`there`, stabilized to this tree's
      * ids) replaces `here`. `off`: the tree only loads from the research;
      * `notWritten`: changes of the last send the research did not write.
-     * `sexUnknown`: people whose sex the research leaves unknown, their sex here kept.
+     * `sexUnknown`: people whose sex the research leaves unknown, their sex here kept;
+     * `sexUnknownRefns`: the reference numbers of all whose sex it leaves unknown.
      */
     askResearchLoad(treeName: string, versionDate: string, here: StromData, there: StromData,
-        opts: { off?: boolean; notWritten?: number; images?: { label: string; detail: string; checked: boolean }; sexUnknown?: { name: string; gender: Gender }[] } = {}): Promise<{ choice: 'load' | 'copy'; images: boolean } | null> {
+        opts: { off?: boolean; notWritten?: number; images?: { label: string; detail: string; checked: boolean }; sexUnknown?: { name: string; gender: Gender }[]; sexUnknownRefns?: ReadonlySet<string> } = {}): Promise<{ choice: 'load' | 'copy'; images: boolean } | null> {
         document.querySelectorAll(`#${LOAD_ID}`).forEach(el => el.remove());
         const s = strings.sync;
         const diff = diffValues(here, there);
         const people = new Set(diff.rows.map(r => r.personId)).size;
+        const theirs = there;
         const row = (r: ValueChange, first: boolean): string => {
             const here = valueText(r, r.here);
-            const there = r.field === 'person' ? s.fieldPersonGone : valueText(r, r.there);
+            // A sex the research gives none for: the sex here is the app's guess, said so (N61-2).
+            const noSex = r.field === 'gender' && !!opts.sexUnknownRefns?.has(theirs.persons[r.personId]?.refn?.trim() ?? '');
+            const there = r.field === 'person' ? s.fieldPersonGone
+                : noSex ? s.loadSexUnknownThere(valueText(r, r.there).toLocaleLowerCase()) : valueText(r, r.there);
             return `<tr${first ? ' class="is-first"' : ''}>`
                 + `<td class="research-load-who">${first ? esc(r.name) : ''}</td>`
                 + `<td class="research-load-field">${esc(fieldLabel(r))}${r.conflict ? ` <span class="research-load-conflict">${esc(s.conflictTag)}</span>` : ''}</td>`

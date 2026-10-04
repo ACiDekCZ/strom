@@ -784,6 +784,9 @@ test('connected again by ?live= with changes here: Follow live on the toast asks
     await page.evaluate((b) => { void window.Strom.UI.startLiveFollow(b); }, BRIDGE);
     const toast = page.locator('.toast', { hasText: 'Connected to the research again' });
     await toast.getByRole('button', { name: 'Follow live' }).click();
+    // The research has nothing newer than the tree's base: not said it has (N61-4).
+    await expect(page.getByRole('button', { name: 'Send, then load' })).toBeVisible();
+    await expect(page.locator('.modal-overlay.active').last()).not.toContainText('the research has a newer version');
     await page.getByRole('button', { name: 'Send, then load' }).click();
     await expect.poll(() => bridge.posts.length).toBe(1);
     await expect.poll(() => page.evaluate(() => window.Strom.UI.isFollowingActiveResearch())).toBe(true);
@@ -825,6 +828,39 @@ test('rc.23 / N1: a copy built on a written send whose version was not loaded sa
     await expect.poll(() => bridge.posts.length).toBe(4);
     expect(bridge.posts[3]).not.toContain('_STROM_SINCE');
     expect(bridge.posts[3]).toContain(`1 _STROM_HEAD ${loaded}`);
+});
+
+test('a restored backup sends the base it kept: _STROM_HEAD and _STROM_SINCE of when it was taken (N61-3)', async ({ page }) => {
+    const bridge = await autoTree(page, { features: ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.since'] });
+    const base = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head);
+    expect(base).toBeTruthy();
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0001', person: 'P0003', fact: 'NAME' }] } };
+    bridge.onWrite = () => ({ head: 'c1c1c1c1c1c1', ged: nameConflictGed('c1c1c1c1c1c1') });
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    const first = bridge.sends[0].intake;
+    // A backup now: the copy the research took in, on the head the tree stands on.
+    const snap = await page.evaluate(() => window.Strom.DataManager.snapshotNow('manual'));
+    expect(snap).toBeTruthy();
+    // Then the research's version is loaded here (a newer head) and an edit goes on it.
+    const loaded = bridge.head;
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    await page.locator('.dialog-confirm').getByRole('button', { name: 'Update' }).click({ timeout: 3000 }).catch(() => undefined);
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(loaded);
+    bridge.syncReply = WRITE;
+    await janBirthPlace(page, 'Praha');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    expect(bridge.posts[1]).toContain(`1 _STROM_HEAD ${loaded}`);
+    // The backup restored: its data build on the head and the copy of when it was taken, and the next send says so.
+    expect(await page.evaluate((id) => window.Strom.DataManager.restoreSnapshot(id!).then(r => !!r), snap)).toBe(true);
+    expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(base);
+    await janBirthPlace(page, 'Brno');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(3);
+    expect(bridge.posts[2]).toContain(`1 _STROM_HEAD ${base}`);
+    expect(bridge.posts[2]).toContain(`1 _STROM_SINCE ${first}`);
 });
 
 /** A write that left a conflict over the user's value: its version not loaded, the conflict in sight. */

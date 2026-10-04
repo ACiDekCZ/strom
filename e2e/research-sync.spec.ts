@@ -278,6 +278,7 @@ test.describe('updating over changes the research does not have', () => {
         await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
         const dialog = page.locator('#confirmation-modal');
         await expect(dialog).toContainText("There are changes the research doesn't have");
+        await expect(dialog).toContainText('the research has a newer version');
         await expect(dialog.locator('.confirm-aside-btn')).toHaveText('Load without changes');
         await dialog.getByRole('button', { name: 'Send, then load' }).click();
         await expect(page.locator('.toast')).toContainText('Sent to the research');

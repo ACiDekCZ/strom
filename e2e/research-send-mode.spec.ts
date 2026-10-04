@@ -466,6 +466,39 @@ test('a sex the research leaves unknown is said in the load dialog and as a word
     await expect(knows.locator('td').filter({ hasText: /^U$/ })).toHaveCount(0);
 });
 
+test('the load dialog says every sex the research leaves unknown: one that stays as a line (a husband too), one that changes as "unknown (… here)" (N61-1, N61-2)', async ({ page }) => {
+    const { openResearch, fakeBridge, poll, researchGed, NEW_HEAD } = await import('./research-bridge.js');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openResearch(page);
+    const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null } });
+    await poll(page);
+    const dialog = page.locator('#research-load-modal');
+    const anna = () => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Anna') as any).gender);
+    // A version where Anna is a man: loaded, so the tree holds her as one.
+    bridge.head = NEW_HEAD;
+    bridge.treeGed = researchGed(NEW_HEAD).replace('1 NAME Anna /Svobodová/\n1 SEX F', '1 NAME Anna /Svobodová/\n1 SEX M');
+    await poll(page);
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    await dialog.locator('#research-load-ok').click();
+    await expect.poll(anna).toBe('male');
+    await expect(page.locator('.toast', { hasText: 'Research version loaded' })).toBeVisible();
+    await page.waitForTimeout(300);
+    // Then the research gives no sex for Josef (husband) and Anna (wife).
+    bridge.head = 'c3c3c3c3c3c3';
+    bridge.treeGed = researchGed('c3c3c3c3c3c3')
+        .replace('1 NAME Josef /Víšek/\n1 SEX M', '1 NAME Josef /Víšek/\n1 SEX U')
+        .replace('1 NAME Anna /Svobodová/\n1 SEX F', '1 NAME Anna /Svobodová/\n1 SEX U');
+    await poll(page);
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    await expect(dialog).toBeVisible();
+    // Josef stays a man (the guess for a husband): said, though nothing was kept against the guess.
+    await expect(dialog.locator('.research-load-sex')).toHaveText(['Josef Víšek: the research gives no sex, male stays here.']);
+    // Anna turns a woman (the guess for a wife): the research gives none, said so in the row.
+    await expect(dialog.locator('.research-load-table')).toContainText('Male → unknown (female here)');
+    await dialog.locator('#research-load-ok').click();
+    await expect.poll(anna).toBe('female');
+});
+
 test('a research copy kept for another fingerprint than the one stored beside it is not compared: no list of changes the user never made (N60-3)', async ({ page }) => {
     const { openResearch, fakeBridge, poll, editJan } = await import('./research-bridge.js');
     await page.setViewportSize({ width: 1440, height: 900 });

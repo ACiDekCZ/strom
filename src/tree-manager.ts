@@ -26,7 +26,8 @@ import { isEncrypted, EncryptedData, CryptoSession, decrypt } from './crypto.js'
 import { SettingsManager } from './settings.js';
 import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
-import { createSnapshot } from './snapshots.js';
+import { createSnapshot, SnapshotResearchBase } from './snapshots.js';
+import { researchAutoState, patchResearchAutoState } from './research-device.js';
 import { researchBaseKey } from './storage-keys.js';
 import { requestPersistentStorage } from './persistence.js';
 import { asciiSlug } from './filenames.js';
@@ -841,7 +842,7 @@ class TreeManagerClass {
             const same = stored.status === 'ok' && JSON.stringify({ ...stored.data, version: 0 }) === JSON.stringify({ ...rescued.data, version: 0 });
             if (!same) {
                 rescued.data.version = STROM_DATA_VERSION;
-                await createSnapshot(id, rescued.data, 'closed-tab', rescued.at);
+                await createSnapshot(id, rescued.data, 'closed-tab', rescued.at, this.backupResearchBase(id, rescued.base ?? null));
             }
             forgetRescueKey(key);
         } catch (err) {
@@ -999,10 +1000,37 @@ class TreeManagerClass {
     }
 
     /**
+     * The research base a backup of a tree's data keeps (N61-3): `base` (what
+     * the data build on) with the research's id, and the copy the research
+     * took in on that head (`_STROM_SINCE`). Null for a tree not linked.
+     */
+    backupResearchBase(id: TreeId, base: ResearchBase | null): SnapshotResearchBase | null {
+        const link = this.index.trees.find(t => t.id === id)?.research;
+        if (!link || !base) return null;
+        const lastCopy = researchAutoState(id).lastCopy;
+        const since = lastCopy && lastCopy.base === base.head ? lastCopy.intake : undefined;
+        return { id: link.id, head: base.head, fingerprint: base.fingerprint, ...(since ? { since } : {}) };
+    }
+
+    /**
+     * The base a restored backup builds on: the one it kept, while the tree is
+     * still linked to the same research; else null. Puts back the copy that
+     * base was that one plus edits of, so the next send says the same.
+     */
+    restoredBackupBase(id: TreeId, kept: SnapshotResearchBase | undefined): ResearchBase | null {
+        const link = this.index.trees.find(t => t.id === id)?.research;
+        if (!link || !kept || kept.id !== link.id || !kept.head) return null;
+        const lastCopy = researchAutoState(id).lastCopy;
+        if (kept.since) patchResearchAutoState(id, { lastCopy: { intake: kept.since, base: kept.head } });
+        else if (lastCopy?.base === kept.head) patchResearchAutoState(id, { lastCopy: undefined });
+        return { head: kept.head, fingerprint: kept.fingerprint };
+    }
+
+    /**
      * Put a tree's link back on the base its data build on: data restored by
-     * undo / redo take their base with them. `null` = unknown (a restored
-     * backup): no head (the research then only adds) and no fingerprint (an
-     * update asks first).
+     * undo / redo take their base with them. `null` = unknown (a backup that
+     * kept none): no head (the research then takes each value that differs
+     * from its own for a conflict) and no fingerprint (an update asks first).
      */
     restoreResearchBase(id: TreeId, base: ResearchBase | null): void {
         const link = this.index.trees.find(t => t.id === id)?.research;

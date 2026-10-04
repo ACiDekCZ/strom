@@ -35,6 +35,19 @@ export interface SnapshotMeta {
     reason: SnapshotReason;
     /** Pooled images the snapshot refers to: content id → stored bytes. */
     media?: Record<string, number>;
+    /**
+     * The research base its data built on when it was taken (a linked tree):
+     * a restore puts it back, so the next send names that head (N61-3).
+     */
+    research?: SnapshotResearchBase;
+}
+
+/** The research link a snapshot's data built on: the research's id, the base, and the copy it was that one plus edits of (`_STROM_SINCE`). */
+export interface SnapshotResearchBase {
+    id: string;
+    head: string;
+    fingerprint: string;
+    since?: string;
 }
 
 /** IndexedDB record: meta + exactly one payload encoding. */
@@ -141,7 +154,7 @@ async function writeSnapshot(data: StromData, meta: SnapshotMeta): Promise<Snaps
  * plain if compression is unavailable). Enforces retention before returning.
  */
 export function createSnapshot(
-    treeId: string, data: StromData, reason: SnapshotReason, now: number
+    treeId: string, data: StromData, reason: SnapshotReason, now: number, research?: SnapshotResearchBase | null
 ): Promise<SnapshotMeta> {
     if (SettingsManager.isEncryptionEnabled() && !CryptoSession.isUnlocked()) {
         // Defense in depth: with encryption on but the session locked, the
@@ -153,7 +166,7 @@ export function createSnapshot(
     return withPoolLock(async () => {
         const personCount = Object.values(data.persons).filter(p => !p.isPlaceholder).length;
         const id = `snap_${now}_${uniqueIdSuffix()}`;
-        const meta = await writeSnapshot(data, { id, treeId, createdAt: now, personCount, sizeBytes: 0, reason });
+        const meta = await writeSnapshot(data, { id, treeId, createdAt: now, personCount, sizeBytes: 0, reason, ...(research ? { research } : {}) });
         await enforceRetention(treeId);
         await collectPoolGarbageLocked();
         // Automatic backups finish in the background: an open backups list
@@ -357,13 +370,13 @@ async function readSnapshotText(s: StoredSnapshot): Promise<string | null> {
  * Decode a snapshot back to the tree's JSON (decrypt / gunzip / plain, images
  * put back). `missingImages` counts images the pool no longer had.
  */
-export async function getSnapshotPayload(id: string): Promise<{ json: string; missingImages: number } | null> {
+export async function getSnapshotPayload(id: string): Promise<{ json: string; missingImages: number; research?: SnapshotResearchBase } | null> {
     const s = await StorageManager.get<StoredSnapshot>('snapshots', id);
     if (!s) return null;
     const text = await readSnapshotText(s);
     if (text === null) return null;
     const { json, missing } = await unpoolJson(text);
-    return { json, missingImages: missing };
+    return { json, missingImages: missing, ...(s.meta?.research ? { research: s.meta.research } : {}) };
 }
 
 /** Decode a snapshot back to a raw JSON string (see getSnapshotPayload). */

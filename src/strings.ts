@@ -1008,6 +1008,7 @@ const stringsEN = {
         nothingOverwritten: 'Nothing here will be overwritten.',
         /** A person whose sex the research leaves unknown (SEX U): the tree's stays. */
         loadSexUnknown: (name: string, sex: string) => `${name}: the research gives no sex, ${sex} stays here.`,
+        loadSexUnknownThere: (sex: string) => `unknown (${sex} here)`,
         loadSexUnknownMany: (n: number) => `The research gives no sex for ${nEn(n, 'person', 'people')}; the sex here stays.`,
         loadBackupNote: 'A backup is saved before loading; it can be restored.',
         offOverwrite: 'Changes from this tree are not sent to the research. These values here will be overwritten by the research version.',
@@ -4458,6 +4459,7 @@ const stringsCZ: StringsType = {
         loadAdded: (p: number, f: number) => `Z výzkumu přibude: ${[p ? `+ ${nCs(p, 'osoba', 'osoby', 'osob')}` : '', f ? nCs(f, 'údaj', 'údaje', 'údajů') : ''].filter(Boolean).join(', ')}`,
         nothingOverwritten: 'Tady se nic nepřepíše.',
         loadSexUnknown: (name: string, sex: string) => `${name}: výzkum pohlaví neuvádí, tady zůstává ${sex}.`,
+        loadSexUnknownThere: (sex: string) => `neznámé (tady ${sex})`,
         loadSexUnknownMany: (n: number) => `Výzkum neuvádí pohlaví u ${nCs(n, 'osoby', 'osob', 'osob')}; tady zůstává, jaké je.`,
         loadBackupNote: 'Před načtením se uloží záloha, půjde vrátit.',
         offOverwrite: 'Úpravy se z tohoto stromu do výzkumu neposílají. Tyto hodnoty tady se přepíšou verzí výzkumu.',
@@ -7898,6 +7900,7 @@ const stringsDE: StringsType = {
         loadAdded: (p: number, f: number) => `Aus der Forschung kommen hinzu: ${[p ? `+ ${nDe(p, 'Person', 'Personen')}` : '', f ? nDe(f, 'Angabe', 'Angaben') : ''].filter(Boolean).join(', ')}`,
         nothingOverwritten: 'Hier wird nichts überschrieben.',
         loadSexUnknown: (name: string, sex: string) => `${name}: Die Forschung nennt kein Geschlecht, hier bleibt ${sex}.`,
+        loadSexUnknownThere: (sex: string) => `unbekannt (hier ${sex})`,
         loadSexUnknownMany: (n: number) => `Die Forschung nennt bei ${nDe(n, 'Person', 'Personen')} kein Geschlecht; das hiesige bleibt.`,
         loadBackupNote: 'Vor dem Laden wird gesichert; ein Zurück ist möglich.',
         offOverwrite: 'Änderungen aus diesem Stammbaum werden nicht an die Forschung gesendet. Diese Werte hier werden durch die Version der Forschung überschrieben.',

@@ -524,16 +524,6 @@ export function sexUByRefn(data: StromData, unknown: ReadonlySet<PersonId>): Rec
     return out;
 }
 
-/** The people of `next` keepKnownSex keeps a sex for: the research leaves theirs unknown, the previous state has them. */
-export function sexKeptUnknown(next: StromData, previous: StromData, guessed: ReadonlySet<PersonId>): PersonId[] {
-    if (guessed.size === 0) return [];
-    const prevByRefn = uniqueRefns(previous);
-    return [...guessed].filter(id => {
-        const refn = next.persons?.[id]?.refn?.trim();
-        return !!refn && prevByRefn.has(refn);
-    });
-}
-
 /** Reference numbers that occur exactly once, mapped to their person id. */
 function uniqueRefns(data: StromData): Map<string, PersonId> {
     const seen = new Map<string, PersonId | null>();

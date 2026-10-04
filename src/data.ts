@@ -1097,7 +1097,7 @@ class DataManagerClass {
         UndoManager.setActiveTree(this.currentTreeId);
         if (this.pendingBefore) {
             // Auto-backup the FIRST mutation of the day (state before it).
-            this.maybeAutoSnapshot(this.pendingBefore);
+            this.maybeAutoSnapshot(this.pendingBefore, this.pendingBase);
             UndoManager.push({ data: this.pendingBefore, description, base: this.pendingBase });
             this.pendingBefore = null;
         }
@@ -1264,7 +1264,7 @@ class DataManagerClass {
     /** In-session guard so only the first mutation of a day auto-snapshots. */
     private lastAutoSnapshotDay = new Map<TreeId, string>();
 
-    private maybeAutoSnapshot(before: StromData): void {
+    private maybeAutoSnapshot(before: StromData, base: ResearchBase | null): void {
         if (this.viewMode || !this.currentTreeId) return;
         // An empty pre-state has nothing worth restoring — don't create a
         // useless "0 people" backup, and don't consume the daily slot either
@@ -1280,8 +1280,9 @@ class DataManagerClass {
         // The in-memory guard resets on reload — check the store too, so the
         // first edit after every reload does not replace the day's backup
         // with a later state.
+        const research = TreeManager.backupResearchBase(treeId, base);
         void hasAutoSnapshotOnDay(treeId, now)
-            .then(exists => exists ? undefined : createSnapshot(treeId, before, 'auto', now))
+            .then(exists => exists ? undefined : createSnapshot(treeId, before, 'auto', now, research))
             .catch(() => {});
     }
 
@@ -1294,7 +1295,7 @@ class DataManagerClass {
         if (this.viewMode || this.currentTreeId !== treeId || this.otherWindowSnapshots.has(treeId)) return;
         if (!TreeManager.isAutoBackupEnabled(treeId) || this.isTreeLocked()) return;
         this.otherWindowSnapshots.add(treeId);
-        await createSnapshot(treeId, this.data, 'other-window', Date.now());
+        await createSnapshot(treeId, this.data, 'other-window', Date.now(), TreeManager.backupResearchBase(treeId, TreeManager.researchBaseOf(treeId)));
     }
 
     async snapshotNow(reason: SnapshotReason): Promise<string | null> {
@@ -1304,13 +1305,18 @@ class DataManagerClass {
         if (!always && !TreeManager.isAutoBackupEnabled(this.currentTreeId)) return null;
         if (reason === 'pre-research-load' || reason === 'pre-first-send') {
             try {
-                return (await createSnapshot(this.currentTreeId, this.data, reason, Date.now())).id;
+                return (await createSnapshot(this.currentTreeId, this.data, reason, Date.now(), this.backupBase())).id;
             } catch (err) {
                 console.warn('The backup before the research could not be written', err);
                 return null;
             }
         }
-        return (await createSnapshot(this.currentTreeId, this.data, reason, Date.now())).id;
+        return (await createSnapshot(this.currentTreeId, this.data, reason, Date.now(), this.backupBase())).id;
+    }
+
+    /** The research base a backup of the current data keeps (N61-3). */
+    private backupBase() {
+        return this.currentTreeId ? TreeManager.backupResearchBase(this.currentTreeId, TreeManager.researchBaseOf(this.currentTreeId)) : null;
     }
 
     /**
@@ -1327,11 +1333,10 @@ class DataManagerClass {
         const migrated = migrateData(JSON.parse(payload.json));
 
         this.beginMutation();
-        // A backup does not say which research head it built on: no head (the
-        // research then only adds), no fingerprint (an update asks first) —
-        // unless the caller knows it (the backup taken before loading the
-        // research's version builds on the base the tree had then, V-B).
-        if (this.currentTreeId) TreeManager.restoreResearchBase(this.currentTreeId, base);
+        // The research base the data build on: the caller's (the backup taken
+        // before loading the research's version, V-B), else the one the backup
+        // kept (N61-3). A backup without one: no head, no fingerprint.
+        if (this.currentTreeId) TreeManager.restoreResearchBase(this.currentTreeId, base ?? TreeManager.restoredBackupBase(this.currentTreeId, payload.research));
         this.data = migrated;
         this.commitMutation(strings.undo.restoreBackup, true);
         AuditLogManager.log(this.currentTreeId, 'data.load', strings.auditLog.restoredBackup);

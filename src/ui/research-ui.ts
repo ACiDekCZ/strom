@@ -32,7 +32,7 @@ import { formatLiveTime, formatLiveClock } from '../live-time.js';
 import { isMobile } from '../breakpoints.js';
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
-    decideResearchOpen, stabilizeIds, keepKnownSex, sexKeptUnknown, sexUByRefn, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
+    decideResearchOpen, stabilizeIds, keepKnownSex, sexUByRefn, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
@@ -1204,17 +1204,22 @@ export const researchUiMethods = uiModule({
         // "Load the research version?" with the values it overwrites (asked at every load the user asks for).
         let askLoad = false;
         let sexUnknown: { name: string; gender: Gender }[] = [];
+        // Their reference numbers: a sex row of the load dialog says the research gives none (N61-2).
+        const sexUnknownRefns = new Set([...unknownSex].map(id => data.persons[id]?.refn?.trim() ?? '').filter(Boolean));
         if (existing) {
             const unreadable = TreeManager.isTreeUnreadable(existing.id);
             previous = unreadable ? null : await readTree(existing.id);
-            // A sex the research leaves unknown is no change to Female (the importer's guess): the tree's stays,
-            // said in "Load the research version?".
+            // A sex the research leaves unknown is no change to Female (the importer's guess): the tree's stays.
+            // "Load the research version?" says so for everyone whose sex the research leaves unknown and whose
+            // sex here stays (a husband's guess as well, N61-1); one that changes is a row of its table.
             if (previous) {
-                const guessed = sexGuessedIn(data);
-                const kept = sexKeptUnknown(data, previous, guessed);
-                data = keepKnownSex(data, previous, guessed);
+                data = keepKnownSex(data, previous, sexGuessedIn(data));
                 const persons = data.persons;
-                sexUnknown = kept.map(id => ({ name: `${persons[id].firstName} ${persons[id].lastName}`.trim() || '?', gender: persons[id].gender }));
+                const before = new Map(Object.values(previous.persons ?? {}).filter(p => p?.refn?.trim()).map(p => [p.refn!.trim(), p.gender]));
+                sexUnknown = [...unknownSex].filter(id => {
+                    const refn = persons[id]?.refn?.trim();
+                    return !!refn && before.get(refn) === persons[id].gender;
+                }).map(id => ({ name: `${persons[id].firstName} ${persons[id].lastName}`.trim() || '?', gender: persons[id].gender }));
             }
             action = decideResearchOpen(existing.research, previous ? fingerprintLike(previous, existing.research?.fingerprint) : null);
             // The app's images stay (carryOverMedia); those of people or sources
@@ -1264,7 +1269,10 @@ export const researchUiMethods = uiModule({
             } else if (edited && existing.research && !plainAsk && this.researchSyncCapable(existing.research.id)) {
                 // (plainAsk: a copy that cannot send yet — "send first" would only come back here.)
                 // A research that tells what it has: send first, or decide knowing it.
-                const choice = await this.showResearchUpdateConflict(existing.id, existing.name, data, includeImages);
+                // "The research has a newer version" only when it has (not a ?live= with the same head, N61-4).
+                const incoming = opts.head || source.head || '';
+                const newer = !incoming || incoming !== (existing.research.head ?? '');
+                const choice = await this.showResearchUpdateConflict(existing.id, existing.name, data, includeImages, newer);
                 if (choice === null) return null;
                 if (choice === 'sendThenLoad') {
                     const live = opts.live;
@@ -1336,6 +1344,7 @@ export const researchUiMethods = uiModule({
                 const answer = await this.askResearchLoad(existing.name, dateLabel, previous, stabilizeIds(data, previous), {
                     off: researchSendMode(existing.research) === 'off', notWritten: nw,
                     ...(sexUnknown.length ? { sexUnknown } : {}),
+                    ...(sexUnknownRefns.size ? { sexUnknownRefns } : {}),
                     ...(bytes > 0 ? { images: { label: strings.importImages.label, checked: includeImages, detail: strings.importImages.size((bytes / (1024 * 1024)).toFixed(1)) } } : {}),
                 });
                 if (!answer) return null;
@@ -1434,9 +1443,10 @@ export const researchUiMethods = uiModule({
      * research that tells what it has). Its bridge runs: send them first (the
      * new version then holds them), open as a copy, or load without them. It
      * does not run: the copy is the advice; overwriting stays possible.
+     * `newer`: the research's version is newer than the one the tree builds on.
      * Resolves 'sendThenLoad' | 'update' | 'copy', or null (cancelled).
      */
-    async showResearchUpdateConflict(treeId: TreeId, treeName: string, data: StromData, includeImages: boolean): Promise<'sendThenLoad' | 'update' | 'copy' | null> {
+    async showResearchUpdateConflict(treeId: TreeId, treeName: string, data: StromData, includeImages: boolean, newer = true): Promise<'sendThenLoad' | 'update' | 'copy' | null> {
         const u = strings.researchUpdate;
         const r = strings.research;
         const link = TreeManager.getTreeMetadata(treeId)?.research;
@@ -1460,7 +1470,7 @@ export const researchUiMethods = uiModule({
             const pick = await this.showChoice(message, u.unsentTitle, [
                 { id: 'copy', label: r.openCopy },
                 ...(sendOff ? [] : [{ id: 'sendThenLoad', label: strings.sync.sendThenLoad }]),
-            ], images, { subtitle: `${treeName} · ${u.newerSub}`, aside: { id: 'update', label: u.loadWithout, sub: u.loadWithoutSub } });
+            ], images, { subtitle: newer ? `${treeName} · ${u.newerSub}` : treeName, aside: { id: 'update', label: u.loadWithout, sub: u.loadWithoutSub } });
             return pick as 'sendThenLoad' | 'update' | 'copy' | null;
         }
         const message = [u.bridgeDownBody(treeName), names, u.bridgeDownAdvice, mediaLine].filter(Boolean).join('\n\n');
