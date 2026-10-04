@@ -1,32 +1,34 @@
 /**
  * Texts never address the user (SPEC "Pravidla textů"): no vykání or
  * tykání in Czech (no "váš", "jste", no imperative to "you"), no "you/your"
- * in English, no "Sie/Ihr" in German — in the groups of texts 3.9 brought
- * (the research, the archive, data protection, backups, sources). Texts for
- * an AI agent or a terminal are the exceptions, named below.
+ * in English, no "Sie/Ihr" or "du" in German — in every group of texts.
+ * Texts for an AI agent or a terminal are the exceptions, named below.
  */
 
 import { describe, it, expect } from 'vitest';
 import { getStringsForLang, Language } from '../strings.js';
 
-const GROUPS = ['sync', 'research', 'install', 'treeSettings', 'batch', 'sources', 'snapshots', 'connect', 'researchUpdate',
-    'live', 'researchOlder', 'researchEdge', 'material', 'media', 'mediaQueue', 'changes'] as const;
-
 const ADDRESS: Record<'en' | 'cs' | 'de', RegExp> = {
     en: /\b(you|your|yours|yourself)\b/i,
-    de: /\b(Sie|Ihr|Ihre|Ihren|Ihrem|Ihrer|Ihres|Ihnen)\b/,
-    cs: /(?<![\p{L}])(vy|vás|vám|vaše|váš|vaši|vašeho|vašem|vašich|vaším|vašemu|jste|tvůj|tvé|tvoje|tvém|tobě|tvého)(?![\p{L}])|(?<![\p{L}])[\p{L}]+(íte|ete|áte|ějte|ejte|ujte|ěte|něte|ďte|řte|ňte)(?![\p{L}])/iu,
+    de: /\b(Sie|Ihr|Ihre|Ihren|Ihrem|Ihrer|Ihres|Ihnen|du|dein|deine|deinen|deinem|deiner|dir|dich)\b/,
+    // Pronouns; verbs of the second person: the plural imperative ("vyberte", "spusťte", "zkuste"),
+    // the present ("máte"), the singular ("pošleš", "vyžádej"). "jej" and "dítěte" only look like them.
+    cs: new RegExp('(?<![\\p{L}])(vy|vás|vám|vámi|vaše|váš|vaši|vaší|vašeho|vašem|vašich|vaším|vašim|vašemu|jste|byste|tvůj|tvé|tvoje|tvoji|tvou|tvá|tvém|tvým|tvých|tvému|tobě|tebe|tebou|tvého|ti|tě)(?![\\p{L}])'
+        + '|(?<![\\p{L}])(?!(?:jej|dítěte)(?![\\p{L}]))[\\p{L}]+(rte|ťte|žte|zte|dte|nte|cte|uste|ijte|lte|pte|šte|hte|vte|mte|bte|íte|ete|áte|ějte|ejte|ujte|ěte|ďte|řte|ňte'
+        + '|uješ|(?<!sp|li)íš|eš|áš|ej)(?![\\p{L}])', 'iu'),
 };
 
 /** Per language: texts quoting another program, and words that only look like an address (group.key). */
 const EXCEPTIONS: Record<'en' | 'cs' | 'de', Set<string>> = {
-    // Chrome's own question, quoted as the browser shows it.
-    en: new Set(['install.waitLna', 'connect.textPrompt']),
-    // "z dítěte" (of the child) only looks like a verb of address.
-    cs: new Set(['researchEdge.estChild']),
+    // Chrome's own question, quoted as the browser shows it; the sample message the sender writes to a relative.
+    en: new Set(['install.waitLna', 'connect.textPrompt', 'share.messagePlaceholder']),
+    // The sample message the sender writes to a relative.
+    cs: new Set(['share.messagePlaceholder']),
     // A sentence-initial "Sie" meaning "it/they" (the changes, the source, the backup, the originals, the research).
     de: new Set(['sync.notWrittenListed', 'sync.notWrittenToast', 'research.reviewIntro', 'treeSettings.guideDesc', 'sources.deleteConfirm',
-        'snapshots.restoreConfirm', 'mediaQueue.browserOnly', 'mediaQueue.bridgeDownSince', 'mediaQueue.staleSub']),
+        'snapshots.restoreConfirm', 'mediaQueue.browserOnly', 'mediaQueue.bridgeDownSince', 'mediaQueue.staleSub',
+        // The sample message the sender writes to a relative.
+        'share.messagePlaceholder']),
 };
 
 /** Every text of an object as "path → text"; a function's text is its source (the template it returns). */
@@ -42,7 +44,7 @@ describe('texts never address the user', () => {
         it(lang, () => {
             const pack = getStringsForLang(lang as Language) as unknown as Record<string, unknown>;
             const found: string[] = [];
-            for (const g of GROUPS) {
+            for (const g of Object.keys(pack)) {
                 const all: [string, string][] = [];
                 texts(pack[g], g, all);
                 for (const [path, text] of all) {

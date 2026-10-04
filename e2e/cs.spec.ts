@@ -31,6 +31,6 @@ test('Czech UI: about dialog shows the version and Czech labels', async ({ page 
     await expect(about).toBeVisible();
     await expect(about.locator('#about-version')).toHaveText(APP_VERSION);
     await expect(about).toContainText('Vytvořil');
-    // The support link says it in Czech (formal).
-    await expect(about.getByRole('link', { name: 'Kupte mi kávu' })).toBeVisible();
+    // The support link says it in Czech, addressing no one.
+    await expect(about.getByRole('link', { name: 'Koupit kávu' })).toBeVisible();
 });

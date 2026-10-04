@@ -297,6 +297,8 @@ export const researchActionsMethods = uiModule({
         reminderThisOpening = false;
         const wrap = document.getElementById('actions-research-wrap');
         if (!wrap) return;
+        // Closed under the pointer, it must not stay open by hover.
+        if (wrap.classList.contains('submenu-open') && wrap.matches(':hover')) wrap.classList.add('hover-off');
         wrap.classList.remove('submenu-open');
         document.getElementById('actions-research-row')?.setAttribute('aria-expanded', 'false');
     },

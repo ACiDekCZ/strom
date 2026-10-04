@@ -58,13 +58,13 @@ async function openAsRecipient(browser: Browser, sharedPath: string): Promise<Pa
     await openFileAsApp(uncle, sharedPath);
     const welcome = uncle.locator('#share-welcome-modal');
     await expect(welcome).toBeVisible();
-    await expect(uncle.locator('#share-welcome-title')).toHaveText('Milan sent you a family tree');
+    await expect(uncle.locator('#share-welcome-title')).toHaveText('A family tree from Milan');
     await expect(uncle.locator('#share-welcome-counts')).toContainText('2 people');
     await expect(uncle.locator('#share-welcome-message')).toHaveText('Please fill in what you know');
     await welcome.getByRole('button', { name: 'Add what I know' }).click();
     // The bar appears once the baseline of the received state is saved.
     await expect(uncle.locator('#collab-bar')).toBeVisible();
-    await expect(uncle.locator('#collab-bar-text')).toHaveText('You are filling in a tree for Milan.');
+    await expect(uncle.locator('#collab-bar-text')).toHaveText('Filling in a tree for Milan.');
     await expect(uncle.locator('body')).not.toHaveClass(/view-mode/);
     return uncle;
 }
@@ -157,8 +157,8 @@ test('change packet with edits on both sides: preview names the fields, Accept k
     await page.locator('#file-input').setInputFiles(packetPath);
     const preview = page.locator('#share-packet-modal');
     await expect(preview).toBeVisible();
-    await expect(page.locator('#share-packet-title')).toHaveText('Strejda sent you changes');
-    await expect(page.locator('#share-packet-intro')).toContainText('These additions update your tree');
+    await expect(page.locator('#share-packet-title')).toHaveText('Changes from Strejda');
+    await expect(page.locator('#share-packet-intro')).toContainText('These additions update the tree');
     const body = page.locator('#share-packet-body');
     await expect(body.locator('.share-packet-chip', { hasText: '1 new person' })).toBeVisible();
     await expect(body.locator('.share-packet-section', { hasText: 'New people' })).toContainText('Anna Odesilatel');
@@ -190,7 +190,7 @@ test('change packet with edits on both sides: preview names the fields, Accept k
     // Re-opening the same packet changes nothing and says so.
     await page.evaluate(() => document.querySelectorAll('.toast').forEach(t => t.remove()));
     await page.locator('#file-input').setInputFiles(packetPath);
-    await expect(page.locator('#confirm-message')).toHaveText('These changes are already in your tree — nothing to apply.');
+    await expect(page.locator('#confirm-message')).toHaveText('These changes are already in the tree — nothing to apply.');
     await expect(preview).toBeHidden();
     expect((await persons(page)).filter(p => !p.isPlaceholder)).toHaveLength(4);
 });
@@ -219,7 +219,7 @@ test('a returned whole file can be imported as a separate new tree', async ({ pa
     await page.locator('#html-input').setInputFiles(replyPath);
     const reply = page.locator('#share-reply-modal');
     await expect(reply).toBeVisible();
-    await expect(page.locator('#share-reply-title')).toHaveText('Strejda returned your tree');
+    await expect(page.locator('#share-reply-title')).toHaveText('Strejda returned the tree');
     await expect(page.locator('#share-reply-message')).toHaveText('I added your brother');
 
     await reply.getByRole('button', { name: 'Import as a new tree' }).click();
@@ -249,7 +249,7 @@ test('a returned file opened as the app offers the merge and leaves view mode in
     await expect(page.locator('body')).toHaveClass(/view-mode/);
     const reply = page.locator('#share-reply-modal');
     await expect(reply).toBeVisible();
-    await expect(page.locator('#share-reply-title')).toHaveText('Strejda returned your tree');
+    await expect(page.locator('#share-reply-title')).toHaveText('Strejda returned the tree');
     // Not offered as "already stored" — the reply keeps its merge offer.
     await expect(page.locator('#existing-export-modal')).toBeHidden();
 

@@ -100,7 +100,7 @@ test.describe('deleting a source', () => {
         await row.locator('.source-delete-btn').click();
         await expect(confirmDlg(page).locator('#confirm-title')).toContainText('Delete source Matrika Lhota?');
         await expect(confirmDlg(page).locator('#confirm-message')).toHaveText(
-            'It is cited in 5 places; those citations are removed too. You can bring it back with the Undo button.');
+            'It is cited in 5 places; those citations are removed too. The Undo button brings it back.');
         await confirmDlg(page).locator('#confirm-cancel-btn').click();
         expect((await getData(page)).sources?.s1?.title).toBe('Matrika Lhota');
 
@@ -144,7 +144,7 @@ test.describe('deleting a source', () => {
         await expect(catalog(page)).toHaveClass(/active/);
 
         await catalog(page).locator('.source-row', { hasText: 'Nepoužitý' }).locator('.source-delete-btn').click();
-        await expect(confirmDlg(page).locator('#confirm-message')).toHaveText('You can bring it back with the Undo button.');
+        await expect(confirmDlg(page).locator('#confirm-message')).toHaveText('The Undo button brings it back.');
         await confirmDlg(page).locator('#confirm-ok-btn').click();
         await clearToasts(page);
         await catalog(page).locator('.source-row', { hasText: 'Křest Jana' }).locator('.source-delete-btn').click();

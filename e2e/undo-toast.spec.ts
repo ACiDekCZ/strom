@@ -71,3 +71,20 @@ test('Undo / Redo live in the toolbar, not in the ⋯ menu: description and disa
     await expect(card(page, 'Jan')).toBeVisible();
     await expect(undo).toBeEnabled();
 });
+
+test('a message toast while the Undo toast shows sits above it, not over it (desktop and phone)', async ({ page }) => {
+    for (const size of [{ width: 1440, height: 900 }, { width: 390, height: 800 }]) {
+        await page.setViewportSize(size);
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await expect(page.locator('.undo-toast')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.showToast('Sent to the research', 6000));
+        const message = page.locator('.toast');
+        await expect(message).toHaveClass(/show/);
+        await expect.poll(async () => {
+            const a = await page.locator('.undo-toast').boundingBox();
+            const b = await message.boundingBox();
+            return !!a && !!b && b.y + b.height <= a.y;
+        }).toBe(true);
+    }
+});

@@ -617,10 +617,11 @@
                flyout may cross the gap (or clip a corner) without losing it. */
             visibility: hidden; transition: visibility 0s linear 0.25s;
         }
-        .actions-tree-wrap:hover > .actions-tree-submenu,
+        /* .hover-off: closed (Esc, a click on its row) under the pointer — hidden until the pointer leaves. */
+        .actions-tree-wrap:not(.hover-off):hover > .actions-tree-submenu,
         .actions-tree-wrap.submenu-open > .actions-tree-submenu { visibility: visible; transition-delay: 0s; z-index: 211; }
         /* The gap between the row and the flyout still counts as the row. */
-        .actions-tree-wrap:hover::before,
+        .actions-tree-wrap:not(.hover-off):hover::before,
         .actions-tree-wrap.submenu-open::before {
             content: ''; position: absolute; top: 0; bottom: 0; right: 100%; width: 16px;
         }
@@ -9829,21 +9830,25 @@
         .undo-toast-btn:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); }
         /* Hidden while a modal is open (the toast would sit behind the overlay). */
         body:has(.modal-overlay.active) .undo-toast { display: none; }
-        /* Lift the family offer above the undo toast when both are showing. */
-        body:has(.undo-toast) .family-offer { bottom: 84px; }
+        /* Lift the family offer and a message toast above the undo toast when both are showing. */
+        body:has(.undo-toast) .family-offer,
+        body:has(.undo-toast) .toast { bottom: 84px; }
         /* :has() fallback (older Safari) — body classes kept in sync by JS. */
         @supports not (selector(:has(*))) {
             body.has-active-modal .undo-toast { display: none; }
-            body.has-undo-toast .family-offer { bottom: 84px; }
+            body.has-undo-toast .family-offer,
+            body.has-undo-toast .toast { bottom: 84px; }
         }
         /* Mobile regime (bottom bar ≤1024px): sit above the bar. */
         @media (max-width: 1024px) {
             .undo-toast { bottom: calc(var(--bottom-bar-h) + 12px); }
             /* "On this day" never covers the bottom bar (its More tab). */
             .otd-card { bottom: calc(var(--bottom-bar-h) + 12px); }
-            body:has(.undo-toast) .family-offer { bottom: calc(var(--bottom-bar-h) + 72px); }
+            body:has(.undo-toast) .family-offer,
+            body:has(.undo-toast) .toast { bottom: calc(var(--bottom-bar-h) + 72px); }
             @supports not (selector(:has(*))) {
-                body.has-undo-toast .family-offer { bottom: calc(var(--bottom-bar-h) + 72px); }
+                body.has-undo-toast .family-offer,
+                body.has-undo-toast .toast { bottom: calc(var(--bottom-bar-h) + 72px); }
             }
         }
         /* Map view: its status bar (Look up, Places) and time bar sit
@@ -9853,15 +9858,19 @@
         body.map-view .undo-toast,
         body.map-view .family-offer,
         body.map-view .tour-offer { bottom: max(24px, calc(var(--map-floor, 0px) + 12px)); }
-        body.map-view:has(.undo-toast) .family-offer { bottom: calc(max(24px, calc(var(--map-floor, 0px) + 12px)) + 60px); }
-        body.map-view.has-undo-toast .family-offer { bottom: calc(max(24px, calc(var(--map-floor, 0px) + 12px)) + 60px); }
+        body.map-view:has(.undo-toast) .family-offer,
+        body.map-view:has(.undo-toast) .toast { bottom: calc(max(24px, calc(var(--map-floor, 0px) + 12px)) + 60px); }
+        body.map-view.has-undo-toast .family-offer,
+        body.map-view.has-undo-toast .toast { bottom: calc(max(24px, calc(var(--map-floor, 0px) + 12px)) + 60px); }
         @media (max-width: 1024px) {
             body.map-view .toast,
             body.map-view .undo-toast,
             body.map-view .family-offer,
             body.map-view .tour-offer { bottom: max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)); }
-            body.map-view:has(.undo-toast) .family-offer { bottom: calc(max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)) + 60px); }
-            body.map-view.has-undo-toast .family-offer { bottom: calc(max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)) + 60px); }
+            body.map-view:has(.undo-toast) .family-offer,
+            body.map-view:has(.undo-toast) .toast { bottom: calc(max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)) + 60px); }
+            body.map-view.has-undo-toast .family-offer,
+            body.map-view.has-undo-toast .toast { bottom: calc(max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)) + 60px); }
         }
         /* Phone (<500px): full width minus 24px, no centre transform. */
         @media (max-width: 499px) {

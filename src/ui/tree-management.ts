@@ -93,7 +93,12 @@ export const treeManagementMethods = uiModule({
                 open: () => this.openActionsResearchSubmenu(), close: () => this.closeActionsResearchSubmenu() },
         ];
         for (const f of flyouts) {
+            // A flyout closed under the pointer stays hidden until the pointer leaves (.hover-off).
+            document.getElementById(f.wrap)?.addEventListener('mouseleave', () => {
+                document.getElementById(f.wrap)?.classList.remove('hover-off');
+            });
             document.getElementById(f.wrap)?.addEventListener('mouseenter', () => {
+                document.getElementById(f.wrap)?.classList.remove('hover-off');
                 for (const other of flyouts) if (other !== f) other.close();
                 this.positionActionsSubmenu(f.sub);
                 requestAnimationFrame(() => this.positionActionsSubmenu(f.sub));
@@ -360,6 +365,8 @@ export const treeManagementMethods = uiModule({
     closeActionsTreeSubmenu(): void {
         const wrap = document.getElementById('actions-tree-wrap');
         if (!wrap) return;
+        // Closed under the pointer, it must not stay open by hover.
+        if (wrap.classList.contains('submenu-open') && wrap.matches(':hover')) wrap.classList.add('hover-off');
         wrap.classList.remove('submenu-open');
         document.getElementById('actions-tree-row')?.setAttribute('aria-expanded', 'false');
     },

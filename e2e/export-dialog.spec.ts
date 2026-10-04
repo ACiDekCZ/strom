@@ -114,7 +114,7 @@ test('Cmd+S / Ctrl+S saves the open tree to a file, not the page', async ({ page
     await expect(page.locator('#export-password-modal')).not.toHaveClass(/active/);
 });
 
-test('"Where your data is" saves with one click: a complete JSON, a toast, "Saved"', async ({ page }) => {
+test('"Where the data is" saves with one click: a complete JSON, a toast, "Saved"', async ({ page }) => {
     await refusePersistence(page);
     await openApp(page);
     await importBigTree(page, 'Quick');

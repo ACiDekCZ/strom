@@ -29,7 +29,7 @@ test('export menu: groups in order with result-named rows (EN, CS, DE)', async (
         'share', 'save and back up', 'print and image', 'for other programs',
     ]);
     expect(en[0].rows).toEqual(['Send to a relative']);
-    expect(save).toEqual(['App with your data (HTML)', 'Data backup (JSON)']);
+    expect(save).toEqual(['App with data (HTML)', 'Data backup (JSON)']);
     expect(en[2].rows).toEqual(['Poster', 'Family book']);
     expect(en[3].rows).toEqual(['GEDCOM', 'Person table (CSV)']);
 

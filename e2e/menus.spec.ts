@@ -186,6 +186,27 @@ test.describe('actions menu "Tree:" submenu', () => {
         await page.keyboard.press('Escape');
         await expect(dropdown).not.toHaveClass(/active/);
     });
+
+    test('a submenu opened by a click and closed by Escape under the pointer is hidden, back on the next hover', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+
+        await page.locator('.actions-menu-btn').click();
+        const row = page.locator('#actions-tree-row');
+        const submenu = page.locator('#actions-tree-wrap > .actions-tree-submenu');
+        await row.click();
+        await expect(page.locator('#actions-tree-wrap')).toHaveClass(/submenu-open/);
+        await expect(submenu).toBeVisible();
+        // The pointer stays on the row: Escape hides the submenu all the same.
+        await page.keyboard.press('Escape');
+        await expect(submenu).toBeHidden();
+        await expect(page.locator('#actions-menu-dropdown')).toHaveClass(/active/);
+        // Away and back: hover opens it again.
+        await page.mouse.move(5, 450);
+        await row.hover();
+        await expect(submenu).toBeVisible();
+    });
 });
 
 /**

@@ -79,7 +79,7 @@ test.describe('a story\'s new version', () => {
         const reader = page.locator('#person-story-modal');
         await expect(reader.locator('.story-nv-tag')).toHaveText('New version waiting');
         await expect(reader.locator('.story-draft-tag')).toHaveCount(0);
-        await expect(reader.locator('.story-nv-banner')).toContainText('Research wrote a new text on 10/2/2026. This one stays approved until you decide.');
+        await expect(reader.locator('.story-nv-banner')).toContainText('Research wrote a new text on 10/2/2026. This one stays approved until a decision is made.');
         // The book's text is still the approved one.
         await expect(reader.locator('.story-reader-text')).toHaveText('Jan byl mlynář.');
         await reader.locator('#person-story-compare').click();
@@ -150,7 +150,7 @@ test.describe('a story\'s new version', () => {
         const jan = await personId(page, 'P0001');
         await page.evaluate((id) => window.Strom.UI.showStoryCompare({ personId: id }), jan);
         const foot = page.locator('#story-compare-foot');
-        await expect(foot).toContainText('You can decide in research on a computer.');
+        await expect(foot).toContainText('Decide in research on a computer.');
         await expect(foot.locator('button')).toHaveText(['Close']);
     });
 
@@ -193,7 +193,7 @@ test.describe('a story\'s new version', () => {
         await setup(page, ALL, [STORY_ITEM]);
         await expect(card(page, 'Jan').locator('.card-tooltip .tt-story')).toHaveText('Story · new version waiting');
         await expect(card(page, 'Jan').locator('.card-tooltip .tt-action')).toHaveText(['Waiting for an answer: New version of the story']);
-        await expect(card(page, 'Jan')).toHaveAttribute('aria-label', /has a story, new version waiting, waiting for you/);
+        await expect(card(page, 'Jan')).toHaveAttribute('aria-label', /has a story, new version waiting, waiting for an answer/);
         await card(page, 'Jan').locator('.card-signal').click();
         await expect(page.locator('#story-compare-modal')).toBeVisible();
         await expect(page.locator('.context-menu')).toHaveCount(0);
@@ -242,7 +242,7 @@ test.describe('a story\'s new version', () => {
         });
         expect(m).toEqual({ overflow: 0, tabsWide: true });
         // On a phone the research's links are not offered.
-        await expect(page.locator('#story-compare-foot')).toContainText('You can decide in research on a computer.');
+        await expect(page.locator('#story-compare-foot')).toContainText('Decide in research on a computer.');
         await context.close();
     });
 });

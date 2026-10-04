@@ -4,7 +4,7 @@ import { openApp, card } from './helpers.js';
 /**
  * What a card shows at a glance: the evidence stripes and the story's folded
  * corner at the card's bottom-right corner, one action badge on the avatar's
- * corner (waiting for you ! > conflict ≠ > question ?), the tooltip rows, the
+ * corner (waiting for an answer ! > conflict ≠ > question ?), the tooltip rows, the
  * aria-label, densities and far zoom, Settings → "Show on card", the person
  * menu leading with the signal, and the Evidence mode in tree health.
  * Invented data only.

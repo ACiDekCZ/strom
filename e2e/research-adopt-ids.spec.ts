@@ -299,3 +299,41 @@ test.describe('the research\'s numbers after a hand-over', () => {
         await expect(page.locator('.toast')).toContainText('Sent to the research');
     });
 });
+
+test.describe('a tree from older data, handed over by hand', () => {
+    test('a parent alone with a child (made a "?" family on load): right after the hand-over nothing waits to be sent', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await page.evaluate(async () => {
+            const launched: string[] = [];
+            (window as unknown as { __launched: string[] }).__launched = launched;
+            window.Strom.UI.handOverResearchLink = (url: string) => { launched.push(url); };
+            const p = (id: string, firstName: string, gender: string, extra: Record<string, unknown> = {}) => ({
+                id, firstName, lastName: '', gender, isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...extra,
+            });
+            // As 3.8.2 kept it: the father alone, no family.
+            await window.Strom.DataManager.importAsNewTree({
+                persons: { a: p('a', '1', 'male', { childIds: ['c'] }), c: p('c', '3', 'male', { parentIds: ['a'] }) },
+                partnerships: {},
+            } as never, 'Test Win4');
+            window.Strom.UI.updateTreeSwitcher();
+            window.Strom.UI.startResearchAdopt(window.Strom.DataManager.getCurrentTreeId());
+        });
+        const url = (await page.evaluate(() => (window as unknown as { __launched: string[] }).__launched))[0];
+        const version = [
+            '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 3 OCT 2026', `1 _STROM_TREE ${UUID}`, '1 _STROM_HEAD abc1234', '1 CHAR UTF-8', '1 NOTE Test Win4',
+            '0 @P0001@ INDI', '1 NAME 1 //', '1 SEX M', '1 REFN P0001', '2 TYPE strom-research', '1 FAMS @F0001@',
+            '0 @P0003@ INDI', '1 NAME 3 //', '1 SEX M', '1 REFN P0003', '2 TYPE strom-research', '1 FAMC @F0001@',
+            '0 @F0001@ FAM', '1 HUSB @P0001@', '1 CHIL @P0003@', '0 TRLR',
+        ].join('\n');
+        await routeBridge(page, url.match(TOKEN_RE)![1], { ids: true, treeGed: version });
+        await page.evaluate((base) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: base })), BRIDGE);
+        await page.locator('#research-adopt-confirm').click();
+        await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.');
+        await page.evaluate(() => window.Strom.UI.pollResearchBridge());
+        await page.waitForTimeout(1500);
+        const state = await page.evaluate(() => window.Strom.UI.currentResearchSyncState());
+        expect(state.core).not.toBe('unsent');
+        await expect(page.locator('#research-sync-send')).toHaveCount(0);
+    });
+});

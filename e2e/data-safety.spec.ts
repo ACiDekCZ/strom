@@ -131,7 +131,7 @@ test.describe('Local encryption', () => {
         await expect(page.locator('body')).toHaveClass(/\bdata-locked\b/);
         const empty = page.locator('#empty-state');
         await expect(empty).toBeVisible();
-        await expect(empty).toContainText('Your data is locked — unlock to continue');
+        await expect(empty).toContainText('The data is locked — unlock to continue');
         await expect(empty.getByRole('button', { name: 'Add first person' })).toBeHidden();
         await expect(empty.getByRole('button', { name: /Try a sample tree/ })).toBeHidden();
         const emptyUnlock = page.locator('#empty-state-unlock-btn');

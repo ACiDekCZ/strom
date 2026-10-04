@@ -91,7 +91,7 @@ test('edits no file holds: an information-only notice, the indicator until the n
     await expect(page.locator('.toolbar')).toBeVisible();
     await expect(notice).toBeVisible();
 
-    // The link opens "Where your data is".
+    // The link opens "Where the data is".
     await notice.getByRole('button', { name: 'Where is my data?' }).click();
     const dialog = page.locator('#storage-status-modal');
     await expect(dialog).toBeVisible();
@@ -122,7 +122,7 @@ test('bottom-bar regime: the state rides the More tab as a warning triangle and 
     await expect(badge.locator('svg path.tri')).toHaveCount(1);
     await expect(page.locator('#bb-view-more')).toHaveAttribute('aria-label', 'More – changes are not saved');
 
-    // The sheet is topped by the state row, which opens "Where your data is".
+    // The sheet is topped by the state row, which opens "Where the data is".
     await page.locator('#bb-view-more').click();
     const row = page.locator('.bottom-sheet-storage-row');
     await expect(row).toContainText('Only in browser');

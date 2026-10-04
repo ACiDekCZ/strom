@@ -150,7 +150,7 @@ describe('the family book', () => {
         expect(out).toContain('Jan Vlk a Marie Vlková');
         expect(out).toContain('href="strom-research://story?x&amp;do=final" data-compare-do="final"');
         // The couple without links: read-only.
-        expect(out).toContain('Rozhodnout můžete ve výzkumu na počítači.');
+        expect(out).toContain('Rozhodnout jde ve výzkumu na počítači.');
         expect(out).toMatch(/@media print \{[^}]*\}\s*\.book-nv, \.book-compare \{ display: none !important; \}/);
     });
 });

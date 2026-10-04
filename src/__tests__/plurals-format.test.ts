@@ -72,7 +72,7 @@ describe('destructive confirmation texts', () => {
         expect(getStringsForLang('en').danger.personLinks('male', 2, 1, 3))
             .toBe('His links are removed too: 2 parents, 1 partner and 3 children.');
         expect(getStringsForLang('de').danger.personLinks('female', 1, 0, 1))
-            .toBe('Ihre Verbindungen werden ebenfalls entfernt: 1 Elternteil und 1 Kind.');
+            .toBe('Ebenfalls entfernt werden ihre Verbindungen: 1 Elternteil und 1 Kind.');
         expect(getStringsForLang('en').danger.personLinks('male', 0, 0, 0)).toBe('');
     });
     it('verb labels, never Yes/OK', () => {
