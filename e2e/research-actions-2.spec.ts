@@ -478,11 +478,25 @@ test.describe('Start research with this tree (G3)', () => {
         await expect(dialog).toBeVisible();
         await expect(dialog.locator('.close-btn')).toHaveCount(0);
         await expect(dialog.locator('.audit-log-subtitle')).toHaveText('Dvořákovi → research “Dvořákovi – výzkum”');
-        await expect(dialog.locator('.research-adopt-summary')).toHaveText('2 people · 0 families · 0 sources');
+        // What goes over, as tiles; "trial" beside the title, the backup said by the buttons.
+        await expect(dialog.locator('.research-adopt-tile')).toHaveText(['2people', '0families', '0sources']);
+        await expect(dialog.locator('.research-trial-tag')).toHaveText('trial');
+        await expect(dialog.locator('.research-send-dialog-note')).toHaveText('A backup is saved before handing over.');
         await expect(dialog.locator('#research-adopt-images')).toHaveCount(0);
         await dialog.locator('#research-adopt-confirm').click();
         await expect(page.locator('.toast')).toContainText('Dvořákovi is now linked to the research.');
         expect(calls.posted[0]).toContain('1 NAME Karel /Dvořák/');
+        // As the dialog said: a backup before handing over.
+        const reasons = await page.evaluate(() => new Promise<string[]>((resolve, reject) => {
+            const req = indexedDB.open('strom-db');
+            req.onsuccess = () => {
+                const all = req.result.transaction('snapshots', 'readonly').objectStore('snapshots').getAll();
+                all.onsuccess = () => resolve(all.result.filter((x: { meta?: { reason: string } }) => x.meta).map((x: { meta: { reason: string } }) => x.meta.reason));
+                all.onerror = () => reject(all.error);
+            };
+            req.onerror = () => reject(req.error);
+        }));
+        expect(reasons).toContain('pre-first-send');
         const research = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata());
         expect(research?.research).toMatchObject({ id: UUID, head: 'abc1234' });
         expect(research?.researchAdoptToken).toBeUndefined();

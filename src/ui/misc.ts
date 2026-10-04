@@ -818,8 +818,7 @@ export const miscMethods = uiModule({
                         return;
                     }
                     if (currentDialog === 'research-mode-ask-modal') {
-                        const treeId = DataManager.getCurrentTreeId();
-                        if (treeId) this.closeResearchModeAsk(treeId, null);
+                        this.dismissResearchModeAsk();
                         return;
                     }
                     if (currentDialog === 'kinship-modal') {

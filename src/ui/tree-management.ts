@@ -296,6 +296,7 @@ export const treeManagementMethods = uiModule({
     closeActionsMenu(): void {
         this.closeActionsTreeSubmenu();
         this.closeActionsResearchSubmenu();
+        this.closeResearchTrialNote();
         document.getElementById('actions-menu-dropdown')?.classList.remove('active');
     },
 
@@ -470,6 +471,8 @@ export const treeManagementMethods = uiModule({
         dropdown?.classList.remove('active');
 
         if (await DataManager.switchTree(treeId as TreeId)) {
+            // Opened again: a question closed unanswered there is asked again.
+            this.forgetResearchModeAskLater(treeId as TreeId);
             this.updateTreeSwitcher();
             // Restore focus from per-tree session state (uses tree's defaultPersonId setting)
             TreeRenderer.restoreFromSession();

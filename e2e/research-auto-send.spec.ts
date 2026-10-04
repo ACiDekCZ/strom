@@ -1433,6 +1433,13 @@ test.describe('data protection around the research', () => {
         await expect(dialog.locator('input[value="off"]')).toBeChecked();
         await expect(dialog).toContainText('Your tree in the app is the main one.');
         await dialog.locator('input[name="research-send-mode"][value="manual"]').check();
+        // Said in the dialog itself (research-send-mode.spec.ts), no toast over it.
+        await expect(dialog.locator('#research-send-piled')).toContainText('Since the last send you changed 1 person.');
+        expect(bridge.posts).toHaveLength(0);
+        await page.evaluate(() => window.Strom.UI.closeResearchTreeSettings());
+        // Switched elsewhere (not from that dialog): the toast tells it.
+        await page.evaluate(() => window.Strom.UI.setResearchSendMode(window.Strom.TreeManager.getActiveTreeId()!, 'off'));
+        await page.evaluate(() => window.Strom.UI.setResearchSendMode(window.Strom.TreeManager.getActiveTreeId()!, 'manual'));
         await expect(page.locator('.toast', { hasText: 'Since then you changed 1 person' }).getByRole('button', { name: 'What will be sent' })).toBeVisible();
         expect(bridge.posts).toHaveLength(0);
     });
@@ -1483,7 +1490,17 @@ test.describe('the one-time question: how should changes go', () => {
         await poll(page);
         await expect(ask(page)).toBeVisible();
         await expect(ask(page).locator('input[value="auto"]')).toBeChecked();
+        // How it went so far is marked; Recommended stays on by hand.
+        await expect(ask(page).locator('label:has(input[value="auto"])')).toContainText('(so far)');
+        await expect(ask(page).locator('label:has(input[value="manual"])')).toContainText('Recommended');
+        await expect(ask(page)).toContainText('you now choose how');
+        await expect(ask(page)).toContainText('Until you answer, sending stays as it was.');
         await expect(ask(page)).toContainText('Whatever the research does not write, you will always see.');
+        // One answer button: Keep while the choice is how it goes, Save otherwise.
+        await ask(page).locator('input[value="off"]').check();
+        await expect(ask(page).locator('#research-mode-ask-save')).toHaveText('Save');
+        await ask(page).locator('input[value="auto"]').check();
+        await expect(ask(page).locator('#research-mode-ask-save')).toHaveText('Keep');
         await ask(page).getByRole('button', { name: 'Keep' }).click();
         await expect(ask(page)).toHaveCount(0);
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('auto');
@@ -1492,7 +1509,7 @@ test.describe('the one-time question: how should changes go', () => {
         await expect(ask(page)).toHaveCount(0);
     });
 
-    test('Save takes the choice (by hand); Escape keeps how it goes; never while the research is not running or a dialog is open', async ({ page }) => {
+    test('Save takes the choice (by hand); Escape and × leave it unanswered, asked again when the tree is opened again; never while the research is not running or a dialog is open', async ({ page }) => {
         const bridge = await autoTree(page);
         await forget(page);
         bridge.down = true;
@@ -1517,14 +1534,32 @@ test.describe('the one-time question: how should changes go', () => {
         await page.keyboard.press('Escape');
         await expect(ask(page)).toHaveCount(0);
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('off');
+        // Not an answer: not asked again while the tree stays open, asked again when it is opened again.
+        const asked = () => page.evaluate(() => JSON.parse(localStorage.getItem(`strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`) ?? '{}').modeAsked ?? false);
+        expect(await asked()).toBe(false);
+        await page.clock.fastForward(30_000);
+        await poll(page);
+        await expect(ask(page)).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.forgetResearchModeAskLater(window.Strom.TreeManager.getActiveTreeId()!));
+        await page.clock.fastForward(30_000);
+        await poll(page);
+        await expect(ask(page)).toBeVisible();
+        await ask(page).locator('#research-mode-ask-x').click();
+        await expect(ask(page)).toHaveCount(0);
+        expect(await asked()).toBe(false);
     });
 });
 
 test.describe('"What will be sent" before sending by hand', () => {
-    const previewOn = (page: Page) => page.evaluate(() => localStorage.removeItem('strom-research-send-preview-skip'));
+    const previewOn = (page: Page) => page.evaluate(() => {
+        const key = `strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`;
+        const st = JSON.parse(localStorage.getItem(key) ?? '{}');
+        delete st.skipPreview;
+        localStorage.setItem(key, JSON.stringify(st));
+    });
     const panel = (page: Page) => page.locator('#research-changes-panel');
 
-    test('Send by hand shows who changed first; Send there sends; "Next time without this list" sends at once after; the setting brings it back', async ({ page }) => {
+    test('Send by hand shows who changed first; Send there sends; "Send without preview next time" sends at once after; the setting brings it back', async ({ page }) => {
         await page.clock.install();
         await openResearch(page);
         const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null } });
@@ -1537,19 +1572,33 @@ test.describe('"What will be sent" before sending by hand', () => {
         await expect(panel(page)).toContainText('What will be sent');
         await expect(panel(page)).toContainText('Jan Víšek');
         expect(bridge.posts).toHaveLength(0);
-        await panel(page).locator('#research-changes-skip').check();
+        // Close leaves it unsent; the menu row says the preview comes ("…").
+        await panel(page).getByRole('button', { name: 'Close' }).click();
+        await expect(panel(page)).toHaveCount(0);
+        await openResearchMenu(page);
+        await expect(page.locator('#research-item-send')).toContainText('Send changes…');
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect(panel(page)).toBeVisible();
+        await panel(page).getByText('Send without preview next time').click();
+        await expect(panel(page).locator('#research-changes-skip')).toBeChecked();
         await panel(page).locator('[data-act="send"]').click();
         await expect.poll(() => bridge.posts.length).toBe(1);
-        // Next time at once.
+        // Next time at once (this tree): the row without dots.
         await editJan(page, 'Brno');
+        await openResearchMenu(page);
+        await expect(page.locator('#research-item-send')).not.toContainText('…');
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         await page.evaluate(() => window.Strom.UI.researchSendNow());
         await expect.poll(() => bridge.posts.length).toBe(2);
         await expect(panel(page)).toHaveCount(0);
-        // The setting brings the list back.
+        // Research for this tree says so and brings the preview back.
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
         const dialog = page.locator('#research-tree-settings-modal');
-        await expect(dialog.locator('#research-send-preview')).not.toBeChecked();
-        await dialog.locator('#research-send-preview').check();
+        await expect(dialog.locator('#research-send-preview-off')).toBeVisible();
+        await expect(dialog.locator('#research-send-preview-off')).toContainText('Sending without preview');
+        await dialog.locator('#research-send-preview-on').click();
+        await expect(dialog.locator('#research-send-preview-off')).toBeHidden();
         await page.evaluate(() => window.Strom.UI.closeResearchTreeSettings());
         await editJan(page, 'Kolín');
         await page.evaluate(() => window.Strom.UI.researchSendNow());

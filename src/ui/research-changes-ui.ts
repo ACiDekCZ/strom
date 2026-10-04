@@ -215,6 +215,7 @@ export const researchChangesMethods = uiModule({
                 ? `<button type="button" class="research-sync-link" data-act="send">${esc(s.sendNow)}</button>`
                 : (opts.confirm && !ctx.link.previewDue
                     ? `<label class="research-changes-skip"><input type="checkbox" id="research-changes-skip"> ${esc(c.skipPreview)}</label>` : '')
+                    + `<button type="button" class="secondary btn-sm" data-act="close">${esc(strings.buttons.close)}</button>`
                     + `<button type="button" class="primary btn-sm" data-act="send">${esc(s.barSend)}</button>`;
         }
         const rows = list.map(ch => {
@@ -247,10 +248,21 @@ export const researchChangesMethods = uiModule({
             TreeRenderer.setFocus(id);
             ZoomPan.centerOnPerson(id);
         }));
-        panel.querySelector('[data-act="send"]')?.addEventListener('click', () => {
-            if (panel.querySelector<HTMLInputElement>('#research-changes-skip')?.checked) noteResearchSendPreviewSkipped(true);
+        panel.querySelector('[data-act="close"]')?.addEventListener('click', () => this.closeResearchChanges());
+        panel.querySelector<HTMLButtonElement>('[data-act="send"]')?.addEventListener('click', (e) => {
+            const btn = e.currentTarget as HTMLButtonElement;
+            if (panel.querySelector<HTMLInputElement>('#research-changes-skip')?.checked) noteResearchSendPreviewSkipped(ctx.treeId, true);
+            // Seen what goes: Send here sends ("Sending…" until the research answers, then the toast tells).
+            if (btn.classList.contains('primary')) {
+                btn.disabled = true;
+                btn.textContent = s.sending;
+                panel.querySelectorAll<HTMLInputElement>('input, [data-act="close"]').forEach(el => { el.disabled = true; });
+                void this.researchSendNow({ previewed: true }).finally(() => {
+                    if (document.getElementById(PANEL_ID) === panel) this.closeResearchChanges();
+                });
+                return;
+            }
             this.closeResearchChanges();
-            // Seen what goes: Send here sends.
             void this.researchSendNow({ previewed: true });
         });
         panel.querySelector('[data-act="decide"]')?.addEventListener('click', () => {

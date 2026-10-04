@@ -9084,6 +9084,14 @@
         .research-changes-name.is-deleted { cursor: default; color: var(--text-light); text-decoration: line-through; }
         .research-changes-kinds { font-size: 12px; color: var(--text-light); }
         .research-changes-foot { display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding: 8px 14px 2px; border-top: 1px solid var(--border); }
+        .research-changes-foot button.primary, .research-changes-foot button.secondary {
+            padding: 6px 14px; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        .research-changes-foot button.primary { border: 1px solid var(--primary); background: var(--primary); color: var(--on-primary); }
+        .research-changes-foot button.primary:hover:not(:disabled) { background: var(--primary-dark); }
+        .research-changes-foot button.primary:disabled { opacity: 0.7; cursor: progress; }
+        .research-changes-foot button.secondary { border: 1px solid var(--border); background: transparent; color: var(--text); font-weight: 400; }
+        .research-changes-foot button.secondary:hover:not(:disabled) { background: var(--hover-bg); }
         .research-changes-note { font-size: 12px; color: var(--text-light); margin-right: auto; }
         /* The note under the mark: a new conflict, the first start of sending by itself. */
         .research-sync-note {
@@ -9121,11 +9129,75 @@
         .research-send-status.is-warn { padding: 8px 12px; border-radius: 8px; background: var(--warning-soft); color: var(--warning-text); }
         .research-send-status-action { font-size: 12px; font-weight: 600; }
         .research-send-device { margin: 8px 0 0; font-size: 12px; line-height: 1.4; color: var(--text-light); }
-        .research-send-principles { margin: 10px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.5; color: var(--text-light); }
+        /* The three sentences under the choice: plain in Research for this tree, on a quiet box in the dialogs. */
+        .research-send-principles { display: flex; flex-direction: column; gap: 2px; margin: 10px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .research-send-principles.is-boxed { padding: 10px 12px; border-radius: 8px; background: var(--surface-2); color: var(--text); }
         .research-send-later { margin: 6px 0 0; font-size: 12px; color: var(--text-light); }
+        /* The send cards: Recommended always on by hand, "(so far)" on how it went (the one-time question). */
+        .modal label.research-send-card { padding: 13px 15px; }
+        .modal label.research-send-card:has(input:checked) { padding: 12px 14px; }
+        .research-send-recommended {
+            display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 999px; vertical-align: 1px;
+            background: var(--primary-soft); color: var(--primary-dark); font-size: 11px; font-weight: 600; line-height: 1.4;
+        }
+        .research-send-was { font-size: 13px; font-weight: 400; color: var(--text-light); }
+        @media (max-width: 499px), (pointer: coarse) {
+            .research-send-card .research-transcripts-title { font-size: 15px; }
+            .research-send-card .research-transcripts-desc { font-size: 14px; }
+        }
+        .research-send-piled { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; background: var(--surface-2); font-size: 13px; line-height: 1.45; }
+        .research-send-piled .link-button, .research-send-preview-off .link-button { font-size: inherit; font-weight: 600; }
+        .research-send-preview-off { margin: 8px 0 0; font-size: 12px; color: var(--text-light); }
+        .research-tree-settings [hidden] { display: none !important; }
+        /* "trial": an amber outline, no fill (open: a soft amber); its note under it. */
+        .research-trial-tag, .modal button.research-trial-tag {
+            display: inline-flex; align-items: center; margin: 0 0 0 6px; padding: 1px 7px; vertical-align: middle;
+            border: 1px solid var(--warning); border-radius: 999px; background: none; cursor: pointer;
+            font-family: var(--font-sans); font-size: 11px; font-weight: 600; line-height: 1.4; color: var(--warning-text);
+        }
+        .toolbar button.research-trial-tag, .toolbar button.research-trial-tag:hover {
+            min-height: 0; height: auto; margin: 0; padding: 1px 7px; border: 1px solid var(--warning); border-radius: 999px;
+            background: none; color: var(--warning-text); font-size: 11px; font-weight: 600; line-height: 1.4; box-shadow: none;
+        }
+        .research-trial-tag[aria-expanded="true"], .modal button.research-trial-tag[aria-expanded="true"],
+        .toolbar button.research-trial-tag[aria-expanded="true"] { background: var(--warning-soft); }
+        .research-trial-tag:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+        .research-trial-note {
+            position: fixed; z-index: 2000; width: 290px; max-width: calc(100vw - 16px); box-sizing: border-box; padding: 8px 10px;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+            box-shadow: 0 6px 18px var(--shadow), var(--shadow-sm);
+            font-family: var(--font-sans); font-size: 12px; line-height: 1.45; color: var(--text);
+        }
+        .research-trial-sentence { margin-top: 4px; font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
+        .research-submenu-heading { display: flex; align-items: center; gap: 8px; padding: 6px 14px 4px; font-size: 12px; font-weight: 600; color: var(--text-light); }
+        .research-submenu-heading .research-trial-tag { margin-left: 0; }
+        /* The hand-over and the one-time question: header and footer stay, the body scrolls (Hand over always in view). */
+        .modal.research-send-dialog { max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); }
+        .research-send-dialog-foot .research-send-dialog-note { margin-right: auto; font-size: 12px; color: var(--text-light); }
+        .research-adopt-what { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+        .research-adopt-eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-light); }
+        .research-adopt-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+        .research-adopt-tile { display: flex; flex-direction: column; padding: 8px 12px; border-radius: 8px; background: var(--surface-2); }
+        .research-adopt-tile b { font-size: 18px; font-weight: 600; }
+        .research-adopt-tile span { font-size: 12px; color: var(--text-light); }
+        .research-adopt-counts-line, .research-adopt-backup-narrow { display: none; }
+        .research-transcripts.research-send-mode.research-adopt-send { margin-top: 0; padding-top: 0; border-top: 0; }
+        .research-adopt-rule { height: 1px; margin: 4px 0 14px; background: var(--divider); }
+        @media (max-width: 639px) {
+            .research-adopt-counts-line { display: block; margin-top: 2px; font-size: 13px; color: var(--text-light); }
+            .research-adopt-what { display: none; }
+            .research-adopt-rule { display: none; }
+            .research-adopt-backup-narrow { display: block; margin: 6px 0 0; font-size: 12px; color: var(--text-light); }
+            .research-adopt-modal .research-send-dialog-note { display: none; }
+            .research-adopt-modal .research-send-dialog-foot > button { flex: 1; height: 40px; }
+        }
+        @media (max-width: 499px) {
+            .modal-overlay:has(> .research-send-dialog) { align-items: flex-end; }
+            .modal.research-send-dialog { border-radius: 14px 14px 0 0; max-height: 94vh; max-height: 94dvh; }
+        }
         .research-changes-skip { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-light); margin-right: auto; }
-        .research-mode-ask-cards, .research-adopt-send { margin: 12px 0 0; padding: 0; border: 0; }
-        .research-adopt-send > legend { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+        .research-transcripts.research-send-mode.research-mode-ask-cards { margin: 0; padding: 0; border: 0; }
+        .research-adopt-send > legend { font-weight: 600; font-size: 15px; margin-bottom: 6px; }
         .confirm-note { margin: 10px 0 0; font-size: 13px; line-height: 1.4; color: var(--text-light); }
         .confirm-note .research-sync-tag--inline { margin-left: 0; margin-right: 6px; }
         /* A toast's own action ("Send again", "Open the research ↗"). */
@@ -9594,11 +9666,9 @@
         .research-info-buttons { flex-wrap: wrap; }
         .research-info-buttons button { white-space: nowrap; }
         .research-info-buttons .research-info-about { margin-right: auto; padding: 6px 0; font-size: 13px; }
-        .research-adopt-summary { margin: 0 0 12px; font-size: 14px; color: var(--text); }
         .modal label.research-adopt-images { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 12px; font-size: 14px; color: var(--text); cursor: pointer; }
         .research-adopt-images input { margin-top: 3px; }
         .research-adopt-size { color: var(--text-light); font-size: 13px; }
-        .research-adopt-after { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
 
         /* A toast that waits (no time limit) closes with its ×. */
         .toast--closable { display: flex; align-items: flex-start; gap: 10px; }

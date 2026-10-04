@@ -209,20 +209,15 @@ export function noteResearchBridgeStatus(researchId: string, accepts: ResearchAc
     });
 }
 
-// ==================== "WHAT WILL BE SENT" FIRST (this browser) ====================
+// ==================== "WHAT WILL BE SENT" FIRST (per tree, this browser) ====================
 
-const PREVIEW_SKIP_KEY = 'strom-research-send-preview-skip';
-
-/** The user said "Next time send without the preview" (sending by hand then goes at once). */
-export function researchSendPreviewSkipped(): boolean {
-    try { return localStorage.getItem(PREVIEW_SKIP_KEY) === '1'; } catch { return false; }
+/** The user said "Send without preview next time" for this tree (sending by hand then goes at once). */
+export function researchSendPreviewSkipped(treeId: string): boolean {
+    return researchAutoState(treeId).skipPreview === true;
 }
 
-export function noteResearchSendPreviewSkipped(skip: boolean): void {
-    try {
-        if (skip) localStorage.setItem(PREVIEW_SKIP_KEY, '1');
-        else localStorage.removeItem(PREVIEW_SKIP_KEY);
-    } catch { /* a private window: shown again next time */ }
+export function noteResearchSendPreviewSkipped(treeId: string, skip: boolean): void {
+    patchResearchAutoState(treeId, { skipPreview: skip ? true : undefined });
 }
 
 // ==================== SENDING BY ITSELF (per tree, this browser) ====================
@@ -275,6 +270,8 @@ export interface ResearchAutoState {
     modeAsked?: true;
     /** Sends by hand the research wrote: after a few, sending by itself is offered (once). */
     manualWrites?: number;
+    /** "Send without preview next time": sending by hand goes at once (unless the tie asks for a preview). */
+    skipPreview?: true;
 }
 
 /** The tie as it stood before the research's version was loaded: what a restore of that backup builds on again (V-B). */
@@ -371,6 +368,7 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (p.firstSendBackup === true) out.firstSendBackup = true;
         if (p.modeAsked === true) out.modeAsked = true;
         if (typeof p.manualWrites === 'number' && p.manualWrites > 0) out.manualWrites = Math.min(Math.floor(p.manualWrites), 9999);
+        if (p.skipPreview === true) out.skipPreview = true;
         return out;
     } catch {
         return {};

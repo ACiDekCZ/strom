@@ -93,7 +93,6 @@ async function handOver(page: Page, init: Partial<Bridge> = {}, pick?: (page: Pa
         if (sessionStorage.getItem('seeded')) return;
         sessionStorage.setItem('seeded', '1');
         localStorage.setItem('strom-research-links', JSON.stringify({ actions: ['new', 'send', 'open'], at: new Date().toISOString() }));
-        localStorage.setItem('strom-research-send-preview-skip', '1');
     });
     await openApp(page);
     await page.evaluate(async () => {
@@ -120,6 +119,11 @@ async function handOver(page: Page, init: Partial<Bridge> = {}, pick?: (page: Pa
     if (pick) await pick(page);
     await page.locator('#research-adopt-confirm').click();
     await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.');
+    // Sending by hand goes at once in these tests ("What will be sent" first: research-auto-send.spec.ts).
+    await page.evaluate(() => {
+        const key = `strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`;
+        localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) ?? '{}'), skipPreview: true }));
+    });
     if (!pick) {
         await page.evaluate(() => {
             const tm = window.Strom.TreeManager;

@@ -964,7 +964,7 @@ export const researchSyncMethods = uiModule({
         // without the preview"; the first send out of "only load" always shows it. ("Send again" and
         // "send, then load" are their own decisions.)
         if (!opts.previewed && !opts.undoAgain && !opts.thenLoad && researchSendMode(link) !== 'off'
-            && (link.previewDue || !researchSendPreviewSkipped())) {
+            && (link.previewDue || !researchSendPreviewSkipped(treeId))) {
             const list = await this.researchChangesReady();
             if (list && list.length > 0) {
                 this.showResearchChanges('send', { confirm: true });
@@ -1555,23 +1555,33 @@ export const researchSyncMethods = uiModule({
         this.refreshResearchSyncUi();
     },
 
-    /** Switch how the tree's changes go; to "by themselves" with changes waiting starts the quiet time. */
-    setResearchSendMode(treeId: TreeId, mode: ResearchSendMode): void {
+    /**
+     * Switch how the tree's changes go; to "by themselves" with changes waiting starts the quiet time.
+     * `told`: the dialog that switched says what piled up itself (no toast).
+     */
+    setResearchSendMode(treeId: TreeId, mode: ResearchSendMode, opts: { told?: boolean } = {}): void {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (!link || researchSendMode(link) === mode) return;
         const wasOff = researchSendMode(link) === 'off';
         TreeManager.patchResearchLink(treeId, { sendMode: mode });
         // Out of "only load": the first send goes through "What will be sent" (set below when changes wait).
         if (mode === 'off' || !wasOff) TreeManager.patchResearchLink(treeId, { previewDue: undefined });
-        // Out of "only load": what piled up meanwhile is said, with what would go (nothing goes at once).
+        // Out of "only load": nothing goes before what piled up meanwhile was seen (held at once, the list may
+        // still be loading; let go when nothing piled up), and it is said, with what would go.
         if (wasOff && DataManager.getCurrentTreeId() === treeId) {
             fpCache = null;
-            const list = this.researchChangesNow();
-            if (list && list.length > 0) {
-                TreeManager.patchResearchLink(treeId, { previewDue: true });
-                this.showToast(strings.sync.offPiledUp(list.length), 10000,
-                    { action: { label: strings.changes.whatWillBeSent, run: () => this.showResearchChanges('send') } });
-            }
+            TreeManager.patchResearchLink(treeId, { previewDue: true });
+            void this.researchChangesReady().then(list => {
+                const now = TreeManager.getTreeMetadata(treeId)?.research;
+                if (!now?.previewDue || researchSendMode(now) === 'off' || DataManager.getCurrentTreeId() !== treeId) return;
+                if (list && list.length === 0) {
+                    TreeManager.patchResearchLink(treeId, { previewDue: undefined });
+                    this.refreshResearchSyncUi();
+                } else if (list && !opts.told) {
+                    this.showToast(strings.sync.offPiledUp(list.length), 10000,
+                        { action: { label: strings.changes.whatWillBeSent, run: () => this.showResearchChanges('send', { confirm: true }) } });
+                }
+            });
         }
         if (mode !== 'auto') {
             if (autoTimerTree === treeId) this.clearResearchAutoTimer();

@@ -18,6 +18,9 @@ import { onComputer } from './research-ui.js';
 import { PersonMenuAction } from './context-menu.js';
 import { personSubtitle } from './person-sources-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
+import { researchSendMode } from './research-sync-ui.js';
+import { researchTrialTagHtml } from './research-tree-settings-ui.js';
+import { researchSendPreviewSkipped } from '../research-device.js';
 
 const REVIEW_ID = 'research-review-modal';
 const SCOPE_KEY = 'strom-research-review-scope';
@@ -152,9 +155,13 @@ export const researchActionsMethods = uiModule({
         const archive = capable && this.activeResearchArchive();
         // Nothing that leads to an agent in an archive, nor while the research's mode is not known here.
         const noAgent = archive || !this.activeResearchModeKnown();
-        const sendRow: SubmenuItem[] = autoSend ? [] : [
+        // Only loading from the research: nothing to send, no row for it.
+        const sendOff = capable && !!ctx && researchSendMode(ctx.link) === 'off';
+        // "Send changes…" opens "What will be sent" first; without the preview it sends at once (no dots).
+        const previewFirst = capable && !!ctx && (!!ctx.link.previewDue || !researchSendPreviewSkipped(ctx.treeId));
+        const sendRow: SubmenuItem[] = autoSend || sendOff ? [] : [
             // Straight to a running bridge (no ↗); else the research starts it in the terminal.
-            { id: 'research-item-send', label: r.sendChanges, run: call('researchActionSend'), ext: !bridgeUp && this.researchLinkAvailable('send') },
+            { id: 'research-item-send', label: previewFirst ? `${r.sendChanges}…` : r.sendChanges, run: call('researchActionSend'), ext: !bridgeUp && this.researchLinkAvailable('send') },
         ];
         if (!this.researchAnyAnnounced()) {
             // No strom-research:// links here (an older research, none announced, or
@@ -220,7 +227,9 @@ export const researchActionsMethods = uiModule({
         // An older research (it never said what it takes): a quiet line, "How to update…" (the research's own newer-version block goes first).
         const olderLine = updateBlock ? '' : this.researchOlderLineHtml('menu');
         if (olderLine) updateBlock = `<div class="research-update-block research-older-block" id="research-older-block">${olderLine}</div>`;
-        const html = syncBlock + updateBlock + groups.filter(g => g.length > 0)
+        // The group's heading with "trial" (a tree tied to a research).
+        const heading = ctx ? `<div class="research-submenu-heading"><span>${esc(r.menuTitle)}</span>${researchTrialTagHtml()}</div>` : '';
+        const html = heading + syncBlock + updateBlock + groups.filter(g => g.length > 0)
             .map(g => g.map(submenuItemHtml).join(''))
             .join('<div class="tree-switcher-divider"></div>')
             + (note ? `<div class="tree-switcher-divider"></div><div class="research-submenu-note">${esc(archive ? r.submenuNoteArchive : r.submenuNote)}</div>` : '');

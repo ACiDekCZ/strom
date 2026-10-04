@@ -26,7 +26,7 @@ import { uiModule } from './module.js';
 import { onComputer, fetchWithTimeout, fetchStatus, fetchGedcomText, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { normalizeModal } from './modal-skeleton.js';
-import { researchSendModeCardsHtml, researchSendPrinciplesHtml, researchSendModeChecked } from './research-tree-settings-ui.js';
+import { researchSendModeCardsHtml, researchSendPrinciplesHtml, researchSendModeChecked, researchTrialTagHtml } from './research-tree-settings-ui.js';
 import { researchSendMode } from './research-sync-ui.js';
 
 const ADOPT_ID = 'research-adopt-modal';
@@ -142,6 +142,10 @@ export const researchAdoptMethods = uiModule({
         if (choice === null) {
             postCancel(cancelUrl, 'cancelled');
             return;
+        }
+        // A backup before the tree first goes to the research (whatever the backup setting).
+        if (DataManager.getCurrentTreeId() === tree.id && await DataManager.snapshotNow('pre-first-send')) {
+            patchResearchAutoState(tree.id, { firstSendBackup: true });
         }
         // The research does not take photos over yet: they stay here only.
         const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name);
@@ -322,34 +326,42 @@ export const researchAdoptMethods = uiModule({
         const images = countImages(data);
         // "Include photos and attachments" waits until the research takes them over.
         const files = RESEARCH_TAKES_IMAGES ? images.photos + images.attachments + images.excerpts : 0;
-        const summary = [strings.about.stats.persons(persons), strings.about.stats.families(families),
-            strings.personSources.countSub(sources)].join(' · ');
         const researchName = offer.name || r.defaultName;
+        const t = strings.treeSettings;
+        const tile = (n: number, noun: string): string => `<span class="research-adopt-tile"><b>${n}</b><span>${esc(noun)}</span></span>`;
 
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.id = ADOPT_ID;
         overlay.innerHTML = `
-            <div class="modal modal--md research-adopt-modal" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="research-adopt-title">
+            <div class="modal modal--md research-adopt-modal research-send-dialog" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="research-adopt-title">
                 <div class="modal-header">
                     <div class="audit-log-heading">
-                        <h2 id="research-adopt-title">${esc(opts.install ? strings.install.adoptTitle : r.adoptTitle)}</h2>
+                        <h2 id="research-adopt-title" class="research-title-with-tag">${esc(opts.install ? strings.install.adoptTitle : r.adoptTitle)} ${researchTrialTagHtml()}</h2>
                         <div class="audit-log-subtitle">${esc(opts.install ? strings.install.adoptSub(tree.name, persons, researchName) : `${tree.name} → ${r.adoptTarget(researchName)}`)}</div>
+                        <div class="research-adopt-counts-line">${esc(t.handoffCounts(persons, families, sources))}</div>
                     </div>
                 </div>
-                <p class="research-adopt-summary">${esc(summary)}</p>
-                ${files > 0 ? `
-                <label class="research-adopt-images">
-                    <input type="checkbox" id="research-adopt-images"${SettingsManager.isImportImages() ? ' checked' : ''}>
-                    <span>${esc(r.adoptImages)} <span class="research-adopt-size">${esc(r.adoptImagesSize(files, (images.bytes / (1024 * 1024)).toFixed(1)))}</span></span>
-                </label>` : ''}
-                <p class="research-adopt-after">${esc(r.adoptAfter)}</p>
-                <fieldset class="research-transcripts research-send-mode research-adopt-send">
-                    <legend>${esc(strings.treeSettings.askTitle)}</legend>
-                    ${researchSendModeCardsHtml('manual', undefined, 'research-adopt-send-mode')}
-                </fieldset>
-                ${researchSendPrinciplesHtml(true)}
-                <div class="buttons">
+                <div class="research-send-dialog-body">
+                    <div class="research-adopt-what">
+                        <span class="research-adopt-eyebrow">${esc(t.handoffWhatGoes)}</span>
+                        <div class="research-adopt-tiles">${tile(persons, t.handoffPersons(persons))}${tile(families, t.handoffFamilies(families))}${tile(sources, t.handoffSources(sources))}</div>
+                    </div>
+                    ${files > 0 ? `
+                    <label class="research-adopt-images">
+                        <input type="checkbox" id="research-adopt-images"${SettingsManager.isImportImages() ? ' checked' : ''}>
+                        <span>${esc(r.adoptImages)} <span class="research-adopt-size">${esc(r.adoptImagesSize(files, (images.bytes / (1024 * 1024)).toFixed(1)))}</span></span>
+                    </label>` : ''}
+                    <div class="research-adopt-rule" aria-hidden="true"></div>
+                    <fieldset class="research-transcripts research-send-mode research-adopt-send">
+                        <legend>${esc(t.askTitle)}</legend>
+                        ${researchSendModeCardsHtml('manual', undefined, 'research-adopt-send-mode')}
+                    </fieldset>
+                    ${researchSendPrinciplesHtml(true)}
+                    <p class="research-adopt-backup-narrow">${esc(t.handoffBackupNote)}</p>
+                </div>
+                <div class="buttons research-send-dialog-foot">
+                    <span class="research-send-dialog-note">${esc(t.handoffBackupNote)}</span>
                     <button type="button" class="secondary" id="research-adopt-cancel" data-dismiss>${esc(r.adoptCancel)}</button>
                     <button type="button" class="primary" id="research-adopt-confirm">${esc(r.adoptConfirm)}</button>
                 </div>
