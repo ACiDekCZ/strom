@@ -1997,7 +1997,9 @@ export const researchSyncMethods = uiModule({
         const conn = link ? this.researchConnectionNote(link.id) : null;
         if (conn) sub.unshift(`${conn.title}.`, ...(conn.warn ? [conn.sub] : []));
         if (treeId && conflicts > 0) {
-            sub.push(`${s.flyConflict(conflicts)} (${when(researchAutoState(treeId).lastWritten?.at)}).`);
+            // The time of that write when known; never empty brackets (R5 of the N1 round).
+            const at = when(researchAutoState(treeId).lastWritten?.at);
+            sub.push(at ? `${s.flyConflict(conflicts)} (${at}).` : `${s.flyConflict(conflicts)}.`);
             const persons = this.researchWrittenConflictPersons(treeId);
             const one = persons.length === 1 ? DataManager.getPerson(persons[0]) : null;
             const name = one ? `${one.firstName} ${one.lastName}`.trim() : '';

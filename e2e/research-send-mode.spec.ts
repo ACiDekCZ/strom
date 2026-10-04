@@ -293,3 +293,23 @@ test('"Only load from the research" and following live: changes made here are ne
     await dialog.locator('#research-load-ok').click();
     await expect.poll(birthPlace).toBe('');
 });
+
+test('following live with changes to send: "Send, then load" sends them, then following starts (R3 of the N1 round)', async ({ page }) => {
+    const { openResearch, fakeBridge, poll, editJan, researchGed, NEW_HEAD, BRIDGE } = await import('./research-bridge.js');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openResearch(page);
+    const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null } });
+    await poll(page);
+    await editJan(page, 'Praha');
+    bridge.head = NEW_HEAD;
+    bridge.treeGed = researchGed(NEW_HEAD);
+    const written = 'abcdef123456';
+    bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0061' } };
+    bridge.onWrite = () => ({ head: written, ged: researchGed(written, ['1 BIRT', '2 PLAC Praha']) });
+    await page.evaluate((b) => { void window.Strom.UI.startLiveFollow(b); }, BRIDGE);
+    await page.getByRole('button', { name: 'Send, then load' }).click();
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    await expect(page.locator('#live-panel')).toBeVisible();
+    // Nothing of the user's lost: the research has it.
+    expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(p => p.firstName === 'Jan').birthPlace)).toBe('Praha');
+});

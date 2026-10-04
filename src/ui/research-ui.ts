@@ -1189,7 +1189,7 @@ export const researchUiMethods = uiModule({
      * afterwards (asking when the user changed it in the app), switch to it.
      * Returns the tree, or null when the user cancelled.
      */
-    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean; afterSend?: TreeId; plainAsk?: boolean; noAsk?: boolean }): Promise<TreeId | null> {
+    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean; afterSend?: TreeId; plainAsk?: boolean; noAsk?: boolean; live?: string }): Promise<TreeId | null> {
         const name = source.name || strings.research.defaultName;
         const dateLabel = researchDateLabel(source.date);
         const existing = source.treeId ? TreeManager.findTreeByResearchId(source.treeId) : null;
@@ -1255,6 +1255,17 @@ export const researchUiMethods = uiModule({
                 const choice = await this.showResearchUpdateConflict(existing.id, existing.name, data, includeImages);
                 if (choice === null) return null;
                 if (choice === 'sendThenLoad') {
+                    const live = opts.live;
+                    if (live) {
+                        // Starting to follow live: sent first, then following starts again — the research holds
+                        // the changes now, so nothing is replaced (R3 of the N1 round).
+                        void this.researchSendTree(existing.id).then(() => {
+                            const sent = TreeManager.getTreeMetadata(existing.id)?.research?.sent;
+                            if (sent?.state === 'written' && DataManager.getCurrentTreeId() === existing.id
+                                && contentFingerprint(DataManager.getData()) === sent.fingerprint) void this.startLiveFollow(live);
+                        });
+                        return null;
+                    }
                     // That tree, named — never the one that happens to be open.
                     void this.researchSendTree(existing.id, { thenLoad: true });
                     return null;
@@ -1295,9 +1306,9 @@ export const researchUiMethods = uiModule({
             }
             // Asked when the user asked for the version (not after a hand-over, a send that loads after
             // itself, or following live): each value here it changes or removes, what it adds, the backup.
-            // Following live asks too when it would replace changes made here (only loading, or changes
-            // the research holds): once, at the start — while it follows, the tree is read-only.
-            if (askLoad && previous && !asCopy && !opts.quiet && !opts.afterSend && (!opts.noAsk || edited)) {
+            // Following live asks too when it would replace changes made here the research lacks (only
+            // loading): once, at the start — while it follows, the tree is read-only.
+            if (askLoad && previous && !asCopy && !opts.quiet && !opts.afterSend && (!opts.noAsk || (edited && !holdsSent))) {
                 if (DataManager.getCurrentTreeId() !== existing.id) {
                     if (existing.isHidden) TreeManager.setTreeVisibility(existing.id, false);
                     await this.switchToTree(existing.id);
@@ -1776,6 +1787,11 @@ export const researchUiMethods = uiModule({
         if (!known.includes(status.head)) return false;
         const previous = await readTree(existing.id);
         if (!previous || fingerprintLike(previous, link.fingerprint) === link.fingerprint) return false;
+        // The tree is the send the research wrote whole (no conflict kept, nothing left unwritten): nothing here
+        // it lacks, its version loads (R3 of the N1 round). With a conflict its version holds the research's value.
+        const nw = researchAutoState(existing.id).notWritten;
+        if (researchSendVouches(link.sent) && contentFingerprint(previous) === link.sent!.fingerprint && !held
+            && !(nw && nw.fingerprint === link.sent!.fingerprint)) return false;
         if (DataManager.getCurrentTreeId() !== existing.id) {
             await this.switchToTree(existing.id);
             if (DataManager.getCurrentTreeId() !== existing.id) return false;
@@ -1863,7 +1879,7 @@ export const researchUiMethods = uiModule({
             const treeId = await this.applyResearch(
                 data,
                 { treeId: status.treeId, name, date: header.date, mode: header.mode },
-                { head: status.head, quiet: opts.resume, noAsk: true }
+                { head: status.head, quiet: opts.resume, noAsk: true, live: raw }
             );
             if (!treeId) {
                 if (opts.resume) forgetLiveBridge();

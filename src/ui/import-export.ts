@@ -1199,7 +1199,8 @@ export const importExportMethods = uiModule({
         }
 
         nameInput.value = suggestedName;
-        personsEl.textContent = String(Object.keys(data.persons).length);
+        // People, not the "?" stand-ins (as the tree's own count).
+        personsEl.textContent = String(Object.values(data.persons).filter(p => p && !p.isPlaceholder).length);
         partnershipsEl.textContent = String(Object.keys(data.partnerships).length);
 
         modal.classList.add('active');

@@ -331,12 +331,19 @@ export const researchChangesMethods = uiModule({
         (panel.querySelector<HTMLElement>('button') ?? panel).focus?.();
     },
 
-    /** Under the "N ⌄" part of the Send button when shown, else under ⋯; within the window. */
+    /**
+     * Under the "N ⌄" part of the Send button when shown, else under the Send button or the research's mark
+     * (where the research is in the toolbar, R6 of the N1 round), else under ⋯; within the window.
+     */
     positionResearchChanges(): void {
         const panel = document.getElementById(PANEL_ID);
         if (!panel) return;
-        const more = document.getElementById('research-sync-send-more');
-        const anchor = more && more.offsetParent ? more : document.querySelector<HTMLElement>('.actions-menu-btn');
+        const shown = (id: string): HTMLElement | null => {
+            const el = document.getElementById(id);
+            return el && el.offsetParent ? el : null;
+        };
+        const anchor = shown('research-sync-send-more') ?? shown('research-sync-send') ?? shown('research-sync-mark')
+            ?? document.querySelector<HTMLElement>('.actions-menu-btn');
         const rect = anchor?.getBoundingClientRect();
         const width = Math.min(panel.offsetWidth || 380, window.innerWidth - 16);
         const left = rect ? Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)) : 8;

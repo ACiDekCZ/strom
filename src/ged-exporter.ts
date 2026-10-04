@@ -782,8 +782,10 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
         // Marriage event (for married or divorced status) — not the bare status of a family whose other
         // parent is only a "?" stand-in (it would read as a wedding to someone unknown).
-        // A childless one says it: its status is all it has ("married, the spouse unknown").
-        const withStandIn = (!personIdMap.has(p1Id) || !personIdMap.has(p2Id)) && partnership.childIds.length > 0;
+        // A "?" family of one child keeps "married" to itself (the default, a child's one known parent). A
+        // childless one ("married, the spouse unknown") and one of siblings say it: with siblings it is what
+        // keeps them one family there and back (R1 of the N1 round: split into a family per child).
+        const withStandIn = (!personIdMap.has(p1Id) || !personIdMap.has(p2Id)) && partnership.childIds.length === 1;
         const hasMarriage = ((partnership.status === 'married' || partnership.status === 'divorced') && !withStandIn) ||
             !!partnership.startDate || !!partnership.startPlace || !!partnership.address
             || Object.values(partnership.ages ?? {}).some(a => a.trim());

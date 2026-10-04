@@ -303,6 +303,25 @@ describe('a child with one known parent', () => {
         expect(contentFingerprint(named)).not.toBe(before);
     });
 
+    it('R1: a "?" family of siblings says its status, so it comes back one family with all three children', () => {
+        const marta = person('Marta', 'female');
+        const stand = DataManager.createPerson({ firstName: '?', lastName: '', gender: 'male' }, true).id;
+        const u = DataManager.createPartnership(stand, marta)!;
+        for (const name of ['Eva', 'Petr', 'Pavla']) {
+            const c = person(name, name === 'Petr' ? 'male' : 'female');
+            DataManager.addParentChild(marta, c, u.id);
+            DataManager.addParentChild(stand, c, u.id);
+        }
+        const out = ged(data());
+        expect(out).not.toContain('1 NAME //');
+        expect(out).toMatch(/0 @F1@ FAM\n1 WIFE @I\d+@\n(1 CHIL @I\d+@\n){3}1 MARR\n/);
+        const back = fromGed(out);
+        expect(unions(back)).toHaveLength(1);
+        expect(unions(back)[0].childIds).toHaveLength(3);
+        expect(unions(back)[0].status).toBe('married');
+        expect(standIns(back)).toHaveLength(1);
+    });
+
     it('D: a childless "?" partner is no nameless person in GEDCOM; its family stays (the known spouse alone with the status) and reads back', () => {
         const ole = person('Ole', 'male');
         const stand = DataManager.createPerson({ firstName: '?', lastName: '', gender: 'female' }, true).id;
