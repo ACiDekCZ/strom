@@ -213,8 +213,23 @@ interface KnownConflicts {
 function fingerprintsOf(data: StromData, link: ResearchLink): { current: string; matchesBase: boolean } {
     return {
         current: contentFingerprint(data),
-        matchesBase: !!link.fingerprint && fingerprintLike(data, link.fingerprint) === link.fingerprint,
+        matchesBase: researchBaseStands(link) && !!link.fingerprint && fingerprintLike(data, link.fingerprint) === link.fingerprint,
     };
+}
+
+/**
+ * The research's version loaded here is still what the research holds of this
+ * tree: no send written (or waiting to be) since it was loaded. Its version
+ * is no longer loaded after a write (only when asked), so once a send changed
+ * something there, the tree going back to the old values is a change to send —
+ * compared with the copy sent, never with the version before it (V-A).
+ */
+function researchBaseStands(link: ResearchLink): boolean {
+    const sent = link.sent;
+    if (!sent || sent.changes === 0 || (sent.state !== 'written' && sent.state !== 'pending')) return true;
+    const sentAt = Date.parse(sent.at);
+    const loadedAt = Date.parse(link.syncedAt);
+    return Number.isFinite(sentAt) && Number.isFinite(loadedAt) && sentAt < loadedAt;
 }
 
 /** A status the bridge gave elsewhere (?live=, ?send=, following): it runs, and this is what it said. */
@@ -435,9 +450,10 @@ export const researchSyncMethods = uiModule({
 
     /** The fingerprints of the active tree now (cached until the next edit). */
     researchSyncFingerprints(treeId: TreeId, link: ResearchLink): { current: string; matchesBase: boolean } {
-        if (fpCache && fpCache.treeId === treeId && fpCache.base === link.fingerprint) return fpCache;
+        const key = `${link.fingerprint}|${link.syncedAt}|${link.sent?.at ?? ''}|${link.sent?.state ?? ''}`;
+        if (fpCache && fpCache.treeId === treeId && fpCache.base === key) return fpCache;
         const fps = fingerprintsOf(DataManager.getData(), link);
-        fpCache = { treeId, ...fps, base: link.fingerprint };
+        fpCache = { treeId, ...fps, base: key };
         return fpCache;
     },
 
@@ -1430,12 +1446,16 @@ export const researchSyncMethods = uiModule({
     async researchRestoreBeforeLoad(treeId: TreeId): Promise<void> {
         const lb = researchAutoState(treeId).loadBackup;
         if (!lb || DataManager.getCurrentTreeId() !== treeId || DataManager.isReadOnly()) return;
-        const restored = await DataManager.restoreSnapshot(lb.id).catch(() => null);
+        // The tree as it was, built on the tie it had then: the next send names that head (and the copy since),
+        // the research's version is "newer" again, to load when asked (V-B).
+        const before = lb.before;
+        const restored = await DataManager.restoreSnapshot(lb.id, before ? { head: before.head, fingerprint: before.fingerprint } : null).catch(() => null);
         if (!restored) {
             this.showToast(strings.storageSafety.snapshotFailed, 5000);
             return;
         }
-        patchResearchAutoState(treeId, { loadBackup: undefined });
+        if (before) TreeManager.patchResearchLink(treeId, { syncedAt: before.syncedAt, sent: before.sent });
+        patchResearchAutoState(treeId, { loadBackup: undefined, held: undefined });
         fpCache = null;
         await TreeRenderer.renderAsync();
         this.refreshSearch();
@@ -1838,13 +1858,17 @@ export const researchSyncMethods = uiModule({
                 b.sub = [strings.changes.personsChanged(list.length), b.sub].filter(Boolean).join(' · ');
                 b.actions = [...(b.actions ?? []), { action: 'showChanges', label: strings.changes.whatWillBeSent, asLink: true }];
             }
-        } else if (state.kind === 'written' && treeId && researchWrittenList(treeId)?.list.length) {
+        } else if (state.kind === 'written' && treeId && researchWrittenList(treeId)?.list.length && researchSendMode(link) !== 'off') {
             b.actions = [...(b.actions ?? []), { action: 'showWritten', label: strings.changes.whatWasWritten, asLink: true }];
         }
         // "Only load from the research": said in every state, with the way to change it.
         if (link && researchSendMode(link) === 'off') {
             // Never "in sync" while nothing goes: what is here may differ from there.
-            if (state.kind === 'inSync' || state.kind === 'written') b.title = s.sendOffLine;
+            // (nor what an earlier send wrote: beside "not sent" it reads as if something went — V-G).
+            if (state.kind === 'inSync' || state.kind === 'written') {
+                b.title = s.sendOffLine;
+                if (state.kind === 'written') b.sub = connNote ? [`${connNote.title}.`, connNote.sub].filter(Boolean).join(' ') : undefined;
+            }
             else b.sub = [b.sub, s.sendOffLine].filter(Boolean).join(' · ');
             b.actions = [...(b.actions ?? []), { action: 'changeSendMode', label: s.sendOffChange, asLink: true }];
         }

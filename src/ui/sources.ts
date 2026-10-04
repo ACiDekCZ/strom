@@ -1467,8 +1467,11 @@ export const sourcesMethods = uiModule({
         this.citeSourceAfterCreate = true;
         this.sourceEditorContext = this.citationContext;
         document.getElementById('source-picker-modal')?.classList.remove('active');
+        // The note of the book, without lines that name that entry's own page (they would point the new one there).
+        const page = (book.reference ?? '').trim();
+        const note = (book.note ?? '').split('\n').filter(line => !page || !line.includes(page)).join('\n').trim();
         this.showAddSourceModal({
-            title: book.title, repository: book.repository, url: book.url, note: book.note,
+            title: book.title, repository: book.repository, url: book.url, note,
             ...(book.quality !== undefined ? { quality: book.quality } : {}),
         });
         (document.getElementById('input-source-reference') as HTMLInputElement | null)?.focus();

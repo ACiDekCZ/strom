@@ -58,7 +58,7 @@ test.describe('birth and death citations', () => {
         await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', deathDate: '1932', birthSourceIds: ['s1'] } }, true);
         await page.evaluate(() => {
             const dm = window.Strom.DataManager;
-            dm.updateSource('s1', { repository: 'SOA Zámrsk', url: 'https://example.org/kniha', note: 'Kniha N', quality: 3,
+            dm.updateSource('s1', { repository: 'SOA Zámrsk', url: 'https://example.org/kniha', note: 'Kniha N\nMatrika N, fol. 12 / Zapsáno: 1865', quality: 3,
                 reference: 'fol. 12', transcript: 'Anno 1865', refn: 'S0001' } as never);
         });
         await page.evaluate(() => window.Strom.UI.showEditPersonModal('j' as never));

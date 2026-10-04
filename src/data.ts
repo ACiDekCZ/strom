@@ -1314,7 +1314,7 @@ class DataManagerClass {
      * reverts the restore. Returns null on failure, else how many of the
      * backup's images were no longer stored.
      */
-    async restoreSnapshot(snapshotId: string): Promise<{ missingImages: number } | null> {
+    async restoreSnapshot(snapshotId: string, base: ResearchBase | null = null): Promise<{ missingImages: number } | null> {
         this.rollbackEditSession();   // whole-data replacement ends a staged dialog
         if (this.isReadOnly() || !this.currentTreeId) return null;
         const payload = await getSnapshotPayload(snapshotId);
@@ -1323,8 +1323,10 @@ class DataManagerClass {
 
         this.beginMutation();
         // A backup does not say which research head it built on: no head (the
-        // research then only adds), no fingerprint (an update asks first).
-        if (this.currentTreeId) TreeManager.restoreResearchBase(this.currentTreeId, null);
+        // research then only adds), no fingerprint (an update asks first) —
+        // unless the caller knows it (the backup taken before loading the
+        // research's version builds on the base the tree had then, V-B).
+        if (this.currentTreeId) TreeManager.restoreResearchBase(this.currentTreeId, base);
         this.data = migrated;
         this.commitMutation(strings.undo.restoreBackup, true);
         AuditLogManager.log(this.currentTreeId, 'data.load', strings.auditLog.restoredBackup);

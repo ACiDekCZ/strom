@@ -1369,6 +1369,45 @@ test.describe('data protection around the research', () => {
         const occu = await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any).occupation ?? '');
         expect(occu).not.toBe('tesař');
         expect(await janPlace(page)).toBe('Praha');
+        // V-B: built on the tie it had before the load — the research's version is newer again, the next copy
+        // names that head and the copy since.
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(HEAD);
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'newer');
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        const first = bridge.sends[bridge.sends.length - 1].intake;
+        await editJan(page, 'Brno');
+        await page.clock.fastForward(QUIET + 1000);
+        await expect.poll(() => bridge.posts.length).toBe(2);
+        expect(bridge.posts[1]).toContain(`1 _STROM_HEAD ${HEAD}`);
+        expect(bridge.posts[1]).toContain(`1 _STROM_SINCE ${first}`);
+    });
+
+    test('V-A: back to the value the research had before a written send is a change to send (compared with the copy sent)', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page);
+        const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null } });
+        writesAtOnce(bridge);
+        await poll(page);
+        const baseFp = await page.evaluate(() => window.Strom.UI.researchSyncFingerprints(window.Strom.TreeManager.getActiveTreeId()!,
+            window.Strom.TreeManager.getActiveTreeMetadata()!.research!).current);
+        await editJan(page, 'Bergen');
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect.poll(() => bridge.posts.length).toBe(1);
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).toBe('written');
+        // Back as the research's version loaded here had it.
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const jan = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
+            dm.updatePerson(jan.id, { birthPlace: '' });
+        });
+        expect(await page.evaluate(() => window.Strom.UI.researchSyncFingerprints(window.Strom.TreeManager.getActiveTreeId()!,
+            window.Strom.TreeManager.getActiveTreeMetadata()!.research!).current)).toBe(baseFp);
+        await expect(page.locator('#research-sync-send')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect.poll(() => bridge.posts.length).toBe(2);
+        expect(bridge.posts[1]).not.toContain('2 PLAC Bergen');
     });
 
     test('"Only load from the research": nothing goes by itself or by hand, said with the way to change it; back to by hand, what piled up is told', async ({ page }) => {

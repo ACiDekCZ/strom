@@ -11,7 +11,7 @@ import {
     ResearchLinkAction, LiveWaiting, LiveIntake, ResearchAccepts, sanitizeResearchLinks, sanitizeWaiting, sanitizeUpdate, sanitizeIntake,
     sanitizeAccepts, parseLiveBridge, isResearchHead,
 } from './research-link.js';
-import { ResearchConflict } from './types.js';
+import { ResearchConflict, ResearchSend } from './types.js';
 
 const LINKS_KEY = 'strom-research-links';
 const OFF_KEY = 'strom-research-links-off';
@@ -268,13 +268,21 @@ export interface ResearchAutoState {
      * tree's fingerprint right after that load: "Restore the state before
      * loading" is offered while the tree is still just that (no edit since).
      */
-    loadBackup?: { id: string; at: string; fingerprint: string };
+    loadBackup?: { id: string; at: string; fingerprint: string; before?: ResearchLinkBefore };
     /** A backup was taken before this tree's first send from this browser. */
     firstSendBackup?: true;
     /** How changes go was chosen or asked once (the hand-over, or the one-time question after 3.9). */
     modeAsked?: true;
     /** Sends by hand the research wrote: after a few, sending by itself is offered (once). */
     manualWrites?: number;
+}
+
+/** The tie as it stood before the research's version was loaded: what a restore of that backup builds on again (V-B). */
+export interface ResearchLinkBefore {
+    head: string;
+    fingerprint: string;
+    syncedAt: string;
+    sent?: ResearchSend;
 }
 
 /**
@@ -351,7 +359,15 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (Array.isArray(p.resent)) out.resent = p.resent.filter((r): r is string => typeof r === 'string' && r.length <= 80).slice(-30);
         const lb = p.loadBackup as Record<string, unknown> | undefined;
         if (lb && typeof lb.id === 'string' && lb.id.length <= 80 && typeof lb.at === 'string' && Number.isFinite(Date.parse(lb.at))
-            && typeof lb.fingerprint === 'string') out.loadBackup = { id: lb.id, at: lb.at, fingerprint: lb.fingerprint };
+            && typeof lb.fingerprint === 'string') {
+            const b = lb.before as Record<string, unknown> | undefined;
+            const sent = b?.sent as ResearchSend | undefined;
+            const before: ResearchLinkBefore | undefined = b && typeof b.head === 'string' && typeof b.fingerprint === 'string' && typeof b.syncedAt === 'string'
+                ? { head: b.head, fingerprint: b.fingerprint, syncedAt: b.syncedAt,
+                    ...(sent && typeof sent === 'object' && typeof sent.fingerprint === 'string' && typeof sent.at === 'string' && typeof sent.state === 'string' ? { sent } : {}) }
+                : undefined;
+            out.loadBackup = { id: lb.id, at: lb.at, fingerprint: lb.fingerprint, ...(before ? { before } : {}) };
+        }
         if (p.firstSendBackup === true) out.firstSendBackup = true;
         if (p.modeAsked === true) out.modeAsked = true;
         if (typeof p.manualWrites === 'number' && p.manualWrites > 0) out.manualWrites = Math.min(Math.floor(p.manualWrites), 9999);

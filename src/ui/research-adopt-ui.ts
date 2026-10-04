@@ -27,6 +27,7 @@ import { onComputer, fetchWithTimeout, fetchStatus, fetchGedcomText, postSync, p
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { researchSendModeCardsHtml, researchSendPrinciplesHtml, researchSendModeChecked } from './research-tree-settings-ui.js';
+import { researchSendMode } from './research-sync-ui.js';
 
 const ADOPT_ID = 'research-adopt-modal';
 const READY_ID = 'research-ready-modal';
@@ -277,7 +278,7 @@ export const researchAdoptMethods = uiModule({
                     <h2 id="research-ready-title"><span class="install-ready-check" aria-hidden="true">✓</span> ${esc(hasPeople ? s.readyTitle : s.liveTitle(researchName))}</h2>
                 </div>
                 <div class="modal-content">
-                    <p>${esc(hasPeople ? s.readyText : s.liveText)}</p>
+                    <p>${esc(hasPeople ? s.readyText(researchSendMode(TreeManager.getTreeMetadata(DataManager.getCurrentTreeId() ?? ('' as TreeId))?.research)) : s.liveText)}</p>
                     ${rows}
                 </div>
                 <div class="buttons">

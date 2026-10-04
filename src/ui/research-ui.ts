@@ -51,7 +51,7 @@ import { formatRelativeDateTime } from '../format.js';
 import { safeFileName } from '../filenames.js';
 import {
     noteResearchLinks, announcedResearchLinks, researchLinksEnabled, noteResearchWaiting, storedResearchWaiting,
-    noteResearchBridge, noteResearchBridgeStatus, patchResearchAutoState, researchAutoState, researchIdAtBridge,
+    noteResearchBridge, noteResearchBridgeStatus, patchResearchAutoState, researchAutoState, researchIdAtBridge, ResearchLinkBefore,
 } from '../research-device.js';
 import { rememberBridgeStatus } from './research-sync-ui.js';
 import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
@@ -1292,8 +1292,9 @@ export const researchUiMethods = uiModule({
         const previousTreeId = DataManager.getCurrentTreeId();
         let treeId: TreeId;
         let created = false;
-        /** The backup of the tree as it was before the research's version replaced it. */
+        /** The backup of the tree as it was before the research's version replaced it, and the tie it built on. */
         let backupId: string | null = null;
+        let tieBefore: ResearchLinkBefore | undefined;
         if (!existing || asCopy) {
             // The new tree takes the updates: the next open of this research
             // updates it. The tree the user changed stays exactly as it is and
@@ -1310,8 +1311,10 @@ export const researchUiMethods = uiModule({
                 if (!await DataManager.switchTree(treeId)) return null;
                 TreeRenderer.restoreFromSession();
             }
-            // Always a backup first (whatever the setting): the load can be taken back.
+            // Always a backup first (whatever the setting): the load can be taken back — with the tie it built on.
             backupId = await DataManager.snapshotNow('pre-research-load');
+            const was = TreeManager.getTreeMetadata(treeId)?.research;
+            if (was) tieBefore = { head: was.head ?? '', fingerprint: was.fingerprint ?? '', syncedAt: was.syncedAt, ...(was.sent ? { sent: was.sent } : {}) };
             DataManager.loadStromData(stable);
         }
 
@@ -1330,7 +1333,8 @@ export const researchUiMethods = uiModule({
         }
         // "Restore the state before loading", offered while the tree is just what was loaded.
         if (backupId && DataManager.getCurrentTreeId() === treeId) {
-            patchResearchAutoState(treeId, { loadBackup: { id: backupId, at: new Date().toISOString(), fingerprint: contentFingerprint(DataManager.getData()) } });
+            patchResearchAutoState(treeId, { loadBackup: { id: backupId, at: new Date().toISOString(), fingerprint: contentFingerprint(DataManager.getData()),
+                ...(tieBefore ? { before: tieBefore } : {}) } });
         }
         const loadedAfterSend = !created && (holdsSent || (!!opts.afterSend && opts.afterSend === treeId));
 
