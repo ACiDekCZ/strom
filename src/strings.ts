@@ -920,6 +920,7 @@ const stringsEN = {
         undoneSub: (t: string) => `At ${t}. Your changes are still here. Nothing more goes to the research until you choose: send it again, or keep the undo by loading the research's version.`,
         undoneAutoSub: (t: string) => `At ${t}. Your changes are still here. Nothing more is sent by itself until you choose: send it again, or keep the undo by loading the research's version.`,
         undoneKeptSub: (t: string) => `At ${t}. Your changes are still here; new edits go to the research as usual, what was taken back stays out of it until you send it again.`,
+        undoneDecideFirst: "The research took back a send, and it would write it there again with your changes. First choose: Send again, or load the research's version to keep the undo.",
         takenBackSub: (n: number) => `${nEn(n, 'change', 'changes')} from the send taken back ${n === 1 ? 'was' : 'were'} not written again.`,
         takenBackToast: (n: number) => `${nEn(n, 'change', 'changes')} from the send taken back ${n === 1 ? 'was' : 'were'} not written. To have ${n === 1 ? 'it' : 'them'} back in the research, send that send again.`,
         pillUndone: 'Send taken back',
@@ -1517,6 +1518,7 @@ const stringsEN = {
         updated: (name: string, persons: number, families: number, date: string) =>
             `Updated the research ${name} from Strom Research — ${nEn(persons, 'person', 'people')}, ${nEn(families, 'family', 'families')} (as of ${date})`,
         editedTitle: 'Changed in the app',
+        conflictTakeover: (names: string) => `A conflict is still open in the research about ${names}: Update puts the research's value in place of yours there (it stays in the backup). Decide the conflict in the research first, or open the version as a new copy.`,
         editedMessage: (name: string, backup = true) =>
             `The tree “${name}” was changed in this app since it last came from Strom Research. Updating it replaces those changes with the research${backup ? ' (a backup is kept first)' : ''}. Or open the research as a new copy and leave this tree as it is.`,
         update: 'Update',
@@ -4267,6 +4269,7 @@ const stringsCZ: StringsType = {
         undoneSub: (t: string) => `V ${t}. Úpravy jsou dál tady. Nic dalšího se do výzkumu nepošle, dokud nezvolíte: poslat znovu, nebo vrácení ponechat načtením verze výzkumu.`,
         undoneAutoSub: (t: string) => `V ${t}. Úpravy jsou dál tady. Nic dalšího se samo nepošle, dokud nezvolíte: poslat znovu, nebo vrácení ponechat načtením verze výzkumu.`,
         undoneKeptSub: (t: string) => `V ${t}. Úpravy jsou dál tady. Nové úpravy se do výzkumu posílají jako obvykle, vrácené zůstane mimo, dokud ho nepošlete znovu.`,
+        undoneDecideFirst: 'Výzkum vrátil poslání a s vašimi úpravami by ho zapsal znovu. Nejdřív zvolte: Poslat znovu, nebo vrácení ponechat načtením verze výzkumu.',
         takenBackSub: (n: number) => `${nCs(n, 'změna', 'změny', 'změn')} z vráceného poslání se znovu nezapsal${n === 1 ? 'a' : n >= 2 && n <= 4 ? 'y' : 'o'}.`,
         takenBackToast: (n: number) => `${nCs(n, 'změna', 'změny', 'změn')} z vráceného poslání se nezapsal${n === 1 ? 'a' : n >= 2 && n <= 4 ? 'y' : 'o'}. Chcete-li ${n === 1 ? 'ji' : 'je'} ve výzkumu zpět, pošlete to poslání znovu.`,
         pillUndone: 'Poslání vráceno',
@@ -4861,6 +4864,7 @@ const stringsCZ: StringsType = {
         updated: (name: string, persons: number, families: number, date: string) =>
             `Aktualizován výzkum ${name} ze Strom Research — ${nCs(persons, 'osoba', 'osoby', 'osob')}, ${nCs(families, 'rodina', 'rodiny', 'rodin')} (stav k ${date})`,
         editedTitle: 'Změněno v aplikaci',
+        conflictTakeover: (names: string) => `Ve výzkumu je dosud otevřený rozpor u: ${names}. Aktualizace tam nahradí vaši hodnotu hodnotou výzkumu (zůstane v záloze). Nejdřív rozpor rozhodněte ve výzkumu, nebo verzi otevřete jako novou kopii.`,
         editedMessage: (name: string, backup = true) =>
             `Rodokmen „${name}“ jste od posledního otevření ze Strom Research v aplikaci změnili. Aktualizace vaše změny přepíše výzkumem${backup ? ' (předtím se uloží záloha)' : ''}. Nebo výzkum otevřete jako novou kopii a tento rodokmen zůstane beze změny.`,
         update: 'Aktualizovat',
@@ -7605,6 +7609,7 @@ const stringsDE: StringsType = {
         undoneSub: (t: string) => `Um ${t}. Ihre Änderungen sind noch hier. Bis Sie wählen, geht nichts weiter an die Forschung: erneut senden oder die Rücknahme behalten, indem Sie die Version der Forschung laden.`,
         undoneAutoSub: (t: string) => `Um ${t}. Ihre Änderungen sind noch hier. Bis Sie wählen, wird nichts von selbst gesendet: erneut senden oder die Rücknahme behalten, indem Sie die Version der Forschung laden.`,
         undoneKeptSub: (t: string) => `Um ${t}. Ihre Änderungen sind noch hier. Neue Änderungen gehen wie gewohnt an die Forschung, das Zurückgenommene bleibt draußen, bis Sie es erneut senden.`,
+        undoneDecideFirst: 'Die Forschung hat eine Sendung zurückgenommen und würde sie mit Ihren Änderungen erneut schreiben. Wählen Sie zuerst: Erneut senden oder die Rücknahme behalten, indem Sie die Version der Forschung laden.',
         takenBackSub: (n: number) => `${nDe(n, 'Änderung', 'Änderungen')} aus der zurückgenommenen Sendung ${n === 1 ? 'wurde' : 'wurden'} nicht erneut geschrieben.`,
         takenBackToast: (n: number) => `${nDe(n, 'Änderung', 'Änderungen')} aus der zurückgenommenen Sendung ${n === 1 ? 'wurde' : 'wurden'} nicht geschrieben. Um sie in der Forschung zurückzuhaben, senden Sie diese Sendung erneut.`,
         pillUndone: 'Sendung zurückgenommen',
@@ -8199,6 +8204,7 @@ const stringsDE: StringsType = {
         updated: (name: string, persons: number, families: number, date: string) =>
             `Forschung ${name} aus Strom Research aktualisiert — ${nDe(persons, 'Person', 'Personen')}, ${nDe(families, 'Familie', 'Familien')} (Stand ${date})`,
         editedTitle: 'In der App geändert',
+        conflictTakeover: (names: string) => `In der Forschung ist noch ein Widerspruch offen bei: ${names}. Aktualisieren setzt dort den Wert der Forschung an die Stelle Ihres Werts (er bleibt in der Sicherung). Entscheiden Sie den Widerspruch zuerst in der Forschung, oder öffnen Sie die Version als neue Kopie.`,
         editedMessage: (name: string, backup = true) =>
             `Sie haben den Stammbaum „${name}“ in dieser App geändert, seit er zuletzt aus Strom Research kam. Beim Aktualisieren werden diese Änderungen durch die Forschung ersetzt${backup ? ' (vorher wird eine Sicherung angelegt)' : ''}. Oder öffnen Sie die Forschung als neue Kopie und lassen diesen Stammbaum unverändert.`,
         update: 'Aktualisieren',

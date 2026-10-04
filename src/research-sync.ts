@@ -347,3 +347,20 @@ export function researchKeepsTakenBack(version: string): boolean {
     if (patch > 0) return true;
     return rc >= 19;
 }
+
+/**
+ * Which send a reply's `undoneSince` names for "Send again": the latest of
+ * them by the research's records (the list may name every send taken back
+ * after the copy's base, in any order — never simply its last mark, finding B).
+ * Marks the status does not list (it keeps only its last sends) count as older.
+ * Without the research's records, its last mark. '' = none.
+ */
+export function latestUndone(undoneSince: readonly string[], sends: readonly ResearchSendRecord[] | null | undefined): string {
+    if (undoneSince.length === 0) return '';
+    const time = (intake: string): number => {
+        const t = Date.parse(sends?.find(r => r.intake === intake)?.at ?? '');
+        return Number.isFinite(t) ? t : -Infinity;
+    };
+    if (!sends || undoneSince.every(x => time(x) === -Infinity)) return undoneSince[undoneSince.length - 1];
+    return undoneSince.reduce((best, x) => (time(x) > time(best) ? x : best));
+}

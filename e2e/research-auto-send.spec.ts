@@ -291,7 +291,7 @@ test('finding 35: Send again after a send taken back asks the research to write 
 test('finding 35: the research no longer keeps the send taken back (404 send.none): said, the bar stays, its version offered', async ({ page }) => {
     const bridge = await writtenThenUndone(page);
     bridge.sends.length = 0;
-    await page.evaluate(() => window.Strom.UI.researchSendNow());
+    await page.evaluate(() => window.Strom.UI.researchSendNow({ undoAgain: true }));
     await expect.poll(() => (bridge.againAsks ?? []).length).toBe(1);
     const toast = page.locator('.toast', { hasText: 'no longer keeps the send it took back' });
     await expect(toast.getByRole('button', { name: "Load the research's version" })).toBeVisible();
@@ -471,6 +471,11 @@ test('finding 43: after a send taken back, an unrelated edit does not go by itse
     // Leaving the tree does not send it either.
     await page.evaluate(() => window.Strom.UI.researchAutoLeave());
     expect(bridge.posts).toHaveLength(1);
+    // A plain Send (the menu, the toolbar) neither: the user is asked to decide; nothing goes, nothing written again.
+    await page.evaluate(() => window.Strom.UI.researchSendNow());
+    await expect(page.locator('.toast', { hasText: 'First choose: Send again' })).toBeVisible();
+    expect(bridge.posts).toHaveLength(1);
+    expect(bridge.againAsks ?? []).toEqual([]);
     // The user's choice: written again from what the research kept; the rename goes after it.
     await block(page).getByRole('button', { name: 'Send again' }).click();
     await expect.poll(() => bridge.againAsks ?? []).toEqual([first]);
@@ -490,11 +495,20 @@ test('finding 43, research 1.12.0-rc.19: it leaves out what a send taken back br
     await renameJan(page, 'Jenda');
     await page.clock.fastForward(QUIET + 1000);
     await expect.poll(() => bridge.posts.length).toBe(2);
+    expect(bridge.againAsks ?? []).toEqual([]);
     const toast = page.locator('.toast', { hasText: '1 change from the send taken back was not written' });
     await expect(toast.getByRole('button', { name: 'Send again' })).toBeVisible();
     await expect(pill(page)).toContainText('Send taken back');
     await openResearchMenu(page);
     await expect(block(page)).toContainText('1 change from the send taken back was not written again');
+    await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+    // A plain Send by hand is a copy too (never the send taken back written again, finding A).
+    await renameJan(page, 'Jeník');
+    await page.evaluate(() => window.Strom.UI.researchSendNow());
+    await expect.poll(() => bridge.posts.length).toBe(3);
+    expect(bridge.againAsks ?? []).toEqual([]);
+    await renameJan(page, 'Jenda');
+    await openResearchMenu(page);
     // Send again: the research writes the send taken back from what it kept.
     await block(page).getByRole('button', { name: 'Send again' }).click();
     await expect.poll(() => bridge.againAsks ?? []).toEqual([first]);
@@ -555,6 +569,38 @@ test('the bridge stops: "not running" at its next ask (within 20 s), and the tas
     await poll(page);
     await openResearchMenu(page);
     await expect(sub.locator('#research-item-waiting')).toBeVisible();
+});
+
+test('findings D/E: "Send, then load" with a conflict still open over the user\'s value: nothing asked, nothing loaded over it; the research stopping is said beside the conflict', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    const bridge = await autoTree(page);
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0001', person: 'P0003', fact: 'NAME' }] } };
+    bridge.onWrite = () => ({ head: 'c1c1c1c1c1c1', ged: nameConflictGed('c1c1c1c1c1c1') });
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    // An unrelated edit sent with "Send, then load": written, no new conflict; its version still has the research's name.
+    bridge.syncReply = WRITE;
+    bridge.onWrite = () => ({ head: 'c2c2c2c2c2c2', ged: nameConflictGed('c2c2c2c2c2c2', ['1 BIRT', '2 PLAC Praha']) });
+    await janBirthPlace(page, 'Praha');
+    await page.evaluate(() => window.Strom.UI.researchSendNow({ thenLoad: true }));
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    await page.clock.fastForward(5000);
+    await expect(page.locator('.dialog-confirm', { hasText: 'Changed in the app' })).toHaveCount(0);
+    expect(await janFirst(page)).toBe('Jenda');
+    expect(await janWhere(page)).toBe('Praha');
+    await expect(pill(page)).toContainText('Written, 1 conflict to decide');
+    // Asked by the user, the question names the conflict that Update would replace.
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    await expect(page.locator('.dialog-confirm')).toContainText('A conflict is still open in the research about Jenda Víšek');
+    await page.keyboard.press('Escape');
+    expect(await janFirst(page)).toBe('Jenda');
+    // The research stops: said beside the conflict.
+    bridge.down = true;
+    await page.clock.fastForward(21_000);
+    await expect(pill(page)).toContainText("The research isn't running");
+    await openResearchMenu(page);
+    await expect(block(page)).toContainText("The research isn't running");
 });
 
 test('a write that takes longer (202): "writing" until the status says written, then loaded quietly', async ({ page }) => {

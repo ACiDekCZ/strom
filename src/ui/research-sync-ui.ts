@@ -46,7 +46,7 @@ import {
 import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
     pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, researchSendVouches, conflictTakeovers, heldConflicts,
-    researchKeepsTakenBack,
+    researchKeepsTakenBack, latestUndone,
 } from '../research-sync.js';
 import { uiModule } from './module.js';
 import { researchWrittenList } from './research-changes-ui.js';
@@ -673,7 +673,7 @@ export const researchSyncMethods = uiModule({
         const s = strings.sync;
         this.showToast(s.undoneToast(when(lw.at)), Infinity, {
             closable: true,
-            action: { label: s.sendAgain, run: () => { void this.researchSendTree(treeId); } },
+            action: { label: s.sendAgain, run: () => { void this.researchSendTree(treeId, { undoAgain: true }); } },
         });
     },
 
@@ -824,7 +824,7 @@ export const researchSyncMethods = uiModule({
      * it runs (no dialog), else the old way through the terminal. `thenLoad`:
      * load the research's new version once the send is written there.
      */
-    async researchSendNow(opts: { thenLoad?: boolean; treeId?: TreeId } = {}): Promise<void> {
+    async researchSendNow(opts: { thenLoad?: boolean; treeId?: TreeId; undoAgain?: boolean } = {}): Promise<void> {
         const ctx = this.researchSyncLink();
         if (!ctx || sendingTree) return;
         // Asked for one tree: never send another (the open tree changed meanwhile).
@@ -836,7 +836,14 @@ export const researchSyncMethods = uiModule({
             return;
         }
         if (!await this.ensureLocalUnlocked()) return;
-        await this.postResearchSend(treeId, { auto: false, thenLoad: opts.thenLoad });
+        // A send taken back: only "Send again" writes it there again (`/again`). Any other send is a copy —
+        // a research that leaves out what was taken back takes it; an older one would write it again, so
+        // there the user decides first (finding A of the rc.19 round).
+        if (!opts.undoAgain && this.researchHoldsForUndo(link)) {
+            this.tellResearchUndoneChoice(strings.sync.undoneDecideFirst);
+            return;
+        }
+        await this.postResearchSend(treeId, { auto: false, thenLoad: opts.thenLoad, undoAgain: opts.undoAgain });
     },
 
     /**
@@ -845,7 +852,7 @@ export const researchSyncMethods = uiModule({
      * bridge is gone); by itself, only what needs the user is (a refusal,
      * once per reason) and the mark shows the rest.
      */
-    async postResearchSend(treeId: TreeId, opts: { auto: boolean; thenLoad?: boolean; keepalive?: boolean; again?: boolean }): Promise<void> {
+    async postResearchSend(treeId: TreeId, opts: { auto: boolean; thenLoad?: boolean; keepalive?: boolean; again?: boolean; undoAgain?: boolean }): Promise<void> {
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
         if (!link || sendingTree) return;
@@ -868,7 +875,7 @@ export const researchSyncMethods = uiModule({
     },
 
     /** The send itself (postResearchSend, under the windows' lock). */
-    async postResearchSendNow(treeId: TreeId, opts: { auto: boolean; thenLoad?: boolean; keepalive?: boolean; again?: boolean; noIdsRetried?: boolean }): Promise<void> {
+    async postResearchSendNow(treeId: TreeId, opts: { auto: boolean; thenLoad?: boolean; keepalive?: boolean; again?: boolean; undoAgain?: boolean; noIdsRetried?: boolean }): Promise<void> {
         const meta = TreeManager.getTreeMetadata(treeId);
         const link = meta?.research;
         if (!link || sendingTree) return;
@@ -908,7 +915,7 @@ export const researchSyncMethods = uiModule({
         // "Send again" by hand for a send the research took back (`strom sync undo`): the research
         // writes it again from what it kept, on the state it was sent from (POST /sync/<R…>/again,
         // 1.12). A copy sent instead reads there as "removed by the research": nothing written (finding 35).
-        const again = !opts.auto && link.sent?.state === 'undone' && link.sent.intake ? link.sent : null;
+        const again = opts.undoAgain && !opts.auto && link.sent?.state === 'undone' && link.sent.intake ? link.sent : null;
         // What goes over is then the state that send had, not this one (edits since go after it).
         const sentFp = again ? again.fingerprint : fps.current;
         const gedcom = again ? '' : researchGedcom(data, meta?.name ?? '', {
@@ -1003,8 +1010,9 @@ export const researchSyncMethods = uiModule({
         // it wrote stands, but the app and the research differ by those — never shown as in step, nor
         // loaded quietly over them. The bar "taken back" names the send taken back, at its own time
         // (findings 38, 39): Send again (theirs again) or load (the undo kept).
-        const undone = !again && reply.undoneSince.length > 0;
-        const undoneIntake = undone ? reply.undoneSince[reply.undoneSince.length - 1] : '';
+        // The latest of them, never simply the last mark (finding B).
+        const undoneIntake = again ? '' : latestUndone(reply.undoneSince, runtime.get(link.id)?.status?.sends);
+        const undone = !!undoneIntake;
         TreeManager.patchResearchLink(treeId, { refused: undefined, sentSources: sourceReadings(data),
             sent: undone ? { ...sent, at: this.researchSendTime(treeId, link, undoneIntake) || now, state: 'undone', intake: undoneIntake,
                 closedAt: now, noticed: true, ...(reply.takenBack ? { takenBack: reply.takenBack } : {}) } : sent });
@@ -1018,7 +1026,7 @@ export const researchSyncMethods = uiModule({
             // The research left those changes out (rc.19): said, with Send again to have them back there.
             if (reply.takenBack) {
                 this.showToast(s.takenBackToast(reply.takenBack), Infinity, {
-                    closable: true, action: { label: s.sendAgain, run: () => { void this.researchSendTree(treeId); } },
+                    closable: true, action: { label: s.sendAgain, run: () => { void this.researchSendTree(treeId, { undoAgain: true }); } },
                 });
             } else {
                 this.tellResearchUndoneChoice(s.undoneSinceToast(reply.undoneSince.length));
@@ -1339,7 +1347,7 @@ export const researchSyncMethods = uiModule({
     },
 
     /** Tree menus' "Send changes": the same send for any tree (switched to first when a running research takes it straight). */
-    async researchSendTree(treeId: TreeId, opts: { thenLoad?: boolean } = {}): Promise<void> {
+    async researchSendTree(treeId: TreeId, opts: { thenLoad?: boolean; undoAgain?: boolean } = {}): Promise<void> {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (!link) return;
         if (!this.researchSyncCapable(link.id)) {
@@ -1460,7 +1468,9 @@ export const researchSyncMethods = uiModule({
         const keepMenu = action === 'cancelLoad';
         if (!keepMenu) this.closeActionsMenu();
         switch (action) {
-            case 'send': case 'retry': case 'sendAgain': void this.researchSendNow(); break;
+            case 'send': case 'retry': void this.researchSendNow(); break;
+            // "Send again" on a send taken back writes that send again (`/again`); on a discarded one, the changes go again.
+            case 'sendAgain': void this.researchSendNow({ undoAgain: ctx.link.sent?.state === 'undone' }); break;
             case 'acceptUndo': void this.researchAcceptUndo(); break;
             case 'sendThenLoad': void this.researchSendNow({ thenLoad: true }); break;
             case 'showChanges': this.showResearchChanges('send'); break;
@@ -1632,7 +1642,10 @@ export const researchSyncMethods = uiModule({
                 if (treeId && this.researchDecideUrl(treeId)) actions.push({ action: 'decideInResearch', label: s.decideInResearch, asLink: true });
                 if (persons.length) actions.push({ action: 'showConflicts', label: name ? `${name} ›` : `${s.showConflicts} ›`, asLink: true });
                 actions.push({ action: 'loadNewer', label: s.loadVersion, asLink: true });
-                return { tone: 'neutral', title: s.flyConflict(conflicts), sub: [s.writtenAt(when(lw?.at ?? state.sent?.closedAt)), s.writtenConflictsSub].join(' · '), actions };
+                // The research stopped: said beside the conflict (it outranks "not running" as the state).
+                const down = !!rt && !rt.up;
+                return { tone: 'neutral', title: s.flyConflict(conflicts),
+                    sub: [down ? s.stateBridgeDown : '', s.writtenAt(when(lw?.at ?? state.sent?.closedAt)), s.writtenConflictsSub].filter(Boolean).join(' · '), actions };
             },
             unsent: () => ({ tone: 'warn', title: s.stateUnsent, sub: changed ? s.changedAt(changed) : undefined, actions: [{ action: 'send', label: s.send }] }),
             sentPending: () => ({ tone: 'neutral', title: s.stateSent(when(state.sent?.at), state.sent?.changes ?? null),
@@ -1724,6 +1737,7 @@ export const researchSyncMethods = uiModule({
         const kept = !!link && auto && !this.researchHoldsForUndo(link);
         const sub = [kept ? s.undoneKeptSub(when(sent?.closedAt)) : auto ? s.undoneAutoSub(when(sent?.closedAt)) : s.undoneSub(when(sent?.closedAt))];
         if (sent?.takenBack) sub.push(s.takenBackSub(sent.takenBack));
+        if (link && this.researchBridgeKnownDown(link.id)) sub.unshift(`${s.stateBridgeDown}.`);
         if (treeId && conflicts > 0) {
             sub.push(`${s.flyConflict(conflicts)} (${when(researchAutoState(treeId).lastWritten?.at)}).`);
             const persons = this.researchWrittenConflictPersons(treeId);
@@ -1865,7 +1879,8 @@ export const researchSyncMethods = uiModule({
             unsentAndNewer: { text: s.barUnsent, button: s.barSend, action: 'sendThenLoad' },
             stale: { text: s.pillStale, button: strings.storageSafety.reload, action: 'reload' },
             // A write left conflicts: they stay in sight until decided or the version is loaded (finding 40).
-            writtenConflicts: { text: s.flyConflict(this.researchHeldConflictCount(ctx.treeId, state.sent)), button: s.showConflicts, action: 'conflicts' },
+            writtenConflicts: { text: [s.flyConflict(this.researchHeldConflictCount(ctx.treeId, state.sent)),
+                this.researchBridgeKnownDown(ctx.link.id) ? s.stateBridgeDown : ''].filter(Boolean).join(' · '), button: s.showConflicts, action: 'conflicts' },
             ...(auto ? {
                 autoBridgeDown: { text: archive ? s.pillBridgeDownWaiting(Math.max(1, researchAutoState(ctx.treeId).edits ?? 1)) : s.pillBridgeDown,
                     button: s.pillStart, action: 'startResearch' },

@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
     researchSyncState, researchSyncWantsAttention, pendingSendFate, verifiedOffer, isOlderSource,
     researchReadSource, sourceReadingHash, unverifiedOlderSources, ResearchSyncInput, conflictTakeovers,
-    heldConflicts, researchKeepsTakenBack,
+    heldConflicts, researchKeepsTakenBack, latestUndone,
 } from '../research-sync.js';
 import { sanitizeAccepts, sanitizeInbox, sanitizeLiveStatus, researchHeaderLines, stabilizeIds, sanitizeSyncReply } from '../research-link.js';
 import { ResearchLink, ResearchSend, Source, StromData, STROM_DATA_VERSION } from '../types.js';
@@ -466,5 +466,18 @@ describe('a research that leaves out what a send taken back brought (finding 43)
     it('the reply says how many changes it left out', () => {
         expect(sanitizeSyncReply({ ok: true, takenBack: 2, undoneSince: ['R1'] })).toMatchObject({ takenBack: 2, undoneSince: ['R1'] });
         expect(sanitizeSyncReply({ ok: true }).takenBack).toBeNull();
+    });
+});
+
+describe('the send taken back a reply names (finding B)', () => {
+    const rec = (intake: string, at: string, state: string) => ({ intake, at, state, changes: 1, tries: null, tree: '', sent: '', decidedAt: '', reason: '', conflicts: null, conflictPersons: [] }) as never;
+    it('the latest by the research\'s records, whatever the order; marks it does not list count as older', () => {
+        const sends = [rec('R1', '2026-10-04T05:50:00Z', 'undone'), rec('R2', '2026-10-04T05:55:00Z', 'undone'), rec('R3', '2026-10-04T05:57:00Z', 'undone')];
+        expect(latestUndone(['R3', 'R1', 'R2'], sends)).toBe('R3');
+        expect(latestUndone(['R2', 'R1'], sends)).toBe('R2');
+        expect(latestUndone(['R9', 'R1'], sends)).toBe('R1');
+        expect(latestUndone(['R8', 'R9'], sends)).toBe('R9');
+        expect(latestUndone(['R1', 'R2'], null)).toBe('R2');
+        expect(latestUndone([], sends)).toBe('');
     });
 });

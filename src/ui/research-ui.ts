@@ -54,7 +54,7 @@ import {
     noteResearchBridge, noteResearchBridgeStatus, patchResearchAutoState,
 } from '../research-device.js';
 import { rememberBridgeStatus } from './research-sync-ui.js';
-import { sourceReadings, researchSendVouches, conflictTakeovers } from '../research-sync.js';
+import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -1203,7 +1203,15 @@ export const researchUiMethods = uiModule({
             const sent = existing.research?.sent;
             const sentIsTree = !!previous && !!sent && contentFingerprint(previous) === sent.fingerprint;
             // …unless a conflict still open there is about a value the user has here: theirs would go (finding 37).
-            const takesOver = !!previous && conflictTakeovers(previous, stabilizeIds(data, previous)).length > 0;
+            const takeovers = previous ? conflictTakeovers(previous, stabilizeIds(data, previous)) : [];
+            const takesOver = takeovers.length > 0;
+            // Just written ("Send, then load"), and its version holds the research's values over open conflicts:
+            // not loaded and nothing asked (finding 37) — the conflict stays in sight, read from that version.
+            if (opts.afterSend === existing.id && takesOver && previous) {
+                patchResearchAutoState(existing.id, { held: heldConflicts(previous, stabilizeIds(data, previous), existing.research?.head ?? '', opts.head || source.head || '') });
+                this.refreshResearchSyncUi();
+                return null;
+            }
             const holdsChanges = edited && lost === 0 && sentIsTree && researchSendVouches(sent) && !takesOver;
             // The tree is what was sent and written, but the research did not take it all (nothing
             // written, a conflict left): asked plainly — "send first" would send nothing new (findings 29, 35).
@@ -1240,6 +1248,11 @@ export const researchUiMethods = uiModule({
                 const ownMedia = countImages(previous);
                 const message = edited
                     ? [strings.research.editedMessage(existing.name, backup),
+                        // Values the user has where a conflict is open there: said, by name (finding 37).
+                        takesOver ? strings.research.conflictTakeover(takeovers.map(id => {
+                            const p = previous!.persons[id];
+                            return p ? `${p.firstName} ${p.lastName}`.trim() : '';
+                        }).filter(Boolean).slice(0, 5).join(', ')) : '',
                         lost > 0 ? strings.research.mediaLost(lost)
                             : ownMedia.photos + ownMedia.attachments + ownMedia.excerpts > 0 ? strings.research.mediaKept : '',
                     ].filter(Boolean).join('\n\n')
