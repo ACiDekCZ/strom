@@ -26,7 +26,8 @@ const ZOOM_EDGE_LABELS = 0.999;
 const ZOOM_BUTTON_FACTOR = 1.3;
 const ZOOM_ANIMATION_DURATION = 200; // ms
 /** Views drawn in their own container over the (hidden) tree canvas. */
-const STANDALONE_VIEW_SELECTOR = '.timeline-container, .fan-container, .map-container';
+// The welcome of an empty tree scrolls itself too (a phone held sideways is shorter than it).
+const STANDALONE_VIEW_SELECTOR = '.timeline-container, .fan-container, .map-container, #empty-state';
 
 interface TouchState {
     startTime: number;

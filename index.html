@@ -3606,6 +3606,21 @@
             .empty-state-ghosts { display: none; }
             .empty-state-actions { align-items: center; }
         }
+        /* A short screen (a phone held sideways): the welcome is taller than the
+           space between the toolbar and the bottom bar — it fills that space and
+           scrolls, nothing under the bar out of reach; centred when it fits. */
+        @media (max-height: 600px) {
+            .empty-state {
+                top: 0; left: 0; right: 0; bottom: 0;
+                transform: none;
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                touch-action: pan-y;
+                align-items: safe center;
+                justify-content: safe center;
+                padding: 16px 16px calc(96px + env(safe-area-inset-bottom, 0px));
+            }
+        }
         /* Locked local data: the Unlock message replaces the welcome offers. */
         .empty-state-locked { display: none; }
         body.data-locked .empty-state-text:not(.empty-state-locked) { display: none; }
@@ -4729,6 +4744,20 @@
         @media (min-width: 500px) and (max-width: 900px) {
             .storage-notice { top: 60px; }
         }
+        /* The reminder to save to a file waits while a dialog is open: it sat
+           over the dialog's top (the Export dialog, where saving happens, too). */
+        body:has(.modal-overlay.active) .file-copy-notice { display: none; }
+        /* The tour offer (after the sample tree) waits too: it covered a form opened meanwhile. */
+        body:has(.modal-overlay.active) .tour-offer { display: none; }
+        /* Small text links and chips are big enough to hit with a finger (44 px,
+           the label unchanged): "+ cause, age, house", the card-field chips, the
+           × of the new-version prompt and of the notices. */
+        @media (pointer: coarse) {
+            .detail-group .detail-more, .card-fields-settings .card-field-chips .card-field-chip { min-height: 44px; }
+            .pwa-update-close { min-width: 44px; min-height: 44px; }
+        }
+        /* With a mouse too: the × is a target of its own, not a glyph. */
+        .pwa-update-close { min-width: 28px; min-height: 28px; }
         @media (max-width: 499px) {
             .storage-notice { top: 56px; width: calc(100vw - 32px); font-size: 13px; }
             /* Two actions do not fit beside the text: text and × on top, the

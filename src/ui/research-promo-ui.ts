@@ -27,6 +27,8 @@ import {
 } from '../research-promo.js';
 import { isToolbarCompact } from '../breakpoints.js';
 import { uiModule } from './module.js';
+import { onComputer } from './research-ui.js';
+import { researchDisplayName } from './research-sync-ui.js';
 
 const INFO_MODAL_ID = 'research-info-modal';
 const SWIPE_CLOSE_PX = 80;
@@ -249,6 +251,15 @@ export const researchPromoMethods = uiModule({
      * menu trigger it came from.
      */
     showResearchInfoDialog(): void {
+        // A tree that has its research already, on a phone or tablet: not the way to install it — where
+        // the research is and what a phone can do (finding 2 of the mobile round).
+        const link = TreeManager.getActiveTreeMetadata()?.research;
+        if (link && !onComputer()) {
+            this.closeActionsMenu();
+            this.hideBottomSheet();
+            void this.showAlert(strings.research.phoneHasResearch(researchDisplayName(link.id)), 'info');
+            return;
+        }
         // Not here yet: the way to install it (the research, once here, takes the tree over).
         if (!this.researchAdoptActiveAvailable()) {
             document.getElementById(INFO_MODAL_ID)?.remove();
