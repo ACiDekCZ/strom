@@ -93,6 +93,7 @@ async function handOver(page: Page, init: Partial<Bridge> = {}, pick?: (page: Pa
         if (sessionStorage.getItem('seeded')) return;
         sessionStorage.setItem('seeded', '1');
         localStorage.setItem('strom-research-links', JSON.stringify({ actions: ['new', 'send', 'open'], at: new Date().toISOString() }));
+        localStorage.setItem('strom-research-send-preview-skip', '1');
     });
     await openApp(page);
     await page.evaluate(async () => {
@@ -147,12 +148,12 @@ test.describe('how changes go, chosen at the hand-over', () => {
     test('three choices, by hand checked and recommended, with the three sentences; the choice is the tie\'s, never asked again', async ({ page }) => {
         await handOver(page, {}, async (page) => {
             const dialog = page.locator('#research-adopt-modal');
-            await expect(dialog.locator('input[name="research-send-mode"]')).toHaveCount(3);
-            await expect(dialog.locator('input[name="research-send-mode"][value="manual"]')).toBeChecked();
+            await expect(dialog.locator('input[name="research-adopt-send-mode"]')).toHaveCount(3);
+            await expect(dialog.locator('input[name="research-adopt-send-mode"][value="manual"]')).toBeChecked();
             await expect(dialog).toContainText('Recommended');
             await expect(dialog).toContainText('The research keeps its own copy.');
             await expect(dialog.locator('#research-adopt-confirm')).toBeInViewport();
-            await dialog.locator('input[name="research-send-mode"][value="off"]').check();
+            await dialog.locator('input[name="research-adopt-send-mode"][value="off"]').check();
         });
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('off');
         const st = await page.evaluate(() => JSON.parse(localStorage.getItem(`strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`) ?? '{}'));

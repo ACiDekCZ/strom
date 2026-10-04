@@ -240,6 +240,8 @@ export async function openResearch(page: Page, opts: { edit?: boolean; bridge?: 
         const id = tm.getActiveTreeId()!;
         tm.patchResearchLink(id, { sendMode: auto ? 'auto' : 'manual' });
         localStorage.setItem(`strom-research-auto:${id}`, JSON.stringify({ ...JSON.parse(localStorage.getItem(`strom-research-auto:${id}`) ?? '{}'), modeAsked: true }));
+        // Sending by hand goes at once in these tests ("What will be sent" first: its own tests).
+        localStorage.setItem('strom-research-send-preview-skip', '1');
     }, !!opts.auto);
     if (opts.edit) await editJan(page);
 }

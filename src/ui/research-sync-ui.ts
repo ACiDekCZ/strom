@@ -39,6 +39,7 @@ import { loadResearchCopy } from '../research-copy.js';
 import {
     noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, storedResearchBridge, researchLinksEnabled,
     researchAutoState, patchResearchAutoState, researchAutoIntroSeen, noteResearchAutoIntroSeen, forgetResearchWaitingItems, anyResearchBridgeKnown,
+    researchSendPreviewSkipped,
     ResearchHeldConflicts,
 } from '../research-device.js';
 import {
@@ -397,7 +398,8 @@ export const researchSyncMethods = uiModule({
 
     /** The tree's changes go by themselves (a research that tells what it has, not Safari). */
     researchAutoOn(link: ResearchLink | undefined): boolean {
-        return !!link && researchSendMode(link) === 'auto' && this.researchSyncCapable(link.id) && !safariBrowser();
+        // (Out of "only load" with changes waiting: the first send goes by hand, through "What will be sent".)
+        return !!link && researchSendMode(link) === 'auto' && !link.previewDue && this.researchSyncCapable(link.id) && !safariBrowser();
     },
 
     /** The bridge answered within FRESH_MS. */
@@ -451,7 +453,7 @@ export const researchSyncMethods = uiModule({
         const fps = this.researchSyncFingerprints(treeId, link);
         const remoteHead = rt?.status?.head || storedResearchBridge(link.id)?.head || '';
         const safari = safariBrowser() && (!rt || rt.blocked || !storedResearchBridge(link.id)?.base);
-        const auto = researchSendMode(link) === 'auto';
+        const auto = researchSendMode(link) === 'auto' && !link.previewDue;
         const mode = this.researchModeOf(link.id, link);
         const st = researchAutoState(treeId);
         return researchSyncState({
@@ -908,7 +910,7 @@ export const researchSyncMethods = uiModule({
      * it runs (no dialog), else the old way through the terminal. `thenLoad`:
      * load the research's new version once the send is written there.
      */
-    async researchSendNow(opts: { thenLoad?: boolean; treeId?: TreeId; undoAgain?: boolean } = {}): Promise<void> {
+    async researchSendNow(opts: { thenLoad?: boolean; treeId?: TreeId; undoAgain?: boolean; previewed?: boolean } = {}): Promise<void> {
         const ctx = this.researchSyncLink();
         if (!ctx || sendingTree) return;
         // Asked for one tree: never send another (the open tree changed meanwhile).
@@ -941,6 +943,17 @@ export const researchSyncMethods = uiModule({
         if (!opts.undoAgain && this.researchHoldsForUndo(link)) {
             this.tellResearchUndoneChoice(strings.sync.undoneDecideFirst);
             return;
+        }
+        // By hand, what would go is shown first and Send there sends — unless the user said "next time
+        // without the preview"; the first send out of "only load" always shows it. ("Send again" and
+        // "send, then load" are their own decisions.)
+        if (!opts.previewed && !opts.undoAgain && !opts.thenLoad && researchSendMode(link) !== 'off'
+            && (link.previewDue || !researchSendPreviewSkipped())) {
+            const list = await this.researchChangesReady();
+            if (list && list.length > 0) {
+                this.showResearchChanges('send', { confirm: true });
+                return;
+            }
         }
         await this.postResearchSend(treeId, { auto: false, thenLoad: opts.thenLoad, undoAgain: opts.undoAgain });
     },
@@ -1076,6 +1089,8 @@ export const researchSyncMethods = uiModule({
         sendingTree = null;
         // The research has this copy now (any answer with its mark; a send written again is the old copy, not this one).
         if (res.ok && reply.ok && reply.intake && !again) patchResearchAutoState(treeId, { lastCopy: { intake: reply.intake, base: link.head ?? '' } });
+        // The first send out of "only load" went (through the preview): sending by itself may go on.
+        if (res.ok && reply.ok && link.previewDue) TreeManager.patchResearchLink(treeId, { previewDue: undefined });
         // Busy (503): not a refusal — it goes again at the next look.
         if (res.status === 503) {
             if (opts.auto) autoDue.add(treeId);
@@ -1526,11 +1541,14 @@ export const researchSyncMethods = uiModule({
         if (!link || researchSendMode(link) === mode) return;
         const wasOff = researchSendMode(link) === 'off';
         TreeManager.patchResearchLink(treeId, { sendMode: mode });
+        // Out of "only load": the first send goes through "What will be sent" (set below when changes wait).
+        if (mode === 'off' || !wasOff) TreeManager.patchResearchLink(treeId, { previewDue: undefined });
         // Out of "only load": what piled up meanwhile is said, with what would go (nothing goes at once).
         if (wasOff && DataManager.getCurrentTreeId() === treeId) {
             fpCache = null;
             const list = this.researchChangesNow();
             if (list && list.length > 0) {
+                TreeManager.patchResearchLink(treeId, { previewDue: true });
                 this.showToast(strings.sync.offPiledUp(list.length), 10000,
                     { action: { label: strings.changes.whatWillBeSent, run: () => this.showResearchChanges('send') } });
             }

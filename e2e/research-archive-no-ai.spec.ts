@@ -151,6 +151,11 @@ for (const locale of ['en-US', 'cs-CZ', 'de-DE']) {
                 dm.updatePerson(jan.id, { birthPlace: 'Praha' });
             });
             await page.evaluate(() => window.Strom.UI.researchSendNow());
+            // By hand: what will be sent first (no agent there either), Send there sends.
+            const preview = page.locator('#research-changes-panel');
+            await expect(preview).toBeVisible();
+            expectNoAgent('what will be sent', await shownText(page, '#research-changes-panel'));
+            await preview.locator('[data-act="send"]').click();
             await expect.poll(() => bridge.posts.length).toBe(1);
             expect(bridge.posts[0]).toContain('_STROM_TREE');
             expect(bridge.posts[0]).not.toContain('_STROM_TRANSCRIPTS');

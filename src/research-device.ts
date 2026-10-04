@@ -209,6 +209,22 @@ export function noteResearchBridgeStatus(researchId: string, accepts: ResearchAc
     });
 }
 
+// ==================== "WHAT WILL BE SENT" FIRST (this browser) ====================
+
+const PREVIEW_SKIP_KEY = 'strom-research-send-preview-skip';
+
+/** The user said "Next time send without the preview" (sending by hand then goes at once). */
+export function researchSendPreviewSkipped(): boolean {
+    try { return localStorage.getItem(PREVIEW_SKIP_KEY) === '1'; } catch { return false; }
+}
+
+export function noteResearchSendPreviewSkipped(skip: boolean): void {
+    try {
+        if (skip) localStorage.setItem(PREVIEW_SKIP_KEY, '1');
+        else localStorage.removeItem(PREVIEW_SKIP_KEY);
+    } catch { /* a private window: shown again next time */ }
+}
+
 // ==================== SENDING BY ITSELF (per tree, this browser) ====================
 
 const AUTO_KEY = 'strom-research-auto:';

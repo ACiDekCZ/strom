@@ -180,6 +180,12 @@ test('German UI: the research — its menu, the states of the block, Research fo
     await page.evaluate(({ uuid, base, accepts }) => localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, accepts })), { uuid: UUID, base: BRIDGE, accepts });
     const bridge = await fakeBridge(page, { accepts, links: ['send', 'open', 'live', 'app', 'setup', 'chat', 'review', 'conflict', 'task'] });
     await poll(page);
+    // Tied without a choice: asked once how changes should go — in German.
+    const ask = page.locator('#research-mode-ask-modal');
+    await expect(ask).toBeVisible();
+    await expectNoEnglish(ask, 'How should changes go');
+    await ask.getByRole('button', { name: 'Beibehalten' }).click();
+    await expect(ask).toHaveCount(0);
     const janId = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.id);
 
     await openResearchMenu(page);
@@ -203,6 +209,11 @@ test('German UI: the research — its menu, the states of the block, Research fo
     bridge.onWrite = () => ({ head: 'c1c1c1c1c1c1', ged: researchGed('c1c1c1c1c1c1', ['1 _STROM_CONFLICT X0008', '2 TYPE NAME', '2 STAT open', '2 VAL Jan /Víšek/', '2 VAL Johann /Víšek/']) });
     await page.evaluate((id) => window.Strom.DataManager.updatePerson(id, { firstName: 'Johann' }), janId);
     await page.evaluate(() => window.Strom.UI.researchSendNow());
+    // By hand: "What will be sent" first, in German too.
+    const preview = page.locator('#research-changes-panel');
+    await expect(preview).toBeVisible();
+    await expectNoEnglish(preview, 'What will be sent');
+    await preview.locator('[data-act="send"]').click();
     await expect.poll(() => bridge.posts.length).toBe(1);
     await page.clock.fastForward(30_000);
     await poll(page);

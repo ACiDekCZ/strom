@@ -16,7 +16,7 @@ import { PersonId, StromData, TreeId } from '../types.js';
 import { formatLiveClock } from '../live-time.js';
 import { ChangeKind, PersonChange, diffByPerson, baseCopy } from '../research-changes.js';
 import { saveResearchCopy, loadResearchCopy } from '../research-copy.js';
-import { researchAutoState } from '../research-device.js';
+import { researchAutoState, noteResearchSendPreviewSkipped } from '../research-device.js';
 import { researchSendMode } from './research-sync-ui.js';
 import { uiModule } from './module.js';
 
@@ -178,7 +178,7 @@ export const researchChangesMethods = uiModule({
     // ==================== THE PANEL ====================
 
     /** Open "What will be sent" / "What was written" under the toolbar's button (or the ⋯ button). */
-    showResearchChanges(mode: 'send' | 'written'): void {
+    showResearchChanges(mode: 'send' | 'written', opts: { confirm?: boolean } = {}): void {
         this.closeActionsMenu();
         this.closeResearchChanges();
         const ctx = this.researchSyncLink();
@@ -211,9 +211,11 @@ export const researchChangesMethods = uiModule({
             list = this.researchChangesNow() ?? [];
             title = c.willSendTitle;
             sub = auto ? c.willSendAutoSub(list.length) : c.willSendSub(list.length, clock(ctx.link.syncedAt));
-            foot = auto
+            foot = auto && !opts.confirm
                 ? `<button type="button" class="research-sync-link" data-act="send">${esc(s.sendNow)}</button>`
-                : `<button type="button" class="primary btn-sm" data-act="send">${esc(s.barSend)}</button>`;
+                : (opts.confirm && !ctx.link.previewDue
+                    ? `<label class="research-changes-skip"><input type="checkbox" id="research-changes-skip"> ${esc(c.skipPreview)}</label>` : '')
+                    + `<button type="button" class="primary btn-sm" data-act="send">${esc(s.barSend)}</button>`;
         }
         const rows = list.map(ch => {
             const name = ch.deleted || !DataManager.getPerson(ch.personId)
@@ -246,8 +248,10 @@ export const researchChangesMethods = uiModule({
             ZoomPan.centerOnPerson(id);
         }));
         panel.querySelector('[data-act="send"]')?.addEventListener('click', () => {
+            if (panel.querySelector<HTMLInputElement>('#research-changes-skip')?.checked) noteResearchSendPreviewSkipped(true);
             this.closeResearchChanges();
-            this.researchSyncAction('send');
+            // Seen what goes: Send here sends.
+            void this.researchSendNow({ previewed: true });
         });
         panel.querySelector('[data-act="decide"]')?.addEventListener('click', () => {
             this.closeResearchChanges();

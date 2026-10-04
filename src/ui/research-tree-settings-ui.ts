@@ -14,7 +14,7 @@ import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
 import { TreeId, ResearchTranscripts, ResearchSendMode, StromData } from '../types.js';
 import { researchSchemeUrl } from '../research-link.js';
-import { researchAutoState, patchResearchAutoState } from '../research-device.js';
+import { researchAutoState, patchResearchAutoState, researchSendPreviewSkipped, noteResearchSendPreviewSkipped } from '../research-device.js';
 import { sourceReadingHash, unverifiedOlderSources } from '../research-sync.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
@@ -25,6 +25,7 @@ import { formatBytesShort } from './originals-ui.js';
 
 const SETTINGS_ID = 'research-tree-settings-modal';
 const ASK_ID = 'research-mode-ask-modal';
+const ASK_GROUP = 'research-ask-send-mode';
 
 /** A phone-sized or touch screen: short card texts, and a note instead of the effect box and the status line. */
 function compactScreen(): boolean {
@@ -42,11 +43,11 @@ function esc(text: string): string {
  * three sentences under them: the same in "Research for this tree", the
  * hand-over and the one-time question. By hand is the recommended one.
  */
-export function researchSendModeCardsHtml(current: ResearchSendMode, compact = compactScreen()): string {
+export function researchSendModeCardsHtml(current: ResearchSendMode, compact = compactScreen(), name = 'research-send-mode'): string {
     const t = strings.treeSettings;
     const card = (value: ResearchSendMode, title: string, desc: string, recommended: boolean): string => `
             <label class="research-transcripts-card">
-                <input type="radio" name="research-send-mode" value="${value}"${value === current ? ' checked' : ''}>
+                <input type="radio" name="${name}" value="${value}"${value === current ? ' checked' : ''}>
                 <span class="research-transcripts-text">
                     <span class="research-transcripts-title">${esc(title)}${recommended ? ` <span class="research-transcripts-default">${esc(t.recommended)}</span>` : ''}</span>
                     <span class="research-transcripts-desc">${esc(desc)}</span>
@@ -64,9 +65,9 @@ export function researchSendPrinciplesHtml(changeLater = false): string {
         + (changeLater ? `<p class="research-send-later">${esc(t.changeLater)}</p>` : '');
 }
 
-/** The choice the cards hold now. */
-export function researchSendModeChecked(root: ParentNode): ResearchSendMode | null {
-    const v = root.querySelector<HTMLInputElement>('input[name="research-send-mode"]:checked')?.value;
+/** The choice the cards hold now (each dialog has its own group: two open at once never share one). */
+export function researchSendModeChecked(root: ParentNode, name: string): ResearchSendMode | null {
+    const v = root.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`)?.value;
     return v === 'manual' || v === 'auto' || v === 'off' ? v : null;
 }
 
@@ -119,6 +120,10 @@ export const researchTreeSettingsMethods = uiModule({
                     <legend>${esc(t.sending)}</legend>
                     ${researchSendModeCardsHtml(sendMode, compact)}
                 </fieldset>
+                <label class="settings-checkbox research-send-preview-toggle">
+                    <input type="checkbox" id="research-send-preview"${researchSendPreviewSkipped() ? '' : ' checked'}>
+                    <span class="settings-text"><span class="settings-name">${esc(t.previewFirst)}</span></span>
+                </label>
                 ${researchSendPrinciplesHtml()}
                 ${compact
                     ? `<p class="research-send-device">${esc(t.deviceNote)}</p>`
@@ -217,6 +222,9 @@ export const researchTreeSettingsMethods = uiModule({
                 statusEl.append(' ', btn);
             }
         };
+        overlay.querySelector<HTMLInputElement>('#research-send-preview')?.addEventListener('change', (e) => {
+            noteResearchSendPreviewSkipped(!(e.target as HTMLInputElement).checked);
+        });
         overlay.querySelectorAll<HTMLInputElement>('input[name="research-send-mode"]').forEach(input => {
             input.addEventListener('change', () => {
                 if (!input.checked) return;
@@ -266,7 +274,8 @@ export const researchTreeSettingsMethods = uiModule({
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (!link || link.copy || !onComputer() || DataManager.getCurrentTreeId() !== treeId || DataManager.isReadOnly()) return;
         if (researchAutoState(treeId).modeAsked || document.getElementById(ASK_ID)) return;
-        if (document.querySelector('.modal-overlay.active') || this.isFollowingActiveResearch()) return;
+        if (document.querySelector('.modal-overlay.active, #research-changes-panel, .actions-menu-dropdown.active, #actions-menu-dropdown.active')
+            || this.isFollowingActiveResearch()) return;
         const t = strings.treeSettings;
         const current = researchSendMode(link);
         const overlay = document.createElement('div');
@@ -281,7 +290,7 @@ export const researchTreeSettingsMethods = uiModule({
                     </div>
                 </div>
                 <fieldset class="research-transcripts research-send-mode research-mode-ask-cards" aria-labelledby="research-mode-ask-title">
-                    ${researchSendModeCardsHtml(current)}
+                    ${researchSendModeCardsHtml(current, compactScreen(), ASK_GROUP)}
                 </fieldset>
                 ${researchSendPrinciplesHtml(true)}
                 <div class="buttons">
@@ -293,7 +302,7 @@ export const researchTreeSettingsMethods = uiModule({
         this.pushDialog(ASK_ID);
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
         (overlay.querySelector('#research-mode-ask-keep') as HTMLButtonElement).onclick = () => this.closeResearchModeAsk(treeId, null);
-        (overlay.querySelector('#research-mode-ask-save') as HTMLButtonElement).onclick = () => this.closeResearchModeAsk(treeId, researchSendModeChecked(overlay));
+        (overlay.querySelector('#research-mode-ask-save') as HTMLButtonElement).onclick = () => this.closeResearchModeAsk(treeId, researchSendModeChecked(overlay, ASK_GROUP));
         (overlay.querySelector('#research-mode-ask-save') as HTMLButtonElement).focus();
     },
 

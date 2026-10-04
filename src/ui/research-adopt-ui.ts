@@ -345,7 +345,7 @@ export const researchAdoptMethods = uiModule({
                 <p class="research-adopt-after">${esc(r.adoptAfter)}</p>
                 <fieldset class="research-transcripts research-send-mode research-adopt-send">
                     <legend>${esc(strings.treeSettings.askTitle)}</legend>
-                    ${researchSendModeCardsHtml('manual')}
+                    ${researchSendModeCardsHtml('manual', undefined, 'research-adopt-send-mode')}
                 </fieldset>
                 ${researchSendPrinciplesHtml(true)}
                 <div class="buttons">
@@ -366,7 +366,7 @@ export const researchAdoptMethods = uiModule({
             (overlay.querySelector('#research-adopt-cancel') as HTMLButtonElement).onclick = () => finish(null);
             (overlay.querySelector('#research-adopt-confirm') as HTMLButtonElement).onclick = () => {
                 const box = overlay.querySelector<HTMLInputElement>('#research-adopt-images');
-                finish({ images: box ? box.checked : false, sendMode: researchSendModeChecked(overlay) ?? 'manual' });
+                finish({ images: box ? box.checked : false, sendMode: researchSendModeChecked(overlay, 'research-adopt-send-mode') ?? 'manual' });
             };
             (overlay.querySelector('#research-adopt-confirm') as HTMLButtonElement).focus();
         });

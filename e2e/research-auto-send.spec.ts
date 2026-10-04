@@ -1480,3 +1480,63 @@ test.describe('the one-time question: how should changes go', () => {
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('off');
     });
 });
+
+test.describe('"What will be sent" before sending by hand', () => {
+    const previewOn = (page: Page) => page.evaluate(() => localStorage.removeItem('strom-research-send-preview-skip'));
+    const panel = (page: Page) => page.locator('#research-changes-panel');
+
+    test('Send by hand shows who changed first; Send there sends; "Next time without this list" sends at once after; the setting brings it back', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page);
+        const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null } });
+        writesAtOnce(bridge);
+        await previewOn(page);
+        await poll(page);
+        await editJan(page);
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect(panel(page)).toBeVisible();
+        await expect(panel(page)).toContainText('What will be sent');
+        await expect(panel(page)).toContainText('Jan Víšek');
+        expect(bridge.posts).toHaveLength(0);
+        await panel(page).locator('#research-changes-skip').check();
+        await panel(page).locator('[data-act="send"]').click();
+        await expect.poll(() => bridge.posts.length).toBe(1);
+        // Next time at once.
+        await editJan(page, 'Brno');
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect.poll(() => bridge.posts.length).toBe(2);
+        await expect(panel(page)).toHaveCount(0);
+        // The setting brings the list back.
+        await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
+        const dialog = page.locator('#research-tree-settings-modal');
+        await expect(dialog.locator('#research-send-preview')).not.toBeChecked();
+        await dialog.locator('#research-send-preview').check();
+        await page.evaluate(() => window.Strom.UI.closeResearchTreeSettings());
+        await editJan(page, 'Kolín');
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect(panel(page)).toBeVisible();
+        expect(bridge.posts).toHaveLength(2);
+    });
+
+    test('out of "only load" into "by itself" with changes made meanwhile: nothing goes by itself until the first send went through the list (always shown)', async ({ page }) => {
+        const bridge = await autoTree(page);
+        writesAtOnce(bridge);
+        const id = await treeId(page);
+        await page.evaluate((id) => window.Strom.UI.setResearchSendMode(id as never, 'off'), id);
+        await editJan(page);
+        await page.evaluate((id) => window.Strom.UI.setResearchSendMode(id as never, 'auto'), id);
+        await page.clock.fastForward(QUIET * 2);
+        expect(bridge.posts).toHaveLength(0);
+        // Even with "without the list" chosen before: this first one shows it.
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect(panel(page)).toBeVisible();
+        await expect(panel(page).locator('#research-changes-skip')).toHaveCount(0);
+        await panel(page).locator('[data-act="send"]').click();
+        await expect.poll(() => bridge.posts.length).toBe(1);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.previewDue)).toBeUndefined();
+        // By itself again.
+        await editJan(page, 'Brno');
+        await page.clock.fastForward(QUIET + 1000);
+        await expect.poll(() => bridge.posts.length).toBe(2);
+    });
+});
