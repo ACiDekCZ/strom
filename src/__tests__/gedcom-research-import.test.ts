@@ -187,9 +187,10 @@ describe('GEDCOM from a research tool', () => {
         expect(anna.nameVariants).toEqual(['Anna Nováková']);
     });
 
-    it('cites the record a name comes from on the person', () => {
+    it('cites the record a name comes from on the person (its own page: a source of that page)', () => {
         const anna = byName(data, 'Anna');
-        expect(anna.sourceIds).toContain(sourceTitled(data, 'Křestní').id);
+        const cited = (anna.sourceIds ?? []).map(id => data.sources![id]);
+        expect(cited.map(s => [s.title, s.reference])).toContainEqual(['Křestní zápis Jan Novák 1885', 'pag. 228, 2. zápis']);
     });
 
     it('comes back unchanged from export and a second import', () => {

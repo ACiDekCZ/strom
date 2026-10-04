@@ -1068,8 +1068,10 @@ function checkPossibleDuplicates(
  * same id: the later one replaced the earlier, and the one left holds both
  * people's relations (more than two parents, two fathers or two mothers, a
  * partner of the same sex, children born before or soon after them, itself
- * among its parents, children or partners). One clear sign, or two weaker
- * ones together: reported with the way out — import the original file again.
+ * among its parents, children or partners). One clear sign, or a child born
+ * too early together with a same-sex parent couple or partner: reported with
+ * the way out — import the original file again. Two mothers and a daughter
+ * with a wife are a family, not a merge: same-sex signs never add up alone.
  */
 function checkImportMerges(data: StromData, addIssue: AddIssue): void {
     const CHILD_MIN_GAP = 12;
@@ -1094,7 +1096,7 @@ function checkImportMerges(data: StromData, addIssue: AddIssue): void {
             const childBorn = parseYear(data.persons[cid]?.birthDate);
             return childBorn !== null && childBorn - born < CHILD_MIN_GAP;
         })) weak.add('childTooEarly');
-        if (strong.size === 0 && weak.size < 2) continue;
+        if (strong.size === 0 && !(weak.has('childTooEarly') && weak.size >= 2)) continue;
         addIssue('error', 'importMerge',
             `${getPersonName(person)} looks like two people merged into one at a GEDCOM import (${[...strong, ...weak].join(', ')})`,
             [id, ...person.parentIds.filter(pid => pid !== id)]);

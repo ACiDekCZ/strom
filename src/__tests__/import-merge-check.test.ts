@@ -93,6 +93,19 @@ describe('two people merged at a GEDCOM import', () => {
         expect(merges(early)).toEqual([]);
     });
 
+    it('two mothers and a daughter with a wife: a family, not a merge (same-sex signs never add up alone)', () => {
+        const data = twoFamilies();
+        // Marie's parents: two mothers; her partner: a woman.
+        data.persons['mf' as PersonId].gender = 'female';
+        data.persons['mh' as PersonId].gender = 'female';
+        expect(merges(data)).toEqual([]);
+        // …and a father with a husband, whose son married a man.
+        const men = twoFamilies();
+        men.persons['jm' as PersonId].gender = 'male';
+        men.persons['jw' as PersonId].gender = 'male';
+        expect(merges(men)).toEqual([]);
+    });
+
     it('someone among their own parents is reported', () => {
         const data = twoFamilies();
         data.persons['js' as PersonId].parentIds = ['jan', 'js'] as PersonId[];

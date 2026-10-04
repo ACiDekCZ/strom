@@ -1484,6 +1484,25 @@ export function parseGedcom(content: string): ParsedGedcom {
     let sourceMediaSubTag: string | null = null;
     /** @Sx@ of the most recent citation (PAGE lines attach to it). */
     let currentCitationId: string | null = null;
+    /** Where that citation's pointer was written (its PAGE may point it to a source of its own). */
+    let currentCitationSlot: { list: string[]; index: number } | null = null;
+    /** Every citation that named a page: its pointer's place, the source and the page. */
+    const pagedCitations: { list: string[]; index: number; id: string; page: string }[] = [];
+    /** A citation pointer pushed onto `list`: remembered so its PAGE can find it. */
+    const cite = (list: string[], value: string): void => {
+        list.push(value);
+        currentCitationId = value;
+        currentCitationSlot = { list, index: list.length - 1 };
+    };
+    /** A citation's PAGE: the source's reference (first wins) and this citation's own page. */
+    const citePage = (value: string): void => {
+        if (!currentCitationId) return;
+        if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
+        const slot = currentCitationSlot;
+        if (slot && slot.list[slot.index] === currentCitationId && value.trim()) {
+            pagedCitations.push({ ...slot, id: currentCitationId, page: value.trim() });
+        }
+    };
     /** 0 @Rx@ REPO record currently open. */
     let currentRepoId: string | null = null;
     /**
@@ -1784,7 +1803,7 @@ export function parseGedcom(content: string): ParsedGedcom {
             currentResearch = null;
             currentMedia = null;
             currentMediaSubTag = null;
-            currentCitationId = null;
+            currentCitationId = null; currentCitationSlot = null;
             currentPlaceValue = null;
             inHeader = recordType === 'HEAD';
             inSurnameNote = false;
@@ -1898,7 +1917,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentResearch = null;
                 if (tag !== 'OBJE') currentMedia = null;
                 currentMediaSubTag = null;
-                if (tag !== 'SOUR') currentCitationId = null;
+                if (tag !== 'SOUR') { currentCitationId = null; currentCitationSlot = null; }
 
                 if (currentType === 'INDI') {
                     const indi = currentRecord as GedcomIndividual;
@@ -1987,7 +2006,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         }
                         case 'SOUR':
                             // Level-1 SOUR on INDI is a citation reference (@Sx@).
-                            if (value) { indi.sourceRefs.push(value); currentCitationId = value; }
+                            if (value) cite(indi.sourceRefs, value);
                             break;
                         case 'BIRT':
                             // MyHeritage allows several BIRT facts: the first
@@ -2089,7 +2108,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             break;
                         case 'SOUR':
                             // Family citation (typically the marriage record).
-                            if (value) { fam.sourceRefs.push(value); currentCitationId = value; }
+                            if (value) cite(fam.sourceRefs, value);
                             break;
                         case 'MARR':
                             fam.unionEvents.push({ type: 'marriage', date: '' });
@@ -2266,8 +2285,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             else indi.deathStatus = parseFactStatus(value);
                         } else if (tag === 'SOUR' && value) {
                             // The birth/death entry itself: cited on that field.
-                            (isBirth ? indi.birthSourceRefs : indi.deathSourceRefs).push(value);
-                            currentCitationId = value;
+                            cite(isBirth ? indi.birthSourceRefs : indi.deathSourceRefs, value);
                         } else if (tag === 'NOTE' && value) {
                             const line = isBirth
                                 ? strings.gedcomNotes.birthNote(value)
@@ -2305,8 +2323,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             if (currentNameSlot === -1) indi.primaryNameType = type;
                             else indi.variantNameTypes[currentNameSlot] = type;
                         } else if (tag === 'SOUR' && value) {
-                            indi.sourceRefs.push(value);
-                            currentCitationId = value;
+                            cite(indi.sourceRefs, value);
                         }
                     } else if (currentSubTag === 'REFN') {
                         // Who issued the number — kept so it goes back out with it.
@@ -2337,7 +2354,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         attachToFact(indi.noteFacts[indi.noteFacts.length - 1], tag, value);
                     } else if (currentSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
                         // Citation page: standard place for a source reference.
-                        if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
+                        citePage(value);
                     } else if (currentSubTag === 'SOUR' && tag === 'QUAY' && currentCitationId) {
                         noteQuay(currentCitationId, value);
                     } else if (currentEvent) {
@@ -2362,8 +2379,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         }
                         else if (tag === '_STROM_STATUS') currentEvent.status = parseFactStatus(value);
                         else if (tag === 'SOUR' && value) {
-                            (currentEvent.sourceRefs ??= []).push(value);
-                            currentCitationId = value;
+                            cite(currentEvent.sourceRefs ??= [], value);
                         } else if (tag === 'NOTE') {
                             currentEvent.note = currentEvent.note
                                 ? `${currentEvent.note}\n${value}` : value;
@@ -2391,7 +2407,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 } else if (currentType === 'FAM') {
                     const fam = currentRecord as GedcomFamily;
                     if (currentSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
-                        if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
+                        citePage(value);
                     } else if (currentSubTag === 'SOUR' && tag === 'QUAY' && currentCitationId) {
                         noteQuay(currentCitationId, value);
                     } else if (currentSubTag === 'MARR') {
@@ -2408,8 +2424,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         // sit here, not on the FAM — reading only DATE/PLAC lost
                         // every one of them.
                         if (tag === 'SOUR' && value) {
-                            fam.sourceRefs.push(value);
-                            currentCitationId = value;
+                            cite(fam.sourceRefs, value);
                         } else if (tag === 'NOTE' && value) {
                             fam.note = fam.note ? `${fam.note}\n${value}` : value;
                         } else if (tag === 'ASSO' && value) {
@@ -2439,8 +2454,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 delete ev.tagValue;
                             }
                         } else if (tag === 'SOUR' && value) {
-                            (ev.sourceRefs ??= []).push(value);
-                            currentCitationId = value;
+                            cite(ev.sourceRefs ??= [], value);
                         } else if (tag === 'NOTE') {
                             ev.note = ev.note ? `${ev.note}\n${value}` : value;
                         } else if (tag === 'CONC' || tag === 'CONT') {
@@ -2476,7 +2490,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     : fam?.marriageParticipants;
                 if (currentFactSubTag === 'SOUR' && currentCitationId) {
                     if (tag === 'PAGE') {
-                        if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
+                        citePage(value);
                     } else if (tag === 'QUAY') {
                         noteQuay(currentCitationId, value);
                     }
@@ -2522,7 +2536,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     }
                 } else if (sub === 'SOUR' && currentCitationId) {
                     if (tag === 'PAGE') {
-                        if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
+                        citePage(value);
                     } else if (tag === 'QUAY') {
                         noteQuay(currentCitationId, value);
                     }
@@ -2535,7 +2549,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 currentMedia.note = (currentMedia.note ?? '') + (tag === 'CONT' ? '\n' : '') + value;
             } else if (level === 3 && currentType === 'INDI' && currentEvent
                 && currentEventSubTag === 'SOUR' && tag === 'PAGE' && currentCitationId) {
-                if (!citationPages.has(currentCitationId)) citationPages.set(currentCitationId, value);
+                citePage(value);
             } else if (level === 3 && currentType === 'INDI' && currentEvent
                 && currentEventSubTag === 'SOUR' && tag === 'QUAY' && currentCitationId) {
                 noteQuay(currentCitationId, value);
@@ -2593,6 +2607,30 @@ export function parseGedcom(content: string): ParsedGedcom {
         if (!src.recordDate && citationDates.has(src.id)) {
             src.recordDate = citationDates.get(src.id);
         }
+    }
+
+    // One source cited at several pages (a register book, an entry per page):
+    // here a source is the entry and its reference the page, so a citation of
+    // another page than the source's gets a source of its own — same book,
+    // its page. With one source for all, every citation showed the first page
+    // and the export wrote it to each of them.
+    const pageSources = new Map<string, string>();
+    for (const c of pagedCitations) {
+        const src = sources.get(c.id);
+        if (!src || c.page === src.reference.trim()) continue;
+        const key = `${c.id}\u0000${c.page}`;
+        let derived = pageSources.get(key);
+        if (!derived) {
+            derived = `${c.id}~${pageSources.size + 1}`;
+            pageSources.set(key, derived);
+            sources.set(derived, {
+                id: derived, title: src.title, repository: src.repository, reference: c.page, url: src.url,
+                note: src.note, media: [],
+                ...(src.abbr ? { abbr: src.abbr } : {}),
+                ...(src.quality !== undefined ? { quality: src.quality } : {}),
+            });
+        }
+        c.list[c.index] = derived;
     }
 
     // Keep only places whose MAP carried BOTH a latitude and a longitude.
