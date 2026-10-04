@@ -82,6 +82,12 @@ export interface FakeBridge {
     waiting?: unknown[];
     /** What the bridge says it can do (`/status.features`, 1.12.0-rc.20). */
     features?: string[];
+    /** Stuck (SIGSTOP): `/status` never answers. */
+    statusHang?: boolean;
+    /** `/status` answers with this code instead (404: an old token). */
+    statusCode?: number;
+    /** A send fails on the way (the connection drops). */
+    syncAbort?: boolean;
 }
 
 export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
@@ -138,6 +144,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             return known ? json(200, { known }) : json(404, { error: 'unknown' });
         }
         if (url.pathname.endsWith('/status')) {
+            if (b.statusHang) return new Promise<void>(() => { /* never answers */ });
+            if (b.statusCode) return json(b.statusCode, { error: 'not here' });
             return json(200, {
                 tree: { id: UUID, name: 'Víškovi' }, head: b.head, links: b.links,
                 accepts: b.accepts, inbox: { trees: b.inbox, material: 0 }, lastIntake: b.lastIntake,
@@ -162,6 +170,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             return json(200, { ok: true, inbox: false, changes: 6, applied: 6, intake, ...(v ? { head: v.head } : {}) });
         }
         if (url.pathname.endsWith('/sync') && route.request().method() === 'POST') {
+            if (b.syncAbort) return route.abort('connectionreset');
             if (b.syncDelayMs) await new Promise(r => setTimeout(r, b.syncDelayMs));
             const body = route.request().postData() ?? '';
             b.posts.push(body);

@@ -983,7 +983,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.33';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.34';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -1242,6 +1242,8 @@ export interface ResearchSend {
     failed?: boolean;
     /** Taken back: changes of a later copy the research left out because this send brought them (`takenBack`). */
     takenBack?: number;
+    /** Written at once: the research's head after the write (its version holds this copy). */
+    replyHead?: string;
     /**
      * Written as part of a newer send of this tree that replaced it (another
      * window of the same app tree sent since): what was written is not this

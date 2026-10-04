@@ -1539,6 +1539,12 @@ export interface ResearchHeaderInfo {
     transcripts?: 'lead' | 'evidence';
     /** The fingerprint of the tree as sent (`_STROM_SENT`): only on a send to the bridge. */
     sent?: string;
+    /**
+     * The send whose copy this one builds on (`_STROM_SINCE R…`): written there,
+     * its version not loaded here — this copy is that copy plus the edits since.
+     * Only to a bridge that says `sync.since`.
+     */
+    since?: string;
 }
 
 /** `_STROM_SENT` / `_STROM_APP_TREE` values: what the research accepts (at most 64 of [A-Za-z0-9._:-]). */
@@ -1553,12 +1559,14 @@ export function researchHeaderLines(link: ResearchHeaderInfo | null | undefined)
     const head = isResearchHead(link?.head);
     const appTree = headerToken(link?.appTree);
     const sent = headerToken(link?.sent);
+    const since = headerToken(link?.since);
     return [
         `1 ${STROM_TREE_TAG} ${id}`,
         ...(head ? [`1 ${STROM_HEAD_TAG} ${head}`] : []),
         ...(appTree ? [`1 _STROM_APP_TREE ${appTree}`] : []),
         ...(link?.transcripts === 'evidence' || link?.transcripts === 'lead' ? [`1 _STROM_TRANSCRIPTS ${link.transcripts}`] : []),
         ...(sent ? [`1 _STROM_SENT ${sent}`] : []),
+        ...(since ? [`1 _STROM_SINCE ${since}`] : []),
     ];
 }
 

@@ -1700,6 +1700,29 @@ export const researchUiMethods = uiModule({
 
     // ==================== D. LIVE BRIDGE ====================
 
+    /**
+     * A ?live= from a research whose version is the one this tree builds on,
+     * the tree changed since: nothing to receive — its bridge is known again
+     * (the status just asked noted it) and what waits goes as usual. True when
+     * handled so.
+     */
+    async researchReconnectOnly(status: LiveStatus): Promise<boolean> {
+        const existing = status.treeId ? TreeManager.findTreeByResearchId(status.treeId) : null;
+        const link = existing?.research;
+        if (!existing || !link || link.copy || !status.head || link.head !== status.head || !status.accepts) return false;
+        const previous = await readTree(existing.id);
+        if (!previous || fingerprintLike(previous, link.fingerprint) === link.fingerprint) return false;
+        if (DataManager.getCurrentTreeId() !== existing.id) {
+            await this.switchToTree(existing.id);
+            if (DataManager.getCurrentTreeId() !== existing.id) return false;
+        }
+        rememberBridgeStatus(status.treeId!, status);
+        this.showToast(strings.research.reconnected, 6000);
+        this.refreshResearchSyncUi();
+        void this.pollResearchBridge();
+        return true;
+    },
+
     /** ?live=: follow a running research through its bridge on this computer. */
     async startLiveFollow(raw: string, opts: { resume?: boolean } = {}): Promise<void> {
         const bridge = parseLiveBridge(raw);
@@ -1757,6 +1780,10 @@ export const researchUiMethods = uiModule({
                 return;
             }
             const name = status.name || header.name || strings.research.defaultName;
+            // The research has nothing new beyond what this tree builds on, and the tree has changes it lacks
+            // (opened again from it, e.g. its bridge on a new port): connected again, the changes go to it —
+            // never asked whether to replace them (B3 of the rc.22 round).
+            if (!opts.resume && await this.researchReconnectOnly(status)) return;
             const treeId = await this.applyResearch(
                 data,
                 { treeId: status.treeId, name, date: header.date, mode: header.mode },

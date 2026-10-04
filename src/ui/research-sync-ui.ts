@@ -106,6 +106,13 @@ interface BridgeRuntime {
     busyUntil?: number;
     /** Since when it does not answer (ms; 0 = it answers). */
     downSince: number;
+    /**
+     * How the last ask failed: `hung` — connected, no answer in time (the bridge
+     * runs but is stuck); `refused` — it answered but not to this address (the
+     * token or the tree no longer its: open the research from the app again);
+     * '' — nothing there (not running, or another port).
+     */
+    why?: '' | 'hung' | 'refused';
 }
 
 const runtime = new Map<string, BridgeRuntime>();
@@ -469,19 +476,25 @@ export const researchSyncMethods = uiModule({
         let status: LiveStatus | null = null;
         let blocked = false;
         let busyFor = 0;
+        let why: BridgeRuntime['why'] = '';
         try {
             const res = await fetchWithTimeout(`${bridge.status}?poll=1`, timeout);
             if (res.ok) status = sanitizeLiveStatus(await res.json());
             // Busy (starting up, a long write): ask again after the time it names.
             else if (res.status === 503) busyFor = retryAfterMs(res.headers.get('Retry-After'));
+            // Something answers there, but not to this address (an old token, another tree's bridge).
+            else if (res.status === 401 || res.status === 403 || res.status === 404) why = 'refused';
         } catch (err) {
             blocked = err instanceof TypeError;
+            // No answer in time: the bridge is there but stuck (B5 of the rc.22 round).
+            if ((err as { name?: string })?.name === 'AbortError' || (err as { name?: string })?.name === 'TimeoutError') why = 'hung';
         }
         // An address of another research (the port went to another tree's bridge): not ours.
-        if (status && status.treeId !== researchId) status = null;
+        if (status && status.treeId !== researchId) { status = null; why = 'refused'; }
         const prev = runtime.get(researchId);
         const downSince = status ? 0 : (prev?.up || !prev?.downSince ? Date.now() : prev.downSince);
-        runtime.set(researchId, { up: !!status, checkedAt: Date.now(), status, blocked: !status && blocked, downSince, busyUntil: busyFor ? Date.now() + busyFor : 0 });
+        runtime.set(researchId, { up: !!status, checkedAt: Date.now(), status, blocked: !status && blocked, downSince,
+            busyUntil: busyFor ? Date.now() + busyFor : 0, why: status ? '' : why });
         if (status) {
             noteResearchLinks(status.links);
             noteResearchWaiting(researchId, status.waiting, status);
@@ -977,8 +990,14 @@ export const researchSyncMethods = uiModule({
         const again = opts.undoAgain && !opts.auto && link.sent?.state === 'undone' && link.sent.intake ? link.sent : null;
         // What goes over is then the state that send had, not this one (edits since go after it).
         const sentFp = again ? again.fingerprint : fps.current;
+        // Its last send written there and that version not loaded here: this copy is that send's copy plus
+        // the edits since — said, so the research takes that copy as the base (a bridge that says sync.since).
+        const prior = link.sent;
+        const since = runtime.get(link.id)?.status?.features?.includes('sync.since') && prior?.state === 'written'
+            && prior.intake && prior.replyHead && prior.replyHead !== link.head ? prior.intake : undefined;
         const gedcom = again ? '' : researchGedcom(data, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
+            ...(since ? { since } : {}),
         });
         // What this send carries, person by person (what was written, once it is).
         if (!again) this.researchNoteSending(treeId, data, fps.current);
@@ -999,8 +1018,13 @@ export const researchSyncMethods = uiModule({
                 autoDue.add(treeId);
                 this.refreshResearchSyncUi();
             } else {
+                // The research answered before, so it takes sends straight: not the old way through its
+                // terminal, but said what happened, with the way to try again (B6 of the rc.22 round).
                 this.refreshResearchSyncUi();
-                await this.sendTreeToResearch(treeId);
+                this.showToast(err instanceof DOMException && err.name === 'AbortError' ? s.sendNoAnswer : s.sendUnreachable, Infinity, {
+                    closable: true,
+                    action: { label: s.retry, run: () => { void this.researchSendTree(treeId, { undoAgain: !!again }); } },
+                });
             }
             return;
         }
@@ -1064,6 +1088,7 @@ export const researchSyncMethods = uiModule({
             ...(opts.thenLoad && !written ? { thenLoad: true } : {}),
             ...(writing ? { writing: true } : {}),
             ...(opts.auto ? {} : { manual: true }),
+            ...(written && reply.head ? { replyHead: reply.head } : {}),
         };
         // The copy still carries sends the research took back since its base (`undoneSince`, 1.12): what
         // it wrote stands, but the app and the research differ by those — never shown as in step, nor
@@ -1186,7 +1211,8 @@ export const researchSyncMethods = uiModule({
             if (conflicts > 0) {
                 this.showToast(s.writtenConflictToast(sent.changes ?? 0, conflicts), 8000,
                     { action: { label: s.showConflicts, run: () => this.researchShowConflicts(persons) } });
-            } else {
+            } else if (sent.changes !== 0) {
+                // (0 written: nothing to say here — what was left out or skipped is told on its own.)
                 this.showToast(s.writtenToast(sent.changes ?? 0), 6000);
             }
         } else if (conflicts > 0) {
@@ -1728,8 +1754,11 @@ export const researchSyncMethods = uiModule({
             unsentAndNewer: () => ({ tone: 'warn', title: s.stateUnsent, sub: s.unsentNewerSub, actions: [{ action: 'sendThenLoad', label: s.sendThenLoad }] }),
             waitThenLoad: () => ({ tone: 'neutral', title: s.stateSent(when(state.sent?.at), state.sent?.changes ?? null),
                 sub: s.waitThenLoadSub, actions: [{ action: 'cancelLoad', label: s.cancelLoad, asLink: true }] }),
-            bridgeDown: () => ({ tone: 'quiet', title: s.stateBridgeDown, sub: s.bridgeDownSub,
-                actions: start.map(a => ({ ...a, asLink: true })) }),
+            bridgeDown: () => rt?.why === 'hung'
+                ? { tone: 'warn', title: s.stateNotResponding, sub: s.notRespondingSub }
+                : rt?.why === 'refused'
+                    ? { tone: 'warn', title: s.stateAddressRefused, sub: s.addressRefusedSub, actions: start }
+                    : { tone: 'quiet', title: s.stateBridgeDown, sub: s.bridgeDownSub, actions: start.map(a => ({ ...a, asLink: true })) },
             unsentBridgeDown: () => ({ tone: 'warn', title: s.stateUnsent, sub: s.unsentBridgeDownSub,
                 actions: this.researchLinkAvailable('send') ? [{ action: 'startAndSend', label: s.startAndSend }] : [] }),
             refused: () => ({ tone: 'warn', title: s.stateRefused,
@@ -1764,6 +1793,12 @@ export const researchSyncMethods = uiModule({
                 actions: [{ action: 'introSeen', label: s.gotIt, asLink: true }, { action: 'introChange', label: s.autoIntroChange, asLink: true }] }),
         };
         const b = blocks[state.kind]();
+        // The bridge there but stuck, or answering not to this app: said as such whatever waits (B4, B5).
+        if (rt && !rt.up && (rt.why === 'hung' || rt.why === 'refused') && ['unsentBridgeDown', 'autoBridgeDown'].includes(state.kind)) {
+            b.tone = 'warn';
+            b.title = rt.why === 'hung' ? s.stateNotResponding : s.stateAddressRefused;
+            b.sub = [b.sub, rt.why === 'hung' ? s.notRespondingSub : s.addressRefusedSub].filter(Boolean).join(' ');
+        }
         // A switch of mode not yet acknowledged: said under the state, with its "Got it".
         if (state.switchedNote) {
             b.sub = [b.sub, archive ? s.switchedToArchiveTitle : s.switchedToAgentTitle].filter(Boolean).join(' · ');
@@ -1810,7 +1845,7 @@ export const researchSyncMethods = uiModule({
         const conflicts = treeId ? this.researchUndoneConflicts(treeId) : 0;
         const actions: { action: string; label: string; asLink?: boolean }[] = [{ action: 'sendAgain', label: s.sendAgain }];
         const link = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
-        const kept = !!link && auto && !this.researchHoldsForUndo(link);
+        const kept = !!link && !this.researchHoldsForUndo(link);
         const sub = [kept ? s.undoneKeptSub(when(sent?.closedAt)) : auto ? s.undoneAutoSub(when(sent?.closedAt)) : s.undoneSub(when(sent?.closedAt))];
         if (sent?.takenBack) sub.push(s.takenBackSub(sent.takenBack));
         // The others taken back too: each comes after this one, with its own Send again.
@@ -1960,18 +1995,25 @@ export const researchSyncMethods = uiModule({
             unsentAndNewer: { text: s.barUnsent, button: s.barSend, action: 'sendThenLoad' },
             stale: { text: s.pillStale, button: strings.storageSafety.reload, action: 'reload' },
             // A write left conflicts: they stay in sight until decided or the version is loaded (finding 40).
+            // A send taken back or discarded: in sight however changes go (sent by hand too, B1).
+            rejected: { text: state.sent?.state === 'undone'
+                ? [s.pillUndone, this.researchUndoneConflicts(ctx.treeId) > 0 ? s.conflictsN(this.researchUndoneConflicts(ctx.treeId)) : ''].filter(Boolean).join(' · ')
+                : state.sent?.failed ? s.pillFailed : s.pillRejected, button: s.sendAgain, action: 'sendAgain' },
             writtenConflicts: { text: [s.flyConflict(this.researchHeldConflictCount(ctx.treeId, state.sent)),
                 this.researchBridgeKnownDown(ctx.link.id) ? s.stateBridgeDown : ''].filter(Boolean).join(' · '), button: s.showConflicts, action: 'conflicts' },
             ...(auto ? {
                 autoBridgeDown: { text: archive ? s.pillBridgeDownWaiting(Math.max(1, researchAutoState(ctx.treeId).edits ?? 1)) : s.pillBridgeDown,
                     button: s.pillStart, action: 'startResearch' },
                 autoPaused: { text: s.pillRefused, button: s.sendAgain, action: 'retry' },
-                rejected: { text: state.sent?.state === 'undone'
-                    ? [s.pillUndone, this.researchUndoneConflicts(ctx.treeId) > 0 ? s.conflictsN(this.researchUndoneConflicts(ctx.treeId)) : ''].filter(Boolean).join(' · ')
-                    : state.sent?.failed ? s.pillFailed : s.pillRejected, button: s.sendAgain, action: 'sendAgain' },
             } : {}),
         };
-        const w = warn[kind];
+        // The bridge there but stuck, or answering not to this app: in sight, never the quiet mark (B4, B5).
+        const rtNow = runtime.get(link!.id);
+        const badBridge = !!rtNow && !rtNow.up && (rtNow.why === 'hung' || rtNow.why === 'refused')
+            && (kind === 'bridgeDown' || kind === 'unsentBridgeDown' || kind === 'autoBridgeDown');
+        const w = badBridge
+            ? { text: rtNow!.why === 'hung' ? s.stateNotResponding : s.stateAddressRefused, button: s.showConflicts, action: 'conflicts' }
+            : warn[kind];
         // A new conflict's note (with the person) first; the pill once it goes.
         const noteFirst = kind === 'writtenConflicts' && note?.kind === 'conflict';
         if (w && !noteFirst && (w.action !== 'startResearch' || this.researchLinkAvailable('open') || this.researchLinkAvailable('live'))) {
@@ -2161,7 +2203,7 @@ export const researchSyncMethods = uiModule({
             case 'autoPaused': return { text: t.statusStopped(state.reason ?? ''), warn: true, action: 'sendAgain' };
             case 'refused': return { text: state.reason ? `${strings.sync.stateRefused}: ${state.reason}.` : `${strings.sync.stateRefused}.`, warn: true, action: 'sendAgain' };
             case 'rejected': return { text: state.sent?.state !== 'undone' ? t.statusRejected(when(state.sent?.at))
-                : auto && !this.researchHoldsForUndo(link) ? t.statusUndoneKept(when(state.sent?.at)) : t.statusUndone(when(state.sent?.at)),
+                : !this.researchHoldsForUndo(link) ? t.statusUndoneKept(when(state.sent?.at)) : t.statusUndone(when(state.sent?.at)),
                 warn: true, action: 'sendAgain' };
             case 'sentPending': case 'waitThenLoad': return { text: strings.sync.markPending(when(state.sent?.at)), warn: false };
             case 'autoBridgeDown':

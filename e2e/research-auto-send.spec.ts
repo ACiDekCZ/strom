@@ -699,6 +699,86 @@ test('a send taken back before this page knew (not its last write) is shown with
     await expect.poll(() => bridge.againAsks ?? []).toEqual(['R20261004060000000-new1']);
 });
 
+test('the rc.22 round: a stuck bridge says it does not respond (B5), an old address that it turned down (B4), both in the pill', async ({ page }) => {
+    const bridge = await autoTree(page);
+    bridge.statusHang = true;
+    void page.evaluate(() => window.Strom.UI.pollResearchBridge());
+    await page.clock.fastForward(4000);
+    await expect(pill(page)).toContainText("The research doesn't respond");
+    await openResearchMenu(page);
+    await expect(block(page)).toContainText('strom live stop');
+    await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+    bridge.statusHang = false;
+    bridge.statusCode = 404;
+    await poll(page);
+    await expect(pill(page)).toContainText('The research turned the connection down');
+    bridge.statusCode = undefined;
+    await poll(page);
+    await expect(pill(page)).not.toContainText('turned the connection down');
+});
+
+test('the rc.22 round: a send by hand cut on its way says so and offers Try again, not the old way through the terminal (B6)', async ({ page }) => {
+    const bridge = await autoTree(page);
+    bridge.syncAbort = true;
+    await editJan(page);
+    await page.evaluate(() => window.Strom.UI.researchSendNow());
+    const toast = page.locator('.toast', { hasText: "couldn't be reached" });
+    await expect(toast.getByRole('button', { name: 'Try again' })).toBeVisible();
+    await expect(page.locator('#research-send-modal, .research-send-dialog')).toHaveCount(0);
+    bridge.syncAbort = false;
+    writesAtOnce(bridge);
+    await toast.getByRole('button', { name: 'Try again' }).click();
+    await expect.poll(() => bridge.posts.length).toBe(1);
+});
+
+test('the rc.22 round: a send taken back shows in the toolbar when changes go by hand too (B1)', async ({ page }) => {
+    await writtenThenUndone(page, { features: ['sync.again', 'sync.undoneSince', 'sync.takenBack'] });
+    await page.evaluate(() => {
+        const tm = window.Strom.TreeManager;
+        tm.patchResearchLink(tm.getActiveTreeId()!, { sendMode: 'manual' });
+        window.Strom.UI.refreshResearchSyncUi();
+    });
+    await expect(pill(page)).toContainText('Send taken back');
+    await openResearchMenu(page);
+    await expect(block(page)).toContainText('new edits go to the research as usual');
+});
+
+test('the rc.22 round: opened again by ?live= with nothing new there and changes here (a new port): connected, nothing asked (B3)', async ({ page }) => {
+    await autoTree(page);
+    await editJan(page);
+    await page.evaluate((b) => { void window.Strom.UI.startLiveFollow(b); }, BRIDGE);
+    await expect(page.locator('.toast', { hasText: 'Connected to the research again' })).toBeVisible();
+    await expect(page.locator('.dialog-confirm, #confirmation-modal.active')).toHaveCount(0);
+    expect(await page.evaluate(() => window.Strom.UI.isFollowingActiveResearch())).toBe(false);
+    expect(await janWhere(page)).not.toBe('');
+});
+
+test('rc.23: a copy built on a written send whose version was not loaded says so (_STROM_SINCE), to a bridge with sync.since only', async ({ page }) => {
+    const bridge = await autoTree(page, { features: ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.since'] });
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0001', person: 'P0003', fact: 'NAME' }] } };
+    bridge.onWrite = () => ({ head: 'c1c1c1c1c1c1', ged: nameConflictGed('c1c1c1c1c1c1') });
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    expect(bridge.posts[0]).not.toContain('_STROM_SINCE');
+    const first = bridge.sends[0].intake;
+    // Not loaded (a conflict over the user's value): the next copy builds on the first one.
+    bridge.syncReply = WRITE;
+    bridge.onWrite = () => ({ head: 'c2c2c2c2c2c2', ged: nameConflictGed('c2c2c2c2c2c2', ['1 BIRT', '2 PLAC Praha']) });
+    await janBirthPlace(page, 'Praha');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    expect(bridge.posts[1]).toContain(`1 _STROM_SINCE ${first}`);
+    expect(bridge.posts[1]).toContain('1 _STROM_HEAD');
+    // A bridge that does not say sync.since: never.
+    bridge.features = ['sync.again'];
+    await poll(page);
+    await janBirthPlace(page, 'Brno');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(3);
+    expect(bridge.posts[2]).not.toContain('_STROM_SINCE');
+});
+
 test('a write that takes longer (202): "writing" until the status says written, then loaded quietly', async ({ page }) => {
     const bridge = await autoTree(page);
     bridge.syncReply = { status: 202, body: { ok: true, inbox: false, pending: true, changes: 6 } };
