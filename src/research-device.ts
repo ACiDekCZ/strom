@@ -168,6 +168,29 @@ export function anyResearchBridgeKnown(): boolean {
     return false;
 }
 
+/**
+ * The research this browser last reached at `base`: the same address (port
+ * and token), else the only one known on that port. Null when none or not one.
+ */
+export function researchIdAtBridge(base: string): string | null {
+    const target = parseLiveBridge(base);
+    if (!target) return null;
+    const port = (b: string): string => { try { return new URL(b).port; } catch { return ''; } };
+    const onPort: string[] = [];
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (!key?.startsWith(BRIDGE_KEY)) continue;
+            const id = key.slice(BRIDGE_KEY.length);
+            const known = storedResearchBridge(id)?.base;
+            if (!known) continue;
+            if (known === target.base) return id;
+            if (port(known) === port(target.base)) onPort.push(id);
+        }
+    } catch { /* no storage */ }
+    return onPort.length === 1 ? onPort[0] : null;
+}
+
 /** The research reached this page at `base` (?live= / ?send= / a status from it): remember where. */
 export function noteResearchBridge(researchId: string, base: string): void {
     const bridge = parseLiveBridge(base);

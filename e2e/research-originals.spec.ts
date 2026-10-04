@@ -129,6 +129,56 @@ test.describe('originals go to the research', () => {
         await expect.poll(() => b.mediaPuts.length).toBe(1);
     });
 
+    test('rc.26 ids: the number a send gives a new person lets its waiting original go, no load of the version needed (F2)', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: { ...MEDIA_ACCEPTS, sync: { auto: 'write' } } });
+        await openResearch(page, { media: true });
+        await page.evaluate(() => {
+            const jan = Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
+            delete jan.refn;
+        });
+        const modal = await attachToJan(page);
+        await expect(modal.locator('.media-state.is-queued')).toHaveText('The original will be sent after the next tree send');
+        await page.keyboard.press('Escape');
+        b.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0042' } };
+        b.onWrite = () => ({ head: 'f9f9f9f9f9f9', ged: b.treeGed });
+        b.replyExtra = (posted) => {
+            const xref = /0 (@I\d+@) INDI\n1 NAME Jan/.exec(posted)?.[1];
+            return xref ? { ids: { persons: { [xref]: 'P0003' }, sources: {} } } : {};
+        };
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect.poll(() => b.posts.length).toBe(1);
+        await expect.poll(() => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any).refn)).toBe('P0003');
+        await expect.poll(() => b.mediaPuts.length).toBe(1);
+        expect(b.mediaPuts[0].headers['x-strom-person']).toBe('P0003');
+    });
+
+    test('rc.26 ids: a crop of a source new in the app goes with that source once a send gives it its number (F2)', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: { ...MEDIA_ACCEPTS, sync: { auto: 'write' } } });
+        await openResearch(page, { media: true });
+        await page.evaluate(async () => {
+            const ui = window.Strom.UI as any;
+            const dm = window.Strom.DataManager;
+            const src = dm.addSource({ title: 'SOA Zámrsk, matrika Chlumy' }) as any;
+            dm.updateSource(src.id, {
+                excerpts: [{ id: 'e1', dataUrl: 'data:image/png;base64,iVBORw0KGgo=', width: 1, height: 1, sizeBytes: 8, originalSha: 'd'.repeat(64) }],
+            } as never);
+            const blob = new Blob([new Uint8Array([1, 2, 3, 4, 5])], { type: 'image/jpeg' });
+            await ui.queueOriginal({ sha256: 'd'.repeat(64), name: 'zapis.jpg', mimeType: 'image/jpeg', bytes: 5, orientation: 1 }, blob, { sourceId: src.id, region: { x: 0, y: 0, w: 1, h: 0.5 } });
+        });
+        await poll(page);
+        expect(b.mediaPuts).toEqual([]);
+        b.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0043' } };
+        b.onWrite = () => ({ head: 'f8f8f8f8f8f8', ged: b.treeGed });
+        b.replyExtra = (posted) => {
+            const xref = /0 (@S\d+@) SOUR\n1 TITL SOA Zámrsk/.exec(posted)?.[1];
+            return xref ? { ids: { persons: {}, sources: { [xref]: 'S0007' } } } : {};
+        };
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect.poll(() => b.mediaPuts.length).toBe(1);
+        expect(b.mediaPuts[0].headers['x-strom-source']).toBe('S0007');
+        expect(b.mediaPuts[0].headers['x-strom-region']).toBeTruthy();
+    });
+
     test('a crop goes with the source and its region on the stored file', async ({ page }) => {
         const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
         await openResearch(page, { media: true });

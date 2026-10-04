@@ -51,7 +51,7 @@ import { formatRelativeDateTime } from '../format.js';
 import { safeFileName } from '../filenames.js';
 import {
     noteResearchLinks, announcedResearchLinks, researchLinksEnabled, noteResearchWaiting, storedResearchWaiting,
-    noteResearchBridge, noteResearchBridgeStatus, patchResearchAutoState, researchAutoState,
+    noteResearchBridge, noteResearchBridgeStatus, patchResearchAutoState, researchAutoState, researchIdAtBridge,
 } from '../research-device.js';
 import { rememberBridgeStatus } from './research-sync-ui.js';
 import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
@@ -560,7 +560,8 @@ export function bridgeFailure(err: unknown): BridgeFailure {
 }
 
 /** Why a bridge could not be reached, as far as the browser tells (the connect-failed dialog). */
-export type ConnectReason = 'denied' | 'prompt' | 'down' | 'unknown' | 'safari';
+/** `refused`: something answered at the address, but not to it (an old token, another tree's bridge on that port). */
+export type ConnectReason = 'denied' | 'prompt' | 'down' | 'unknown' | 'safari' | 'refused';
 const CONNECT_FAILED_ID = 'research-connect-failed';
 
 /** The browser's local network permission (Chrome), or null where it has none to tell. */
@@ -1045,13 +1046,15 @@ export const researchUiMethods = uiModule({
      * work there.
      */
     async showResearchConnectFailed(err: unknown, request?: { param: 'adopt' | 'send' | 'live'; value: string }): Promise<boolean> {
-        const reason: ConnectReason = bridgeFailure(err) === 'safari' ? 'safari' : await localNetworkReason();
+        const reason: ConnectReason = bridgeFailure(err) === 'safari' ? 'safari'
+            : err instanceof Error && /^HTTP (401|403|404)$/.test(err.message) ? 'refused' : await localNetworkReason();
         const c = strings.connect;
         const tree = TreeManager.getActiveTreeMetadata();
         const people = Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder);
         const texts: Record<ConnectReason, [string, string]> = {
             denied: [c.reasonDenied, c.textDenied], prompt: [c.reasonPrompt, c.textPrompt],
             down: [c.reasonDown, c.textDown], unknown: [c.reasonUnknown, c.textUnknown], safari: [c.reasonSafari, c.textSafari],
+            refused: [c.reasonRefused, c.textRefused],
         };
         const [why, text] = texts[reason];
         // The way to allow it: open where it is the cause, folded where it may be.
@@ -1775,6 +1778,11 @@ export const researchUiMethods = uiModule({
                     this.showToast(strings.research.ended, 4000);
                     return;
                 }
+                // The tree of that research, when this browser knows its address: the question is about it,
+                // never about whichever tree the page started with (rc.27 round).
+                const knownId = researchIdAtBridge(bridge.base);
+                const knownTree = knownId ? TreeManager.findTreeByResearchId(knownId) : null;
+                if (knownTree && DataManager.getCurrentTreeId() !== knownTree.id) await this.switchToTree(knownTree.id);
                 if (await this.showResearchConnectFailed(err, { param: 'live', value: raw })) void this.startLiveFollow(raw);
                 return;
             }

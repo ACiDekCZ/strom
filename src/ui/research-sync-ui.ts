@@ -1942,11 +1942,17 @@ export const researchSyncMethods = uiModule({
         return DataManager.getPerson(personId)?.research?.conflicts ?? [];
     },
 
-    /** "Written, N conflicts to decide": the most the research said, or what its unloaded version holds open over the user's values. */
+    /** "Written, N conflicts to decide": every conflict open there as known here (cards count the same), at least what the research said. */
     researchHeldConflictCount(treeId: TreeId, sent: ResearchSend | undefined): number {
-        const held = this.researchHeld(treeId);
-        const open = (held?.takeovers ?? []).reduce((n, id) => n + this.researchConflictsOf(id as PersonId).filter(c => c.status === 'open').length, 0);
-        return Math.max(sent?.conflicts ?? 0, researchAutoState(treeId).lastWritten?.conflicts ?? 0, open, 1);
+        return Math.max(this.researchOpenConflictTotal(treeId), sent?.conflicts ?? 0, researchAutoState(treeId).lastWritten?.conflicts ?? 0, 1);
+    },
+
+    /** The conflicts open in the research for the open tree's people: its unloaded version's where read, else the tree's. */
+    researchOpenConflictTotal(treeId: TreeId): number {
+        if (DataManager.getCurrentTreeId() !== treeId) return 0;
+        let n = 0;
+        for (const id of Object.keys(DataManager.getData().persons)) n += this.researchConflictsOf(id as PersonId).filter(c => c.status === 'open').length;
+        return n;
     },
 
     /** Read the research's version (not loading it) for what its conflicts say now; true when read. */
@@ -2013,6 +2019,8 @@ export const researchSyncMethods = uiModule({
             const fp = contentFingerprint(DataManager.getData());
             if (link?.sent && link.sent.fingerprint === sentFp) TreeManager.patchResearchLink(treeId, { sent: { ...link.sent, fingerprint: fp } });
         }
+        // Originals that waited for these people or sources to be known there go now (F2).
+        void this.researchOriginalsKick();
     },
 
     /** What a send carried that the research did not write, line by line: whom, which fact, why. */
@@ -2034,7 +2042,8 @@ export const researchSyncMethods = uiModule({
     researchUndoneConflicts(treeId: TreeId): number {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (link?.sent?.state !== 'undone') return 0;
-        return researchAutoState(treeId).lastWritten?.conflicts ?? 0;
+        // Every conflict open there (as the cards count them), not only those the last write named.
+        return Math.max(researchAutoState(treeId).lastWritten?.conflicts ?? 0, this.researchOpenConflictTotal(treeId));
     },
 
     /** The ⋯ dot and label for the sync state (refreshActionMenuBadges calls this). */

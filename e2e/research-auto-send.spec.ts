@@ -890,6 +890,34 @@ test('rc.26: the numbers the research gave what a send added (ids, by its xrefs)
     expect(bridge.posts[2]).toMatch(/1 NAME Petr[\s\S]*?1 REFN P0099/);
 });
 
+test('the rc.27 round: ?live= with an old token says the research turned it down, on the tree of that research (not another)', async ({ page }) => {
+    const bridge = await autoTree(page);
+    const researchTree = await treeId(page);
+    // Another tree open, as the page may start with.
+    await page.evaluate(async () => {
+        const id = window.Strom.TreeManager.createTree('Other');
+        await window.Strom.DataManager.switchTree(id);
+    });
+    expect(await treeId(page)).not.toBe(researchTree);
+    bridge.statusCode = 404;
+    await page.evaluate((b) => { void window.Strom.UI.startLiveFollow(b); }, BRIDGE);
+    const dialog = page.locator('.research-connect-failed');
+    await expect(dialog).toHaveAttribute('data-reason', 'refused');
+    await expect(dialog).toContainText('The research turned the connection down');
+    expect(await treeId(page)).toBe(researchTree);
+});
+
+test('the rc.27 round: the pill counts every conflict open there (as the cards do), not only the last write\'s', async ({ page }) => {
+    await conflictLeft(page);
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const josef = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Josef') as any;
+        josef.research = { conflicts: [{ id: 'X0009', fact: 'BIRT', status: 'open', values: [{ value: '1840' }, { value: '1841' }] }] };
+        window.Strom.UI.refreshResearchSyncUi();
+    });
+    await expect(pill(page)).toContainText('Written, 2 conflicts to decide');
+});
+
 test('a write that takes longer (202): "writing" until the status says written, then loaded quietly', async ({ page }) => {
     const bridge = await autoTree(page);
     bridge.syncReply = { status: 202, body: { ok: true, inbox: false, pending: true, changes: 6 } };
