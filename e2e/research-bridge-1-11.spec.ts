@@ -72,7 +72,7 @@ async function bridge111(page: Page): Promise<OldBridge> {
 
 function queued(page: Page): Promise<unknown[]> {
     return page.evaluate(() => new Promise((resolve) => {
-        const req = indexedDB.open('strom-db');
+        const req = indexedDB.open('strom-originals');
         req.onsuccess = () => {
             const all = req.result.transaction('originals', 'readonly').objectStore('originals').getAll();
             all.onsuccess = () => { resolve(all.result as unknown[]); req.result.close(); };

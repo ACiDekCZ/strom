@@ -25,6 +25,7 @@ import { isEncrypted, EncryptedData, CryptoSession, decrypt } from './crypto.js'
 import { SettingsManager } from './settings.js';
 import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
+import { researchBaseKey } from './storage-keys.js';
 import { requestPersistentStorage } from './persistence.js';
 import { asciiSlug } from './filenames.js';
 import { announceTreeSaved, clearTreeStale, isTreeStale } from './tab-sync.js';
@@ -390,6 +391,8 @@ class TreeManagerClass {
 
         // Remove tree data from IDB
         await StorageManager.delete('trees', id);
+        // The research base stored beside it goes with it.
+        await StorageManager.delete('trees', researchBaseKey(id)).catch(() => undefined);
         forgetPoolScope(id);
 
         // Remove audit log for this tree
@@ -789,11 +792,11 @@ class TreeManagerClass {
         if (typeof StorageManager.setTogether === 'function') {
             await StorageManager.setTogether([
                 { store: 'trees', key: id, value: record },
-                { store: 'researchBases', key: id, value: stored },
+                { store: 'trees', key: researchBaseKey(id), value: stored },
             ]);
         } else {
             await StorageManager.set('trees', id, record);
-            await StorageManager.set('researchBases', id, stored);
+            await StorageManager.set('trees', researchBaseKey(id), stored);
         }
     }
 
@@ -835,7 +838,7 @@ class TreeManagerClass {
         if (!link) return;
         let stored: StoredResearchBase | null = null;
         try {
-            stored = await StorageManager.get<StoredResearchBase>('researchBases', id);
+            stored = await StorageManager.get<StoredResearchBase>('trees', researchBaseKey(id));
         } catch { return; }
         if (!stored || stored.researchId !== link.id) return;
         const base = { head: stored.head ?? '', fingerprint: stored.fingerprint ?? '' };
@@ -856,7 +859,7 @@ class TreeManagerClass {
         if (!link) return true;
         let stored: StoredResearchBase | null = null;
         try {
-            stored = await StorageManager.get<StoredResearchBase>('researchBases', id);
+            stored = await StorageManager.get<StoredResearchBase>('trees', researchBaseKey(id));
         } catch { return true; }
         if (!stored || stored.researchId !== link.id) return true;
         return sameBase(this.researchBaseOf(id), { head: stored.head ?? '', fingerprint: stored.fingerprint ?? '' });

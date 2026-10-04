@@ -38,7 +38,7 @@ function janAttachment(page: Page) {
 
 function queued(page: Page): Promise<{ sha256: string; personId?: string; bytes: number }[]> {
     return page.evaluate(() => new Promise((resolve) => {
-        const req = indexedDB.open('strom-db');
+        const req = indexedDB.open('strom-originals');
         req.onsuccess = () => {
             const tx = req.result.transaction('originals', 'readonly');
             const all = tx.objectStore('originals').getAll();
@@ -295,7 +295,7 @@ test.describe('originals: the full UI (beta.10)', () => {
         await expect(pill).not.toContainText('Originals waiting');
         // Four days later (the record's time moved back), the page opened again.
         await page.evaluate(() => new Promise<void>((resolve) => {
-            const req = indexedDB.open('strom-db');
+            const req = indexedDB.open('strom-originals');
             req.onsuccess = () => {
                 const store = req.result.transaction('originals', 'readwrite').objectStore('originals');
                 const all = store.getAll();

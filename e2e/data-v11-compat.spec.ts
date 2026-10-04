@@ -116,3 +116,62 @@ test('a browser database left by a newer app: this build still starts, opens it 
     const dbs = await page.evaluate(async () => (await indexedDB.databases()).map(d => ({ name: d.name, version: d.version })));
     expect(dbs).toContainEqual({ name: 'strom-db', version: 99 });
 });
+
+test('3.9 keeps the browser database at version 5: an older build (3.8.x, an older exported file) still opens it', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(page.locator('.person-card').first()).toBeVisible();
+    const dbs = await page.evaluate(async () => (await indexedDB.databases()).map(d => ({ name: d.name, version: d.version })));
+    expect(dbs).toContainEqual({ name: 'strom-db', version: 5 });
+    // What 3.8.x does at its start: open at 5 — no VersionError, its stores there.
+    const older = await page.evaluate(() => new Promise<string>((resolve) => {
+        const req = indexedDB.open('strom-db', 5);
+        req.onsuccess = () => { const names = [...req.result.objectStoreNames].sort().join(','); req.result.close(); resolve(names); };
+        req.onerror = () => resolve(`ERR ${req.error?.name}`);
+    }));
+    expect(older).toBe('audit,fileHandles,media,merge,shareBaselines,snapshots,trees');
+});
+
+test('a database a 3.9 beta raised to 7: the app starts, the research bases and queued originals move to their new places', async ({ page }) => {
+    // The same origin before the app runs: the beta's database (v7, its two extra stores, a record in each).
+    await page.goto('/');
+    await page.evaluate(() => new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('strom-db', 7);
+        req.onupgradeneeded = () => {
+            for (const s of ['trees', 'audit', 'merge', 'snapshots', 'media', 'fileHandles', 'shareBaselines', 'originals', 'researchBases']) req.result.createObjectStore(s);
+        };
+        req.onsuccess = () => {
+            const tx = req.result.transaction(['originals', 'researchBases'], 'readwrite');
+            tx.objectStore('originals').put({ sha256: 'ab'.repeat(32), bytes: 3, addedAt: Date.now() }, 'orig-1');
+            tx.objectStore('researchBases').put({ researchId: 'r', head: 'abc1234', fingerprint: 'f', at: 1 }, 'tree_1');
+            tx.oncomplete = () => { req.result.close(); resolve(); };
+            tx.onerror = () => reject(tx.error);
+        };
+        req.onerror = () => reject(req.error);
+    }));
+    await openApp(page);
+    await expect(page.locator('#empty-state')).toBeVisible();
+    const moved = await page.evaluate(() => new Promise<Record<string, unknown>>((resolve) => {
+        const main = indexedDB.open('strom-db');
+        main.onsuccess = () => {
+            const db = main.result;
+            const tx = db.transaction(['trees', 'originals', 'researchBases'], 'readonly');
+            const base = tx.objectStore('trees').get('researchBase:tree_1');
+            const oldOriginals = tx.objectStore('originals').count();
+            const oldBases = tx.objectStore('researchBases').count();
+            tx.oncomplete = () => {
+                db.close();
+                const extra = indexedDB.open('strom-originals');
+                extra.onsuccess = () => {
+                    const get = extra.result.transaction('originals', 'readonly').objectStore('originals').get('orig-1');
+                    get.onsuccess = () => {
+                        extra.result.close();
+                        resolve({ base: (base.result as { head?: string } | undefined)?.head, oldOriginals: oldOriginals.result,
+                            oldBases: oldBases.result, original: (get.result as { bytes?: number } | undefined)?.bytes });
+                    };
+                };
+            };
+        };
+    }));
+    expect(moved).toEqual({ base: 'abc1234', oldOriginals: 0, oldBases: 0, original: 3 });
+});

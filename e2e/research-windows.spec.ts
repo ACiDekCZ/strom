@@ -31,7 +31,8 @@ const storedBase = (page: Page) => page.evaluate(() => new Promise<{ head: strin
     const req = indexedDB.open('strom-db');
     req.onsuccess = () => {
         const id = window.Strom.TreeManager.getActiveTreeId()!;
-        const get = req.result.transaction('researchBases', 'readonly').objectStore('researchBases').get(id);
+        // Beside the tree in 'trees', under its own key (strom-db stays at version 5).
+        const get = req.result.transaction('trees', 'readonly').objectStore('trees').get(`researchBase:${id}`);
         get.onsuccess = () => { resolve(get.result ?? null); req.result.close(); };
     };
 }));

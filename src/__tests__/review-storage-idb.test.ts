@@ -28,11 +28,13 @@ function fakeDb(onTx: (tx: FakeTx) => void) {
         },
         close: vi.fn(),
         onversionchange: null as (() => void) | null,
+        objectStoreNames: { contains: () => false },
     };
 }
 
 function install(db: unknown): void {
-    (StorageManager as unknown as { db: unknown }).db = db;
+    (StorageManager as unknown as { db: unknown; extra: unknown }).db = db;
+    (StorageManager as unknown as { db: unknown; extra: unknown }).extra = db;
 }
 
 afterEach(() => {
@@ -71,14 +73,23 @@ describe('S22 connection lifecycle', () => {
         vi.stubGlobal('window', target);
 
         const db = fakeDb(tx => tx.oncomplete?.());
-        const request: Record<string, unknown> = { result: db };
-        vi.stubGlobal('indexedDB', { open: () => request });
+        const extra = fakeDb(tx => tx.oncomplete?.());
+        // One request per database: strom-db (frozen at 5), then the originals' own.
+        const opened: { name: string; version: number | undefined; request: Record<string, unknown> }[] = [];
+        vi.stubGlobal('indexedDB', { open: (name: string, version?: number) => {
+            const request: Record<string, unknown> = { result: opened.length === 0 ? db : extra };
+            opened.push({ name, version, request });
+            return request;
+        } });
 
         const opening = StorageManager.init();
-        (request.onblocked as () => void)();
-        (request.onsuccess as () => void)();
+        (opened[0].request.onblocked as () => void)();
+        (opened[0].request.onsuccess as () => void)();
+        await vi.waitFor(() => expect(opened).toHaveLength(2));
+        (opened[1].request.onsuccess as () => void)();
         await opening;
         expect(seen).toEqual(['blocked']);
+        expect(opened.map(o => [o.name, o.version])).toEqual([['strom-db', 5], ['strom-originals', 1]]);
 
         await expect(StorageManager.set('trees', 'k', 1)).resolves.toBeUndefined();
 
