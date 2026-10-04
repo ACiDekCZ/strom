@@ -983,7 +983,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.60';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.0-beta.61';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -1146,6 +1146,12 @@ export type ResearchEdgeMode = 'off' | 'mine' | 'all';
 export interface ResearchLink {
     /** The research tree's UUID (lower case). */
     id: string;
+    /**
+     * People whose sex the research's version leaves unknown (SEX U), by
+     * reference number, with the sex they have here since the load: sent back
+     * as SEX U while it stays, so another sex is the user's (N60-2).
+     */
+    sexU?: Record<string, Gender>;
     /** Content fingerprint of the tree right after the last import/update. */
     fingerprint: string;
     /** ISO time of the last import/update. */

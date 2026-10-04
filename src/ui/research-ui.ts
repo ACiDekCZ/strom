@@ -26,13 +26,13 @@ import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { StromData, TreeId, PersonId, Gender } from '../types.js';
-import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate, sexGuessedIn } from '../ged-parser.js';
+import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate, sexGuessedIn, sexUnknownIn } from '../ged-parser.js';
 import { formatFlexDate } from '../dates.js';
 import { formatLiveTime, formatLiveClock } from '../live-time.js';
 import { isMobile } from '../breakpoints.js';
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
-    decideResearchOpen, stabilizeIds, keepKnownSex, sexKeptUnknown, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
+    decideResearchOpen, stabilizeIds, keepKnownSex, sexKeptUnknown, sexUByRefn, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
@@ -1193,6 +1193,8 @@ export const researchUiMethods = uiModule({
         const name = source.name || strings.research.defaultName;
         const dateLabel = researchDateLabel(source.date);
         const existing = source.treeId ? TreeManager.findTreeByResearchId(source.treeId) : null;
+        // Whose sex the research leaves unknown (read before any copy of `data` loses it).
+        const unknownSex = sexUnknownIn(data);
 
         let previous: StromData | null = null;
         let includeImages = SettingsManager.isImportImages();
@@ -1377,12 +1379,14 @@ export const researchUiMethods = uiModule({
 
         if (source.treeId) {
             const head = opts.head || source.head;
+            const sexU = sexUByRefn(data, unknownSex);
             TreeManager.setResearchLink(treeId, {
                 id: source.treeId,
                 fingerprint: contentFingerprint(DataManager.getData()),
                 syncedAt: new Date().toISOString(),
                 ...(head ? { head } : {}),
                 ...(source.mode === 'archive' ? { mode: 'archive' as const } : {}),
+                ...(Object.keys(sexU).length ? { sexU } : {}),
             });
             // The load itself counted as an edit (it went through the edit path before the tie moved on): nothing waits now.
             patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined });
@@ -1556,7 +1560,7 @@ export const researchUiMethods = uiModule({
         this.showToast(r.sending, 60000);
         let res: Response;
         try {
-            res = await postSync(bridge.sync, researchGedcom(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts }), 120000);
+            res = await postSync(bridge.sync, researchGedcom(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts, sexU: link.sexU }), 120000);
         } catch (err) {
             console.warn('Sending to the research failed', err);
             document.querySelector('.toast')?.remove();
@@ -1770,7 +1774,7 @@ export const researchUiMethods = uiModule({
             await this.showAlert(strings.storageSafety.treeLocked, 'warning');
             return;
         }
-        const research = { id: meta.research.id, head: meta.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(meta.research).transcripts };
+        const research = { id: meta.research.id, head: meta.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(meta.research).transcripts, sexU: meta.research.sexU };
         const blob = new Blob([researchGedcom(data, meta.name, research)], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1787,9 +1791,10 @@ export const researchUiMethods = uiModule({
      * A ?live= from a research whose version is the one this tree builds on,
      * the tree changed since: nothing to receive — its bridge is known again
      * (the status just asked noted it) and what waits goes as usual. True when
-     * handled so.
+     * handled so. Following is not started (it would replace those changes):
+     * "Follow live" on the toast starts it the usual way, asking first.
      */
-    async researchReconnectOnly(status: LiveStatus): Promise<boolean> {
+    async researchReconnectOnly(status: LiveStatus, raw: string): Promise<boolean> {
         const existing = status.treeId ? TreeManager.findTreeByResearchId(status.treeId) : null;
         const link = existing?.research;
         if (!existing || !link || link.copy || !status.head || !status.accepts) return false;
@@ -1810,14 +1815,17 @@ export const researchUiMethods = uiModule({
             if (DataManager.getCurrentTreeId() !== existing.id) return false;
         }
         rememberBridgeStatus(status.treeId!, status);
-        this.showToast(strings.research.reconnected, 6000);
+        this.showToast(strings.research.reconnected, 10000, {
+            closable: true,
+            action: { label: strings.research.followLive, run: () => { void this.startLiveFollow(raw, { follow: true }); } },
+        });
         this.refreshResearchSyncUi();
         void this.pollResearchBridge();
         return true;
     },
 
     /** ?live=: follow a running research through its bridge on this computer. */
-    async startLiveFollow(raw: string, opts: { resume?: boolean } = {}): Promise<void> {
+    async startLiveFollow(raw: string, opts: { resume?: boolean; follow?: boolean } = {}): Promise<void> {
         const bridge = parseLiveBridge(raw);
         if (!bridge) {
             if (opts.resume) forgetLiveBridge();
@@ -1880,8 +1888,8 @@ export const researchUiMethods = uiModule({
             const name = status.name || header.name || strings.research.defaultName;
             // The research has nothing new beyond what this tree builds on, and the tree has changes it lacks
             // (opened again from it, e.g. its bridge on a new port): connected again, the changes go to it —
-            // never asked whether to replace them (B3 of the rc.22 round).
-            if (!opts.resume && await this.researchReconnectOnly(status)) return;
+            // never asked whether to replace them (B3 of the rc.22 round). `follow`: "Follow live" asked for it.
+            if (!opts.resume && !opts.follow && await this.researchReconnectOnly(status, raw)) return;
             // A research still waiting for its tree from here (opened before the hand-over): the hand-over,
             // not a second, empty tree (J7 of the language round).
             if (!opts.resume && Object.keys(data.persons ?? {}).length === 0 && !TreeManager.findTreeByResearchId(status.treeId)
@@ -2174,6 +2182,8 @@ export const researchUiMethods = uiModule({
             return null;
         }
         const guessed = sexGuessedIn(data);
+        // Whose sex the research leaves unknown, by reference number (ids change below).
+        const unknownRefns = new Set([...sexUnknownIn(data)].map(id => data.persons[id]?.refn?.trim() ?? '').filter(Boolean));
         // Following live asks nothing: the setting decides about images.
         if (!SettingsManager.isImportImages()) data = stripMedia(data);
         if (!TreeManager.getTreeMetadata(s.treeId)) {
@@ -2195,12 +2205,14 @@ export const researchUiMethods = uiModule({
             TreeManager.updateTreeFromImport(s.treeId, stable);
         }
         if (head) s.head = head;
+        const sexU = sexUByRefn(stable, new Set(Object.values(stable.persons).filter(p => unknownRefns.has(p.refn?.trim() ?? '')).map(p => p.id)));
         TreeManager.setResearchLink(s.treeId, {
             id: s.researchId,
             fingerprint: contentFingerprint(active ? DataManager.getData() : stable),
             syncedAt: new Date().toISOString(),
             ...(s.head ? { head: s.head } : {}),
             ...(header.mode === 'archive' ? { mode: 'archive' as const } : {}),
+            ...(Object.keys(sexU).length ? { sexU } : {}),
         });
         this.researchKeepCopy(s.treeId, active ? DataManager.getData() : stable);
         return active ? DataManager.getData() : stable;

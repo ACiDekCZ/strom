@@ -121,7 +121,7 @@ export const researchChangesMethods = uiModule({
             localStorage.setItem(FP_KEY + treeId, base);
             localStorage.removeItem(FP_PREV_KEY + treeId);
         } catch { /* the copy is not trusted next time */ }
-        void saveResearchCopy(treeId, data);
+        void saveResearchCopy(treeId, data, base);
     },
 
     /**
@@ -136,13 +136,14 @@ export const researchChangesMethods = uiModule({
         if (!copy || copy.treeId !== treeId) {
             if (loading !== treeId) {
                 loading = treeId;
-                loadingDone = Promise.all([loadResearchCopy(treeId), loadResearchPrevCopy(treeId)]).then(([base, prev]) => {
+                const fp = storedFp(treeId);
+                let prevFp = '';
+                try { prevFp = localStorage.getItem(FP_PREV_KEY + treeId) ?? ''; } catch { /* not trusted */ }
+                loadingDone = Promise.all([loadResearchCopy(treeId, fp), loadResearchPrevCopy(treeId, prevFp)]).then(([base, prev]) => {
                     if (loading !== treeId) return;
                     loading = null;
                     loadingDone = null;
-                    copy = { treeId, base, fp: storedFp(treeId) };
-                    let prevFp = '';
-                    try { prevFp = localStorage.getItem(FP_PREV_KEY + treeId) ?? ''; } catch { /* not trusted */ }
+                    copy = { treeId, base, fp };
                     prevCopy = prev && prevFp ? { treeId, base: prev, fp: prevFp } : null;
                     memo = null;
                     this.refreshResearchSyncUi();
@@ -197,14 +198,14 @@ export const researchChangesMethods = uiModule({
         if (copy?.treeId === treeId && copy.base && copy.fp) {
             prevCopy = { treeId, base: copy.base, fp: copy.fp };
             try { localStorage.setItem(FP_PREV_KEY + treeId, copy.fp); } catch { /* not trusted next time */ }
-            void saveResearchPrevCopy(treeId, copy.base);
+            void saveResearchPrevCopy(treeId, copy.base, copy.fp);
         }
         const base = retagged ? baseCopy(retagged.data) : p.data;
         const fp = retagged?.fingerprint ?? fingerprint;
         copy = { treeId, base, fp };
         memo = null;
         try { localStorage.setItem(FP_KEY + treeId, fp); } catch { /* not trusted next time */ }
-        void saveResearchCopy(treeId, base);
+        void saveResearchCopy(treeId, base, fp);
         if (p.list) storeWritten(treeId, at, p.list);
     },
 

@@ -95,7 +95,7 @@ export const researchLoadMethods = uiModule({
         const unknownSex = opts.sexUnknown ?? [];
         const sexLines = unknownSex.length > SEX_LINES
             ? [s.loadSexUnknownMany(unknownSex.length)]
-            : unknownSex.map(p => s.loadSexUnknown(p.name, p.gender === 'male' ? strings.gender.male : strings.gender.female));
+            : unknownSex.map(p => s.loadSexUnknown(p.name, (p.gender === 'male' ? strings.gender.male : strings.gender.female).toLocaleLowerCase()));
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.id = LOAD_ID;

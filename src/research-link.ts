@@ -8,7 +8,7 @@
  * in src/ui/research-ui.ts. Nothing here touches the DOM or storage.
  */
 
-import { StromData, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION } from './types.js';
+import { StromData, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION, Gender } from './types.js';
 import { withoutConvertedStandIns, isPurePlaceholder } from './single-parent.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
@@ -507,6 +507,21 @@ export function keepKnownSex(next: StromData, previous: StromData, guessed: Read
         persons[id] = { ...p, gender: was };
     }
     return persons ? { ...next, persons } : next;
+}
+
+/**
+ * People whose sex the research's version leaves unknown, by reference
+ * number, with the sex they have here after the load (kept or the
+ * importer's): sent back as SEX U while that sex stays (N60-2).
+ */
+export function sexUByRefn(data: StromData, unknown: ReadonlySet<PersonId>): Record<string, Gender> {
+    const out: Record<string, Gender> = {};
+    for (const id of unknown) {
+        const p = data.persons?.[id];
+        const refn = p?.refn?.trim();
+        if (p && refn) out[refn] = p.gender;
+    }
+    return out;
 }
 
 /** The people of `next` keepKnownSex keeps a sex for: the research leaves theirs unknown, the previous state has them. */
@@ -1621,6 +1636,8 @@ export interface ResearchHeaderInfo {
      * Only to a bridge that says `sync.since`.
      */
     since?: string;
+    /** People whose sex the research leaves unknown, with the sex kept here (ResearchLink.sexU): SEX U while it stays. */
+    sexU?: Record<string, Gender>;
 }
 
 /** `_STROM_SENT` / `_STROM_APP_TREE` values: what the research accepts (at most 64 of [A-Za-z0-9._:-]). */
@@ -1643,6 +1660,8 @@ export function researchHeaderLines(link: ResearchHeaderInfo | null | undefined)
         ...(link?.transcripts === 'evidence' || link?.transcripts === 'lead' ? [`1 _STROM_TRANSCRIPTS ${link.transcripts}`] : []),
         ...(sent ? [`1 _STROM_SENT ${sent}`] : []),
         ...(since ? [`1 _STROM_SINCE ${since}`] : []),
+        // SEX U is written where the research's unknown sex stayed (N60-2): any other sex is the user's.
+        '1 _STROM_SEX_U Y',
     ];
 }
 

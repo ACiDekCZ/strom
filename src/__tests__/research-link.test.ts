@@ -567,8 +567,8 @@ describe('research version in the header (_STROM_HEAD)', () => {
     });
 
     it('a linked export writes _STROM_TREE and _STROM_HEAD, not SOUR STROM_RESEARCH', () => {
-        expect(researchHeaderLines({ id: RID.toUpperCase(), head: 'ABCDEF1' })).toEqual([`1 _STROM_TREE ${RID}`, '1 _STROM_HEAD abcdef1']);
-        expect(researchHeaderLines({ id: RID })).toEqual([`1 _STROM_TREE ${RID}`]);
+        expect(researchHeaderLines({ id: RID.toUpperCase(), head: 'ABCDEF1' })).toEqual([`1 _STROM_TREE ${RID}`, '1 _STROM_HEAD abcdef1', '1 _STROM_SEX_U Y']);
+        expect(researchHeaderLines({ id: RID })).toEqual([`1 _STROM_TREE ${RID}`, '1 _STROM_SEX_U Y']);
         expect(researchHeaderLines({ id: 'nope' })).toEqual([]);
         const data: StromData = { persons: {}, partnerships: {} } as StromData;
         const ged = exportToGedcom(data, 'T', { research: { id: RID, head: 'abcdef1' } }).content;
@@ -576,6 +576,20 @@ describe('research version in the header (_STROM_HEAD)', () => {
         expect(ged).toContain('1 _STROM_HEAD abcdef1');
         expect(ged).not.toContain('STROM_RESEARCH');
         expect(exportToGedcom(data, 'T').content).not.toContain('_STROM_TREE');
+    });
+
+    it('the research\'s unknown sex, kept here unchanged, goes back as SEX U; another sex is the user\'s (N60-2)', () => {
+        const person = (id: string, refn: string, gender: 'male' | 'female') =>
+            ({ id, firstName: id, lastName: 'X', gender, refn, parentIds: [], childIds: [], partnerships: [] });
+        const data = { persons: { a: person('a', 'P0001', 'male'), b: person('b', 'P0002', 'female'), c: person('c', 'P0003', 'male') }, partnerships: {} } as unknown as StromData;
+        const ged = exportToGedcom(data, 'T', { research: { id: RID, sexU: { P0001: 'male', P0002: 'male' } } }).content;
+        const sexOf = (name: string) => new RegExp(`1 NAME ${name} /X/[\\s\\S]*?1 SEX (\\w)`).exec(ged)?.[1];
+        expect(ged).toContain('1 _STROM_SEX_U Y');
+        expect(sexOf('a')).toBe('U');      // kept as loaded
+        expect(sexOf('b')).toBe('F');      // changed since: the user's
+        expect(sexOf('c')).toBe('M');      // known there
+        // Without a research nothing is unknown.
+        expect(exportToGedcom(data, 'T').content).not.toContain('1 SEX U');
     });
 });
 

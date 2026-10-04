@@ -777,6 +777,19 @@ test('the rc.22 round: opened again by ?live= with nothing new there and changes
     expect(await janWhere(page)).not.toBe('');
 });
 
+test('connected again by ?live= with changes here: Follow live on the toast asks first, and Send, then load sends, loads and follows (beta.60 round)', async ({ page }) => {
+    const bridge = await autoTree(page);
+    writesAtOnce(bridge);
+    await editJan(page);
+    await page.evaluate((b) => { void window.Strom.UI.startLiveFollow(b); }, BRIDGE);
+    const toast = page.locator('.toast', { hasText: 'Connected to the research again' });
+    await toast.getByRole('button', { name: 'Follow live' }).click();
+    await page.getByRole('button', { name: 'Send, then load' }).click();
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    await expect.poll(() => page.evaluate(() => window.Strom.UI.isFollowingActiveResearch())).toBe(true);
+    expect(await janWhere(page)).not.toBe('');
+});
+
 test('rc.23 / N1: a copy built on a written send whose version was not loaded says so (_STROM_SINCE), always when known; a version loaded since is the base then', async ({ page }) => {
     const bridge = await autoTree(page, { features: ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.since'] });
     bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0001', person: 'P0003', fact: 'NAME' }] } };

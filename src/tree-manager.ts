@@ -16,6 +16,7 @@ import {
     Person,
     Partnership,
     generateTreeId,
+    uniqueIdSuffix,
     LAST_FOCUSED,
     LastFocusedMarker,
     STROM_DATA_VERSION
@@ -52,8 +53,14 @@ export type TreeReadResult =
     | { status: 'locked' }
     | { status: 'undecryptable' };
 
-/** localStorage key prefix of a tree state rescued when the page was left before its save landed (tree id follows). */
+/**
+ * localStorage key prefix of a tree state rescued when the page was left
+ * before its save landed: `<prefix><tree id>@<window>` — one per window, so
+ * another window's save never drops it (N60-1); beta.58–60 wrote `<prefix><tree id>`.
+ */
 const RESCUE_PREFIX = 'strom-save-rescue:';
+/** This window's part of its rescue keys. */
+const RESCUE_WINDOW = uniqueIdSuffix();
 /** Larger states are not rescued: localStorage holds about 5 million characters per origin. */
 const RESCUE_MAX_CHARS = 4_000_000;
 
@@ -64,8 +71,37 @@ interface RescuedSave {
     data: StromData;
 }
 
-function forgetRescue(id: TreeId): void {
-    try { localStorage.removeItem(RESCUE_PREFIX + id); } catch { /* no storage */ }
+/** This window's rescue key of a tree. */
+function rescueKey(id: TreeId): string {
+    return `${RESCUE_PREFIX}${id}@${RESCUE_WINDOW}`;
+}
+
+/** The tree a rescue key is of. */
+function rescueTree(key: string): TreeId {
+    const rest = key.slice(RESCUE_PREFIX.length);
+    const at = rest.lastIndexOf('@');
+    return (at > 0 ? rest.slice(0, at) : rest) as TreeId;
+}
+
+function forgetRescueKey(key: string): void {
+    try { localStorage.removeItem(key); } catch { /* no storage */ }
+}
+
+/** Every rescue key in localStorage (of every window). */
+function rescueKeys(): string[] {
+    const keys: string[] = [];
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key?.startsWith(RESCUE_PREFIX)) keys.push(key);
+        }
+    } catch { /* no storage */ }
+    return keys;
+}
+
+/** A deleted tree: the rescue copies of every window go with it. */
+function forgetRescues(id: TreeId): void {
+    for (const key of rescueKeys()) if (rescueTree(key) === id) forgetRescueKey(key);
 }
 
 /** Separator between the readable slug and the id suffix in `?tree=`. A
@@ -421,7 +457,7 @@ class TreeManagerClass {
         this.index.trees.splice(idx, 1);
         this.unreadableTrees.delete(id);
         await this.flush(id);
-        forgetRescue(id);
+        forgetRescues(id);
 
         // Remove tree data from IDB
         await StorageManager.delete('trees', id);
@@ -721,11 +757,21 @@ class TreeManagerClass {
     /** The newest state handed to the queue per tree until its write lands (see rescueUnsettledSaves). */
     private unsettledSaves = new Map<TreeId, { data: StromData; base: ResearchBase | null }>();
 
+    /** Rescue keys of closed windows this one stored at start, per tree, until that write lands. */
+    private restoredRescues = new Map<TreeId, string>();
+
     /** A write landed: when it carried the newest state, nothing of the tree waits any more. */
     private settle(id: TreeId, written: { data: StromData; base: ResearchBase | null }): void {
         if (this.unsettledSaves.get(id) !== written) return;
         this.unsettledSaves.delete(id);
-        forgetRescue(id);
+        // Only this window's copy (and the one it stored at start): another window's (closed before its
+        // save landed) waits for the next start.
+        forgetRescueKey(rescueKey(id));
+        const restored = this.restoredRescues.get(id);
+        if (restored) {
+            forgetRescueKey(restored);
+            this.restoredRescues.delete(id);
+        }
     }
 
     /**
@@ -743,51 +789,53 @@ class TreeManagerClass {
             try {
                 const json = JSON.stringify({ at: Date.now(), base: entry.base, data: entry.data } satisfies RescuedSave);
                 if (json.length > RESCUE_MAX_CHARS) continue;
-                localStorage.setItem(RESCUE_PREFIX + id, json);
+                localStorage.setItem(rescueKey(id), json);
             } catch { /* no room or no storage: best effort */ }
         }
     }
 
     /**
      * Store the states rescued when a page was left before its save landed
-     * (rescueUnsettledSaves) — unless the tree is gone or was stored again
-     * after the rescue (another window, or the write landed after all).
+     * (rescueUnsettledSaves): per tree the newest one, unless the tree is gone
+     * or was stored again after it (another window, or the write landed after
+     * all). Every other one goes to the backups, never lost unseen.
      */
     private restoreRescuedSaves(): void {
-        let keys: string[];
-        try {
-            keys = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key?.startsWith(RESCUE_PREFIX)) keys.push(key);
-            }
-        } catch { return; }
-        for (const key of keys) {
-            const id = key.slice(RESCUE_PREFIX.length) as TreeId;
+        const byTree = new Map<TreeId, { key: string; rescued: RescuedSave }[]>();
+        for (const key of rescueKeys()) {
+            const id = rescueTree(key);
             let rescued: RescuedSave | null = null;
             try { rescued = JSON.parse(localStorage.getItem(key) ?? 'null') as RescuedSave | null; } catch { /* unreadable */ }
             const tree = this.index.trees.find(t => t.id === id);
-            const storedAt = tree ? Date.parse(tree.lastModifiedAt) : NaN;
             if (!rescued?.data || !tree || SettingsManager.isEncryptionEnabled()) {
-                forgetRescue(id);
+                forgetRescueKey(key);
                 continue;
             }
-            // Stored again after it (another window): the newer state stays, the rescued one goes to the
-            // backups, never lost unseen.
-            if (storedAt > rescued.at) {
-                void this.backUpRescue(id, rescued);
-                continue;
-            }
-            rescued.data.version = STROM_DATA_VERSION;
-            this.queueWrite(id, { data: rescued.data, base: rescued.base ?? null });
+            const list = byTree.get(id) ?? [];
+            list.push({ key, rescued });
+            byTree.set(id, list);
+        }
+        for (const [id, list] of byTree) {
+            const tree = this.index.trees.find(t => t.id === id)!;
+            const storedAt = Date.parse(tree.lastModifiedAt);
+            list.sort((a, b) => a.rescued.at - b.rescued.at);
+            const newest = list[list.length - 1];
+            const store = newest.rescued.at >= storedAt || !Number.isFinite(storedAt) ? newest : null;
+            for (const item of list) if (item !== store) void this.backUpRescue(id, item.key, item.rescued);
+            if (!store) continue;
+            store.rescued.data.version = STROM_DATA_VERSION;
+            this.queueWrite(id, { data: store.rescued.data, base: store.rescued.base ?? null });
+            // Its key goes once the write lands (settle).
+            this.restoredRescues.set(id, store.key);
         }
     }
 
     /**
-     * A rescued state the tree was stored past: kept as a backup at the time
-     * it was rescued (none when it is the stored state anyway), then dropped.
+     * A rescued state the tree was stored past (or another window's newer
+     * one): kept as a backup at the time it was rescued (none when it is the
+     * stored state anyway), then dropped.
      */
-    private async backUpRescue(id: TreeId, rescued: RescuedSave): Promise<void> {
+    private async backUpRescue(id: TreeId, key: string, rescued: RescuedSave): Promise<void> {
         try {
             const stored = await this.readTreeRecord(id);
             const same = stored.status === 'ok' && JSON.stringify({ ...stored.data, version: 0 }) === JSON.stringify({ ...rescued.data, version: 0 });
@@ -795,7 +843,7 @@ class TreeManagerClass {
                 rescued.data.version = STROM_DATA_VERSION;
                 await createSnapshot(id, rescued.data, 'closed-tab', rescued.at);
             }
-            forgetRescue(id);
+            forgetRescueKey(key);
         } catch (err) {
             // Kept for the next start.
             console.warn('The state rescued on leaving could not be kept as a backup', err);

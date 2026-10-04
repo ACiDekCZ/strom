@@ -522,7 +522,10 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         }
 
         // Sex
-        lines.push(`1 SEX ${person.gender === 'male' ? 'M' : 'F'}`);
+        // The research's unknown sex, kept here unchanged: unknown there still (N60-2).
+        const refn = person.refn?.trim();
+        const unknown = !!refn && options.research?.sexU?.[refn] === person.gender;
+        lines.push(`1 SEX ${unknown ? 'U' : person.gender === 'male' ? 'M' : 'F'}`);
 
         // Birth (with the citations of the birth entry: 2 SOUR)
         if (person.birthDate || person.birthPlace || person.birthAddress || person.birthSourceIds?.length) {

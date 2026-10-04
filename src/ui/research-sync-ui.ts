@@ -1090,8 +1090,9 @@ export const researchSyncMethods = uiModule({
         if (fps.matchesBase) {
             TreeManager.patchResearchLink(treeId, { refused: undefined });
             if (!opts.auto) {
-                this.showToast(s.nothingToast, 4000);
+                // "Send, then load": nothing to send, its version loads (asked as any load) — never "the same tree".
                 if (opts.thenLoad) await this.researchLoadNewer();
+                else this.showToast(s.nothingToast, 4000);
             }
             this.refreshResearchSyncUi();
             return;
@@ -1136,7 +1137,7 @@ export const researchSyncMethods = uiModule({
         const lastCopy = researchAutoState(treeId).lastCopy;
         const since = lastCopy && lastCopy.base === (link.head ?? '') ? lastCopy.intake : undefined;
         const exported = again ? null : researchGedcomExport(data, meta?.name ?? '', {
-            id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
+            id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current, sexU: link.sexU,
             ...(since ? { since } : {}),
         });
         const gedcom = exported?.content ?? '';
@@ -1322,7 +1323,10 @@ export const researchSyncMethods = uiModule({
         this.refreshResearchSyncUi();
         this.scheduleResearchPoll();
         if (reply.changes === 0) {
-            if (!opts.auto) this.showToast(s.nothingToast, 4000);
+            // Edits went, the research took none of them: said so (its tree may be ahead, never "the same").
+            // "Send, then load" loads its version all the same — asked first, what it replaces shown (N60-4).
+            if (!opts.auto) this.showToast(s.nothingTakenToast, 6000);
+            if (!opts.auto && opts.thenLoad && active) await this.researchLoadNewer();
         } else if (written) {
             // A write that left conflicts never loads after itself: told as any write (the note, the
             // conflicts), its version waits for the user — it holds the research's values in place of theirs.

@@ -383,6 +383,50 @@ test('a state kept aside by a closed tab that another tab outdated goes to Backu
     await expect(card(page, 'Kamil')).toContainText('1777');
 });
 
+test('a tab closed before its save landed keeps its state while another tab goes on saving the tree: it goes to Backups at the next start (N60-1)', async ({ page, context }) => {
+    type W = { Strom: { TreeManager: any; DataManager: any } };
+    await openApp(page);
+    await createFirstPerson(page, 'Kamil', 'Novak', { birthDate: '1900' });
+    await page.evaluate(() => (window as unknown as W).Strom.DataManager.createPerson({ firstName: 'Pavel', lastName: 'Novak', gender: 'male', birthDate: '1910' }));
+    await page.waitForTimeout(500);
+    const other = await context.newPage();
+    await other.goto('/strom.html');
+    await expect(other.locator('html')).not.toHaveClass(/app-loading/);
+    const born = (p: Page, name: string) => p.evaluate((name) => (Object.values((window as unknown as W).Strom.DataManager.getData().persons).find((x: any) => x.firstName === name) as any)?.birthDate, name);
+    expect(await born(other, 'Pavel')).toBe('1910');
+    // This tab's write never lands; it is closed with the edit rescued.
+    await page.evaluate(() => {
+        const { TreeManager, DataManager } = (window as unknown as W).Strom;
+        TreeManager.saveQueues.set(TreeManager.getActiveTreeId(), new Promise(() => undefined));
+        const kamil = Object.values(DataManager.getData().persons).find((p: any) => p.firstName === 'Kamil') as any;
+        DataManager.updatePerson(kamil.id, { birthDate: '1777' });
+        TreeManager.rescueUnsettledSaves();
+    });
+    const rescues = (p: Page) => p.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('strom-save-rescue:')).length);
+    expect(await rescues(page)).toBe(1);
+    await page.close();
+    // The other tab saves the tree: the closed tab's copy stays.
+    await other.evaluate(() => {
+        const dm = (window as unknown as W).Strom.DataManager;
+        const pavel = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Pavel') as any;
+        dm.updatePerson(pavel.id, { birthDate: '1912' });
+    });
+    await other.waitForTimeout(500);
+    expect(await rescues(other)).toBe(1);
+    // The next start: the tree stored later stays, the closed tab's state is a backup.
+    await other.reload();
+    await expect(other.locator('html')).not.toHaveClass(/app-loading/);
+    expect(await born(other, 'Pavel')).toBe('1912');
+    await expect(card(other, 'Kamil')).toContainText('1900');
+    await expect.poll(() => rescues(other)).toBe(0);
+    await other.evaluate(() => (window as unknown as { Strom: { UI: { showSnapshotsDialog(): void } } }).Strom.UI.showSnapshotsDialog());
+    const row = other.locator('#snapshots-modal .snapshot-row', { hasText: 'Backup copy from a closed tab' });
+    await expect(row).toHaveCount(1);
+    await row.getByRole('button', { name: 'Restore' }).click();
+    await other.locator('#confirmation-modal').getByRole('button', { name: 'Restore backup' }).click();
+    await expect(card(other, 'Kamil')).toContainText('1777');
+});
+
 test('a state kept aside that is the stored tree anyway makes no backup', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Kamil', 'Novak', { birthDate: '1900' });
