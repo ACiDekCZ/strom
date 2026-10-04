@@ -301,6 +301,9 @@ export const researchTreeSettingsMethods = uiModule({
             const off = mode === 'off';
             const effectEl = overlay.querySelector<HTMLElement>('#research-send-effect');
             if (effectEl) effectEl.hidden = off;
+            // Nothing is sent: no originals either.
+            const originals = overlay.querySelector<HTMLElement>('.research-originals-toggle');
+            if (originals) originals.hidden = off;
             if (off && statusEl) statusEl.hidden = true;
             else renderStatus();
             const previewOff = overlay.querySelector<HTMLElement>('#research-send-preview-off');

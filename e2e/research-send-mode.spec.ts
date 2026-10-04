@@ -116,6 +116,7 @@ test.describe('Research for this tree', () => {
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
         await expect(settings(page).locator('#research-send-effect')).toBeHidden();
         await expect(settings(page).locator('#research-send-piled')).toBeHidden();
+        await expect(settings(page).locator('.research-originals-toggle')).toBeHidden();
         await settings(page).locator('label:has(input[value="manual"])').click();
         const piled = settings(page).locator('#research-send-piled');
         await expect(piled).toContainText('Since the last send you changed 1 person.');
@@ -249,4 +250,21 @@ test.describe('"Export all" now and then (only with a research)', () => {
         await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
         await expect(page.locator('#snapshots-export')).toBeHidden();
     });
+});
+
+test('D of rc.34: switching to a tree without a research shows no state of the last one (at once)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await manualTree(page);
+    await editJan(page);
+    await page.clock.fastForward(2000);
+    const pill = page.locator('#research-sync-pill');
+    await expect(pill).toBeVisible();
+    const other = await page.evaluate(async () => {
+        const tm = window.Strom.TreeManager;
+        const id = tm.createTree('Bez výzkumu');
+        tm.saveTreeData(id, { version: 11, persons: {}, partnerships: {} } as never);
+        return id;
+    });
+    await page.evaluate((id) => window.Strom.UI.switchToTree(id), other);
+    await expect(pill).toBeHidden();
 });

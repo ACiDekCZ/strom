@@ -813,6 +813,22 @@ async function conflictLeft(page: Page, init: Partial<FakeBridge> = {}): Promise
     return bridge;
 }
 
+test('V-E: the conflict decided in the research (its record: none open) — no "1 conflict to decide" here any more', async ({ page }) => {
+    const bridge = await conflictLeft(page);
+    // Its record says what is still open: one, then none.
+    (bridge.sends[0] as unknown as { conflicts: number }).conflicts = 1;
+    await page.clock.fastForward(30_000);
+    await poll(page);
+    await expect(pill(page)).toContainText('Written, 1 conflict to decide');
+    (bridge.sends[0] as unknown as { conflicts: number }).conflicts = 0;
+    await page.clock.fastForward(30_000);
+    await poll(page);
+    await expect(pill(page)).not.toContainText('conflict');
+    await openResearchMenu(page);
+    await expect(block(page)).not.toHaveAttribute('data-state', 'writtenConflicts');
+    await expect(block(page)).not.toContainText('conflict');
+});
+
 test('the rc.23 round: beside an open conflict, a stuck bridge, a refused address and a stopped one are each said (A1); a send by hand then never the old way (A2)', async ({ page }) => {
     const bridge = await conflictLeft(page);
     bridge.statusHang = true;

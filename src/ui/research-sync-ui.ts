@@ -576,6 +576,7 @@ export const researchSyncMethods = uiModule({
             await this.settleResearchSend(ctx.treeId, status);
             this.researchNoteUndone(ctx.treeId, status);
             this.researchNoteWrittenAgain(ctx.treeId, status);
+            this.researchNoteConflictsSettled(ctx.treeId, status);
         }
         this.refreshResearchSyncUi();
         // Updated since: it takes sends now — what waits starts its quiet time.
@@ -785,6 +786,30 @@ export const researchSyncMethods = uiModule({
         fpCache = null;
         this.refreshResearchSyncUi();
         this.researchAutoArm();
+    },
+
+    /**
+     * Conflicts a write left, decided in the research since (V-E): its record
+     * says none is open any more, and no other send of this tree it keeps has
+     * one open — no "1 conflict to decide" here; its version still loads when asked.
+     */
+    researchNoteConflictsSettled(treeId: TreeId, status: LiveStatus): void {
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        const sent = link?.sent;
+        if (!link || !sent || sent.state !== 'written' || !sent.intake || !status.sends) return;
+        const st = researchAutoState(treeId);
+        const shown = (sent.conflicts ?? 0) > 0 || (st.lastWritten?.conflicts ?? 0) > 0 || !!st.held;
+        if (!shown) return;
+        const rec = status.sends.find(r => r.intake === sent.intake);
+        if (!rec || rec.conflicts !== 0) return;
+        const mine = status.sends.filter(r => r.tree === treeId || r.tree === link.id);
+        if (mine.some(r => (r.conflicts ?? 0) > 0)) return;
+        TreeManager.patchResearchLink(treeId, { sent: { ...sent, conflicts: undefined } });
+        patchResearchAutoState(treeId, {
+            held: undefined,
+            ...(st.lastWritten ? { lastWritten: { ...st.lastWritten, conflicts: 0, persons: undefined, conflictIds: undefined } } : {}),
+        });
+        fpCache = null;
     },
 
     // ==================== SENDING BY ITSELF ====================

@@ -474,6 +474,8 @@ export const treeManagementMethods = uiModule({
         if (await DataManager.switchTree(treeId as TreeId)) {
             // Opened again: a question closed unanswered there is asked again.
             this.forgetResearchModeAskLater(treeId as TreeId);
+            // The research state shown is this tree's at once (never the last tree's under a dialog, D of rc.34).
+            this.refreshResearchSyncUi();
             this.updateTreeSwitcher();
             // Restore focus from per-tree session state (uses tree's defaultPersonId setting)
             TreeRenderer.restoreFromSession();
