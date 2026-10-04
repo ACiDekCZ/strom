@@ -170,3 +170,38 @@ test.describe('a child with one known parent and the research', () => {
         expect(await unionCount(page)).toBe(2);
     });
 });
+
+test.describe('"married, the spouse unknown" and the research\'s version', () => {
+    for (const alone of [false, true]) {
+        test(alone ? 'a research that keeps such a family (family.alone): its version decides — not there, not here'
+            : 'a research that drops such a family: loading its version over it keeps it here', async ({ page }) => {
+            const { openResearch, fakeBridge, poll, researchGed } = await import('./research-bridge.js');
+            await page.setViewportSize({ width: 1440, height: 900 });
+            await page.clock.install();
+            await openResearch(page);
+            const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null },
+                ...(alone ? { features: ['family.alone'] } : {}) });
+            await poll(page);
+            // Jan married to someone unknown, no children.
+            await page.evaluate(() => {
+                const dm = window.Strom.DataManager;
+                const jan = (Object.values(dm.getData().persons) as any[]).find(p => p.firstName === 'Jan');
+                const stand = dm.createPerson({ firstName: '?', lastName: '', gender: 'female' }, true);
+                dm.createPartnership(jan.id, stand.id);
+            });
+            bridge.head = 'cd34ef56ab12';
+            bridge.treeGed = researchGed('cd34ef56ab12');
+            await poll(page);
+            await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+            // The family is a change the research does not have: loaded over it on purpose.
+            await page.locator('.confirm-aside-btn', { hasText: 'Load without changes' }).click();
+            await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('cd34ef56ab12');
+            const janUnions = await page.evaluate(() => {
+                const d = window.Strom.DataManager.getData();
+                const jan = (Object.values(d.persons) as any[]).find(p => p.firstName === 'Jan');
+                return jan.partnerships.map((id: string) => d.partnerships[id as never]?.status);
+            });
+            expect(janUnions).toEqual(alone ? [] : ['married']);
+        });
+    }
+});

@@ -459,6 +459,9 @@ export const miscMethods = uiModule({
         this.renderEvidencePill();
         this.renderCardSignalSettings();
         this.renderResearchEdgeSettings();
+        // Settings drawn from code while open (the originals waiting, the change history's state): the new language
+        // at once, not at the next opening (J4 of the language round).
+        if (document.getElementById('settings-modal')?.classList.contains('active')) this.showSettingsDialog();
     },
 
     // ---- MENUS ----
@@ -627,14 +630,16 @@ export const miscMethods = uiModule({
                 }
                 const actionsMenu = document.getElementById('actions-menu-dropdown');
                 if (actionsMenu?.classList.contains('active')) {
-                    // The "Strom:" / "Research" submenu (a flyout) closes
-                    // first; the next Escape closes the whole actions menu.
+                    // A "Strom:" / "Research" submenu (a flyout) opened from the keyboard closes
+                    // first; the next Escape closes the whole actions menu. Opened by the pointer,
+                    // one Escape closes it all (J6 of the language round).
                     const treeWrap = document.getElementById('actions-tree-wrap');
-                    if (treeWrap?.classList.contains('submenu-open')) {
+                    if (treeWrap?.classList.contains('submenu-open') && treeWrap.hasAttribute('data-kbd')) {
                         this.closeActionsTreeSubmenu();
                         return;
                     }
-                    if (document.getElementById('actions-research-wrap')?.classList.contains('submenu-open')) {
+                    const researchWrap = document.getElementById('actions-research-wrap');
+                    if (researchWrap?.classList.contains('submenu-open') && researchWrap.hasAttribute('data-kbd')) {
                         this.closeActionsResearchSubmenu();
                         return;
                     }

@@ -204,3 +204,14 @@ test.describe('grouped settings', () => {
         await expect(child).toBeEnabled();
     });
 });
+
+test('switching the language with Settings open: what Settings draws from code says it in the new language at once (J4)', async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    const status = page.locator('#audit-log-status');
+    const before = (await status.textContent())?.trim() ?? '';
+    expect(before).toMatch(/history/i);
+    await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
+    await expect(status).toHaveText(/Historie změn/);
+    await page.evaluate(() => window.Strom.UI.setLanguage('en' as never));
+});

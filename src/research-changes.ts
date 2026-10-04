@@ -8,12 +8,12 @@
 import { StromData, Person, Partnership, Source, EventParticipant, PersonId } from './types.js';
 
 export type ChangeKind =
-    | 'added' | 'deleted' | 'name' | 'birth' | 'death' | 'marriage' | 'event'
-    | 'godparent' | 'witness' | 'citation' | 'source' | 'attachment' | 'attachmentRemoved' | 'note' | 'other';
+    | 'added' | 'deleted' | 'name' | 'gender' | 'birth' | 'death' | 'marriage' | 'event'
+    | 'godparent' | 'witness' | 'citation' | 'source' | 'attachment' | 'attachmentRemoved' | 'note' | 'parents' | 'other';
 
 /** The order kinds are told in (the most telling first). */
-const KIND_ORDER: ChangeKind[] = ['added', 'deleted', 'name', 'birth', 'death', 'marriage', 'event', 'godparent', 'witness',
-    'citation', 'source', 'attachment', 'attachmentRemoved', 'note', 'other'];
+const KIND_ORDER: ChangeKind[] = ['added', 'deleted', 'name', 'gender', 'birth', 'death', 'marriage', 'event', 'godparent', 'witness',
+    'citation', 'source', 'attachment', 'attachmentRemoved', 'note', 'parents', 'other'];
 
 export interface PersonChange {
     personId: PersonId;
@@ -72,6 +72,7 @@ function participantKinds(before: EventParticipant[] | undefined, after: EventPa
 function personKinds(before: Person, after: Person, sourcesChanged: Set<string>): Set<ChangeKind> {
     const kinds = new Set<ChangeKind>();
     if (NAME_FIELDS.some(f => differs(before[f], after[f]))) kinds.add('name');
+    if (before.gender !== after.gender) kinds.add('gender');
     if (BIRTH_FIELDS.some(f => differs(before[f], after[f]))) kinds.add('birth');
     if (DEATH_FIELDS.some(f => differs(before[f], after[f]))) kinds.add('death');
     if (CITATION_FIELDS.some(f => differs(before[f] ?? [], after[f] ?? []))) kinds.add('citation');
@@ -98,7 +99,7 @@ function personKinds(before: Person, after: Person, sourcesChanged: Set<string>)
     if ([...(after.sourceIds ?? []), ...(after.birthSourceIds ?? []), ...(after.deathSourceIds ?? []),
         ...(after.events ?? []).flatMap(e => e.sourceIds ?? [])].some(id => sourcesChanged.has(id))) kinds.add('source');
     // Anything else of the person (gender, the number, the question, the story, parents…).
-    const known = new Set<string>([...NAME_FIELDS, ...BIRTH_FIELDS, ...DEATH_FIELDS, ...CITATION_FIELDS, 'notes', 'events', 'attachments', 'id']);
+    const known = new Set<string>([...NAME_FIELDS, ...BIRTH_FIELDS, ...DEATH_FIELDS, ...CITATION_FIELDS, 'gender', 'notes', 'events', 'attachments', 'id']);
     const rest = (p: Person): Record<string, unknown> => {
         const o: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(p)) if (!known.has(k) && !IGNORED_FIELDS.has(k)) o[k] = v;
@@ -135,6 +136,13 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
         const before = bp[p.id];
         if (!before) {
             if (!p.isPlaceholder) touch(p.id, fullName(p)).add('added');
+            continue;
+        }
+        // A "?" given a name is someone new for the research (it never had the "?"), and its children
+        // have a parent they did not have there.
+        if (before.isPlaceholder && !p.isPlaceholder) {
+            touch(p.id, fullName(p)).add('added');
+            for (const cid of p.childIds) if (cp[cid] && !cp[cid].isPlaceholder) touch(cid, fullName(cp[cid])).add('parents');
             continue;
         }
         // Most people did not change: one comparison of the whole record, not one per field.

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { openApp, createFirstPerson } from './helpers.js';
 
 /**
@@ -187,7 +187,7 @@ test.describe('actions menu "Tree:" submenu', () => {
         await expect(dropdown).not.toHaveClass(/active/);
     });
 
-    test('a submenu opened by a click and closed by Escape under the pointer is hidden, back on the next hover', async ({ page }) => {
+    test('a submenu opened by a click: one Escape closes the whole menu, the pointer still on the row (J6); open again, hover shows it', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
@@ -198,12 +198,13 @@ test.describe('actions menu "Tree:" submenu', () => {
         await row.click();
         await expect(page.locator('#actions-tree-wrap')).toHaveClass(/submenu-open/);
         await expect(submenu).toBeVisible();
-        // The pointer stays on the row: Escape hides the submenu all the same.
+        // The pointer stays on the row: Escape closes the submenu and the menu.
         await page.keyboard.press('Escape');
         await expect(submenu).toBeHidden();
-        await expect(page.locator('#actions-menu-dropdown')).toHaveClass(/active/);
-        // Away and back: hover opens it again.
+        await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
+        // The menu again, away and back: hover opens the submenu.
         await page.mouse.move(5, 450);
+        await page.locator('.actions-menu-btn').click();
         await row.hover();
         await expect(submenu).toBeVisible();
     });
@@ -317,5 +318,46 @@ test.describe('tree manager row menu: Escape', () => {
         // The tree statistics dialog opens; the actions menu is dismissed.
         await expect(page.locator('#tree-stats-modal')).toHaveClass(/active/);
         await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
+    });
+});
+
+test.describe('many trees in a short window (J5 of the language round)', () => {
+    const manyTrees = async (page: Page) => {
+        await page.setViewportSize({ width: 1440, height: 779 });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.evaluate(async () => {
+            for (let i = 1; i <= 18; i++) {
+                await window.Strom.DataManager.importAsNewTree({ persons: {}, partnerships: {} } as never, `Strom ${i}`);
+            }
+            window.Strom.UI.updateTreeSwitcher();
+        });
+    };
+
+    test('the tree switcher scrolls: "Manage trees…" at its end is reachable', async ({ page }) => {
+        await manyTrees(page);
+        await page.locator('.tree-switcher-btn').click();
+        const dropdown = page.locator('#tree-switcher-dropdown');
+        await expect(dropdown).toHaveClass(/active/);
+        const box = await dropdown.boundingBox();
+        expect(box!.y + box!.height).toBeLessThanOrEqual(779);
+        await dropdown.getByText('Manage trees').click();
+        await expect(page.locator('#tree-manager-modal')).toHaveClass(/active/);
+    });
+
+    test('the first tree\'s ⋯ menu in the manager: every item below the header and inside the window', async ({ page }) => {
+        await manyTrees(page);
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const modal = page.locator('#tree-manager-modal');
+        await modal.locator('.tree-row-menu-btn').first().click();
+        const menu = modal.locator('.tree-row-menu.open');
+        await expect(menu).toBeVisible();
+        const header = await modal.locator('.modal-header').boundingBox();
+        const m = await menu.boundingBox();
+        expect(m!.y).toBeGreaterThanOrEqual(header!.y + header!.height);
+        expect(m!.y + m!.height).toBeLessThanOrEqual(779);
+        // The last item is reachable (scrolled to inside the menu when needed).
+        await menu.locator('.tree-row-menu-item').last().scrollIntoViewIfNeeded();
+        await expect(menu.locator('.tree-row-menu-item').last()).toBeInViewport();
     });
 });

@@ -300,6 +300,7 @@ export const researchActionsMethods = uiModule({
         // Closed under the pointer, it must not stay open by hover.
         if (wrap.classList.contains('submenu-open') && wrap.matches(':hover')) wrap.classList.add('hover-off');
         wrap.classList.remove('submenu-open');
+        wrap.removeAttribute('data-kbd');
         document.getElementById('actions-research-row')?.setAttribute('aria-expanded', 'false');
     },
 

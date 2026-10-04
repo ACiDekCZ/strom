@@ -48,6 +48,31 @@ describe('changes per person since the research\'s version', () => {
         expect(changes.find(c => c.personId === 'p3')!.kinds).toEqual(['name']);
     });
 
+    it('a changed sex is told as such, not as "other details"', () => {
+        const base = baseCopy(tree());
+        const cur = tree();
+        cur.persons['p3' as PersonId].gender = 'female';
+        expect(diffByPerson(base, cur).find(c => c.personId === 'p3')!.kinds).toEqual(['gender']);
+    });
+
+    it('a "?" given a name: a new person for the research, its children told as having a parent there', () => {
+        const withStandIn = (): StromData => {
+            const t = tree();
+            t.persons['q' as PersonId] = person('q', '?', { isPlaceholder: true, lastName: '', partnerships: ['u2' as PartnershipId], childIds: ['e' as PersonId] });
+            t.persons['e' as PersonId] = person('e', 'Eva', { gender: 'female', parentIds: ['p3' as PersonId, 'q' as PersonId] });
+            t.persons['p3' as PersonId].partnerships = ['u2' as PartnershipId];
+            t.persons['p3' as PersonId].childIds = ['e' as PersonId];
+            t.partnerships['u2' as PartnershipId] = { id: 'u2' as PartnershipId, person1Id: 'p3' as PersonId, person2Id: 'q' as PersonId, childIds: ['e' as PersonId], status: 'married' };
+            return t;
+        };
+        const base = baseCopy(withStandIn());
+        const cur = withStandIn();
+        cur.persons['q' as PersonId] = { ...cur.persons['q' as PersonId], firstName: 'Zbyněk', lastName: 'Pokorný', isPlaceholder: false };
+        const changes = diffByPerson(base, cur);
+        expect(changes.find(c => c.personId === 'q')!.kinds).toEqual(['added']);
+        expect(changes.find(c => c.personId === 'e')!.kinds).toEqual(['parents']);
+    });
+
     it('a wedding and its witnesses are told at both partners; a new and a deleted person', () => {
         const base = baseCopy(tree());
         const cur = tree();

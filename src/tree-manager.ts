@@ -495,6 +495,20 @@ class TreeManagerClass {
      * an "empty" in-memory copy would overwrite the real data.
      */
     async readTreeData(id: TreeId): Promise<TreeReadResult> {
+        const result = await this.readTreeRecord(id);
+        // A count kept by an older version (the "?" stand-ins counted too) is put right when the tree is read.
+        if (result.status === 'ok') {
+            const tree = this.index.trees.find(t => t.id === id);
+            const count = realPersonCount(result.data);
+            if (tree && tree.personCount !== count) {
+                tree.personCount = count;
+                this.saveIndex();
+            }
+        }
+        return result;
+    }
+
+    private async readTreeRecord(id: TreeId): Promise<TreeReadResult> {
         // Ensure this tree's queued saves (and any other pending writes) have
         // landed before reading (review S20).
         await this.flush(id);

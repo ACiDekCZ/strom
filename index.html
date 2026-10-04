@@ -449,6 +449,9 @@
             z-index: 200;
             display: none;
         }
+        /* Many trees: the list scrolls, "Manage trees…" stays reachable (J5 of the language round).
+           Not the actions menu: its flyouts sit outside it. */
+        #tree-switcher-dropdown { max-height: calc(100vh - 72px); overflow-y: auto; }
         .tree-switcher-dropdown.active {
             display: block;
         }
@@ -3832,7 +3835,7 @@
         }
         .install-mobile-box p { margin: 0; }
         .install-send-link { min-height: 44px; }
-        .install-ready-rows { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 13px; }
+        .install-ready-rows { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 12px 0 0; font-size: 13px; }
         .install-ready-rows dt { font-weight: 600; color: var(--text); }
         .install-ready-rows dd { margin: 0; color: var(--text-light); }
         .install-ready-path { word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
@@ -7480,6 +7483,8 @@
             box-shadow: var(--shadow-lg);
             padding: 4px;
             z-index: 1300;
+            /* Taller than the room by its button: scrolls inside (positionTreeRowMenu sets max-height). */
+            overflow-y: auto;
         }
         .tree-row-menu.open { display: block; }
         .tree-row-menu-item {

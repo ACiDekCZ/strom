@@ -386,3 +386,27 @@ test.describe('"married, the spouse unknown" through a hand-over', () => {
         expect((await page.evaluate(() => window.Strom.UI.currentResearchSyncState())).core).not.toBe('unsent');
     });
 });
+
+test.describe('?live= of a research still waiting for its tree (J7 of the language round)', () => {
+    test('the hand-over is offered, no second empty tree', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await page.evaluate(async () => {
+            const launched: string[] = [];
+            (window as unknown as { __launched: string[] }).__launched = launched;
+            window.Strom.UI.handOverResearchLink = (url: string) => { launched.push(url); };
+            const p = (id: string, firstName: string, gender: string) => ({ id, firstName, lastName: '', gender, isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] });
+            await window.Strom.DataManager.importAsNewTree({ persons: { a: p('a', '1', 'male') }, partnerships: {} } as never, 'Test Win4');
+            window.Strom.UI.updateTreeSwitcher();
+            window.Strom.UI.startResearchAdopt(window.Strom.DataManager.getCurrentTreeId());
+        });
+        const url = (await page.evaluate(() => (window as unknown as { __launched: string[] }).__launched))[0];
+        // The new research is empty until the tree comes.
+        await routeBridge(page, url.match(TOKEN_RE)![1], { treeGed: ['0 HEAD', '1 SOUR STROM_RESEARCH', `1 _STROM_TREE ${UUID}`, '1 _STROM_HEAD abc1234', '1 CHAR UTF-8', '1 NOTE Test Win4', '0 TRLR'].join('\n') });
+        const trees = () => page.evaluate(() => window.Strom.TreeManager.getTrees().length);
+        const before = await trees();
+        await page.evaluate((base) => window.Strom.UI.openExternalRequest(new URLSearchParams({ live: base })), BRIDGE);
+        await expect(page.locator('#research-adopt-confirm')).toBeVisible();
+        expect(await trees()).toBe(before);
+    });
+});

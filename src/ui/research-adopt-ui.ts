@@ -86,6 +86,25 @@ export const researchAdoptMethods = uiModule({
     },
 
     /**
+     * The research at this bridge waits for a tree of this browser to be handed
+     * over (its `GET /adopt` names a token a tree here holds, or the
+     * installation's): a ?live= of it is the hand-over, never a second tree.
+     */
+    async researchAwaitsHandOver(base: string): Promise<boolean> {
+        try {
+            const res = await fetchWithTimeout(`${base}/adopt`, CONNECT_TIMEOUT_MS);
+            if (!res.ok) return false;
+            const offer = sanitizeAdoptOffer(await res.json());
+            if (!offer) return false;
+            const install = readInstallRecord();
+            const fromInstall = install?.token === offer.token && installPhase(install) !== 'expired';
+            return fromInstall || !!TreeManager.findTreeByAdoptToken(offer.token, TOKEN_MAX_AGE_MS);
+        } catch {
+            return false;
+        }
+    },
+
+    /**
      * ?adopt=<bridge>: the research came back for the tree. It names the tree
      * by its token; the user decides whether it goes over.
      */

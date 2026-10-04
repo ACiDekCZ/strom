@@ -110,6 +110,8 @@ export const treeManagementMethods = uiModule({
                 if (ev.key === 'ArrowRight' || ev.key === 'Enter' || ev.key === ' ') {
                     ev.preventDefault();
                     f.open();
+                    // Opened from the keyboard: Escape goes back to its row (by the pointer, it closes the menu).
+                    document.getElementById(f.wrap)?.setAttribute('data-kbd', '');
                 } else if (ev.key === 'ArrowLeft') {
                     ev.preventDefault();
                     f.close();
@@ -368,6 +370,7 @@ export const treeManagementMethods = uiModule({
         // Closed under the pointer, it must not stay open by hover.
         if (wrap.classList.contains('submenu-open') && wrap.matches(':hover')) wrap.classList.add('hover-off');
         wrap.classList.remove('submenu-open');
+        wrap.removeAttribute('data-kbd');
         document.getElementById('actions-tree-row')?.setAttribute('aria-expanded', 'false');
     },
 
@@ -773,24 +776,42 @@ export const treeManagementMethods = uiModule({
             });
             // A fixed-position menu must not drift away from its button.
             window.addEventListener('resize', closeAll);
-            document.addEventListener('scroll', closeAll, true);
+            // (A menu scrolled inside itself stays open.)
+            document.addEventListener('scroll', (e) => {
+                if (!(e.target instanceof Element && e.target.closest('.tree-row-menu'))) closeAll();
+            }, true);
         }
     },
 
     /**
      * Place a row menu (position: fixed) next to its ⋯ button: right-aligned
-     * to the button, below it — or above when there is no room underneath.
+     * to the button, below it — or above when there is more room there —
+     * never over the dialog's header nor past the window; what does not fit
+     * scrolls inside the menu (J5 of the language round).
      */
     positionTreeRowMenu(btn: HTMLElement, menu: HTMLElement): void {
         const r = btn.getBoundingClientRect();
         menu.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
         menu.style.top = '0px';
+        menu.style.maxHeight = '';
         const h = menu.offsetHeight;
-        const below = r.bottom + 4;
-        const top = (below + h > window.innerHeight - 8)
-            ? Math.max(8, r.top - h - 4)
-            : below;
-        menu.style.top = `${top}px`;
+        // The dialog's scrolling body clips the menu: its edges (and the header's) are the room.
+        let clip: HTMLElement | null = btn.parentElement;
+        while (clip && !/(auto|scroll)/.test(getComputedStyle(clip).overflowY)) clip = clip.parentElement;
+        const box = clip?.getBoundingClientRect();
+        const header = btn.closest('.modal')?.querySelector('.modal-header')?.getBoundingClientRect();
+        const ceiling = Math.max(8, header ? header.bottom + 4 : 8, box ? box.top + 4 : 8);
+        const floor = Math.min(window.innerHeight - 8, box ? box.bottom - 4 : Infinity);
+        const roomBelow = floor - (r.bottom + 4);
+        const roomAbove = (r.top - 4) - ceiling;
+        if (h <= roomBelow || roomBelow >= roomAbove) {
+            menu.style.top = `${r.bottom + 4}px`;
+            if (h > roomBelow) menu.style.maxHeight = `${Math.max(120, roomBelow)}px`;
+        } else {
+            const fit = Math.min(h, roomAbove);
+            menu.style.top = `${Math.max(ceiling, r.top - 4 - fit)}px`;
+            if (h > roomAbove) menu.style.maxHeight = `${Math.max(120, roomAbove)}px`;
+        }
     },
 
     /** Switch to a tree from the manager and close the dialog to show it. */

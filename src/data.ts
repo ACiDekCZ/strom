@@ -82,8 +82,9 @@ export type ViewModeImportAction = 'new' | 'update' | 'copy';
 /** Format person name for audit log: "FirstName LastName (*year)" or "[unknown]" for placeholders */
 export function auditPersonName(person: Person | null | undefined): string {
     if (!person) return '?';
+    // The unknown person as the tree shows it: "?", its gender beside it ("? (male)").
     if (person.isPlaceholder) {
-        return `[${strings.gender[person.gender].toLowerCase()}]`;
+        return `? (${strings.gender[person.gender].toLowerCase()})`;
     }
     const name = [person.firstName, person.lastName].filter(Boolean).join(' ') || '?';
     const year = person.birthDate?.split('-')[0];

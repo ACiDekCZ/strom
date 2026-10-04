@@ -1295,7 +1295,9 @@ export const researchUiMethods = uiModule({
             }
             // Asked when the user asked for the version (not after a hand-over, a send that loads after
             // itself, or following live): each value here it changes or removes, what it adds, the backup.
-            if (askLoad && previous && !asCopy && !opts.quiet && !opts.afterSend && !opts.noAsk) {
+            // Following live asks too when it would replace changes made here (only loading, or changes
+            // the research holds): once, at the start — while it follows, the tree is read-only.
+            if (askLoad && previous && !asCopy && !opts.quiet && !opts.afterSend && (!opts.noAsk || edited)) {
                 if (DataManager.getCurrentTreeId() !== existing.id) {
                     if (existing.isHidden) TreeManager.setTreeVisibility(existing.id, false);
                     await this.switchToTree(existing.id);
@@ -1851,6 +1853,13 @@ export const researchUiMethods = uiModule({
             // (opened again from it, e.g. its bridge on a new port): connected again, the changes go to it —
             // never asked whether to replace them (B3 of the rc.22 round).
             if (!opts.resume && await this.researchReconnectOnly(status)) return;
+            // A research still waiting for its tree from here (opened before the hand-over): the hand-over,
+            // not a second, empty tree (J7 of the language round).
+            if (!opts.resume && Object.keys(data.persons ?? {}).length === 0 && !TreeManager.findTreeByResearchId(status.treeId)
+                && await this.researchAwaitsHandOver(bridge.base)) {
+                void this.adoptFromResearch(bridge.base);
+                return;
+            }
             const treeId = await this.applyResearch(
                 data,
                 { treeId: status.treeId, name, date: header.date, mode: header.mode },

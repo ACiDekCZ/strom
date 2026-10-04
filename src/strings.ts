@@ -591,7 +591,7 @@ const stringsEN = {
         chipOpen: (title: string) => `Show source: ${title}`,
         titleHint: 'One specific entry — a baptism, marriage or burial.',
         excerptLabel: 'Excerpt of the entry',
-        excerptEmpty: "Paste a screenshot from the archive's image viewer, or upload a scan.",
+        excerptEmpty: "A screenshot from the archive's image viewer can be pasted here, or a scan uploaded.",
         excerptPaste: 'Paste from clipboard',
         excerptPasteHint: 'Press Ctrl+V (⌘V on a Mac).',
         excerptNotImage: 'The clipboard contains no image.',
@@ -1297,6 +1297,8 @@ const stringsEN = {
         kindAttachment: '+ attachment',
         kindAttachmentRemoved: '− attachment',
         kindNote: 'note',
+        kindGender: 'sex',
+        kindParents: 'parents',
         kindOther: 'other details',
         overwriteIntro: "The research doesn't have these changes yet. Loading without sending would overwrite them:",
         andMore: (n: number) => `and ${nEn(n,'more person','more people')}`,
@@ -1992,7 +1994,7 @@ const stringsEN = {
         sectionBirth: 'Birth',
         sectionOrigin: 'Occupation & residence',
         occupationField: 'Occupation / trade',
-        residenceField: 'Residence ("of Lipany")',
+        residenceField: 'Residence ("of Voss")',
         originHint: 'Stored as occupation and residence events; the trade shows on the card in the detailed density.',
         sectionRelations: 'Relationships',
         sectionDeathEvents: 'Death and other events',
@@ -4261,7 +4263,7 @@ const stringsCZ: StringsType = {
 
     // Progressive web app (offline + updates)
     pwa: {
-        offline: 'Offline',
+        offline: 'Bez internetu',
         updateReady: 'Je k dispozici nová verze.',
         refresh: 'Obnovit',
         refreshing: 'Obnovuji…',
@@ -4737,6 +4739,8 @@ const stringsCZ: StringsType = {
         kindAttachment: '+ příloha',
         kindAttachmentRemoved: '− příloha',
         kindNote: 'poznámka',
+        kindGender: 'pohlaví',
+        kindParents: 'rodiče',
         kindOther: 'jiné údaje',
         overwriteIntro: 'Tyto úpravy výzkum ještě nemá. Načtením bez poslání by se přepsaly:',
         andMore: (n: number) => `a ${nCs(n,'další osoba','další osoby','dalších osob')}`,
@@ -7694,7 +7698,7 @@ const stringsDE: StringsType = {
 
     // Progressive web app (offline + updates)
     pwa: {
-        offline: 'Offline',
+        offline: 'Ohne Internet',
         updateReady: 'Eine neue Version ist verfügbar.',
         refresh: 'Aktualisieren',
         refreshing: 'Wird aktualisiert…',
@@ -8170,6 +8174,8 @@ const stringsDE: StringsType = {
         kindAttachment: '+ Anhang',
         kindAttachmentRemoved: '− Anhang',
         kindNote: 'Notiz',
+        kindGender: 'Geschlecht',
+        kindParents: 'Eltern',
         kindOther: 'weitere Angaben',
         overwriteIntro: 'Diese Änderungen hat die Forschung noch nicht. Laden ohne Senden würde sie überschreiben:',
         andMore: (n: number) => `und ${nDe(n,'weitere Person','weitere Personen')}`,
@@ -8854,7 +8860,7 @@ const stringsDE: StringsType = {
         sectionBirth: 'Geburt',
         sectionOrigin: 'Beruf & Wohnort',
         occupationField: 'Beruf / Handwerk',
-        residenceField: 'Wohnort („aus Lipany“)',
+        residenceField: 'Wohnort („aus Voss“)',
         originHint: 'Wird als Ereignisse Beruf und Wohnort gespeichert; der Beruf erscheint auf der Karte in der detaillierten Dichte.',
         sectionRelations: 'Beziehungen',
         sectionDeathEvents: 'Tod und weitere Ereignisse',

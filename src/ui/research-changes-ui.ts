@@ -90,10 +90,10 @@ export function forgetResearchChanges(treeId: string): void {
 export function changeKindsText(kinds: readonly ChangeKind[]): string {
     const c = strings.changes;
     const label: Record<ChangeKind, string> = {
-        added: c.kindAdded, deleted: c.kindDeleted, name: c.kindName, birth: c.kindBirth, death: c.kindDeath,
+        added: c.kindAdded, deleted: c.kindDeleted, name: c.kindName, gender: c.kindGender, birth: c.kindBirth, death: c.kindDeath,
         marriage: c.kindMarriage, event: c.kindEvent, godparent: c.kindGodparent, witness: c.kindWitness,
         citation: c.kindCitation, source: c.kindSource, attachment: c.kindAttachment,
-        attachmentRemoved: c.kindAttachmentRemoved, note: c.kindNote, other: c.kindOther,
+        attachmentRemoved: c.kindAttachmentRemoved, note: c.kindNote, parents: c.kindParents, other: c.kindOther,
     };
     const shown = kinds.slice(0, KINDS_SHOWN).map(k => label[k]);
     return [...shown, ...(kinds.length > KINDS_SHOWN ? [c.more(kinds.length - KINDS_SHOWN)] : [])].join(' · ');

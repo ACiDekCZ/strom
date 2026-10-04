@@ -268,3 +268,28 @@ test('D of rc.34: switching to a tree without a research shows no state of the l
     await page.evaluate((id) => window.Strom.UI.switchToTree(id), other);
     await expect(pill).toBeHidden();
 });
+
+test('"Only load from the research" and following live: changes made here are never replaced unasked — the load dialog first, Cancel keeps them', async ({ page }) => {
+    const { openResearch, fakeBridge, poll, editJan, researchGed, NEW_HEAD, BRIDGE } = await import('./research-bridge.js');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openResearch(page);
+    const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null } });
+    await page.evaluate(() => { const tm = window.Strom.TreeManager; tm.patchResearchLink(tm.getActiveTreeId()!, { sendMode: 'off' }); });
+    await poll(page);
+    await editJan(page, 'Praha');
+    bridge.head = NEW_HEAD;
+    bridge.treeGed = researchGed(NEW_HEAD);
+    const birthPlace = () => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(p => p.firstName === 'Jan').birthPlace ?? '');
+    await page.evaluate((b) => { void window.Strom.UI.startLiveFollow(b); }, BRIDGE);
+    const dialog = page.locator('#research-load-modal');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('Praha');
+    await dialog.locator('#research-load-cancel').click();
+    await expect(dialog).toBeHidden();
+    expect(await birthPlace()).toBe('Praha');
+    await expect(page.locator('#live-panel')).toBeHidden();
+    // Asked again, loaded: the research's version, following on.
+    await page.evaluate((b) => { void window.Strom.UI.startLiveFollow(b); }, BRIDGE);
+    await dialog.locator('#research-load-ok').click();
+    await expect.poll(birthPlace).toBe('');
+});
