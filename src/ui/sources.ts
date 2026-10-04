@@ -1380,13 +1380,17 @@ export const sourcesMethods = uiModule({
         const item = (s: Source) => {
             const meta = sourceMeta(s);
             return `
+                <div class="source-picker-row">
                 <button type="button" class="source-picker-item" data-source-id="${esc(s.id)}">
                     ${sourceThumbHtml(s, 'picker')}
                     <span class="source-picker-text">
                         <span class="source-title">${esc(s.title)}</span>
                         ${meta ? `<span class="source-meta"> — ${esc(meta)}</span>` : ''}
                     </span>
-                </button>`;
+                </button>
+                <button type="button" class="link-button source-picker-page" data-page-of="${esc(s.id)}"
+                    title="${esc(strings.sources.otherPageTitle)}">${esc(strings.sources.otherPage)}</button>
+                </div>`;
         };
         const treeId = TreeManager.getActiveTreeId();
         const recent = !query && Object.keys(catalog).length > 8 && treeId
@@ -1398,6 +1402,9 @@ export const sourcesMethods = uiModule({
             : sources.map(item).join('');
         container.querySelectorAll<HTMLElement>('.source-picker-item[data-source-id]').forEach(btn => {
             btn.addEventListener('click', () => this.pickSource(btn.dataset.sourceId ?? ''));
+        });
+        container.querySelectorAll<HTMLElement>('.source-picker-page[data-page-of]').forEach(btn => {
+            btn.addEventListener('click', () => this.otherPageFromPicker(btn.dataset.pageOf ?? ''));
         });
         hydrateThumbs(container);
     },
@@ -1445,6 +1452,26 @@ export const sourcesMethods = uiModule({
         this.closeSourcePicker();
         this.refreshCitationChips();
         if (wasPartnership) this.refreshRelationshipsPanel();
+    },
+
+    /**
+     * "Another page of the same book" in the picker: a new source with the
+     * book's title, archive, link, note and quality, its own page (and
+     * transcript, crops) left for the user — cited where the picker was opened.
+     * A source here is the entry, so a page of its own is a source of its own
+     * (as the import splits one); the research gets it as a new source (`ids`).
+     */
+    otherPageFromPicker(sourceId: string): void {
+        const book = DataManager.getData().sources?.[sourceId];
+        if (!book) return;
+        this.citeSourceAfterCreate = true;
+        this.sourceEditorContext = this.citationContext;
+        document.getElementById('source-picker-modal')?.classList.remove('active');
+        this.showAddSourceModal({
+            title: book.title, repository: book.repository, url: book.url, note: book.note,
+            ...(book.quality !== undefined ? { quality: book.quality } : {}),
+        });
+        (document.getElementById('input-source-reference') as HTMLInputElement | null)?.focus();
     },
 
     /** "New source…" in the picker: open the editor with a title from the context. */

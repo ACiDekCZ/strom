@@ -54,6 +54,38 @@ test.describe('birth and death citations', () => {
         await expect(card(page, 'Jan').locator(':scope > .card-state .st-ev i')).toHaveCount(2);
     });
 
+    test('"Another page" of a book in the picker: a new source with its title, archive, link, note and quality — its own page, cited there; nothing else copied', async ({ page }) => {
+        await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', deathDate: '1932', birthSourceIds: ['s1'] } }, true);
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            dm.updateSource('s1', { repository: 'SOA Zámrsk', url: 'https://example.org/kniha', note: 'Kniha N', quality: 3,
+                reference: 'fol. 12', transcript: 'Anno 1865', refn: 'S0001' } as never);
+        });
+        await page.evaluate(() => window.Strom.UI.showEditPersonModal('j' as never));
+        await page.locator('#death-sources-group .fact-cite-btn').click();
+        const picker = page.locator('#source-picker-modal');
+        await picker.locator('.source-picker-row', { hasText: 'Matrika' }).getByRole('button', { name: 'Another page' }).click();
+        const editor = page.locator('#source-editor-modal');
+        await expect(editor).toBeVisible();
+        await expect(editor.locator('#input-source-title')).toHaveValue('Matrika N Lipany 1840–1870');
+        await expect(editor.locator('#input-source-repository')).toHaveValue('SOA Zámrsk');
+        await expect(editor.locator('#input-source-reference')).toHaveValue('');
+        await expect(editor.locator('#input-source-reference')).toBeFocused();
+        await expect(editor.locator('#input-source-transcript')).toHaveValue('');
+        await editor.locator('#input-source-reference').fill('fol. 99');
+        await editor.getByRole('button', { name: 'Save' }).click();
+        await expect(editor).toBeHidden();
+        const j = await person(page, 'j');
+        expect(j?.deathSourceIds).toHaveLength(1);
+        expect(j?.birthSourceIds).toEqual(['s1']);
+        const page2 = await page.evaluate((id) => window.Strom.DataManager.getData().sources![id], j!.deathSourceIds![0]);
+        expect(page2).toMatchObject({ title: 'Matrika N Lipany 1840–1870', repository: 'SOA Zámrsk', url: 'https://example.org/kniha',
+            note: 'Kniha N', quality: 3, reference: 'fol. 99' });
+        expect(page2.transcript ?? '').toBe('');
+        expect(page2.refn).toBeUndefined();
+        expect(page2.excerpts ?? []).toEqual([]);
+    });
+
     test('× on the death chip takes the citation off the death only', async ({ page }) => {
         await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', deathDate: '1932', sourceIds: ['s1'], deathSourceIds: ['s1'] } });
         await page.evaluate(() => window.Strom.UI.showEditPersonModal('j' as never));

@@ -10737,6 +10737,10 @@
         }
         .source-row-open:hover .source-title { text-decoration: underline; }
         .source-picker-item { display: flex; align-items: center; gap: 10px; }
+        .source-picker-row { display: flex; align-items: stretch; gap: 6px; }
+        .source-picker-row .source-picker-item { flex: 1; min-width: 0; }
+        .source-picker-page { flex: none; align-self: center; font-size: 12px; white-space: nowrap; padding: 6px 4px; }
+        @media (pointer: coarse) { .source-picker-page { min-height: 44px; } }
         .source-picker-text { min-width: 0; flex: 1; }
         .source-picker-section {
             font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
