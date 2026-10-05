@@ -24,7 +24,7 @@ import { PERSISTENCE_EVENT } from './persistence.js';
 import { FILE_COPY_EVENT, RESEARCH_BASE_EVENT } from './tree-manager.js';
 import { SNAPSHOTS_TRIMMED_EVENT, SNAPSHOT_CREATED_EVENT, SnapshotTrim } from './snapshots.js';
 import { collectPoolGarbage } from './media-pool.js';
-import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT } from './pwa.js';
+import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
 
 // Make modules available globally for HTML event handlers
 declare global {
@@ -390,7 +390,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // hosted PWA (never in embedded/file:// exports or dev).
     UI.initOnlineIndicator();
     if (shouldRegisterServiceWorker(APP_MODE)) {
-        linkManifest();
+        const nav = navigator as Navigator & { userAgentData?: { brands?: { brand: string }[] } };
+        linkManifest(isSafariOnComputer(nav.userAgent || '', nav.platform || '', nav.maxTouchPoints ?? 0, nav.userAgentData?.brands?.map(b => b.brand))
+            ? safariAppName(isBetaBuild(APP_MODE)) : null);
         captureInstallPrompt();
         registerServiceWorker(() => UI.showUpdateAvailable());
     }

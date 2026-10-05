@@ -41,7 +41,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: strom-build
-          path: strom.html
+          # The app, and the muted icons of Safari's own app (see the deploy jobs).
+          path: |
+            strom.html
+            pwa/icons/*-muted.png
 
   # Type errors esbuild lets through; alongside the browser suite.
   typecheck:
@@ -172,7 +175,13 @@ jobs:
           # version into the About span, so the artifact itself is the source.
           VERSION=$(grep -o 'id="about-version">[^<]*' run/index.html | cut -d'>' -f2)
           sed -i "s/const APP_VERSION = '[^']*'/const APP_VERSION = '${VERSION}'/" run/sw.js
-          git add run/index.html run/sw.js
+          # Safari's own app (Add to Dock) apart from the one from Chrome: its
+          # own manifest, name and muted icons; the app links it in Safari on a
+          # computer (pwa.ts linkManifest). Made from manifest.json here.
+          mkdir -p run/icons && cp ../pwa/icons/*-muted.png run/icons/
+          jq '.name = "Strom (Safari)" | .short_name = "Strom (Safari)" | .icons |= map(.src |= sub("\\.png$"; "-muted.png"))' run/manifest.json > run/manifest-safari.json
+          grep -q '"short_name": "Strom (Safari)"' run/manifest-safari.json || { echo "safari manifest not made"; exit 1; }
+          git add run/index.html run/sw.js run/manifest-safari.json run/icons
           git diff --staged --quiet || git commit -m "Update PWA from GitHub build"
           git push origin main
 
@@ -209,7 +218,11 @@ jobs:
           # (and a later beta -> main merge there) keep the public name.
           sed -i -E 's/^(  "name": )"[^"]*"/\1"Strom Beta"/; s/^(  "short_name": )"[^"]*"/\1"Strom Beta"/' run/manifest.json
           grep -q '"short_name": "Strom Beta"' run/manifest.json || { echo "manifest name not stamped"; exit 1; }
-          git add run/index.html run/sw.js run/manifest.json
+          # Safari's own app, as in deploy-pwa (from the stamped manifest).
+          mkdir -p run/icons && cp ../pwa/icons/*-muted.png run/icons/
+          jq '.name = "Strom Beta (Safari)" | .short_name = "Strom Beta (Safari)" | .icons |= map(.src |= sub("\\.png$"; "-muted.png"))' run/manifest.json > run/manifest-safari.json
+          grep -q '"short_name": "Strom Beta (Safari)"' run/manifest-safari.json || { echo "safari manifest not made"; exit 1; }
+          git add run/index.html run/sw.js run/manifest.json run/manifest-safari.json run/icons
           git diff --staged --quiet || git commit -m "Update beta PWA from GitHub build"
           git push origin beta
 

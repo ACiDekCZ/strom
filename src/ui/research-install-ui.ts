@@ -128,6 +128,14 @@ export const researchInstallMethods = uiModule({
             clearInstallRecord();
             return false;
         }
+        // Its tree is gone (removed, "Remove this copy" after a move): nothing to finish.
+        if (record?.treeId && !TreeManager.getTreeMetadata(record.treeId)) {
+            clearInstallRecord();
+            return false;
+        }
+        // Only for the tree it was started for (an installation without a tree: for an empty one).
+        const active = DataManager.getCurrentTreeId() ?? TreeManager.getActiveTreeId();
+        if (record && (record.treeId ? record.treeId !== active : hasPeople())) return false;
         const phase = installPhase(record);
         return phase === 'waiting' || phase === 'long';
     },
@@ -235,7 +243,10 @@ export const researchInstallMethods = uiModule({
         const s = strings.install;
         const tree = TreeManager.getActiveTreeMetadata();
         const people = Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder);
-        const intro = tree && people ? s.intro(tree.name) : s.introEmpty;
+        // A browser that cannot reach the research moves the tree (never "it stays here").
+        const moving = needsTransfer(currentAppBrowser()) || !onComputer();
+        const mobile = !onComputer();
+        const intro = tree && people ? (moving ? s.introMove(tree.name, mobile) : s.intro(tree.name)) : moving ? s.introMoveEmpty(mobile) : s.introEmpty;
         return `
             <div class="modal-content install-body">
                 <p class="install-intro">${esc(intro)}</p>
@@ -298,7 +309,7 @@ export const researchInstallMethods = uiModule({
                     <code class="install-line" tabindex="0" data-line="${esc(line)}">${lineHtml(line, record.token)}</code>
                     <button type="button" class="install-copy${st.copied ? ' copied' : ''}" data-act="copy">${esc(st.copied ? s.copied : s.copy)}</button>
                 </div>
-                <p class="install-after">${esc(st.copied ? s.afterCopied : s.after)}</p>` : `<div class="install-line-row"><p class="install-line-later">${esc(s.transferLineAfter)}</p></div>`}
+                <p class="install-after">${esc(transfer ? (st.copied ? s.afterCopiedTransfer : s.afterTransfer) : st.copied ? s.afterCopied : s.after)}</p>` : `<div class="install-line-row"><p class="install-line-later">${esc(s.transferLineAfter)}</p></div>`}
                 ${lineShown ? `<details class="install-other"${st.otherOpen ? ' open' : ''}>
                     <summary>${esc(s.other)}</summary>
                     <p>${esc(s.npmIntro)}</p>
@@ -310,7 +321,7 @@ export const researchInstallMethods = uiModule({
                 </details>` : ''}
             </div>
             <div class="buttons">
-                <button type="button" class="link-button" data-act="have">${esc(s.haveIt)}</button>
+                <button type="button" class="link-button" data-act="have">${esc(this.researchHaveItLabel())}</button>
                 <button type="button" class="link-button" data-act="back">${esc(s.back)}</button>
                 <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.close)}</button>
                 <button type="button" class="primary" data-act="pasted"${lineShown ? '' : ' disabled'}>${esc(s.pasted)}</button>
@@ -669,7 +680,7 @@ export const researchInstallMethods = uiModule({
                 <div class="modal-content install-body install-wait" data-phase="expired">
                     <h3 class="install-wait-title">${esc(s.expiredTitle)}</h3>
                     <p>${esc(s.expiredText)}</p>
-                    <p class="install-wait-links"><button type="button" class="link-button" data-act="have">${esc(s.haveIt)}</button></p>
+                    <p class="install-wait-links"><button type="button" class="link-button" data-act="have">${esc(this.researchHaveItLabel())}</button></p>
                 </div>
                 <div class="buttons">
                     <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.close)}</button>
@@ -685,7 +696,7 @@ export const researchInstallMethods = uiModule({
                 ${isChromium() ? `<p class="install-note">${esc(s.waitLna)}</p>` : ''}
                 <p class="install-wait-links">
                     <button type="button" class="link-button" data-act="again">${esc(s.showAgain)}</button>
-                    <button type="button" class="link-button" data-act="have">${esc(s.haveIt)}</button>
+                    <button type="button" class="link-button" data-act="have">${esc(this.researchHaveItLabel())}</button>
                 </p>
             </div>
             <div class="buttons">
@@ -863,8 +874,24 @@ export const researchInstallMethods = uiModule({
      * same token (strom-research://new). From a browser that cannot reach it,
      * the tree goes as a file first — an installed research takes it as well.
      */
+    /** "I already have it, start ↗", or — the tree downloaded for a move — that it is, and the start. */
+    researchHaveItLabel(): string {
+        const s = strings.install;
+        if (!needsTransfer(currentAppBrowser())) return s.haveIt;
+        const record = readInstallRecord();
+        const active = DataManager.getCurrentTreeId() ?? TreeManager.getActiveTreeId();
+        return record?.file && record.treeId === active && installPhase(record) !== 'expired' ? s.haveItDownloaded : s.haveIt;
+    },
+
     async researchInstallHaveIt(): Promise<void> {
-        if (needsTransfer(currentAppBrowser()) && !readInstallRecord()?.file) await this.downloadResearchTransfer();
+        // This tree's record (never another tree's file). From a browser that moves the tree: the download
+        // first, on its own — WebKit drops a download the page leaves at once for strom-research:// — then
+        // the button says it is downloaded and a second click opens the research.
+        if (needsTransfer(currentAppBrowser()) && !this.ensureInstallRecord().file) {
+            await this.downloadResearchTransfer();
+            this.renderResearchInstall();
+            return;
+        }
         const record = this.ensureInstallRecord();
         const url = researchNewUrl(record.token, currentAppBrowser(), record.file);
         if (url) this.handOverResearchLink(url);

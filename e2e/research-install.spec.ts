@@ -459,8 +459,20 @@ test.describe('installing the research from the app', () => {
         const token = (await installRecord(page))!.token;
         const file = `strom-prenos-${token.slice(0, 8)}.json`;
         expect(download.suggestedFilename()).toBe(file);
+        // The download on its own (WebKit drops one the page leaves at once): the button says so, the link waits.
+        await expect(dialog(page).locator('[data-act="have"]')).toHaveText('✓ Tree downloaded · start the research ↗');
+        expect(await launched(page)).toEqual([]);
+        await dialog(page).locator('[data-act="have"]').click();
         await expect.poll(() => launched(page)).toEqual([`strom-research://new?app=${token}&browser=safari&file=${file}`]);
         await expect(dialog(page).locator('.research-install-dialog')).toHaveAttribute('data-step', 'wait');
+        // The line step says the research opens the tree in another browser (not this page).
+        await page.evaluate(() => window.Strom.UI.goResearchInstallStep('install'));
+        await expect(dialog(page).locator('.install-after')).toHaveText('When the research is ready, it opens the tree in another browser.');
+        // Another tree: its own installation — no "Finish installing" with this tree's time, no file of this tree.
+        expect(await page.evaluate(() => window.Strom.UI.researchInstallPending())).toBe(true);
+        await page.evaluate(() => window.Strom.UI.closeResearchInstall());
+        await page.evaluate(async () => { window.Strom.DataManager.createNewTree('Other'); });
+        expect(await page.evaluate(() => window.Strom.UI.researchInstallPending())).toBe(false);
     });
 
     test('an encrypted tree moves too: said in amber, the file is plain JSON, the other browser imports and hands it over', async ({ page, browser }) => {

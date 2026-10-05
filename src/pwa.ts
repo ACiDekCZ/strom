@@ -7,6 +7,8 @@
  */
 
 import { AppMode, BETA_HOSTNAME } from './types.js';
+import { detectAppBrowser } from './research-transfer.js';
+import { isIosDevice } from './file-copy.js';
 
 /**
  * The hosted app's base path: the public app lives at /run/, the pre-release
@@ -210,20 +212,45 @@ export function resetServiceWorkerState(): void {
 }
 
 /**
+ * Safari on a computer (Add to Dock): its app gets a name and icon of its own
+ * ("Strom (Safari)", muted), so it is never taken for the Strom installed from
+ * Chrome or Edge — it cannot reach the research and keeps storage apart from
+ * any browser. An iPhone or iPad (Add to Home Screen) stays "Strom": no
+ * research there to tell apart from.
+ */
+export function isSafariOnComputer(userAgent: string, platform: string, maxTouchPoints: number, brands?: readonly string[]): boolean {
+    return detectAppBrowser(userAgent, brands) === 'safari' && !isIosDevice(userAgent, platform, maxTouchPoints);
+}
+
+/** The name of Safari's own app (the deploy makes manifest-safari.json with it, see deploy.yml). */
+export function safariAppName(beta: boolean): string {
+    return beta ? 'Strom Beta (Safari)' : 'Strom (Safari)';
+}
+
+/**
  * Link the web app manifest so the hosted PWA is installable. Done at runtime
  * (PWA mode only) so the exported single-file build never points at /run/.
+ * `safariName`: Safari on a computer — its own manifest (name, muted icons),
+ * touch icon and app title.
  */
-export function linkManifest(): void {
+export function linkManifest(safariName: string | null = null): void {
     if (typeof document === 'undefined' || document.querySelector('link[rel="manifest"]')) return;
+    const base = pwaBasePath(location.pathname);
     const link = document.createElement('link');
     link.rel = 'manifest';
-    link.href = `${pwaBasePath(location.pathname)}manifest.json`;
+    link.href = `${base}${safariName ? 'manifest-safari.json' : 'manifest.json'}`;
     document.head.appendChild(link);
     // iOS takes the home-screen icon from here, not from the manifest.
     const touch = document.createElement('link');
     touch.rel = 'apple-touch-icon';
-    touch.href = `${pwaBasePath(location.pathname)}icons/apple-touch-icon.png`;
+    touch.href = `${base}icons/${safariName ? 'apple-touch-icon-muted.png' : 'apple-touch-icon.png'}`;
     document.head.appendChild(touch);
+    if (safariName) {
+        const title = document.createElement('meta');
+        title.name = 'apple-mobile-web-app-title';
+        title.content = safariName;
+        document.head.appendChild(title);
+    }
 }
 
 // ---- Install offer (Chromium: beforeinstallprompt) ----
