@@ -624,7 +624,7 @@ test.describe('Start research with this tree (G3)', () => {
         await expect(d).toHaveCount(0);
     });
 
-    test('an unknown token from an older research (1.12.0): the elsewhere dialog says a tree in Safari moves only with 1.12.1, and how', async ({ page }) => {
+    test('an unknown token from an older research (1.12.0): told it is not handed over, and the dialog says a tree in Safari moves only with 1.12.1, and how', async ({ page }) => {
         await appTree(page, ALL);
         const empty = { strom: '', tree: { id: UUID, name: 'Dvořákovi – výzkum', lang: 'en' }, persons: 0, families: 0 };
         for (const [status, old] of [
@@ -633,18 +633,26 @@ test.describe('Start research with this tree (G3)', () => {
         ] as const) {
             const calls = { cancel: [] as string[], posted: [] as string[] };
             await page.unrouteAll({ behavior: 'ignoreErrors' });
-            await routeBridge(page, 'x'.repeat(43), calls, { status });
+            await routeBridge(page, 'x'.repeat(43), calls, { status, offer: { until: '2026-10-05T19:30:00.000Z' } });
             await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
             const d = page.locator('#research-elsewhere-modal');
             await expect(d.locator('h2')).toHaveText('The tree is in another browser');
             const note = d.locator('.research-elsewhere-old');
             if (old) {
+                // The research stops waiting at once (no address to open elsewhere: it would not wait for it).
+                await expect.poll(() => calls.cancel).toEqual([JSON.stringify({ reason: 'cancelled' })]);
+                await expect(d).toContainText('was told it is not handed over');
                 await expect(note).toHaveText('A tree in Safari or on a phone moves over only with the research 1.12.1 or newer, and this one is older. There: Ancestor research, then the installation line into the terminal. The line updates the research and moves the tree.');
-                expect(await note.evaluate(el => getComputedStyle(el).fontSize)).toBe('13px');
+                await expect(d.locator('.research-elsewhere-address')).toHaveCount(0);
+                await expect(d).not.toContainText('The research waits until');
+                await expect(d.locator('.buttons button')).toHaveText(['Close']);
+                await expect(d.locator('.buttons .primary')).toBeFocused();
             } else {
+                await expect.poll(() => calls.cancel).toEqual([JSON.stringify({ reason: 'no-tree' })]);
                 await expect(note).toHaveCount(0);
+                await expect(d.locator('.research-elsewhere-address')).toHaveCount(1);
+                await expect(d.locator('.buttons .primary')).toHaveText('Copy address');
             }
-            await expect.poll(() => calls.cancel).toEqual([JSON.stringify({ reason: 'no-tree' })]);
             await page.keyboard.press('Escape');
             await expect(d).toHaveCount(0);
         }

@@ -201,10 +201,13 @@ export const researchAdoptMethods = uiModule({
             }
         }
         if (!offer || !tree) {
-            postCancel(cancelUrl, 'no-tree');
+            // An older research (1.12.0) takes no tree from Safari or a phone, where such a tree usually is:
+            // told it is not handed over (it stops waiting at once instead of asking for another copy for
+            // half an hour), and said here with the way to update it. A later line takes its empty research.
+            const oldResearch = !!offer && !offer.transfer && !await researchMovesTrees(bridge.base);
+            postCancel(cancelUrl, oldResearch ? 'cancelled' : 'no-tree');
             // Another browser or profile has it: the address to open there (the research keeps waiting).
-            // An older research (1.12.0) takes no tree from Safari or a phone: said, with the way to update it.
-            if (offer) this.showResearchElsewhere(raw, offer.until, !offer.transfer && !await researchMovesTrees(bridge.base));
+            if (offer) this.showResearchElsewhere(raw, offer.until, oldResearch);
             else this.showToast(r.adoptUnknown, 6000);
             return;
         }
@@ -492,16 +495,18 @@ export const researchAdoptMethods = uiModule({
                     <h2 id="research-elsewhere-title">${esc(r.elsewhereTitle)}</h2>
                     <button type="button" class="close-btn" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
-                <div class="modal-content install-body">
+                <div class="modal-content install-body">${oldResearch ? `
+                    <p>${esc(r.elsewhereOldText)}</p>
+                    <p class="research-elsewhere-old">${esc(r.elsewhereOldResearch)}</p>` : `
                     <p>${esc(r.elsewhereText)}${time ? ` ${esc(r.elsewhereUntil(time))}` : ''}</p>
                     <div class="install-line-row">
                         <code class="install-line research-elsewhere-address" tabindex="0">${esc(address)}</code>
-                    </div>
-                    ${oldResearch ? `<p class="research-elsewhere-old">${esc(r.elsewhereOldResearch)}</p>` : ''}
+                    </div>`}
                 </div>
-                <div class="buttons">
+                <div class="buttons">${oldResearch ? `
+                    <button type="button" class="primary" data-dismiss>${esc(strings.buttons.close)}</button>` : `
                     <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.close)}</button>
-                    <button type="button" class="primary" data-act="copy">${esc(r.elsewhereCopy)}</button>
+                    <button type="button" class="primary" data-act="copy">${esc(r.elsewhereCopy)}</button>`}
                 </div>
             </div>`;
         document.body.appendChild(overlay);
@@ -532,7 +537,7 @@ export const researchAdoptMethods = uiModule({
             }
         });
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
-        copy?.focus();
+        (copy ?? overlay.querySelector<HTMLElement>('.buttons .primary'))?.focus();
     },
 
     askResearchAdopt(tree: TreeMetadata, offer: AdoptOffer, data: ReturnType<typeof DataManager.getData>, opts: { install?: boolean; movedFrom?: AppBrowser } = {}): Promise<{ images: boolean; sendMode: ResearchSendMode } | null> {
