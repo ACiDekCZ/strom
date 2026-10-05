@@ -10,6 +10,7 @@
 
 import { TreeId } from './types.js';
 import { researchAdoptToken } from './research-link.js';
+import { AppBrowser, APP_BROWSERS, isTransferFileName } from './research-transfer.js';
 
 export type InstallOs = 'mac' | 'win' | 'linux';
 export const INSTALL_OSES: readonly InstallOs[] = ['mac', 'win', 'linux'];
@@ -39,27 +40,40 @@ export function installAppUrl(href: string): string | null {
     return url;
 }
 
+/** What else the line tells the research: the browser it came from, the file a tree moves by (see research-transfer.ts). */
+export interface InstallExtra {
+    browser?: AppBrowser;
+    file?: string;
+}
+
 /** The line for Terminal (macOS, Linux) or Win + R (Windows), with the tree's token (and this app's address, see installAppUrl). */
-export function installLine(os: InstallOs, token: string, appUrl: string | null = null, treeName = ''): string {
+export function installLine(os: InstallOs, token: string, appUrl: string | null = null, treeName = '', extra: InstallExtra = {}): string {
     const name = installTreeName(treeName);
-    if (os !== 'win') return `curl -fsSL ${DOWNLOAD}/install.sh | STROM_FROM_APP=${token} ${shName(name)}${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}sh`;
-    const line = (n: string): string =>
-        `powershell -ExecutionPolicy Bypass -c "$env:STROM_FROM_APP='${token}'; ${winName(n)}${appUrl ? `$env:STROM_APP_URL='${appUrl}'; ` : ''}irm ${DOWNLOAD}/install.ps1 | iex"`;
-    // Win + R takes 259 characters: the name shortened to what is left, or left out (the research suggests one).
-    let fit = name;
-    while (fit && line(fit).length > WIN_RUN_MAX) fit = fit.slice(0, -1).trim();
-    return line(fit.length >= 3 ? fit : '');
+    if (os !== 'win') return `curl -fsSL ${DOWNLOAD}/install.sh | STROM_FROM_APP=${token} ${shName(name)}${shExtra(extra)}${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}sh`;
+    const line = (n: string, x: InstallExtra): string =>
+        `powershell -ExecutionPolicy Bypass -c "$env:STROM_FROM_APP='${token}'; ${winName(n)}${winExtra(x)}${appUrl ? `$env:STROM_APP_URL='${appUrl}'; ` : ''}irm ${DOWNLOAD}/install.ps1 | iex"`;
+    // Win + R takes 259 characters: the name shortened to what is left, or left out (the research suggests one);
+    // then the browser (the research then picks one itself) — the file never (the tree moves by it).
+    const fitName = (x: InstallExtra): string => {
+        let fit = name;
+        while (fit && line(fit, x).length > WIN_RUN_MAX) fit = fit.slice(0, -1).trim();
+        return fit.length >= 3 ? fit : '';
+    };
+    const withName = fitName(extra);
+    if (line(withName, extra).length <= WIN_RUN_MAX || !extra.browser) return line(withName, extra);
+    const lean: InstallExtra = { ...extra, browser: undefined };
+    return line(fitName(lean), lean);
 }
 
 /** The Run dialog's (Win + R) limit. */
 export const WIN_RUN_MAX = 259;
 
 /** The npm way for technical users: install, then start with the token (and this app's address). */
-export function npmLines(os: InstallOs, token: string, appUrl: string | null = null, treeName = ''): [string, string] {
+export function npmLines(os: InstallOs, token: string, appUrl: string | null = null, treeName = '', extra: InstallExtra = {}): [string, string] {
     const name = installTreeName(treeName);
     return ['npm i -g strom-research', os === 'win'
-        ? `$env:STROM_FROM_APP='${token}'; ${winName(name)}${appUrl ? `$env:STROM_APP_URL='${appUrl}'; ` : ''}strom-research`
-        : `STROM_FROM_APP=${token} ${shName(name)}${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}strom-research`];
+        ? `$env:STROM_FROM_APP='${token}'; ${winName(name)}${winExtra(extra)}${appUrl ? `$env:STROM_APP_URL='${appUrl}'; ` : ''}strom-research`
+        : `STROM_FROM_APP=${token} ${shName(name)}${shExtra(extra)}${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}strom-research`];
 }
 
 /**
@@ -74,6 +88,19 @@ export function installTreeName(raw: string): string {
 
 const winName = (name: string): string => (name ? `$env:STROM_FROM_APP_NAME='${name.replace(/'/g, "''")}'; ` : '');
 const shName = (name: string): string => (name ? `STROM_FROM_APP_NAME='${name.replace(/'/g, "'\\''")}' ` : '');
+// Both values are from fixed sets of plain characters (APP_BROWSERS, isTransferFileName): no quoting needed.
+const cleanExtra = (x: InstallExtra): InstallExtra => ({
+    ...(x.browser && APP_BROWSERS.includes(x.browser) ? { browser: x.browser } : {}),
+    ...(isTransferFileName(x.file) ? { file: x.file } : {}),
+});
+const shExtra = (x: InstallExtra): string => {
+    const c = cleanExtra(x);
+    return `${c.browser ? `STROM_FROM_BROWSER=${c.browser} ` : ''}${c.file ? `STROM_FROM_FILE=${c.file} ` : ''}`;
+};
+const winExtra = (x: InstallExtra): string => {
+    const c = cleanExtra(x);
+    return `${c.browser ? `$env:STROM_FROM_BROWSER='${c.browser}'; ` : ''}${c.file ? `$env:STROM_FROM_FILE='${c.file}'; ` : ''}`;
+};
 
 /**
  * The system from the browser: User-Agent Client Hints when there are
@@ -105,6 +132,8 @@ export interface InstallRecord {
     os: InstallOs;
     createdAt: string;
     expiresAt: string;
+    /** Safari: the transfer file it downloaded for the research (research-transfer.ts), once it did. */
+    file?: string;
 }
 
 /** A record as stored, or null when it is not one (hand-edited, another version's). */
@@ -117,7 +146,10 @@ export function sanitizeInstallRecord(raw: unknown): InstallRecord | null {
     const expires = typeof r.expiresAt === 'string' ? Date.parse(r.expiresAt) : NaN;
     if (!token || !os || !Number.isFinite(created) || !Number.isFinite(expires)) return null;
     const treeId = typeof r.treeId === 'string' && r.treeId ? r.treeId as TreeId : null;
-    return { token, treeId, os, createdAt: r.createdAt as string, expiresAt: r.expiresAt as string };
+    return {
+        token, treeId, os, createdAt: r.createdAt as string, expiresAt: r.expiresAt as string,
+        ...(isTransferFileName(r.file) ? { file: r.file } : {}),
+    };
 }
 
 /** A new record for `token`, now. */

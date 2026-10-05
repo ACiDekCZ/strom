@@ -810,6 +810,10 @@ export const miscMethods = uiModule({
                         this.cancelResearchConnectFailed();
                         return;
                     }
+                    if (currentDialog === 'research-elsewhere-modal') {
+                        this.closeResearchElsewhere();
+                        return;
+                    }
                     if (currentDialog === 'research-ready-modal') {
                         this.closeResearchReady();
                         return;

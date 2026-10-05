@@ -102,7 +102,7 @@ export async function createFirstPerson(
     lastName: string,
     opts: { gender?: 'male' | 'female'; birthDate?: string; birthPlace?: string } = {}
 ): Promise<void> {
-    const addFirst = page.locator('#empty-state button').first();
+    const addFirst = page.locator('#empty-state .empty-state-actions button').first();
     if (await addFirst.isVisible().catch(() => false)) {
         await addFirst.click();
     } else {

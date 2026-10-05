@@ -382,7 +382,8 @@ test.describe('approve a draft story', () => {
 });
 
 test.describe('Start research with this tree (G3)', () => {
-    const TOKEN_RE = /^strom-research:\/\/new\?app=([A-Za-z0-9_-]{43})$/;
+    // The link names the browser it came from too (the research opens that one again).
+    const TOKEN_RE = /^strom-research:\/\/new\?app=([A-Za-z0-9_-]{43})&browser=(chrome|chromium|edge)$/;
 
     async function appTree(page: Page, links: string[]): Promise<void> {
         await page.setViewportSize({ width: 1440, height: 900 });
@@ -446,14 +447,18 @@ test.describe('Start research with this tree (G3)', () => {
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.researchAdoptToken?.token)).toBe(stored);
     });
 
-    async function routeBridge(page: Page, token: string, calls: { cancel: string[]; posted: string[] }): Promise<void> {
+    async function routeBridge(page: Page, token: string, calls: { cancel: string[]; posted: string[] },
+        extra: { offer?: Record<string, unknown>; transfer?: string } = {}): Promise<void> {
         await page.route(`${BRIDGE}/**`, async (route) => {
             const req = route.request();
             const path = new URL(req.url()).pathname;
             if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-headers': '*' } });
             if (path.endsWith('/adopt') && req.method() === 'GET') {
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
-                    body: JSON.stringify({ token, name: 'Dvořákovi – výzkum' }) });
+                    body: JSON.stringify({ token, name: 'Dvořákovi – výzkum', ...extra.offer }) });
+            }
+            if (path.endsWith('/transfer') && req.method() === 'GET' && extra.transfer !== undefined) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: extra.transfer });
             }
             if (path.endsWith('/adopt') && req.method() === 'POST') {
                 calls.posted.push(req.postData() ?? '');
@@ -598,14 +603,75 @@ test.describe('Start research with this tree (G3)', () => {
         expect(await page.evaluate(() => window.Strom.TreeManager.getTrees().length)).toBe(2);
     });
 
-    test('an unknown token: a toast, no dialog, the research is told', async ({ page }) => {
+    test('an unknown token: the tree is in another browser or profile — its address to open there, the research told', async ({ page }) => {
         await appTree(page, ALL);
         const calls = { cancel: [] as string[], posted: [] as string[] };
-        await routeBridge(page, 'x'.repeat(43), calls);
+        await routeBridge(page, 'x'.repeat(43), calls, { offer: { until: '2026-10-05T19:30:00.000Z' } });
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
-        await expect(page.locator('.toast')).toContainText('The research asked for a tree that is not here.');
+        const d = page.locator('#research-elsewhere-modal');
+        await expect(d.locator('h2')).toHaveText('The tree is in another browser');
+        await expect(d).toContainText('another profile of this one');
+        await expect(d).toContainText('The research waits until');
+        const address = await d.locator('.research-elsewhere-address').textContent();
+        expect(new URL(address!).searchParams.get('adopt')).toBe(BRIDGE);
         await expect(page.locator('#research-adopt-modal')).toHaveCount(0);
         await expect.poll(() => calls.cancel).toEqual([JSON.stringify({ reason: 'no-tree' })]);
+        await page.keyboard.press('Escape');
+        await expect(d).toHaveCount(0);
+    });
+
+    test('a tree moved from Safari: the research\'s file imported (images too), handed over; declined, nothing is left', async ({ page }) => {
+        await appTree(page, ALL);
+        const token = 'S'.repeat(43);
+        const photo = 'data:image/png;base64,' + 'iVBORw0KGgo'.repeat(200);
+        const tree = {
+            version: 11,
+            persons: {
+                m1: { id: 'm1', firstName: 'Marie', lastName: 'Safárová', gender: 'female', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], photo },
+            },
+            partnerships: {},
+        };
+        const file = JSON.stringify({ stromTransfer: { v: 1, token, from: 'safari', tree: 'Safárovi', persons: 1, at: '2026-10-05T18:00:00.000Z' }, ...tree });
+        for (const decline of [true, false]) {
+            const calls = { cancel: [] as string[], posted: [] as string[] };
+            await page.unrouteAll({ behavior: 'ignoreErrors' });
+            await routeBridge(page, token, calls, { offer: { transfer: true }, transfer: file });
+            const before = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
+            await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+            const dialog = page.locator('#research-adopt-modal');
+            await expect(dialog.locator('.research-adopt-moved')).toHaveText('Move The tree came from Safari. After the hand-over, work goes on here.');
+            await expect(dialog.locator('.research-adopt-tile').first()).toHaveText('1person');
+            expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.name)).toBe('Safárovi');
+            if (decline) {
+                await dialog.locator('#research-adopt-cancel').click();
+                await expect(page.locator('.toast')).toContainText('The tree was not moved. It stays in Safari as it was.');
+                await expect.poll(() => calls.cancel).toEqual([JSON.stringify({ reason: 'cancelled' })]);
+                expect(await page.evaluate(() => window.Strom.TreeManager.getTrees().map(t => t.name))).not.toContain('Safárovi');
+                expect(await page.evaluate(() => window.Strom.TreeManager.getTrees().length)).toBe(before);
+            } else {
+                await dialog.locator('#research-adopt-confirm').click();
+                await expect.poll(() => calls.posted.length).toBe(1);
+                expect(calls.posted[0]).toContain('1 NAME Marie /Safárová/');
+                const kept = await page.evaluate(() => {
+                    const m = Object.values(window.Strom.DataManager.getData().persons).find(p => p.firstName === 'Marie');
+                    return { photo: (m?.photo ?? '').length, research: !!window.Strom.TreeManager.getActiveTreeMetadata()?.research };
+                });
+                expect(kept).toEqual({ photo: photo.length, research: true });
+            }
+        }
+    });
+
+    test('a transfer file for another tree: said, nothing imported, the research told', async ({ page }) => {
+        await appTree(page, ALL);
+        const token = 'T'.repeat(43);
+        const calls = { cancel: [] as string[], posted: [] as string[] };
+        const file = JSON.stringify({ stromTransfer: { v: 1, token: 'U'.repeat(43), from: 'safari', tree: 'X', persons: 0, at: '' }, persons: {}, partnerships: {} });
+        await routeBridge(page, token, calls, { offer: { transfer: true }, transfer: file });
+        const before = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+        await expect(page.locator('#alert-modal, .modal-overlay.active').filter({ hasText: 'could not be read' })).toBeVisible();
+        await expect.poll(() => calls.cancel).toEqual([JSON.stringify({ reason: 'cancelled' })]);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getTrees().length)).toBe(before);
     });
 
     test('"Don\'t hand over": the research is told, the tree stays unlinked', async ({ page }) => {

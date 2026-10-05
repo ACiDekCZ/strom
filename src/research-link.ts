@@ -133,9 +133,14 @@ export type ResearchConflictDo = 'decide' | 'agent';
 const CONFLICT_DOS: readonly string[] = ['decide', 'agent'];
 
 /** "Start research with this tree": the one link without a tree (the research makes one). */
-export function researchNewUrl(token: string): string | null {
+export function researchNewUrl(token: string, browser?: string, file?: string): string | null {
     const app = researchAdoptToken(token);
-    return app ? `strom-research://new?app=${app}` : null;
+    if (!app) return null;
+    // The browser it came from (research-transfer.ts AppBrowser): the research opens that one again;
+    // from Safari, the file the tree moves by (STROM_FROM_FILE of the line).
+    const b = browser && /^[a-z]{1,16}$/.test(browser) ? `&browser=${browser}` : '';
+    const f = file && /^strom-prenos-[A-Za-z0-9_-]{8}\.json$/.test(file) ? `&file=${file}` : '';
+    return `strom-research://new?app=${app}${b}${f}`;
 }
 
 /**
@@ -1774,6 +1779,10 @@ export interface AdoptOffer {
     name: string;
     /** The research tree's UUID, when it already made one. */
     tree: string | null;
+    /** The tree comes from another browser: the research holds its transfer file (GET <bridge>/transfer, 1.12.1). */
+    transfer: boolean;
+    /** Until when the research waits for the hand-over (ISO), when it says. */
+    until: string | null;
 }
 
 /** The adopt offer, or null when it does not carry a valid token. Untrusted. */
@@ -1781,7 +1790,8 @@ export function sanitizeAdoptOffer(value: unknown): AdoptOffer | null {
     const r = asRecord(value);
     const token = researchAdoptToken(r?.token);
     if (!r || !token) return null;
-    return { token, name: cleanText(r.name, MAX_NAME), tree: normalizeResearchId(r.tree) };
+    const until = typeof r.until === 'string' && r.until.length <= 40 && Number.isFinite(Date.parse(r.until)) ? r.until : null;
+    return { token, name: cleanText(r.name, MAX_NAME), tree: normalizeResearchId(r.tree), transfer: r.transfer === true, until };
 }
 
 /** The research's answer to the handed-over tree: its tree UUID and version, or null. Untrusted. */

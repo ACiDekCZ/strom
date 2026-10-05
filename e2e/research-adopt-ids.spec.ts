@@ -13,7 +13,7 @@ import { openApp } from './helpers.js';
 const UUID = '5b7e2c10-3a4d-4f61-8e2b-9c0d1e2f3a4b';
 const BRIDGE = 'http://127.0.0.1:5995/0123456789abcdef0123456789abcdef';
 const cors = { 'access-control-allow-origin': '*' };
-const TOKEN_RE = /^strom-research:\/\/new\?app=([A-Za-z0-9_-]{43})$/;
+const TOKEN_RE = /^strom-research:\/\/new\?app=([A-Za-z0-9_-]{43})&browser=[a-z]+$/;
 
 /** The research's version of the tree it took: its own numbers, the same people. */
 function researchVersion(): string {

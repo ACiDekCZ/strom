@@ -76,7 +76,7 @@ test.describe('installing the research from the app', () => {
         const line = await d.locator('.install-line').first().getAttribute('data-line');
         // A copy of the app other than stromapp.info (here the test server): the line names it.
         const app = appUrlOf(page);
-        expect(line).toBe(`curl -fsSL https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.sh | STROM_FROM_APP=${rec.token} STROM_FROM_APP_NAME='My Family Tree' STROM_APP_URL=${app} sh`);
+        expect(line).toBe(`curl -fsSL https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.sh | STROM_FROM_APP=${rec.token} STROM_FROM_APP_NAME='My Family Tree' STROM_FROM_BROWSER=chromium STROM_APP_URL=${app} sh`);
         await expect(d.locator('.install-line .install-token').first()).toHaveText(rec.token);
         // Opened again while it holds: the same token.
         await d.locator('[data-act="back"]').click();
@@ -107,14 +107,15 @@ test.describe('installing the research from the app', () => {
         const token = (await installRecord(page))!.token;
         expect(await d.locator('.install-line').first().getAttribute('data-line'))
             .toBe(`powershell -ExecutionPolicy Bypass -c "$env:STROM_FROM_APP='${token}'; $env:STROM_APP_URL='${appUrlOf(page)}'; irm https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.ps1 | iex"`);
-        // (With this copy's address the tree's name no longer fits Win + R: left out, the research suggests one.)
+        // (With this copy's address the tree's name no longer fits Win + R, nor the browser: left out, the
+        // research suggests a name and picks a browser. The public app's line has room for both.)
         expect((await d.locator('.install-line').first().getAttribute('data-line'))!.length).toBeLessThanOrEqual(259);
         await expect(d.locator('.install-howto li').first()).toContainText('Win + R');
         await expect(d.locator('.install-apple')).toHaveCount(0);
 
         await d.locator('.install-os-btn[data-os="linux"]').click();
         await expect(d.locator('.install-howto li').first()).toContainText('Ctrl + Alt + T');
-        expect(await d.locator('.install-line').first().getAttribute('data-line')).toContain(`STROM_FROM_APP=${token} STROM_FROM_APP_NAME='My Family Tree' STROM_APP_URL=${appUrlOf(page)} sh`);
+        expect(await d.locator('.install-line').first().getAttribute('data-line')).toContain(`STROM_FROM_APP=${token} STROM_FROM_APP_NAME='My Family Tree' STROM_FROM_BROWSER=chromium STROM_APP_URL=${appUrlOf(page)} sh`);
         await d.locator('.install-os-btn[data-os="mac"]').click();
         await expect(d.locator('.install-apple')).toContainText('Command Line Tools');
         expect((await installRecord(page))!.os).toBe('mac');
@@ -124,7 +125,7 @@ test.describe('installing the research from the app', () => {
         // npm folded away; open, it carries the same token.
         await expect(d.locator('details.install-other')).not.toHaveAttribute('open', '');
         await d.locator('details.install-other summary').click();
-        expect(await d.locator('.install-npm').getAttribute('data-line')).toBe(`npm i -g strom-research\nSTROM_FROM_APP=${token} STROM_FROM_APP_NAME='My Family Tree' STROM_APP_URL=${appUrlOf(page)} strom-research`);
+        expect(await d.locator('.install-npm').getAttribute('data-line')).toBe(`npm i -g strom-research\nSTROM_FROM_APP=${token} STROM_FROM_APP_NAME='My Family Tree' STROM_FROM_BROWSER=chromium STROM_APP_URL=${appUrlOf(page)} strom-research`);
     });
 
     test('Copy puts the exact line on the clipboard; "Copied" holds until the system changes', async ({ page, context }) => {
@@ -299,16 +300,83 @@ test.describe('installing the research from the app', () => {
         await other.close();
     });
 
-    test('Safari: the Install step says it will not connect there', async ({ page }) => {
+    test('Safari: the tree moves to another browser — said first, downloaded with its mark, the line names the file, the tree gets its banner', async ({ page }) => {
         await page.addInitScript(() => {
             Object.defineProperty(navigator, 'userAgent', {
                 configurable: true,
                 get: () => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
             });
+            Object.defineProperty(navigator, 'userAgentData', { configurable: true, get: () => undefined });
         });
         await setup(page);
         await toInstallStep(page);
-        await expect(dialog(page).locator('.install-warn').first()).toContainText("Safari won't connect to the research");
+        const d = dialog(page);
+        await expect(d.locator('.install-transfer')).toContainText("Safari can't connect to the research");
+        await expect(d.locator('.install-transfer')).toContainText('the tree “My Family Tree” therefore moves to another browser');
+        // No line before the tree is downloaded.
+        await expect(d.locator('.install-line')).toHaveCount(0);
+        await expect(d.locator('.install-line-later')).toHaveText('The line appears once the tree is downloaded.');
+        const token = (await installRecord(page))!.token;
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            d.locator('[data-act="transfer-download"]').click(),
+        ]);
+        const file = `strom-prenos-${token.slice(0, 8)}.json`;
+        expect(download.suggestedFilename()).toBe(file);
+        const text = await (await import('node:fs')).promises.readFile(await download.path(), 'utf8');
+        expect(text.startsWith(`{"stromTransfer":{"v":1,"token":"${token}","from":"safari","tree":"My Family Tree","persons":1,`)).toBe(true);
+        expect(Object.values(JSON.parse(text).persons as Record<string, { firstName: string }>).map(p => p.firstName)).toContain('Jan');
+        await expect(d.locator('.install-transfer-done')).toHaveText('✓ Downloaded');
+        expect(await d.locator('.install-line').first().getAttribute('data-line'))
+            .toContain(`STROM_FROM_APP=${token} STROM_FROM_APP_NAME='My Family Tree' STROM_FROM_BROWSER=safari STROM_FROM_FILE=${file} STROM_APP_URL=`);
+        expect((await installRecord(page))!.file).toBe(file);
+        // The tree says it is moving; "The move did not happen" takes the banner away.
+        const banner = page.locator('#research-transfer-banner');
+        await expect(banner).toContainText('“My Family Tree” is moving to another browser for the research');
+        await d.locator('[data-act="pasted"]').click();
+        await expect(d).toContainText('It asks which browser the tree moves to');
+        await page.evaluate(() => window.Strom.UI.closeResearchInstall());
+        await banner.locator('.research-transfer-undo').click();
+        await expect(banner).toHaveCount(0);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.researchTransfer)).toBeUndefined();
+    });
+
+    test('desktop Safari: the welcome and "Data elsewhere" say the research needs Chrome or Edge; "Continue here" holds; not on an iPad, not in Chrome', async ({ page }) => {
+        const SAFARI = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
+        await page.addInitScript((ua) => {
+            Object.defineProperty(navigator, 'userAgent', { configurable: true, get: () => ua });
+            Object.defineProperty(navigator, 'userAgentData', { configurable: true, get: () => undefined });
+            Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, get: () => Number(localStorage.getItem('test-touch') ?? 0) });
+        }, SAFARI);
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await openApp(page);
+        const welcome = page.locator('#empty-state .browser-notice');
+        await expect(welcome).toContainText('Ancestor research planned? The family is better entered straight in Chrome or Edge.');
+        await page.evaluate(() => window.Strom.UI.showImportFileDialog());
+        await expect(page.locator('#import-file-modal .browser-notice')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.closeImportFileDialog());
+        // The research offer says it too (no "Continue here" there).
+        await page.evaluate(() => window.Strom.UI.showResearchInstall());
+        await expect(dialog(page).locator('.browser-notice [data-browser-notice="copy"]')).toBeVisible();
+        await expect(dialog(page).locator('.browser-notice [data-browser-notice="stay"]')).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.closeResearchInstall());
+        await welcome.locator('[data-browser-notice="stay"]').click();
+        await expect(page.locator('.browser-notice')).toHaveCount(0);
+        await page.reload();
+        await expect(page.locator('#empty-state')).toBeVisible();
+        await expect(page.locator('.browser-notice')).toHaveCount(0);
+        // An iPad (asks for the desktop site as a Mac, but has touch): never.
+        await page.evaluate(() => { localStorage.removeItem('strom-browser-notice'); localStorage.setItem('test-touch', '5'); });
+        await page.reload();
+        await expect(page.locator('#empty-state')).toBeVisible();
+        await expect(page.locator('.browser-notice')).toHaveCount(0);
+    });
+
+    test('Chrome: no browser notice on the welcome screen', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await openApp(page);
+        await expect(page.locator('#empty-state')).toBeVisible();
+        await expect(page.locator('.browser-notice')).toHaveCount(0);
     });
 
     for (const [name, width, height] of [['phone', 360, 780], ['tablet', 768, 1024], ['desktop', 1440, 900]] as const) {

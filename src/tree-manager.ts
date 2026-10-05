@@ -1464,6 +1464,15 @@ class TreeManagerClass {
         this.saveIndex();
     }
 
+    /** Mark (or unmark) a tree as moving to another browser for the research. */
+    setResearchTransfer(treeId: TreeId, value: { at: string } | null): void {
+        const tree = this.index.trees.find(t => t.id === treeId);
+        if (!tree) return;
+        if (value) tree.researchTransfer = value;
+        else delete tree.researchTransfer;
+        this.saveIndex();
+    }
+
     /** The tree waiting to be taken over with `token` (issued less than `maxAgeMs` ago), or null. */
     findTreeByAdoptToken(token: string, maxAgeMs: number, now = Date.now()): TreeMetadata | null {
         const tree = this.index.trees.find(t => t.researchAdoptToken?.token === token);

@@ -11,7 +11,9 @@
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
-import { strings } from '../strings.js';
+import { strings, getCurrentLanguage } from '../strings.js';
+import { AppBrowser, appBrowserName, currentAppBrowser, readTransferJson } from '../research-transfer.js';
+import { validateJsonImport } from '../merge/validation.js';
 import { TreeId, TreeMetadata, StromData, STROM_DATA_VERSION, ResearchSendMode } from '../types.js';
 import { readInstallRecord, installPhase, INSTALL_TTL_MS } from '../research-install.js';
 import { noteResearchBridge, patchResearchAutoState } from '../research-device.js';
@@ -30,6 +32,9 @@ import { researchSendModeCardsHtml, researchSendPrinciplesHtml, researchSendMode
 import { researchSendMode } from './research-sync-ui.js';
 
 const ADOPT_ID = 'research-adopt-modal';
+const ELSEWHERE_ID = 'research-elsewhere-modal';
+/** A transfer file carries the whole tree with its images: time to read a large one from the bridge. */
+const TRANSFER_TIMEOUT_MS = 120_000;
 const READY_ID = 'research-ready-modal';
 /** How long the research has to come back for the tree. */
 const TOKEN_MAX_AGE_MS = 60 * 60 * 1000;
@@ -68,7 +73,7 @@ export const researchAdoptMethods = uiModule({
     /** Hand `treeId` a token and open the research's set-up in the terminal. */
     startResearchAdopt(treeId: TreeId): void {
         const token = newAdoptToken();
-        const url = researchNewUrl(token);
+        const url = researchNewUrl(token, currentAppBrowser());
         if (!url || !TreeManager.getTreeMetadata(treeId)) return;
         TreeManager.setResearchAdoptToken(treeId, { token, at: new Date().toISOString() });
         this.handOverResearchLink(url);
@@ -140,9 +145,25 @@ export const researchAdoptMethods = uiModule({
             fresh = { version: STROM_DATA_VERSION, persons: {}, partnerships: {} };
             this.updateTreeSwitcher();
         }
+        // The tree comes from another browser (Safari): the research holds its file — imported here first.
+        let moved: { tree: TreeMetadata; from: AppBrowser } | null = null;
+        if (!tree && offer?.transfer) {
+            const got = await this.receiveResearchTransfer(bridge.base, offer);
+            if (got === 'failed') {
+                postCancel(cancelUrl, 'cancelled');
+                void this.showAlert(r.transferUnreadable, 'error');
+                return;
+            }
+            if (got) {
+                moved = got;
+                tree = got.tree;
+            }
+        }
         if (!offer || !tree) {
             postCancel(cancelUrl, 'no-tree');
-            this.showToast(r.adoptUnknown, 6000);
+            // Another browser or profile has it: the address to open there (the research keeps waiting).
+            if (offer) this.showResearchElsewhere(raw, offer.until);
+            else this.showToast(r.adoptUnknown, 6000);
             return;
         }
         if (DataManager.isViewMode() || !await this.ensureLocalUnlocked()) {
@@ -157,9 +178,11 @@ export const researchAdoptMethods = uiModule({
         }
         // The tree going over is the one on screen behind the dialog.
         if (DataManager.getCurrentTreeId() !== tree.id) await this.switchToTree(tree.id);
-        const choice = await this.askResearchAdopt(tree, offer, data, { install: fromInstall });
+        const choice = await this.askResearchAdopt(tree, offer, data, { install: fromInstall || !!moved, ...(moved ? { movedFrom: moved.from } : {}) });
         if (choice === null) {
             postCancel(cancelUrl, 'cancelled');
+            // Not handed over: nothing of the move is left half-done here.
+            if (moved) await this.dropResearchTransfer(moved.tree.id, moved.from);
             return;
         }
         // A backup before the tree first goes to the research (whatever the backup setting).
@@ -220,8 +243,8 @@ export const researchAdoptMethods = uiModule({
         this.updateTreeManagerList();
         this.refreshActionMenuBadges();
         TreeRenderer.render();
-        if (fromInstall) {
-            this.finishResearchInstall(offer.token);
+        if (fromInstall || moved) {
+            if (fromInstall) this.finishResearchInstall(offer.token);
             void this.showResearchReady(bridge.base, reply.tree, offer.name || r.defaultName, hasPeople);
             return;
         }
@@ -325,6 +348,11 @@ export const researchAdoptMethods = uiModule({
         overlay.querySelector<HTMLElement>('.primary')?.focus();
     },
 
+    closeResearchElsewhere(): void {
+        document.getElementById(ELSEWHERE_ID)?.remove();
+        this.dialogStack = this.dialogStack.filter(d => d !== ELSEWHERE_ID);
+    },
+
     closeResearchReady(): void {
         document.getElementById(READY_ID)?.remove();
         this.dialogStack = this.dialogStack.filter(d => d !== READY_ID);
@@ -335,7 +363,117 @@ export const researchAdoptMethods = uiModule({
      * sources; photos and attachments by choice). Resolves null for "Don't
      * hand over". A decision: no ×, Escape = don't.
      */
-    askResearchAdopt(tree: TreeMetadata, offer: AdoptOffer, data: ReturnType<typeof DataManager.getData>, opts: { install?: boolean } = {}): Promise<{ images: boolean; sendMode: ResearchSendMode } | null> {
+    /**
+     * The tree from another browser: its transfer file from the research's
+     * bridge, checked (the token, the usual JSON import checks) and imported
+     * as a new tree waiting for this hand-over. Null: the research has none;
+     * 'failed': it had one that could not be read (nothing changed).
+     */
+    async receiveResearchTransfer(base: string, offer: AdoptOffer): Promise<{ tree: TreeMetadata; from: AppBrowser } | null | 'failed'> {
+        let text: string;
+        try {
+            const res = await fetchWithTimeout(`${base}/transfer`, TRANSFER_TIMEOUT_MS);
+            if (res.status === 404) return null;
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            text = await res.text();
+        } catch (err) {
+            console.warn('The tree from the other browser did not come', err);
+            return 'failed';
+        }
+        const moved = readTransferJson(text, offer.token);
+        const result = moved ? validateJsonImport(moved.json) : null;
+        if (!moved || !result?.valid || !result.data) return 'failed';
+        const name = moved.mark.tree || offer.name || strings.install.newTreeName;
+        const id = await DataManager.importAsNewTree(result.data, name);
+        TreeManager.setResearchAdoptToken(id, { token: offer.token, at: new Date().toISOString() });
+        this.updateTreeSwitcher();
+        TreeRenderer.render();
+        const tree = TreeManager.getTreeMetadata(id);
+        return tree ? { tree, from: moved.mark.from } : 'failed';
+    },
+
+    /** The move declined at the hand-over: the tree imported for it goes again; the other browser keeps it as it was. */
+    async dropResearchTransfer(treeId: TreeId, from: AppBrowser): Promise<void> {
+        const wasActive = TreeManager.getActiveTreeId() === treeId;
+        await TreeManager.deleteTree(treeId);
+        if (!TreeManager.hasTrees()) {
+            DataManager.createNewTree(strings.treeManager.defaultTreeName);
+        } else if (wasActive) {
+            await DataManager.switchTree(TreeManager.getActiveTreeId()!);
+        }
+        this.updateTreeSwitcher();
+        this.updateTreeManagerList();
+        TreeRenderer.render();
+        this.showToast(strings.research.transferCancelled(appBrowserName(from)), 8000);
+    },
+
+    /**
+     * The research asks for a tree this browser does not have (another
+     * browser, another profile): the address to open where the tree is.
+     */
+    showResearchElsewhere(rawBridge: string, until: string | null): void {
+        const r = strings.research;
+        document.getElementById(ELSEWHERE_ID)?.remove();
+        const url = new URL(window.location.href);
+        url.search = '';
+        url.hash = '';
+        url.searchParams.set('adopt', rawBridge);
+        const address = url.toString();
+        const at = until ? new Date(until) : null;
+        const time = at && !Number.isNaN(at.getTime())
+            ? at.toLocaleTimeString(getCurrentLanguage(), { hour: '2-digit', minute: '2-digit' }) : '';
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay active';
+        overlay.id = ELSEWHERE_ID;
+        overlay.innerHTML = `
+            <div class="modal modal--sm research-elsewhere-modal" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="research-elsewhere-title">
+                <div class="modal-header">
+                    <h2 id="research-elsewhere-title">${esc(r.elsewhereTitle)}</h2>
+                    <button type="button" class="close-btn" aria-label="${esc(strings.buttons.close)}">&times;</button>
+                </div>
+                <div class="modal-content install-body">
+                    <p>${esc(r.elsewhereText)}${time ? ` ${esc(r.elsewhereUntil(time))}` : ''}</p>
+                    <div class="install-line-row">
+                        <code class="install-line research-elsewhere-address" tabindex="0">${esc(address)}</code>
+                        <button type="button" class="install-copy" data-act="copy">${esc(r.elsewhereCopy)}</button>
+                    </div>
+                </div>
+                <div class="buttons">
+                    <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.close)}</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        this.pushDialog(ELSEWHERE_ID);
+        const close = (): void => this.closeResearchElsewhere();
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+        overlay.querySelector('.close-btn')?.addEventListener('click', close);
+        overlay.querySelector('[data-dismiss]')?.addEventListener('click', close);
+        const code = overlay.querySelector<HTMLElement>('.research-elsewhere-address');
+        const select = (): void => {
+            if (!code) return;
+            const range = document.createRange();
+            range.selectNodeContents(code);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+        };
+        code?.addEventListener('click', select);
+        const copy = overlay.querySelector<HTMLButtonElement>('[data-act="copy"]');
+        copy?.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(address);
+                copy.textContent = strings.install.copied;
+                copy.classList.add('copied');
+            } catch {
+                select();
+                this.showToast(strings.install.copyManual, 6000);
+            }
+        });
+        normalizeModal(overlay.querySelector('.modal') as HTMLElement);
+        copy?.focus();
+    },
+
+    askResearchAdopt(tree: TreeMetadata, offer: AdoptOffer, data: ReturnType<typeof DataManager.getData>, opts: { install?: boolean; movedFrom?: AppBrowser } = {}): Promise<{ images: boolean; sendMode: ResearchSendMode } | null> {
         document.getElementById(ADOPT_ID)?.remove();
         const r = strings.research;
         // As the research counts them: people with a name (an unnamed "?" stays out of its count).
@@ -362,6 +500,7 @@ export const researchAdoptMethods = uiModule({
                     </div>
                 </div>
                 <div class="research-send-dialog-body">
+                    ${opts.movedFrom ? `<p class="research-adopt-moved"><span class="research-adopt-moved-tag">${esc(r.transferTag)}</span> ${esc(r.transferCame(appBrowserName(opts.movedFrom)))}</p>` : ''}
                     <div class="research-adopt-what">
                         <span class="research-adopt-eyebrow">${esc(t.handoffWhatGoes)}</span>
                         <div class="research-adopt-tiles">${tile(persons, t.handoffPersons(persons))}${tile(families, t.handoffFamilies(families))}${tile(sources, t.handoffSources(sources))}</div>

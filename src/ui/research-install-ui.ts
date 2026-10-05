@@ -17,7 +17,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeId } from '../types.js';
-import { newAdoptToken, researchNewUrl, isSafariBrowser } from '../research-link.js';
+import { newAdoptToken, researchNewUrl } from '../research-link.js';
 import { isPromoAvailable } from '../research-promo.js';
 import {
     InstallOs, InstallRecord, INSTALL_OSES, INSTALL_RELEASE_URL,
@@ -25,10 +25,15 @@ import {
     readInstallRecord, writeInstallRecord, clearInstallRecord,
 } from '../research-install.js';
 import { onComputer } from './research-ui.js';
+import { currentAppBrowser, needsTransfer, transferFileName, buildTransferJson } from '../research-transfer.js';
+import { SettingsManager } from '../settings.js';
+import { STROM_DATA_VERSION, StromData } from '../types.js';
 import { uiModule } from './module.js';
 
 /** The dialog keeps the info dialog's id: one research dialog at a time, closed by the shared Escape handling. */
 export const INSTALL_DIALOG_ID = 'research-info-modal';
+/** localStorage: Safari's notice was answered "Continue here" (never shown again in this browser). */
+const BROWSER_NOTICE_KEY = 'strom-browser-notice';
 /** The channel the tab the research opens tells the others on. */
 const INSTALL_CHANNEL = 'strom-install';
 
@@ -44,10 +49,6 @@ function esc(text: string): string {
     return text
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
-function isSafari(): boolean {
-    return typeof navigator !== 'undefined' && isSafariBrowser(navigator.userAgent || '');
 }
 
 /** Chromium asks about the local network; the waiting step warns of it there only. */
@@ -185,6 +186,7 @@ export const researchInstallMethods = uiModule({
                 ${body}
             </div>`;
         this.bindResearchInstall(overlay);
+        this.bindBrowserNotice(overlay);
         this.syncResearchInstallTimer();
     },
 
@@ -210,6 +212,7 @@ export const researchInstallMethods = uiModule({
                     </div>
                 </div>
                 <p class="install-later">${esc(s.choiceLater)}</p>
+                ${this.browserNoticeApplies() ? this.browserNoticeHtml(false) : ''}
             </div>
             <div class="buttons">
                 <button type="button" class="link-button install-web" data-act="web">${esc(s.web)}</button>
@@ -231,8 +234,14 @@ export const researchInstallMethods = uiModule({
         const appUrl = installAppUrl(window.location.href);
         // The tree's name: the research suggests it as its own (an empty tree from the welcome screen: none).
         const treeName = record.treeId ? TreeManager.getTreeMetadata(record.treeId)?.name ?? '' : '';
-        const line = installLine(os, record.token, appUrl, treeName);
-        const [npm1, npm2] = npmLines(os, record.token, appUrl, treeName);
+        // The browser it came from: the research opens that one again. Safari cannot reach the
+        // research: the tree moves by a file, and the line shows once it is downloaded.
+        const browser = currentAppBrowser();
+        const transfer = needsTransfer(browser);
+        const extra = { browser, ...(record.file ? { file: record.file } : {}) };
+        const line = installLine(os, record.token, appUrl, treeName, extra);
+        const [npm1, npm2] = npmLines(os, record.token, appUrl, treeName, extra);
+        const lineShown = !transfer || !!record.file;
         return `
             <div class="modal-content install-body">
                 <div class="install-os-row">
@@ -241,16 +250,16 @@ export const researchInstallMethods = uiModule({
                     </div>
                     <span class="install-detected">${esc(s.detected(names[detectedOs()]))}</span>
                 </div>
-                ${isSafari() ? `<p class="install-warn">${esc(s.safari)}</p>` : ''}
+                ${transfer ? this.researchInstallTransferHtml(record.file ?? null, treeName) : ''}
                 <div class="install-what"><strong>${esc(s.whatTitle)}</strong> ${esc(what)}</div>
                 ${os === 'mac' ? `<p class="install-warn install-apple">${esc(s.appleNote)}</p>` : ''}
                 <ol class="install-howto">${steps.map((t, i) => `<li><span class="install-num" aria-hidden="true">${i + 1}</span><span>${esc(t)}</span></li>`).join('')}</ol>
-                <div class="install-line-row">
+                ${lineShown ? `<div class="install-line-row">
                     <code class="install-line" tabindex="0" data-line="${esc(line)}">${lineHtml(line, record.token)}</code>
                     <button type="button" class="install-copy${st.copied ? ' copied' : ''}" data-act="copy">${esc(st.copied ? s.copied : s.copy)}</button>
                 </div>
-                <p class="install-after">${esc(st.copied ? s.afterCopied : s.after)}</p>
-                <details class="install-other"${st.otherOpen ? ' open' : ''}>
+                <p class="install-after">${esc(st.copied ? s.afterCopied : s.after)}</p>` : `<p class="install-line-later">${esc(s.transferLineAfter)}</p>`}
+                ${lineShown ? `<details class="install-other"${st.otherOpen ? ' open' : ''}>
                     <summary>${esc(s.other)}</summary>
                     <p>${esc(s.npmIntro)}</p>
                     <div class="install-line-row">
@@ -258,7 +267,7 @@ export const researchInstallMethods = uiModule({
                         <button type="button" class="install-copy" data-act="copy-npm">${esc(s.copy)}</button>
                     </div>
                     <a class="install-release" href="${esc(INSTALL_RELEASE_URL)}" target="_blank" rel="noopener">${esc(INSTALL_RELEASE_URL.replace(/^https:\/\//, ''))} ↗</a>
-                </details>
+                </details>` : ''}
             </div>
             <div class="buttons">
                 <button type="button" class="link-button" data-act="have">${esc(s.haveIt)}</button>
@@ -266,6 +275,173 @@ export const researchInstallMethods = uiModule({
                 <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.close)}</button>
                 <button type="button" class="primary" data-act="pasted">${esc(s.pasted)}</button>
             </div>`;
+    },
+
+    /** Safari: the tree moves to another browser — said first, then downloaded for the research to find. */
+    researchInstallTransferHtml(file: string | null, treeName: string): string {
+        const s = strings.install;
+        const people = Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder);
+        return `
+            <div class="install-what install-transfer">
+                <p>${esc(treeName && people ? s.transferText(treeName) : s.transferTextEmpty)}</p>
+                <div class="install-transfer-row">
+                    ${file
+                        ? `<span class="install-transfer-done">${esc(s.transferDownloaded)}</span>
+                           <button type="button" class="link-button" data-act="transfer-download">${esc(s.transferAgain)}</button>`
+                        : `<button type="button" class="secondary" data-act="transfer-download">${esc(s.transferDownload)}</button>`}
+                </div>
+                ${file ? `<p class="install-note">${esc(s.transferFileNote)}</p>` : ''}
+                ${SettingsManager.isEncryptionEnabled() ? `<p class="install-note">${esc(s.transferEncrypted)}</p>` : ''}
+            </div>`;
+    },
+
+    /**
+     * Download the tree for the move: the whole tree (images too) as JSON with
+     * the transfer mark first; the line then names the file. The tree is
+     * marked as moving (its banner) — the research takes it over elsewhere.
+     */
+    async downloadResearchTransfer(): Promise<void> {
+        const record = this.ensureInstallRecord();
+        const treeId = record.treeId;
+        let data: StromData | null;
+        if (!treeId) data = { version: STROM_DATA_VERSION, persons: {}, partnerships: {} };
+        else data = DataManager.getCurrentTreeId() === treeId ? DataManager.getData() : await TreeManager.getTreeData(treeId);
+        if (!data) {
+            await this.showAlert(strings.storageSafety.treeLocked, 'warning');
+            return;
+        }
+        const tree = treeId ? TreeManager.getTreeMetadata(treeId) : null;
+        const file = transferFileName(record.token);
+        const text = buildTransferJson({
+            v: 1, token: record.token, from: currentAppBrowser(),
+            tree: tree?.name ?? '',
+            persons: Object.values(data.persons).filter(p => p && !p.isPlaceholder).length,
+            at: new Date().toISOString(),
+        }, { ...data, version: STROM_DATA_VERSION });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+        a.download = file;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+        writeInstallRecord({ ...record, file });
+        if (treeId && tree && Object.values(data.persons).some(p => p && !p.isPlaceholder)) {
+            TreeManager.setResearchTransfer(treeId, { at: new Date().toISOString() });
+            this.renderResearchTransferBanner();
+        }
+        if (current) current.copied = false;
+        this.renderResearchInstall();
+    },
+
+    /**
+     * The banner over a tree downloaded to move to another browser: work goes
+     * on there, an older copy stays here. Only "The move did not happen"
+     * removes it; a tree that got its research here never shows it.
+     */
+    renderResearchTransferBanner(): void {
+        const tree = TreeManager.getActiveTreeMetadata();
+        const mark = tree?.researchTransfer;
+        let banner = document.getElementById('research-transfer-banner');
+        if (!tree || !mark || tree.research) {
+            banner?.remove();
+            return;
+        }
+        const r = strings.research;
+        const at = new Date(mark.at);
+        const date = Number.isNaN(at.getTime()) ? '' : at.toLocaleDateString(getCurrentLanguage());
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'research-transfer-banner';
+            banner.className = 'embedded-mode-banner research-transfer-banner visible';
+            banner.setAttribute('role', 'status');
+            document.body.appendChild(banner);
+        }
+        banner.innerHTML = `
+            <span class="embedded-mode-icon"><svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="4" width="13" height="10" rx="2"/><rect x="9" y="10" width="13" height="10" rx="2"/></svg></span>
+            <span class="embedded-mode-text"><span class="embedded-mode-detail">${esc(r.transferBanner(tree.name, date))}</span></span>
+            <button type="button" class="embedded-mode-link research-transfer-undo">${esc(r.transferNotDone)}</button>`;
+        const treeId = tree.id;
+        banner.querySelector('.research-transfer-undo')?.addEventListener('click', () => {
+            TreeManager.setResearchTransfer(treeId, null);
+            this.renderResearchTransferBanner();
+        });
+    },
+
+    /** The transfer banner follows the open tree (at start and at every switch); Safari's notice where a tree begins. */
+    initResearchTransferBanner(): void {
+        this.renderResearchTransferBanner();
+        window.addEventListener('strom:tree-switched', () => this.renderResearchTransferBanner());
+        this.placeBrowserNotices();
+    },
+
+    /**
+     * Desktop Safari cannot reach the research: said where a tree begins (the
+     * welcome screen, "Data elsewhere") so a family is entered in Chrome or
+     * Edge from the start. Not on an iPad or a phone (no research there), not
+     * once "Continue here" was chosen. The move by a file stays the rescue.
+     */
+    browserNoticeApplies(): boolean {
+        if (!needsTransfer(currentAppBrowser()) || !onComputer()) return false;
+        // An iPad asks for the desktop site as a Mac: its touch points give it away.
+        if (typeof navigator !== 'undefined' && (navigator.maxTouchPoints ?? 0) > 0) return false;
+        return isPromoAvailable(this.researchPromoContext());
+    },
+
+    browserNoticeDismissed(): boolean {
+        try { return localStorage.getItem(BROWSER_NOTICE_KEY) === 'here'; } catch { return false; }
+    },
+
+    /** The notice's markup; `stay` adds "Continue here" (the welcome screen and the import dialog). */
+    browserNoticeHtml(stay: boolean): string {
+        const r = strings.research;
+        return `
+            <div class="browser-notice" role="note">
+                <p>${esc(r.browserNotice)}</p>
+                <div class="browser-notice-actions">
+                    <button type="button" class="link-button" data-browser-notice="copy">${esc(r.browserNoticeCopy)}</button>
+                    ${stay ? `<button type="button" class="link-button" data-browser-notice="stay">${esc(r.browserNoticeStay)}</button>` : ''}
+                </div>
+            </div>`;
+    },
+
+    /** Its two actions, wherever it stands. */
+    bindBrowserNotice(root: ParentNode): void {
+        root.querySelectorAll<HTMLButtonElement>('[data-browser-notice]').forEach(btn => btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (btn.dataset.browserNotice === 'stay') {
+                try { localStorage.setItem(BROWSER_NOTICE_KEY, 'here'); } catch { /* shown again next time */ }
+                this.placeBrowserNotices();
+                return;
+            }
+            // A page in Safari cannot open Chrome: the address goes on the clipboard.
+            const url = new URL(window.location.href);
+            url.search = '';
+            url.hash = '';
+            void navigator.clipboard.writeText(url.toString()).then(
+                () => this.showToast(strings.connect.linkCopied, 5000),
+                () => this.showToast(url.toString(), 10000));
+        }));
+    },
+
+    /** Put the notice on the welcome screen and in "Data elsewhere" (or take it away). */
+    placeBrowserNotices(): void {
+        const show = this.browserNoticeApplies() && !this.browserNoticeDismissed();
+        const spots: [Element | null, 'prepend' | 'afterHeader'][] = [
+            [document.querySelector('#empty-state > .empty-state-text:not(.empty-state-locked)'), 'prepend'],
+            [document.querySelector('#import-file-modal .modal'), 'afterHeader'],
+        ];
+        for (const [spot, where] of spots) {
+            if (!spot) continue;
+            spot.querySelector(':scope > .browser-notice')?.remove();
+            if (!show) continue;
+            const holder = document.createElement('div');
+            holder.innerHTML = this.browserNoticeHtml(true).trim();
+            const notice = holder.firstElementChild as HTMLElement;
+            if (where === 'prepend') spot.prepend(notice);
+            else spot.querySelector(':scope > .modal-header')?.after(notice);
+            this.bindBrowserNotice(notice);
+        }
     },
 
     /** 4a–4c: waiting (no time limit here), waiting long, the command expired. */
@@ -293,7 +469,7 @@ export const researchInstallMethods = uiModule({
             <div class="modal-content install-body install-wait" data-phase="${phase}">
                 <div class="install-dots" aria-hidden="true"><span></span><span></span><span></span></div>
                 <h3 class="install-wait-title" role="status">${esc(long ? s.waitLongTitle : s.waitTitle)}</h3>
-                <p>${esc(long ? s.waitLongText : s.waitText)}</p>
+                <p>${esc(long ? s.waitLongText : needsTransfer(currentAppBrowser()) ? s.waitTextTransfer : s.waitText)}</p>
                 ${isChromium() ? `<p class="install-note">${esc(s.waitLna)}</p>` : ''}
                 <p class="install-wait-links">
                     <button type="button" class="link-button" data-act="again">${esc(s.showAgain)}</button>
@@ -374,6 +550,7 @@ export const researchInstallMethods = uiModule({
                 const code = el.parentElement?.querySelector<HTMLElement>('.install-line');
                 void this.copyResearchInstallLine(code, act === 'copy');
             } else if (act === 'send-link') void this.sendResearchInstallLink();
+            else if (act === 'transfer-download') void this.downloadResearchTransfer();
         }));
     },
 
@@ -407,7 +584,7 @@ export const researchInstallMethods = uiModule({
     /** "I already have it, start": the research takes the tree over by the same token (strom-research://new). */
     researchInstallHaveIt(): void {
         const record = this.ensureInstallRecord();
-        const url = researchNewUrl(record.token);
+        const url = researchNewUrl(record.token, currentAppBrowser(), record.file);
         if (url) this.handOverResearchLink(url);
         this.goResearchInstallStep('wait');
     },

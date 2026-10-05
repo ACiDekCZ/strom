@@ -3799,6 +3799,22 @@
             line-height: 1.5;
         }
         .empty-state-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+        /* Desktop Safari: the research needs Chrome or Edge — said where a tree begins (research-install-ui.ts). */
+        .browser-notice {
+            margin: 0 0 16px; padding: 10px 14px; border-radius: var(--r-md); text-align: left;
+            background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+            border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+            font-size: 13px; line-height: 1.45; color: var(--text);
+        }
+        .browser-notice p { margin: 0 0 6px; }
+        .browser-notice-actions { display: flex; gap: 16px; flex-wrap: wrap; }
+        .empty-state .browser-notice button {
+            padding: 2px 0; border: none; background: none; color: var(--primary); font-size: 13px; font-weight: 600;
+            box-shadow: none; min-height: 0;
+        }
+        @media (hover: hover) { .empty-state .browser-notice button:hover { background: none; text-decoration: underline; } }
+        .modal > .browser-notice { margin: 0 20px 4px; }
+        .install-body .browser-notice { margin: 12px 0 0; }
         .empty-state button {
             padding: 12px 24px;
             border: 1px solid transparent;
@@ -4006,6 +4022,16 @@
         .install-os-btn.active { background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; }
         .install-detected { font-size: 12px; color: var(--text-light); }
         .install-what { margin: 0 0 10px; font-size: 13px; line-height: 1.45; color: var(--text); }
+        /* Safari: the tree moves to another browser — said first, then downloaded (research-transfer.ts). */
+        .install-transfer {
+            display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: var(--r-md);
+            background: var(--surface-2); border: 1px solid var(--border);
+        }
+        .install-transfer p { margin: 0; }
+        .install-transfer-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .install-transfer-done { font-weight: 600; color: var(--primary-dark); }
+        .install-body .install-line-later { margin: 0 0 10px; font-size: 13px; color: var(--text-light); font-style: italic; }
+        @media (pointer: coarse) { .install-transfer-row button { min-height: 44px; } }
         .install-body .install-warn {
             font-size: 13px; padding: 8px 12px; border-radius: var(--r-md);
             background: var(--warning-soft); color: var(--warning-text);
@@ -4305,6 +4331,15 @@
         .embedded-mode-banner.visible {
             display: flex;
         }
+        /* A tree moving to another browser for the research (Safari): the same bar, an action instead of ×. */
+        .research-transfer-banner .research-transfer-undo {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px 0;
+            font-family: inherit;
+        }
+        @media (pointer: coarse) { .research-transfer-banner .research-transfer-undo { min-height: 44px; } }
         .embedded-mode-icon {
             display: inline-flex;
             color: var(--text-light);
@@ -6082,8 +6117,10 @@
             position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 95;
         }
         /* Below the standalone-file banner when it is shown (embedded copies). */
-        body:has(#embedded-mode-banner.visible) .collab-bar { top: 124px; }
-        body:has(#embedded-mode-banner.visible) .collab-badge { top: 124px; }
+        body:has(#embedded-mode-banner.visible) .collab-bar,
+        body:has(#research-transfer-banner) .collab-bar { top: 124px; }
+        body:has(#embedded-mode-banner.visible) .collab-badge,
+        body:has(#research-transfer-banner) .collab-badge { top: 124px; }
         .collab-bar {
             display: flex; align-items: center; gap: 10px;
             background: var(--primary); color: var(--on-primary);
@@ -9521,6 +9558,12 @@
         .modal .buttons .research-send-dialog-note { margin-right: auto; font-size: 12px; line-height: 1.4; color: var(--text-light); }
         .research-load-foot > button { white-space: nowrap; }
         .research-adopt-what { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+        .research-adopt-moved { margin: 0 0 12px; font-size: 13px; line-height: 1.45; color: var(--text); }
+        .research-adopt-moved-tag {
+            display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+            background: var(--primary-soft); color: var(--primary-dark); vertical-align: 1px;
+        }
+        .research-elsewhere-modal .install-line { user-select: all; }
         .research-adopt-eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-light); }
         .research-adopt-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
         .research-adopt-tile { display: flex; flex-direction: column; padding: 8px 12px; border-radius: 8px; background: var(--surface-2); }

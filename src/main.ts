@@ -439,6 +439,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         UI.initResearchSync();
         // Originals waiting for a research (their state lines).
         void UI.initOriginalsQueue();
+        // A tree downloaded in Safari to move to another browser for the research: its banner.
+        UI.initResearchTransferBanner();
 
         // Handle URL import parameter (from offline version redirect)
         handleUrlImportParam();
