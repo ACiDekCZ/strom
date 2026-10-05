@@ -448,11 +448,11 @@ export const researchAdoptMethods = uiModule({
                     <p>${esc(r.elsewhereText)}${time ? ` ${esc(r.elsewhereUntil(time))}` : ''}</p>
                     <div class="install-line-row">
                         <code class="install-line research-elsewhere-address" tabindex="0">${esc(address)}</code>
-                        <button type="button" class="install-copy" data-act="copy">${esc(r.elsewhereCopy)}</button>
                     </div>
                 </div>
                 <div class="buttons">
                     <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.close)}</button>
+                    <button type="button" class="primary" data-act="copy">${esc(r.elsewhereCopy)}</button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);
@@ -505,6 +505,7 @@ export const researchAdoptMethods = uiModule({
         overlay.id = ADOPT_ID;
         overlay.innerHTML = `
             <div class="modal modal--md research-adopt-modal research-send-dialog" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="research-adopt-title">
+                ${opts.movedFrom ? `<p class="research-adopt-moved"><span class="research-adopt-moved-tag">${esc(r.transferTag)}</span> ${esc(opts.movedFrom === 'mobile' ? r.transferCameMobile : r.transferCame(appBrowserName(opts.movedFrom)))}</p>` : ''}
                 <div class="modal-header">
                     <div class="audit-log-heading">
                         <div class="research-title-row"><h2 id="research-adopt-title">${esc(opts.install ? strings.install.adoptTitle : r.adoptTitle)}</h2>${researchTrialTagHtml()}</div>
@@ -513,7 +514,6 @@ export const researchAdoptMethods = uiModule({
                     </div>
                 </div>
                 <div class="research-send-dialog-body">
-                    ${opts.movedFrom ? `<p class="research-adopt-moved"><span class="research-adopt-moved-tag">${esc(r.transferTag)}</span> ${esc(opts.movedFrom === 'mobile' ? r.transferCameMobile : r.transferCame(appBrowserName(opts.movedFrom)))}</p>` : ''}
                     <div class="research-adopt-what">
                         <span class="research-adopt-eyebrow">${esc(t.handoffWhatGoes)}</span>
                         <div class="research-adopt-tiles">${tile(persons, t.handoffPersons(persons))}${tile(families, t.handoffFamilies(families))}${tile(sources, t.handoffSources(sources))}</div>

@@ -614,6 +614,7 @@ test.describe('Start research with this tree (G3)', () => {
         await expect(d).toContainText('The research waits until');
         const address = await d.locator('.research-elsewhere-address').textContent();
         expect(new URL(address!).searchParams.get('adopt')).toBe(BRIDGE);
+        await expect(d.locator('.buttons .primary')).toHaveText('Copy address');
         await expect(page.locator('#research-adopt-modal')).toHaveCount(0);
         await expect.poll(() => calls.cancel).toEqual([JSON.stringify({ reason: 'no-tree' })]);
         await page.keyboard.press('Escape');

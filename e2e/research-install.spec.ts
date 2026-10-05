@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page, Browser } from '@playwright/test';
 import fs from 'fs';
 import { openApp, card, createFirstPerson, addRelation, waitForPersist } from './helpers.js';
 
@@ -61,6 +61,39 @@ async function catchLinks(page: Page): Promise<void> {
     });
 }
 const launched = (page: Page) => page.evaluate(() => (window as unknown as { __launched: string[] }).__launched);
+
+/**
+ * The other browser on the computer: the research opens it with ?adopt= and
+ * holds the transfer file. Imports it, hands it over; the research gets the tree.
+ */
+async function handOverInChrome(browser: Browser, token: string, file: string): Promise<void> {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const other = await ctx.newPage();
+    const posted: string[] = [];
+    await other.route(`${BRIDGE}/**`, async (route) => {
+        const req = route.request();
+        const path = new URL(req.url()).pathname;
+        if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-headers': '*' } });
+        if (path.endsWith('/adopt') && req.method() === 'GET') {
+            return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ token, name: 'My Family Tree', transfer: true }) });
+        }
+        if (path.endsWith('/transfer')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: file });
+        if (path.endsWith('/adopt') && req.method() === 'POST') {
+            posted.push(req.postData() ?? '');
+            return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ tree: UUID, head: 'abc1234' }) });
+        }
+        return route.fulfill({ status: 404, headers: cors, body: '' });
+    });
+    await openApp(other);
+    await other.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+    const adopt = other.locator('#research-adopt-modal');
+    await expect(adopt.locator('.research-adopt-moved')).toHaveText('Move The tree came from Safari. After the hand-over, work goes on here.');
+    await adopt.locator('#research-adopt-confirm').click();
+    await expect.poll(() => posted.length).toBe(1);
+    expect(posted[0]).toContain('1 NAME Jan /Novak/');
+    await expect(other.locator('.install-ready-moved')).toHaveText('A copy of the tree stayed in Safari. Once everything here is right, it can be removed there.');
+    await ctx.close();
+}
 
 async function setup(page: Page, platform = 'macOS'): Promise<void> {
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -332,11 +365,15 @@ test.describe('installing the research from the app', () => {
         await setup(page);
         await toInstallStep(page);
         const d = dialog(page);
+        await expect(d.locator('.install-transfer-head')).toHaveText(/Moving the tree\s*Safari → another browser/);
         await expect(d.locator('.install-transfer')).toContainText("Safari can't connect to the research");
         await expect(d.locator('.install-transfer')).toContainText('the tree “My Family Tree” therefore moves to another browser');
         // No line before the tree is downloaded.
         await expect(d.locator('.install-line')).toHaveCount(0);
         await expect(d.locator('.install-line-later')).toHaveText('The line appears once the tree is downloaded.');
+        await expect(d.locator('[data-act="pasted"]')).toBeDisabled();
+        // The line's place has the line's height: the dialog does not jump at the download.
+        expect((await d.locator('.install-line-later').boundingBox())!.height).toBeGreaterThanOrEqual(38);
         const token = (await installRecord(page))!.token;
         const [download] = await Promise.all([
             page.waitForEvent('download'),
@@ -348,6 +385,9 @@ test.describe('installing the research from the app', () => {
         expect(text.startsWith(`{"stromTransfer":{"v":1,"token":"${token}","from":"safari","tree":"My Family Tree","persons":1,`)).toBe(true);
         expect(Object.values(JSON.parse(text).persons as Record<string, { firstName: string }>).map(p => p.firstName)).toContain('Jan');
         await expect(d.locator('.install-transfer-done')).toHaveText('✓ Downloaded');
+        await expect(d.locator('.install-transfer-file')).toHaveText(file);
+        await expect(d.locator('.install-transfer')).toHaveClass(/install-transfer-downloaded/);
+        await expect(d.locator('[data-act="pasted"]')).toBeEnabled();
         expect(await d.locator('.install-line').first().getAttribute('data-line'))
             .toContain(`STROM_FROM_APP=${token} STROM_FROM_APP_NAME='My Family Tree' STROM_FROM_BROWSER=safari STROM_FROM_FILE=${file} STROM_APP_URL=`);
         expect((await installRecord(page))!.file).toBe(file);
@@ -374,7 +414,7 @@ test.describe('installing the research from the app', () => {
         const welcome = page.locator('#empty-state .browser-notice');
         await expect(welcome).toContainText("Ancestor research planned? Safari can't connect to the research. Best to start straight in Chrome or Edge, or to install the research first");
         // On a Mac Chrome may be missing: its download is offered (Windows has Edge).
-        await expect(welcome.locator('[data-browser-notice="chrome"]')).toHaveText('Download Chrome');
+        await expect(welcome.locator('[data-browser-notice="chrome"]')).toHaveText('Download Chrome ↗');
         // "Install the research" opens the installation.
         await welcome.locator('[data-browser-notice="install"]').click();
         await expect(dialog(page).locator('.research-install-dialog')).toHaveAttribute('data-step', 'what');
@@ -419,6 +459,38 @@ test.describe('installing the research from the app', () => {
         await expect(dialog(page).locator('.research-install-dialog')).toHaveAttribute('data-step', 'wait');
     });
 
+    test('an encrypted tree moves too: said in amber, the file is plain JSON, the other browser imports and hands it over', async ({ page, browser }) => {
+        await asBrowser(page, SAFARI_UA);
+        await setup(page);
+        await waitForPersist(page, 'Jan');
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        const settings = page.locator('#settings-modal');
+        await settings.locator('#encryption-toggle').check();
+        const setupPwd = page.locator('#password-setup-modal');
+        await setupPwd.locator('#password-setup-input').fill('Tajne-heslo-42');
+        await setupPwd.locator('#password-setup-confirm').fill('Tajne-heslo-42');
+        await setupPwd.getByRole('button', { name: 'Save' }).click();
+        await expect(settings.locator('#encryption-status')).toHaveText('Encryption enabled');
+        await page.reload();
+        const prompt = page.locator('#password-prompt-modal');
+        await prompt.locator('#password-prompt-input').fill('Tajne-heslo-42');
+        await prompt.locator('#password-prompt-input').press('Enter');
+        await expect(card(page, 'Jan')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.closeBrowserNoticeFloat());
+        await toInstallStep(page);
+        const d = dialog(page);
+        await expect(d.locator('.install-transfer .install-warn')).toHaveText('The file for the move is not encrypted, like any JSON export.');
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            d.locator('[data-act="transfer-download"]').click(),
+        ]);
+        const token = (await installRecord(page))!.token;
+        const text = await fs.promises.readFile(await download.path(), 'utf8');
+        expect(JSON.parse(text).stromTransfer.token).toBe(token);
+        expect(Object.values(JSON.parse(text).persons as Record<string, { firstName: string }>).map(p => p.firstName)).toContain('Jan');
+        await handOverInChrome(browser, token, text);
+    });
+
     test('the copy a move left behind asks at its opening: keep it for now (banner, one reminder), the move did not happen, remove it', async ({ page }) => {
         await asBrowser(page, SAFARI_UA);
         await setup(page);
@@ -450,6 +522,13 @@ test.describe('installing the research from the app', () => {
         await page.keyboard.press('Escape');
         await expect(q).toHaveCount(0);
         await expect(banner).toBeVisible();
+        // A click outside the question = keep it for now.
+        await page.reload();
+        await expect(q).toBeVisible();
+        await expect(q.locator('[data-act="keep"]')).toBeFocused();
+        await q.click({ position: { x: 5, y: 5 } });
+        await expect(q).toHaveCount(0);
+        await expect(banner).toBeVisible();
         // The move did not happen: the mark goes, nothing else.
         await page.reload();
         await q.locator('[data-act="not-done"]').click();
@@ -461,6 +540,7 @@ test.describe('installing the research from the app', () => {
         await page.reload();
         await q.locator('[data-act="remove"]').click();
         const confirm = page.locator('.modal-overlay.active').filter({ hasText: 'The tree stays in the other browser and in the research. Here it is removed.' });
+        await expect(confirm).toContainText('Remove this copy?');
         await confirm.getByRole('button', { name: 'Remove this copy' }).click();
         await expect(page.locator('.toast')).toContainText('The copy of “My Family Tree” was removed.');
         await expect(page.locator('#empty-state')).toBeVisible();
@@ -578,6 +658,21 @@ test.describe('installing the research from the app', () => {
 
 test.describe('installing the research from a phone', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('the old copy\'s question at 360 px: the answers stacked, the primary on top, the removal last, 44 px each', async ({ page }) => {
+        await page.setViewportSize({ width: 360, height: 780 });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await waitForPersist(page, 'Jan');
+        await page.evaluate(() => window.Strom.TreeManager.setResearchTransfer(window.Strom.TreeManager.getActiveTreeId()!, { at: '2026-10-05T18:00:00.000Z', mobile: true }));
+        await page.reload();
+        const q = page.locator('#research-old-copy-modal');
+        await expect(q.locator('h2')).toHaveText('This tree is now on a computer');
+        const boxes = await Promise.all(['keep', 'not-done', 'remove'].map(a => q.locator(`[data-act="${a}"]`).boundingBox()));
+        expect(boxes[0]!.y).toBeLessThan(boxes[1]!.y);
+        expect(boxes[1]!.y).toBeLessThan(boxes[2]!.y);
+        for (const b of boxes) expect(b!.height).toBeGreaterThanOrEqual(44);
+    });
 
     test('the tree goes to the computer as a file: downloaded, then the line for the computer\'s terminal (its system picked here)', async ({ page }) => {
         await openApp(page);

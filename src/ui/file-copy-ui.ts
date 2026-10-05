@@ -549,7 +549,7 @@ export const fileCopyMethods = uiModule({
             if (sessionStorage.getItem(PRIVATE_NOTICE_KEY)) return;
             sessionStorage.setItem(PRIVATE_NOTICE_KEY, '1');
         } catch { /* said at every load then */ }
-        this.showToast(strings.fileCopy.noticePrivate, 12000, { closable: true, kind: 'private-window' });
+        this.showToast(strings.fileCopy.noticePrivate, 8000, { closable: true, kind: 'private-window' });
     },
 
     /** The short status for the backups dialog: storage, the open tree, other unsaved trees. */

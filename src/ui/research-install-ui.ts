@@ -286,7 +286,7 @@ export const researchInstallMethods = uiModule({
                     <code class="install-line" tabindex="0" data-line="${esc(line)}">${lineHtml(line, record.token)}</code>
                     <button type="button" class="install-copy${st.copied ? ' copied' : ''}" data-act="copy">${esc(st.copied ? s.copied : s.copy)}</button>
                 </div>
-                <p class="install-after">${esc(st.copied ? s.afterCopied : s.after)}</p>` : `<p class="install-line-later">${esc(s.transferLineAfter)}</p>`}
+                <p class="install-after">${esc(st.copied ? s.afterCopied : s.after)}</p>` : `<div class="install-line-row"><p class="install-line-later">${esc(s.transferLineAfter)}</p></div>`}
                 ${lineShown ? `<details class="install-other"${st.otherOpen ? ' open' : ''}>
                     <summary>${esc(s.other)}</summary>
                     <p>${esc(s.npmIntro)}</p>
@@ -301,7 +301,7 @@ export const researchInstallMethods = uiModule({
                 <button type="button" class="link-button" data-act="have">${esc(s.haveIt)}</button>
                 <button type="button" class="link-button" data-act="back">${esc(s.back)}</button>
                 <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.close)}</button>
-                <button type="button" class="primary" data-act="pasted">${esc(s.pasted)}</button>
+                <button type="button" class="primary" data-act="pasted"${lineShown ? '' : ' disabled'}>${esc(s.pasted)}</button>
             </div>`;
     },
 
@@ -309,17 +309,24 @@ export const researchInstallMethods = uiModule({
     researchInstallTransferHtml(file: string | null, treeName: string): string {
         const s = strings.install;
         const lead = noConnectLead();
+        const people = !!treeName && hasPeople();
+        const from = appBrowserName(currentAppBrowser()) || s.thisBrowser;
         return `
-            <div class="install-what install-transfer">
-                <p>${esc(treeName && hasPeople() ? s.transferText(treeName, lead) : s.transferTextEmpty(lead))}</p>
+            <div class="install-what install-transfer${file ? ' install-transfer-downloaded' : ''}">
+                <div class="install-transfer-head">
+                    <strong>${esc(s.transferTitle)}</strong>
+                    <span class="install-transfer-route">${esc(people ? s.transferRoute(from) : s.transferRouteEmpty(from))}</span>
+                </div>
+                <p class="install-transfer-text">${esc(people ? s.transferText(treeName, lead) : s.transferTextEmpty(lead))}</p>
                 <div class="install-transfer-row">
                     ${file
                         ? `<span class="install-transfer-done">${esc(s.transferDownloaded)}</span>
+                           <code class="install-transfer-file">${esc(file)}</code>
                            <button type="button" class="link-button" data-act="transfer-download">${esc(s.transferAgain)}</button>`
                         : `<button type="button" class="secondary" data-act="transfer-download">${esc(s.transferDownload)}</button>`}
                 </div>
-                ${file ? `<p class="install-note">${esc(s.transferFileNote)}</p>` : ''}
-                ${SettingsManager.isEncryptionEnabled() ? `<p class="install-note">${esc(s.transferEncrypted)}</p>` : ''}
+                <p class="install-transfer-note">${esc(s.transferFileNote)}</p>
+                ${SettingsManager.isEncryptionEnabled() ? `<p class="install-warn">${esc(s.transferEncrypted)}</p>` : ''}
             </div>`;
     },
 
@@ -424,13 +431,14 @@ export const researchInstallMethods = uiModule({
                     <p>${esc(mark.mobile ? r.oldCopyTextMobile(tree.name, date) : r.oldCopyText(tree.name, date))}</p>
                 </div>
                 <div class="buttons">
-                    <button type="button" class="secondary research-old-copy-remove" data-act="remove">${esc(r.oldCopyRemove)}</button>
+                    <button type="button" class="link-button research-old-copy-remove" data-act="remove">${esc(r.oldCopyRemove)}</button>
                     <button type="button" class="secondary" data-act="not-done">${esc(r.transferNotDone)}</button>
                     <button type="button" class="primary" data-act="keep" data-dismiss>${esc(r.oldCopyKeep)}</button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);
         this.pushDialog(OLD_COPY_ID);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) this.keepResearchOldCopy(); });
         overlay.querySelectorAll<HTMLElement>('[data-act]').forEach(el => el.addEventListener('click', () => {
             const act = el.dataset.act;
             if (act === 'keep') this.keepResearchOldCopy();
@@ -462,7 +470,7 @@ export const researchInstallMethods = uiModule({
         if (!tree) return;
         const r = strings.research;
         this.closeResearchOldCopy();
-        const ok = await this.showConfirm(tree.researchTransfer?.mobile ? r.oldCopyConfirmMobile : r.oldCopyConfirm, r.oldCopyRemove,
+        const ok = await this.showConfirm(tree.researchTransfer?.mobile ? r.oldCopyConfirmMobile : r.oldCopyConfirm, r.oldCopyConfirmTitle,
             { confirmLabel: r.oldCopyRemove, variant: 'danger' });
         if (!ok) {
             // Not removed: the question again (nothing was decided).
@@ -541,8 +549,8 @@ export const researchInstallMethods = uiModule({
                 <div class="browser-notice-actions">
                     ${opts.install ? `<button type="button" class="link-button" data-browser-notice="install">${esc(r.browserNoticeInstall)}</button>` : ''}
                     <button type="button" class="link-button" data-browser-notice="copy">${esc(r.browserNoticeCopy)}</button>
-                    ${chrome ? `<button type="button" class="link-button" data-browser-notice="chrome">${esc(r.browserNoticeChrome)}</button>` : ''}
-                    ${opts.stay ? `<button type="button" class="link-button" data-browser-notice="stay">${esc(r.browserNoticeStay)}</button>` : ''}
+                    ${chrome ? `<button type="button" class="link-button" data-browser-notice="chrome">${esc(r.browserNoticeChrome)} <span aria-hidden="true">↗</span></button>` : ''}
+                    ${opts.stay ? `<button type="button" class="link-button browser-notice-stay" data-browser-notice="stay">${esc(r.browserNoticeStay)}</button>` : ''}
                 </div>
             </div>`;
     },
@@ -726,7 +734,7 @@ export const researchInstallMethods = uiModule({
                     <code class="install-line" tabindex="0" data-line="${esc(line)}">${lineHtml(line, record.token)}</code>
                     <button type="button" class="install-copy${st.copied ? ' copied' : ''}" data-act="copy">${esc(st.copied ? s.copied : s.copy)}</button>
                 </div>
-                ${canShare ? `<button type="button" class="secondary install-send-line" data-act="send-line">${esc(s.sendLine)}</button>` : ''}
+                ${canShare ? `<button type="button" class="primary install-send-line" data-act="send-line">${esc(s.sendLine)}</button>` : ''}
                 <p class="install-note">${esc(s.mobileFileNote)}</p>`;
         }
         return `
@@ -736,10 +744,10 @@ export const researchInstallMethods = uiModule({
                     ${file
                         ? `<span class="install-transfer-done">${esc(s.transferDownloaded)}</span>
                            <button type="button" class="link-button" data-act="transfer-download">${esc(s.transferAgain)}</button>`
-                        : `<button type="button" class="secondary" data-act="transfer-download">${esc(s.transferDownload)}</button>`}
+                        : `<button type="button" class="primary" data-act="transfer-download">${esc(s.transferDownload)}</button>`}
                 </div>
                 ${lineBlock}
-                ${SettingsManager.isEncryptionEnabled() ? `<p class="install-note">${esc(s.transferEncrypted)}</p>` : ''}
+                ${SettingsManager.isEncryptionEnabled() ? `<p class="install-warn">${esc(s.transferEncrypted)}</p>` : ''}
             </div>`;
     },
 

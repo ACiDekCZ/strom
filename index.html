@@ -3807,7 +3807,9 @@
             font-size: 13px; line-height: 1.45; color: var(--text);
         }
         .browser-notice p { margin: 0 0 6px; }
-        .browser-notice-actions { display: flex; gap: 16px; flex-wrap: wrap; }
+        .browser-notice-actions { display: flex; gap: 4px 16px; flex-wrap: wrap; }
+        /* "Continue here" closes, offers nothing: grey. */
+        .browser-notice .browser-notice-stay { color: var(--text-light) !important; font-weight: 500 !important; }
         .empty-state .browser-notice button {
             padding: 2px 0; border: none; background: none; color: var(--primary); font-size: 13px; font-weight: 600;
             box-shadow: none; min-height: 0;
@@ -3815,15 +3817,24 @@
         @media (hover: hover) { .empty-state .browser-notice button:hover { background: none; text-decoration: underline; } }
         .modal > .browser-notice { margin: 0 20px 4px; }
         /* Once over a tree, at its first person: a floating card. */
+        /* White over the tree with an accent edge: readable, not taken for an error. Bottom left, clear of the zoom. */
         .browser-notice-float {
             position: fixed; left: 24px; bottom: 24px; z-index: 180; margin: 0;
             width: 384px; max-width: calc(100vw - 32px); box-sizing: border-box;
             padding: 14px 40px 12px 16px; box-shadow: var(--shadow-lg);
-            background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+            background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border));
         }
         .browser-notice-float .browser-notice-close { position: absolute; top: 6px; right: 6px; }
+        .browser-notice-float .browser-notice-actions .link-button { padding: 2px 0; min-height: 0; margin: 0; }
         @media (max-width: 1024px) {
-            .browser-notice-float { left: 16px; right: 16px; width: auto; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+            .browser-notice-float { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+        }
+        /* A narrow window: across the width, square, on the bottom bar. */
+        @media (max-width: 767px) {
+            .browser-notice-float {
+                left: 0; right: 0; width: auto; max-width: none; border-radius: 0;
+                border-width: 1px 0 0; bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+            }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .browser-notice-float { bottom: 16px; }
@@ -4043,9 +4054,22 @@
             background: var(--surface-2); border: 1px solid var(--border);
         }
         .install-transfer p { margin: 0; }
+        .install-transfer-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+        .install-transfer-head strong { font-size: 13px; color: var(--text); }
+        .install-transfer-route { font-size: 12px; font-weight: 600; color: var(--text-light); }
+        /* Downloaded: the text steps back, the line takes the attention. */
+        .install-body .install-transfer-downloaded .install-transfer-text { color: var(--text-light); }
         .install-transfer-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         .install-transfer-done { font-weight: 600; color: var(--primary-dark); }
-        .install-body .install-line-later { margin: 0 0 10px; font-size: 13px; color: var(--text-light); font-style: italic; }
+        .install-transfer-file { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--text); word-break: break-all; }
+        .install-body .install-transfer .install-transfer-note { font-size: 12px; color: var(--text-light); }
+        .install-transfer .install-warn { margin: 0; }
+        /* The line's place before the download: the line's own height, dashed, so the dialog does not jump. */
+        .install-body .install-line-later {
+            flex: 1; margin: 0; padding: 10px 12px; min-height: 40px; box-sizing: border-box;
+            border: 1px dashed var(--border); border-radius: var(--r-md);
+            font-size: 13px; color: var(--text-light); font-style: italic; display: flex; align-items: center;
+        }
         @media (pointer: coarse) { .install-transfer-row button { min-height: 44px; } }
         .install-body .install-warn {
             font-size: 13px; padding: 8px 12px; border-radius: var(--r-md);
@@ -4100,14 +4124,32 @@
         .install-send-link { min-height: 44px; }
         /* A phone's move to a computer: the download, then the line (research-install-ui.ts). */
         .install-mobile-box.install-transfer { align-items: stretch; gap: 10px; }
-        .install-mobile-box .install-transfer-row, .install-mobile-box .install-os { align-self: flex-start; }
+        .install-mobile-box .install-transfer-row { align-self: flex-start; }
+        /* The system switch across the width: 36 px segments in a 44 px row. */
+        .install-mobile-box .install-os { display: flex; align-self: stretch; min-height: 44px; align-items: stretch; }
+        .install-mobile-box .install-os-btn { flex: 1; min-height: 36px; }
+        /* The line shortened to three lines (copied and sent whole). */
+        .install-mobile-box .install-line {
+            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+        }
         .install-mobile-line-label { font-size: 13px; font-weight: 600; color: var(--text); }
         .install-mobile-box .install-note { margin: 0; }
         .install-send-line { min-height: 44px; align-self: flex-start; }
-        .install-ready-moved { margin: 12px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
-        /* The copy left behind by a move: asked at its opening. */
+        /* A reminder only: under a rule, smaller than the text. */
+        .install-ready-moved {
+            margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--divider);
+            font-size: 12px; line-height: 1.45; color: var(--text-light);
+        }
+        /* The copy left behind by a move: asked at its opening. The removal a red link on its own. */
+        @media (min-width: 641px) { .modal.modal--sm.research-old-copy { width: 520px; max-width: min(520px, 94vw); } }
         .research-old-copy .buttons { flex-wrap: wrap; }
-        .research-old-copy .research-old-copy-remove { color: var(--danger); margin-right: auto; }
+        .research-old-copy .research-old-copy-remove { color: var(--danger); margin-right: auto; padding-left: 0; padding-right: 0; }
+        @media (max-width: 640px) {
+            .research-old-copy .buttons { flex-direction: column-reverse; align-items: stretch; }
+            .research-old-copy .buttons button { width: 100%; min-height: 44px; margin: 0; }
+            /* "Keep it for now" answers the question: on top, though it is also the dismissal. */
+            .research-old-copy .buttons > .primary { order: 1; }
+        }
         .install-ready-rows { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 12px 0 0; font-size: 13px; }
         .install-ready-rows dt { font-weight: 600; color: var(--text); }
         .install-ready-rows dd { margin: 0; color: var(--text-light); }
@@ -4357,13 +4399,15 @@
             display: flex;
         }
         /* A tree moving to another browser for the research (Safari): the same bar, an action instead of ×. */
+        .research-transfer-banner { background: var(--info-soft); }
+        /* The only way to take the bar away: a button, not a link. */
         .research-transfer-banner .research-transfer-undo {
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 4px 0;
-            font-family: inherit;
+            margin-left: auto; flex-shrink: 0; cursor: pointer;
+            padding: 6px 12px; border-radius: var(--r-md);
+            background: var(--surface); color: var(--text); border: 1px solid var(--border);
+            font-family: inherit; font-size: 13px; font-weight: 600; text-decoration: none;
         }
+        @media (hover: hover) { .research-transfer-banner .research-transfer-undo:hover { background: var(--hover-bg); } }
         @media (pointer: coarse) { .research-transfer-banner .research-transfer-undo { min-height: 44px; } }
         .embedded-mode-icon {
             display: inline-flex;
@@ -9583,7 +9627,11 @@
         .modal .buttons .research-send-dialog-note { margin-right: auto; font-size: 12px; line-height: 1.4; color: var(--text-light); }
         .research-load-foot > button { white-space: nowrap; }
         .research-adopt-what { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
-        .research-adopt-moved { margin: 0 0 12px; font-size: 13px; line-height: 1.45; color: var(--text); }
+        /* Above the title, the info colour of the moving tree's bar on the other side. */
+        .research-adopt-moved {
+            margin: 0; padding: 8px 20px; font-size: 13px; line-height: 1.45; color: var(--text);
+            background: var(--info-soft); border-radius: var(--r-xl) var(--r-xl) 0 0;
+        }
         .research-adopt-moved-tag {
             display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
             background: var(--primary-soft); color: var(--primary-dark); vertical-align: 1px;
