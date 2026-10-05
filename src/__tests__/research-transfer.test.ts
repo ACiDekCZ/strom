@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     detectAppBrowser, needsTransfer, appBrowserName, transferFileName, isTransferFileName,
-    buildTransferJson, readTransferJson, TRANSFER_KEY,
+    buildTransferJson, readTransferJson, TRANSFER_KEY, bridgeMovesTrees,
 } from '../research-transfer.js';
 import { legacyInstallLine, legacyNpmLines, sanitizeInstallRecord, newInstallRecord } from '../research-install.js';
 import { researchNewUrl, sanitizeAdoptOffer } from '../research-link.js';
@@ -143,5 +143,16 @@ describe('the transfer file', () => {
         expect(odd?.mark).toMatchObject({ from: 'other', persons: 0 });
         // From a phone or tablet: said as such on the computer.
         expect(readTransferJson(buildTransferJson({ ...mark, from: 'mobile' }, data), TOKEN)?.mark.from).toBe('mobile');
+    });
+});
+
+describe('an older research', () => {
+    it('moves trees only when its bridge says adopt.transfer (1.12.1)', () => {
+        expect(bridgeMovesTrees({ strom: '1.12.1', features: ['sync.ids', 'adopt.transfer'] })).toBe(true);
+        // 1.12.0 lists features without it; before 1.12.0-rc.20 there were none.
+        expect(bridgeMovesTrees({ strom: '1.12.0', features: ['sync.ids', 'family.alone'] })).toBe(false);
+        expect(bridgeMovesTrees({ strom: '1.11.0' })).toBe(false);
+        expect(bridgeMovesTrees({ features: 'adopt.transfer' })).toBe(false);
+        expect(bridgeMovesTrees(null)).toBe(false);
     });
 });

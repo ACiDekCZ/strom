@@ -448,7 +448,7 @@ test.describe('Start research with this tree (G3)', () => {
     });
 
     async function routeBridge(page: Page, token: string, calls: { cancel: string[]; posted: string[] },
-        extra: { offer?: Record<string, unknown>; transfer?: string } = {}): Promise<void> {
+        extra: { offer?: Record<string, unknown>; transfer?: string; status?: Record<string, unknown> } = {}): Promise<void> {
         await page.route(`${BRIDGE}/**`, async (route) => {
             const req = route.request();
             const path = new URL(req.url()).pathname;
@@ -456,6 +456,9 @@ test.describe('Start research with this tree (G3)', () => {
             if (path.endsWith('/adopt') && req.method() === 'GET') {
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
                     body: JSON.stringify({ token, name: 'Dvořákovi – výzkum', ...extra.offer }) });
+            }
+            if (path.endsWith('/status') && extra.status) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(extra.status) });
             }
             if (path.endsWith('/transfer') && req.method() === 'GET' && extra.transfer !== undefined) {
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: extra.transfer });
@@ -619,6 +622,32 @@ test.describe('Start research with this tree (G3)', () => {
         await expect.poll(() => calls.cancel).toEqual([JSON.stringify({ reason: 'no-tree' })]);
         await page.keyboard.press('Escape');
         await expect(d).toHaveCount(0);
+    });
+
+    test('an unknown token from an older research (1.12.0): the elsewhere dialog says a tree in Safari moves only with 1.12.1, and how', async ({ page }) => {
+        await appTree(page, ALL);
+        const empty = { strom: '', tree: { id: UUID, name: 'Dvořákovi – výzkum', lang: 'en' }, persons: 0, families: 0 };
+        for (const [status, old] of [
+            [{ ...empty, strom: '1.12.0', features: ['sync.ids', 'family.alone'] }, true],
+            [{ ...empty, strom: '1.12.1', features: ['sync.ids', 'adopt.transfer'] }, false],
+        ] as const) {
+            const calls = { cancel: [] as string[], posted: [] as string[] };
+            await page.unrouteAll({ behavior: 'ignoreErrors' });
+            await routeBridge(page, 'x'.repeat(43), calls, { status });
+            await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+            const d = page.locator('#research-elsewhere-modal');
+            await expect(d.locator('h2')).toHaveText('The tree is in another browser');
+            const note = d.locator('.research-elsewhere-old');
+            if (old) {
+                await expect(note).toHaveText('A tree in Safari or on a phone moves over only with the research 1.12.1 or newer, and this one is older. There: Ancestor research, then the installation line into the terminal. The line updates the research and moves the tree.');
+                expect(await note.evaluate(el => getComputedStyle(el).fontSize)).toBe('13px');
+            } else {
+                await expect(note).toHaveCount(0);
+            }
+            await expect.poll(() => calls.cancel).toEqual([JSON.stringify({ reason: 'no-tree' })]);
+            await page.keyboard.press('Escape');
+            await expect(d).toHaveCount(0);
+        }
     });
 
     test('a tree moved from Safari: the research\'s file imported (images too), handed over; declined, nothing is left', async ({ page }) => {

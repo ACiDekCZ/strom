@@ -12,7 +12,7 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { AppBrowser, appBrowserName, currentAppBrowser, needsTransfer, readTransferJson } from '../research-transfer.js';
+import { AppBrowser, appBrowserName, bridgeMovesTrees, currentAppBrowser, needsTransfer, readTransferJson } from '../research-transfer.js';
 import { validateJsonImport } from '../merge/validation.js';
 import { TreeId, TreeMetadata, StromData, STROM_DATA_VERSION, ResearchSendMode } from '../types.js';
 import { readInstallRecord, installPhase, INSTALL_TTL_MS } from '../research-install.js';
@@ -52,6 +52,20 @@ function esc(text: string): string {
     return text
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/**
+ * Whether the research behind this bridge moves a tree from another browser
+ * (its /status, read without noting anything: the research waits with an
+ * empty tree this browser does not know). Not reached: taken as able.
+ */
+async function researchMovesTrees(base: string): Promise<boolean> {
+    try {
+        const res = await fetchWithTimeout(`${base}/status`, 4000);
+        return !res.ok || bridgeMovesTrees(await res.json());
+    } catch {
+        return true;
+    }
 }
 
 export const researchAdoptMethods = uiModule({
@@ -189,7 +203,8 @@ export const researchAdoptMethods = uiModule({
         if (!offer || !tree) {
             postCancel(cancelUrl, 'no-tree');
             // Another browser or profile has it: the address to open there (the research keeps waiting).
-            if (offer) this.showResearchElsewhere(raw, offer.until);
+            // An older research (1.12.0) takes no tree from Safari or a phone: said, with the way to update it.
+            if (offer) this.showResearchElsewhere(raw, offer.until, !offer.transfer && !await researchMovesTrees(bridge.base));
             else this.showToast(r.adoptUnknown, 6000);
             return;
         }
@@ -455,7 +470,7 @@ export const researchAdoptMethods = uiModule({
      * The research asks for a tree this browser does not have (another
      * browser, another profile): the address to open where the tree is.
      */
-    showResearchElsewhere(rawBridge: string, until: string | null): void {
+    showResearchElsewhere(rawBridge: string, until: string | null, oldResearch = false): void {
         const r = strings.research;
         document.getElementById(ELSEWHERE_ID)?.remove();
         const url = new URL(window.location.href);
@@ -480,6 +495,7 @@ export const researchAdoptMethods = uiModule({
                     <div class="install-line-row">
                         <code class="install-line research-elsewhere-address" tabindex="0">${esc(address)}</code>
                     </div>
+                    ${oldResearch ? `<p class="research-elsewhere-old">${esc(r.elsewhereOldResearch)}</p>` : ''}
                 </div>
                 <div class="buttons">
                     <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.close)}</button>
