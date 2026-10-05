@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import fs from 'fs';
-import { openApp, card, createFirstPerson } from './helpers.js';
+import { openApp, card, createFirstPerson, addRelation, waitForPersist } from './helpers.js';
 
 /**
  * Installing Strom Research from the app: "What it is" → the line for this
@@ -40,6 +40,27 @@ async function toInstallStep(page: Page): Promise<void> {
     await dialog(page).locator('[data-act="install"]').click();
     await expect(dialog(page).locator('.research-install-dialog')).toHaveAttribute('data-step', 'install');
 }
+
+const SAFARI_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
+const FIREFOX_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14.5; rv:143.0) Gecko/20100101 Firefox/143.0';
+
+/** Pretend to be a browser without Client Hints (Safari, Firefox). */
+async function asBrowser(page: Page, ua: string): Promise<void> {
+    await page.addInitScript((u) => {
+        Object.defineProperty(navigator, 'userAgent', { configurable: true, get: () => u });
+        Object.defineProperty(navigator, 'userAgentData', { configurable: true, get: () => undefined });
+    }, ua);
+}
+
+/** strom-research:// links the app hands over, kept instead of opened. */
+async function catchLinks(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const launched: string[] = [];
+        (window as unknown as { __launched: string[] }).__launched = launched;
+        window.Strom.UI.handOverResearchLink = (url: string) => { launched.push(url); };
+    });
+}
+const launched = (page: Page) => page.evaluate(() => (window as unknown as { __launched: string[] }).__launched);
 
 async function setup(page: Page, platform = 'macOS'): Promise<void> {
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -351,7 +372,13 @@ test.describe('installing the research from the app', () => {
         await page.setViewportSize({ width: 1280, height: 900 });
         await openApp(page);
         const welcome = page.locator('#empty-state .browser-notice');
-        await expect(welcome).toContainText('Ancestor research planned? The family is better entered straight in Chrome or Edge.');
+        await expect(welcome).toContainText("Ancestor research planned? Safari can't connect to the research. Best to start straight in Chrome or Edge, or to install the research first");
+        // On a Mac Chrome may be missing: its download is offered (Windows has Edge).
+        await expect(welcome.locator('[data-browser-notice="chrome"]')).toHaveText('Download Chrome');
+        // "Install the research" opens the installation.
+        await welcome.locator('[data-browser-notice="install"]').click();
+        await expect(dialog(page).locator('.research-install-dialog')).toHaveAttribute('data-step', 'what');
+        await page.evaluate(() => window.Strom.UI.closeResearchInstall());
         await page.evaluate(() => window.Strom.UI.showImportFileDialog());
         await expect(page.locator('#import-file-modal .browser-notice')).toBeVisible();
         await page.evaluate(() => window.Strom.UI.closeImportFileDialog());
@@ -359,6 +386,7 @@ test.describe('installing the research from the app', () => {
         await page.evaluate(() => window.Strom.UI.showResearchInstall());
         await expect(dialog(page).locator('.browser-notice [data-browser-notice="copy"]')).toBeVisible();
         await expect(dialog(page).locator('.browser-notice [data-browser-notice="stay"]')).toHaveCount(0);
+        await expect(dialog(page).locator('.browser-notice [data-browser-notice="install"]')).toHaveCount(0);
         await page.evaluate(() => window.Strom.UI.closeResearchInstall());
         await welcome.locator('[data-browser-notice="stay"]').click();
         await expect(page.locator('.browser-notice')).toHaveCount(0);
@@ -370,6 +398,155 @@ test.describe('installing the research from the app', () => {
         await page.reload();
         await expect(page.locator('#empty-state')).toBeVisible();
         await expect(page.locator('.browser-notice')).toHaveCount(0);
+    });
+
+    test('Safari: "I already have it" sends the tree as a file first, and the link names it; "Start research" leads there too', async ({ page }) => {
+        await asBrowser(page, SAFARI_UA);
+        await setup(page);
+        await catchLinks(page);
+        // An installed research cannot be reached from Safari: the Install step, its file.
+        await page.evaluate(() => window.Strom.UI.startResearchAdopt(window.Strom.DataManager.getCurrentTreeId()!));
+        await expect(dialog(page).locator('.research-install-dialog')).toHaveAttribute('data-step', 'install');
+        expect(await launched(page)).toEqual([]);
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            dialog(page).locator('[data-act="have"]').click(),
+        ]);
+        const token = (await installRecord(page))!.token;
+        const file = `strom-prenos-${token.slice(0, 8)}.json`;
+        expect(download.suggestedFilename()).toBe(file);
+        await expect.poll(() => launched(page)).toEqual([`strom-research://new?app=${token}&browser=safari&file=${file}`]);
+        await expect(dialog(page).locator('.research-install-dialog')).toHaveAttribute('data-step', 'wait');
+    });
+
+    test('the copy a move left behind asks at its opening: keep it for now (banner, one reminder), the move did not happen, remove it', async ({ page }) => {
+        await asBrowser(page, SAFARI_UA);
+        await setup(page);
+        await waitForPersist(page, 'Jan');
+        const mark = () => page.evaluate(() => window.Strom.TreeManager.setResearchTransfer(window.Strom.TreeManager.getActiveTreeId()!, { at: '2026-10-05T18:00:00.000Z' }));
+        await mark();
+        await page.reload();
+        const q = page.locator('#research-old-copy-modal');
+        const banner = page.locator('#research-transfer-banner');
+        await expect(q.locator('h2')).toHaveText('This tree is now in another browser');
+        await expect(q).toContainText('The tree “My Family Tree” moved to another browser for the research on');
+        await expect(q).toContainText('this copy is older, and changes in it do not reach the research');
+        await expect(banner).toHaveCount(0);
+        // Keep it for now: the banner; the first edit reminds, once.
+        await q.locator('[data-act="keep"]').click();
+        await expect(q).toHaveCount(0);
+        await expect(banner).toContainText('“My Family Tree” is moving to another browser for the research.');
+        const reminder = page.locator('.toast', { hasText: 'This is an older copy of “My Family Tree”' });
+        await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
+        await expect(reminder).toBeVisible();
+        await page.evaluate(() => document.querySelectorAll('.toast').forEach(t => t.remove()));
+        await addRelation(page, 'Jan', 'child', 'Pavel', 'Novak');
+        await expect(card(page, 'Pavel')).toBeVisible();
+        await expect(reminder).toHaveCount(0);
+        // The next opening asks again; Escape = keep it for now.
+        await waitForPersist(page, 'Pavel');
+        await page.reload();
+        await expect(q).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(q).toHaveCount(0);
+        await expect(banner).toBeVisible();
+        // The move did not happen: the mark goes, nothing else.
+        await page.reload();
+        await q.locator('[data-act="not-done"]').click();
+        await expect(q).toHaveCount(0);
+        await expect(banner).toHaveCount(0);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.researchTransfer)).toBeUndefined();
+        // Remove this copy: only once confirmed; the only tree gone, the welcome screen says where to start.
+        await mark();
+        await page.reload();
+        await q.locator('[data-act="remove"]').click();
+        const confirm = page.locator('.modal-overlay.active').filter({ hasText: 'The tree stays in the other browser and in the research. Here it is removed.' });
+        await confirm.getByRole('button', { name: 'Remove this copy' }).click();
+        await expect(page.locator('.toast')).toContainText('The copy of “My Family Tree” was removed.');
+        await expect(page.locator('#empty-state')).toBeVisible();
+        await expect(page.locator('#empty-state .browser-notice')).toBeVisible();
+        expect(await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().persons).length)).toBe(0);
+    });
+
+    test('Safari: the first person brings the notice over the tree once (Mac: with Chrome\'s download); never after "Continue here"', async ({ page }) => {
+        await asBrowser(page, SAFARI_UA);
+        await setup(page);
+        const float = page.locator('#browser-notice-float');
+        await expect(float).toContainText("Safari can't connect to the research.");
+        await expect(float.locator('[data-browser-notice="install"]')).toBeVisible();
+        await expect(float.locator('[data-browser-notice="chrome"]')).toBeVisible();
+        await float.locator('.browser-notice-close').click();
+        await expect(float).toHaveCount(0);
+        expect(await page.evaluate(() => localStorage.getItem('strom-browser-notice-tree'))).toBe('1');
+        await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
+        await expect(float).toHaveCount(0);
+    });
+
+    test('Safari after "Continue here": no notice over a new tree\'s first person', async ({ page }) => {
+        await asBrowser(page, SAFARI_UA);
+        await page.addInitScript(() => localStorage.setItem('strom-browser-notice', 'here'));
+        await setup(page);
+        await expect(card(page, 'Jan')).toBeVisible();
+        await expect(page.locator('.browser-notice')).toHaveCount(0);
+    });
+
+    test('Firefox reaches the research: no notice, no move — the line names Firefox', async ({ page }) => {
+        await asBrowser(page, FIREFOX_UA);
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await openApp(page);
+        await expect(page.locator('#empty-state')).toBeVisible();
+        await expect(page.locator('.browser-notice')).toHaveCount(0);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await expect(page.locator('#browser-notice-float')).toHaveCount(0);
+        await toInstallStep(page);
+        await expect(dialog(page).locator('.install-transfer')).toHaveCount(0);
+        expect(await dialog(page).locator('.install-line').first().getAttribute('data-line')).toContain('STROM_FROM_BROWSER=firefox ');
+    });
+
+    test('a private window in Safari: said once at the start, nothing blocked; the storage status says so and suggests Chrome or Edge', async ({ page }) => {
+        await asBrowser(page, SAFARI_UA);
+        await page.addInitScript(() => {
+            const storage = navigator.storage as StorageManager & { getDirectory: () => Promise<unknown> };
+            storage.getDirectory = () => Promise.reject(Object.assign(new Error('The operation failed for an unknown transient reason (e.g. out of memory).'), { name: 'UnknownError' }));
+        });
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await openApp(page);
+        const notice = page.locator('.toast', { hasText: 'Private window: the trees disappear when it closes.' });
+        await expect(notice).toBeVisible();
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.evaluate(() => window.Strom.UI.closeBrowserNoticeFloat());
+        await page.evaluate(() => window.Strom.UI.showStorageStatusDialog());
+        const status = page.locator('#storage-status-modal');
+        await expect(status).toContainText('This is a private window: the browser clears the trees when it closes.');
+        await expect(status).toContainText("For ancestor research, Chrome or Edge is better. Safari can't connect to the research.");
+        await page.evaluate(() => window.Strom.UI.closeStorageStatusDialog());
+        // Once per window.
+        await waitForPersist(page, 'Jan');
+        await page.reload();
+        await expect(card(page, 'Jan')).toBeVisible();
+        await expect(notice).toHaveCount(0);
+        // The move works from it as from any Safari window.
+        await toInstallStep(page);
+        await expect(dialog(page).locator('[data-act="transfer-download"]')).toBeVisible();
+    });
+
+    test('Brave: blocked access to this computer is told with Brave\'s own setting', async ({ page }) => {
+        await page.addInitScript(() => {
+            Object.defineProperty(navigator, 'brave', { configurable: true, get: () => ({ isBrave: () => Promise.resolve(true) }) });
+            const query = navigator.permissions.query.bind(navigator.permissions);
+            navigator.permissions.query = ((d: { name: string }) => d.name === 'localhost-access'
+                ? Promise.resolve({ state: 'denied', onchange: null } as unknown as PermissionStatus)
+                : ['loopback-network', 'local-network-access', 'local-network'].includes(d.name)
+                    ? Promise.reject(new TypeError(`unknown permission ${d.name}`))
+                    : query(d as PermissionDescriptor)) as Permissions['query'];
+        });
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await openApp(page);
+        void page.evaluate(() => { void window.Strom.UI.showResearchConnectFailed(new TypeError('Failed to fetch')); });
+        const failed = page.locator('#research-connect-failed .research-connect-failed');
+        await expect(failed).toHaveAttribute('data-reason', 'denied');
+        await expect(failed).toContainText("the browser didn't let Strom connect to it");
+        await expect(failed.locator('.connect-how')).toContainText('find Localhost access');
     });
 
     test('Chrome: no browser notice on the welcome screen', async ({ page }) => {
@@ -397,4 +574,39 @@ test.describe('installing the research from the app', () => {
             expect(overflow.right).toBeLessThanOrEqual(0);
         });
     }
+});
+
+test.describe('installing the research from a phone', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('the tree goes to the computer as a file: downloaded, then the line for the computer\'s terminal (its system picked here)', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.evaluate(() => window.Strom.UI.showResearchInstall());
+        const d = dialog(page);
+        await expect(d.locator('.research-install-touch')).toBeVisible();
+        await expect(d.locator('.install-mobile-box')).toContainText('the tree “My Family Tree” is here. It goes over as a file');
+        await expect(d.locator('.install-line')).toHaveCount(0);
+        await expect(d.locator('.install-send-link')).toHaveCount(0);
+        expect(await installRecord(page)).toBeNull();
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            d.locator('[data-act="transfer-download"]').click(),
+        ]);
+        const record = (await installRecord(page))!;
+        const file = `strom-prenos-${record.token.slice(0, 8)}.json`;
+        expect(download.suggestedFilename()).toBe(file);
+        const text = await fs.promises.readFile(await download.path(), 'utf8');
+        expect(text.startsWith(`{"stromTransfer":{"v":1,"token":"${record.token}","from":"mobile","tree":"My Family Tree","persons":1,`)).toBe(true);
+        await expect(d.locator('.install-transfer-done')).toHaveText('✓ Downloaded');
+        await expect(d.locator('.install-mobile-line-label')).toHaveText('The line for the computer’s terminal:');
+        await d.locator('.install-os-btn[data-os="mac"]').click();
+        expect(await d.locator('.install-line').getAttribute('data-line')).toContain(`STROM_FROM_BROWSER=mobile STROM_FROM_FILE=${file} `);
+        // Windows: the file always (the browser may not fit Win + R's 259 characters).
+        await d.locator('.install-os-btn[data-os="win"]').click();
+        expect(await d.locator('.install-line').getAttribute('data-line')).toContain(`$env:STROM_FROM_FILE='${file}'; `);
+        // The tree left on the phone says where it is going.
+        await expect(page.locator('#research-transfer-banner')).toContainText('“My Family Tree” is moving to a computer for the research.');
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.researchTransfer?.mobile)).toBe(true);
+    });
 });

@@ -38,11 +38,23 @@ describe('the browser the app runs in', () => {
         expect(detectAppBrowser('Lynx/2.9', undefined)).toBe('other');
     });
 
-    it('moves the tree by a file from Safari only; names browsers in a sentence', () => {
-        expect(needsTransfer('safari')).toBe(true);
-        for (const b of ['chrome', 'edge', 'brave', 'opera', 'firefox', 'chromium', 'other'] as const) expect(needsTransfer(b)).toBe(false);
+    it('moves the tree by a file from every browser that does not reach the research; names browsers in a sentence', () => {
+        // Safari, anything unknown, a phone; Firefox reaches it (proven by the research 1.12.1).
+        for (const b of ['safari', 'other', 'mobile'] as const) expect(needsTransfer(b)).toBe(true);
+        for (const b of ['chrome', 'edge', 'brave', 'opera', 'chromium', 'firefox'] as const) expect(needsTransfer(b)).toBe(false);
         expect(appBrowserName('edge')).toBe('Edge');
         expect(appBrowserName('other')).toBe('');
+        expect(appBrowserName('mobile')).toBe('');
+    });
+
+    it('takes WebKit browsers that are not Safari (Orion, DuckDuckGo) for Safari: they move the tree too', () => {
+        const orion = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15 Orion/0.99';
+        const ddg = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15 Ddg/18.0';
+        expect(detectAppBrowser(orion, undefined)).toBe('safari');
+        expect(detectAppBrowser(ddg, undefined)).toBe('safari');
+        expect(needsTransfer(detectAppBrowser(ddg, undefined))).toBe(true);
+        // A Chromium whose brands name neither Chromium nor Chrome: unknown, so it moves the tree.
+        expect(needsTransfer(detectAppBrowser(UA.chrome, ['Some Browser']))).toBe(true);
     });
 });
 
@@ -115,5 +127,7 @@ describe('the transfer file', () => {
         expect(readTransferJson(JSON.stringify({ [TRANSFER_KEY]: { ...mark, v: 2 }, ...data }), TOKEN)).toBeNull();
         const odd = readTransferJson(JSON.stringify({ [TRANSFER_KEY]: { ...mark, from: 'netscape', persons: -3 }, ...data }), TOKEN);
         expect(odd?.mark).toMatchObject({ from: 'other', persons: 0 });
+        // From a phone or tablet: said as such on the computer.
+        expect(readTransferJson(buildTransferJson({ ...mark, from: 'mobile' }, data), TOKEN)?.mark.from).toBe('mobile');
     });
 });

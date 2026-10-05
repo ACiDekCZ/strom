@@ -15,11 +15,14 @@ import { SettingsManager } from '../settings.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { TreeId, TreeMetadata } from '../types.js';
 import { formatRelativeDateTime } from '../format.js';
-import { getPersistenceState, settledPersistenceState, PersistenceState } from '../persistence.js';
+import { getPersistenceState, settledPersistenceState, PersistenceState, detectPrivateWindow } from '../persistence.js';
 import {
     hasUnsavedChanges, shouldShowNotice, shouldShowUnsavedIndicator, unsavedTrees, storageAdvice, isIosDevice, browserFamily, StorageAdvice,
 } from '../file-copy.js';
 import { canPromptInstall, promptInstall, isStandaloneDisplay } from '../pwa.js';
+import { appBrowserName, currentAppBrowser, needsTransfer } from '../research-transfer.js';
+import { isPromoAvailable } from '../research-promo.js';
+import { onComputer } from './research-ui.js';
 import { uiModule } from './module.js';
 import { iconSvg } from '../icons.js';
 
@@ -27,6 +30,10 @@ import { iconSvg } from '../icons.js';
 let knownState: PersistenceState = 'best-effort';
 /** The storage state was read at least once (before that nothing is painted from it). */
 let stateRead = false;
+/** A private window (Safari, Firefox): its trees go when it closes. */
+let privateWindow = false;
+/** sessionStorage: the private window was said once in this window. */
+const PRIVATE_NOTICE_KEY = 'strom-private-notice';
 
 function currentAdvice(): StorageAdvice {
     const nav = typeof navigator !== 'undefined' ? navigator : undefined;
@@ -505,6 +512,7 @@ export const fileCopyMethods = uiModule({
 
     storageStateSentence(): string {
         const s = strings.fileCopy;
+        if (privateWindow) return s.statePrivate;
         return knownState === 'persistent' ? s.statePersistent
             : knownState === 'unsupported' ? s.stateUnsupported : s.stateNotPersistent;
     },
@@ -512,12 +520,36 @@ export const fileCopyMethods = uiModule({
     storageAdviceSentence(): string {
         const s = strings.fileCopy;
         const advice = currentAdvice();
+        // Installing it here would settle the trees in a browser that cannot reach the research.
+        const research = needsTransfer(currentAppBrowser()) && onComputer() && advice !== 'ios-safari' && advice !== 'ios-app'
+            && isPromoAvailable(this.researchPromoContext())
+            ? ' ' + s.adviceResearch(strings.research.noConnect(appBrowserName(currentAppBrowser()))) : '';
+        return this.storageAdviceBase(advice) + research;
+    },
+
+    storageAdviceBase(advice: StorageAdvice): string {
+        const s = strings.fileCopy;
         return advice === 'install' ? s.adviceInstall
             : advice === 'install-menu' ? s.adviceInstallMenu
             : advice === 'mac-dock' ? s.adviceMacDock
             : advice === 'firefox' ? s.adviceFirefox
             : advice === 'ios-safari' ? s.adviceIosSafari
             : advice === 'ios-app' ? s.adviceIosApp : s.adviceFile;
+    },
+
+    /**
+     * A private window: said once at the start (its trees go when it
+     * closes) and in the storage status. Nothing is blocked — a move to
+     * another browser works from it too.
+     */
+    async initPrivateWindowNotice(): Promise<void> {
+        privateWindow = await detectPrivateWindow();
+        if (!privateWindow) return;
+        try {
+            if (sessionStorage.getItem(PRIVATE_NOTICE_KEY)) return;
+            sessionStorage.setItem(PRIVATE_NOTICE_KEY, '1');
+        } catch { /* said at every load then */ }
+        this.showToast(strings.fileCopy.noticePrivate, 12000, { closable: true, kind: 'private-window' });
     },
 
     /** The short status for the backups dialog: storage, the open tree, other unsaved trees. */

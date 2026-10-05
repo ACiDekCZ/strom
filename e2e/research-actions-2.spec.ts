@@ -657,6 +657,8 @@ test.describe('Start research with this tree (G3)', () => {
                     return { photo: (m?.photo ?? '').length, research: !!window.Strom.TreeManager.getActiveTreeMetadata()?.research };
                 });
                 expect(kept).toEqual({ photo: photo.length, research: true });
+                // The copy in Safari is said, and that it can go once all is right here.
+                await expect(page.locator('.install-ready-moved')).toHaveText('A copy of the tree stayed in Safari. Once everything here is right, it can be removed there.');
             }
         }
     });

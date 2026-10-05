@@ -95,3 +95,32 @@ export function resetPersistenceRequestForTests(): void {
     lastRequestedState = null;
     pendingRequest = null;
 }
+
+/**
+ * A private window (Safari, Firefox): its storage goes when the window
+ * closes. Both refuse the origin-private file system there — Safari "for an
+ * unknown transient reason", Firefox with a SecurityError. Only on a web
+ * page (a saved file:// copy may be refused for other reasons). Chromium's
+ * incognito tells nothing reliable: not detected. Never throws.
+ */
+export async function detectPrivateWindow(): Promise<boolean> {
+    try {
+        if (typeof location === 'undefined' || !/^https?:$/.test(location.protocol)) return false;
+        const storage = (navigator as { storage?: { getDirectory?: () => Promise<unknown> } }).storage;
+        if (!storage || typeof storage.getDirectory !== 'function') return false;
+        const ua = navigator.userAgent || '';
+        const webkit = /Safari\//.test(ua) && !/Chrome\/|Chromium\/|CriOS|Edg\//.test(ua);
+        const firefox = /Firefox\//.test(ua);
+        if (!webkit && !firefox) return false;
+        try {
+            await storage.getDirectory();
+            return false;
+        } catch (err) {
+            const name = (err as { name?: string })?.name ?? '';
+            const message = String((err as { message?: string })?.message ?? '');
+            return webkit ? /unknown transient reason/i.test(message) : name === 'SecurityError';
+        }
+    } catch {
+        return false;
+    }
+}

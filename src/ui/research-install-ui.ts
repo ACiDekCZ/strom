@@ -25,15 +25,24 @@ import {
     readInstallRecord, writeInstallRecord, clearInstallRecord,
 } from '../research-install.js';
 import { onComputer } from './research-ui.js';
-import { currentAppBrowser, needsTransfer, transferFileName, buildTransferJson } from '../research-transfer.js';
+import { AppBrowser, appBrowserName, currentAppBrowser, needsTransfer, transferFileName, buildTransferJson } from '../research-transfer.js';
+import { isIosDevice } from '../file-copy.js';
 import { SettingsManager } from '../settings.js';
 import { STROM_DATA_VERSION, StromData } from '../types.js';
+import { TreeRenderer } from '../renderer.js';
 import { uiModule } from './module.js';
 
 /** The dialog keeps the info dialog's id: one research dialog at a time, closed by the shared Escape handling. */
 export const INSTALL_DIALOG_ID = 'research-info-modal';
 /** localStorage: Safari's notice was answered "Continue here" (never shown again in this browser). */
 const BROWSER_NOTICE_KEY = 'strom-browser-notice';
+/** localStorage: the notice was shown once over a tree (at its first person); not again. */
+const BROWSER_NOTICE_TREE_KEY = 'strom-browser-notice-tree';
+/** The floating notice over a tree, and the old copy's dialog. */
+const BROWSER_NOTICE_FLOAT_ID = 'browser-notice-float';
+const OLD_COPY_ID = 'research-old-copy-modal';
+/** Where Chrome is downloaded (the notice's link on a Mac or Linux; Windows has Edge). */
+const CHROME_DOWNLOAD_URL = 'https://www.google.com/chrome/';
 /** The channel the tab the research opens tells the others on. */
 const INSTALL_CHANNEL = 'strom-install';
 
@@ -44,6 +53,11 @@ let current: { step: InstallStep; os: InstallOs; copied: boolean; otherOpen: boo
 let phaseTimer: ReturnType<typeof setInterval> | null = null;
 let channel: BroadcastChannel | null = null;
 let storageWatched = false;
+/** Trees downloaded for a move in this page: the banner, not the old copy's question, until the next opening. */
+const markedNow = new Set<TreeId>();
+/** Old copies answered "Keep it for now" in this page (the banner then), and those already reminded at an edit. */
+const keptNow = new Set<TreeId>();
+const remindedNow = new Set<TreeId>();
 
 function esc(text: string): string {
     return text
@@ -71,6 +85,20 @@ function lineHtml(line: string, token: string): string {
     const at = line.indexOf(token);
     if (at < 0) return esc(line);
     return `${esc(line.slice(0, at))}<span class="install-token">${esc(token)}</span>${esc(line.slice(at + token.length))}`;
+}
+
+/** "Safari can't connect to the research." for this browser. */
+function noConnectLead(): string {
+    return strings.research.noConnect(appBrowserName(currentAppBrowser()));
+}
+
+/** The browser the move is made from: a phone or tablet is "mobile" whatever its browser (the research is on a computer). */
+function transferFrom(): AppBrowser {
+    return onComputer() ? currentAppBrowser() : 'mobile';
+}
+
+function hasPeople(): boolean {
+    return Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder);
 }
 
 function timeOf(iso: string): string {
@@ -115,7 +143,7 @@ export const researchInstallMethods = uiModule({
         const resumed = !step && (phase === 'waiting' || phase === 'long' || phase === 'expired');
         const first: InstallStep = step ?? (resumed ? 'wait' : 'what');
         current = {
-            step: first, os: record?.os ?? detectedOs(), copied: false, otherOpen: false, resumed,
+            step: first, os: record?.os ?? (onComputer() || detectedOs() !== 'linux' ? detectedOs() : 'win'), copied: false, otherOpen: false, resumed,
         };
         // The Install step makes the token; opened straight on it, that happens now.
         if (first === 'install') this.ensureInstallRecord();
@@ -212,7 +240,7 @@ export const researchInstallMethods = uiModule({
                     </div>
                 </div>
                 <p class="install-later">${esc(s.choiceLater)}</p>
-                ${this.browserNoticeApplies() ? this.browserNoticeHtml(false) : ''}
+                ${this.browserNoticeApplies() ? this.browserNoticeHtml({ stay: false, install: false }) : ''}
             </div>
             <div class="buttons">
                 <button type="button" class="link-button install-web" data-act="web">${esc(s.web)}</button>
@@ -280,10 +308,10 @@ export const researchInstallMethods = uiModule({
     /** Safari: the tree moves to another browser — said first, then downloaded for the research to find. */
     researchInstallTransferHtml(file: string | null, treeName: string): string {
         const s = strings.install;
-        const people = Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder);
+        const lead = noConnectLead();
         return `
             <div class="install-what install-transfer">
-                <p>${esc(treeName && people ? s.transferText(treeName) : s.transferTextEmpty)}</p>
+                <p>${esc(treeName && hasPeople() ? s.transferText(treeName, lead) : s.transferTextEmpty(lead))}</p>
                 <div class="install-transfer-row">
                     ${file
                         ? `<span class="install-transfer-done">${esc(s.transferDownloaded)}</span>
@@ -312,8 +340,9 @@ export const researchInstallMethods = uiModule({
         }
         const tree = treeId ? TreeManager.getTreeMetadata(treeId) : null;
         const file = transferFileName(record.token);
+        const from = transferFrom();
         const text = buildTransferJson({
-            v: 1, token: record.token, from: currentAppBrowser(),
+            v: 1, token: record.token, from,
             tree: tree?.name ?? '',
             persons: Object.values(data.persons).filter(p => p && !p.isPlaceholder).length,
             at: new Date().toISOString(),
@@ -327,7 +356,8 @@ export const researchInstallMethods = uiModule({
         setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
         writeInstallRecord({ ...record, file });
         if (treeId && tree && Object.values(data.persons).some(p => p && !p.isPlaceholder)) {
-            TreeManager.setResearchTransfer(treeId, { at: new Date().toISOString() });
+            markedNow.add(treeId);
+            TreeManager.setResearchTransfer(treeId, { at: new Date().toISOString(), ...(from === 'mobile' ? { mobile: true as const } : {}) });
             this.renderResearchTransferBanner();
         }
         if (current) current.copied = false;
@@ -335,9 +365,12 @@ export const researchInstallMethods = uiModule({
     },
 
     /**
-     * The banner over a tree downloaded to move to another browser: work goes
-     * on there, an older copy stays here. Only "The move did not happen"
-     * removes it; a tree that got its research here never shows it.
+     * A tree downloaded to move to another browser (or from a phone to a
+     * computer): work goes on there, an older copy stays here. In the page
+     * that downloaded it a banner says so; at every later opening the old
+     * copy asks first — remove it, the move did not happen, or keep it for
+     * now (the banner then, and one reminder at the first edit). Nothing is
+     * removed by itself; a tree that got its research here shows neither.
      */
     renderResearchTransferBanner(): void {
         const tree = TreeManager.getActiveTreeMetadata();
@@ -347,9 +380,12 @@ export const researchInstallMethods = uiModule({
             banner?.remove();
             return;
         }
+        if (!markedNow.has(tree.id) && !keptNow.has(tree.id)) {
+            banner?.remove();
+            this.showResearchOldCopy(tree.id);
+            return;
+        }
         const r = strings.research;
-        const at = new Date(mark.at);
-        const date = Number.isNaN(at.getTime()) ? '' : at.toLocaleDateString(getCurrentLanguage());
         if (!banner) {
             banner = document.createElement('div');
             banner.id = 'research-transfer-banner';
@@ -359,7 +395,7 @@ export const researchInstallMethods = uiModule({
         }
         banner.innerHTML = `
             <span class="embedded-mode-icon"><svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2" y="4" width="13" height="10" rx="2"/><rect x="9" y="10" width="13" height="10" rx="2"/></svg></span>
-            <span class="embedded-mode-text"><span class="embedded-mode-detail">${esc(r.transferBanner(tree.name, date))}</span></span>
+            <span class="embedded-mode-text"><span class="embedded-mode-detail">${esc(mark.mobile ? r.transferBannerMobile(tree.name) : r.transferBanner(tree.name))}</span></span>
             <button type="button" class="embedded-mode-link research-transfer-undo">${esc(r.transferNotDone)}</button>`;
         const treeId = tree.id;
         banner.querySelector('.research-transfer-undo')?.addEventListener('click', () => {
@@ -368,23 +404,121 @@ export const researchInstallMethods = uiModule({
         });
     },
 
+    /** "This tree is now in another browser": the old copy's question at its opening. */
+    showResearchOldCopy(treeId: TreeId): void {
+        const tree = TreeManager.getTreeMetadata(treeId);
+        const mark = tree?.researchTransfer;
+        if (!tree || !mark || document.getElementById(OLD_COPY_ID)) return;
+        const r = strings.research;
+        const at = new Date(mark.at);
+        const date = Number.isNaN(at.getTime()) ? '' : at.toLocaleDateString(getCurrentLanguage());
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay active';
+        overlay.id = OLD_COPY_ID;
+        overlay.innerHTML = `
+            <div class="modal modal--sm research-old-copy" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="research-old-copy-title">
+                <div class="modal-header">
+                    <h2 id="research-old-copy-title">${esc(mark.mobile ? r.oldCopyTitleMobile : r.oldCopyTitle)}</h2>
+                </div>
+                <div class="modal-content">
+                    <p>${esc(mark.mobile ? r.oldCopyTextMobile(tree.name, date) : r.oldCopyText(tree.name, date))}</p>
+                </div>
+                <div class="buttons">
+                    <button type="button" class="secondary research-old-copy-remove" data-act="remove">${esc(r.oldCopyRemove)}</button>
+                    <button type="button" class="secondary" data-act="not-done">${esc(r.transferNotDone)}</button>
+                    <button type="button" class="primary" data-act="keep" data-dismiss>${esc(r.oldCopyKeep)}</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        this.pushDialog(OLD_COPY_ID);
+        overlay.querySelectorAll<HTMLElement>('[data-act]').forEach(el => el.addEventListener('click', () => {
+            const act = el.dataset.act;
+            if (act === 'keep') this.keepResearchOldCopy();
+            else if (act === 'not-done') {
+                this.closeResearchOldCopy();
+                TreeManager.setResearchTransfer(treeId, null);
+                this.renderResearchTransferBanner();
+            } else if (act === 'remove') void this.removeResearchOldCopy(treeId);
+        }));
+        overlay.querySelector<HTMLElement>('.primary')?.focus();
+    },
+
+    closeResearchOldCopy(): void {
+        document.getElementById(OLD_COPY_ID)?.remove();
+        this.dialogStack = this.dialogStack.filter(d => d !== OLD_COPY_ID);
+    },
+
+    /** "Keep it for now" (and Escape, by [data-dismiss]): the banner for this opening; asked again at the next. */
+    keepResearchOldCopy(): void {
+        const id = TreeManager.getActiveTreeId();
+        this.closeResearchOldCopy();
+        if (id) keptNow.add(id);
+        this.renderResearchTransferBanner();
+    },
+
+    /** "Remove this copy", confirmed: the tree goes here only (the other browser and the research keep it). */
+    async removeResearchOldCopy(treeId: TreeId): Promise<void> {
+        const tree = TreeManager.getTreeMetadata(treeId);
+        if (!tree) return;
+        const r = strings.research;
+        this.closeResearchOldCopy();
+        const ok = await this.showConfirm(tree.researchTransfer?.mobile ? r.oldCopyConfirmMobile : r.oldCopyConfirm, r.oldCopyRemove,
+            { confirmLabel: r.oldCopyRemove, variant: 'danger' });
+        if (!ok) {
+            // Not removed: the question again (nothing was decided).
+            this.showResearchOldCopy(treeId);
+            return;
+        }
+        const name = tree.name;
+        const wasActive = TreeManager.getActiveTreeId() === treeId;
+        await TreeManager.deleteTree(treeId);
+        if (!TreeManager.hasTrees()) {
+            // The only tree: the welcome screen, with the notice.
+            DataManager.createNewTree(strings.treeManager.defaultTreeName);
+        } else if (wasActive) {
+            await DataManager.switchTree(TreeManager.getActiveTreeId()!);
+        }
+        this.updateTreeSwitcher();
+        this.updateTreeManagerList();
+        TreeRenderer.render();
+        this.renderResearchTransferBanner();
+        this.placeBrowserNotices();
+        this.showToast(r.oldCopyRemoved(name), 6000);
+    },
+
+    /** The first edit in a tree that moved away: once, that changes here do not reach the research. */
+    remindResearchOldCopy(treeId: TreeId): void {
+        const tree = TreeManager.getTreeMetadata(treeId);
+        if (!tree?.researchTransfer || tree.research || remindedNow.has(treeId)) return;
+        remindedNow.add(treeId);
+        this.showToast(strings.research.oldCopyReminder(tree.name), 8000);
+    },
+
     /** The transfer banner follows the open tree (at start and at every switch); Safari's notice where a tree begins. */
     initResearchTransferBanner(): void {
         this.renderResearchTransferBanner();
         window.addEventListener('strom:tree-switched', () => this.renderResearchTransferBanner());
+        window.addEventListener('strom:user-change', (e) => {
+            const treeId = (e as CustomEvent<{ treeId?: TreeId }>).detail?.treeId;
+            if (!treeId) return;
+            this.remindResearchOldCopy(treeId);
+            this.maybeShowBrowserNoticeInTree(treeId);
+        });
         this.placeBrowserNotices();
     },
 
     /**
-     * Desktop Safari cannot reach the research: said where a tree begins (the
-     * welcome screen, "Data elsewhere") so a family is entered in Chrome or
-     * Edge from the start. Not on an iPad or a phone (no research there), not
+     * A browser that cannot reach the research on a computer (Safari and
+     * other WebKit browsers, one unknown): said where a tree begins (the welcome
+     * screen, "Data elsewhere", once over a tree at its first person) so a
+     * family is entered in Chrome or Edge from the start, or the research is
+     * installed first. Not on an iPad or a phone (no research there), not
      * once "Continue here" was chosen. The move by a file stays the rescue.
      */
     browserNoticeApplies(): boolean {
         if (!needsTransfer(currentAppBrowser()) || !onComputer()) return false;
         // An iPad asks for the desktop site as a Mac: its touch points give it away.
-        if (typeof navigator !== 'undefined' && (navigator.maxTouchPoints ?? 0) > 0) return false;
+        if (typeof navigator !== 'undefined' && isIosDevice(navigator.userAgent || '', navigator.platform || '', navigator.maxTouchPoints ?? 0)) return false;
         return isPromoAvailable(this.researchPromoContext());
     },
 
@@ -392,15 +526,23 @@ export const researchInstallMethods = uiModule({
         try { return localStorage.getItem(BROWSER_NOTICE_KEY) === 'here'; } catch { return false; }
     },
 
-    /** The notice's markup; `stay` adds "Continue here" (the welcome screen and the import dialog). */
-    browserNoticeHtml(stay: boolean): string {
+    /**
+     * The notice's markup. `install` adds "Install the research" (not inside
+     * the install dialog itself), `stay` adds "Continue here" (not there
+     * either); "Download Chrome" only where Chrome may well be missing (a
+     * Mac, Linux — Windows has Edge).
+     */
+    browserNoticeHtml(opts: { stay: boolean; install: boolean }): string {
         const r = strings.research;
+        const chrome = detectedOs() !== 'win';
         return `
             <div class="browser-notice" role="note">
-                <p>${esc(r.browserNotice)}</p>
+                <p>${esc(r.browserNotice(noConnectLead()))}</p>
                 <div class="browser-notice-actions">
+                    ${opts.install ? `<button type="button" class="link-button" data-browser-notice="install">${esc(r.browserNoticeInstall)}</button>` : ''}
                     <button type="button" class="link-button" data-browser-notice="copy">${esc(r.browserNoticeCopy)}</button>
-                    ${stay ? `<button type="button" class="link-button" data-browser-notice="stay">${esc(r.browserNoticeStay)}</button>` : ''}
+                    ${chrome ? `<button type="button" class="link-button" data-browser-notice="chrome">${esc(r.browserNoticeChrome)}</button>` : ''}
+                    ${opts.stay ? `<button type="button" class="link-button" data-browser-notice="stay">${esc(r.browserNoticeStay)}</button>` : ''}
                 </div>
             </div>`;
     },
@@ -409,9 +551,21 @@ export const researchInstallMethods = uiModule({
     bindBrowserNotice(root: ParentNode): void {
         root.querySelectorAll<HTMLButtonElement>('[data-browser-notice]').forEach(btn => btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (btn.dataset.browserNotice === 'stay') {
+            const act = btn.dataset.browserNotice;
+            if (act === 'stay') {
                 try { localStorage.setItem(BROWSER_NOTICE_KEY, 'here'); } catch { /* shown again next time */ }
                 this.placeBrowserNotices();
+                this.closeBrowserNoticeFloat();
+                return;
+            }
+            if (act === 'install') {
+                this.closeBrowserNoticeFloat();
+                if (document.getElementById('import-file-modal')?.classList.contains('active')) this.closeImportFileDialog();
+                this.showResearchInstall();
+                return;
+            }
+            if (act === 'chrome') {
+                window.open(CHROME_DOWNLOAD_URL, '_blank', 'noopener');
                 return;
             }
             // A page in Safari cannot open Chrome: the address goes on the clipboard.
@@ -436,12 +590,45 @@ export const researchInstallMethods = uiModule({
             spot.querySelector(':scope > .browser-notice')?.remove();
             if (!show) continue;
             const holder = document.createElement('div');
-            holder.innerHTML = this.browserNoticeHtml(true).trim();
+            holder.innerHTML = this.browserNoticeHtml({ stay: true, install: true }).trim();
             const notice = holder.firstElementChild as HTMLElement;
             if (where === 'prepend') spot.prepend(notice);
             else spot.querySelector(':scope > .modal-header')?.after(notice);
             this.bindBrowserNotice(notice);
         }
+    },
+
+    /**
+     * The first person of a tree in such a browser: the notice once more,
+     * over the tree — whoever skipped the welcome screen (a new tree, a GEDCOM
+     * import) sees it too. Once per browser, never after "Continue here".
+     */
+    maybeShowBrowserNoticeInTree(treeId: TreeId): void {
+        if (DataManager.getCurrentTreeId() !== treeId || !this.browserNoticeApplies() || this.browserNoticeDismissed()) return;
+        try { if (localStorage.getItem(BROWSER_NOTICE_TREE_KEY)) return; } catch { return; }
+        const people = Object.values(DataManager.getData().persons).filter(p => !p.isPlaceholder).length;
+        if (people !== 1 || document.getElementById(BROWSER_NOTICE_FLOAT_ID)) return;
+        try { localStorage.setItem(BROWSER_NOTICE_TREE_KEY, '1'); } catch { /* shown once anyway in this page */ }
+        const holder = document.createElement('div');
+        holder.innerHTML = this.browserNoticeHtml({ stay: true, install: true }).trim();
+        const notice = holder.firstElementChild as HTMLElement;
+        notice.id = BROWSER_NOTICE_FLOAT_ID;
+        notice.classList.add('browser-notice-float');
+        notice.setAttribute('role', 'dialog');
+        notice.setAttribute('aria-label', strings.install.title);
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'close-btn browser-notice-close';
+        close.setAttribute('aria-label', strings.buttons.close);
+        close.innerHTML = '&times;';
+        close.addEventListener('click', () => this.closeBrowserNoticeFloat());
+        notice.prepend(close);
+        document.body.appendChild(notice);
+        this.bindBrowserNotice(notice);
+    },
+
+    closeBrowserNoticeFloat(): void {
+        document.getElementById(BROWSER_NOTICE_FLOAT_ID)?.remove();
     },
 
     /** 4a–4c: waiting (no time limit here), waiting long, the command expired. */
@@ -482,11 +669,16 @@ export const researchInstallMethods = uiModule({
             </div>`;
     },
 
-    /** 2b: on a phone or tablet — what it is, briefly, and a link to send to a computer. Nothing is stored. */
+    /**
+     * 2b: on a phone or tablet — what it is, briefly. The research is
+     * installed on a computer: a tree with people goes there as a file (the
+     * same file a move from Safari makes, its line naming it); an empty one
+     * only needs the link sent to the computer (nothing is stored).
+     */
     researchInstallMobileHtml(): string {
         const s = strings.install;
         const tree = TreeManager.getActiveTreeMetadata();
-        const people = Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder);
+        const people = hasPeople();
         return `
             <div class="modal-content install-body">
                 <p class="install-intro">${esc(tree && people ? s.intro(tree.name) : s.introEmpty)}</p>
@@ -500,15 +692,74 @@ export const researchInstallMethods = uiModule({
                         <p>${esc(s.archiveShort)}</p>
                     </div>
                 </div>
-                <div class="install-mobile-box">
+                ${tree && people ? this.researchInstallMobileTransferHtml(tree.name) : `<div class="install-mobile-box">
                     <p>${esc(s.mobileOnly)}</p>
                     <button type="button" class="secondary install-send-link" data-act="send-link">${esc(s.sendLink)}</button>
-                </div>
+                </div>`}
             </div>
             <div class="buttons">
                 <button type="button" class="link-button install-web" data-act="web">${esc(s.web)}</button>
                 <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.close)}</button>
             </div>`;
+    },
+
+    /** The phone's move: download the tree, then the line for the computer's terminal (its system picked here). */
+    researchInstallMobileTransferHtml(treeName: string): string {
+        const s = strings.install;
+        const st = current!;
+        const held = readInstallRecord();
+        const treeId = DataManager.getCurrentTreeId() ?? TreeManager.getActiveTreeId();
+        // Downloaded already (this tree, its token still holding): the line right away.
+        const record = held && installPhase(held) !== 'expired' && held.treeId === treeId && held.file ? this.ensureInstallRecord() : null;
+        const file = record?.file ?? null;
+        const names = OS_NAMES();
+        const canShare = typeof (navigator as Navigator & { share?: unknown }).share === 'function';
+        let lineBlock = '';
+        if (record && file) {
+            const line = installLine(st.os, record.token, installAppUrl(window.location.href), treeName, { browser: 'mobile', file });
+            lineBlock = `
+                <p class="install-mobile-line-label">${esc(s.mobileLine)}</p>
+                <div class="install-os" role="radiogroup" aria-label="${esc(s.mobileLine)}">
+                    ${INSTALL_OSES.map(o => `<button type="button" role="radio" aria-checked="${o === st.os}" class="install-os-btn${o === st.os ? ' active' : ''}" data-os="${o}">${esc(names[o])}</button>`).join('')}
+                </div>
+                <div class="install-line-row">
+                    <code class="install-line" tabindex="0" data-line="${esc(line)}">${lineHtml(line, record.token)}</code>
+                    <button type="button" class="install-copy${st.copied ? ' copied' : ''}" data-act="copy">${esc(st.copied ? s.copied : s.copy)}</button>
+                </div>
+                ${canShare ? `<button type="button" class="secondary install-send-line" data-act="send-line">${esc(s.sendLine)}</button>` : ''}
+                <p class="install-note">${esc(s.mobileFileNote)}</p>`;
+        }
+        return `
+            <div class="install-mobile-box install-transfer">
+                <p>${esc(s.mobileTransfer(treeName))}</p>
+                <div class="install-transfer-row">
+                    ${file
+                        ? `<span class="install-transfer-done">${esc(s.transferDownloaded)}</span>
+                           <button type="button" class="link-button" data-act="transfer-download">${esc(s.transferAgain)}</button>`
+                        : `<button type="button" class="secondary" data-act="transfer-download">${esc(s.transferDownload)}</button>`}
+                </div>
+                ${lineBlock}
+                ${SettingsManager.isEncryptionEnabled() ? `<p class="install-note">${esc(s.transferEncrypted)}</p>` : ''}
+            </div>`;
+    },
+
+    /** Phone: the line to the computer by the system's share sheet (AirDrop, a message); else copied. */
+    async sendResearchInstallLine(): Promise<void> {
+        const code = document.querySelector<HTMLElement>(`#${INSTALL_DIALOG_ID} .install-line`);
+        const text = code?.dataset.line ?? '';
+        if (!text) return;
+        const nav = navigator as Navigator & { share?: (d: { text: string }) => Promise<void> };
+        if (typeof nav.share === 'function') {
+            try { await nav.share({ text }); return; } catch (err) {
+                if ((err as { name?: string })?.name === 'AbortError') return;
+            }
+        }
+        try {
+            await navigator.clipboard.writeText(text);
+            this.showToast(strings.install.lineCopiedMobile, 5000);
+        } catch {
+            void this.copyResearchInstallLine(code, true);
+        }
     },
 
     bindResearchInstall(overlay: HTMLElement): void {
@@ -545,11 +796,12 @@ export const researchInstallMethods = uiModule({
                 if (current) current.copied = false;
                 this.goResearchInstallStep('install');
             } else if (act === 'web') this.openResearchSite();
-            else if (act === 'have') this.researchInstallHaveIt();
+            else if (act === 'have') void this.researchInstallHaveIt();
             else if (act === 'copy' || act === 'copy-npm') {
                 const code = el.parentElement?.querySelector<HTMLElement>('.install-line');
                 void this.copyResearchInstallLine(code, act === 'copy');
             } else if (act === 'send-link') void this.sendResearchInstallLink();
+            else if (act === 'send-line') void this.sendResearchInstallLine();
             else if (act === 'transfer-download') void this.downloadResearchTransfer();
         }));
     },
@@ -581,8 +833,13 @@ export const researchInstallMethods = uiModule({
         }
     },
 
-    /** "I already have it, start": the research takes the tree over by the same token (strom-research://new). */
-    researchInstallHaveIt(): void {
+    /**
+     * "I already have it, start": the research takes the tree over by the
+     * same token (strom-research://new). From a browser that cannot reach it,
+     * the tree goes as a file first — an installed research takes it as well.
+     */
+    async researchInstallHaveIt(): Promise<void> {
+        if (needsTransfer(currentAppBrowser()) && !readInstallRecord()?.file) await this.downloadResearchTransfer();
         const record = this.ensureInstallRecord();
         const url = researchNewUrl(record.token, currentAppBrowser(), record.file);
         if (url) this.handOverResearchLink(url);

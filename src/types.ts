@@ -983,7 +983,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.1-beta.1';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.1-beta.2';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -1120,11 +1120,12 @@ export interface TreeMetadata {
      */
     researchAdoptToken?: { token: string; at: string };
     /**
-     * Safari: the tree was downloaded to move to another browser for the
-     * research (research-transfer.ts). Its banner says work goes on there; the
-     * user removes it when the move did not happen.
+     * The tree was downloaded to move to another browser for the research
+     * (research-transfer.ts), or from a phone to a computer (`mobile`). The
+     * copy left here says so (banner, then a question at every opening) until
+     * it is removed or the move did not happen.
      */
-    researchTransfer?: { at: string };
+    researchTransfer?: { at: string; mobile?: true };
     /**
      * Automatic backups (daily, before import / merge) for this tree. Missing =
      * on. Off for a tree the user keeps elsewhere, or whose scans make every

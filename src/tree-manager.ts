@@ -1465,7 +1465,7 @@ class TreeManagerClass {
     }
 
     /** Mark (or unmark) a tree as moving to another browser for the research. */
-    setResearchTransfer(treeId: TreeId, value: { at: string } | null): void {
+    setResearchTransfer(treeId: TreeId, value: { at: string; mobile?: true } | null): void {
         const tree = this.index.trees.find(t => t.id === treeId);
         if (!tree) return;
         if (value) tree.researchTransfer = value;

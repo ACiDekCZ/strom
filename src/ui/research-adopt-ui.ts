@@ -12,7 +12,7 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { AppBrowser, appBrowserName, currentAppBrowser, readTransferJson } from '../research-transfer.js';
+import { AppBrowser, appBrowserName, currentAppBrowser, needsTransfer, readTransferJson } from '../research-transfer.js';
 import { validateJsonImport } from '../merge/validation.js';
 import { TreeId, TreeMetadata, StromData, STROM_DATA_VERSION, ResearchSendMode } from '../types.js';
 import { readInstallRecord, installPhase, INSTALL_TTL_MS } from '../research-install.js';
@@ -70,8 +70,20 @@ export const researchAdoptMethods = uiModule({
         return this.researchAdoptAvailable(TreeManager.getActiveTreeMetadata());
     },
 
-    /** Hand `treeId` a token and open the research's set-up in the terminal. */
+    /**
+     * Hand `treeId` a token and open the research's set-up in the terminal.
+     * From a browser that cannot reach the research the tree goes by a file:
+     * the install dialog's Install step (its "I already have it" takes an
+     * installed research too).
+     */
     startResearchAdopt(treeId: TreeId): void {
+        if (needsTransfer(currentAppBrowser())) {
+            void (async () => {
+                if (DataManager.getCurrentTreeId() !== treeId) await this.switchToTree(treeId);
+                this.showResearchInstall('install');
+            })();
+            return;
+        }
         const token = newAdoptToken();
         const url = researchNewUrl(token, currentAppBrowser());
         if (!url || !TreeManager.getTreeMetadata(treeId)) return;
@@ -245,7 +257,7 @@ export const researchAdoptMethods = uiModule({
         TreeRenderer.render();
         if (fromInstall || moved) {
             if (fromInstall) this.finishResearchInstall(offer.token);
-            void this.showResearchReady(bridge.base, reply.tree, offer.name || r.defaultName, hasPeople);
+            void this.showResearchReady(bridge.base, reply.tree, offer.name || r.defaultName, hasPeople, moved?.from);
             return;
         }
         this.showToast(r.adopted(tree.name), 6000);
@@ -291,7 +303,7 @@ export const researchAdoptMethods = uiModule({
      * for the tree (where it is, the agent, the originals) — or, for an empty
      * tree, how to start it. Later only the bar shows the state.
      */
-    async showResearchReady(base: string, researchId: string, researchName: string, hasPeople: boolean): Promise<void> {
+    async showResearchReady(base: string, researchId: string, researchName: string, hasPeople: boolean, movedFrom?: AppBrowser): Promise<void> {
         const s = strings.install;
         let where = '';
         let agent = '';
@@ -326,6 +338,7 @@ export const researchAdoptMethods = uiModule({
                 <div class="modal-content">
                     <p>${esc(hasPeople ? s.readyText(researchSendMode(TreeManager.getTreeMetadata(DataManager.getCurrentTreeId() ?? ('' as TreeId))?.research)) : s.liveText)}</p>
                     ${rows}
+                    ${movedFrom && hasPeople ? `<p class="install-ready-moved">${esc(movedFrom === 'mobile' ? strings.research.transferCopyLeftMobile : strings.research.transferCopyLeft(appBrowserName(movedFrom)))}</p>` : ''}
                 </div>
                 <div class="buttons">
                     ${hasPeople
@@ -404,7 +417,7 @@ export const researchAdoptMethods = uiModule({
         this.updateTreeSwitcher();
         this.updateTreeManagerList();
         TreeRenderer.render();
-        this.showToast(strings.research.transferCancelled(appBrowserName(from)), 8000);
+        this.showToast(from === 'mobile' ? strings.research.transferCancelledMobile : strings.research.transferCancelled(appBrowserName(from)), 8000);
     },
 
     /**
@@ -500,7 +513,7 @@ export const researchAdoptMethods = uiModule({
                     </div>
                 </div>
                 <div class="research-send-dialog-body">
-                    ${opts.movedFrom ? `<p class="research-adopt-moved"><span class="research-adopt-moved-tag">${esc(r.transferTag)}</span> ${esc(r.transferCame(appBrowserName(opts.movedFrom)))}</p>` : ''}
+                    ${opts.movedFrom ? `<p class="research-adopt-moved"><span class="research-adopt-moved-tag">${esc(r.transferTag)}</span> ${esc(opts.movedFrom === 'mobile' ? r.transferCameMobile : r.transferCame(appBrowserName(opts.movedFrom)))}</p>` : ''}
                     <div class="research-adopt-what">
                         <span class="research-adopt-eyebrow">${esc(t.handoffWhatGoes)}</span>
                         <div class="research-adopt-tiles">${tile(persons, t.handoffPersons(persons))}${tile(families, t.handoffFamilies(families))}${tile(sources, t.handoffSources(sources))}</div>

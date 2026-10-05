@@ -441,6 +441,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         void UI.initOriginalsQueue();
         // A tree downloaded in Safari to move to another browser for the research: its banner.
         UI.initResearchTransferBanner();
+        // A private window: its trees go when it closes (said once).
+        void UI.initPrivateWindowNotice();
 
         // Handle URL import parameter (from offline version redirect)
         handleUrlImportParam();

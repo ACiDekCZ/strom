@@ -22,7 +22,8 @@ async function lnaPermission(page: Page, state: 'denied' | 'prompt' | 'granted' 
             configurable: true,
             value: {
                 query: (d: { name: string }) => {
-                    if (d.name === 'local-network-access') {
+                    // Every name the app may ask it under (research-ui.ts LOCAL_NETWORK_PERMISSIONS).
+                    if (['local-network-access', 'loopback-network', 'local-network'].includes(d.name)) {
                         return st === 'none' ? Promise.reject(new TypeError('unknown permission')) : Promise.resolve(status);
                     }
                     return orig ? orig(d as PermissionDescriptor) : Promise.reject(new TypeError('no'));
@@ -66,7 +67,7 @@ test.describe('couldn\'t connect to the research', () => {
         await setup(page, 'prompt');
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
         const d = dialog(page);
-        await expect(d.locator('.connect-reason')).toHaveText('Chrome is waiting for permission');
+        await expect(d.locator('.connect-reason')).toHaveText('The browser is waiting for permission');
         await expect(d.locator('.connect-how')).toHaveCount(0);
         let asked = 0;
         await page.unroute(`${BRIDGE}/**`);

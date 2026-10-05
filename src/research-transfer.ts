@@ -12,10 +12,24 @@
 import type { StromData } from './types.js';
 import { researchAdoptToken } from './research-link.js';
 
-/** The browser the app runs in, as the research is told (STROM_FROM_BROWSER, &browser=). */
-export type AppBrowser = 'chrome' | 'edge' | 'brave' | 'opera' | 'firefox' | 'safari' | 'chromium' | 'other';
+/**
+ * The browser the app runs in, as the research is told (STROM_FROM_BROWSER,
+ * &browser=). `mobile`: a phone or tablet — the research runs on a computer,
+ * so the tree always goes over by a file, whatever the phone's browser.
+ */
+export type AppBrowser = 'chrome' | 'edge' | 'brave' | 'opera' | 'firefox' | 'safari' | 'chromium' | 'other' | 'mobile';
 
-export const APP_BROWSERS: readonly AppBrowser[] = ['chrome', 'edge', 'brave', 'opera', 'firefox', 'safari', 'chromium', 'other'];
+export const APP_BROWSERS: readonly AppBrowser[] = ['chrome', 'edge', 'brave', 'opera', 'firefox', 'safari', 'chromium', 'other', 'mobile'];
+
+/**
+ * Firefox treats http://127.0.0.1 as a secure origin and reaches the bridge
+ * (proven by the research 1.12.1, Firefox 151 and 157). One switch: were it
+ * to fail, it would move the tree like Safari and get the notice.
+ */
+export const FIREFOX_REACHES_RESEARCH = true;
+
+/** The Chromium family: proven to reach the research on this computer. */
+const REACHES_RESEARCH: readonly AppBrowser[] = ['chrome', 'edge', 'brave', 'opera', 'chromium'];
 
 /**
  * The browser from the User-Agent Client Hints' brands, the User-Agent and
@@ -43,15 +57,19 @@ export function currentAppBrowser(): AppBrowser {
     return detectAppBrowser(nav.userAgent || '', brands, !!nav.brave);
 }
 
-/** The browser cannot reach the research on this computer: the tree moves by a file. */
+/**
+ * The browser cannot reach the research on this computer (Safari and other
+ * WebKit browsers, anything unknown, a phone): the tree moves by a file.
+ */
 export function needsTransfer(browser: AppBrowser): boolean {
-    return browser === 'safari';
+    if (browser === 'firefox') return !FIREFOX_REACHES_RESEARCH;
+    return !REACHES_RESEARCH.includes(browser);
 }
 
 /** A browser's name in a sentence (its product name, the same in every language). */
 export function appBrowserName(browser: AppBrowser): string {
     return ({
-        chrome: 'Chrome', edge: 'Edge', brave: 'Brave', opera: 'Opera', firefox: 'Firefox', safari: 'Safari', chromium: 'Chromium', other: '',
+        chrome: 'Chrome', edge: 'Edge', brave: 'Brave', opera: 'Opera', firefox: 'Firefox', safari: 'Safari', chromium: 'Chromium', other: '', mobile: '',
     } as Record<AppBrowser, string>)[browser];
 }
 

@@ -497,11 +497,13 @@ test.describe('existing tree on a phone', () => {
         const dialog = infoDialog(page);
         await expect(dialog).toBeVisible();
         await expect(moreDot(page)).toBeHidden();
-        // On a phone: it installs on a computer — no line, a link to send to one.
+        // On a phone: it installs on a computer, where the tree is not — it goes there as a file
+        // (research-install.spec.ts follows it); no line before the download.
         await expect(dialog.locator('.research-install-touch')).toBeVisible();
         await expect(dialog.locator('.install-line')).toHaveCount(0);
-        await expect(dialog.locator('.install-send-link')).toHaveText('Send myself the link');
-        expect((await dialog.locator('.install-send-link').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        const download = dialog.locator('.install-mobile-box [data-act="transfer-download"]');
+        await expect(download).toHaveText('Download the tree for the move');
+        expect((await download.boundingBox())!.height).toBeGreaterThanOrEqual(44);
         expect(await page.evaluate(() => localStorage.getItem('strom-install'))).toBeNull();
         await page.keyboard.press('Escape');
         await expect(dialog).toHaveCount(0);

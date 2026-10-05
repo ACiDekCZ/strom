@@ -3814,6 +3814,21 @@
         }
         @media (hover: hover) { .empty-state .browser-notice button:hover { background: none; text-decoration: underline; } }
         .modal > .browser-notice { margin: 0 20px 4px; }
+        /* Once over a tree, at its first person: a floating card. */
+        .browser-notice-float {
+            position: fixed; left: 24px; bottom: 24px; z-index: 180; margin: 0;
+            width: 384px; max-width: calc(100vw - 32px); box-sizing: border-box;
+            padding: 14px 40px 12px 16px; box-shadow: var(--shadow-lg);
+            background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+        }
+        .browser-notice-float .browser-notice-close { position: absolute; top: 6px; right: 6px; }
+        @media (max-width: 1024px) {
+            .browser-notice-float { left: 16px; right: 16px; width: auto; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .browser-notice-float { bottom: 16px; }
+        }
+        @media (pointer: coarse) { .browser-notice-float button { min-height: 44px; } }
         .install-body .browser-notice { margin: 12px 0 0; }
         .empty-state button {
             padding: 12px 24px;
@@ -4083,6 +4098,16 @@
         }
         .install-mobile-box p { margin: 0; }
         .install-send-link { min-height: 44px; }
+        /* A phone's move to a computer: the download, then the line (research-install-ui.ts). */
+        .install-mobile-box.install-transfer { align-items: stretch; gap: 10px; }
+        .install-mobile-box .install-transfer-row, .install-mobile-box .install-os { align-self: flex-start; }
+        .install-mobile-line-label { font-size: 13px; font-weight: 600; color: var(--text); }
+        .install-mobile-box .install-note { margin: 0; }
+        .install-send-line { min-height: 44px; align-self: flex-start; }
+        .install-ready-moved { margin: 12px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        /* The copy left behind by a move: asked at its opening. */
+        .research-old-copy .buttons { flex-wrap: wrap; }
+        .research-old-copy .research-old-copy-remove { color: var(--danger); margin-right: auto; }
         .install-ready-rows { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 12px 0 0; font-size: 13px; }
         .install-ready-rows dt { font-weight: 600; color: var(--text); }
         .install-ready-rows dd { margin: 0; color: var(--text-light); }
