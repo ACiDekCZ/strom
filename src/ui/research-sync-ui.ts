@@ -774,12 +774,6 @@ export const researchSyncMethods = uiModule({
         this.refreshResearchSyncUi();
     },
 
-    /** The other sends of the open tree still taken back (besides the one shown), newest first. */
-    researchOtherUndone(treeId: TreeId, link: ResearchLink): ResearchSendRecord[] {
-        return openUndone(runtime.get(link.id)?.status?.sends, tree => tree === treeId || tree === link.id,
-            researchAutoState(treeId).resent ?? [], link.syncedAt).filter(r => r.intake !== link.sent?.intake);
-    },
-
     /**
      * The send shown as taken back was written again since (`again` in its
      * record: Send again from another window, or in the research): not taken
@@ -792,7 +786,7 @@ export const researchSyncMethods = uiModule({
         if (!link || sent?.state !== 'undone' || !sent.intake || !status.sends) return;
         const rec = status.sends.find(r => r.intake === sent.intake);
         if (!rec?.again) return;
-        // Another send of this tree still taken back there stays in sight (finding B2).
+        // A send taken back before it is an older state: never offered (R3 of the rc.49 round).
         const next = nextUndone(status.sends, tree => tree === treeId || tree === link.id, [...(researchAutoState(treeId).resent ?? []), sent.intake]);
         TreeManager.patchResearchLink(treeId, { sent: next
             ? { ...sent, at: next.at || sent.at, intake: next.intake, closedAt: next.decidedAt || sent.closedAt, takenBack: undefined }
@@ -1275,8 +1269,8 @@ export const researchSyncMethods = uiModule({
         TreeManager.patchResearchLink(treeId, { refused: undefined, sentSources: sourceReadings(data),
             sent: undone ? { ...sent, at: this.researchSendTime(treeId, link, undoneIntake) || now, state: 'undone', intake: undoneIntake,
                 closedAt: now, noticed: true, ...(reply.takenBack ? { takenBack: reply.takenBack } : {}) } : sent });
-        // Written again: never offered again (the research may still list it as taken back), and another
-        // send of this tree it still has taken back stays in sight, to be sent again in its turn (finding B2).
+        // Written again: never offered again (the research may still list it as taken back); a send taken
+        // back before it is an older state, never offered either (R3 of the rc.49 round, over finding B2).
         if (again && written) {
             const resent = [...(researchAutoState(treeId).resent ?? []).filter(x => x !== again.intake), again.intake!].slice(-30);
             patchResearchAutoState(treeId, { resent });
@@ -1870,7 +1864,7 @@ export const researchSyncMethods = uiModule({
             },
             writtenConflicts: () => {
                 const lw = autoState.lastWritten;
-                const conflicts = treeId ? this.researchHeldConflictCount(treeId, state.sent) : 1;
+                const conflicts = treeId ? this.researchHeldConflictCount(treeId, state.sent) : 0;
                 const persons = treeId ? this.researchWrittenConflictPersons(treeId) : [];
                 const one = persons.length === 1 ? DataManager.getPerson(persons[0]) : null;
                 const name = one ? `${one.firstName} ${one.lastName}`.trim() : '';
@@ -1880,8 +1874,10 @@ export const researchSyncMethods = uiModule({
                 actions.push({ action: 'loadNewer', label: s.loadVersion, asLink: true });
                 // How the research is reached, said beside the conflict (it outranks the connection as the state).
                 const conn = link ? this.researchConnectionNote(link.id) : null;
-                return { tone: conn && conn.warn ? 'warn' : 'neutral', title: s.flyConflict(conflicts),
-                    sub: [conn ? `${conn.title}.` : '', conn?.sub ?? '', s.writtenAt(when(lw?.at ?? state.sent?.closedAt)), s.writtenConflictsSub].filter(Boolean).join(' '), actions };
+                // The research's value stands there only while a conflict really is open.
+                const at = s.writtenAt(when(lw?.at ?? state.sent?.closedAt));
+                return { tone: conn && conn.warn ? 'warn' : 'neutral', title: conflicts > 0 ? s.flyConflict(conflicts) : at,
+                    sub: [conn ? `${conn.title}.` : '', conn?.sub ?? '', conflicts > 0 ? at : '', conflicts > 0 ? s.writtenConflictsSub : ''].filter(Boolean).join(' '), actions };
             },
             unsent: () => ({ tone: 'warn', title: s.stateUnsent, sub: changed ? s.changedAt(changed) : undefined, actions: [{ action: 'send', label: s.send }] }),
             sentPending: () => ({ tone: 'neutral', title: s.stateSent(when(state.sent?.at), state.sent?.changes ?? null),
@@ -2016,9 +2012,6 @@ export const researchSyncMethods = uiModule({
         const kept = !!link && !this.researchHoldsForUndo(link);
         const sub = [kept ? s.undoneKeptSub(when(sent?.closedAt)) : auto ? s.undoneAutoSub(when(sent?.closedAt)) : s.undoneSub(when(sent?.closedAt))];
         if (sent?.takenBack) sub.push(s.takenBackSub(sent.takenBack));
-        // The others taken back too: each comes after this one, with its own Send again.
-        const others = treeId && link ? this.researchOtherUndone(treeId, link) : [];
-        if (others.length) sub.push(s.undoneMore(others.map(r => when(r.at)).join(', ')));
         const conn = link ? this.researchConnectionNote(link.id) : null;
         if (conn) sub.unshift(`${conn.title}.`, ...(conn.warn ? [conn.sub] : []));
         if (treeId && conflicts > 0) {
@@ -2063,11 +2056,20 @@ export const researchSyncMethods = uiModule({
         return sc && link && sc.base === (link.head ?? '') && sc.ids.length ? new Set(sc.ids) : null;
     },
 
-    /** "Written, N conflicts to decide": every conflict open there as known here (cards count the same), at least what the research said. */
+    /**
+     * "Written, N conflicts to decide": the conflicts open there, each once —
+     * as the cards count them when known here; else the research's largest
+     * single count (its sends repeat a conflict still open, so their sum
+     * overcounts: R1 of the rc.49 round). 0: none known.
+     */
     researchHeldConflictCount(treeId: TreeId, sent: ResearchSend | undefined): number {
+        const cards = this.researchOpenConflictTotal(treeId);
+        if (cards > 0) return cards;
         const link = TreeManager.getTreeMetadata(treeId)?.research;
-        return Math.max(this.researchOpenConflictTotal(treeId), sent?.conflicts ?? 0, researchAutoState(treeId).lastWritten?.conflicts ?? 0,
-            link ? this.researchSendsOpenConflicts(treeId, link) : 0, 1);
+        const sends = link ? runtime.get(link.id)?.status?.sends ?? [] : [];
+        const largest = sends.filter(r => link && (r.tree === treeId || r.tree === link.id) && r.state === 'written')
+            .reduce((n, r) => Math.max(n, r.conflicts ?? 0), 0);
+        return Math.max(sent?.conflicts ?? 0, researchAutoState(treeId).lastWritten?.conflicts ?? 0, largest);
     },
 
     /** The conflicts still open in the research from this tree's sends, as its `/status.sends` says (0: none, or not known). */
@@ -2164,8 +2166,9 @@ export const researchSyncMethods = uiModule({
     researchUndoneConflicts(treeId: TreeId): number {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (link?.sent?.state !== 'undone') return 0;
-        // Every conflict open there (as the cards count them), not only those the last write named.
-        return Math.max(researchAutoState(treeId).lastWritten?.conflicts ?? 0, this.researchOpenConflictTotal(treeId));
+        // Every conflict open there, each once (as the cards count them), not only those the last write named.
+        const cards = this.researchOpenConflictTotal(treeId);
+        return cards > 0 ? cards : researchAutoState(treeId).lastWritten?.conflicts ?? 0;
     },
 
     /** The ⋯ dot and label for the sync state (refreshActionMenuBadges calls this). */
@@ -2216,6 +2219,7 @@ export const researchSyncMethods = uiModule({
         };
         if (kind === 'none' || !ctx) { hide(); return; }
         const set = (cls: string, html: string, title = ''): void => {
+            pill.onclick = null;
             pill.style.display = '';
             pill.className = `storage-pill research-sync-pill ${cls}`;
             if (title) pill.title = title;
@@ -2235,7 +2239,8 @@ export const researchSyncMethods = uiModule({
             rejected: { text: state.sent?.state === 'undone'
                 ? [s.pillUndone, this.researchUndoneConflicts(ctx.treeId) > 0 ? s.conflictsN(this.researchUndoneConflicts(ctx.treeId)) : ''].filter(Boolean).join(' · ')
                 : state.sent?.failed ? s.pillFailed : s.pillRejected, button: s.sendAgain, action: 'sendAgain' },
-            writtenConflicts: { text: [s.flyConflict(this.researchHeldConflictCount(ctx.treeId, state.sent)),
+            writtenConflicts: { text: [this.researchHeldConflictCount(ctx.treeId, state.sent) > 0
+                ? s.flyConflict(this.researchHeldConflictCount(ctx.treeId, state.sent)) : s.writtenAt(when(researchAutoState(ctx.treeId).lastWritten?.at ?? state.sent?.closedAt)),
                 this.researchConnectionNote(ctx.link.id)?.title ?? ''].filter(Boolean).join(' · '), button: s.showConflicts, action: 'conflicts' },
             ...(auto ? {
                 autoBridgeDown: { text: archive ? s.pillBridgeDownWaiting(Math.max(1, researchAutoState(ctx.treeId).edits ?? 1)) : s.pillBridgeDown,
@@ -2257,11 +2262,16 @@ export const researchSyncMethods = uiModule({
         const noteFirst = kind === 'writtenConflicts' && note?.kind === 'conflict';
         if (w && !noteFirst && (w.action !== 'startResearch' || this.researchLinkAvailable('open') || this.researchLinkAvailable('live'))) {
             this.closeResearchSyncNote();
-            set('is-warn', '<span class="research-sync-pill-mark" aria-hidden="true">!</span>'
-                + `<span class="research-sync-pill-label" onclick="${call('openResearchSyncMenu')}">${esc(w.text)}</span>`
-                + `<button type="button" class="research-sync-pill-send" data-action="${w.action}" onclick="event.stopPropagation(); ${call('researchSyncAction', `'${w.action}'`)}">${esc(w.button)}</button>`,
-                // The research's reason, when it gave one, on hover too (not only in the block).
-                kind === 'rejected' && !state.sent?.failed && state.sent?.reason ? `${w.text}: ${state.sent.reason}` : w.text);
+            // The research's reason, when it gave one, on hover too (not only in the block).
+            const tip = kind === 'rejected' && !state.sent?.failed && state.sent?.reason ? `${w.text}: ${state.sent.reason}` : w.text;
+            // The state (mark, text, its title) opens the details; only the button acts (R4 of the rc.49
+            // round: the pill named by the state, its text hidden, had the button in its middle).
+            set('is-warn', `<span class="research-sync-pill-mark" title="${esc(tip)}" aria-hidden="true">!</span>`
+                + `<span class="research-sync-pill-label" title="${esc(tip)}">${esc(w.text)}</span>`
+                + `<button type="button" class="research-sync-pill-send" data-action="${w.action}" onclick="event.stopPropagation(); ${call('researchSyncAction', `'${w.action}'`)}">${esc(w.button)}</button>`);
+            pill.onclick = (e) => {
+                if (!(e.target as Element | null)?.closest('button')) this.openResearchSyncMenu();
+            };
             pill.setAttribute('aria-live', 'polite');
             return;
         }

@@ -525,10 +525,14 @@ describe('the send taken back a reply names (finding B)', () => {
         expect(latestUndone(['R1', 'R2'], null)).toBe('R2');
         expect(latestUndone([], sends)).toBe('');
     });
-    it('a send written again since (`again`) is not taken back any more', () => {
-        const sends = [rec('R1', '2026-10-04T05:50:00Z', 'undone'), { ...(rec('R2', '2026-10-04T05:55:00Z', 'undone') as object), again: 'R4' } as never];
-        expect(latestUndone(['R1', 'R2'], sends)).toBe('R1');
+    it('a send written again since (`again`) is not taken back any more, nor one taken back before it (R3 of the rc.49 round)', () => {
+        const sends = [rec('R1', '2026-10-04T05:50:00Z', 'undone'), { ...(rec('R2', '2026-10-04T05:55:00Z', 'undone') as object), again: 'R4' } as never,
+            rec('R5', '2026-10-04T06:00:00Z', 'undone')];
+        expect(latestUndone(['R1', 'R2'], sends)).toBe('');
         expect(latestUndone(['R2'], sends)).toBe('');
+        expect(latestUndone(['R1', 'R2', 'R5'], sends)).toBe('R5');
+        // Written again by this app (`resent`) the same way.
+        expect(latestUndone(['R1', 'R5'], [rec('R1', '2026-10-04T05:50:00Z', 'undone'), rec('R5', '2026-10-04T06:00:00Z', 'undone')], ['R5'])).toBe('');
         expect(sanitizeLiveStatus({ tree: { id: RID }, sends: [{ intake: 'R2', state: 'undone', again: 'R4' }] })?.sends?.[0].again).toBe('R4');
         expect(sanitizeLiveStatus({ tree: { id: RID }, sends: [{ intake: 'R2', state: 'undone', resent: true }] })?.sends?.[0].again).toBe('yes');
     });

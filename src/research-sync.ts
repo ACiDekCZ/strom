@@ -401,15 +401,16 @@ export function researchKeepsTakenBack(version: string, features?: readonly stri
 export function latestUndone(undoneSince: readonly string[], sends: readonly ResearchSendRecord[] | null | undefined,
     resent: readonly string[] = []): string {
     const rec = (intake: string) => sends?.find(r => r.intake === intake);
-    // The reply is now; the status may be older than the undo: only a send written again (`again`, or by
-    // this app — `resent`) is left out.
-    const open = undoneSince.filter(x => !rec(x)?.again && !resent.includes(x));
-    if (open.length === 0) return '';
-    if (!sends) return open[open.length - 1];
     const time = (intake: string): number => {
         const t = Date.parse(rec(intake)?.at ?? '');
         return Number.isFinite(t) ? t : -Infinity;
     };
+    // The reply is now; the status may be older than the undo: only a send written again (`again`, or by
+    // this app — `resent`) is left out, and with it every send taken back before it (R3 of the rc.49 round).
+    const cut = resentCut(sends, resent);
+    const open = undoneSince.filter(x => !rec(x)?.again && !resent.includes(x) && !(Number.isFinite(cut) && time(x) <= cut));
+    if (open.length === 0) return '';
+    if (!sends) return open[open.length - 1];
     if (open.every(x => time(x) === -Infinity)) return open[open.length - 1];
     return open.reduce((best, x) => (time(x) > time(best) ? x : best));
 }
@@ -423,16 +424,33 @@ export function latestUndone(undoneSince: readonly string[], sends: readonly Res
 export function openUndone(sends: readonly ResearchSendRecord[] | null | undefined, ours: (tree: string) => boolean,
     resent: readonly string[], since = ''): ResearchSendRecord[] {
     const after = Date.parse(since);
+    const cut = resentCut(sends?.filter(r => ours(r.tree)), resent);
     return (sends ?? [])
         .filter(r => r.state === 'undone' && !r.again && !resent.includes(r.intake) && ours(r.tree)
-            && (!Number.isFinite(after) || !(Date.parse(r.decidedAt || r.at) <= after)))
+            && (!Number.isFinite(after) || !(Date.parse(r.decidedAt || r.at) <= after))
+            && !(Number.isFinite(cut) && Date.parse(r.at) <= cut))
         .sort((a, b) => (Date.parse(b.at || '') || 0) - (Date.parse(a.at || '') || 0));
 }
 
 /**
+ * The time of the newest send taken back and written again since (`again`,
+ * or by this app — `resent`); -Infinity: none. A send taken back before it is
+ * an older state of the tree, never offered to send again (R3 of the rc.49 round).
+ */
+function resentCut(sends: readonly ResearchSendRecord[] | null | undefined, resent: readonly string[]): number {
+    let cut = -Infinity;
+    for (const r of sends ?? []) {
+        if (!r.again && !resent.includes(r.intake)) continue;
+        const t = Date.parse(r.at);
+        if (Number.isFinite(t) && t > cut) cut = t;
+    }
+    return cut;
+}
+
+/**
  * After a send taken back was written again: the latest other send of this
- * tree the research still has as taken back (see openUndone), or null. It
- * stays the one to offer (finding B2).
+ * tree the research still has as taken back (see openUndone) and newer than
+ * the one written again, or null — an older one is not offered (R3 of the rc.49 round).
  */
 export function nextUndone(sends: readonly ResearchSendRecord[] | null | undefined, ours: (tree: string) => boolean,
     resent: readonly string[], since = ''): ResearchSendRecord | null {

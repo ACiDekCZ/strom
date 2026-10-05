@@ -670,7 +670,7 @@ test('A2: a switch of mode not yet acknowledged is said beside a send taken back
     await expect(pill(page)).toContainText('Send taken back');
 });
 
-test('every send taken back is offered: an older one the research still has taken back stays in sight after another was sent again', async ({ page }) => {
+test('R3 of the rc.49 round: after Send again an older send taken back is not offered (an older state), not even when the next copy\'s reply still lists it', async ({ page }) => {
     const bridge = await writtenThenUndone(page, { features: ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.conflictEdit'] });
     const older = bridge.sends.find(r => r.state === 'undone')!;
     // A later send, written, then taken back too.
@@ -683,7 +683,7 @@ test('every send taken back is offered: an older one the research still has take
     const later = bridge.sends[0]; // the newest first, as the research lists them
     Object.assign(later, { state: 'undone', decidedAt: new Date().toISOString() });
     await page.clock.fastForward(60_000);
-    // Send again for the later one: written; the older one is still taken back there — offered next.
+    // Send again for the later one: written; the older one, still taken back there, is an older state — not offered.
     bridge.syncReply = { status: 200, body: { ...WRITE.body, input: 'I0051', changes: 1, applied: 1, undoneSince: [later.intake, older.intake], takenBack: 1 } };
     await renameJan(page, 'Jeník');
     await page.evaluate(() => window.Strom.UI.researchSendNow());
@@ -692,16 +692,17 @@ test('every send taken back is offered: an older one the research still has take
     await openResearchMenu(page);
     await block(page).getByRole('button', { name: 'Send again' }).click();
     await expect.poll(() => bridge.againAsks ?? []).toEqual([later.intake]);
-    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent))
-        .toMatchObject({ state: 'undone', intake: older.intake });
-    await expect(pill(page)).toContainText('Send taken back');
-    // And the next copy, the research still listing both: the older one stays the one offered.
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).not.toBe('undone');
+    await expect(pill(page)).not.toContainText('Send taken back');
+    // And the next copy, the research still listing both: the older one is still not offered.
     bridge.syncReply = { status: 200, body: { ...WRITE.body, input: 'I0052', changes: 1, applied: 1, undoneSince: [later.intake, older.intake], takenBack: 1 } };
     await renameJan(page, 'Jenda');
     await page.evaluate(() => window.Strom.UI.researchSendNow());
     await expect.poll(() => bridge.posts.length).toBe(4);
-    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent))
-        .toMatchObject({ state: 'undone', intake: older.intake });
+    await poll(page);
+    expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).not.toBe('undone');
+    await expect(pill(page)).not.toContainText('Send taken back');
+    expect(bridge.againAsks ?? []).toEqual([later.intake]);
 });
 
 test('a send taken back before this page knew (not its last write) is shown with its own Send again; one taken back before the last load is settled', async ({ page }) => {
@@ -1866,4 +1867,55 @@ test('B1 of beta.56: a send with a conflict taken back in the research (the conf
     await expect(jan).not.toHaveAttribute('aria-label', /conflicting sources/);
     await openResearchMenu(page);
     await expect(block(page)).not.toContainText('conflict');
+});
+
+test('R4 of the rc.49 round: the state of a send taken back never sends again — only its button does; the state opens the details', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    const bridge = await writtenThenUndone(page);
+    // The text and the mark open ⋯ → Research; nothing is asked of the research.
+    await pill(page).locator('.research-sync-pill-label').click();
+    await expect(block(page)).toContainText('was taken back in the research');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await pill(page).locator('.research-sync-pill-mark').click();
+    await expect(block(page)).toContainText('was taken back in the research');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    // Narrower, the text hidden: what carries the state's name is not the button (the pill had it, Send again in its middle).
+    await page.setViewportSize({ width: 1500, height: 900 });
+    const named = page.getByTitle('Send taken back', { exact: true }).locator('visible=true');
+    await expect(named).toHaveCount(1);
+    await named.click();
+    await page.clock.fastForward(1000);
+    await poll(page);
+    expect(bridge.againAsks ?? []).toEqual([]);
+    await expect(pill(page)).toContainText('Send taken back');
+    await expect(block(page)).toContainText('was taken back in the research');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    // The button does.
+    await pill(page).getByRole('button', { name: 'Send again' }).click();
+    await expect.poll(() => bridge.againAsks ?? []).toHaveLength(1);
+});
+
+test('R1 of the rc.49 round: a conflict the research still lists with later sends counts once ("1 conflict", not one per send)', async ({ page }) => {
+    const bridge = await conflictLeft(page);
+    Object.assign(bridge.sends[0], { conflicts: 1 });
+    const later: [string, string, string][] = [['I0044', 'c2c2c2c2c2c2', 'Praha'], ['I0045', 'c3c3c3c3c3c3', 'Brno']];
+    for (const [input, head, place] of later) {
+        bridge.syncReply = { status: 200, body: { ...WRITE.body, input } };
+        bridge.onWrite = () => ({ head, ged: nameConflictGed(head, ['1 BIRT', `2 PLAC ${place}`]) });
+        const n = bridge.posts.length;
+        await janBirthPlace(page, place);
+        await page.clock.fastForward(QUIET + 1000);
+        await expect.poll(() => bridge.posts.length).toBe(n + 1);
+        // The research's record of each send names the same conflict, still open.
+        Object.assign(bridge.sends[0], { conflicts: 1 });
+    }
+    await page.clock.fastForward(30_000);
+    await poll(page);
+    await expect(pill(page)).toContainText('Written, 1 conflict to decide');
+    await openResearchMenu(page);
+    await expect(block(page)).toContainText('Written, 1 conflict to decide');
+    await expect(block(page)).not.toContainText('3 conflicts');
 });
