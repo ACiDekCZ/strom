@@ -295,7 +295,9 @@ test.describe('where the tree menu offers it', () => {
     test('a computer: in the tree manager of a tied tree', async ({ page }) => {
         await openResearch(page, false);
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-        await expect(page.locator('#tree-manager-modal')).toContainText('Send changes to the research');
+        const row = page.locator('.tree-manager-item.active');
+        await row.locator('.tree-row-menu-btn').click();
+        await expect(row.locator('.tree-row-menu.open [data-action="researchSend"]')).toHaveText('Send changes to the research');
     });
 
     test('a computer: Actions → Research of a tied tree (nothing announced: Send + What is it), not of another tree', async ({ page }) => {
@@ -334,7 +336,10 @@ test.describe('where the tree menu offers it', () => {
         await openResearch(page, false);
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
         await expect(page.locator('#tree-manager-modal')).toBeVisible();
-        await expect(page.locator('#tree-manager-modal')).not.toContainText('Send changes to the research');
+        await page.locator('.tree-manager-item.active .tree-row-menu-btn').tap();
+        const sheet = page.locator('.bottom-sheet-tree-actions');
+        await expect(sheet.locator('[data-action="stats"]')).toBeVisible();
+        await expect(sheet).not.toContainText('Send changes to the research');
         await ctx.close();
     });
 });

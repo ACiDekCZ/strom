@@ -6,7 +6,7 @@
  */
 
 import { iconSvg } from '../icons.js';
-import { PersonId } from '../types.js';
+import { PersonId, APP_VERSION } from '../types.js';
 import { uiModule } from './module.js';
 import { strings } from '../strings.js';
 import { SettingsManager } from '../settings.js';
@@ -24,6 +24,8 @@ interface MenuRow {
     ariaLabel?: string;
     /** A quiet second line under the label ("whole tree or current view"). */
     sub?: string;
+    /** A quiet value at the row's end ("BETA · 3.9.0"). */
+    value?: string;
 }
 /** The prominent "Strom: {name}" row that opens the second-level tree sheet
  *  (serif name + chevron + tinted background — mirrors the desktop submenu row). */
@@ -295,54 +297,26 @@ export const bottomSheetMethods = uiModule({
             };
         }
         if (managed.rows.length > 0 || managed.treeRow) blocks.push(managed);
+        // The tree manager right under the tree row (its actions sheet no longer lists it).
+        if (active) blocks.push({ rows: [{ label: s.treeManager.manageTreesTitle, run: () => this.showTreeManagerDialog() }] });
 
         // 6) Add family (no bottom-bar home; edit-only) and the settings.
         blocks.push({ divider: true, rows: [
             ...(isView ? [] : [{ label: s.familyWizard.menu, run: () => this.startFamilyWizardFromToolbar() }]),
             { label: s.settings.title, run: () => this.showSettingsDialog() },
+            // The version here (the toolbar's BETA badge has no room on a phone).
+            { label: s.about.title, run: () => this.showAboutDialog(),
+                value: document.body.classList.contains('beta-build') ? s.about.betaValue(APP_VERSION) : APP_VERSION },
         ] });
 
         this.presentMenuSheet(s.mobileMenu.more, blocks);
     },
 
-    /**
-     * The second-level "Strom: {name}" sheet (mobile counterpart of the desktop
-     * ⋯ "Tree:" submenu, same order): about the tree, its management, the
-     * actions on the current view, merging / splitting, the tree manager.
-     * Delete stays in the tree manager; gating (fsa / audit) matches the desktop rows.
-     */
+    /** More → "Strom: {name}": the open tree's actions sheet (the shared list, tree-actions.ts). */
     showTreeActionsSheet(): void {
-        const s = strings;
-        const active = TreeManager.getActiveTreeMetadata();
         const id = TreeManager.getActiveTreeId();
-        if (!active || !id || DataManager.isReadOnly()) return;
-        const isFsa = document.body.classList.contains('fsa-supported');
-
-        this.presentMenuSheet(`${s.menu.treeActions} ${active.name}`, [
-            { rows: [
-                { label: s.treeManager.stats, run: () => this.showActiveTreeStats() },
-                { label: s.treeHealth.menu, run: () => void this.showTreeHealthDialog(id) },
-                ...(SettingsManager.isAuditLogEnabled() ? [{ label: s.auditLog.viewLog, run: () => this.showAuditLogDialog() }] : []),
-            ] },
-            { divider: true, rows: [
-                { label: s.treeManager.rename, run: () => this.showRenameTreeDialog(id) },
-                { label: s.treeManager.duplicate, run: () => this.duplicateTree(id) },
-                { label: s.treeManager.hide, run: () => void this.toggleTreeVisibility(id) },
-            ] },
-            { divider: true, header: s.menu.sectionFromView, rows: [
-                { label: s.menu.makeTree, run: () => this.makeTreeFromCurrentView() },
-                { label: s.menu.mergeViewInto, run: () => this.mergeViewInto() },
-            ] },
-            { divider: true, rows: [
-                { label: s.menu.mergeIntoTree, run: () => this.showMergeTreesDialog(id) },
-                // WYSIWYG: the active tree IS the live view, so no person picker.
-                { label: s.menu.splitFamilies, run: () => this.showSplitFamiliesDialog() },
-                ...(isFsa ? [{ label: s.fileAccess.saveToFile, run: () => this.attachSaveToFile() }] : []),
-            ] },
-            { divider: true, rows: [
-                { label: s.treeManager.manageTreesTitle, run: () => this.showTreeManagerDialog() },
-            ] },
-        ]);
+        if (!id || DataManager.isReadOnly()) return;
+        void this.presentTreeActionsSheet(id, { source: 'more' });
     },
 
     /**
@@ -384,6 +358,12 @@ export const bottomSheetMethods = uiModule({
                 label.appendChild(sub);
             }
             btn.appendChild(label);
+            if (row.value) {
+                const value = document.createElement('span');
+                value.className = 'bottom-sheet-value';
+                value.textContent = row.value;
+                btn.appendChild(value);
+            }
             if (row.badge && row.badge > 0) {
                 const badge = document.createElement('span');
                 badge.className = 'tree-switcher-badge';

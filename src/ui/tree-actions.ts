@@ -9,8 +9,14 @@
 import { TreeId, LAST_FOCUSED } from '../types.js';
 import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
-import { strings } from '../strings.js';
+import { countFamilies } from '../ged-exporter.js';
+import { strings, getCurrentLanguage } from '../strings.js';
+import { formatFileSize, formatRelativeDateTime } from '../format.js';
 import { uiModule } from './module.js';
+
+/** Drag on the sheet's head: this far up expands it, this far down closes it. */
+const SHEET_EXPAND_PX = 40;
+const SHEET_CLOSE_PX = 80;
 
 /** Where the list is opened from: the tree manager (its dialogs return there) or More. */
 export type TreeActionSource = 'manager' | 'more';
@@ -43,6 +49,11 @@ export interface TreeActionGroup {
  */
 export function researchRunsHere(): boolean {
     try { return !(window.matchMedia?.('(pointer: coarse)').matches ?? false); } catch { return true; }
+}
+
+/** Touch in the bottom-navigation regime: the tree manager's ⋯ opens the sheet. */
+export function treeActionsAsSheet(): boolean {
+    try { return window.matchMedia?.('(max-width: 1024px) and (pointer: coarse)').matches ?? false; } catch { return false; }
 }
 
 export const treeActionsMethods = uiModule({
@@ -117,5 +128,162 @@ export const treeActionsMethods = uiModule({
             ] },
         ];
         return groups.filter(group => group.rows.length > 0);
+    },
+
+    /**
+     * The tree-actions sheet (2.2): the tree's name and summary on top, the
+     * groups as 48px rows below. Opens at 80% of the window, a drag up on its
+     * head takes the full height, down closes it. "Open at startup" toggles in
+     * place; every other row closes the sheet and runs. From the tree manager
+     * it is a second layer: the manager stays open under it.
+     */
+    async presentTreeActionsSheet(treeId: TreeId, opts: { source: TreeActionSource }): Promise<void> {
+        const tree = TreeManager.getTreeMetadata(treeId);
+        if (!tree) return;
+        const readOnly = document.body.classList.contains('view-mode');
+        const groups = (await this.treeActionGroups(treeId, opts.source))
+            .map(group => ({ ...group, rows: group.rows.filter(row => !(readOnly && row.editOnly)) }))
+            .filter(group => group.rows.length > 0);
+        const isActive = treeId === TreeManager.getActiveTreeId();
+        const t = strings.treeActions;
+
+        this.hideBottomSheet();
+        const overlay = document.createElement('div');
+        overlay.className = 'bottom-sheet-overlay';
+        const sheet = document.createElement('div');
+        sheet.className = 'bottom-sheet bottom-sheet-menu bottom-sheet-tree-actions';
+        sheet.setAttribute('role', 'dialog');
+        sheet.setAttribute('aria-modal', 'true');
+        sheet.setAttribute('aria-label', tree.name);
+
+        // Head: handle, name + ×, subtitle, summary.
+        const head = document.createElement('div');
+        head.className = 'tree-actions-head';
+        const handle = document.createElement('div');
+        handle.className = 'bottom-sheet-handle';
+        const titleRow = document.createElement('div');
+        titleRow.className = 'tree-actions-title-row';
+        const title = document.createElement('div');
+        title.className = 'tree-actions-title';
+        title.textContent = tree.name;
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'tree-actions-close';
+        close.setAttribute('aria-label', strings.buttons.close);
+        close.textContent = '\u00d7';
+        close.addEventListener('click', () => this.hideBottomSheet());
+        titleRow.append(title, close);
+        const sub = document.createElement('div');
+        sub.className = 'tree-actions-sub';
+        sub.textContent = isActive ? t.subActive : t.subOther;
+        const summary = document.createElement('div');
+        summary.className = 'tree-actions-summary';
+        const treeData = await TreeManager.getTreeData(treeId);
+        const lang = getCurrentLanguage();
+        const facts = [
+            strings.treeManager.persons(tree.personCount),
+            strings.treeManager.families(treeData ? countFamilies(treeData) : 0),
+            formatFileSize(tree.sizeBytes, lang),
+            isActive
+                ? t.edited(formatRelativeDateTime(new Date(tree.lastModifiedAt).getTime(), lang))
+                : (tree.research ? t.researchLinked : t.researchNone),
+        ].filter(Boolean);
+        for (const fact of facts) {
+            const span = document.createElement('span');
+            span.textContent = fact;
+            summary.appendChild(span);
+        }
+        head.append(handle, titleRow, sub, summary);
+        sheet.appendChild(head);
+
+        const list = document.createElement('div');
+        list.className = 'bottom-sheet-items tree-actions-list';
+        list.setAttribute('role', 'menu');
+        list.setAttribute('aria-label', tree.name);
+        for (const group of groups) {
+            const header = document.createElement('div');
+            header.className = 'bottom-sheet-section';
+            header.setAttribute('role', 'presentation');
+            header.textContent = group.header;
+            list.appendChild(header);
+            for (const row of group.rows) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'bottom-sheet-item tree-actions-row' + (row.danger ? ' danger' : '');
+                btn.dataset.action = row.key;
+                const label = document.createElement('span');
+                label.className = 'bottom-sheet-label';
+                label.textContent = row.label;
+                btn.appendChild(label);
+                if (row.checked !== undefined) {
+                    btn.setAttribute('role', 'menuitemcheckbox');
+                    btn.setAttribute('aria-checked', String(row.checked));
+                    const toggle = document.createElement('span');
+                    toggle.className = 'tree-actions-switch';
+                    toggle.setAttribute('aria-hidden', 'true');
+                    btn.appendChild(toggle);
+                    btn.addEventListener('click', () => {
+                        row.run();
+                        btn.setAttribute('aria-checked', String(TreeManager.getDefaultTree() === treeId));
+                    });
+                } else {
+                    btn.setAttribute('role', 'menuitem');
+                    if (row.value !== undefined || row.key === 'defaultPerson') {
+                        const value = document.createElement('span');
+                        value.className = 'tree-actions-value';
+                        value.textContent = row.value ?? '';
+                        btn.appendChild(value);
+                        const chevron = document.createElement('span');
+                        chevron.className = 'tree-actions-chevron';
+                        chevron.setAttribute('aria-hidden', 'true');
+                        chevron.textContent = '\u203a';
+                        btn.appendChild(chevron);
+                    }
+                    btn.addEventListener('click', () => {
+                        this.hideBottomSheet();
+                        row.run();
+                    });
+                }
+                list.appendChild(btn);
+            }
+        }
+        if (!isActive && !readOnly) {
+            const note = document.createElement('p');
+            note.className = 'tree-actions-note';
+            note.textContent = t.moreWhenOpen;
+            list.appendChild(note);
+        }
+        sheet.appendChild(list);
+        overlay.appendChild(sheet);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this.hideBottomSheet();
+        });
+
+        // A drag on the head: up = full height, down = close (the list scrolls itself).
+        let startY = 0;
+        let dragging = false;
+        head.addEventListener('touchstart', (e) => {
+            startY = e.touches[0].clientY;
+            dragging = true;
+            sheet.style.transition = 'none';
+        }, { passive: true });
+        head.addEventListener('touchmove', (e) => {
+            if (!dragging) return;
+            const dy = e.touches[0].clientY - startY;
+            if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
+        }, { passive: true });
+        head.addEventListener('touchend', (e) => {
+            dragging = false;
+            sheet.style.transition = '';
+            sheet.style.transform = '';
+            const dy = e.changedTouches[0].clientY - startY;
+            if (dy > SHEET_CLOSE_PX) this.hideBottomSheet();
+            else if (dy < -SHEET_EXPAND_PX) sheet.classList.add('expanded');
+        });
+
+        document.body.appendChild(overlay);
+        this.bottomSheet = overlay;
+        requestAnimationFrame(() => overlay.classList.add('active'));
+        list.querySelector<HTMLElement>('.tree-actions-row')?.focus({ preventScroll: true });
     },
 });

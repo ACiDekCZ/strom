@@ -43,6 +43,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { fitFlyout } from './flyout.js';
 import { uiModule } from './module.js';
+import { treeActionsAsSheet } from './tree-actions.js';
 
 import { iconSvg } from '../icons.js';
 
@@ -635,6 +636,7 @@ export const treeManagementMethods = uiModule({
                     </div>
                     <div class="tree-manager-item-actions">
                         <button class="tree-open-btn" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${s.open}</button>
+                        ${isActive ? `<span class="tree-opened-label">${s.opened}</span>` : ''}
                         <div class="tree-row-menu-wrap">
                             <button class="tree-row-menu-btn" data-tree-id="${tree.id}" data-tip="${s.moreActions}" aria-label="${s.moreActions}" aria-haspopup="menu">⋯</button>
                             <div class="tree-row-menu" role="menu"></div>
@@ -716,7 +718,12 @@ export const treeManagementMethods = uiModule({
                     const menu = btn.parentElement?.querySelector('.tree-row-menu') as HTMLElement | null;
                     const wasOpen = menu?.classList.contains('open');
                     closeAll();
-                    if (menu && !wasOpen && btn.dataset.treeId) void this.openTreeRowMenu(btn, menu, btn.dataset.treeId as TreeId);
+                    if (btn.dataset.treeId && treeActionsAsSheet()) {
+                        // Touch: the tree-actions sheet over the manager (no floating menu).
+                        void this.presentTreeActionsSheet(btn.dataset.treeId as TreeId, { source: 'manager' });
+                    } else if (menu && !wasOpen && btn.dataset.treeId) {
+                        void this.openTreeRowMenu(btn, menu, btn.dataset.treeId as TreeId);
+                    }
                     e.stopPropagation();
                     return;
                 }

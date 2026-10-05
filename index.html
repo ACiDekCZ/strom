@@ -1827,6 +1827,70 @@
             margin: 6px 4px; min-height: 56px; gap: 6px; justify-content: flex-start;
         }
         .bottom-sheet-tree-prefix { color: var(--text-light); flex-shrink: 0; }
+        /* A quiet value at a More-sheet row's end ("BETA · 3.9.0"). */
+        .bottom-sheet-value { flex: none; font-size: 13px; color: var(--text-faint); }
+
+        /* Tree-actions sheet (tree-actions.ts): name + summary on top, the six
+           groups as 48px rows. Opens at 80% of the window; .expanded = full
+           height (a drag up on the head). Only the list scrolls. */
+        .bottom-sheet.bottom-sheet-tree-actions {
+            display: flex; flex-direction: column; overflow: hidden;
+            max-height: 80dvh;
+            padding: 0 0 env(safe-area-inset-bottom, 0px);
+            transition: transform 0.22s ease, max-height 0.22s ease;
+        }
+        .bottom-sheet.bottom-sheet-tree-actions.expanded {
+            max-height: calc(100dvh - 8px - env(safe-area-inset-top, 0px));
+        }
+        .tree-actions-head {
+            flex: none; padding: 0 4px 10px 16px;
+            border-bottom: 1px solid var(--divider);
+            touch-action: none;
+        }
+        .tree-actions-title-row { display: flex; align-items: flex-start; gap: 8px; }
+        .tree-actions-title {
+            flex: 1; min-width: 0; padding-top: 8px;
+            font-family: var(--font-serif); font-size: 20px; font-weight: 600; line-height: 1.25;
+            overflow-wrap: anywhere;
+        }
+        .tree-actions-close {
+            flex: none; width: 44px; height: 44px; border: none; background: none;
+            border-radius: 50%; font-size: 24px; line-height: 1; color: var(--text-light); cursor: pointer;
+        }
+        .tree-actions-sub { margin-top: 2px; font-size: 13px; color: var(--text-light); }
+        .tree-actions-summary {
+            display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 6px;
+            font-size: 13px; color: var(--text-faint);
+        }
+        .tree-actions-list {
+            flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+            padding: 0 0 8px;
+        }
+        .tree-actions-list .bottom-sheet-section { padding: 14px 16px 6px; font-size: 12px; letter-spacing: .06em; }
+        .bottom-sheet-menu .bottom-sheet-item.tree-actions-row {
+            min-height: 48px; padding: 0 16px; gap: 8px; justify-content: flex-start;
+            font-size: 16px; border-radius: 0; border-top: 1px solid var(--divider);
+        }
+        .tree-actions-row .bottom-sheet-label { flex: 1; min-width: 0; }
+        .tree-actions-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .tree-actions-value {
+            max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            font-size: 14px; color: var(--text-faint);
+        }
+        .tree-actions-chevron { color: var(--text-light); font-size: 20px; line-height: 1; }
+        /* "Open at startup": a switch toggled in place. */
+        .tree-actions-switch {
+            flex: none; position: relative; width: 40px; height: 24px; border-radius: 999px;
+            background: var(--border); transition: background 0.15s;
+        }
+        .tree-actions-switch::after {
+            content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+            border-radius: 50%; background: var(--surface); box-shadow: var(--shadow-sm);
+            transition: transform 0.15s;
+        }
+        .tree-actions-row[aria-checked="true"] .tree-actions-switch { background: var(--primary); }
+        .tree-actions-row[aria-checked="true"] .tree-actions-switch::after { transform: translateX(16px); }
+        .tree-actions-note { margin: 12px 16px 4px; font-size: 13px; line-height: 1.45; color: var(--text-faint); }
         .bottom-sheet-tree-name {
             font-family: var(--font-serif); font-weight: 600; color: var(--text);
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
@@ -10206,6 +10270,37 @@
             }
         }
 
+        /* "Open" label of the open tree's row: the phone shows it instead of Open. */
+        .tree-opened-label { display: none; }
+        .tree-manager-footer .btn-text-short { display: none; }
+        @media (max-width: 1024px) and (pointer: coarse) {
+            .tree-manager-item .tree-manager-item-actions button.tree-row-menu-btn { min-width: 44px; height: 44px; }
+        }
+        /* Tree manager on a phone (2.1): serif names, Open 40px high, the open
+           tree labelled, Export all and New tree side by side (× and a drag
+           down close the dialog, no Close button). */
+        @media (max-width: 640px) {
+            .tree-manager-item .tree-manager-item-name {
+                min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                font-family: var(--font-serif); font-size: 18px; font-weight: 600;
+            }
+            .tree-manager-item .active-badge { display: none; }
+            .tree-manager-item-stats-row { font-size: 14px; color: var(--text-light); }
+            .tree-manager-item .tree-manager-item-actions button.tree-open-btn { height: 40px; }
+            .tree-manager-item.active .tree-open-btn { display: none !important; }
+            .tree-manager-item.active .tree-opened-label {
+                display: inline-flex; align-items: center; height: 28px; padding: 0 10px;
+                border-radius: 999px; font-size: 13px; font-weight: 600;
+                color: var(--primary); background: var(--primary-soft);
+                align-self: center;
+            }
+            .tree-manager-footer [data-dismiss] { display: none; }
+            /* Side by side, unlike the other phone footers (one button per row). */
+            .modal.tree-manager-modal .tree-manager-footer { flex-direction: row; flex-wrap: nowrap; }
+            .modal.tree-manager-modal .tree-manager-footer > button { flex: 1; width: auto; min-height: 48px; }
+            .tree-manager-footer .btn-text-full { display: none; }
+            .tree-manager-footer .btn-text-short { display: inline; }
+        }
         /* Tablet/Mobile (≤900px): icons in tree manager */
         @media (max-width: 900px) {
             .tree-manager-item-actions .btn-icon,
@@ -13794,7 +13889,7 @@
             </div>
             <div class="buttons tree-manager-footer">
                 <button class="secondary" onclick="window.Strom.UI.showExportAllDialog()" data-i18n-title="treeManager.exportAll">
-                    <span class="btn-text" data-i18n="treeManager.exportAll">Export All</span>
+                    <span class="btn-text btn-text-full" data-i18n="treeManager.exportAll">Export All</span><span class="btn-text btn-text-short" data-i18n="treeManager.exportAllShort">Export all</span>
                 </button>
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeTreeManagerDialog()" data-i18n="buttons.close"></button>
                 <button class="primary edit-only" onclick="window.Strom.UI.showNewTreeMenu()">

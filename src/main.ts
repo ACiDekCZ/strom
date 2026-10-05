@@ -398,6 +398,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (isBetaBuild(APP_MODE)) {
         // The window title too (as the installed app's name, "Strom Beta").
         document.title = 'Strom Beta';
+        // The phone's More sheet shows "BETA · version" by About (no badge room there).
+        document.body.classList.add('beta-build');
         const logo = document.querySelector('.app-wordmark');
         if (logo && !logo.querySelector('.beta-badge')) {
             const badge = document.createElement('span');

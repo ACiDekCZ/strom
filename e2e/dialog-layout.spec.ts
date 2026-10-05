@@ -170,7 +170,7 @@ test('a decision without a "leave it" option ignores Escape', async ({ page }) =
     await expect(modal).toBeVisible();
 });
 
-for (const id of ['storage-status-modal', 'tree-manager-modal'] as const) {
+for (const id of ['storage-status-modal'] as const) {
     test(`360px: ${id} footer stacks full width, primary on top`, async ({ page }) => {
         await page.setViewportSize({ width: 360, height: 740 });
         await openApp(page);
@@ -197,6 +197,29 @@ for (const id of ['storage-status-modal', 'tree-manager-modal'] as const) {
         expect(m).toEqual({ overflow: false, fullWidth: true, primaryAbove: true, pageScroll: false });
     });
 }
+
+test('360px: the tree manager footer has Export all and New tree side by side, no Close (× and the drag close it)', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await page.evaluate(() => void window.Strom.UI.showTreeManagerDialog());
+    const modal = page.locator('#tree-manager-modal');
+    await expect(modal).toBeVisible();
+    const m = await page.evaluate(() => {
+        const footer = document.querySelector('#tree-manager-modal .buttons') as HTMLElement;
+        const btns = Array.from(footer.children).filter(b => (b as HTMLElement).offsetParent) as HTMLElement[];
+        const f = footer.getBoundingClientRect();
+        const [a, b] = btns.map(x => x.getBoundingClientRect());
+        return {
+            labels: btns.map(x => x.innerText.replace(/\s+/g, ' ').trim()),
+            sideBySide: Math.abs(a.top - b.top) < 1,
+            tall: btns.every(x => x.getBoundingClientRect().height >= 48),
+            overflow: btns.some(x => x.getBoundingClientRect().right > f.right + 0.5 || x.getBoundingClientRect().left < f.left - 0.5),
+            pageScroll: document.documentElement.scrollWidth > window.innerWidth,
+        };
+    });
+    expect(m).toEqual({ labels: ['Export all', '+ New tree'], sideBySide: true, tall: true, overflow: false, pageScroll: false });
+});
 
 test('the confirm dialog is the small width and its title keeps the 20px/24px inset, lined up with the body (desktop)', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
