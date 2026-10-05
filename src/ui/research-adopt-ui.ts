@@ -29,6 +29,7 @@ import { onComputer, fetchWithTimeout, fetchStatus, fetchGedcomText, postSync, p
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { canPromptInstall, promptInstall } from '../pwa.js';
+import { setPendingAdopt, clearPendingAdopt } from './pending-adopt.js';
 import { researchSendModeCardsHtml, researchSendPrinciplesHtml, researchSendModeChecked, researchTrialTagHtml } from './research-tree-settings-ui.js';
 import { researchSendMode } from './research-sync-ui.js';
 
@@ -127,6 +128,17 @@ export const researchAdoptMethods = uiModule({
      * by its token; the user decides whether it goes over.
      */
     async adoptFromResearch(raw: string): Promise<void> {
+        // Kept in this tab until the hand-over ends: a reload meanwhile (the browser's own advice after
+        // allowing local network access) asks again instead of losing ?adopt= (m4 of the Windows round).
+        setPendingAdopt(raw);
+        try {
+            await this.adoptFromResearchNow(raw);
+        } finally {
+            clearPendingAdopt(raw);
+        }
+    },
+
+    async adoptFromResearchNow(raw: string): Promise<void> {
         const r = strings.research;
         const bridge = parseLiveBridge(raw);
         if (!bridge) {
@@ -142,7 +154,7 @@ export const researchAdoptMethods = uiModule({
         } catch (err) {
             console.warn('The research bridge did not answer', err);
             // Not reached at all (the local network blocked, or the research gone): say so.
-            if (await this.showResearchConnectFailed(err, { param: 'adopt', value: raw })) void this.adoptFromResearch(raw);
+            if (await this.showResearchConnectFailed(err, { param: 'adopt', value: raw })) await this.adoptFromResearchNow(raw);
             return;
         }
         // Installed from the app: its token holds 24 h, and from the welcome

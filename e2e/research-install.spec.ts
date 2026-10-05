@@ -13,7 +13,7 @@ import { openApp, card, createFirstPerson, addRelation, waitForPersist } from '.
 const BRIDGE = 'http://127.0.0.1:5993/0123456789abcdef0123456789abcdef';
 const UUID = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
 const cors = { 'access-control-allow-origin': '*' };
-const TOKEN_IN_LINE = /STROM_FROM_APP='?([A-Za-z0-9_-]{22,43})/;
+const TOKEN_IN_LINE = /STROM_FROM[ =]'1\|([A-Za-z0-9_-]{22,43})\|/;
 
 const dialog = (page: Page) => page.locator('#research-info-modal');
 /** This copy's address as the line names it (origin + path, no query). */
@@ -132,7 +132,7 @@ test.describe('installing the research from the app', () => {
         const line = await d.locator('.install-line').first().getAttribute('data-line');
         // A copy of the app other than stromapp.info (here the test server): the line names it.
         const app = appUrlOf(page);
-        expect(line).toBe(`curl -fsSL https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.sh | STROM_FROM_APP=${rec.token} STROM_FROM_APP_NAME='My Family Tree' STROM_FROM_BROWSER=chromium STROM_APP_URL=${app} sh`);
+        expect(line).toBe(`curl -fsSL https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.sh | STROM_FROM='1|${rec.token}|chromium||${app}|My Family Tree' sh`);
         await expect(d.locator('.install-line .install-token').first()).toHaveText(rec.token);
         // Opened again while it holds: the same token.
         await d.locator('[data-act="back"]').click();
@@ -162,7 +162,7 @@ test.describe('installing the research from the app', () => {
         await expect(d.locator('.install-os-btn.active')).toHaveText('Windows');
         const token = (await installRecord(page))!.token;
         expect(await d.locator('.install-line').first().getAttribute('data-line'))
-            .toBe(`powershell -ExecutionPolicy Bypass -c "si env:STROM_FROM_APP '${token}'; si env:STROM_APP_URL '${appUrlOf(page)}'; irm https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.ps1 | iex"`);
+            .toBe(`powershell -ExecutionPolicy Bypass -c "si env:STROM_FROM '1|${token}|chromium||${appUrlOf(page)}|My Family Tree'; irm https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.ps1 | iex"`);
         // (With this copy's address the tree's name no longer fits Win + R, nor the browser: left out, the
         // research suggests a name and picks a browser. The public app's line has room for both.)
         expect((await d.locator('.install-line').first().getAttribute('data-line'))!.length).toBeLessThanOrEqual(259);
@@ -171,7 +171,7 @@ test.describe('installing the research from the app', () => {
 
         await d.locator('.install-os-btn[data-os="linux"]').click();
         await expect(d.locator('.install-howto li').first()).toContainText('Ctrl + Alt + T');
-        expect(await d.locator('.install-line').first().getAttribute('data-line')).toContain(`STROM_FROM_APP=${token} STROM_FROM_APP_NAME='My Family Tree' STROM_FROM_BROWSER=chromium STROM_APP_URL=${appUrlOf(page)} sh`);
+        expect(await d.locator('.install-line').first().getAttribute('data-line')).toContain(`STROM_FROM='1|${token}|chromium||${appUrlOf(page)}|My Family Tree' sh`);
         await d.locator('.install-os-btn[data-os="mac"]').click();
         await expect(d.locator('.install-apple')).toContainText('Command Line Tools');
         expect((await installRecord(page))!.os).toBe('mac');
@@ -181,7 +181,7 @@ test.describe('installing the research from the app', () => {
         // npm folded away; open, it carries the same token.
         await expect(d.locator('details.install-other')).not.toHaveAttribute('open', '');
         await d.locator('details.install-other summary').click();
-        expect(await d.locator('.install-npm').getAttribute('data-line')).toBe(`npm i -g strom-research\nSTROM_FROM_APP=${token} STROM_FROM_APP_NAME='My Family Tree' STROM_FROM_BROWSER=chromium STROM_APP_URL=${appUrlOf(page)} strom-research`);
+        expect(await d.locator('.install-npm').getAttribute('data-line')).toBe(`npm i -g strom-research\nSTROM_FROM='1|${token}|chromium||${appUrlOf(page)}|My Family Tree' strom-research`);
     });
 
     test('Copy puts the exact line on the clipboard; "Copied" holds until the system changes', async ({ page, context }) => {
@@ -206,7 +206,7 @@ test.describe('installing the research from the app', () => {
         await toInstallStep(page);
         await dialog(page).locator('[data-act="copy"]').click();
         await expect(page.locator('.toast')).toContainText('Copying failed');
-        expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toContain('STROM_FROM_APP=');
+        expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toContain("STROM_FROM='1|");
     });
 
     test('waiting: no request to the computer for 5 minutes; after 15 the longer text; after 24 h expired, the menu as before', async ({ page }) => {
@@ -391,7 +391,7 @@ test.describe('installing the research from the app', () => {
         await expect(d.locator('.install-transfer')).toHaveClass(/install-transfer-downloaded/);
         await expect(d.locator('[data-act="pasted"]')).toBeEnabled();
         expect(await d.locator('.install-line').first().getAttribute('data-line'))
-            .toContain(`STROM_FROM_APP=${token} STROM_FROM_APP_NAME='My Family Tree' STROM_FROM_BROWSER=safari STROM_FROM_FILE=${file} STROM_APP_URL=`);
+            .toContain(`STROM_FROM='1|${token}|safari|${token.slice(0, 8)}|${appUrlOf(page)}|My Family Tree' sh`);
         expect((await installRecord(page))!.file).toBe(file);
         // The tree says it is moving; "The move did not happen" takes the banner away.
         const banner = page.locator('#research-transfer-banner');
@@ -647,7 +647,7 @@ test.describe('installing the research from the app', () => {
         await expect(page.locator('#browser-notice-float')).toHaveCount(0);
         await toInstallStep(page);
         await expect(dialog(page).locator('.install-transfer')).toHaveCount(0);
-        expect(await dialog(page).locator('.install-line').first().getAttribute('data-line')).toContain('STROM_FROM_BROWSER=firefox ');
+        expect(await dialog(page).locator('.install-line').first().getAttribute('data-line')).toMatch(/STROM_FROM='1\|[A-Za-z0-9_-]+\|firefox\|/);
     });
 
     test('a private window in Safari: said once at the start, nothing blocked; the storage status says so and suggests Chrome or Edge', async ({ page }) => {
@@ -763,12 +763,13 @@ test.describe('installing the research from a phone', () => {
         await expect(d.locator('.install-transfer-done')).toHaveText('✓ Downloaded');
         await expect(d.locator('.install-mobile-line-label')).toHaveText('The line for the computer’s terminal:');
         await d.locator('.install-os-btn[data-os="mac"]').click();
-        expect(await d.locator('.install-line').getAttribute('data-line')).toContain(`STROM_FROM_BROWSER=mobile STROM_FROM_FILE=${file} `);
-        // Windows: the file always (the browser may not fit Win + R's 259 characters).
+        expect(await d.locator('.install-line').getAttribute('data-line')).toContain(`STROM_FROM='1|${record.token}|mobile|${record.token.slice(0, 8)}|${appUrlOf(page)}|My Family Tree' sh`);
+        // Windows: everything but the name fits Win + R's 259 characters.
         await d.locator('.install-os-btn[data-os="win"]').click();
-        expect(await d.locator('.install-line').getAttribute('data-line')).toContain(`si env:STROM_FROM_FILE '${file}'; `);
-        // This copy's address has no room in Win + R beside the file: the file carries it.
-        expect(await d.locator('.install-line').getAttribute('data-line')).not.toContain('STROM_APP_URL');
+        const win = (await d.locator('.install-line').getAttribute('data-line'))!;
+        expect(win).toContain(`si env:STROM_FROM '1|${record.token}|mobile|${record.token.slice(0, 8)}|${appUrlOf(page)}|`);
+        expect(win.length).toBeLessThanOrEqual(259);
+        // The file carries this copy's address too (for the research's link from a file).
         expect(JSON.parse(text).stromTransfer.app).toBe(appUrlOf(page));
         // The tree left on the phone says where it is going.
         await expect(page.locator('#research-transfer-banner')).toContainText('“My Family Tree” is moving to a computer for the research.');

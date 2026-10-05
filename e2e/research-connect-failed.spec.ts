@@ -52,7 +52,7 @@ test.describe('couldn\'t connect to the research', () => {
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ live: b })), BRIDGE);
         const d = dialog(page);
         await expect(d.locator('h2')).toHaveText("Couldn't connect to the research");
-        await expect(d.locator('.connect-reason')).toHaveText('The browser blocks the connection');
+        await expect(d.locator('.connect-reason')).toHaveText('Chromium blocks the connection');
         await expect(d.locator('.connect-how')).toHaveAttribute('open', '');
         await expect(d.locator('.connect-how li')).toHaveCount(3);
         await expect(d.locator('.connect-nothing')).toHaveText(/the tree .* stays as it was/);
@@ -92,6 +92,48 @@ test.describe('couldn\'t connect to the research', () => {
         await d.getByRole('button', { name: 'Try again' }).click();
         await expect(d.locator('.connect-reason')).toHaveText("The research isn't responding");
         await page.keyboard.press('Escape');
+        await expect(d).toHaveCount(0);
+    });
+
+    test('m4 of the Windows round: a hand-over survives a reload while blocked, and goes on by itself once allowed — never the old research quietly', async ({ page }) => {
+        await setup(page, 'denied');
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+        const d = dialog(page);
+        await expect(d.locator('.connect-reason')).toHaveText('Chromium blocks the connection');
+        // The browser's advice: reload after allowing. The hand-over is asked again, not lost.
+        await page.reload();
+        await expect(d.locator('.connect-reason')).toHaveText('Chromium blocks the connection');
+        // Allowed in the site settings: it connects by itself, no reload, no click.
+        await page.unroute(`${BRIDGE}/**`);
+        await page.route(`${BRIDGE}/**`, (route) => route.request().method() === 'OPTIONS'
+            ? route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' } })
+            : new URL(route.request().url()).pathname.endsWith('/adopt')
+                ? route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'application/json' }, body: JSON.stringify({ token: 'Q'.repeat(43), name: 'Novákovi' }) })
+                : route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, body: '' }));
+        await page.evaluate(() => {
+            const st = (window as unknown as { __lna: { state: string; onchange: (() => void) | null } }).__lna;
+            st.state = 'granted';
+            st.onchange?.();
+        });
+        await expect(d).toHaveCount(0);
+        // This browser has no tree for that token: where to open it (the hand-over went on, it was not dropped).
+        await expect(page.locator('#research-elsewhere-modal')).toBeVisible();
+        // Over: nothing is kept for a later reload.
+        expect(await page.evaluate(() => sessionStorage.getItem('strom-pending-adopt'))).toBeNull();
+        await page.reload();
+        await expect(page.locator('#research-elsewhere-modal')).toHaveCount(0);
+        await expect(d).toHaveCount(0);
+    });
+
+    test('a hand-over closed as it is ("Close") is not asked again at the next reload', async ({ page }) => {
+        await setup(page, 'denied');
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+        const d = dialog(page);
+        await expect(d).toBeVisible();
+        await d.getByRole('button', { name: 'Close' }).click();
+        await expect(d).toHaveCount(0);
+        await page.reload();
+        await expect(card(page, 'Jan')).toBeVisible();
         await expect(d).toHaveCount(0);
     });
 

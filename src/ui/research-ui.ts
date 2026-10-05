@@ -55,8 +55,9 @@ import {
 } from '../research-device.js';
 import { rememberBridgeStatus, researchSendMode } from './research-sync-ui.js';
 import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
-import { currentAppBrowser } from '../research-transfer.js';
+import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
 import { localNetworkStatus } from '../local-network.js';
+import { pendingAdopt } from './pending-adopt.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -776,7 +777,8 @@ export const researchUiMethods = uiModule({
             const importUrl = params.get('import-url');
             const liveUrl = params.get('live');
             const sendUrl = params.get('send');
-            const adoptUrl = params.get('adopt');
+            // A hand-over this tab was in before a reload comes first — before the old bridge or research.
+            const adoptUrl = params.get('adopt') ?? (importUrl === null && liveUrl === null && sendUrl === null && !params.has('open') ? pendingAdopt() : null);
             if (importUrl !== null || liveUrl !== null || sendUrl !== null || adoptUrl !== null || params.has('open')) {
                 try {
                     const url = new URL(window.location.href);
@@ -1045,7 +1047,7 @@ export const researchUiMethods = uiModule({
         const tree = TreeManager.getActiveTreeMetadata();
         const people = Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder);
         const texts: Record<ConnectReason, [string, string]> = {
-            denied: [c.reasonDenied, c.textDenied], prompt: [c.reasonPrompt, c.textPrompt],
+            denied: [c.reasonDenied(appBrowserName(currentAppBrowser())), c.textDenied], prompt: [c.reasonPrompt, c.textPrompt],
             down: [c.reasonDown, c.textDown], unknown: [c.reasonUnknown, c.textUnknown], safari: [c.reasonSafari, c.textSafari],
             refused: [c.reasonRefused, c.textRefused],
         };
@@ -1054,7 +1056,7 @@ export const researchUiMethods = uiModule({
         const how = reason === 'denied' || reason === 'unknown' ? `
             <details class="connect-how"${reason === 'denied' ? ' open' : ''}>
                 <summary>${this.escapeHtml(c.howTitle)}</summary>
-                <ol>${(currentAppBrowser() === 'brave' ? c.howBrave : c.how).map(t => `<li>${this.escapeHtml(t)}</li>`).join('')}</ol>
+                <ol>${(currentAppBrowser() === 'brave' ? c.howBrave : currentAppBrowser() === 'firefox' ? c.howFirefox : c.how).map(t => `<li>${this.escapeHtml(t)}</li>`).join('')}</ol>
             </details>` : '';
         document.getElementById(CONNECT_FAILED_ID)?.remove();
         const overlay = document.createElement('div');
@@ -1105,8 +1107,9 @@ export const researchUiMethods = uiModule({
                         () => this.showToast(url.toString(), 10000));
                 }
             }));
-            // Waiting for the user's answer to the browser: once allowed, connect by itself.
-            if (reason === 'prompt') {
+            // Waiting for the user's answer to the browser, or blocked and changed in its settings:
+            // once allowed, connect by itself — no reload (which used to lose ?adopt=).
+            if (reason === 'prompt' || reason === 'denied') {
                 void localNetworkStatus().then(st => {
                     if (!st || settled) return;
                     watch = st;

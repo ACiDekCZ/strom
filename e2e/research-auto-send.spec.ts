@@ -657,7 +657,7 @@ test('F4/F5 of the Windows round: the browser blocking the research is said as s
     // The way to allow it: the dialog with the steps open; allowed, Try again connects.
     await block(page).getByRole('button', { name: 'How to allow' }).click();
     const d = page.locator('#research-connect-failed');
-    await expect(d.locator('.connect-reason')).toHaveText('The browser blocks the connection');
+    await expect(d.locator('.connect-reason')).toHaveText('Chromium blocks the connection');
     await expect(d.locator('.connect-how li').nth(1)).toHaveText('Open Site settings and find Apps on device (in older versions Local network access).');
     await page.evaluate(() => { (window as unknown as { __lna: { state: string } }).__lna.state = 'granted'; });
     bridge.down = false;

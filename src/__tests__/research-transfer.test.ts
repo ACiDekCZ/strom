@@ -9,7 +9,7 @@ import {
     detectAppBrowser, needsTransfer, appBrowserName, transferFileName, isTransferFileName,
     buildTransferJson, readTransferJson, TRANSFER_KEY,
 } from '../research-transfer.js';
-import { installLine, npmLines, sanitizeInstallRecord, newInstallRecord } from '../research-install.js';
+import { legacyInstallLine, legacyNpmLines, sanitizeInstallRecord, newInstallRecord } from '../research-install.js';
 import { researchNewUrl, sanitizeAdoptOffer } from '../research-link.js';
 import { STROM_DATA_VERSION, StromData, PersonId } from '../types.js';
 
@@ -62,24 +62,24 @@ describe('what the line and the link tell the research', () => {
     it('names the browser (STROM_FROM_BROWSER) and the file (STROM_FROM_FILE) in every line', () => {
         const file = transferFileName(TOKEN);
         expect(file).toBe('strom-prenos-AbCdEfGh.json');
-        expect(installLine('mac', TOKEN, null, '', { browser: 'safari', file }))
+        expect(legacyInstallLine('mac', TOKEN, null, '', { browser: 'safari', file }))
             .toBe(`curl -fsSL https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.sh | STROM_FROM_APP=${TOKEN} STROM_FROM_BROWSER=safari STROM_FROM_FILE=${file} sh`);
-        expect(installLine('linux', TOKEN, null, 'Víškovi', { browser: 'firefox' }))
+        expect(legacyInstallLine('linux', TOKEN, null, 'Víškovi', { browser: 'firefox' }))
             .toContain(`STROM_FROM_APP_NAME='Víškovi' STROM_FROM_BROWSER=firefox sh`);
-        expect(installLine('win', TOKEN, null, '', { browser: 'edge' }))
+        expect(legacyInstallLine('win', TOKEN, null, '', { browser: 'edge' }))
             .toContain(`si env:STROM_FROM_APP '${TOKEN}'; si env:STROM_FROM_BROWSER 'edge'; irm`);
-        expect(npmLines('mac', TOKEN, BETA, '', { browser: 'chrome' })[1]).toBe(`STROM_FROM_APP=${TOKEN} STROM_FROM_BROWSER=chrome STROM_APP_URL=${BETA} strom-research`);
-        expect(npmLines('win', TOKEN, null, '', { browser: 'edge' })[1]).toBe(`$env:STROM_FROM_APP='${TOKEN}'; $env:STROM_FROM_BROWSER='edge'; strom-research`);
+        expect(legacyNpmLines('mac', TOKEN, BETA, '', { browser: 'chrome' })[1]).toBe(`STROM_FROM_APP=${TOKEN} STROM_FROM_BROWSER=chrome STROM_APP_URL=${BETA} strom-research`);
+        expect(legacyNpmLines('win', TOKEN, null, '', { browser: 'edge' })[1]).toBe(`$env:STROM_FROM_APP='${TOKEN}'; $env:STROM_FROM_BROWSER='edge'; strom-research`);
         // Nothing but the known values goes into a shell line.
-        expect(installLine('mac', TOKEN, null, '', { browser: 'evil;rm' as never, file: '../x.json' })).not.toMatch(/STROM_FROM_(BROWSER|FILE)/);
+        expect(legacyInstallLine('mac', TOKEN, null, '', { browser: 'evil;rm' as never, file: '../x.json' })).not.toMatch(/STROM_FROM_(BROWSER|FILE)/);
     });
 
     it('fits Win + R: the name shortened first, then the browser left out (the beta line)', () => {
         const name = 'Velmi dlouhý název rodiny Víšků z Čáslavi a okolí';
-        const prod = installLine('win', TOKEN, null, name, { browser: 'firefox' });
+        const prod = legacyInstallLine('win', TOKEN, null, name, { browser: 'firefox' });
         expect(prod.length).toBeLessThanOrEqual(259);
         expect(prod).toContain("si env:STROM_FROM_BROWSER 'firefox'; ");
-        const beta = installLine('win', TOKEN, BETA, name, { browser: 'firefox' });
+        const beta = legacyInstallLine('win', TOKEN, BETA, name, { browser: 'firefox' });
         expect(beta.length).toBeLessThanOrEqual(259);
         expect(beta).not.toContain('STROM_FROM_APP_NAME');
         expect(beta).not.toContain('STROM_FROM_BROWSER');
@@ -88,15 +88,15 @@ describe('what the line and the link tell the research', () => {
     it('fits Win + R with a real token and a file: on another copy the address goes, the file carries it (TransferMark.app)', () => {
         const token = 'A'.repeat(43);
         const file = transferFileName(token);
-        const beta = installLine('win', token, BETA, 'Moje rodina', { browser: 'mobile', file });
+        const beta = legacyInstallLine('win', token, BETA, 'Moje rodina', { browser: 'mobile', file });
         expect(beta.length).toBeLessThanOrEqual(259);
         expect(beta).toContain(`si env:STROM_FROM_FILE '${file}'; `);
         expect(beta).not.toContain('STROM_APP_URL');
         // Without a file the address stays (nothing else would carry it), and on the public app nothing changes.
-        expect(installLine('win', token, BETA, 'Moje rodina', { browser: 'edge' })).toContain(`si env:STROM_APP_URL '${BETA}'; `);
-        expect(installLine('win', token, null, '', { browser: 'mobile', file })).toContain(`si env:STROM_FROM_FILE '${file}'; `);
+        expect(legacyInstallLine('win', token, BETA, 'Moje rodina', { browser: 'edge' })).toContain(`si env:STROM_APP_URL '${BETA}'; `);
+        expect(legacyInstallLine('win', token, null, '', { browser: 'mobile', file })).toContain(`si env:STROM_FROM_FILE '${file}'; `);
         // Terminal lines have no limit: everything stays.
-        expect(installLine('mac', token, BETA, 'Moje rodina', { browser: 'mobile', file })).toContain(`STROM_APP_URL=${BETA} `);
+        expect(legacyInstallLine('mac', token, BETA, 'Moje rodina', { browser: 'mobile', file })).toContain(`STROM_APP_URL=${BETA} `);
     });
 
     it('carries the browser and the file on strom-research://new', () => {

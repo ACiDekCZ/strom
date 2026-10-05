@@ -46,8 +46,57 @@ export interface InstallExtra {
     file?: string;
 }
 
+/**
+ * The line carries one variable, STROM_FROM (research 1.12.1+), in place of
+ * the five of before (STROM_FROM_APP, _APP_NAME, _BROWSER, _FILE, STROM_APP_URL).
+ * The installers take the newest research from GitHub: on only once 1.12.1 is
+ * its latest release (before that, tests run against an rc by STROM_DOWNLOAD_BASE).
+ */
+export const INSTALL_LINE_STROM_FROM = true;
+
+/** The public app's beta, said as `beta` in STROM_FROM. */
+const BETA_APP_URL = 'https://beta.stromapp.info/run/';
+
+/**
+ * STROM_FROM's value, form 1: `1|<token>|<browser>|<file>|<app>|<name>` —
+ * always six fields, empty ones kept in place. The file is the 8 characters
+ * of strom-prenos-XXXXXXXX.json; the app empty for the public one, `beta`, or
+ * this copy's address (installAppUrl: no `|`); the name last (installTreeName:
+ * no `|` either — the research takes all after the fifth `|`).
+ */
+export function installFromValue(token: string, appUrl: string | null, name: string, extra: InstallExtra = {}): string {
+    const c = cleanExtra(extra);
+    const file = c.file ? c.file.slice('strom-prenos-'.length, -'.json'.length) : '';
+    const app = !appUrl ? '' : appUrl === BETA_APP_URL ? 'beta' : appUrl;
+    return ['1', token, c.browser ?? '', file, app, name].join('|');
+}
+
 /** The line for Terminal (macOS, Linux) or Win + R (Windows), with the tree's token (and this app's address, see installAppUrl). */
 export function installLine(os: InstallOs, token: string, appUrl: string | null = null, treeName = '', extra: InstallExtra = {}): string {
+    if (!INSTALL_LINE_STROM_FROM) return legacyInstallLine(os, token, appUrl, treeName, extra);
+    const name = installTreeName(treeName);
+    if (os !== 'win') return `curl -fsSL ${DOWNLOAD}/install.sh | STROM_FROM=${shQuote(installFromValue(token, appUrl, name, extra))} sh`;
+    const line = (n: string): string =>
+        `powershell -ExecutionPolicy Bypass -c "${winSet('STROM_FROM', installFromValue(token, appUrl, n, extra).replace(/'/g, "''"))}irm ${DOWNLOAD}/install.ps1 | iex"`;
+    // Win + R takes 259 characters: only the name is shortened (or left out under 3 characters).
+    let fit = name;
+    while (fit && line(fit).length > WIN_RUN_MAX) fit = fit.slice(0, -1).trim();
+    return line(fit.length >= 3 ? fit : '');
+}
+
+/** The npm way for technical users: install, then start with the token (and this app's address). */
+export function npmLines(os: InstallOs, token: string, appUrl: string | null = null, treeName = '', extra: InstallExtra = {}): [string, string] {
+    if (!INSTALL_LINE_STROM_FROM) return legacyNpmLines(os, token, appUrl, treeName, extra);
+    const value = installFromValue(token, appUrl, installTreeName(treeName), extra);
+    return ['npm i -g strom-research', os === 'win'
+        ? psSet('STROM_FROM', value.replace(/'/g, "''")) + 'strom-research'
+        : `STROM_FROM=${shQuote(value)} strom-research`];
+}
+
+const shQuote = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+
+/** The five variables of before (research up to 1.12.0). */
+export function legacyInstallLine(os: InstallOs, token: string, appUrl: string | null = null, treeName = '', extra: InstallExtra = {}): string {
     const name = installTreeName(treeName);
     if (os !== 'win') return `curl -fsSL ${DOWNLOAD}/install.sh | STROM_FROM_APP=${token} ${shName(name)}${shExtra(extra)}${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}sh`;
     const line = (n: string, x: InstallExtra, url: string | null = appUrl): string =>
@@ -70,8 +119,8 @@ export function installLine(os: InstallOs, token: string, appUrl: string | null 
 /** The Run dialog's (Win + R) limit. */
 export const WIN_RUN_MAX = 259;
 
-/** The npm way for technical users: install, then start with the token (and this app's address). */
-export function npmLines(os: InstallOs, token: string, appUrl: string | null = null, treeName = '', extra: InstallExtra = {}): [string, string] {
+/** The npm lines with the five variables of before. */
+export function legacyNpmLines(os: InstallOs, token: string, appUrl: string | null = null, treeName = '', extra: InstallExtra = {}): [string, string] {
     const name = installTreeName(treeName);
     return ['npm i -g strom-research', os === 'win'
         ? `${psSet('STROM_FROM_APP', token)}${winName(name, psSet)}${winExtra(extra, psSet)}${appUrl ? psSet('STROM_APP_URL', appUrl) : ''}strom-research`
