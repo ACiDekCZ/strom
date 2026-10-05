@@ -85,6 +85,20 @@ describe('what the line and the link tell the research', () => {
         expect(beta).not.toContain('STROM_FROM_BROWSER');
     });
 
+    it('fits Win + R with a real token and a file: on another copy the address goes, the file carries it (TransferMark.app)', () => {
+        const token = 'A'.repeat(43);
+        const file = transferFileName(token);
+        const beta = installLine('win', token, BETA, 'Moje rodina', { browser: 'mobile', file });
+        expect(beta.length).toBeLessThanOrEqual(259);
+        expect(beta).toContain(`si env:STROM_FROM_FILE '${file}'; `);
+        expect(beta).not.toContain('STROM_APP_URL');
+        // Without a file the address stays (nothing else would carry it), and on the public app nothing changes.
+        expect(installLine('win', token, BETA, 'Moje rodina', { browser: 'edge' })).toContain(`si env:STROM_APP_URL '${BETA}'; `);
+        expect(installLine('win', token, null, '', { browser: 'mobile', file })).toContain(`si env:STROM_FROM_FILE '${file}'; `);
+        // Terminal lines have no limit: everything stays.
+        expect(installLine('mac', token, BETA, 'Moje rodina', { browser: 'mobile', file })).toContain(`STROM_APP_URL=${BETA} `);
+    });
+
     it('carries the browser and the file on strom-research://new', () => {
         expect(researchNewUrl(TOKEN, 'edge')).toBe(`strom-research://new?app=${TOKEN}&browser=edge`);
         expect(researchNewUrl(TOKEN, 'safari', 'strom-prenos-AbCdEfGh.json')).toBe(`strom-research://new?app=${TOKEN}&browser=safari&file=strom-prenos-AbCdEfGh.json`);

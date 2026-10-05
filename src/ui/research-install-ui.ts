@@ -27,6 +27,7 @@ import {
 import { onComputer } from './research-ui.js';
 import { AppBrowser, appBrowserName, currentAppBrowser, needsTransfer, transferFileName, buildTransferJson } from '../research-transfer.js';
 import { isIosDevice } from '../file-copy.js';
+import { isStandaloneDisplay } from '../pwa.js';
 import { SettingsManager } from '../settings.js';
 import { STROM_DATA_VERSION, StromData } from '../types.js';
 import { TreeRenderer } from '../renderer.js';
@@ -95,6 +96,17 @@ function noConnectLead(): string {
 /** The browser the move is made from: a phone or tablet is "mobile" whatever its browser (the research is on a computer). */
 function transferFrom(): AppBrowser {
     return onComputer() ? currentAppBrowser() : 'mobile';
+}
+
+/**
+ * The app runs as Safari's own web app on a Mac (File → Add to Dock): an app
+ * of its own in ~/Applications with storage apart from Safari's, beside which
+ * a Strom installed from Chrome looks the same — after a move, the old icon
+ * would open the old copy.
+ */
+function safariDockApp(): boolean {
+    if (currentAppBrowser() !== 'safari' || !isStandaloneDisplay()) return false;
+    return typeof navigator === 'undefined' || !isIosDevice(navigator.userAgent || '', navigator.platform || '', navigator.maxTouchPoints ?? 0);
 }
 
 function hasPeople(): boolean {
@@ -348,11 +360,13 @@ export const researchInstallMethods = uiModule({
         const tree = treeId ? TreeManager.getTreeMetadata(treeId) : null;
         const file = transferFileName(record.token);
         const from = transferFrom();
+        const appCopy = installAppUrl(window.location.href);
         const text = buildTransferJson({
             v: 1, token: record.token, from,
             tree: tree?.name ?? '',
             persons: Object.values(data.persons).filter(p => p && !p.isPlaceholder).length,
             at: new Date().toISOString(),
+            ...(appCopy ? { app: appCopy } : {}),
         }, { ...data, version: STROM_DATA_VERSION });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
@@ -429,6 +443,7 @@ export const researchInstallMethods = uiModule({
                 </div>
                 <div class="modal-content">
                     <p>${esc(mark.mobile ? r.oldCopyTextMobile(tree.name, date) : r.oldCopyText(tree.name, date))}</p>
+                    ${safariDockApp() ? `<p class="research-old-copy-app">${esc(r.oldCopyDockShort)}</p>` : ''}
                 </div>
                 <div class="buttons">
                     <button type="button" class="link-button research-old-copy-remove" data-act="remove">${esc(r.oldCopyRemove)}</button>
@@ -492,6 +507,8 @@ export const researchInstallMethods = uiModule({
         this.renderResearchTransferBanner();
         this.placeBrowserNotices();
         this.showToast(r.oldCopyRemoved(name), 6000);
+        // Safari's own app (Add to Dock) keeps its icon and its storage: how it goes too.
+        if (safariDockApp()) void this.showAlert(r.oldCopyDockApp, 'info');
     },
 
     /** The first edit in a tree that moved away: once, that changes here do not reach the research. */

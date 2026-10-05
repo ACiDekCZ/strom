@@ -92,6 +92,8 @@ async function handOverInChrome(browser: Browser, token: string, file: string): 
     await expect.poll(() => posted.length).toBe(1);
     expect(posted[0]).toContain('1 NAME Jan /Novak/');
     await expect(other.locator('.install-ready-moved')).toHaveText('A copy of the tree stayed in Safari. Once everything here is right, it can be removed there.');
+    // Not installable here (a development copy): no offer to install.
+    await expect(other.locator('.install-ready-app')).toHaveCount(0);
     await ctx.close();
 }
 
@@ -550,6 +552,57 @@ test.describe('installing the research from the app', () => {
         expect(await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().persons).length)).toBe(0);
     });
 
+    test('Safari\'s Dock app: the old copy\'s question says the app stays in the Dock; after the removal, how it goes', async ({ page }) => {
+        await asBrowser(page, SAFARI_UA);
+        // Running as Safari's web app (File → Add to Dock) on a Mac.
+        await page.addInitScript(() => {
+            Object.defineProperty(navigator, 'platform', { configurable: true, get: () => 'MacIntel' });
+            const orig = window.matchMedia.bind(window);
+            window.matchMedia = (q: string) => q.includes('display-mode: standalone')
+                ? { matches: true, media: q, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false } as MediaQueryList
+                : orig(q);
+        });
+        await setup(page);
+        await waitForPersist(page, 'Jan');
+        await page.evaluate(() => window.Strom.TreeManager.setResearchTransfer(window.Strom.TreeManager.getActiveTreeId()!, { at: '2026-10-05T18:00:00.000Z' }));
+        await page.reload();
+        const q = page.locator('#research-old-copy-modal');
+        await expect(q.locator('.research-old-copy-app')).toHaveText('The Strom app added from Safari stays in the Dock even after the removal.');
+        await q.locator('[data-act="remove"]').click();
+        await page.locator('.modal-overlay.active').filter({ hasText: 'Remove this copy?' }).getByRole('button', { name: 'Remove this copy' }).click();
+        await expect(page.locator('.modal-overlay.active')).toContainText('stays in the Dock and in the Applications folder of the home folder (~/Applications)');
+        await expect(page.locator('.modal-overlay.active')).toContainText('(Options → Remove from Dock)');
+    });
+
+    test('the receiving browser offers to install Strom as its app after a move (hosted, Chromium offers it)', async ({ browser }) => {
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+        // The hosted app (beta.stromapp.info), answered locally: there Chromium's install offer is kept.
+        const html = await fs.promises.readFile('e2e-dist/strom.html', 'utf8');
+        await ctx.route('https://beta.stromapp.info/**', (route) => /\/run\/(index\.html)?$/.test(new URL(route.request().url()).pathname)
+            ? route.fulfill({ status: 200, contentType: 'text/html', body: html })
+            : route.fulfill({ status: 404, body: '' }));
+        const page = await ctx.newPage();
+        await page.goto('https://beta.stromapp.info/run/');
+        await page.waitForFunction(() => !!window.Strom?.UI);
+        await page.evaluate(() => {
+            const e = new Event('beforeinstallprompt', { cancelable: true }) as Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
+            e.prompt = () => { (window as unknown as { __prompted: boolean }).__prompted = true; return Promise.resolve(); };
+            e.userChoice = Promise.resolve({ outcome: 'accepted' });
+            window.dispatchEvent(e);
+        });
+        await page.evaluate((b) => window.Strom.UI.showResearchReady(b, '00000000-0000-4000-8000-000000000001', 'Novákovi', true, 'safari'), BRIDGE);
+        const ready = page.locator('.research-ready-modal');
+        await expect(ready.locator('.install-ready-moved')).toContainText('A copy of the tree stayed in Safari.');
+        await expect(ready.locator('.install-ready-app')).toHaveText('As an app, Strom opens with the trees of this browser. Install Strom as an app');
+        await ready.locator('[data-act="install-app"]').click();
+        await expect.poll(() => page.evaluate(() => (window as unknown as { __prompted?: boolean }).__prompted)).toBe(true);
+        await expect(page.locator('.toast')).toContainText('Strom is being installed as an app, with the trees of this browser.');
+        // Not a move: no offer.
+        await page.evaluate((b) => window.Strom.UI.showResearchReady(b, '00000000-0000-4000-8000-000000000001', 'Novákovi', true), BRIDGE);
+        await expect(page.locator('.research-ready-modal .install-ready-app')).toHaveCount(0);
+        await ctx.close();
+    });
+
     test('Safari: the first person brings the notice over the tree once (Mac: with Chrome\'s download); never after "Continue here"', async ({ page }) => {
         await asBrowser(page, SAFARI_UA);
         await setup(page);
@@ -702,6 +755,9 @@ test.describe('installing the research from a phone', () => {
         // Windows: the file always (the browser may not fit Win + R's 259 characters).
         await d.locator('.install-os-btn[data-os="win"]').click();
         expect(await d.locator('.install-line').getAttribute('data-line')).toContain(`si env:STROM_FROM_FILE '${file}'; `);
+        // This copy's address has no room in Win + R beside the file: the file carries it.
+        expect(await d.locator('.install-line').getAttribute('data-line')).not.toContain('STROM_APP_URL');
+        expect(JSON.parse(text).stromTransfer.app).toBe(appUrlOf(page));
         // The tree left on the phone says where it is going.
         await expect(page.locator('#research-transfer-banner')).toContainText('“My Family Tree” is moving to a computer for the research.');
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.researchTransfer?.mobile)).toBe(true);

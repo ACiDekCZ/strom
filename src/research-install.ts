@@ -50,19 +50,21 @@ export interface InstallExtra {
 export function installLine(os: InstallOs, token: string, appUrl: string | null = null, treeName = '', extra: InstallExtra = {}): string {
     const name = installTreeName(treeName);
     if (os !== 'win') return `curl -fsSL ${DOWNLOAD}/install.sh | STROM_FROM_APP=${token} ${shName(name)}${shExtra(extra)}${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}sh`;
-    const line = (n: string, x: InstallExtra): string =>
-        `powershell -ExecutionPolicy Bypass -c "${winSet('STROM_FROM_APP', token)}${winName(n, winSet)}${winExtra(x, winSet)}${appUrl ? winSet('STROM_APP_URL', appUrl) : ''}irm ${DOWNLOAD}/install.ps1 | iex"`;
+    const line = (n: string, x: InstallExtra, url: string | null = appUrl): string =>
+        `powershell -ExecutionPolicy Bypass -c "${winSet('STROM_FROM_APP', token)}${winName(n, winSet)}${winExtra(x, winSet)}${url ? winSet('STROM_APP_URL', url) : ''}irm ${DOWNLOAD}/install.ps1 | iex"`;
     // Win + R takes 259 characters: the name shortened to what is left, or left out (the research suggests one);
-    // then the browser (the research then picks one itself) — the file never (the tree moves by it).
-    const fitName = (x: InstallExtra): string => {
+    // then the browser (the research then picks one itself); then this app's address when the tree moves by a
+    // file (the file carries it, TransferMark.app) — the file never (the tree moves by it).
+    const fitName = (x: InstallExtra, url: string | null = appUrl): string => {
         let fit = name;
-        while (fit && line(fit, x).length > WIN_RUN_MAX) fit = fit.slice(0, -1).trim();
+        while (fit && line(fit, x, url).length > WIN_RUN_MAX) fit = fit.slice(0, -1).trim();
         return fit.length >= 3 ? fit : '';
     };
     const withName = fitName(extra);
-    if (line(withName, extra).length <= WIN_RUN_MAX || !extra.browser) return line(withName, extra);
+    if (line(withName, extra).length <= WIN_RUN_MAX) return line(withName, extra);
     const lean: InstallExtra = { ...extra, browser: undefined };
-    return line(fitName(lean), lean);
+    if (line(fitName(lean), lean).length <= WIN_RUN_MAX || !extra.file || !appUrl) return line(fitName(lean), lean);
+    return line(fitName(lean, null), lean, null);
 }
 
 /** The Run dialog's (Win + R) limit. */

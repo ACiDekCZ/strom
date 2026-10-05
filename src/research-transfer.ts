@@ -87,6 +87,12 @@ export interface TransferMark {
     tree: string;
     persons: number;
     at: string;
+    /**
+     * This app's address when it is another copy than the public one (see
+     * installAppUrl): the research opens that copy with ?adopt= even when the
+     * Win + R line had no room left for STROM_APP_URL (1.12.1-rc.3 reads it).
+     */
+    app?: string;
 }
 
 /** The name the app asks the browser to save the file under: ASCII only, safe unquoted in a shell line. */

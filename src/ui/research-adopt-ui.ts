@@ -28,6 +28,7 @@ import { uiModule } from './module.js';
 import { onComputer, fetchWithTimeout, fetchStatus, fetchGedcomText, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { normalizeModal } from './modal-skeleton.js';
+import { canPromptInstall, promptInstall } from '../pwa.js';
 import { researchSendModeCardsHtml, researchSendPrinciplesHtml, researchSendModeChecked, researchTrialTagHtml } from './research-tree-settings-ui.js';
 import { researchSendMode } from './research-sync-ui.js';
 
@@ -321,6 +322,9 @@ export const researchAdoptMethods = uiModule({
         } catch { /* the rows the status gives are left out */ }
         document.getElementById(READY_ID)?.remove();
         const open = this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: researchId }) : null;
+        // Moved here from another browser: Strom installed as this browser's app (Chromium offers it only while it
+        // is not), so its icon opens these trees — not the old app of the browser it came from (a Safari Dock app).
+        const offerApp = !!movedFrom && hasPeople && canPromptInstall();
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.id = READY_ID;
@@ -339,6 +343,7 @@ export const researchAdoptMethods = uiModule({
                     <p>${esc(hasPeople ? s.readyText(researchSendMode(TreeManager.getTreeMetadata(DataManager.getCurrentTreeId() ?? ('' as TreeId))?.research)) : s.liveText)}</p>
                     ${rows}
                     ${movedFrom && hasPeople ? `<p class="install-ready-moved">${esc(movedFrom === 'mobile' ? strings.research.transferCopyLeftMobile : strings.research.transferCopyLeft(appBrowserName(movedFrom)))}</p>` : ''}
+                    ${offerApp ? `<p class="install-ready-app">${esc(strings.research.transferAppNote)} <button type="button" class="link-button" data-act="install-app">${esc(strings.research.transferInstallApp)}</button></p>` : ''}
                 </div>
                 <div class="buttons">
                     ${hasPeople
@@ -354,7 +359,8 @@ export const researchAdoptMethods = uiModule({
         overlay.querySelectorAll<HTMLElement>('[data-act]').forEach(el => el.addEventListener('click', () => {
             const act = el.dataset.act;
             close();
-            if (act === 'open' && open) this.handOverResearchLink(open);
+            if (act === 'install-app') void promptInstall().then(ok => { if (ok) this.showToast(strings.research.transferInstalling, 6000); });
+            else if (act === 'open' && open) this.handOverResearchLink(open);
             else if (act === 'gedcom') this.startGedcomImportPlain();
             else if (act === 'first') this.showAddPersonModal();
         }));
