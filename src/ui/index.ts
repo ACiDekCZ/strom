@@ -65,6 +65,7 @@ import { mergeUiMethods } from './merge-ui.js';
 import { encryptionUiMethods } from './encryption-ui.js';
 import { treeStatsMethods } from './tree-stats.js';
 import { treeManagementMethods } from './tree-management.js';
+import { treeActionsMethods } from './tree-actions.js';
 import { miscMethods } from './misc.js';
 import { appModeMethods } from './app-mode.js';
 import { kinshipUiMethods } from './kinship-ui.js';
@@ -488,6 +489,10 @@ Object.assign(UIClass.prototype, treeStatsMethods);
 type TreeManagementMethods = typeof treeManagementMethods;
 export interface UIClass extends TreeManagementMethods {}
 Object.assign(UIClass.prototype, treeManagementMethods);
+
+type TreeActionsMethods = typeof treeActionsMethods;
+export interface UIClass extends TreeActionsMethods {}
+Object.assign(UIClass.prototype, treeActionsMethods);
 
 type MiscMethods = typeof miscMethods;
 export interface UIClass extends MiscMethods {}

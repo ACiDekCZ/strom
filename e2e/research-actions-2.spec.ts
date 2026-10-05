@@ -639,7 +639,9 @@ test.describe('Start research with this tree (G3)', () => {
     test('tree manager: "Start research with this tree ↗" in the row menu of an app tree', async ({ page }) => {
         await appTree(page, ALL);
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
-        const item = page.locator('.tree-manager-item', { hasText: 'Dvořákovi' }).locator('.tree-row-menu-item', { hasText: 'Start research with this tree ↗' });
+        const row = page.locator('.tree-manager-item', { hasText: 'Dvořákovi' });
+        await row.locator('.tree-row-menu-btn').click();
+        const item = row.locator('.tree-row-menu-item', { hasText: 'Start research with this tree ↗' });
         await expect(item).toHaveCount(1);
     });
 });

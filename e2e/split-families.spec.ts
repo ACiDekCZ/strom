@@ -302,17 +302,24 @@ test("the third cut — one person's view: the depth decides where sibling famil
     await expect(modal.locator('.splitfam-persp-cut')).toContainText('Strejda Novák (*1933)');
 });
 
-test('tree manager row: split opens the proposals directly, even for a non-active tree', async ({ page }) => {
+test('tree manager row: split opens the proposals directly; a tree not open offers it once open', async ({ page }) => {
     await loadTree(page);
     await page.evaluate(() => window.Strom.DataManager.createNewTree('Jiný strom'));
 
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    // Splitting needs the open tree: the other tree's menu leaves it out.
     const row = page.locator('.tree-manager-item', { hasText: 'Rodina Novákových' });
     await row.locator('.tree-row-menu-btn').click();
-    await row.locator('.tree-row-menu-item', { hasText: 'Split into families' }).click();
+    await expect(row.locator('.tree-row-menu.open')).toBeVisible();
+    await expect(row.locator('.tree-row-menu-item', { hasText: 'Split into families' })).toHaveCount(0);
 
-    // No starting-person picker — the partition never depends on one. The
-    // proposals open straight away for the picked (non-active) tree.
+    await row.locator('.tree-open-btn').click();
+    await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    const active = page.locator('.tree-manager-item.active');
+    await active.locator('.tree-row-menu-btn').click();
+    await active.locator('.tree-row-menu-item', { hasText: 'Split into families' }).click();
+
+    // No starting-person picker — the partition never depends on one.
     const modal = page.locator('#split-families-modal');
     await expect(modal).toBeVisible();
     await expect(modal.locator('.splitfam-row')).toHaveCount(2);

@@ -361,3 +361,94 @@ test.describe('many trees in a short window (J5 of the language round)', () => {
         await expect(menu.locator('.tree-row-menu-item').last()).toBeInViewport();
     });
 });
+
+test.describe('tree manager ⋯ menu on desktop: the tree-action groups', () => {
+    test.use({ viewport: { width: 1280, height: 800 } });
+
+    test('the open tree: the groups in order, rows not bordered buttons, under ⋯ and never over the name', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+
+        const row = page.locator('.tree-manager-item.active');
+        const btn = row.locator('.tree-row-menu-btn');
+        await btn.click();
+        const menu = row.locator('.tree-row-menu.open');
+        await expect(menu).toBeVisible();
+
+        // The sheet's groups in its order; Research only with a research action
+        // to offer (none for a one-person tree without a link), never empty.
+        await expect(menu.locator('.tree-row-menu-group:visible')).toHaveText(
+            ['Overview', 'Outputs', 'Tree settings', 'Structure', 'Manage']);
+        const keys = await menu.locator('.tree-row-menu-item:visible').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action));
+        expect(keys.slice(0, 2)).toEqual(['stats', 'health']);
+        expect(keys).toContain('places');
+        expect(keys).toContain('surnames');
+        expect(keys).toContain('split');
+        expect(keys[keys.length - 1]).toBe('delete');
+
+        // Rows, not bordered centered buttons (the row buttons' style leaked in).
+        const item = menu.locator('.tree-row-menu-item[data-action="stats"]');
+        const style = await item.evaluate(el => {
+            const cs = getComputedStyle(el);
+            return { border: cs.borderTopWidth, align: cs.textAlign, justify: cs.justifyContent, font: cs.fontSize, h: el.getBoundingClientRect().height };
+        });
+        expect(style.border).toBe('0px');
+        expect(style.align).toBe('left');
+        expect(style.justify).not.toBe('center');
+        expect(style.font).toBe('14px');
+        expect(style.h).toBeGreaterThanOrEqual(32);
+
+        // Under ⋯, right edges aligned, the tree's name stays visible.
+        const b = (await btn.boundingBox())!;
+        const m = (await menu.boundingBox())!;
+        const name = (await row.locator('.tree-manager-item-header').boundingBox())!;
+        expect(m.y).toBeGreaterThanOrEqual(b.y + b.height);
+        expect(Math.abs((m.x + m.width) - (b.x + b.width))).toBeLessThanOrEqual(1);
+        expect(m.y).toBeGreaterThanOrEqual(name.y + name.height);
+
+        // The default person shows its value; the startup row is a checkbox.
+        await expect(menu.locator('[data-action="startup"]')).toHaveAttribute('role', 'menuitemcheckbox');
+        await expect(menu.locator('[data-action="defaultPerson"]')).toBeVisible();
+    });
+
+    test('a tree that is not open: no open-tree rows, a note says where they are', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.evaluate(() => window.Strom.DataManager.importAsNewTree({ persons: {}, partnerships: {} } as never, 'Jiný strom'));
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+
+        const row = page.locator('.tree-manager-item:not(.active)').first();
+        await row.locator('.tree-row-menu-btn').click();
+        const menu = row.locator('.tree-row-menu.open');
+        await expect(menu).toBeVisible();
+        for (const key of ['audit', 'places', 'surnames', 'makeTree', 'splitFamilies', 'split', 'saveToFile']) {
+            await expect(menu.locator(`[data-action="${key}"]`)).toHaveCount(0);
+        }
+        for (const key of ['stats', 'export', 'rename', 'mergeInto', 'duplicate', 'delete']) {
+            await expect(menu.locator(`[data-action="${key}"]`)).toHaveCount(1);
+        }
+        await expect(menu.locator('.tree-row-menu-note')).toHaveText(
+            'Places, surnames, change log and splitting are available once the tree is open.');
+    });
+
+    test('a menu taller than its room: a fade and chevron at the bottom, gone at the end', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 560 });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+
+        const row = page.locator('.tree-manager-item.active');
+        await row.locator('.tree-row-menu-btn').click();
+        const menu = row.locator('.tree-row-menu.open');
+        await expect(menu).toHaveClass(/can-scroll/);
+        await expect(menu.locator('.tree-row-menu-more')).toBeVisible();
+        // The menu stays inside the window.
+        const m = (await menu.boundingBox())!;
+        expect(m.y + m.height).toBeLessThanOrEqual(560);
+
+        await menu.evaluate(el => { el.scrollTop = el.scrollHeight; el.dispatchEvent(new Event('scroll')); });
+        await expect(menu).not.toHaveClass(/can-scroll/);
+        await expect(menu.locator('.tree-row-menu-more')).toBeHidden();
+    });
+});

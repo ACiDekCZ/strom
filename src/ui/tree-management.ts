@@ -41,19 +41,10 @@ import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
-import { AuditLogManager } from '../audit-log.js';
 import { fitFlyout } from './flyout.js';
 import { uiModule } from './module.js';
 
 import { iconSvg } from '../icons.js';
-
-/**
- * Strom Research runs in a terminal on a computer: phones and tablets (a
- * coarse pointer) never reach its bridge, so they get no "send to research".
- */
-function researchRunsHere(): boolean {
-    try { return !(window.matchMedia?.('(pointer: coarse)').matches ?? false); } catch { return true; }
-}
 
 export const treeManagementMethods = uiModule({
     // ---- TREE SWITCHER ----
@@ -622,8 +613,6 @@ export const treeManagementMethods = uiModule({
             // If undefined, don't show anything (first person is implicit default)
 
             const s = strings.treeManager;
-            const visibilityLabel = tree.isHidden ? s.showTree : s.hideTree;
-            const lockLabel = tree.isLocked ? strings.lock.unlockTree : strings.lock.lockTree;
 
             // Status as explicit text chips — a leading glyph was easy to miss
             // and its meaning unclear. Active reads green, hidden/locked gray.
@@ -631,19 +620,6 @@ export const treeManagementMethods = uiModule({
                 (isActive ? `<span class="tree-badge active-badge">${s.activeBadge}</span>` : '') +
                 (tree.isLocked ? `<span class="tree-badge">${s.lockedBadge}</span>` : '') +
                 (tree.isHidden ? `<span class="tree-badge">${s.hiddenBadge}</span>` : '');
-
-            // Row menu items are text-only per the Letopis design (no emoji).
-            const menuItem = (onclick: string, label: string, cls = '', title = '') =>
-                `<button class="tree-row-menu-item ${cls}" onclick="${onclick}"${title ? ` title="${this.escapeHtml(title)}"` : ''}>${label}</button>`;
-
-            // "Open at startup" replaces the old footer "Default tree" dialog:
-            // a checkable row per tree (unchecking falls back to the first tree).
-            const isStartup = defaultTree === tree.id;
-            const startupItem = `<button class="tree-row-menu-item edit-only tree-startup-toggle${isStartup ? ' checked' : ''}" role="menuitemcheckbox" aria-checked="${isStartup}" onclick="window.Strom.UI.toggleStartupTree('${tree.id}')"><span class="tree-row-menu-check" aria-hidden="true">${isStartup ? iconSvg('check', { size: 12 }) : ''}</span>${s.openAtStartup}</button>`;
-
-            const auditItem = (AuditLogManager.isEnabled() || await AuditLogManager.hasEntries(tree.id))
-                ? menuItem(`window.Strom.UI.showAuditLogDialog('${tree.id}', 'tree-manager-modal')`, strings.auditLog.viewLog)
-                : '';
 
             html += `
                 <div class="tree-manager-item ${isActive ? 'active' : ''} ${tree.isHidden ? 'hidden-tree' : ''}">
@@ -660,29 +636,8 @@ export const treeManagementMethods = uiModule({
                     <div class="tree-manager-item-actions">
                         <button class="tree-open-btn" onclick="window.Strom.UI.openTreeFromManager('${tree.id}')">${s.open}</button>
                         <div class="tree-row-menu-wrap">
-                            <button class="tree-row-menu-btn" data-tip="${s.moreActions}" aria-label="${s.moreActions}" aria-haspopup="menu">⋯</button>
-                            <div class="tree-row-menu">
-                                ${menuItem(`window.Strom.UI.showTreeStatsDialog('${tree.id}', 'tree-manager-modal')`, s.stats)}
-                                ${menuItem(`window.Strom.UI.showTreeHealthDialog('${tree.id}', 'tree-manager-modal')`, strings.treeHealth.menu)}
-                                ${menuItem(`window.Strom.UI.showExportDialogFromManager('${tree.id}')`, s.export)}
-                                ${tree.research && researchRunsHere() ? menuItem(`window.Strom.UI.researchSendTree('${tree.id}')`, strings.research.sendMenu, 'edit-only') : ''}
-                                ${tree.research && this.researchTranscriptsCapable(tree.research.id) ? menuItem(`window.Strom.UI.showResearchTreeSettings('${tree.id}')`, strings.sync.treeSettingsRow) : ''}
-                                ${this.researchAdoptAvailable(tree) ? menuItem(`window.Strom.UI.treeActionStartResearch('${tree.id}')`, this.escapeHtml(strings.research.adoptTree), 'edit-only') : ''}
-                                ${menuItem(`window.Strom.UI.showRenameTreeDialog('${tree.id}', 'tree-manager-modal')`, s.rename, 'edit-only tree-row-menu-divider')}
-                                ${menuItem(`window.Strom.UI.showDefaultPersonDialog('${tree.id}', 'tree-manager-modal')`, s.defaultPerson, 'edit-only')}
-                                ${startupItem}
-                                ${menuItem(`window.Strom.UI.showSnapshotsDialog('${tree.id}', 'tree-manager-modal')`, strings.snapshots.menu, 'edit-only')}
-                                ${isActive ? menuItem(`window.Strom.UI.showPlacesManager(undefined, 'tree-manager-modal')`, strings.map.placesTitle, 'edit-only') : ''}
-                                ${isActive ? menuItem(`window.Strom.UI.showSurnamesDialog('tree-manager-modal')`, strings.surnames.menu, 'edit-only') : ''}
-                                ${menuItem(`window.Strom.UI.showSplitFamiliesPickerDialog('${tree.id}', 'tree-manager-modal')`, strings.menu.splitFamilies, 'edit-only', strings.menu.splitFamiliesHint)}
-                                ${menuItem(`window.Strom.UI.showSplitDialog('${tree.id}', 'tree-manager-modal')`, strings.split.menu, 'edit-only', strings.split.menuHint)}
-                                ${auditItem}
-                                ${menuItem(`window.Strom.UI.duplicateTree('${tree.id}')`, s.duplicate, 'edit-only')}
-                                ${menuItem(`window.Strom.UI.showMergeTreesDialog('${tree.id}', 'tree-manager-modal')`, s.mergeInto, 'edit-only')}
-                                ${menuItem(`window.Strom.UI.toggleTreeVisibility('${tree.id}')`, visibilityLabel, 'edit-only')}
-                                ${menuItem(`window.Strom.UI.toggleTreeLock('${tree.id}')`, lockLabel, 'edit-only')}
-                                ${menuItem(`window.Strom.UI.confirmDeleteTree('${tree.id}')`, s.delete, 'danger edit-only tree-row-menu-divider')}
-                            </div>
+                            <button class="tree-row-menu-btn" data-tree-id="${tree.id}" data-tip="${s.moreActions}" aria-label="${s.moreActions}" aria-haspopup="menu">⋯</button>
+                            <div class="tree-row-menu" role="menu"></div>
                         </div>
                     </div>
                 </div>
@@ -761,15 +716,10 @@ export const treeManagementMethods = uiModule({
                     const menu = btn.parentElement?.querySelector('.tree-row-menu') as HTMLElement | null;
                     const wasOpen = menu?.classList.contains('open');
                     closeAll();
-                    if (menu && !wasOpen) {
-                        menu.classList.add('open');
-                        this.positionTreeRowMenu(btn, menu);
-                    }
+                    if (menu && !wasOpen && btn.dataset.treeId) void this.openTreeRowMenu(btn, menu, btn.dataset.treeId as TreeId);
                     e.stopPropagation();
                     return;
                 }
-                // A menu item runs its inline action; close the menu around it.
-                if (target.closest('.tree-row-menu-item')) closeAll();
             });
             document.addEventListener('click', (e) => {
                 if (!(e.target as HTMLElement).closest('.tree-row-menu-wrap')) closeAll();
@@ -783,11 +733,87 @@ export const treeManagementMethods = uiModule({
         }
     },
 
+    /** Fill a row's ⋯ menu from the shared tree-action list, then show it by its button. */
+    async openTreeRowMenu(btn: HTMLElement, menu: HTMLElement, treeId: TreeId): Promise<void> {
+        const groups = await this.treeActionGroups(treeId, 'manager');
+        menu.replaceChildren();
+        for (const group of groups) {
+            const header = document.createElement('div');
+            header.className = 'tree-row-menu-group';
+            header.setAttribute('role', 'presentation');
+            header.textContent = group.header;
+            // A group of edit-only rows hides with them in read-only mode.
+            if (group.rows.every(row => row.editOnly)) header.classList.add('edit-only');
+            menu.appendChild(header);
+            for (const row of group.rows) {
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'tree-row-menu-item';
+                item.dataset.action = row.key;
+                if (row.danger) item.classList.add('danger');
+                if (row.editOnly) item.classList.add('edit-only');
+                if (row.hint) item.title = row.hint;
+                const label = document.createElement('span');
+                label.className = 'tree-row-menu-label';
+                label.textContent = row.label;
+                item.appendChild(label);
+                if (row.checked !== undefined) {
+                    item.classList.add('tree-startup-toggle');
+                    item.setAttribute('role', 'menuitemcheckbox');
+                    item.setAttribute('aria-checked', String(row.checked));
+                    const check = document.createElement('span');
+                    check.className = 'tree-row-menu-check';
+                    check.setAttribute('aria-hidden', 'true');
+                    if (row.checked) check.innerHTML = iconSvg('check', { size: 14 });
+                    item.appendChild(check);
+                } else {
+                    item.setAttribute('role', 'menuitem');
+                    if (row.value) {
+                        const value = document.createElement('span');
+                        value.className = 'tree-row-menu-value';
+                        value.textContent = row.value;
+                        item.appendChild(value);
+                    }
+                }
+                item.addEventListener('click', () => {
+                    menu.classList.remove('open');
+                    row.run();
+                });
+                menu.appendChild(item);
+            }
+        }
+        // A tree that is not open: say where the missing actions are.
+        if (treeId !== TreeManager.getActiveTreeId()) {
+            const note = document.createElement('div');
+            note.className = 'tree-row-menu-note edit-only';
+            note.textContent = strings.treeActions.moreWhenOpen;
+            menu.appendChild(note);
+        }
+        const more = document.createElement('div');
+        more.className = 'tree-row-menu-more';
+        more.setAttribute('aria-hidden', 'true');
+        more.innerHTML = iconSvg('chevron-down', { size: 16 });
+        menu.appendChild(more);
+        if (!menu.dataset.scrollWired) {
+            menu.dataset.scrollWired = '1';
+            menu.addEventListener('scroll', () => this.updateTreeRowMenuHint(menu), { passive: true });
+        }
+        menu.classList.add('open');
+        this.positionTreeRowMenu(btn, menu);
+        this.updateTreeRowMenuHint(menu);
+    },
+
+    /** The fade + chevron while more of the menu lies below; gone at its end. */
+    updateTreeRowMenuHint(menu: HTMLElement): void {
+        menu.classList.toggle('can-scroll', menu.scrollTop + menu.clientHeight < menu.scrollHeight - 2);
+    },
+
     /**
-     * Place a row menu (position: fixed) next to its ⋯ button: right-aligned
-     * to the button, below it — or above when there is more room there —
-     * never over the dialog's header nor past the window; what does not fit
-     * scrolls inside the menu (J5 of the language round).
+     * Place a row menu (position: fixed) under its ⋯ button, right edges
+     * aligned, 4px apart — above it only when there is more room there, and
+     * never over the tree's name, the dialog's header nor past the window;
+     * max-height is the room left (8px kept on each side) and the rest
+     * scrolls inside the menu.
      */
     positionTreeRowMenu(btn: HTMLElement, menu: HTMLElement): void {
         const r = btn.getBoundingClientRect();
@@ -800,8 +826,9 @@ export const treeManagementMethods = uiModule({
         while (clip && !/(auto|scroll)/.test(getComputedStyle(clip).overflowY)) clip = clip.parentElement;
         const box = clip?.getBoundingClientRect();
         const header = btn.closest('.modal')?.querySelector('.modal-header')?.getBoundingClientRect();
-        const ceiling = Math.max(8, header ? header.bottom + 4 : 8, box ? box.top + 4 : 8);
-        const floor = Math.min(window.innerHeight - 8, box ? box.bottom - 4 : Infinity);
+        const name = btn.closest('.tree-manager-item')?.querySelector('.tree-manager-item-header')?.getBoundingClientRect();
+        const ceiling = Math.max(8, header ? header.bottom + 4 : 8, box ? box.top + 4 : 8, name ? name.bottom + 4 : 8);
+        const floor = Math.min(window.innerHeight - 8, box ? box.bottom - 8 : Infinity);
         const roomBelow = floor - (r.bottom + 4);
         const roomAbove = (r.top - 4) - ceiling;
         if (h <= roomBelow || roomBelow >= roomAbove) {

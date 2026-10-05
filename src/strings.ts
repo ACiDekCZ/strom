@@ -2748,6 +2748,19 @@ const stringsEN = {
     },
 
     // Tree Manager
+    treeActions: {
+        subActive: 'Open tree',
+        subOther: 'Tree settings and file',
+        moreWhenOpen: 'Places, surnames, change log and splitting are available once the tree is open.',
+        group: {
+            overview: 'Overview',
+            outputs: 'Outputs',
+            research: 'Research',
+            settings: 'Tree settings',
+            structure: 'Structure',
+            manage: 'Manage',
+        },
+    },
     treeManager: {
         defaultTreeName: 'My Family Tree',
         newTree: 'New tree',
@@ -6207,6 +6220,19 @@ const stringsCZ: StringsType = {
     },
 
     // Tree Manager
+    treeActions: {
+        subActive: 'Otevřený strom',
+        subOther: 'Nastavení a soubor stromu',
+        moreWhenOpen: 'Místa, příjmení, záznam změn a dělení stromu jsou dostupné po otevření stromu.',
+        group: {
+            overview: 'Přehled',
+            outputs: 'Výstupy',
+            research: 'Výzkum',
+            settings: 'Nastavení stromu',
+            structure: 'Struktura',
+            manage: 'Správa',
+        },
+    },
     treeManager: {
         defaultTreeName: 'Můj rodokmen',
         newTree: 'Nový strom',
@@ -9603,6 +9629,19 @@ const stringsDE: StringsType = {
     },
 
     // Tree Manager
+    treeActions: {
+        subActive: 'Geöffneter Stammbaum',
+        subOther: 'Einstellungen und Datei',
+        moreWhenOpen: 'Orte, Nachnamen, Änderungsprotokoll und Aufteilen sind verfügbar, sobald der Stammbaum geöffnet ist.',
+        group: {
+            overview: 'Übersicht',
+            outputs: 'Ausgabe',
+            research: 'Forschung',
+            settings: 'Stammbaum-Einstellungen',
+            structure: 'Struktur',
+            manage: 'Verwaltung',
+        },
+    },
     treeManager: {
         defaultTreeName: 'Mein Stammbaum',
         newTree: 'Neuer Stammbaum',

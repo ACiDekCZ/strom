@@ -7470,7 +7470,7 @@
             font-weight: 600;
             padding: 6px 14px !important;
         }
-        .tree-open-btn:hover { filter: brightness(1.08); }
+        @media (hover: hover) { .tree-open-btn:hover { filter: brightness(1.08); } }
         .tree-row-menu-wrap { position: relative; margin-left: auto; }
         .tree-row-menu-btn { font-size: 16px; font-weight: 700; letter-spacing: 1px; }
         .tree-row-menu {
@@ -7491,30 +7491,79 @@
             overflow-y: auto;
         }
         .tree-row-menu.open { display: block; }
+        /* Group headers (Overview, Outputs, …), the tree-actions sheet's order. */
+        .tree-row-menu-group {
+            padding: 8px 12px 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: var(--accent-text, var(--text-light));
+        }
+        .tree-row-menu-group + .tree-row-menu-item { margin-top: 0; }
+        .tree-row-menu-group:not(:first-child) {
+            border-top: 1px solid var(--divider);
+            margin-top: 4px;
+        }
         .tree-row-menu-item {
             /* Text-only rows (Letopis design): no icon column. */
-            display: block;
+            display: flex;
+            align-items: center;
+            gap: 8px;
             width: 100%;
-            padding: 8px 12px;
+            min-height: 32px;
+            padding: 0 12px;
             border: none;
             background: none;
-            border-radius: var(--r-sm);
-            font-size: 13px;
+            border-radius: 6px;
+            font-size: 14px;
             text-align: left;
             cursor: pointer;
             color: var(--text);
         }
-        .tree-row-menu-item:hover { background: var(--hover-bg, #f1f1ee); }
+        .tree-row-menu-label { flex: 1; min-width: 0; }
+        /* A value at the row's end (the default person), or the startup tick. */
+        .tree-row-menu-value {
+            max-width: 140px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 13px;
+            color: var(--text-faint, var(--text-light));
+        }
+        @media (hover: hover) {
+            .tree-row-menu-item:hover { background: var(--hover-bg, #f1f1ee); }
+        }
+        .tree-row-menu-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .tree-row-menu-item.danger { color: var(--danger); }
-        /* "Open at startup": a checkable row; the tick column keeps labels aligned. */
-        .tree-row-menu-item.tree-startup-toggle { display: flex; align-items: center; gap: 6px; }
-        .tree-row-menu-check { display: inline-block; width: 12px; color: var(--primary); font-weight: 700; }
-        /* A hairline separates action groups within the menu. */
-        .tree-row-menu-item.tree-row-menu-divider {
+        .tree-row-menu-check { display: inline-flex; width: 14px; color: var(--primary); }
+        .tree-row-menu { max-width: min(320px, calc(100vw - 16px)); }
+        .tree-row-menu-note {
+            padding: 8px 12px 6px;
             border-top: 1px solid var(--divider);
             margin-top: 4px;
-            padding-top: 10px;
+            font-size: 12px;
+            line-height: 1.4;
+            color: var(--text-faint, var(--text-light));
         }
+        /* A menu taller than its room scrolls: a fade and a chevron at the
+           bottom say so, gone at the end of the list (.can-scroll by JS). */
+        .tree-row-menu-more {
+            display: none;
+            position: sticky;
+            bottom: 0;
+            height: 36px;
+            margin: -36px -4px 0;
+            background: linear-gradient(to bottom, transparent, var(--card-bg, var(--surface)) 70%);
+            color: var(--text-light);
+            pointer-events: none;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 4px;
+        }
+        .tree-row-menu.can-scroll .tree-row-menu-more { display: flex; }
+        /* Read-only: a group whose rows are all edit-only hides with them. */
+        body.view-mode .tree-row-menu .edit-only { display: none !important; }
         .tree-manager-item {
             padding: 12px 14px;
             margin-bottom: 8px;
@@ -7590,7 +7639,8 @@
             gap: 6px;
             margin-top: 8px;
         }
-        .tree-manager-item-actions button {
+        /* Row buttons only: the ⋯ menu's items are rows, not bordered buttons. */
+        .tree-manager-item-actions button:not(.tree-row-menu-item) {
             padding: 6px 10px;
             font-size: 12px;
             font-weight: 500;
@@ -7608,19 +7658,23 @@
             justify-content: center;
             gap: 4px;
         }
-        .tree-manager-item-actions button:hover {
-            border-color: var(--primary);
-            color: var(--primary);
+        @media (hover: hover) {
+            .tree-manager-item-actions button:not(.tree-row-menu-item):hover {
+                border-color: var(--primary);
+                color: var(--primary);
+            }
         }
         /* Text-only action buttons (pending merges): a touch wider than icons. */
         .tree-manager-item-actions button.tree-text-action { padding: 6px 12px; }
-        .tree-manager-item-actions button.danger {
+        .tree-manager-item-actions button.danger:not(.tree-row-menu-item) {
             background: var(--surface);
             color: var(--danger);
         }
-        .tree-manager-item-actions button.danger:hover {
-            border-color: var(--danger);
-            background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+        @media (hover: hover) {
+            .tree-manager-item-actions button.danger:not(.tree-row-menu-item):hover {
+                border-color: var(--danger);
+                background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+            }
         }
         /* Desktop: footer shows icon + text, items show only icons */
         .tree-manager-footer .btn-icon {
@@ -10162,7 +10216,7 @@
                 display: none !important;
             }
             .tree-manager-footer { flex-wrap: wrap; gap: 8px; }
-            .tree-manager-item-actions button {
+            .tree-manager-item-actions button:not(.tree-row-menu-item) {
                 padding: 6px 8px;
                 min-width: auto;
             }
