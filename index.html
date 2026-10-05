@@ -4361,6 +4361,10 @@
                 z-index: 100;
             }
             .zoom-controls button {
+                /* The desktop row's flex: 1 would set the height in this
+                   column (flex-basis beats height) and squash the circle. */
+                flex: none;
+                aspect-ratio: 1;
                 width: 48px;
                 height: 48px;
                 border-radius: 50%;

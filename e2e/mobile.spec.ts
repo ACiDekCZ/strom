@@ -218,3 +218,19 @@ test('bottom-bar tabs, the FAB and sheet rows meet the 44px touch target', async
     const rowBox = (await row.boundingBox())!;
     expect(rowBox.height).toBeGreaterThanOrEqual(44);
 });
+
+test('the floating zoom buttons are circles at every phone width', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+
+    for (const width of [320, 390, 430]) {
+        await page.setViewportSize({ width, height: 844 });
+        const buttons = page.locator('.zoom-controls button:visible');
+        await expect(buttons.first()).toBeVisible();
+        for (const box of await buttons.evaluateAll(els => els.map(el => el.getBoundingClientRect().toJSON()))) {
+            // Same width and height: border-radius 50% draws a circle, not an oval.
+            expect(Math.abs(box.width - box.height), `${width}px: ${box.width}×${box.height}`).toBeLessThanOrEqual(1);
+            expect(box.height).toBeGreaterThanOrEqual(44);
+        }
+    }
+});
