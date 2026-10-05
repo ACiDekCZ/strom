@@ -44,6 +44,11 @@ export function syncDepthStepper(select: HTMLSelectElement | null): void {
     const value = parseInt(select.value, 10);
     const valueEl = stepper.querySelector('.depth-stepper-value');
     if (valueEl) valueEl.textContent = isNaN(value) ? '0' : String(value);
+    // The phone person panel's ↑n / ↓n chip for this select.
+    if (select.id) {
+        const chip = document.querySelector(`.focus-chip[data-for="${select.id}"] .focus-chip-value`);
+        if (chip) chip.textContent = isNaN(value) ? '0' : String(value);
+    }
 
     const dec = stepper.querySelector<HTMLButtonElement>('.depth-stepper-btn[data-step="-1"]');
     const inc = stepper.querySelector<HTMLButtonElement>('.depth-stepper-btn[data-step="1"]');

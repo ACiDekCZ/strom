@@ -306,7 +306,7 @@
             align-self: flex-end;
             margin-bottom: 3px;
         }
-        .app-logo:hover { color: var(--primary); }
+        @media (hover: hover) { .app-logo:hover { color: var(--primary); } }
 
         .toolbar button {
             padding: 8px 14px;
@@ -318,7 +318,7 @@
             cursor: pointer;
             transition: background 0.2s;
         }
-        .toolbar button:hover { background: var(--primary-dark); }
+        @media (hover: hover) { .toolbar button:hover { background: var(--primary-dark); } }
         /* Ghost buttons (⋯ actions, settings): transparent, hairline on hover. */
         .toolbar button.secondary {
             background: transparent;
@@ -327,7 +327,7 @@
             align-items: center;
             justify-content: center;
         }
-        .toolbar button.secondary:hover { background: var(--hover-bg); color: var(--text); }
+        @media (hover: hover) { .toolbar button.secondary:hover { background: var(--hover-bg); color: var(--text); } }
         .toolbar button.secondary svg { display: block; }
 
         /* Primary "＋ Add person" button. */
@@ -351,9 +351,9 @@
             border: none;
             cursor: pointer;
         }
-        .add-person-round:hover {
+        @media (hover: hover) { .add-person-round:hover {
             background: var(--primary-dark);
-        }
+        } }
 
         /* Toolbar focus info (for tablet landscape) */
         .toolbar .toolbar-focus {
@@ -418,10 +418,10 @@
                under the search field when the toolbar squeezes. */
             max-width: min(200px, 100%);
         }
-        .toolbar .tree-switcher-btn:hover {
+        @media (hover: hover) { .toolbar .tree-switcher-btn:hover {
             border-color: var(--primary);
             background: var(--surface-2);
-        }
+        } }
         .tree-switcher-btn .tree-name {
             overflow: hidden;
             text-overflow: ellipsis;
@@ -470,9 +470,9 @@
         .tree-switcher-item:last-child {
             border-bottom: none;
         }
-        .tree-switcher-item:hover {
+        @media (hover: hover) { .tree-switcher-item:hover {
             background: var(--hover-bg);
-        }
+        } }
         .tree-switcher-item.active {
             background: color-mix(in srgb, var(--primary) 10%, transparent);
         }
@@ -502,10 +502,10 @@
             font-size: 13px;
             transition: all 0.15s;
         }
-        .tree-switcher-action:hover {
+        @media (hover: hover) { .tree-switcher-action:hover {
             background: var(--hover-bg);
             color: var(--primary);
-        }
+        } }
         .tree-switcher-action:last-child {
             border-radius: 0 0 10px 10px;
         }
@@ -621,13 +621,15 @@
             visibility: hidden; transition: visibility 0s linear 0.25s;
         }
         /* .hover-off: closed (Esc, a click on its row) under the pointer — hidden until the pointer leaves. */
-        .actions-tree-wrap:not(.hover-off):hover > .actions-tree-submenu,
         .actions-tree-wrap.submenu-open > .actions-tree-submenu { visibility: visible; transition-delay: 0s; z-index: 211; }
+        @media (hover: hover) { .actions-tree-wrap:not(.hover-off):hover > .actions-tree-submenu { visibility: visible; transition-delay: 0s; z-index: 211; } }
         /* The gap between the row and the flyout still counts as the row. */
-        .actions-tree-wrap:not(.hover-off):hover::before,
         .actions-tree-wrap.submenu-open::before {
             content: ''; position: absolute; top: 0; bottom: 0; right: 100%; width: 16px;
         }
+        @media (hover: hover) { .actions-tree-wrap:not(.hover-off):hover::before {
+            content: ''; position: absolute; top: 0; bottom: 0; right: 100%; width: 16px;
+        } }
 
 
         /* ==================== SEARCH ==================== */
@@ -720,8 +722,9 @@
            .search-open = the field over the whole bar with Cancel (keyboard up);
            .search-active = a query or a filter holds with the keyboard closed:
            the field stays with its count and ×. Never a folded field with an
-           active filter. */
-        @media (max-width: 640px) {
+           active filter. A phone held sideways (≤1024 × ≤500, landscape) has
+           the same bar, 44px high and merged with the person panel (4a). */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             :root { --toolbar-h: calc(52px + env(safe-area-inset-top, 0px)); }
             .toolbar {
                 height: var(--toolbar-h); padding: env(safe-area-inset-top, 0px) 4px 0; gap: 0;
@@ -789,6 +792,11 @@
             /* 16px: iOS zooms into a smaller input. */
             .toolbar #toolbar-search-picker .person-picker-input { font-size: 16px; }
             .toolbar .search-row .search-filter-toggle { width: 44px; min-width: 44px; height: 38px; padding: 0; }
+            /* The funnel and × look 38px high inside the 40px field; their
+               touch target reaches 44 (5: targets ≥ 44×44). */
+            .toolbar .search-row .search-filter-toggle, .toolbar .search-row .search-clear-btn { position: relative; }
+            .toolbar .search-row .search-filter-toggle::before,
+            .toolbar .search-row .search-clear-btn::before { content: ''; position: absolute; inset: -3px 0; }
             body.search-active:not(.search-open) .toolbar .search-clear-btn {
                 display: flex; align-items: center; justify-content: center; flex: none;
                 width: 44px; height: 38px; padding: 0; border: none; background: none;
@@ -844,9 +852,9 @@
             }
             .toolbar .search-filters-sheet-foot > button:disabled { opacity: .5; cursor: default; }
             /* No hover fill after a tap (the generic toolbar button hover is the primary). */
-            .toolbar .toolbar-tree-icon:hover, .toolbar .search-open-btn:hover,
+            @media (hover: hover) { .toolbar .toolbar-tree-icon:hover, .toolbar .search-open-btn:hover,
             .toolbar .search-clear-btn:hover, .toolbar .search-cancel-btn:hover,
-            .toolbar .tree-switcher-btn:hover, .toolbar .search-filters-close:hover { background: none; }
+            .toolbar .tree-switcher-btn:hover, .toolbar .search-filters-close:hover { background: none; } }
         }
         /* The pill carries its own magnifier + "/" chip — the picker's built-in
            dropdown caret is redundant here, so hide it in the toolbar. */
@@ -988,11 +996,11 @@
             touch-action: manipulation;
             /* overflow: visible needed for add-btn positioned outside card bounds */
         }
-        .person-card:hover {
+        @media (hover: hover) { .person-card:hover {
             transform: scale(1.03);
             box-shadow: var(--shadow-sm);
             z-index: 100;
-        }
+        } }
         /* Branch colour stripe: an absolute bar so the card box never changes.
            Colours are mid-tones (defined in :root tokens) that read on both light and dark cards. */
         .person-card.branch-paternal::before,
@@ -1124,7 +1132,7 @@
             text-decoration: none;
         }
         .about-coffee .ui-icon { color: var(--accent); }
-        .about-coffee:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .about-coffee:hover { background: var(--hover-bg); } }
         .about-coffee:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .person-card:active {
             transform: scale(0.98);
@@ -1236,9 +1244,12 @@
             vertical-align: middle; opacity: 0.6;
             transition: opacity 0.12s ease, color 0.12s ease;
         }
-        .hint-toggle:hover, .hint-toggle:focus-visible {
+        .hint-toggle:focus-visible {
             opacity: 1; color: var(--primary, #4a7c59);
         }
+        @media (hover: hover) { .hint-toggle:hover {
+            opacity: 1; color: var(--primary, #4a7c59);
+        } }
         /* Touch targets: a 15px disc is fine to read but not to hit. */
         @media (max-width: 900px) {
             .hint-toggle { width: 20px; height: 20px; font-size: 12px; margin-left: 7px; }
@@ -1347,7 +1358,7 @@
         @media (hover: hover) {
             .person-card:hover .add-btn { display: inline-flex; }
         }
-        .add-btn:hover {
+        @media (hover: hover) { .add-btn:hover {
             height: auto;
             min-height: 18px;
             background: var(--primary);
@@ -1356,12 +1367,12 @@
             padding: 4px 12px 4px 8px;
             box-shadow: 0 2px 8px rgba(63,107,79,0.3);
             z-index: 30;
-        }
-        .add-btn:hover .add-btn-label {
+        } }
+        @media (hover: hover) { .add-btn:hover .add-btn-label {
             max-width: 120px;
             opacity: 1;
             margin-left: 3px;
-        }
+        } }
 
         /* Position of every add tab now comes from its card-edge container
            (.edge-top-left / .edge-right-center / .edge-bottom-center); the
@@ -1396,11 +1407,11 @@
            "＋ parent" pill on the left and the branch-tabs+chain group on the
            right cannot both fit. When the left add pill is hovered (the user is
            aiming to add), the right navigation group briefly yields. */
-        .person-card:has(.edge-top-left .add-btn:hover) .edge-top-right {
+        @media (hover: hover) { .person-card:has(.edge-top-left .add-btn:hover) .edge-top-right {
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.12s;
-        }
+        } }
 
         /* ==================== MODAL ==================== */
         .modal-overlay {
@@ -1656,7 +1667,7 @@
             background: transparent;
             text-align: center;
         }
-        .settings-segment .settings-radio:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .settings-segment .settings-radio:hover { background: var(--hover-bg); } }
         .settings-segment .settings-radio + .settings-radio {
             border-left: 1px solid var(--border);
         }
@@ -1692,10 +1703,10 @@
             cursor: pointer;
             transition: all 0.15s;
         }
-        .settings-radio:hover {
+        @media (hover: hover) { .settings-radio:hover {
             background: var(--hover-bg);
             border-color: var(--primary);
-        }
+        } }
         .settings-radio input[type="radio"] {
             width: 18px;
             height: 18px;
@@ -1936,7 +1947,7 @@
         .bottom-sheet-person .bottom-sheet-section { padding-top: 8px; }
         .bottom-sheet-person .menu-person-state { padding-bottom: 4px; }
         .bottom-sheet-person .bottom-sheet-items .menu-signal { margin: 2px 12px 6px; }
-        .bottom-sheet-person .bottom-sheet-item:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .bottom-sheet-person .bottom-sheet-item:hover { background: var(--hover-bg); } }
         .bottom-sheet-person .bottom-sheet-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .bottom-sheet-divider { height: 1px; background: var(--divider); margin: 6px 16px; }
         .bottom-sheet-person .bottom-sheet-menu-title {
@@ -2093,9 +2104,9 @@
             .pwa-update-close, .embedded-mode-close,
             .storage-notice button { min-width: 44px; min-height: 44px; }
         }
-        .close-btn:hover {
+        @media (hover: hover) { .close-btn:hover {
             color: var(--text);
-        }
+        } }
 
         /* Relationships Panel */
         .rel-section {
@@ -2148,9 +2159,9 @@
             cursor: pointer;
             transition: background 0.2s;
         }
-        .rel-remove-btn:hover {
+        @media (hover: hover) { .rel-remove-btn:hover {
             background: color-mix(in srgb, var(--danger) 18%, var(--danger-soft));
-        }
+        } }
         /* "Reassign" moves the link instead of deleting it — neutral, not red. */
         .rel-reassign-btn {
             padding: 4px 10px;
@@ -2163,9 +2174,9 @@
             transition: background 0.2s;
             white-space: nowrap;
         }
-        .rel-reassign-btn:hover {
+        @media (hover: hover) { .rel-reassign-btn:hover {
             background: var(--hover-bg);
-        }
+        } }
         .reassign-modal { max-width: 460px; }
         .reassign-hint { margin: 4px 0 12px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
         @media (max-width: 499px) {
@@ -2302,9 +2313,9 @@
             font: inherit;
             cursor: pointer;
         }
-        .modal .couple-event-row:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .modal .couple-event-row:hover { background: var(--hover-bg); } }
         .modal .couple-event-row.readonly { cursor: default; }
-        .modal .couple-event-row.readonly:hover { background: var(--surface); }
+        @media (hover: hover) { .modal .couple-event-row.readonly:hover { background: var(--surface); } }
         .couple-event-main { font-size: 14px; line-height: 1.35; }
         .couple-event-type { font-weight: 600; }
         .couple-event-meta, .couple-event-dash { color: var(--text-light); }
@@ -2390,11 +2401,11 @@
             text-align: center;
             transition: all 0.2s;
         }
-        .link-relationships-btn:hover {
+        @media (hover: hover) { .link-relationships-btn:hover {
             border-color: var(--primary);
             background: color-mix(in srgb, var(--primary) 10%, transparent);
             color: var(--primary);
-        }
+        } }
         .rel-add-btn {
             display: block;
             width: 100%;
@@ -2408,11 +2419,11 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .rel-add-btn:hover {
+        @media (hover: hover) { .rel-add-btn:hover {
             border-color: var(--primary);
             color: var(--primary);
             background: color-mix(in srgb, var(--primary) 5%, transparent);
-        }
+        } }
         /* Chain-link "relations" tab — a member of the round-3 edge-tab family.
            Rests as an 18px circle ON the card's top edge (top -9, right 12) with
            an inline chain SVG in --primary; on hover it grows into a --primary
@@ -2458,7 +2469,7 @@
         @media (hover: hover) {
             .person-card:hover .rel-link-icon { display: inline-flex; }
         }
-        .rel-link-icon:hover {
+        @media (hover: hover) { .rel-link-icon:hover {
             height: auto;
             min-height: 18px;
             background: var(--primary);
@@ -2467,12 +2478,12 @@
             padding: 4px 12px 4px 8px;
             box-shadow: 0 2px 8px rgba(63,107,79,0.3);
             z-index: 30;
-        }
-        .rel-link-icon:hover .rel-link-label {
+        } }
+        @media (hover: hover) { .rel-link-icon:hover .rel-link-label {
             max-width: 120px;
             opacity: 1;
             margin-left: 3px;
-        }
+        } }
 
         /* ==================== CARD NAV PILLS ==================== */
         /* One pill shape for every card-edge affordance: branch tabs (hidden
@@ -2503,11 +2514,11 @@
             white-space: nowrap;
             transition: transform 0.15s, background 0.15s, border-color 0.15s;
         }
-        .branch-tab:hover,
+        @media (hover: hover) { .branch-tab:hover,
         .hidden-partners-btn:hover,
         .hidden-families-btn:hover {
             transform: translateY(-1px);
-        }
+        } }
         .branch-tab .pill-glyph,
         .hidden-partners-btn .pill-glyph,
         .hidden-families-btn .pill-glyph,
@@ -2569,11 +2580,11 @@
             border-bottom: 1px solid var(--border);
             transform: rotate(45deg);
         }
-        .hidden-partners-btn:hover .badge-tooltip,
+        @media (hover: hover) { .hidden-partners-btn:hover .badge-tooltip,
         .hidden-families-btn:hover .badge-tooltip,
         .branch-tab:hover .badge-tooltip {
             display: block;
-        }
+        } }
         .badge-tooltip-header {
             font-weight: 600;
             font-size: 10.5px;
@@ -2615,10 +2626,10 @@
             from { opacity: 0; transform: scale(0.8); }
             to { opacity: 1; transform: scale(1); }
         }
-        .cross-tree-badge:hover {
+        @media (hover: hover) { .cross-tree-badge:hover {
             transform: translateY(-1px);
             z-index: 9999;
-        }
+        } }
 
         /* Tooltip container for cross-tree badge */
         .cross-tree-badge .cross-tree-tooltip {
@@ -2657,9 +2668,9 @@
             border-bottom: 1px solid var(--border);
             transform: rotate(45deg);
         }
-        .cross-tree-badge:hover .cross-tree-tooltip {
+        @media (hover: hover) { .cross-tree-badge:hover .cross-tree-tooltip {
             display: block;
-        }
+        } }
         .cross-tree-tooltip-header {
             font-weight: 600;
             font-size: 10.5px;
@@ -2719,11 +2730,14 @@
             touch-action: manipulation;
             user-select: none;
         }
-        .cross-tree-chooser-item:hover,
         .cross-tree-chooser-item:focus {
             background: var(--hover-bg);
             outline: none;
         }
+        @media (hover: hover) { .cross-tree-chooser-item:hover {
+            background: var(--hover-bg);
+            outline: none;
+        } }
         .cross-tree-chooser-item:active {
             background: var(--hover-bg);
         }
@@ -2751,10 +2765,10 @@
 
         /* Branch-navigation pills live in the top-right edge slot (see
            .edge-top-right). Shape comes from the unified pill rules above. */
-        .branch-tab.active:hover {
+        @media (hover: hover) { .branch-tab.active:hover {
             background: var(--primary-dark);
             border-color: var(--primary-dark);
-        }
+        } }
 
         .modal .form-group { margin-bottom: 16px; }
         .modal .form-row {
@@ -2805,10 +2819,10 @@
             text-align: left;
             transition: all 0.2s;
         }
-        .expand-btn:hover {
+        @media (hover: hover) { .expand-btn:hover {
             border-color: var(--primary);
             color: var(--primary);
-        }
+        } }
         .expand-btn .expand-icon {
             display: inline-block;
             transition: transform 0.2s;
@@ -2943,7 +2957,7 @@
             color: var(--text-color, #222);
             cursor: pointer;
         }
-        .split-modal .split-row:hover { border-color: var(--primary, #4a7c59); }
+        @media (hover: hover) { .split-modal .split-row:hover { border-color: var(--primary, #4a7c59); } }
         .split-modal .split-row input { width: auto; margin-top: 3px; flex-shrink: 0; }
         .split-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .split-row-meta, .split-row-names { font-size: 12px; color: var(--text-light); }
@@ -2967,7 +2981,7 @@
             font-size: 12px; line-height: 1.2; white-space: nowrap;
             transition: background 0.15s, color 0.15s, border-color 0.15s;
         }
-        .splitfam-mode-btn:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .splitfam-mode-btn:hover { background: var(--hover-bg); } }
         .splitfam-mode-btn.active {
             background: var(--primary); border-color: var(--primary); color: var(--on-primary);
         }
@@ -3058,7 +3072,7 @@
             border: 1px solid var(--border-color, #ddd); border-radius: 999px;
             background: transparent; color: var(--text); cursor: pointer;
         }
-        .splitfam-preview-btn:hover { border-color: var(--primary); color: var(--primary); }
+        @media (hover: hover) { .splitfam-preview-btn:hover { border-color: var(--primary); color: var(--primary); } }
         .splitfam-summary { font-size: 12px; color: var(--text-light); margin-right: auto; }
 
         /* Reusable static tree thumbnail (also usable elsewhere). One SVG that
@@ -3141,7 +3155,7 @@
             text-align: left;
             cursor: pointer;
         }
-        .place-candidate:hover { background: var(--primary, #4a7c59); color: var(--on-primary); }
+        @media (hover: hover) { .place-candidate:hover { background: var(--primary, #4a7c59); color: var(--on-primary); } }
         .map-popup-fix {
             width: 100%;
             margin-top: 10px;
@@ -3153,7 +3167,7 @@
             font-size: 12px;
             cursor: pointer;
         }
-        .map-popup-fix:hover { background: var(--bg-color, #f4f4f4); color: var(--text-color, #222); }
+        @media (hover: hover) { .map-popup-fix:hover { background: var(--bg-color, #f4f4f4); color: var(--text-color, #222); } }
         /* Tablet: the name row keeps its shape, the pin row wraps as needed. */
         @media (max-width: 900px) {
             .places-modal { max-width: 94vw; }
@@ -3214,7 +3228,7 @@
         .archives-modal h3 { margin: 12px 0 6px; font-size: 0.95em; opacity: 0.8; }
         .archive-link { display: block; padding: 8px 10px; margin: 4px 0; border-radius: 8px;
             background: rgba(127,127,127,0.08); text-decoration: none; color: inherit; }
-        .archive-link:hover { background: rgba(127,127,127,0.18); }
+        @media (hover: hover) { .archive-link:hover { background: rgba(127,127,127,0.18); } }
         .archive-link-name { display: block; font-weight: 600; }
         .archive-link-hint { display: block; font-size: 0.8em; opacity: 0.7; }
         .archive-disclaimer { font-size: 0.75em; opacity: 0.6; margin-top: 10px; }
@@ -3283,22 +3297,22 @@
             background: var(--primary);
             color: var(--on-primary);
         }
-        .modal button.primary:hover { background: var(--primary-dark); }
+        @media (hover: hover) { .modal button.primary:hover { background: var(--primary-dark); } }
         .modal button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
-        .modal button.primary:disabled:hover { background: var(--primary); }
+        @media (hover: hover) { .modal button.primary:disabled:hover { background: var(--primary); } }
         /* Ghost secondary: transparent with a hairline border (round 13 tokens). */
         .modal button.secondary {
             background: transparent;
             color: var(--text);
             border: 1px solid var(--border);
         }
-        .modal button.secondary:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .modal button.secondary:hover { background: var(--hover-bg); } }
         .modal button.danger {
             background: var(--danger);
             color: white;
             margin-right: auto;
         }
-        .modal button.danger:hover { filter: brightness(0.92); }
+        @media (hover: hover) { .modal button.danger:hover { filter: brightness(0.92); } }
 
         /* Dialog widths (round 14): three classes, every dialog carries one.
            sm = confirmations and short prompts, md = forms, lg = lists/tables.
@@ -3332,9 +3346,9 @@
             background: var(--danger);
             color: #fff;
         }
-        #confirmation-modal .modal button.primary.is-danger:hover {
+        @media (hover: hover) { #confirmation-modal .modal button.primary.is-danger:hover {
             background: color-mix(in srgb, var(--danger) 85%, #000);
-        }
+        } }
         #confirmation-modal.dialog-danger h2 .dialog-dot { background: var(--danger); }
 
         /* Empty states (round 14): one pattern everywhere — serif heading, one
@@ -3465,8 +3479,8 @@
             color: var(--accent);
             text-align: left;
         }
-        .modal .expand-btn.pm-expand:hover { background: transparent; color: var(--accent); }
-        .modal .expand-btn.pm-expand:hover .pm-expand-title { text-decoration: underline; }
+        @media (hover: hover) { .modal .expand-btn.pm-expand:hover { background: transparent; color: var(--accent); } }
+        @media (hover: hover) { .modal .expand-btn.pm-expand:hover .pm-expand-title { text-decoration: underline; } }
         .modal .expand-btn.pm-expand:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .pm-expand-icon {
             flex: none;
@@ -3556,7 +3570,7 @@
         /* A range ("1890–1900", a couple's residence) needs a wider year column. */
         .pm-lifeline-body.has-ranges .pm-lifeline-year { min-width: 76px; }
         .pm-lifeline-row.is-link { cursor: pointer; border-radius: var(--r-md); }
-        .pm-lifeline-row.is-link:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .pm-lifeline-row.is-link:hover { background: var(--hover-bg); } }
         .pm-lifeline-row.is-link:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .pm-lifeline-glyph.k-birth { color: var(--male, #5b7f9e); }
         .pm-lifeline-glyph.k-death { color: var(--text-light, #5c5546); }
@@ -3628,7 +3642,7 @@
             cursor: pointer;
             box-shadow: none;
         }
-        .detail-group .detail-more:hover { color: var(--primary-dark); background: none; }
+        @media (hover: hover) { .detail-group .detail-more:hover { color: var(--primary-dark); background: none; } }
         /* Cause · age · house under an event (events list, life timeline). */
         .event-details-line { display: block; font-size: 12px; line-height: 1.4; color: var(--text-faint); }
         /* Toolbar search: a person found by a cause or a house says so. */
@@ -3673,7 +3687,7 @@
             padding: 8px 0;
             font-size: 13px;
         }
-        .modal button.pm-delete-link:hover { text-decoration: underline; background: transparent; }
+        @media (hover: hover) { .modal button.pm-delete-link:hover { text-decoration: underline; background: transparent; } }
 
         /* Shell pattern shared by the other form modals (event, source, relation).
            The bare <h2> acts as the pinned header; its horizontal padding stands
@@ -3790,16 +3804,16 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .empty-state button.primary:hover { background: var(--primary-dark); }
+        @media (hover: hover) { .empty-state button.primary:hover { background: var(--primary-dark); } }
         .empty-state button.ghost {
             background: transparent;
             border-color: var(--border);
             color: var(--text);
         }
-        .empty-state button.ghost:hover {
+        @media (hover: hover) { .empty-state button.ghost:hover {
             border-color: var(--primary);
             color: var(--primary);
-        }
+        } }
         .empty-state button.link {
             background: transparent;
             border: none;
@@ -3807,7 +3821,7 @@
             padding: 4px 0;
             font-weight: 500;
         }
-        .empty-state button.link:hover { text-decoration: underline; }
+        @media (hover: hover) { .empty-state button.link:hover { text-decoration: underline; } }
         @media (max-width: 900px) {
             .empty-state { flex-direction: column; gap: 28px; text-align: center; }
             .empty-state-ghosts { display: none; }
@@ -3850,7 +3864,7 @@
             background: var(--surface); color: var(--text);
             font-size: 13px; font-weight: 400;
         }
-        body.research-promo .empty-state button.research-offer:hover { border-color: var(--primary); }
+        @media (hover: hover) { body.research-promo .empty-state button.research-offer:hover { border-color: var(--primary); } }
         .empty-state button.research-offer:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .research-offer-body { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
         .research-offer-eyebrow { font-size: 12px; font-weight: 600; color: var(--accent); }
@@ -4123,9 +4137,9 @@
             font-family: var(--font-sans);
         }
         .whats-new-actions button.primary { background: var(--primary); color: var(--on-primary); border: 1px solid var(--primary); }
-        .whats-new-actions button.primary:hover { background: var(--primary-dark); }
+        @media (hover: hover) { .whats-new-actions button.primary:hover { background: var(--primary-dark); } }
         .whats-new-actions button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
-        .whats-new-actions button.secondary:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .whats-new-actions button.secondary:hover { background: var(--hover-bg); } }
         .whats-new-actions button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .whats-new-footer {
             background: var(--surface-2); border-top: 1px solid var(--divider);
@@ -4180,9 +4194,9 @@
             background: var(--danger-soft);
             color: var(--danger);
         }
-        .buttons .danger:hover {
+        @media (hover: hover) { .buttons .danger:hover {
             background: color-mix(in srgb, var(--danger) 18%, var(--danger-soft));
-        }
+        } }
 
         /* ==================== VIEW MODE ==================== */
         .view-mode-banner {
@@ -4228,10 +4242,10 @@
             cursor: pointer;
             transition: background 0.2s, transform 0.2s;
         }
-        .view-mode-banner .btn-primary:hover {
+        @media (hover: hover) { .view-mode-banner .btn-primary:hover {
             background: var(--hover-bg);
             transform: scale(1.02);
-        }
+        } }
         .view-mode-banner .btn-primary[disabled] {
             background: rgba(255,255,255,0.5);
             color: rgba(0,0,0,0.5);
@@ -4259,9 +4273,9 @@
             font-size: 13px;
             opacity: 0.9;
         }
-        .view-mode-link:hover {
+        @media (hover: hover) { .view-mode-link:hover {
             opacity: 1;
-        }
+        } }
         .info-text {
             color: var(--text-light);
             font-size: 13px;
@@ -4316,10 +4330,10 @@
             color: var(--text-light);
             border-radius: var(--r-sm);
         }
-        .embedded-mode-info:hover {
+        @media (hover: hover) { .embedded-mode-info:hover {
             color: var(--text);
             background: var(--hover-bg);
-        }
+        } }
         .embedded-mode-link {
             color: var(--primary);
             text-decoration: none;
@@ -4327,10 +4341,10 @@
             font-size: 13px;
             font-weight: 600;
         }
-        .embedded-mode-link:hover {
+        @media (hover: hover) { .embedded-mode-link:hover {
             color: var(--primary-dark);
             text-decoration: underline;
-        }
+        } }
         .embedded-mode-close {
             background: none;
             border: none;
@@ -4340,9 +4354,9 @@
             padding: 0 4px;
             line-height: 1;
         }
-        .embedded-mode-close:hover {
+        @media (hover: hover) { .embedded-mode-close:hover {
             color: var(--text);
-        }
+        } }
         /* Mobile: stack vertically */
         @media (max-width: 499px) {
             .embedded-mode-banner {
@@ -4409,9 +4423,9 @@
             text-decoration: none;
             font-size: 14px;
         }
-        #embedded-info-modal .btn-primary:hover {
+        @media (hover: hover) { #embedded-info-modal .btn-primary:hover {
             background: var(--primary-dark);
-        }
+        } }
         /* Offset content when embedded banner is visible */
         body.embedded-mode .focus-bar {
             top: 90px;
@@ -4514,10 +4528,10 @@
             touch-action: manipulation;
             user-select: none;
         }
-        .zoom-controls button:hover {
+        @media (hover: hover) { .zoom-controls button:hover {
             background: var(--hover-bg);
             color: var(--text);
-        }
+        } }
         .zoom-controls button:active {
             background: var(--primary);
             color: var(--on-primary);
@@ -4598,7 +4612,7 @@
             cursor: pointer;
             transition: background 0.12s;
         }
-        .anniversary-row:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); }
+        @media (hover: hover) { .anniversary-row:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); } }
         .anniversary-text { flex: 1; font-family: var(--font-serif); font-size: 15px; color: var(--text); }
         .anniversary-when {
             font-size: 11px;
@@ -4646,7 +4660,7 @@
         /* Copper left rim ties the card to the anniversaries "on this day" motif. */
         .otd-card-rim { border-left: 3px solid var(--accent); }
         .otd-text { font-size: 14px; color: var(--text-color); cursor: pointer; line-height: 1.35; }
-        .otd-text:hover { color: var(--primary); }
+        @media (hover: hover) { .otd-text:hover { color: var(--primary); } }
         .otd-close {
             flex-shrink: 0;
             border: none;
@@ -4717,7 +4731,7 @@
             font-size: 15px;
             cursor: pointer;
         }
-        .file-link-indicator:hover { background: var(--accent-soft, #e8f0fe); }
+        @media (hover: hover) { .file-link-indicator:hover { background: var(--accent-soft, #e8f0fe); } }
         /* Storage state pill: "Only in browser" (warning), "Saved to file"
            (primary, briefly after an export), "Persistent storage" (neutral, in
            the storage dialog). In the toolbar it sits after the wordmark (and
@@ -4741,9 +4755,9 @@
             color: var(--accent-text); background: var(--warning-soft);
             border-color: color-mix(in srgb, var(--warning) 60%, transparent);
         }
-        .toolbar .storage-pill.is-unsaved:hover {
+        @media (hover: hover) { .toolbar .storage-pill.is-unsaved:hover {
             background: color-mix(in srgb, var(--warning) 22%, var(--warning-soft));
-        }
+        } }
         .storage-pill.is-saved,
         .toolbar .storage-pill.is-saved {
             color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--surface));
@@ -4778,7 +4792,7 @@
             border-radius: var(--r-md); color: var(--accent-text); background: var(--warning-soft);
             border: 1px solid color-mix(in srgb, var(--warning) 60%, transparent);
         }
-        .actions-storage-row:hover { background: color-mix(in srgb, var(--warning) 22%, var(--warning-soft)); }
+        @media (hover: hover) { .actions-storage-row:hover { background: color-mix(in srgb, var(--warning) 22%, var(--warning-soft)); } }
         .actions-storage-icon svg { width: 16px; height: 16px; display: block; }
         .actions-storage-text { display: flex; flex-direction: column; gap: 1px; }
         .actions-storage-title { font-size: 13px; font-weight: 600; color: var(--warning-text); }
@@ -4906,7 +4920,7 @@
         .storage-notice.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         .storage-notice .pwa-update-btn { flex-shrink: 0; }
         .storage-notice .notice-link { flex-shrink: 0; font-size: 13px; color: var(--text-light); text-decoration: none; padding: 6px 2px; }
-        .storage-notice .notice-link:hover { text-decoration: underline; }
+        @media (hover: hover) { .storage-notice .notice-link:hover { text-decoration: underline; } }
         /* "Changes only in the browser": information only — icon, readable
            text over the full width, a quiet link, a 44px close. */
         .storage-notice.file-copy-notice {
@@ -4928,7 +4942,7 @@
             text-decoration: underline; text-underline-offset: 2px;
             background: none; border: none; cursor: pointer;
         }
-        .storage-notice .file-copy-notice-link:hover { color: var(--text); }
+        @media (hover: hover) { .storage-notice .file-copy-notice-link:hover { color: var(--text); } }
         .file-copy-notice-links { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 16px; row-gap: 2px; margin-top: 4px; }
         .file-copy-notice-links .file-copy-notice-link { margin-top: 0; }
         .file-copy-notice-kbd { font-size: 13px; color: var(--text-light); white-space: nowrap; }
@@ -4941,7 +4955,7 @@
             border: none; background: none; border-radius: var(--r-md);
             font-size: 22px; line-height: 1; color: var(--text-light); cursor: pointer;
         }
-        .file-copy-notice-close:hover { color: var(--text); background: var(--hover-bg); }
+        @media (hover: hover) { .file-copy-notice-close:hover { color: var(--text); background: var(--hover-bg); } }
         @media (max-width: 499px) {
             .storage-notice.file-copy-notice {
                 width: calc(100vw - 2 * 12px);
@@ -4950,7 +4964,7 @@
             .storage-notice .file-copy-notice-link { min-height: 44px; margin-top: 0; }
         }
         .storage-status-encrypt { margin-right: auto; font-size: 13px; color: var(--text-light); text-decoration: none; }
-        .storage-status-encrypt:hover { text-decoration: underline; }
+        @media (hover: hover) { .storage-status-encrypt:hover { text-decoration: underline; } }
         .storage-status-encrypt[hidden] { display: none; }
         @media (min-width: 500px) and (max-width: 900px) {
             .storage-notice { top: 60px; }
@@ -5057,7 +5071,7 @@
             border: none; background: none; cursor: pointer; font-size: 18px;
             color: var(--text-light); line-height: 1;
         }
-        .wiz-remove:hover { color: var(--danger); }
+        @media (hover: hover) { .wiz-remove:hover { color: var(--danger); } }
         .wiz-spacer { display: inline-block; }
         .wiz-hint { grid-column: 1 / -1; font-size: 12px; display: flex; align-items: center; gap: 8px; min-height: 0; }
         .wiz-hint:empty { display: none; }
@@ -5066,13 +5080,13 @@
             border: 1px solid var(--primary); color: var(--primary);
             background: none; border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer;
         }
-        .wiz-use:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); }
+        @media (hover: hover) { .wiz-use:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); } }
         .wiz-row.wiz-linked input, .wiz-row.wiz-linked select { background: color-mix(in srgb, var(--primary) 8%, var(--card-bg, #fff)); }
         .wiz-add {
             border: 1px dashed var(--border-color, #bbb); background: none; color: var(--text-light);
             border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; margin-top: 2px;
         }
-        .wiz-add:hover { border-color: var(--primary); color: var(--primary); }
+        @media (hover: hover) { .wiz-add:hover { border-color: var(--primary); color: var(--primary); } }
         /* On a phone the role column ate 60px of ~370 and squeezed the name
            fields to 133px. The role is a heading for the row, not a column —
            put it above and give the fields the whole width. */
@@ -5133,7 +5147,7 @@
         .tl-nm { overflow: hidden; text-overflow: ellipsis; }
         .tl-yr { color: var(--text-light, #999); font-size: 11px; flex-shrink: 0; }
         .timeline-bar { cursor: pointer; }
-        .timeline-bar:hover .tl-bar-rect { filter: brightness(0.92); }
+        @media (hover: hover) { .timeline-bar:hover .tl-bar-rect { filter: brightness(0.92); } }
         .timeline-bar.focused .tl-bar-rect { stroke: var(--primary); stroke-width: 2.5; }
         .timeline-bar.focused .tl-name { font-weight: 700; }
         @media (max-width: 499px) {
@@ -5203,7 +5217,7 @@
             font-weight: 600;
             box-shadow: var(--shadow-sm);
         }
-        .map-marker-dot:hover { transform: scale(1.12); }
+        @media (hover: hover) { .map-marker-dot:hover { transform: scale(1.12); } }
         /* Fresh: something happened here within the last ten years of the slider.
            An accent ring outside the white border, driven purely by state. */
         .map-marker-fresh .map-marker-dot {
@@ -5385,7 +5399,7 @@
             font-size: 12px;
             cursor: pointer;
         }
-        .map-popup-person:hover { background: var(--primary, #4a7c59); color: var(--on-primary); }
+        @media (hover: hover) { .map-popup-person:hover { background: var(--primary, #4a7c59); color: var(--on-primary); } }
 
         /* Tablet: the map is the whole screen, so keep chrome smaller. */
         @media (max-width: 900px) {
@@ -5485,7 +5499,7 @@
         .fan-sector.female path { fill: var(--female); }
         /* Adoptive/step/foster parent: dashed like non-biological tree lines. */
         .fan-sector.fan-nonbio path { stroke-dasharray: 5 3; }
-        .fan-sector:hover path { filter: brightness(0.94); }
+        @media (hover: hover) { .fan-sector:hover path { filter: brightness(0.94); } }
         .fan-focus circle {
             stroke: var(--primary);
             stroke-width: 2;
@@ -5513,7 +5527,7 @@
             stroke-dasharray: 4 3;
             cursor: pointer;
         }
-        .fan-empty:hover path { fill: var(--hover-bg, #f1f1ee); }
+        @media (hover: hover) { .fan-empty:hover path { fill: var(--hover-bg, #f1f1ee); } }
         .fan-plus {
             fill: var(--text-light, #aaa);
             font-size: 15px;
@@ -5544,9 +5558,9 @@
             box-shadow: var(--shadow-focus);
             transform: scale(1.05);
         }
-        .person-card.focused:hover {
+        @media (hover: hover) { .person-card.focused:hover {
             transform: scale(1.07);
-        }
+        } }
         /* The focused card no longer wears a "FOCUS" pill (the fact is already
            carried by the green border, the focus shadow, and the top-left focus
            chip). Instead it turns green where identity lives: the avatar ring
@@ -5592,6 +5606,7 @@
         }
         /* No focus person → JS adds .hidden; keep it hidden at every width. */
         .focus-controls.hidden { display: none !important; }
+        .focus-chips { display: none; }
         /* Descendants view uses its own badge (root name + exit) as the context
            UI at every width — the focus chip would just duplicate it. */
         body.descendants-view .focus-controls { display: none !important; }
@@ -5670,8 +5685,8 @@
             cursor: pointer;
             transition: background 0.15s, color 0.15s;
         }
-        .depth-stepper .depth-stepper-btn:hover { background: transparent; }
-        .depth-stepper .depth-stepper-btn:hover:not(:disabled) { background: var(--hover-bg); }
+        @media (hover: hover) { .depth-stepper .depth-stepper-btn:hover { background: transparent; } }
+        @media (hover: hover) { .depth-stepper .depth-stepper-btn:hover:not(:disabled) { background: var(--hover-bg); } }
         .depth-stepper .depth-stepper-btn:focus-visible {
             outline: 2px solid var(--primary);
             outline-offset: -2px;
@@ -5698,7 +5713,7 @@
             font-size: 18px; line-height: 1; cursor: pointer;
             transition: background 0.15s, color 0.15s;
         }
-        .focus-clear:hover { background: var(--hover-bg); color: var(--text); }
+        @media (hover: hover) { .focus-clear:hover { background: var(--hover-bg); color: var(--text); } }
         .focus-controls .btn-export-focus {
             padding: 8px 14px;
             border: none;
@@ -5709,9 +5724,9 @@
             cursor: pointer;
             transition: background 0.2s;
         }
-        .focus-controls .btn-export-focus:hover {
+        @media (hover: hover) { .focus-controls .btn-export-focus:hover {
             background: var(--primary-dark);
-        }
+        } }
         .focus-controls .btn-exit-focus {
             padding: 8px 14px;
             border: none;
@@ -5722,9 +5737,9 @@
             cursor: pointer;
             transition: background 0.2s;
         }
-        .focus-controls .btn-exit-focus:hover {
+        @media (hover: hover) { .focus-controls .btn-exit-focus:hover {
             background: var(--hover-bg);
-        }
+        } }
 
         #file-input { display: none; }
 
@@ -5774,18 +5789,18 @@
             touch-action: manipulation;
             user-select: none;
         }
-        .context-menu-item:hover {
+        @media (hover: hover) { .context-menu-item:hover {
             background: var(--hover-bg);
-        }
+        } }
         .context-menu-item:active {
             background: color-mix(in srgb, var(--primary) 12%, transparent);
         }
         .context-menu-item.danger {
             color: var(--danger);
         }
-        .context-menu-item.danger:hover {
+        @media (hover: hover) { .context-menu-item.danger:hover {
             background: color-mix(in srgb, var(--danger) 12%, transparent);
-        }
+        } }
         .context-menu-divider {
             height: 1px;
             background: var(--divider);
@@ -5867,9 +5882,9 @@
             transition: all 0.15s;
             white-space: nowrap;
         }
-        .content-preset:hover {
+        @media (hover: hover) { .content-preset:hover {
             border-color: var(--primary);
-        }
+        } }
         .content-preset.active {
             background: var(--primary);
             border-color: var(--primary);
@@ -5893,10 +5908,10 @@
             color: var(--text);
             transition: all 0.15s;
         }
-        .content-check:hover {
+        @media (hover: hover) { .content-check:hover {
             background: var(--hover-bg);
             border-color: var(--primary);
-        }
+        } }
         .content-check input {
             flex-shrink: 0;
         }
@@ -5983,10 +5998,10 @@
             cursor: pointer;
             transition: border-color 0.2s, background 0.2s;
         }
-        #confirmation-modal .confirm-option:hover {
+        @media (hover: hover) { #confirmation-modal .confirm-option:hover {
             border-color: var(--primary);
             background: color-mix(in srgb, var(--primary) 5%, transparent);
-        }
+        } }
         #confirmation-modal .confirm-option.selected {
             border-color: var(--primary);
             background: color-mix(in srgb, var(--primary) 10%, transparent);
@@ -6048,7 +6063,7 @@
            ".toolbar button:hover { background: var(--primary-dark) }" rule
            otherwise painted a dark-green fill behind the dark hover text
            (dark-on-dark) — reassert a transparent background here. */
-        .view-mode-segment button:hover { color: var(--text); background: transparent; }
+        @media (hover: hover) { .view-mode-segment button:hover { color: var(--text); background: transparent; } }
         .view-mode-segment button.active {
             color: var(--accent);
             border-bottom-color: var(--accent);
@@ -6056,7 +6071,7 @@
         }
         /* Hovering the active tab keeps its copper indicator, not the flat
            hover text colour. */
-        .view-mode-segment button.active:hover { color: var(--accent); background: transparent; }
+        @media (hover: hover) { .view-mode-segment button.active:hover { color: var(--accent); background: transparent; } }
         /* Descendants badge bar */
         .collab-bar {
             position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 95;
@@ -6162,11 +6177,11 @@
             font-size: 12px; line-height: 1; white-space: nowrap;
             transition: background 0.15s, color 0.15s, border-color 0.15s;
         }
-        .descendants-seg:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .descendants-seg:hover { background: var(--hover-bg); } }
         .descendants-seg.active {
             background: var(--primary); border-color: var(--primary); color: var(--on-primary);
         }
-        .descendants-seg.active:hover { background: var(--primary-dark); }
+        @media (hover: hover) { .descendants-seg.active:hover { background: var(--primary-dark); } }
         .descendants-seg .figures-glyph { flex-shrink: 0; }
         .descendants-seg-short { display: none; }
         .descendants-close {
@@ -6177,7 +6192,7 @@
             font-size: 16px; line-height: 1; cursor: pointer;
             transition: background 0.15s, color 0.15s;
         }
-        .descendants-close:hover { background: var(--hover-bg); color: var(--text); }
+        @media (hover: hover) { .descendants-close:hover { background: var(--hover-bg); color: var(--text); } }
 
         /* Descendants view: step-relatives (partner's other families) are
            shown de-emphasized so the blood line stays dominant. */
@@ -6360,9 +6375,9 @@
         .zoom-edge-bar .research-edge.edge-kind-muted .research-edge-line { height: 2px; background: repeating-linear-gradient(to right, currentColor 0 2px, transparent 2px 5px); }
         .zoom-edge-bar .research-edge.is-moving .research-edge-line { animation: none; }
         /* The "+ parent" tab wins its corner: the father's stub steps aside. */
-        .person-card:has(.edge-top-left .add-btn:hover) .research-edge.side-father { opacity: 0; pointer-events: none; }
+        @media (hover: hover) { .person-card:has(.edge-top-left .add-btn:hover) .research-edge.side-father { opacity: 0; pointer-events: none; } }
         /* Pointing at the stub shows its bubble, not the card's hover card. */
-        .person-card:has(.research-edge:hover) .card-tooltip { display: none; }
+        @media (hover: hover) { .person-card:has(.research-edge:hover) .card-tooltip { display: none; } }
         @media (pointer: coarse) {
             .research-edge { width: 44px; height: 44px; }
             .research-edge.edge-kind-muted, .research-edge.edge-kind-proof { height: 44px; }
@@ -6410,7 +6425,7 @@
             cursor: pointer;
             color: var(--text);
         }
-        .edge-link-pill--family:hover { border-color: var(--primary); }
+        @media (hover: hover) { .edge-link-pill--family:hover { border-color: var(--primary); } }
         .edge-link-pill--family:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
         /* The bubble over a stub. */
@@ -6622,7 +6637,8 @@
         }
         .person-menu .menu-signal > :first-child, .bottom-sheet-person .menu-signal > :first-child { grid-row: span 2; margin-top: 1px; }
         .person-menu .menu-signal-go, .bottom-sheet-person .menu-signal-go { grid-column: 2; justify-self: start; }
-        .context-menu-item.menu-signal:hover, .context-menu-item.menu-signal:focus { background: var(--warning-soft); filter: brightness(0.97); }
+        .context-menu-item.menu-signal:focus { background: var(--warning-soft); filter: brightness(0.97); }
+        @media (hover: hover) { .context-menu-item.menu-signal:hover { background: var(--warning-soft); filter: brightness(0.97); } }
 
         /* Settings → "Show on card": options left, preview card right. */
         .card-signals-settings { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
@@ -6678,7 +6694,7 @@
             border: none; border-radius: var(--r-sm); background: transparent; color: var(--text-light);
             font-size: 14px; cursor: pointer;
         }
-        .card-field-move button:hover:not(:disabled) { background: var(--hover-bg); }
+        @media (hover: hover) { .card-field-move button:hover:not(:disabled) { background: var(--hover-bg); } }
         .card-field-move button:disabled { opacity: 0.3; cursor: default; }
         .card-fields-status { font-size: 12px; color: var(--text-faint); }
         .card-fields-status.is-full { color: var(--warning-text); }
@@ -6689,7 +6705,7 @@
             .card-fields-settings .card-field-chip { font-size: 13px; padding: 6px 12px; }
             .card-fields-settings .card-field-move button { width: 44px; height: 44px; }
         }
-        .person-card.indirect:hover { opacity: 1; }
+        @media (hover: hover) { .person-card.indirect:hover { opacity: 1; } }
 
         /* Floating focus back/forward buttons (browser-style navigation). */
         .focus-nav-btn {
@@ -6702,7 +6718,7 @@
         }
         .focus-back-btn { left: 16px; }
         .focus-forward-btn { left: 68px; }
-        .focus-nav-btn:hover { background: rgba(128,128,128,0.12); }
+        @media (hover: hover) { .focus-nav-btn:hover { background: rgba(128,128,128,0.12); } }
         body.view-mode-print .focus-nav-btn { display: none !important; }
         @media print { .focus-nav-btn { display: none !important; } }
 
@@ -6789,7 +6805,7 @@
             display: flex; gap: 8px; pointer-events: auto;
             opacity: 0.25; transition: opacity 0.2s;
         }
-        .slideshow-overlay:hover .slideshow-controls { opacity: 1; }
+        @media (hover: hover) { .slideshow-overlay:hover .slideshow-controls { opacity: 1; } }
         .slideshow-controls button {
             width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
             border: 1px solid rgba(255,255,255,0.25); background: rgba(20,20,20,0.8);
@@ -6817,7 +6833,7 @@
             border-radius: var(--r-md); color: var(--text-light);
             align-items: center; justify-content: center;
         }
-        .toolbar .mobile-more-btn:hover { background: var(--hover-bg); color: var(--text); }
+        @media (hover: hover) { .toolbar .mobile-more-btn:hover { background: var(--hover-bg); color: var(--text); } }
         .toolbar .mobile-more-btn { position: relative; }
         .mobile-more-storage-dot {
             position: absolute; top: 6px; right: 3px;
@@ -6830,8 +6846,9 @@
             display: none;
             position: fixed;
             left: 0; right: 0; bottom: 0;
-            height: calc(76px + env(safe-area-inset-bottom, 0px));
+            height: calc(56px + env(safe-area-inset-bottom, 0px));
             padding-bottom: env(safe-area-inset-bottom, 0px);
+            box-sizing: border-box;
             background: var(--surface);
             border-top: 1px solid var(--border);
             z-index: 120;
@@ -6844,14 +6861,17 @@
             gap: 3px;
             border: none; background: transparent; cursor: pointer;
             color: var(--text-light);
+            min-width: 0;
             min-height: 44px;
-            padding: 8px 2px 0;
+            padding: 4px 2px 0;
             position: relative;
             border-top: 2px solid transparent;
             -webkit-tap-highlight-color: transparent;
         }
         .bottom-bar-icon { width: 22px; height: 22px; display: block; }
-        .bottom-bar-label { font-size: 11px; line-height: 1.1; }
+        /* One line, never cut: German gets 10.5px on the narrowest phones. */
+        .bottom-bar-label { font-size: 11px; line-height: 1.1; white-space: nowrap; }
+        @media (max-width: 360px) { html[lang="de"] .bottom-bar-label { font-size: 10.5px; } }
         .bottom-bar-tab.active {
             color: var(--accent);
             border-top-color: var(--accent);
@@ -6864,19 +6884,19 @@
             position: absolute; top: -2px; right: -4px;
             width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
         }
-        /* Central raised FAB (add person). */
+        /* Central FAB (add person): a 48px circle in a 64px slot, inside the
+           bar (nothing pokes up into the tree, 3.3). */
         .bottom-bar-fab {
             flex: 0 0 auto;
-            width: 56px; height: 56px; align-self: center;
-            margin: 0 4px;
+            width: 48px; height: 48px; align-self: center;
+            margin: 0 8px;
             border: none; border-radius: 50%;
             background: var(--primary); color: var(--on-primary);
-            box-shadow: var(--shadow-lg);
+            box-shadow: var(--shadow-sm);
             cursor: pointer;
             display: flex; align-items: center; justify-content: center;
-            transform: translateY(-10px);
         }
-        .bottom-bar-fab:hover { background: var(--primary-dark); }
+        @media (hover: hover) { .bottom-bar-fab:hover { background: var(--primary-dark); } }
         .bottom-bar-fab-glyph { font-size: 26px; line-height: 1; font-weight: 300; }
         /* Add is unavailable in read-only view mode or a locked tree. */
         body.tree-locked .bottom-bar-fab { display: none !important; }
@@ -6934,7 +6954,7 @@
             text-align: left;
             transition: background 0.15s;
         }
-        .menu-option:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .menu-option:hover { background: var(--hover-bg); } }
         .menu-option:focus-visible {
             outline: 2px solid var(--primary);
             outline-offset: -2px;
@@ -6997,7 +7017,7 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
-        .menu-option.disabled:hover { background: transparent; }
+        @media (hover: hover) { .menu-option.disabled:hover { background: transparent; } }
 
         /* Save current dialog */
         .save-current-message {
@@ -7075,9 +7095,9 @@
             cursor: pointer;
             transition: all 0.15s;
         }
-        .merge-tab:hover {
+        @media (hover: hover) { .merge-tab:hover {
             border-color: var(--primary);
-        }
+        } }
         .merge-tab.active {
             background: var(--primary);
             border-color: var(--primary);
@@ -7120,9 +7140,9 @@
         .merge-item:last-child {
             border-bottom: none;
         }
-        .merge-item:hover {
+        @media (hover: hover) { .merge-item:hover {
             background: var(--hover-bg);
-        }
+        } }
         .merge-item.confirmed {
             background: var(--primary-soft);
         }
@@ -7239,9 +7259,9 @@
             cursor: pointer;
             transition: all 0.15s;
         }
-        .merge-item-actions button:hover {
+        @media (hover: hover) { .merge-item-actions button:hover {
             border-color: var(--primary);
-        }
+        } }
         .merge-btn-confirm.active {
             background: var(--primary);
             border-color: var(--primary);
@@ -7394,9 +7414,9 @@
             cursor: pointer;
             transition: all 0.15s;
         }
-        .person-merge-conflict-option:hover {
+        @media (hover: hover) { .person-merge-conflict-option:hover {
             background: var(--surface-2);
-        }
+        } }
         .person-merge-conflict-option input[type="radio"] {
             margin: 0;
         }
@@ -7445,9 +7465,9 @@
             cursor: pointer;
             transition: all 0.15s;
         }
-        .conflict-option:hover {
+        @media (hover: hover) { .conflict-option:hover {
             border-color: var(--primary);
-        }
+        } }
         /* The chosen side reads as a selected card, not just a radio dot. */
         .conflict-option:has(input:checked) {
             border-color: var(--primary, #4a7c59);
@@ -7579,9 +7599,9 @@
             border-color: var(--warning) !important;
             color: var(--text) !important;
         }
-        .merge-btn-resolve:hover {
+        @media (hover: hover) { .merge-btn-resolve:hover {
             background: color-mix(in srgb, var(--warning) 22%, var(--warning-soft)) !important;
-        }
+        } }
 
         /* ==================== TREE MANAGER ==================== */
         .tree-manager-modal {
@@ -7660,7 +7680,7 @@
             color: var(--on-primary);
         }
         .tree-manager-item-name.clickable { cursor: pointer; }
-        .tree-manager-item-name.clickable:hover { color: var(--primary); text-decoration: underline; }
+        @media (hover: hover) { .tree-manager-item-name.clickable:hover { color: var(--primary); text-decoration: underline; } }
         .tree-manager-item-stats-row {
             font-size: 12px;
             color: var(--text-light);
@@ -7890,7 +7910,7 @@
         /* CSS tooltips for action buttons: native title tooltips do not show
            in standalone PWA windows on some platforms, so draw our own. */
         [data-tip] { position: relative; }
-        [data-tip]:hover::after {
+        @media (hover: hover) { [data-tip]:hover::after {
             content: attr(data-tip);
             position: absolute;
             bottom: calc(100% + 6px);
@@ -7904,8 +7924,8 @@
             white-space: nowrap;
             pointer-events: none;
             z-index: 300;
-        }
-        @media (pointer: coarse) { [data-tip]:hover::after { display: none; } }
+        } }
+        @media (pointer: coarse) { @media (hover: hover) { [data-tip]:hover::after { display: none; } } }
 
         .tree-manager-item-actions .btn-icon {
             display: inline;
@@ -8315,9 +8335,9 @@
             text-decoration: none;
             cursor: pointer;
         }
-        .validation-person-link:hover {
+        @media (hover: hover) { .validation-person-link:hover {
             text-decoration: underline;
-        }
+        } }
         .validation-fix-btn {
             padding: 2px 8px;
             font-size: 11px;
@@ -8330,10 +8350,10 @@
             flex-shrink: 0;
             align-self: center;
         }
-        .validation-fix-btn:hover {
+        @media (hover: hover) { .validation-fix-btn:hover {
             background: var(--primary);
             color: var(--on-primary);
-        }
+        } }
         .validation-fix-all-btn {
             padding: 4px 12px;
             font-size: 12px;
@@ -8345,9 +8365,9 @@
             cursor: pointer;
             white-space: nowrap;
         }
-        .validation-fix-all-btn:hover {
+        @media (hover: hover) { .validation-fix-all-btn:hover {
             opacity: 0.9;
-        }
+        } }
 
         /* Merge trees dialog */
         .merge-trees-description {
@@ -8369,9 +8389,9 @@
             margin-bottom: 8px;
             transition: all 0.15s;
         }
-        .merge-trees-option:hover {
+        @media (hover: hover) { .merge-trees-option:hover {
             border-color: var(--primary);
-        }
+        } }
         .merge-trees-option.selected {
             border-color: var(--primary);
             background: var(--primary-soft);
@@ -8425,9 +8445,9 @@
             cursor: pointer;
             transition: background 0.15s;
         }
-        .radio-option:hover {
+        @media (hover: hover) { .radio-option:hover {
             background: var(--hover-bg);
-        }
+        } }
         .radio-option input[type="radio"] {
             width: 16px;
             height: 16px;
@@ -8546,10 +8566,10 @@
             justify-content: center;
             transition: all 0.15s;
         }
-        .tree-preview-close:hover {
+        @media (hover: hover) { .tree-preview-close:hover {
             background: rgba(0,0,0,0.1);
             color: var(--text);
-        }
+        } }
         .tree-preview-container {
             flex: 1;
             position: relative;
@@ -8621,10 +8641,10 @@
             -webkit-tap-highlight-color: transparent;
             touch-action: manipulation;
         }
-        .tree-preview-zoom-btn:hover {
+        @media (hover: hover) { .tree-preview-zoom-btn:hover {
             background: var(--primary);
             color: var(--on-primary);
-        }
+        } }
         .tree-preview-zoom-btn:active {
             transform: scale(0.95);
         }
@@ -8653,10 +8673,10 @@
             touch-action: manipulation;
             user-select: none;
         }
-        .tree-preview-card:hover {
+        @media (hover: hover) { .tree-preview-card:hover {
             transform: scale(1.05);
             box-shadow: var(--shadow-sm);
-        }
+        } }
         .tree-preview-card:active {
             transform: scale(0.98);
         }
@@ -9066,7 +9086,8 @@
             text-align: left;
         }
         .live-change-link { cursor: pointer; }
-        .live-change-link:hover, .live-change-link:focus-visible { background: var(--hover-bg); }
+        .live-change-link:focus-visible { background: var(--hover-bg); }
+        @media (hover: hover) { .live-change-link:hover { background: var(--hover-bg); } }
         .live-change-link:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .live-panel-list li:has(> .live-change) { padding: 1px 0; }
         .live-panel-hint { margin: 6px 0 0; font-size: 12px; color: var(--text-light); }
@@ -9080,7 +9101,7 @@
             border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
             border-radius: var(--r-md); padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer;
         }
-        .live-waiting-answer:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .live-waiting-answer:hover { background: var(--hover-bg); } }
         .live-waiting-answer:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         /* Without following (the research is not running): grey dot, ×, "Open research ↗". */
         .live-panel.idle .live-dot { background: var(--text-ghost); box-shadow: none; }
@@ -9089,7 +9110,7 @@
             flex: none; width: 28px; height: 28px; border: 0; background: none; border-radius: var(--r-md);
             color: var(--text-light); font-size: 20px; line-height: 1; cursor: pointer;
         }
-        .live-panel-close:hover { background: var(--hover-bg); color: var(--text); }
+        @media (hover: hover) { .live-panel-close:hover { background: var(--hover-bg); color: var(--text); } }
         .live-panel-close:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .live-panel-foot { display: flex; justify-content: flex-end; padding: 8px 12px 12px; border-top: 1px solid var(--divider); }
         .live-panel-open {
@@ -9097,7 +9118,7 @@
             border: 1px solid var(--primary); border-radius: var(--r-md);
             background: var(--primary); color: var(--on-primary);
         }
-        .live-panel-open:hover { filter: brightness(1.06); }
+        @media (hover: hover) { .live-panel-open:hover { filter: brightness(1.06); } }
         .live-panel-open:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         /* Tablet: narrower card, same place. */
         @media (min-width: 500px) and (max-width: 900px) {
@@ -9144,7 +9165,7 @@
             padding: 2px 0; border: 0; background: none; cursor: pointer; font: inherit;
             font-size: 13px; font-weight: 600; color: var(--primary);
         }
-        .research-sync-link:hover, .toolbar .research-sync-link:hover { text-decoration: underline; background: none; }
+        @media (hover: hover) { .research-sync-link:hover, .toolbar .research-sync-link:hover { text-decoration: underline; background: none; } }
         .research-sync-btn:focus-visible, .research-sync-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .research-sync-spinner {
             flex: none; width: 11px; height: 11px; border-radius: 50%;
@@ -9187,7 +9208,7 @@
             width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; background: none;
             display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--primary);
         }
-        .research-sync-mark:hover, .toolbar .research-sync-mark:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .research-sync-mark:hover, .toolbar .research-sync-mark:hover { background: var(--hover-bg); } }
         .research-sync-mark:focus-visible, .research-sync-send:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .research-sync-mark-ring {
             width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid var(--text-secondary);
@@ -9204,7 +9225,7 @@
             border: 0; border-radius: 999px; background: var(--primary); color: var(--on-primary);
             font-family: var(--font-sans); font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer;
         }
-        .toolbar .research-sync-send:hover { background: var(--primary-dark); }
+        @media (hover: hover) { .toolbar .research-sync-send:hover { background: var(--primary-dark); } }
         .toolbar .research-sync-send[disabled] { background: var(--primary-soft); color: var(--primary); cursor: progress; }
         .research-sync-send-short { display: none; }
         /* Sent by hand with nothing to send: the button's place kept, invisible (the toolbar never moves). */
@@ -9224,7 +9245,7 @@
             background: var(--primary-dark); color: var(--on-primary);
             font-family: var(--font-sans); font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer;
         }
-        .research-sync-send-more:hover { filter: brightness(0.92); }
+        @media (hover: hover) { .research-sync-send-more:hover { filter: brightness(0.92); } }
         .research-sync-send-more--placeholder { visibility: hidden; pointer-events: none; }
         /* Sent by hand with nothing to send: the quiet mark at the end of the kept place (next to the tree switcher). */
         .toolbar .research-sync-pill.is-reserved .research-sync-mark--reserved { position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 1; }
@@ -9385,7 +9406,7 @@
             align-self: flex-start; padding: 0; border: 0; background: none; font: inherit; font-size: 14px; font-weight: 600;
             color: var(--text); text-align: left; cursor: pointer; overflow-wrap: anywhere;
         }
-        button.research-changes-name:hover { color: var(--primary); text-decoration: underline; }
+        @media (hover: hover) { button.research-changes-name:hover { color: var(--primary); text-decoration: underline; } }
         .research-changes-name.is-deleted { cursor: default; color: var(--text-light); text-decoration: line-through; }
         .research-changes-kinds { font-size: 12px; color: var(--text-light); }
         .research-changes-foot { display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding: 8px 14px 2px; border-top: 1px solid var(--border); }
@@ -9393,10 +9414,10 @@
             padding: 6px 14px; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
         }
         .research-changes-foot button.primary { border: 1px solid var(--primary); background: var(--primary); color: var(--on-primary); }
-        .research-changes-foot button.primary:hover:not(:disabled) { background: var(--primary-dark); }
+        @media (hover: hover) { .research-changes-foot button.primary:hover:not(:disabled) { background: var(--primary-dark); } }
         .research-changes-foot button.primary:disabled { opacity: 0.7; cursor: progress; }
         .research-changes-foot button.secondary { border: 1px solid var(--border); background: transparent; color: var(--text); font-weight: 400; }
-        .research-changes-foot button.secondary:hover:not(:disabled) { background: var(--hover-bg); }
+        @media (hover: hover) { .research-changes-foot button.secondary:hover:not(:disabled) { background: var(--hover-bg); } }
         .research-changes-note { font-size: 12px; color: var(--text-light); margin-right: auto; }
         /* Add parent to a child of a "?" family: which siblings share the new parent (none by default). */
         .rel-also-children { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--divider); border-radius: 8px; }
@@ -9416,11 +9437,11 @@
         .research-sync-note-link, .toolbar .research-sync-note-link {
             padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-weight: 600; color: var(--primary);
         }
-        .toolbar .research-sync-note-link:hover { text-decoration: underline; background: none; }
+        @media (hover: hover) { .toolbar .research-sync-note-link:hover { text-decoration: underline; background: none; } }
         .research-sync-note-x, .toolbar .research-sync-note-x {
             padding: 0 2px; border: 0; background: none; cursor: pointer; font-size: 16px; line-height: 1; color: var(--text-light);
         }
-        .toolbar .research-sync-note-x:hover { background: none; color: var(--text); }
+        @media (hover: hover) { .toolbar .research-sync-note-x:hover { background: none; color: var(--text); } }
         /* The research is an archive: a small label (state block, Research for this tree, a delete). */
         .research-sync-tag {
             align-self: flex-start; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--divider);
@@ -9467,10 +9488,14 @@
             border: 1px solid var(--warning); border-radius: 999px; background: none; cursor: pointer;
             font-family: var(--font-sans); font-size: 11px; font-weight: 600; line-height: 1.4; color: var(--warning-text);
         }
-        .toolbar button.research-trial-tag, .toolbar button.research-trial-tag:hover {
+        .toolbar button.research-trial-tag {
             min-height: 0; height: auto; margin: 0; padding: 1px 7px; border: 1px solid var(--warning); border-radius: 999px;
             background: none; color: var(--warning-text); font-size: 11px; font-weight: 600; line-height: 1.4; box-shadow: none;
         }
+        @media (hover: hover) { .toolbar button.research-trial-tag:hover {
+            min-height: 0; height: auto; margin: 0; padding: 1px 7px; border: 1px solid var(--warning); border-radius: 999px;
+            background: none; color: var(--warning-text); font-size: 11px; font-weight: 600; line-height: 1.4; box-shadow: none;
+        } }
         .research-trial-tag[aria-expanded="true"], .modal button.research-trial-tag[aria-expanded="true"],
         .toolbar button.research-trial-tag[aria-expanded="true"] { background: var(--warning-soft); }
         .research-trial-tag:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
@@ -9537,7 +9562,7 @@
             padding: 4px 0; border: 0; background: none; cursor: pointer; font: inherit;
             font-weight: 600; color: var(--danger);
         }
-        .confirm-aside-btn:hover { text-decoration: underline; }
+        @media (hover: hover) { .confirm-aside-btn:hover { text-decoration: underline; } }
         .confirm-aside-sub { font-size: 12px; color: var(--text-light); }
         /* "Where your data is": the research lacks the changes. */
         .storage-status-research {
@@ -9619,7 +9644,7 @@
             display: inline-flex; margin: 2px -6px 0; padding: 4px 6px; border-radius: var(--r-sm);
             font-size: 13px; color: var(--primary); background: none;
         }
-        .actions-research-submenu .tree-switcher-action.research-update-action:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .actions-research-submenu .tree-switcher-action.research-update-action:hover { background: var(--hover-bg); } }
         .research-item-label--two { display: flex; flex-direction: column; gap: 1px; }
         .research-item-sub { font-size: 12px; color: var(--text-light); }
 
@@ -9643,14 +9668,14 @@
             display: inline; padding: 0; margin: 0; border: 0; background: none; font: inherit; color: inherit;
             text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 2px; cursor: pointer;
         }
-        .live-person-link:hover { color: var(--primary); }
+        @media (hover: hover) { .live-person-link:hover { color: var(--primary); } }
         .live-person-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 2px; }
         .live-all-changes { margin-top: 4px; padding: 0; font-size: 13px; }
         .live-panel-expand {
             flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--r-md);
             background: var(--surface-2); color: var(--text-light); font-size: 15px; cursor: pointer;
         }
-        .live-panel-expand:hover { color: var(--text); background: var(--hover-bg); }
+        @media (hover: hover) { .live-panel-expand:hover { color: var(--text); background: var(--hover-bg); } }
         .live-panel-expand:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         /* "Follow the agent in the tree" (◎): off plain, on filled green, paused an outline. */
         .live-follow-btn {
@@ -9659,7 +9684,7 @@
             background: none; color: var(--text-light); font-size: 15px; line-height: 1; cursor: pointer;
             display: inline-flex; align-items: center; justify-content: center;
         }
-        .live-follow-btn:hover { color: var(--text); background: var(--hover-bg); }
+        @media (hover: hover) { .live-follow-btn:hover { color: var(--text); background: var(--hover-bg); } }
         .live-follow-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .live-follow-btn.is-on { background: var(--primary-soft); color: var(--primary); }
         .live-follow-btn.is-on.is-paused { background: none; border: 1px dashed var(--primary); }
@@ -9717,7 +9742,7 @@
         }
         .research-overview--sheet .research-overview__close { width: 44px; height: 44px; font-size: 22px; }
         .research-overview--sheet .research-overview__name { display: none; }
-        .research-overview__close:hover { color: var(--text); background: var(--hover-bg); }
+        @media (hover: hover) { .research-overview__close:hover { color: var(--text); background: var(--hover-bg); } }
         .research-overview__close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .research-overview__body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 16px 12px; }
         .research-overview__body .live-panel-update { margin: 10px -16px 0; padding: 6px 16px; }
@@ -9779,7 +9804,7 @@
             border-bottom: 1px solid var(--divider);
         }
         .research-overview__row.has-person { cursor: pointer; }
-        .research-overview__row.has-person:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .research-overview__row.has-person:hover { background: var(--hover-bg); } }
         .research-overview__row.is-new { animation: overview-row-new 4s ease-out; }
         @keyframes overview-row-new { from { background: var(--primary-soft); } to { background: transparent; } }
         @media (prefers-reduced-motion: reduce) { .research-overview__row.is-new { animation: none; } }
@@ -9790,7 +9815,7 @@
             font: inherit; font-size: 13px; color: var(--text); cursor: pointer; overflow-wrap: anywhere;
         }
         .research-overview__knows-row.is-conflict { color: var(--warning-text); }
-        .research-overview__knows-row:hover { text-decoration: underline; }
+        @media (hover: hover) { .research-overview__knows-row:hover { text-decoration: underline; } }
         .research-overview__foot {
             display: flex; align-items: center; gap: 12px; justify-content: space-between;
             padding: 10px 16px; background: var(--surface-2); border-top: 1px solid var(--divider); font-size: 13px;
@@ -9827,7 +9852,8 @@
             border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface);
             color: var(--text-light); font: inherit; font-size: 14px; line-height: 1;
         }
-        .live-queue-more:hover, .live-queue-more[aria-expanded="true"] { background: var(--hover-bg); color: var(--text); }
+        .live-queue-more[aria-expanded="true"] { background: var(--hover-bg); color: var(--text); }
+        @media (hover: hover) { .live-queue-more:hover { background: var(--hover-bg); color: var(--text); } }
         .live-queue-more:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .live-queue .link-button { flex: none; padding: 0; font-size: 12px; }
         .live-queue-row--more .link-button { font-size: 13px; }
@@ -9842,7 +9868,7 @@
             flex: none; width: 26px; height: 22px; padding: 0; cursor: pointer; border: 0;
             border-radius: var(--r-sm); background: none; color: var(--text-light); font: inherit;
         }
-        .live-panel-spend-link:hover { background: var(--hover-bg); color: var(--text); }
+        @media (hover: hover) { .live-panel-spend-link:hover { background: var(--hover-bg); color: var(--text); } }
         .live-panel-spend-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .live-panel.collapsed .live-panel-spend { display: none; }
 
@@ -9970,7 +9996,7 @@
             font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1.6;
             background: var(--surface-2); color: var(--text-light); vertical-align: 1px;
         }
-        #person-modal .pm-conflict-tag:hover { background: var(--hover-bg); color: var(--text); }
+        @media (hover: hover) { #person-modal .pm-conflict-tag:hover { background: var(--hover-bg); color: var(--text); } }
         #person-modal .pm-conflict-tag:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 
         /* Story reader: "Approve in the research ↗" on the left of the footer. */
@@ -9992,7 +10018,7 @@
             flex: none; margin: -4px -12px -4px 4px; width: 28px; height: 28px; padding: 0; cursor: pointer;
             border: 0; border-radius: 50%; background: none; color: inherit; font-size: 18px; line-height: 1; opacity: 0.8;
         }
-        .toast-close:hover { opacity: 1; background: color-mix(in srgb, var(--surface) 15%, transparent); }
+        @media (hover: hover) { .toast-close:hover { opacity: 1; background: color-mix(in srgb, var(--surface) 15%, transparent); } }
         .toast-close:focus-visible { outline: 2px solid var(--surface); outline-offset: 1px; }
 
         /* Tree health: "Where evidence is missing". */
@@ -10025,7 +10051,7 @@
         .evidence-pill-level-full, .evidence-pill-level-partial { color: var(--primary); }
         .evidence-pill-level-none { color: var(--text-faint); }
         .evidence-pill-level[aria-pressed="true"] { background: var(--primary-soft); font-weight: 600; }
-        .evidence-pill-level:hover:not(:disabled) { background: var(--hover-bg); }
+        @media (hover: hover) { .evidence-pill-level:hover:not(:disabled) { background: var(--hover-bg); } }
         .evidence-pill-level:disabled { opacity: 0.5; cursor: default; }
         .evidence-pill-level:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .fan-sector.evidence-hit path { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
@@ -10042,7 +10068,7 @@
             background: none; color: var(--primary); font: inherit; font-size: 13px; font-weight: 500;
         }
         .evidence-pill-close { width: 30px; padding: 0; color: var(--text-light); font-size: 18px; }
-        .evidence-pill-next:hover, .evidence-pill-cite:hover, .evidence-pill-close:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .evidence-pill-next:hover, .evidence-pill-cite:hover, .evidence-pill-close:hover { background: var(--hover-bg); } }
         .evidence-pill-next:focus-visible, .evidence-pill-cite:focus-visible, .evidence-pill-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         body[data-view-mode="timeline"] .evidence-pill, body[data-view-mode="map"] .evidence-pill { display: none; }
         /* Tablet: same place, wider margins. */
@@ -10093,7 +10119,7 @@
             padding: 5px 12px; border-radius: 999px;
             transition: background 0.15s;
         }
-        .undo-toast-btn:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); }
+        @media (hover: hover) { .undo-toast-btn:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); } }
         /* Hidden while a modal is open (the toast would sit behind the overlay). */
         body:has(.modal-overlay.active) .undo-toast { display: none; }
         /* Lift the family offer and a message toast above the undo toast when both are showing. */
@@ -10195,16 +10221,16 @@
             background: var(--primary);
             color: var(--on-primary);
         }
-        .btn-resume:hover {
+        @media (hover: hover) { .btn-resume:hover {
             background: var(--primary-dark);
-        }
+        } }
         .btn-discard {
             background: var(--danger-soft);
             color: var(--danger);
         }
-        .btn-discard:hover {
+        @media (hover: hover) { .btn-discard:hover {
             background: color-mix(in srgb, var(--danger) 18%, var(--danger-soft));
-        }
+        } }
 
         /* ==================== PERSON PICKER ==================== */
         .person-picker {
@@ -10243,9 +10269,9 @@
             justify-content: center;
             transition: color 0.2s;
         }
-        .person-picker-toggle:hover {
+        @media (hover: hover) { .person-picker-toggle:hover {
             color: var(--text);
-        }
+        } }
         .person-picker-dropdown {
             position: fixed;
             /* Size to content, never narrower than the input, capped to the
@@ -10278,10 +10304,12 @@
         .person-picker-item:last-child {
             border-bottom: none;
         }
-        .person-picker-item:hover,
         .person-picker-item.selected {
             background: var(--info-soft);
         }
+        @media (hover: hover) { .person-picker-item:hover {
+            background: var(--info-soft);
+        } }
         .person-picker-item .birth-year {
             color: var(--text-light);
             font-size: 12px;
@@ -10343,7 +10371,7 @@
         /* Mobile regime (≤1024px): reveal the bottom bar + ⋯, keep the canvas
            and every floating control clear of the fixed bottom bar. */
         @media (max-width: 1024px) {
-            :root { --bottom-bar-h: calc(76px + env(safe-area-inset-bottom, 0px)); }
+            :root { --bottom-bar-h: calc(56px + env(safe-area-inset-bottom, 0px)); }
             .bottom-bar { display: flex; }
             /* No ⋯ in the top bar: More is the bottom bar's (one place only). */
             /* Canvas ends above the bar so nothing hides behind it. */
@@ -10366,17 +10394,21 @@
             #toolbar-search-picker { width: 100%; }
             .tree-switcher { display: block !important; }
 
-            /* Larger zoom controls on mobile for better touch targets */
+            /* The zoom stack: 12px from the bar and the right edge (+ safe area). */
             .zoom-controls {
-                bottom: calc(var(--bottom-bar-h) + 16px);
-                right: 16px;
+                bottom: calc(var(--bottom-bar-h) + 12px);
+                right: calc(12px + env(safe-area-inset-right, 0px));
                 gap: 8px;
             }
-            .zoom-controls button {
-                width: 48px;
-                height: 48px;
-                font-size: 24px;
-            }
+        }
+        /* Touch zooms with two fingers: only ⛶ Fit stays (＋/− are for the
+           mouse), a 44px circle (3.2). */
+        @media (pointer: coarse) {
+            .zoom-controls button:nth-child(1),
+            .zoom-controls button:nth-child(2) { display: none; }
+        }
+        @media (pointer: coarse) and (max-width: 640px) {
+            .zoom-controls button { width: 44px; height: 44px; font-size: 22px; }
         }
 
         /* "Open" label of the open tree's row: the phone shows it instead of Open. */
@@ -10485,22 +10517,69 @@
             .toolbar .toolbar-focus {
                 display: none !important;
             }
-            /* Compact focus chip, top-left: "Jan Novak  ↑3 ↓3  ×" (no label,
-               no count) so it stays a small pill on a phone. */
+            /* The person panel (3.1): a fixed 48px row under the bar, the tree
+               drawn below it — name · ↑n · ↓n, no ×. A chip unfolds the
+               steppers as a second 52px row (body.focus-steppers-open); the
+               tree area moves down with it, nothing is covered. */
             .focus-controls {
                 display: flex !important;
                 top: var(--toolbar-h);
-                left: 8px;
-                right: auto;
-                max-width: calc(100vw - 16px);
+                left: 0; right: 0;
+                max-width: none;
                 transform: none;
-                padding: 5px 6px 5px 12px;
-                flex-wrap: nowrap;
-                gap: 8px;
+                min-height: 48px; box-sizing: border-box;
+                padding: 0 4px 0 16px;
+                flex-wrap: wrap; align-items: center;
+                gap: 0;
+                border: none; border-bottom: 1px solid var(--border); border-radius: 0;
+                box-shadow: none;
                 z-index: 50;
             }
             .focus-controls .focus-label,
-            .focus-controls .focus-count { display: none; }
+            .focus-controls .focus-count,
+            .focus-controls .focus-clear { display: none; }
+            .focus-controls .focus-info { flex: 1 1 0; min-width: 0; height: 47px; display: flex; align-items: center; }
+            .focus-controls .focus-info strong {
+                display: block; max-width: 100%; min-width: 0;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                font-size: 15px; font-weight: 600;
+            }
+            .focus-controls .focus-chips { display: flex; flex: none; }
+            /* The chip looks 34px high; its button is the 44px target. */
+            .focus-chip {
+                position: relative;
+                display: flex; align-items: center; justify-content: center; gap: 3px;
+                min-width: 48px; height: 44px; padding: 0 10px; border: none; background: none;
+                font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer;
+            }
+            .focus-chip > span:first-child { color: var(--text-light); }
+            .focus-chip::after {
+                content: ''; position: absolute; inset: 5px 2px; z-index: -1;
+                border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+            }
+            .focus-chip[aria-expanded="true"]::after { border-color: var(--primary); background: var(--primary-soft); }
+            .focus-chips { isolation: isolate; gap: 2px; }
+            .focus-controls .focus-depth { display: none; }
+            body.focus-steppers-open .focus-controls .focus-depth {
+                display: grid; grid-template-columns: 1fr 1fr; flex: 1 0 100%; height: 52px;
+                align-items: center; gap: 12px;
+                margin-left: -16px; padding: 0 8px 0 12px; box-sizing: border-box;
+                border-top: 1px solid var(--divider);
+            }
+            /* ↑ Ancestors  − n +: the label yields ("…"), the buttons never. */
+            .focus-controls .depth-stepper { display: flex; min-width: 0; gap: 4px; }
+            .focus-controls .depth-stepper-label {
+                display: flex; align-items: center; flex: 1 1 auto; min-width: 0;
+                overflow: hidden; font-size: 13px;
+            }
+            .focus-controls .depth-stepper-label-full { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .focus-controls .depth-stepper-label-short { order: -1; flex: none; }
+            .focus-controls .depth-stepper-group { flex: none; }
+            .focus-controls .depth-stepper .depth-stepper-btn { width: 44px; height: 40px; }
+            .focus-controls .depth-stepper-value { min-width: 18px; text-align: center; }
+            /* The tree starts under the panel (and its open steppers). */
+            body.has-focus-panel:not(.descendants-view):not(.standalone-view) #tree-container { top: calc(var(--toolbar-h) + 48px); }
+            body.has-focus-panel.focus-steppers-open:not(.descendants-view):not(.standalone-view) #tree-container { top: calc(var(--toolbar-h) + 100px); }
             /* Descendants view: the badge carries the root name and exit,
                so the focus bar would just sit underneath it — hide it and
                let the badge use the full width. */
@@ -10514,22 +10593,122 @@
             /* Mobile: shorten the segment label ("blood" / "families"). */
             .descendants-seg-full { display: none; }
             .descendants-seg-short { display: inline; }
-            /* Depth steppers on phone chrome: bigger 32×30 touch buttons; the
-               chip shows ↑ / ↓ glyphs instead of the word labels. */
+            /* Depth steppers on phone chrome: bigger touch buttons; the open
+               panel row says the label in full after its ↑ / ↓. */
             .depth-stepper .depth-stepper-btn { width: 32px; height: 30px; font-size: 17px; }
-            .focus-controls .depth-stepper-label-full { display: none; }
-            .focus-controls .depth-stepper-label-short { display: inline; font-size: 13px; }
+            .focus-controls .depth-stepper-label-short { display: inline; font-size: 13px; margin-right: 4px; color: var(--text-light); }
             .focus-controls.hidden {
                 display: none !important;
             }
             .person-picker-dropdown {
                 z-index: 500 !important;
             }
-            .focus-info { font-size: 12px; white-space: nowrap; }
-            .focus-info strong { display: inline; max-width: 40vw; }
-            .focus-depth { gap: 8px; }
             /* Top bar: 52px + the safe area on a phone (1a). */
             #tree-container { top: var(--toolbar-h); }
+        }
+        @media (max-width: 360px) {
+            .focus-controls .depth-stepper .depth-stepper-btn { width: 40px; }
+        }
+
+        /* A phone held sideways (4a, ≤1024 × ≤500 landscape): the bottom bar
+           turns into a 76px side bar on the left (+ the safe area); one 44px
+           header joins the top bar and the person panel — icon · tree name |
+           person name · ↑n · ↓n · magnifier; the steppers open as a popover
+           under the chips. The tree takes the rest (≈325pt high on 844×390). */
+        .bottom-bar-label-short { display: none; }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            :root {
+                --side-bar-w: calc(76px + env(safe-area-inset-left, 0px));
+                --toolbar-h: calc(44px + env(safe-area-inset-top, 0px));
+                --bottom-bar-h: 0px;
+            }
+            .bottom-bar {
+                top: 0; bottom: 0; right: auto; width: var(--side-bar-w); height: auto;
+                flex-direction: column; justify-content: space-around; align-items: stretch;
+                padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+                border-top: none; border-right: 1px solid var(--border);
+            }
+            .bottom-bar-tab {
+                flex: 1 1 0; min-height: 44px; padding: 0 2px;
+                border-top: none; border-left: 2px solid transparent;
+            }
+            .bottom-bar-tab.active { border-left-color: var(--accent); }
+            .bottom-bar-label { font-size: 10px; }
+            .bottom-bar-label-full { display: none; }
+            .bottom-bar-label-short { display: inline; }
+            .bottom-bar-fab { width: 44px; height: 44px; margin: 2px auto; align-self: center; }
+            .toolbar {
+                left: var(--side-bar-w); height: var(--toolbar-h);
+                padding-right: calc(4px + env(safe-area-inset-right, 0px));
+            }
+            #tree-container {
+                top: var(--toolbar-h); left: var(--side-bar-w);
+                right: env(safe-area-inset-right, 0px); bottom: 0;
+            }
+            /* The tree's name leaves room for the person; the magnifier (and
+               Cancel) at the end of the header, after the person. */
+            .toolbar .tree-switcher { flex: 0 1 auto; max-width: 42%; }
+            .toolbar .search-open-btn, .toolbar .search-cancel-btn { order: 10; }
+            .toolbar .toolbar-focus {
+                display: flex !important; flex: 1 1 auto; min-width: 0; height: 32px;
+                align-items: center; gap: 0; margin-left: 4px; padding-left: 10px;
+                border-left: 1px solid var(--border);
+            }
+            .toolbar .toolbar-focus .focus-count { display: none; }
+            .toolbar .toolbar-focus strong {
+                flex: 1 1 auto; min-width: 0; max-width: none;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                font-size: 15px; font-weight: 600;
+            }
+            .toolbar .toolbar-focus .focus-chips { display: flex; flex: none; isolation: isolate; gap: 2px; }
+            .toolbar .toolbar-focus .focus-chip {
+                position: relative; display: flex; align-items: center; justify-content: center; gap: 3px;
+                min-width: 48px; height: 44px; padding: 0 10px; border: none; background: none;
+                font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer;
+            }
+            .toolbar .toolbar-focus .focus-chip > span:first-child { color: var(--text-light); }
+            .toolbar .toolbar-focus .focus-chip::after {
+                content: ''; position: absolute; inset: 7px 2px; z-index: -1;
+                border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+            }
+            .toolbar .toolbar-focus .focus-chip[aria-expanded="true"]::after { border-color: var(--primary); background: var(--primary-soft); }
+            @media (hover: hover) { .toolbar .toolbar-focus .focus-chip:hover { background: none; } }
+            .toolbar .toolbar-focus .focus-depth { display: none; }
+            body.focus-steppers-open .toolbar .toolbar-focus .focus-depth {
+                display: flex; flex-direction: column; align-items: stretch; gap: 10px;
+                position: fixed; top: calc(var(--toolbar-h) + 4px); right: calc(8px + env(safe-area-inset-right, 0px));
+                padding: 10px 12px; background: var(--surface);
+                border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
+                z-index: 150;
+            }
+            .toolbar .toolbar-focus .depth-stepper { justify-content: space-between; gap: 12px; }
+            .toolbar .toolbar-focus .depth-stepper-label-full { display: inline; font-size: 13px; }
+            .toolbar .toolbar-focus .depth-stepper-label-short { display: inline; order: -1; margin-right: 4px; color: var(--text-light); }
+            .toolbar .toolbar-focus .depth-stepper-label { display: flex; align-items: center; }
+            .toolbar .toolbar-focus .depth-stepper .depth-stepper-btn { width: 44px; height: 40px; }
+            body.search-open .toolbar .toolbar-focus,
+            body.search-active .toolbar .toolbar-focus,
+            body.search-filters-open .toolbar .toolbar-focus { display: none !important; }
+            /* The zoom block dissolves as on a phone: only ⛶, bottom right. */
+            .control-block { display: contents; }
+            .minimap-panel { display: none !important; }
+            .zoom-controls {
+                position: fixed; flex-direction: column; gap: 8px; z-index: 100;
+                bottom: 12px; right: calc(12px + env(safe-area-inset-right, 0px));
+            }
+            .zoom-controls button {
+                flex: none; width: 44px; height: 44px; border-radius: 50%;
+                background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+                font-size: 22px;
+            }
+            .zoom-controls button:nth-child(3) { display: none; }
+            /* Sheets: at most 560 wide in the middle, the window's height less 16px. */
+            .bottom-sheet, .bottom-sheet.bottom-sheet-tree-actions { max-height: calc(100dvh - 16px); }
+            .search-filters { max-height: calc(100dvh - 16px); }
+            /* Floating messages centre on the tree, clear of the side bar. */
+            .toast, .tour-offer { left: calc(50% + var(--side-bar-w) / 2); }
+            .family-offer { left: var(--side-bar-w); }
+            .descendants-badge { top: calc(var(--toolbar-h) + 6px); left: var(--side-bar-w); }
         }
 
         /* Mobile (kolo 14 S4): the badge and the focus chip become two-row
@@ -10558,16 +10737,6 @@
             }
             .descendants-badge .descendants-seg { padding-top: 6px; padding-bottom: 6px; }
 
-            .focus-controls {
-                right: 8px; max-width: none;
-                flex-wrap: wrap; row-gap: 6px;
-                border-radius: var(--r-xl);
-                padding: 6px 6px 8px 12px;
-            }
-            .focus-controls .focus-info { order: 1; flex: 1 0 calc(100% - 34px); min-width: 0; }
-            .focus-controls .focus-info strong { max-width: 100%; }
-            .focus-controls .focus-clear { order: 2; }
-            .focus-controls .focus-depth { order: 3; gap: 16px; }
         }
 
         @media (max-width: 499px) {
@@ -10819,9 +10988,9 @@
             color: var(--text-light);
             padding: 0 4px;
         }
-        .debug-panel-close:hover {
+        @media (hover: hover) { .debug-panel-close:hover {
             color: var(--text);
-        }
+        } }
         .debug-panel-content {
             padding: 10px;
         }
@@ -10918,9 +11087,9 @@
             font-family: monospace;
             font-size: 11px;
         }
-        .debug-error-row:hover {
+        @media (hover: hover) { .debug-error-row:hover {
             background: rgba(0,0,0,0.05);
-        }
+        } }
         .debug-error-num {
             color: var(--text-light);
             width: 20px;
@@ -10982,7 +11151,7 @@
             border: none; background: none; cursor: pointer; padding: 2px 6px;
             font-size: 15px; line-height: 1; color: var(--text-secondary, #777);
         }
-        .event-row .event-actions button:hover { color: var(--text-primary, #222); }
+        @media (hover: hover) { .event-row .event-actions button:hover { color: var(--text-primary, #222); } }
         /* These were 24x19 and 31x19 — half the 44px a finger needs, side by
            side, and one of them deletes. Tablets are touch too, so the room to
            hit (and to miss apart from each other) applies below 900px, and the
@@ -11017,7 +11186,7 @@
             border: none; background: none; cursor: pointer; padding: 2px 6px;
             font-size: 15px; line-height: 1; color: var(--text-secondary, #777);
         }
-        .source-actions button:hover { color: var(--text-primary, #222); }
+        @media (hover: hover) { .source-actions button:hover { color: var(--text-primary, #222); } }
         /* Inline "no sources" line (person modal chips, picker); the dialog's
            empty state is an .empty-block and overrides size/padding. */
         .sources-empty { color: var(--text-light); font-size: 13px; padding: 4px 0; }
@@ -11044,14 +11213,14 @@
             border: none; background: none; cursor: pointer; font-size: 16px; line-height: 1;
             color: var(--text-secondary, #777); padding: 0 2px;
         }
-        .source-chip-remove:hover { color: var(--danger, #c0392b); }
+        @media (hover: hover) { .source-chip-remove:hover { color: var(--danger, #c0392b); } }
         .partnership-citations { margin-top: 6px; }
         .partnership-cite-btn {
             border: 1px dashed var(--border-color, #ccc); background: none; cursor: pointer;
             border-radius: 999px; padding: 3px 10px; font-size: 12px;
             color: var(--text-secondary, #777);
         }
-        .partnership-cite-btn:hover { border-color: var(--primary, #4a7c59); color: var(--primary, #4a7c59); }
+        @media (hover: hover) { .partnership-cite-btn:hover { border-color: var(--primary, #4a7c59); color: var(--primary, #4a7c59); } }
         /* Wedding witnesses read like the citations above them. */
         .partnership-witnesses { margin-top: 6px; }
         .partnership-witness-btn {
@@ -11059,7 +11228,7 @@
             border-radius: 999px; padding: 3px 10px; font-size: 12px;
             color: var(--text-secondary, #777);
         }
-        .partnership-witness-btn:hover { border-color: var(--primary, #4a7c59); color: var(--primary, #4a7c59); }
+        @media (hover: hover) { .partnership-witness-btn:hover { border-color: var(--primary, #4a7c59); color: var(--primary, #4a7c59); } }
         /* Source picker, editor and catalog ("Manage sources") open ABOVE
            whatever dialog cited them (person modal, relationships panel, event
            editor) — DOM order is not enough. The catalog comes first in the
@@ -11085,7 +11254,7 @@
             text-align: left; border: 1px solid var(--border-color, #ddd); border-radius: 6px;
             background: var(--card-bg, #fafafa); padding: 8px 10px; cursor: pointer; font-size: 14px;
         }
-        .source-picker-item:hover { background: var(--accent-soft, #e8f0fe); }
+        @media (hover: hover) { .source-picker-item:hover { background: var(--accent-soft, #e8f0fe); } }
 
         /* Source entries: excerpt thumbnails on chips, picker and catalog rows */
         .source-chip { padding: 3px 6px 3px 10px; }
@@ -11095,14 +11264,14 @@
             border: none; background: none; padding: 0; cursor: pointer;
             font: inherit; color: inherit; text-align: left;
         }
-        .source-chip-open:hover .source-chip-label { text-decoration: underline; }
+        @media (hover: hover) { .source-chip-open:hover .source-chip-label { text-decoration: underline; } }
         /* Wedding witnesses: the chip opens their editor */
         .partnership-witness-open {
             display: inline-flex; align-items: center; gap: 4px; min-width: 0;
             border: none; background: none; padding: 0; cursor: pointer;
             font: inherit; color: inherit; text-align: left;
         }
-        .partnership-witness-open:hover { text-decoration: underline; }
+        @media (hover: hover) { .partnership-witness-open:hover { text-decoration: underline; } }
         .partnership-witness-open svg { flex-shrink: 0; color: var(--primary); }
         #wedding-witnesses-modal .participants-list { margin: 8px 0 10px; }
         .source-chip-thumb {
@@ -11129,7 +11298,7 @@
             border: none; background: none; padding: 0; cursor: pointer; font: inherit;
             color: inherit; text-align: left; min-width: 0;
         }
-        .source-row-open:hover .source-title { text-decoration: underline; }
+        @media (hover: hover) { .source-row-open:hover .source-title { text-decoration: underline; } }
         .source-picker-item { display: flex; align-items: center; gap: 10px; }
         .source-picker-row { display: flex; align-items: stretch; gap: 6px; }
         .source-picker-row .source-picker-item { flex: 1; min-width: 0; }
@@ -11177,7 +11346,7 @@
         .excerpt-bar .excerpt-size { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
         .excerpt-bar button { padding: 6px 10px; }
         .excerpt-bar .excerpt-remove { border: none; background: none; color: var(--text-light); cursor: pointer; }
-        .excerpt-bar .excerpt-remove:hover { color: var(--danger); }
+        @media (hover: hover) { .excerpt-bar .excerpt-remove:hover { color: var(--danger); } }
         .excerpt-add-second { align-self: flex-start; }
         .excerpt-adder-menu { padding: 8px 0 0; }
         .excerpt-page-picker {
@@ -11227,8 +11396,8 @@
             background: var(--surface); color: var(--primary);
             font: inherit; font-size: 13px; text-align: center; cursor: pointer;
         }
-        .context-menu .menu-chip-grid .menu-chip:hover,
-        .bottom-sheet-person .menu-chip-grid .menu-chip:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .context-menu .menu-chip-grid .menu-chip:hover,
+        .bottom-sheet-person .menu-chip-grid .menu-chip:hover { background: var(--hover-bg); } }
         .context-menu .menu-chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         /* A row that opens a second level: chevron at the end; tinted while open. */
         .menu-item-chev { flex: none; margin-left: 10px; color: var(--text-light); font-size: 15px; line-height: 1; }
@@ -11367,7 +11536,7 @@
             padding: 6px 12px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--text);
             background: var(--surface); border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border));
         }
-        .modal .story-nv-banner button.story-nv-compare:hover { background: var(--hover-bg); }
+        @media (hover: hover) { .modal .story-nv-banner button.story-nv-compare:hover { background: var(--hover-bg); } }
         .story-nv-banner--edit { margin-bottom: 10px; padding: 9px 12px; }
         .story-nv-banner .link-button { color: var(--text); text-decoration: underline; font-weight: 500; padding: 0; }
         .story-nv-sum { color: var(--warning-text); font-weight: 500; }
@@ -11545,7 +11714,7 @@
             border: 1px solid var(--border-color, #ccc); border-radius: 6px; background: var(--card-bg, #fff);
             cursor: pointer; padding: 4px 8px; font-size: 12px;
         }
-        .snapshot-actions button:hover { background: var(--accent-soft, #e8f0fe); }
+        @media (hover: hover) { .snapshot-actions button:hover { background: var(--accent-soft, #e8f0fe); } }
         /* What a backup is NOT. Someone who reads these as their safety net and
            then reinstalls their laptop loses everything — better said here. */
         /* Storage note: a plain hint like .settings-hint, no colored side bar. */
@@ -11666,7 +11835,7 @@
             border: none; background: none; cursor: pointer; padding: 2px 6px;
             font-size: 15px; line-height: 1; color: var(--text-secondary, #777); flex-shrink: 0;
         }
-        .attachment-actions button:hover { color: var(--danger, #c0392b); }
+        @media (hover: hover) { .attachment-actions button:hover { color: var(--danger, #c0392b); } }
         .attachments-total { color: var(--text-secondary, #777); font-size: 12px; margin-bottom: 8px; }
         .attachments-empty { color: var(--text-light); font-size: 13px; padding: 4px 0; }
         .attachments-empty.empty-block--compact { font-size: inherit; padding: 8px 0 4px; }
@@ -11703,7 +11872,7 @@
             font-family: var(--font-sans); cursor: pointer;
             display: inline-flex; align-items: center; justify-content: center;
         }
-        .image-viewer-btn:hover { background: rgba(255,255,255,0.14); }
+        @media (hover: hover) { .image-viewer-btn:hover { background: rgba(255,255,255,0.14); } }
         .image-viewer-btn:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
         .image-viewer-btn:disabled { opacity: 0.35; cursor: default; background: transparent; }
         .image-viewer-level { min-width: 64px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -11720,7 +11889,7 @@
             min-height: 32px; padding: 0 12px; border: 1px solid rgba(255,255,255,0.35); border-radius: 999px;
             background: transparent; color: #fff; font: inherit; font-weight: 600; cursor: pointer;
         }
-        .image-viewer-media-btn:hover { background: rgba(255,255,255,0.14); }
+        @media (hover: hover) { .image-viewer-media-btn:hover { background: rgba(255,255,255,0.14); } }
         .image-viewer-media-text { padding: 0 4px; }
         .image-viewer-media-track { display: inline-block; width: 120px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.25); overflow: hidden; }
         .image-viewer-media-track span { display: block; height: 100%; background: #fff; }
@@ -11763,7 +11932,7 @@
             flex-shrink: 0; border: 1px solid var(--border); border-radius: 6px;
             background: var(--surface); color: var(--text); cursor: pointer; padding: 3px 8px; font-size: 12px;
         }
-        .duplicate-suggest-item button:hover { background: var(--accent-soft, #e8f0fe); }
+        @media (hover: hover) { .duplicate-suggest-item button:hover { background: var(--accent-soft, #e8f0fe); } }
 
         /* Card tooltip */
         /* Unified hover-tooltip surface (shared with .badge-tooltip and
@@ -11880,11 +12049,11 @@
         }
         /* Hovering any card-edge pill (add tabs, branch tabs, chain, hidden
            indicators, cross-tree) suppresses the default hover card. */
-        .person-card:has(.card-edge *:hover) .card-tooltip {
+        @media (hover: hover) { .person-card:has(.card-edge *:hover) .card-tooltip {
             opacity: 0 !important;
             visibility: hidden !important;
             transition: none !important;
-        }
+        } }
         @media (max-width: 900px) { .card-tooltip { visibility: hidden !important; } }
 
         /* Print CSS */
@@ -12032,8 +12201,13 @@
 
         <!-- Toolbar Focus Info (tablet landscape) -->
         <div class="toolbar-focus tablet-only">
-            <strong id="toolbar-focus-name" role="button" tabindex="0" onclick="window.Strom.ZoomPan.centerOnFocusWithContext()" style="cursor:pointer;" data-i18n-title="uiTips.centerOnFocus"></strong>
+            <strong id="toolbar-focus-name" role="button" tabindex="0" onclick="window.Strom.UI.focusNameTap()" style="cursor:pointer;" data-i18n-title="uiTips.centerOnFocus"></strong>
             <span id="toolbar-focus-count" class="focus-count" role="button" tabindex="0" onclick="window.Strom.UI.showActiveTreeStats()" style="cursor:pointer;" data-i18n-title="uiTips.showStats"></span>
+            <!-- A phone sideways: ↑n ↓n chips in the header; the steppers as a popover -->
+            <div class="focus-chips">
+                <button type="button" class="focus-chip" data-for="toolbar-depth-up" aria-expanded="false" onclick="window.Strom.UI.toggleFocusSteppers()" data-i18n-aria-label="depth.toggle"><span aria-hidden="true">↑</span><span class="focus-chip-value"></span></button>
+                <button type="button" class="focus-chip" data-for="toolbar-depth-down" aria-expanded="false" onclick="window.Strom.UI.toggleFocusSteppers()" data-i18n-aria-label="depth.toggle"><span aria-hidden="true">↓</span><span class="focus-chip-value"></span></button>
+            </div>
             <div class="focus-depth">
                 <div class="depth-stepper">
                     <span class="depth-stepper-label"><span class="depth-stepper-label-full" data-i18n="focus.ancestorsLabel"></span><span class="depth-stepper-label-short" aria-hidden="true">↑</span></span>
@@ -12230,7 +12404,7 @@
         </button>
         <button type="button" class="bottom-bar-tab" id="bb-view-timeline" onclick="window.Strom.UI.setDisplayViewMode('timeline')">
             <svg class="bottom-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-            <span class="bottom-bar-label" data-i18n="viewModeSwitch.timeline"></span>
+            <span class="bottom-bar-label bottom-bar-label-full" data-i18n="viewModeSwitch.timeline"></span><span class="bottom-bar-label bottom-bar-label-short" data-i18n="nav.timelineShort"></span>
         </button>
         <button type="button" class="bottom-bar-tab bottom-bar-more" id="bb-view-more" onclick="window.Strom.UI.showMoreMenuSheet()">
             <span class="bottom-bar-icon-wrap"><svg class="bottom-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span id="bottom-bar-more-dot" class="bottom-bar-more-dot" style="display:none;"></span><span id="bottom-bar-more-storage-dot" class="bottom-bar-more-dot is-storage storage-dot storage-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="tri" d="M10.27 3.2a2 2 0 0 1 3.46 0l8.5 14.8A2 2 0 0 1 20.5 21h-17a2 2 0 0 1-1.73-3z"/><path class="mark" d="M12 9.5v4M12 17h.01"/></svg></span></span>
@@ -12389,8 +12563,13 @@
     <div id="focus-controls" class="focus-controls hidden">
         <div class="focus-info">
             <span class="focus-label" data-i18n="focus.focusedOn"></span>
-            <strong id="focus-name" onclick="window.Strom.ZoomPan.centerOnFocusWithContext()" style="cursor:pointer;" data-i18n-title="uiTips.centerOnFocus"></strong>
+            <strong id="focus-name" onclick="window.Strom.UI.focusNameTap()" style="cursor:pointer;" data-i18n-title="uiTips.centerOnFocus"></strong>
             <span id="focus-person-count" class="focus-count" onclick="window.Strom.UI.showActiveTreeStats()" style="cursor:pointer;" data-i18n-title="uiTips.showStats"></span>
+        </div>
+        <!-- Phone: ↑n ↓n chips; a tap unfolds the steppers in a second row -->
+        <div class="focus-chips">
+            <button type="button" class="focus-chip" data-for="focus-depth-up" aria-expanded="false" onclick="window.Strom.UI.toggleFocusSteppers()" data-i18n-aria-label="depth.toggle"><span aria-hidden="true">↑</span><span class="focus-chip-value"></span></button>
+            <button type="button" class="focus-chip" data-for="focus-depth-down" aria-expanded="false" onclick="window.Strom.UI.toggleFocusSteppers()" data-i18n-aria-label="depth.toggle"><span aria-hidden="true">↓</span><span class="focus-chip-value"></span></button>
         </div>
         <div class="focus-depth">
             <div class="depth-stepper">

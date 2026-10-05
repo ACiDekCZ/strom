@@ -42,10 +42,11 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
+import { isPhoneBar } from '../breakpoints.js';
 
-/** The phone top bar (≤640px): the search folds to a magnifier there. */
+/** The phone top bar (≤640px, or a phone sideways): the search folds to a magnifier there. */
 export function isPhoneToolbar(): boolean {
-    try { return window.matchMedia?.('(max-width: 640px)').matches ?? false; } catch { return false; }
+    return isPhoneBar();
 }
 
 /** Filters set in the filter panel (the years count as one). */

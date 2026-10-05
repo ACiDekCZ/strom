@@ -71,3 +71,13 @@ export const MQ_TOOLBAR_COMPACT = `(max-width: ${TOOLBAR_COMPACT_MAX}px)`;
 export function isToolbarCompact(): boolean {
     return matches(MQ_TOOLBAR_COMPACT, (w) => w <= TOOLBAR_COMPACT_MAX);
 }
+
+/** A phone held sideways: the side bar and the one 44px header (4a of the phone round). */
+export const MQ_PHONE_LANDSCAPE = `(max-width: ${TOOLBAR_COMPACT_MAX}px) and (max-height: 500px) and (orientation: landscape)`;
+/** The phone top bar (icon · tree name · magnifier): a phone either way up. */
+export const MQ_PHONE_BAR = `${MQ_PHONE_CHROME}, ${MQ_PHONE_LANDSCAPE}`;
+
+/** The phone top bar is in use (≤ 640px, or a phone sideways). */
+export function isPhoneBar(): boolean {
+    return matches(MQ_PHONE_BAR, (w) => w <= PHONE_CHROME_MAX);
+}

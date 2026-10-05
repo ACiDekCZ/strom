@@ -476,6 +476,7 @@ export const treeManagementMethods = uiModule({
     showTreeSwitcherSheet(): void {
         const activeId = TreeManager.getActiveTreeId();
         const trees = TreeManager.getVisibleTrees();
+        this.noteBottomSheetTrigger();
         this.hideBottomSheet();
         this.presentMenuSheet(strings.treeManager.switcherTitle, [
             { rows: trees.map(tree => ({

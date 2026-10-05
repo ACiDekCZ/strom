@@ -121,6 +121,8 @@ export class UIClass {
     crossTreeChooser: HTMLElement | null = null;
     crossTreeChooserCloseHandler: ((e: Event) => void) | null = null;
     bottomSheet: HTMLElement | null = null;
+    /** What had focus when the sheet opened: it gets it back on close. */
+    bottomSheetTrigger: HTMLElement | null = null;
     linkMode = false;
     gedcomResult: GedcomConversionResult | null = null;
     /** This GEDCOM import brings images (null until the result dialog decides). */

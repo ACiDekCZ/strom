@@ -167,3 +167,149 @@ test('the tree name opens the tree list as a sheet: the trees, the open one mark
     await sheet.locator('.bottom-sheet-item:not(.active)', { hasText: /Jiný strom|My Family Tree/ }).first().tap();
     await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).not.toBe(before);
 });
+
+/** The sample tree: a focus person with ancestors and descendants. */
+async function sample(page: Page): Promise<void> {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(page.locator('#focus-controls')).toBeVisible();
+}
+
+test('the person panel: one 48px row under the bar (name · ↑n · ↓n, no ×), the tree drawn below it', async ({ page }) => {
+    await sample(page);
+    const panel = (await page.locator('#focus-controls').boundingBox())!;
+    const bar = (await page.locator('.toolbar').boundingBox())!;
+    const tree = (await page.locator('#tree-container').boundingBox())!;
+    expect(Math.round(panel.height)).toBe(48);
+    expect(panel.x).toBe(0);
+    expect(Math.round(panel.width)).toBe(390);
+    expect(Math.round(panel.y)).toBe(Math.round(bar.y + bar.height));
+    expect(Math.round(tree.y)).toBe(Math.round(panel.y + panel.height));
+    await expect(page.locator('.focus-controls .focus-clear')).toBeHidden();
+    await expect(page.locator('.focus-controls .focus-depth')).toBeHidden();
+    const up = page.locator('.focus-chip[data-for="focus-depth-up"]');
+    await expect(up.locator('.focus-chip-value')).toHaveText(await page.locator('#focus-depth-up').inputValue());
+    for (const chip of await page.locator('#focus-controls .focus-chip').all()) {
+        const b = (await chip.boundingBox())!;
+        expect(Math.round(b.width)).toBeGreaterThanOrEqual(44);
+        expect(Math.round(b.height)).toBeGreaterThanOrEqual(44);
+    }
+});
+
+test('a chip unfolds the steppers as a second row and the tree moves down; the chip, the stepper and a tap into the tree work', async ({ page }) => {
+    await sample(page);
+    const treeTop = async () => Math.round((await page.locator('#tree-container').boundingBox())!.y);
+    const before = await treeTop();
+    const down = page.locator('.focus-chip[data-for="focus-depth-down"]');
+    await down.tap();
+    await expect(down).toHaveAttribute('aria-expanded', 'true');
+    const steppers = page.locator('.focus-controls .focus-depth');
+    await expect(steppers).toBeVisible();
+    expect(Math.round((await steppers.boundingBox())!.height)).toBe(52);
+    await expect.poll(treeTop).toBe(before + 52);
+    // Nothing in the row overflows the phone.
+    expect(await steppers.evaluate(el => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+
+    // − on ↓ lowers the depth; the chip follows.
+    const value = Number(await page.locator('#focus-depth-down').inputValue());
+    await steppers.locator('.depth-stepper').nth(1).locator('[data-step="-1"]').tap();
+    await expect(down.locator('.focus-chip-value')).toHaveText(String(value - 1));
+
+    // The chip again folds it; a tap into the tree too.
+    await down.tap();
+    await expect(steppers).toBeHidden();
+    await expect.poll(treeTop).toBe(before);
+    await down.tap();
+    await expect(steppers).toBeVisible();
+    await page.locator('#tree-container').dispatchEvent('pointerdown');
+    await expect(steppers).toBeHidden();
+    await expect(down).toHaveAttribute('aria-expanded', 'false');
+});
+
+test('the name in the panel opens the person\'s sheet', async ({ page }) => {
+    await sample(page);
+    await page.locator('#focus-name').tap();
+    await expect(page.locator('.bottom-sheet-person')).toBeVisible();
+});
+
+test('touch zooms with two fingers: only ⛶ Fit, a 44px circle 12px above the bar and from the edge', async ({ page }) => {
+    await sample(page);
+    const buttons = page.locator('.zoom-controls button:visible');
+    await expect(buttons).toHaveCount(1);
+    await expect(buttons).toHaveAttribute('title', 'Fit to screen');
+    const fit = (await buttons.boundingBox())!;
+    const bar = (await page.locator('#bottom-bar').boundingBox())!;
+    expect(Math.round(fit.width)).toBe(44);
+    expect(Math.round(fit.height)).toBe(44);
+    expect(Math.round(bar.y - (fit.y + fit.height))).toBe(12);
+    expect(Math.round(390 - (fit.x + fit.width))).toBe(12);
+});
+
+test('the bottom bar is 56px with the FAB inside it; German labels fit one line at 320px', async ({ page }) => {
+    await sample(page);
+    const bar = (await page.locator('#bottom-bar').boundingBox())!;
+    expect(Math.round(bar.height)).toBe(56);
+    const fab = (await page.locator('#bottom-bar-fab').boundingBox())!;
+    expect(Math.round(fab.width)).toBe(48);
+    expect(fab.y).toBeGreaterThanOrEqual(bar.y);
+    expect(fab.y + fab.height).toBeLessThanOrEqual(bar.y + bar.height);
+
+    await page.evaluate(() => window.Strom.UI.setLanguage('de'));
+    await page.setViewportSize({ width: 320, height: 700 });
+    await expect(page.locator('#bb-view-descendants .bottom-bar-label')).toHaveText('Nachkommen');
+    const labels = await page.locator('.bottom-bar-label').evaluateAll(els => els.map(el => ({
+        text: el.textContent, cut: el.scrollWidth > el.clientWidth + 0.5,
+        lines: Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight || '12')),
+        size: getComputedStyle(el).fontSize,
+    })));
+    for (const l of labels) {
+        expect(l.cut, `${l.text} cut`).toBe(false);
+        expect(l.size).toBe('10.5px');
+    }
+});
+
+test('every control of the phone chrome is a 44×44 target (the funnel and × in the field by their padding)', async ({ page }) => {
+    await sample(page);
+    const small = async () => page.evaluate(() => {
+        const out: string[] = [];
+        const sel = '.toolbar button, #focus-controls button, #bottom-bar button, .zoom-controls button';
+        for (const el of document.querySelectorAll<HTMLElement>(sel)) {
+            const r = el.getBoundingClientRect();
+            if (!r.width || getComputedStyle(el).visibility === 'hidden' || el.closest('#search-filters')) continue;
+            // The hit area: the box, or a ::before reaching past it.
+            const cx = r.left + r.width / 2;
+            const hitTop = document.elementFromPoint(cx, r.top + r.height / 2 - 21.5);
+            const hitBottom = document.elementFromPoint(cx, r.top + r.height / 2 + 21.5);
+            const tall = r.height >= 43.5 || (el.contains(hitTop) && el.contains(hitBottom));
+            if (Math.round(r.width) < 44 || !tall) out.push(`${el.id || el.className} ${Math.round(r.width)}×${Math.round(r.height)}`);
+        }
+        return out;
+    });
+    expect(await small(), 'at rest').toEqual([]);
+    await page.locator('#search-open-btn').tap();
+    await page.locator('#toolbar-search-picker .person-picker-input').fill('Berg');
+    await page.locator('#toolbar-search-picker .person-picker-input').blur();
+    await expect(page.locator('#search-clear-btn')).toBeVisible();
+    expect(await small(), 'with the active field').toEqual([]);
+});
+
+test('a tap leaves no hover fill (hover styles are for the mouse only)', async ({ page }) => {
+    await sample(page);
+    expect(await page.evaluate(() => matchMedia('(hover: hover)').matches)).toBe(false);
+    // A row of the person's sheet (its hover tint was a plain :hover rule).
+    await page.locator('#focus-name').tap();
+    const row = page.locator('.bottom-sheet-person .bottom-sheet-item').last();
+    const rest = await row.evaluate(el => getComputedStyle(el).backgroundColor);
+    await row.hover();
+    expect(await row.evaluate(el => getComputedStyle(el).backgroundColor)).toBe(rest);
+});
+
+test('a sheet closed by Escape gives the focus back to what opened it', async ({ page }) => {
+    await sample(page);
+    await page.locator('#bb-view-more').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.bottom-sheet-menu')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.bottom-sheet-menu')).toHaveCount(0);
+    await expect(page.locator('#bb-view-more')).toBeFocused();
+});

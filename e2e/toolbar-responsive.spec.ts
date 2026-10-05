@@ -61,7 +61,9 @@ async function probe(page: Page) {
         // Generation-depth controls: inline (.toolbar-focus) or floating bar.
         // The visible control is the stepper fronting each (hidden) select.
         const toolbarDepth = shown(document.getElementById('toolbar-depth-up')?.closest('.depth-stepper') ?? null);
-        const floatingDepth = shown(document.getElementById('focus-depth-up')?.closest('.depth-stepper') ?? null);
+        // The phone panel shows ↑n / ↓n chips (they unfold the steppers).
+        const floatingDepth = shown(document.getElementById('focus-depth-up')?.closest('.depth-stepper') ?? null)
+            || shown(document.querySelector('#focus-controls .focus-chip'));
         const depthSurfaces = (toolbarDepth ? 1 : 0) + (floatingDepth ? 1 : 0);
 
         // Clip audit: every visible toolbar child stays within the bar.

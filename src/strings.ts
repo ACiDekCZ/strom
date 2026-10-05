@@ -2255,6 +2255,12 @@ const stringsEN = {
     },
 
     // Focus mode
+    nav: {
+        timelineShort: 'Timeline',
+    },
+    depth: {
+        toggle: 'Number of generations',
+    },
     focus: {
         focusedOn: 'Focused on',
         back: 'Back to previous person (Alt+←)',
@@ -5735,6 +5741,12 @@ const stringsCZ: StringsType = {
     },
 
     // Focus mode
+    nav: {
+        timelineShort: 'Čas. osa',
+    },
+    depth: {
+        toggle: 'Počet generací',
+    },
     focus: {
         back: 'Zpět na předchozí osobu (Alt+←)',
         forward: 'Vpřed (Alt+→)',
@@ -9185,6 +9197,12 @@ const stringsDE: StringsType = {
     },
 
     // Focus mode
+    nav: {
+        timelineShort: 'Zeitleiste',
+    },
+    depth: {
+        toggle: 'Anzahl der Generationen',
+    },
     focus: {
         focusedOn: 'Fokussiert auf',
         back: 'Zurück zur vorherigen Person (Alt+←)',

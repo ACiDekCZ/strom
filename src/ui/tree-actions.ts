@@ -147,6 +147,7 @@ export const treeActionsMethods = uiModule({
         const isActive = treeId === TreeManager.getActiveTreeId();
         const t = strings.treeActions;
 
+        this.noteBottomSheetTrigger();
         this.hideBottomSheet();
         const overlay = document.createElement('div');
         overlay.className = 'bottom-sheet-overlay';

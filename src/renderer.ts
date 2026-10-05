@@ -751,6 +751,7 @@ class TreeRendererClass {
         const totalCount = DataManager.getAllPersons().length;
         if (totalCount === 0) {
             focusControls.classList.add('hidden');
+            document.body.classList.remove('has-focus-panel');
             if (toolbarFocus) toolbarFocus.style.display = 'none';
             if (toolbarFocusName) toolbarFocusName.textContent = '';
             if (toolbarFocusCount) toolbarFocusCount.textContent = '';
@@ -796,8 +797,11 @@ class TreeRendererClass {
             this.updateGenerationSelect(descDepthDown, maxGen.down, this.focusDepthDown);
 
             focusControls.classList.remove('hidden');
+            // The phone draws the tree under the panel row (CSS).
+            document.body.classList.add('has-focus-panel');
         } else {
             focusControls.classList.add('hidden');
+            document.body.classList.remove('has-focus-panel');
             // Clear toolbar focus display when no focus person
             if (toolbarFocusName) toolbarFocusName.textContent = '';
             if (toolbarFocusCount) toolbarFocusCount.textContent = '';

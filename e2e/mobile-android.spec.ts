@@ -13,7 +13,7 @@ test('Android phone: the main screens fit; a card opens its sheet; no minimap; t
 test.describe('Android phone held sideways', () => {
     const { defaultBrowserType: _browser, ...sideways } = devices['Pixel 7 landscape'];
     test.use(sideways);
-    test('the empty state scrolls between the toolbar and the bottom bar: Try a sample tree can be reached and tapped', async ({ page }) => {
+    test('the empty state scrolls beside the side bar and under the header: Try a sample tree can be reached and tapped', async ({ page }) => {
         await openApp(page);
         const empty = page.locator('#empty-state');
         await expect(empty).toBeVisible();
@@ -21,9 +21,11 @@ test.describe('Android phone held sideways', () => {
         await empty.evaluate(el => { el.scrollTop = el.scrollHeight; });
         const demo = page.getByRole('button', { name: 'Try a sample tree' });
         const box = (await demo.boundingBox())!;
+        // Sideways the bar is a side bar on the left (4a of the phone round).
         const bar = (await page.locator('.bottom-bar').boundingBox())!;
         const toolbar = (await page.locator('.toolbar').boundingBox())!;
-        expect(box.y + box.height).toBeLessThanOrEqual(bar.y);
+        expect(box.x).toBeGreaterThanOrEqual(bar.x + bar.width);
+        expect(box.y + box.height).toBeLessThanOrEqual(page.viewportSize()!.height);
         expect(box.y).toBeGreaterThanOrEqual(toolbar.y + toolbar.height);
         await demo.tap();
         await expect(card(page, 'Johan')).toBeVisible();

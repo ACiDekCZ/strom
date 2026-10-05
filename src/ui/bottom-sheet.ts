@@ -13,6 +13,8 @@ import { SettingsManager } from '../settings.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
+import { ZoomPan } from '../zoom.js';
+import { isPhoneBar } from '../breakpoints.js';
 import { menuItemBody, menuItemAria, PersonMenuAction } from './context-menu.js';
 
 /** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
@@ -61,6 +63,7 @@ export const bottomSheetMethods = uiModule({
      * "More ›") turns the sheet into that page (‹ Back returns).
      */
     showPersonBottomSheet(personId: PersonId): void {
+        this.noteBottomSheetTrigger();
         this.hideBottomSheet();
         const actions = this.getPersonMenuActions(personId);
         if (actions.length === 0) return;
@@ -211,11 +214,56 @@ export const bottomSheetMethods = uiModule({
         requestAnimationFrame(() => overlay.classList.add('active'));
     },
 
+    /** The person panel's name: the person's sheet on a phone, centring elsewhere. */
+    focusNameTap(): void {
+        const id = TreeRenderer.getFocusPersonId();
+        if (id && isPhoneBar()) this.showPersonBottomSheet(id);
+        else ZoomPan.centerOnFocusWithContext();
+    },
+
+    /**
+     * Phone person panel: a ↑n / ↓n chip unfolds (or folds) the steppers' row;
+     * a tap into the tree folds it too.
+     */
+    toggleFocusSteppers(open?: boolean): void {
+        const next = open ?? !document.body.classList.contains('focus-steppers-open');
+        document.body.classList.toggle('focus-steppers-open', next);
+        document.querySelectorAll('.focus-chip').forEach(chip => chip.setAttribute('aria-expanded', String(next)));
+        const tree = document.getElementById('tree-container');
+        if (next && tree && !tree.dataset.foldsSteppers) {
+            tree.dataset.foldsSteppers = '1';
+            tree.addEventListener('pointerdown', () => {
+                if (document.body.classList.contains('focus-steppers-open')) this.toggleFocusSteppers(false);
+            });
+        }
+    },
+
     hideBottomSheet(): void {
         if (this.bottomSheet) {
             this.bottomSheet.remove();
             this.bottomSheet = null;
+            // Focus back to what opened the sheet — unless the row's action
+            // already put it somewhere (a dialog it opened).
+            const trigger = this.bottomSheetTrigger;
+            this.bottomSheetTrigger = null;
+            requestAnimationFrame(() => {
+                // Replaced by another sheet: that one hands the focus back later.
+                if (this.bottomSheet) {
+                    if (!this.bottomSheetTrigger) this.bottomSheetTrigger = trigger;
+                    return;
+                }
+                if (trigger?.isConnected && (document.activeElement === document.body || !document.activeElement)) {
+                    trigger.focus({ preventScroll: true });
+                }
+            });
         }
+    },
+
+    /** Remember the opener (once per sheet; a sheet replacing another keeps the first). */
+    noteBottomSheetTrigger(): void {
+        if (this.bottomSheet) return;
+        const active = document.activeElement;
+        this.bottomSheetTrigger = active instanceof HTMLElement && active !== document.body ? active : null;
     },
 
     /**
@@ -231,6 +279,7 @@ export const bottomSheetMethods = uiModule({
      * bar's ⋯ button. Edit-only rows drop in read-only view.
      */
     showMoreMenuSheet(): void {
+        this.noteBottomSheetTrigger();
         this.hideBottomSheet();
         this.closeAllMenusExcept('sheet');
         this.hideWhatsNewCard();
