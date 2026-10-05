@@ -44,6 +44,7 @@ import * as CrossTree from '../cross-tree.js';
 import { fitFlyout } from './flyout.js';
 import { uiModule } from './module.js';
 import { treeActionsAsSheet } from './tree-actions.js';
+import { isPhoneToolbar } from './search.js';
 
 import { iconSvg } from '../icons.js';
 
@@ -457,6 +458,11 @@ export const treeManagementMethods = uiModule({
      */
     toggleTreeSwitcher(): void {
         this.closeAllMenusExcept('switcher');
+        // Phone: the tree list is a sheet from below (1.5).
+        if (isPhoneToolbar() && !DataManager.isViewMode()) {
+            this.showTreeSwitcherSheet();
+            return;
+        }
         const dropdown = document.getElementById('tree-switcher-dropdown');
         if (dropdown) {
             dropdown.classList.toggle('active');
@@ -464,6 +470,23 @@ export const treeManagementMethods = uiModule({
                 this.updateTreeSwitcher();
             }
         }
+    },
+
+    /** The phone's tree list: the visible trees (the open one marked), then Manage trees ›. */
+    showTreeSwitcherSheet(): void {
+        const activeId = TreeManager.getActiveTreeId();
+        const trees = TreeManager.getVisibleTrees();
+        this.hideBottomSheet();
+        this.presentMenuSheet(strings.treeManager.switcherTitle, [
+            { rows: trees.map(tree => ({
+                label: tree.name,
+                active: tree.id === activeId,
+                run: () => { if (tree.id !== activeId) void this.switchToTree(tree.id); },
+            })) },
+            { divider: true, rows: [
+                { label: strings.treeManager.manageTreesTitle, value: '\u203a', run: () => this.showTreeManagerDialog() },
+            ] },
+        ]);
     },
 
     /**

@@ -253,21 +253,16 @@ test.describe('view switcher — monotonic, in-viewport, ghost ⋯ (cs-CZ, stres
         expect(sawFold, 'the segment folded into the bottom bar somewhere in 360–1600px').toBe(true);
     });
 
-    test('the mobile ⋯ stays ghost at rest, on hover, and when its sheet is open', async ({ page }) => {
-        await page.setViewportSize({ width: 900, height: 850 });
+    test('no ⋯ in the top bar up to 1024px: More is the bottom bar\'s', async ({ page }) => {
         await openApp(page);
-        const green = await primaryGreen(page);
-        const dots = page.locator('.mobile-more-btn');
-
-        const bg = () => dots.evaluate((e) => getComputedStyle(e).backgroundColor);
-        expect(await bg(), 'resting ⋯ is not primary-green').not.toBe(green);
-        await dots.hover();
-        expect(await bg(), 'hovered ⋯ is not primary-green').not.toBe(green);
-        await dots.click();
-        // The top bar ⋯ opens the same "More" sheet as the bottom bar.
-        await expect(page.locator('.bottom-sheet-menu')).toBeVisible();
-        await page.waitForTimeout(50);
-        expect(await bg(), 'open-state ⋯ is not primary-green').not.toBe(green);
+        for (const width of [390, 900, 1024]) {
+            await page.setViewportSize({ width, height: 850 });
+            await expect(page.locator('.mobile-more-btn'), `${width}px`).toBeHidden();
+            await expect(page.locator('.actions-menu-btn'), `${width}px`).toBeHidden();
+            await expect(page.locator('#bb-view-more'), `${width}px`).toBeVisible();
+        }
+        await page.setViewportSize({ width: 1025, height: 850 });
+        await expect(page.locator('.actions-menu-btn')).toBeVisible();
     });
 });
 

@@ -14,7 +14,11 @@ export const pwaUiMethods = uiModule({
     initOnlineIndicator(): void {
         const badge = document.getElementById('offline-indicator');
         if (!badge) return;
-        const sync = () => { badge.style.display = navigator.onLine ? 'none' : 'inline-flex'; };
+        const sync = () => {
+            badge.style.display = navigator.onLine ? 'none' : 'inline-flex';
+            // The phone bar has no room for the badge: a dot before the tree's name (More says it).
+            document.body.classList.toggle('is-offline', !navigator.onLine);
+        };
         window.addEventListener('online', sync);
         window.addEventListener('offline', sync);
         sync();

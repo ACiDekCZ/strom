@@ -32,7 +32,7 @@ interface MenuRow {
 interface TreeRow { prefix: string; name: string; run: () => void; }
 /** The "Only in browser" state row on top of the "More" sheet. */
 interface StorageRow { title: string; sub: string; run: () => void; }
-interface MenuBlock { header?: string; rows: MenuRow[]; pair?: MenuRow[]; treeRow?: TreeRow; divider?: boolean; storageRow?: StorageRow; }
+interface MenuBlock { header?: string; rows: MenuRow[]; pair?: MenuRow[]; treeRow?: TreeRow; divider?: boolean; storageRow?: StorageRow; note?: string; }
 
 /** Coarse pointer = touch device; used to gate touch-only behaviour. */
 export function isCoarsePointer(): boolean {
@@ -251,6 +251,14 @@ export const bottomSheetMethods = uiModule({
             } });
         }
 
+        // The phone bar's state dot explained: a linked file to save into, offline.
+        if (!isView && this.activeFileHandleName) {
+            blocks.push({ rows: [{ label: s.fileAccess.save, sub: s.fileAccess.linkedTo(this.activeFileHandleName), run: () => void this.saveActiveTreeToFile() }] });
+        }
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+            blocks.push({ rows: [], note: s.pwa.offline });
+        }
+
         // 1) Undo / Redo — the mobile home for these beyond the toast.
         if (!isView) {
             blocks.push({ rows: [], pair: [
@@ -438,6 +446,12 @@ export const bottomSheetMethods = uiModule({
 
         for (const block of blocks) {
             if (block.storageRow) list.appendChild(makeStorageButton(block.storageRow));
+            if (block.note) {
+                const note = document.createElement('p');
+                note.className = 'bottom-sheet-note';
+                note.textContent = block.note;
+                list.appendChild(note);
+            }
             if (block.divider) {
                 const divider = document.createElement('div');
                 divider.className = 'bottom-sheet-divider';

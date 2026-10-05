@@ -116,14 +116,15 @@ test('Escape closes dialogs that are not on the dialog stack (book, sources)', a
 test.describe('mobile', () => {
     test.use({ viewport: { width: 390, height: 844 } });
 
-    test('search filter panel hides the floating zoom buttons while open', async ({ page }) => {
+    test('the filter sheet keeps the zoom buttons (under its backdrop) and its own foot in view', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
         await expect(page.locator('.zoom-controls')).toBeVisible();
         await page.evaluate(() => window.Strom.UI.toggleSearchFilters());
-        await expect(page.locator('.zoom-controls')).toBeHidden();
-        await expect(page.locator('#search-filters .search-filters-footer button').last()).toBeVisible();
+        await expect(page.locator('.zoom-controls')).toBeVisible();
+        await expect(page.locator('#search-filters .search-filters-sheet-foot button').last()).toBeInViewport();
         await page.keyboard.press('Escape');   // closes the panel first
+        await expect(page.locator('#search-filters')).toBeHidden();
         await expect(page.locator('.zoom-controls')).toBeVisible();
     });
 });

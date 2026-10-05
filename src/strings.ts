@@ -2306,6 +2306,10 @@ const stringsEN = {
         selectPerson: 'Select person',
         shortcutHint: '/',
         shortcutAria: 'Press / to search',
+        open: 'Search people',
+        cancel: 'Cancel',
+        clear: 'Clear search',
+        resultCount: (n: number) => nEn(n, 'person', 'people'),
     },
 
     // Search filters
@@ -2321,6 +2325,11 @@ const stringsEN = {
         deceased: 'Deceased only',
         clear: 'Clear',
         resultCount: (n: number) => nEn(n, 'result', 'results'),
+        title: 'Filter',
+        clearFilters: 'Clear filters',
+        show: (n: number) => `Show ${nEn(n, 'person', 'people')}`,
+        none: 'No matches',
+        activeCount: (n: number) => `Active filters: ${n}`,
     },
 
     // Person picker
@@ -2774,6 +2783,7 @@ const stringsEN = {
         openAtStartup: 'Open at startup',
         opened: 'Open',
         exportAllShort: 'Export all',
+        switcherTitle: 'Trees',
         searchTrees: 'Search trees…',
         pendingSection: 'Unfinished merges',
         cannotHideLastVisible: 'The last visible tree cannot be hidden — unhide another tree first.',
@@ -5776,6 +5786,10 @@ const stringsCZ: StringsType = {
         selectPerson: 'Vybrat osobu',
         shortcutHint: '/',
         shortcutAria: 'Hledání klávesou /',
+        open: 'Hledat osobu',
+        cancel: 'Zrušit',
+        clear: 'Smazat hledání',
+        resultCount: (n: number) => nCs(n, 'osoba', 'osoby', 'osob'),
     },
 
     // Search filters
@@ -5791,6 +5805,11 @@ const stringsCZ: StringsType = {
         deceased: 'Jen zemřelí',
         clear: 'Vymazat',
         resultCount: (n: number) => nCs(n, 'výsledek', 'výsledky', 'výsledků'),
+        title: 'Filtr',
+        clearFilters: 'Zrušit filtry',
+        show: (n: number) => `Zobrazit ${nCs(n, 'osobu', 'osoby', 'osob')}`,
+        none: 'Žádná osoba',
+        activeCount: (n: number) => `Aktivní filtry: ${n}`,
     },
 
     // Person picker
@@ -6252,6 +6271,7 @@ const stringsCZ: StringsType = {
         openAtStartup: 'Otevírat při spuštění',
         opened: 'Otevřený',
         exportAllShort: 'Exportovat vše',
+        switcherTitle: 'Stromy',
         searchTrees: 'Hledat strom…',
         pendingSection: 'Rozpracovaná sloučení',
         cannotHideLastVisible: 'Poslední viditelný strom nejde skrýt — nejdřív zobraz jiný strom.',
@@ -9215,6 +9235,10 @@ const stringsDE: StringsType = {
         selectPerson: 'Person auswählen',
         shortcutHint: '/',
         shortcutAria: 'Zum Suchen / drücken',
+        open: 'Person suchen',
+        cancel: 'Abbrechen',
+        clear: 'Suche löschen',
+        resultCount: (n: number) => nDe(n, 'Person', 'Personen'),
     },
 
     // Search filters
@@ -9230,6 +9254,11 @@ const stringsDE: StringsType = {
         deceased: 'Nur Verstorbene',
         clear: 'Zurücksetzen',
         resultCount: (n: number) => nDe(n, 'Ergebnis', 'Ergebnisse'),
+        title: 'Filter',
+        clearFilters: 'Filter zurücksetzen',
+        show: (n: number) => `${nDe(n, 'Person', 'Personen')} anzeigen`,
+        none: 'Keine Treffer',
+        activeCount: (n: number) => `Aktive Filter: ${n}`,
     },
 
     // Person picker
@@ -9667,6 +9696,7 @@ const stringsDE: StringsType = {
         openAtStartup: 'Beim Start öffnen',
         opened: 'Geöffnet',
         exportAllShort: 'Alle exportieren',
+        switcherTitle: 'Stammbäume',
         searchTrees: 'Stammbäume durchsuchen…',
         pendingSection: 'Unfertige Zusammenführungen',
         cannotHideLastVisible: 'Der letzte sichtbare Stammbaum kann nicht ausgeblendet werden — zuerst einen anderen einblenden.',

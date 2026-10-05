@@ -43,6 +43,16 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 
+/** The phone top bar (≤640px): the search folds to a magnifier there. */
+export function isPhoneToolbar(): boolean {
+    try { return window.matchMedia?.('(max-width: 640px)').matches ?? false; } catch { return false; }
+}
+
+/** Filters set in the filter panel (the years count as one). */
+function activeFilterCount(c: SearchCriteria): number {
+    return [c.lastName, c.place, c.birthFrom ?? c.birthTo, c.gender, c.living].filter(v => v !== undefined && v !== '').length;
+}
+
 export const searchMethods = uiModule({
     initSearch(): void {
         const container = document.getElementById('toolbar-search-picker');
@@ -75,7 +85,66 @@ export const searchMethods = uiModule({
 
         // Live-highlight matches in the tree as the name query changes.
         const input = container.querySelector('.person-picker-input') as HTMLInputElement | null;
-        if (input) input.addEventListener('input', () => this.scheduleSearchFilter());
+        if (input) {
+            input.addEventListener('input', () => this.scheduleSearchFilter());
+            // Phone: the focused field takes the whole bar (with Cancel); a
+            // blur folds it back unless a query or a filter holds.
+            input.addEventListener('focus', () => {
+                if (isPhoneToolbar()) document.body.classList.add('search-open');
+            });
+            input.addEventListener('blur', () => {
+                setTimeout(() => this.settleSearchAfterBlur(), 150);
+            });
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && isPhoneToolbar() && document.body.classList.contains('search-open')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.cancelSearch();
+                }
+            });
+        }
+    },
+
+    /** Phone: the magnifier opens the field over the whole bar, keyboard up. */
+    openSearch(): void {
+        document.body.classList.add('search-open');
+        const input = document.querySelector<HTMLInputElement>('#toolbar-search-picker .person-picker-input');
+        input?.focus();
+    },
+
+    /** Phone "Cancel" (and Esc / Back): the query AND the filters go, the bar is at rest. */
+    cancelSearch(): void {
+        if (document.getElementById('search-filters')?.style.display !== 'none') this.toggleSearchFilters();
+        this.clearSearchFilters();
+        document.querySelector<HTMLInputElement>('#toolbar-search-picker .person-picker-input')?.blur();
+        document.body.classList.remove('search-open');
+        this.syncSearchState();
+    },
+
+    /** × in the field: the text only; the filters stay. */
+    clearSearchText(): void {
+        this.toolbarSearchPicker?.clear();
+        if (this.searchFilterTimer) clearTimeout(this.searchFilterTimer);
+        this.applySearchFilter();
+    },
+
+    /**
+     * After the field lost focus: still inside the search (the funnel, the
+     * filter sheet, Cancel) keeps it open; otherwise it folds to the
+     * magnifier, or stays as the active field while a query or a filter holds.
+     */
+    settleSearchAfterBlur(): void {
+        const active = document.activeElement;
+        const filtersOpen = document.getElementById('search-filters')?.style.display !== 'none';
+        if (!filtersOpen && !(active instanceof Element && active.closest('.search-container, .search-cancel-btn'))) {
+            document.body.classList.remove('search-open');
+        }
+        this.syncSearchState();
+    },
+
+    /** body.search-active: a query or a filter holds (the phone keeps the field then). */
+    syncSearchState(): void {
+        document.body.classList.toggle('search-active', hasSearchCriteria(this.readSearchCriteria()));
     },
 
     /**
@@ -111,9 +180,42 @@ export const searchMethods = uiModule({
         const show = panel.style.display === 'none';
         panel.style.display = show ? '' : 'none';
         toggle?.classList.toggle('active', show);
-        // Mobile: the floating zoom buttons overlap the panel's right edge
-        // (and its Clear button) — CSS hides them while the panel is open.
+        // Phone: the panel is a sheet from below (CSS) over a backdrop.
         document.body.classList.toggle('search-filters-open', show);
+        if (show) {
+            this.applySearchFilter();
+            this.followKeyboardWithFilters(panel);
+        } else {
+            panel.style.bottom = '';
+            // Closed ("Show n", ×): the keyboard goes; the field stays only while the search holds.
+            const focused = document.activeElement;
+            if (focused instanceof HTMLElement && panel.contains(focused)) focused.blur();
+            this.settleSearchAfterBlur();
+        }
+    },
+
+    /** Phone: the filter sheet's foot stays above the on-screen keyboard. */
+    followKeyboardWithFilters(panel: HTMLElement): void {
+        const vv = window.visualViewport;
+        if (!vv || panel.dataset.keyboardWired) return;
+        panel.dataset.keyboardWired = '1';
+        const place = () => {
+            if (panel.style.display === 'none' || !isPhoneToolbar()) { panel.style.bottom = ''; return; }
+            const covered = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+            panel.style.bottom = covered ? `${covered}px` : '';
+        };
+        vv.addEventListener('resize', place);
+        vv.addEventListener('scroll', place);
+    },
+
+    /** The filter sheet's "Clear filters": the fields only, the query stays. */
+    clearFilterFields(): void {
+        for (const id of ['filter-lastname', 'filter-place', 'filter-year-from', 'filter-year-to', 'filter-gender', 'filter-living']) {
+            const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+            if (el) el.value = '';
+        }
+        if (this.searchFilterTimer) clearTimeout(this.searchFilterTimer);
+        this.applySearchFilter();
     },
 
     /** Debounced (150 ms) re-application of the search filter + highlight. */
@@ -145,11 +247,38 @@ export const searchMethods = uiModule({
         if (!hasSearchCriteria(criteria)) {
             TreeRenderer.setHighlight(null);
             if (countEl) countEl.textContent = '';
+            const all = Object.values(DataManager.getData().persons).filter(p => !p.isPlaceholder).length;
+            this.renderSearchSummary(null, criteria, all);
             return;
         }
         const ids = filterPersons(DataManager.getData(), criteria);
         TreeRenderer.setHighlight(new Set(ids));
         if (countEl) countEl.textContent = strings.searchFilters.resultCount(ids.length);
+        this.renderSearchSummary(ids.length, criteria, ids.length);
+    },
+
+    /**
+     * The phone's search summary: the count after the query (null = none),
+     * the funnel's badge of active filters, the filter sheet's "Show n"
+     * (disabled at none) — and body.search-active.
+     */
+    renderSearchSummary(count: number | null, criteria: SearchCriteria, shown: number): void {
+        const queryCount = document.getElementById('search-query-count');
+        if (queryCount) queryCount.textContent = count === null ? '' : strings.search.resultCount(count);
+        const filters = activeFilterCount(criteria);
+        const badge = document.getElementById('search-filter-badge');
+        if (badge) {
+            badge.hidden = filters === 0;
+            badge.textContent = filters ? String(filters) : '';
+            if (filters) badge.setAttribute('aria-label', strings.searchFilters.activeCount(filters));
+            else badge.removeAttribute('aria-label');
+        }
+        const show = document.getElementById('search-filters-show') as HTMLButtonElement | null;
+        if (show) {
+            show.textContent = shown ? strings.searchFilters.show(shown) : strings.searchFilters.none;
+            show.disabled = shown === 0;
+        }
+        document.body.classList.toggle('search-active', hasSearchCriteria(criteria));
     },
 
     clearSearchFilters(): void {
@@ -161,6 +290,7 @@ export const searchMethods = uiModule({
         TreeRenderer.setHighlight(null);
         const countEl = document.getElementById('search-result-count');
         if (countEl) countEl.textContent = '';
+        this.applySearchFilter();
     },
 
     /**

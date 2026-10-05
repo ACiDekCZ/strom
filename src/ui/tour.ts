@@ -34,7 +34,8 @@ const TOUR_STEPS: TourStepDef[] = [
     { key: 'step4', selectors: ['#focus-controls', '.toolbar .toolbar-focus'] },
     { key: 'step5', selectors: ['#view-mode-segment', '.bottom-bar'] },
     { key: 'step6', selectors: ['.zoom-controls'] },
-    { key: 'step7', selectors: ['#toolbar-search-picker'] },
+    // The phone folds the field to its magnifier at rest.
+    { key: 'step7', selectors: ['#toolbar-search-picker', '#search-open-btn'] },
     { key: 'step8', selectors: ['.tree-switcher-btn', '.bottom-bar-more'] },
 ];
 

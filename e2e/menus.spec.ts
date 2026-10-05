@@ -11,27 +11,29 @@ test.describe('menus are mutually exclusive', () => {
     test.describe('on a phone', () => {
         test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-        test('opening the tree switcher closes the More sheet, and vice versa', async ({ page }) => {
+        test('the tree list and the More sheet are one sheet at a time, never the dropdown', async ({ page }) => {
             await openApp(page);
             await createFirstPerson(page, 'Jan', 'Novak');
 
             const sheet = page.locator('.bottom-sheet-menu');
             const switcher = page.locator('#tree-switcher-dropdown');
+            const title = sheet.locator('.bottom-sheet-menu-title');
 
-            // Switcher open, then open the More sheet from the bottom bar →
-            // the switcher closes, only the sheet shows.
+            // The tree name opens the tree list as a sheet (the phone has no dropdown).
             await page.locator('.tree-switcher-btn').click();
-            await expect(switcher).toHaveClass(/active/);
-            await page.locator('#bb-view-more').click();
-            await expect(sheet).toBeVisible();
+            await expect(title).toHaveText('Trees');
             await expect(switcher).not.toHaveClass(/active/);
+            // More replaces it: only one sheet shows.
+            await page.evaluate(() => window.Strom.UI.showMoreMenuSheet());
+            await expect(sheet).toHaveCount(1);
+            await expect(title).toHaveText('More');
 
-            // And the reverse: opening the switcher dismisses the sheet (the
-            // sheet is a full-screen overlay, so the switcher is reopened via
-            // its toggle rather than a tap through the backdrop).
+            // And the reverse (the sheet is a full-screen overlay, so the list
+            // is reopened via its toggle rather than a tap through the backdrop).
             await page.evaluate(() => window.Strom.UI.toggleTreeSwitcher());
-            await expect(switcher).toHaveClass(/active/);
-            await expect(sheet).toHaveCount(0);
+            await expect(sheet).toHaveCount(1);
+            await expect(title).toHaveText('Trees');
+            await expect(switcher).not.toHaveClass(/active/);
         });
     });
 

@@ -262,8 +262,8 @@ for (const width of [360, 768]) {
             expect(gap.dx, `pad ${pad}: dot x`).toBeLessThanOrEqual(6);
             expect(gap.dy, `pad ${pad}: dot y`).toBeLessThanOrEqual(6);
         }
-        // The top ⋯ carries the state too (the bottom bar may be off screen).
-        await expect(page.locator('.mobile-more-btn .mobile-more-storage-dot')).toBeVisible();
+        // No ⋯ in the top bar any more (More is the bottom bar's only).
+        await expect(page.locator('.mobile-more-btn')).toBeHidden();
     });
 }
 
