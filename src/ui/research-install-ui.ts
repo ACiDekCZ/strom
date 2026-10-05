@@ -42,6 +42,7 @@ const BROWSER_NOTICE_TREE_KEY = 'strom-browser-notice-tree';
 /** The floating notice over a tree, and the old copy's dialog. */
 const BROWSER_NOTICE_FLOAT_ID = 'browser-notice-float';
 const OLD_COPY_ID = 'research-old-copy-modal';
+const DOCK_APP_ID = 'research-dock-app-modal';
 /** Where Chrome is downloaded (the notice's link on a Mac or Linux; Windows has Edge). */
 const CHROME_DOWNLOAD_URL = 'https://www.google.com/chrome/';
 /** The channel the tab the research opens tells the others on. */
@@ -454,7 +455,7 @@ export const researchInstallMethods = uiModule({
                 </div>
                 <div class="modal-content">
                     <p>${esc(mark.mobile ? r.oldCopyTextMobile(tree.name, date) : r.oldCopyText(tree.name, date))}</p>
-                    ${safariDockApp() ? `<p class="research-old-copy-app">${esc(r.oldCopyDockShort)}</p>` : ''}
+                    ${safariDockApp() ? `<p class="research-old-copy-app">${esc(r.oldCopyDockNote)}</p>` : ''}
                 </div>
                 <div class="buttons">
                     <button type="button" class="link-button research-old-copy-remove" data-act="remove">${esc(r.oldCopyRemove)}</button>
@@ -516,10 +517,48 @@ export const researchInstallMethods = uiModule({
         this.updateTreeManagerList();
         TreeRenderer.render();
         this.renderResearchTransferBanner();
+        // Safari's own app (Add to Dock) keeps its icon and its storage: how it goes too, before the toast.
+        if (safariDockApp()) await this.showResearchDockApp();
         this.placeBrowserNotices();
         this.showToast(r.oldCopyRemoved(name), 6000);
-        // Safari's own app (Add to Dock) keeps its icon and its storage: how it goes too.
-        if (safariDockApp()) void this.showAlert(r.oldCopyDockApp, 'info');
+    },
+
+    /** After the removal in Safari's Dock app: it stays in ~/Applications and the Dock, and how it goes. Resolves at Close. */
+    showResearchDockApp(): Promise<void> {
+        const r = strings.research;
+        document.getElementById(DOCK_APP_ID)?.remove();
+        // The path and the menu items set apart (looked for on the screen); the translation itself has no markup.
+        const P = '\u0000P', O = '\u0000O';
+        const steps = esc(r.oldCopyDockSteps(P, O))
+            .replace(P, `<code class="research-dock-path">${esc(r.oldCopyDockPath)}</code>`)
+            .replace(O, `<strong>${esc(r.oldCopyDockOptions)}</strong>`);
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay active';
+        overlay.id = DOCK_APP_ID;
+        overlay.innerHTML = `
+            <div class="modal modal--sm research-dock-app" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="research-dock-app-title">
+                <div class="modal-header">
+                    <h2 id="research-dock-app-title">${esc(r.oldCopyDockTitle)}</h2>
+                </div>
+                <div class="modal-content">
+                    <p>${steps}</p>
+                </div>
+                <div class="buttons">
+                    <button type="button" class="primary" data-dismiss>${esc(strings.buttons.close)}</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        this.pushDialog(DOCK_APP_ID);
+        return new Promise<void>((resolve) => {
+            const close = (): void => {
+                overlay.remove();
+                this.dialogStack = this.dialogStack.filter(d => d !== DOCK_APP_ID);
+                resolve();
+            };
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+            overlay.querySelector('[data-dismiss]')?.addEventListener('click', close);
+            overlay.querySelector<HTMLElement>('.primary')?.focus();
+        });
     },
 
     /** The first edit in a tree that moved away: once, that changes here do not reach the research. */

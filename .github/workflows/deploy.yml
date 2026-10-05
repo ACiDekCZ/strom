@@ -181,6 +181,7 @@ jobs:
           mkdir -p run/icons && cp ../pwa/icons/*-muted.png run/icons/
           jq '.name = "Strom (Safari)" | .short_name = "Strom (Safari)" | .icons |= map(.src |= sub("\\.png$"; "-muted.png"))' run/manifest.json > run/manifest-safari.json
           grep -q '"short_name": "Strom (Safari)"' run/manifest-safari.json || { echo "safari manifest not made"; exit 1; }
+          for f in $(jq -r '.icons[].src' run/manifest-safari.json) icons/apple-touch-icon-muted.png; do test -f "run/$f" || { echo "missing run/$f"; exit 1; }; done
           git add run/index.html run/sw.js run/manifest-safari.json run/icons
           git diff --staged --quiet || git commit -m "Update PWA from GitHub build"
           git push origin main
@@ -222,6 +223,7 @@ jobs:
           mkdir -p run/icons && cp ../pwa/icons/*-muted.png run/icons/
           jq '.name = "Strom Beta (Safari)" | .short_name = "Strom Beta (Safari)" | .icons |= map(.src |= sub("\\.png$"; "-muted.png"))' run/manifest.json > run/manifest-safari.json
           grep -q '"short_name": "Strom Beta (Safari)"' run/manifest-safari.json || { echo "safari manifest not made"; exit 1; }
+          for f in $(jq -r '.icons[].src' run/manifest-safari.json) icons/apple-touch-icon-muted.png; do test -f "run/$f" || { echo "missing run/$f"; exit 1; }; done
           git add run/index.html run/sw.js run/manifest.json run/manifest-safari.json run/icons
           git diff --staged --quiet || git commit -m "Update beta PWA from GitHub build"
           git push origin beta

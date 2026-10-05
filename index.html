@@ -4140,12 +4140,26 @@
             margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--divider);
             font-size: 12px; line-height: 1.45; color: var(--text-light);
         }
-        /* This browser's app offered after a move: beside the reminder, as small. */
-        .install-ready-app { margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-light); }
-        .install-ready-app .link-button { font-size: 12px; padding: 0; min-height: 0; }
+        /* This browser's app offered after a move: under the reminder, the green icon says which app is the right one. */
+        .install-ready-app { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; }
+        .install-ready-app-icon { flex: none; width: 28px; height: 28px; display: block; }
+        .install-ready-app-text { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+        .install-ready-app-line { font-size: 13px; line-height: 1.45; color: var(--text-secondary); }
+        .install-ready-app .link-button {
+            font-size: 13px; font-weight: 600; color: var(--primary); text-decoration: none;
+            padding: 0; min-height: 32px; text-align: left;
+        }
+        @media (hover: hover) { .install-ready-app .link-button:hover { text-decoration: underline; } }
         @media (pointer: coarse) { .install-ready-app .link-button { min-height: 44px; } }
-        /* Safari's Dock app stays after the removal: said under the question, smaller. */
-        .research-old-copy .research-old-copy-app { font-size: 13px; color: var(--text-light); margin-top: 8px; }
+        /* Safari's Dock app stays after the removal: said right under the question's text, smaller. */
+        .research-old-copy .research-old-copy-app { font-size: 13px; line-height: 1.5; color: var(--text-secondary); margin: 12px 0 0; }
+        /* After the removal in Safari's Dock app: the path and the menu items as they are on the screen. */
+        @media (min-width: 641px) { .modal.modal--sm.research-dock-app { width: 480px; max-width: min(480px, 94vw); } }
+        .research-dock-app .research-dock-path {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px;
+            background: var(--surface-2); padding: 1px 5px; border-radius: 4px;
+        }
+        .research-dock-app strong { font-weight: 600; }
         /* The copy left behind by a move: asked at its opening. The removal a red link on its own. */
         @media (min-width: 641px) { .modal.modal--sm.research-old-copy { width: 520px; max-width: min(520px, 94vw); } }
         .research-old-copy .buttons { flex-wrap: wrap; }

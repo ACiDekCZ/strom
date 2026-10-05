@@ -518,6 +518,8 @@ test.describe('installing the research from the app', () => {
         const banner = page.locator('#research-transfer-banner');
         await expect(q.locator('h2')).toHaveText('This tree is now in another browser');
         await expect(q).toContainText('The tree “My Family Tree” moved to another browser for the research on');
+        // A Safari tab, not its Dock app: nothing about the Dock.
+        await expect(q.locator('.research-old-copy-app')).toHaveCount(0);
         await expect(q).toContainText('this copy is older, and changes in it do not reach the research');
         await expect(banner).toHaveCount(0);
         // Keep it for now: the banner; the first edit reminds, once.
@@ -564,7 +566,7 @@ test.describe('installing the research from the app', () => {
         expect(await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().persons).length)).toBe(0);
     });
 
-    test('Safari\'s Dock app: the old copy\'s question says the app stays in the Dock; after the removal, how it goes', async ({ page }) => {
+    test('Safari\'s Dock app: the old copy\'s question says the app stays in the Dock; after the removal, how it goes, then the toast', async ({ page }) => {
         await asBrowser(page, SAFARI_UA);
         // Running as Safari's web app (File → Add to Dock) on a Mac.
         await page.addInitScript(() => {
@@ -579,11 +581,24 @@ test.describe('installing the research from the app', () => {
         await page.evaluate(() => window.Strom.TreeManager.setResearchTransfer(window.Strom.TreeManager.getActiveTreeId()!, { at: '2026-10-05T18:00:00.000Z' }));
         await page.reload();
         const q = page.locator('#research-old-copy-modal');
-        await expect(q.locator('.research-old-copy-app')).toHaveText('The Strom app added from Safari stays in the Dock even after the removal.');
+        // Right under the question's text, before the answers.
+        await expect(q.locator('.modal-content > p').last()).toHaveText('The Strom app added from Safari stays in the Dock even after the removal.');
+        await expect(q.locator('.research-old-copy-app')).toHaveCSS('font-size', '13px');
         await q.locator('[data-act="remove"]').click();
         await page.locator('.modal-overlay.active').filter({ hasText: 'Remove this copy?' }).getByRole('button', { name: 'Remove this copy' }).click();
-        await expect(page.locator('.modal-overlay.active')).toContainText('stays in the Dock and in the Applications folder of the home folder (~/Applications)');
-        await expect(page.locator('.modal-overlay.active')).toContainText('(Options → Remove from Dock)');
+        const dock = page.locator('#research-dock-app-modal');
+        await expect(dock.locator('h2')).toHaveText('The Strom app stays in the Dock');
+        await expect(dock).toContainText('stays in the Dock and in the Applications folder of the home folder (~/Applications). After the move it can go: drag it from there to the Trash and remove it from the Dock (Options → Remove from Dock).');
+        // The path in code, the menu items in bold: as they are on the screen.
+        await expect(dock.locator('code')).toHaveText('~/Applications');
+        await expect(dock.locator('strong')).toHaveText('Options → Remove from Dock');
+        await expect(dock.locator('.buttons button')).toHaveText(['Close']);
+        // The toast only after Close; the only tree gone, then the welcome screen.
+        await expect(page.locator('.toast').filter({ hasText: 'was removed' })).toHaveCount(0);
+        await dock.getByRole('button', { name: 'Close' }).click();
+        await expect(dock).toHaveCount(0);
+        await expect(page.locator('.toast')).toContainText('The copy of “My Family Tree” was removed.');
+        await expect(page.locator('#empty-state')).toBeVisible();
     });
 
     test('the receiving browser offers to install Strom as its app after a move (hosted, Chromium offers it)', async ({ browser }) => {
@@ -605,10 +620,32 @@ test.describe('installing the research from the app', () => {
         await page.evaluate((b) => window.Strom.UI.showResearchReady(b, '00000000-0000-4000-8000-000000000001', 'Novákovi', true, 'safari'), BRIDGE);
         const ready = page.locator('.research-ready-modal');
         await expect(ready.locator('.install-ready-moved')).toContainText('A copy of the tree stayed in Safari.');
-        await expect(ready.locator('.install-ready-app')).toHaveText('As an app, Strom opens with the trees of this browser. Install Strom as an app');
-        await ready.locator('[data-act="install-app"]').click();
+        const row = ready.locator('.install-ready-app');
+        await expect(row.locator('.install-ready-app-line')).toHaveText('As an app, Strom opens with the trees of this browser.');
+        await expect(row.locator('[data-act="install-app"]')).toHaveText('Install Strom as an app');
+        await expect(row.locator('svg.install-ready-app-icon')).toBeVisible();
+        // "Done" stays the dialog's one primary action.
+        await expect(ready.locator('.buttons .primary')).toHaveText('Done');
+        await row.locator('[data-act="install-app"]').click();
         await expect.poll(() => page.evaluate(() => (window as unknown as { __prompted?: boolean }).__prompted)).toBe(true);
+        // Accepted: the toast, the row goes, the dialog stays.
         await expect(page.locator('.toast')).toContainText('Strom is being installed as an app, with the trees of this browser.');
+        await expect(row).toHaveCount(0);
+        await expect(ready).toBeVisible();
+        // Dismissed: the row stays until the dialog closes.
+        await page.evaluate(() => {
+            const e = new Event('beforeinstallprompt', { cancelable: true }) as Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
+            e.prompt = () => Promise.resolve();
+            e.userChoice = Promise.resolve({ outcome: 'dismissed' });
+            window.dispatchEvent(e);
+        });
+        await page.evaluate((b) => window.Strom.UI.showResearchReady(b, '00000000-0000-4000-8000-000000000001', 'Novákovi', true, 'safari'), BRIDGE);
+        // The browser's dialog answered (the app hears it once the offer is used up).
+        await page.evaluate(() => window.addEventListener('strom:install-availability', () => { (window as unknown as { __answered: boolean }).__answered = true; }, { once: true }));
+        await page.locator('.research-ready-modal [data-act="install-app"]').click();
+        await expect.poll(() => page.evaluate(() => (window as unknown as { __answered?: boolean }).__answered)).toBe(true);
+        await expect(page.locator('.research-ready-modal .install-ready-app')).toBeVisible();
+        await expect(page.locator('.research-ready-modal')).toBeVisible();
         // Not a move: no offer.
         await page.evaluate((b) => window.Strom.UI.showResearchReady(b, '00000000-0000-4000-8000-000000000001', 'Novákovi', true), BRIDGE);
         await expect(page.locator('.research-ready-modal .install-ready-app')).toHaveCount(0);

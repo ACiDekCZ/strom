@@ -38,6 +38,8 @@ const ELSEWHERE_ID = 'research-elsewhere-modal';
 /** A transfer file carries the whole tree with its images: time to read a large one from the bridge. */
 const TRANSFER_TIMEOUT_MS = 120_000;
 const READY_ID = 'research-ready-modal';
+/** The app's own (green) icon, as in icon.svg: beside the offer, it tells this app from Safari's muted one. */
+const APP_ICON_SVG = '<svg class="install-ready-app-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="5.3" fill="#3f6b4f"/><g transform="translate(3.6 3.6) scale(0.7)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 19a4 4 0 0 1-2.24-7.32A3.5 3.5 0 0 1 9 6.03V6a3 3 0 1 1 6 0v.04a3.5 3.5 0 0 1 3.24 5.65A4 4 0 0 1 16 19Z"/><path d="M12 19v3"/></g></svg>';
 /** How long the research has to come back for the tree. */
 const TOKEN_MAX_AGE_MS = 60 * 60 * 1000;
 /** Strom Research takes photos and attachments over with a tree (not yet: it skips data URLs). */
@@ -355,7 +357,7 @@ export const researchAdoptMethods = uiModule({
                     <p>${esc(hasPeople ? s.readyText(researchSendMode(TreeManager.getTreeMetadata(DataManager.getCurrentTreeId() ?? ('' as TreeId))?.research)) : s.liveText)}</p>
                     ${rows}
                     ${movedFrom && hasPeople ? `<p class="install-ready-moved">${esc(movedFrom === 'mobile' ? strings.research.transferCopyLeftMobile : strings.research.transferCopyLeft(appBrowserName(movedFrom)))}</p>` : ''}
-                    ${offerApp ? `<p class="install-ready-app">${esc(strings.research.transferAppNote)} <button type="button" class="link-button" data-act="install-app">${esc(strings.research.transferInstallApp)}</button></p>` : ''}
+                    ${offerApp ? `<div class="install-ready-app">${APP_ICON_SVG}<div class="install-ready-app-text"><span class="install-ready-app-line">${esc(strings.research.transferAppNote)}</span><button type="button" class="link-button" data-act="install-app">${esc(strings.research.transferInstallApp)}</button></div></div>` : ''}
                 </div>
                 <div class="buttons">
                     ${hasPeople
@@ -370,9 +372,20 @@ export const researchAdoptMethods = uiModule({
         const close = (): void => this.closeResearchReady();
         overlay.querySelectorAll<HTMLElement>('[data-act]').forEach(el => el.addEventListener('click', () => {
             const act = el.dataset.act;
+            if (act === 'install-app') {
+                // The dialog stays; accepted → the row goes with a toast, dismissed → it stays until the dialog closes
+                // (a browser offers once: a click with no offer left takes the row away).
+                const row = el.closest('.install-ready-app');
+                if (!canPromptInstall()) { row?.remove(); return; }
+                void promptInstall().then(ok => {
+                    if (!ok) return;
+                    row?.remove();
+                    this.showToast(strings.research.transferInstalling, 6000);
+                });
+                return;
+            }
             close();
-            if (act === 'install-app') void promptInstall().then(ok => { if (ok) this.showToast(strings.research.transferInstalling, 6000); });
-            else if (act === 'open' && open) this.handOverResearchLink(open);
+            if (act === 'open' && open) this.handOverResearchLink(open);
             else if (act === 'gedcom') this.startGedcomImportPlain();
             else if (act === 'first') this.showAddPersonModal();
         }));
