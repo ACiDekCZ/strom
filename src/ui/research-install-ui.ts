@@ -80,7 +80,14 @@ function timeOf(iso: string): string {
 export const researchInstallMethods = uiModule({
     /** An installation is under way (its token still holds): the menu item says "Finish installing…". */
     researchInstallPending(): boolean {
-        const phase = installPhase(readInstallRecord());
+        const record = readInstallRecord();
+        // Its tree went to a research some other way (a research already installed, opened from it):
+        // the installation is over — never "Finish installing" over a tree that has its research.
+        if (record?.treeId && TreeManager.getTreeMetadata(record.treeId)?.research) {
+            clearInstallRecord();
+            return false;
+        }
+        const phase = installPhase(record);
         return phase === 'waiting' || phase === 'long';
     },
 

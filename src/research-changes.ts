@@ -5,7 +5,7 @@
  * Pure: no DOM, no storage.
  */
 
-import { StromData, Person, Partnership, Source, EventParticipant, PersonId } from './types.js';
+import { StromData, Person, Partnership, Source, EventParticipant, PersonId, LifeEvent } from './types.js';
 
 export type ChangeKind =
     | 'added' | 'deleted' | 'name' | 'gender' | 'birth' | 'death' | 'marriage' | 'event'
@@ -250,6 +250,45 @@ function factsOf(p: Person): number {
 }
 
 /**
+ * A person's events here paired with theirs in the research's version: by id first — but an event read
+ * from a GEDCOM gets a new id at every reading (the file has none of its own), so then by what it says
+ * (type, label, date, place, value, house), by type, label and date, and by type alone where one each is
+ * left. Unpaired: gone here, added there.
+ */
+export function pairEvents(here: readonly LifeEvent[], there: readonly LifeEvent[]): Map<LifeEvent, LifeEvent> {
+    const out = new Map<LifeEvent, LifeEvent>();
+    const left = new Set(there);
+    const take = (key: (e: LifeEvent) => string): void => {
+        const byKey = new Map<string, LifeEvent[]>();
+        for (const t of left) {
+            const k = key(t);
+            byKey.set(k, [...(byKey.get(k) ?? []), t]);
+        }
+        for (const h of here) {
+            if (out.has(h)) continue;
+            const t = byKey.get(key(h))?.find(x => left.has(x));
+            if (!t) continue;
+            out.set(h, t);
+            left.delete(t);
+        }
+    };
+    take(e => `id\u0000${e.id}`);
+    take(e => [e.type, e.customLabel, e.date, e.place, e.note, e.address].map(str).join('\u0000'));
+    take(e => [e.type, e.customLabel, e.date].map(str).join('\u0000'));
+    // One of a type left on each side: the same event, its values changed.
+    const restHere = here.filter(h => !out.has(h));
+    for (const h of restHere) {
+        const same = (e: LifeEvent): boolean => e.type === h.type && str(e.customLabel) === str(h.customLabel);
+        const theirs = [...left].filter(same);
+        if (theirs.length === 1 && restHere.filter(same).length === 1) {
+            out.set(h, theirs[0]);
+            left.delete(theirs[0]);
+        }
+    }
+    return out;
+}
+
+/**
  * Values the research's version (`there`) would put over the tree here:
  * every value here that changes or goes, one row each (a value only there
  * is counted as added, not listed). Matched by id — `there` stabilized to
@@ -286,10 +325,10 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
         field(h, 'deathPlace', str(h.deathPlace), str(t.deathPlace), death);
         field(h, 'deathCause', str(h.deathCause), str(t.deathCause), death);
         field(h, 'notes', str(h.notes), str(t.notes));
-        // Events by id: their date, place, value; one here only goes.
-        const tEvents = new Map((t.events ?? []).map(e => [e.id, e]));
+        // Events paired (by id, else by what they say): their date, place, value; one here only goes.
+        const paired = pairEvents(h.events ?? [], t.events ?? []);
         for (const e of h.events ?? []) {
-            const o = tEvents.get(e.id);
+            const o = paired.get(e);
             const ev = { of: e.type, ...(open.has(EVENT_TAG[e.type] ?? '') ? { conflict: true } : {}) };
             if (!o) {
                 rows.push({ personId: h.id, name: fullName(h), field: 'event', here: str(e.note) || str(e.date) || str(e.place) || e.type, there: '', ...ev,
@@ -303,7 +342,8 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
             const gone = (e.sourceIds ?? []).filter(id => !(o.sourceIds ?? []).includes(id));
             if (gone.length) rows.push({ personId: h.id, name: fullName(h), field: 'citation', of: e.type, here: sourceTitles(gone, hs), there: sourceTitles(o.sourceIds ?? [], ts) });
         }
-        addedFacts += (t.events ?? []).filter(e => !(h.events ?? []).some(x => x.id === e.id)).length;
+        const pairedThere = new Set(paired.values());
+        addedFacts += (t.events ?? []).filter(e => !pairedThere.has(e)).length;
         // Citations of the person, the birth, the death: what is cited here and not there.
         for (const [key, of] of [['sourceIds', 'person'], ['birthSourceIds', 'birth'], ['deathSourceIds', 'death']] as const) {
             const a = h[key] ?? [];

@@ -54,4 +54,37 @@ describe('values the research version would overwrite', () => {
         const there = tree([person('a', 'Ida', { birthDate: '1825' })]);
         expect(diffValues(here, there)).toEqual({ rows: [], addedPersons: 0, addedFacts: 1 });
     });
+
+    it('events read anew from the research\'s file (new ids each reading) pair by what they say: nothing goes that stays (the showcase round)', () => {
+        const ev = (id: string, extra: object) => ({ id, ...extra }) as never;
+        const here = tree([person('a', 'Ida', { events: [
+            ev('h1', { type: 'baptism', date: '1931-01-18', place: 'Voss' }),
+            ev('h2', { type: 'custom', customLabel: 'Pověst', note: 'Vodítko' }),
+            ev('h3', { type: 'occupation', note: 'sedlák' }),
+            ev('h4', { type: 'residence', place: 'Voss', date: '1950' }),
+        ] })]);
+        // The same file read again: other ids, the same events — nothing to say.
+        const same = tree([person('a', 'Ida', { events: [
+            ev('t1', { type: 'baptism', date: '1931-01-18', place: 'Voss' }),
+            ev('t2', { type: 'custom', customLabel: 'Pověst', note: 'Vodítko' }),
+            ev('t3', { type: 'occupation', note: 'sedlák' }),
+            ev('t4', { type: 'residence', place: 'Voss', date: '1950' }),
+        ] })]);
+        expect(diffValues(here, same)).toEqual({ rows: [], addedPersons: 0, addedFacts: 0 });
+        // Changed there: the occupation's value (one of its type each side), the residence's place (same date);
+        // the custom one gone; a new one added.
+        const there = tree([person('a', 'Ida', { events: [
+            ev('t1', { type: 'baptism', date: '1931-01-18', place: 'Voss' }),
+            ev('t3', { type: 'occupation', note: 'chalupník' }),
+            ev('t4', { type: 'residence', place: 'Bergen', date: '1950' }),
+            ev('t5', { type: 'emigration', date: '1951' }),
+        ] })]);
+        const d = diffValues(here, there);
+        expect(d.rows.map(r => [r.field, r.of, r.here, r.there])).toEqual([
+            ['event', 'custom', 'Vodítko', ''],
+            ['eventValue', 'occupation', 'sedlák', 'chalupník'],
+            ['eventPlace', 'residence', 'Voss', 'Bergen'],
+        ]);
+        expect(d.addedFacts).toBe(1);
+    });
 });

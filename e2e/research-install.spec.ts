@@ -202,6 +202,22 @@ test.describe('installing the research from the app', () => {
         await expect(dialog(page).locator('.install-wait')).toHaveAttribute('data-phase', 'long');
     });
 
+    test('its tree tied to a research some other way (a research already installed): no "Finish installing…" any more, the record gone', async ({ page }) => {
+        await setup(page);
+        await toInstallStep(page);
+        await dialog(page).locator('[data-act="pasted"]').click();
+        await page.reload();
+        await expect(card(page, 'Jan')).toBeVisible();
+        // The tree went to a research without the install's token (opened from a research already here).
+        await page.evaluate(() => {
+            const id = window.Strom.DataManager.getCurrentTreeId();
+            window.Strom.TreeManager.setResearchLink(id, { id: '3233420f-b95e-41d3-baf5-60fb5b1ca3e6', fingerprint: '', syncedAt: new Date().toISOString() } as never);
+        });
+        await page.locator('.actions-menu-btn').click();
+        await expect(page.locator('#research-menu-row .research-menu-label')).not.toHaveText('Finish installing the research…');
+        expect(await page.evaluate(() => localStorage.getItem('strom-install'))).toBeNull();
+    });
+
     test('?adopt= with the install token: the hand-over, then "The research is ready"; another tab closes its dialog', async ({ page }) => {
         await setup(page);
         await toInstallStep(page);
