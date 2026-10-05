@@ -14,7 +14,7 @@ import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
 import { DEFAULT_LAYOUT_CONFIG, PersonId, Position, STANDALONE_VIEWS } from '../types.js';
 import { uiModule } from './module.js';
-import { isPhoneChrome } from '../breakpoints.js';
+import { isMobile as isMobileViewport } from '../breakpoints.js';
 
 // Panel geometry (CSS px). Kept small; the card loop is a bare fillRect sweep.
 const MINIMAP_W = 180;
@@ -131,7 +131,7 @@ export const minimapMethods = uiModule({
         // On mobile the control block dissolves (CSS `display: contents`), so
         // the minimap has no docked home and CSS hides it — mirror that here so
         // the JS never re-shows a detached panel.
-        const isMobile = isPhoneChrome();
+        const isMobile = isMobileViewport();
         const { cardWidth, cardHeight } = DEFAULT_LAYOUT_CONFIG;
         const box = worldBoundingBox(positions, cardWidth, cardHeight);
 

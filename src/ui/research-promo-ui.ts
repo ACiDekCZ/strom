@@ -25,7 +25,7 @@ import {
     isNewMarkerActive,
     decideWhatsNewCard,
 } from '../research-promo.js';
-import { isToolbarCompact } from '../breakpoints.js';
+import { isTabletOrMobile } from '../breakpoints.js';
 import { uiModule } from './module.js';
 import { onComputer } from './research-ui.js';
 import { researchDisplayName } from './research-sync-ui.js';
@@ -415,7 +415,7 @@ export const researchPromoMethods = uiModule({
     showWhatsNewCard(): void {
         this.hideWhatsNewCard();
         const anchor = document.querySelector<HTMLElement>('.actions-menu-btn');
-        const asSheet = isToolbarCompact() || !isShown(anchor);
+        const asSheet = isTabletOrMobile() || !isShown(anchor);
         const s = strings.research;
 
         const card = el('div', asSheet ? 'bottom-sheet whats-new whats-new-sheet' : 'whats-new whats-new-card');
@@ -472,7 +472,7 @@ export const researchPromoMethods = uiModule({
             this.positionWhatsNewCard();
             whatsNewResize = () => {
                 // Crossing into the bottom-navigation regime: the anchor is gone.
-                if (isToolbarCompact()) this.hideWhatsNewCard();
+                if (isTabletOrMobile()) this.hideWhatsNewCard();
                 else this.positionWhatsNewCard();
             };
             window.addEventListener('resize', whatsNewResize);

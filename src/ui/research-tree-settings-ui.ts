@@ -31,7 +31,7 @@ const askLater = new Set<TreeId>();
 
 /** A phone-sized or touch screen: short card texts, and a note instead of the effect box and the status line. */
 function compactScreen(): boolean {
-    try { return window.matchMedia?.('(max-width: 499px), (pointer: coarse)').matches ?? false; } catch { return false; }
+    try { return window.matchMedia?.('(max-width: 640px), (pointer: coarse)').matches ?? false; } catch { return false; }
 }
 
 function esc(text: string): string {

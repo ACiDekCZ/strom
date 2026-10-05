@@ -170,9 +170,10 @@ test('a decision without a "leave it" option ignores Escape', async ({ page }) =
     await expect(modal).toBeVisible();
 });
 
-for (const id of ['storage-status-modal'] as const) {
-    test(`360px: ${id} footer stacks full width, primary on top`, async ({ page }) => {
-        await page.setViewportSize({ width: 360, height: 740 });
+// 600px is a phone too (the phone band runs to 640px, like the phone chrome).
+for (const [id, width] of [['storage-status-modal', 360], ['storage-status-modal', 600]] as const) {
+    test(`${width}px: ${id} footer stacks full width, primary on top`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 740 });
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
         await page.evaluate((dialog) => {
@@ -276,4 +277,16 @@ test('surname spellings: Link is the footer primary, typed spellings use an Add 
     await expect(modal.locator('.buttons [data-dismiss]')).toHaveText('Close');
     await expect(modal.locator('#surname-other-add')).toHaveText('Add');
     await expect(modal.locator('.surnames-none .empty-block-title')).toBeVisible();
+});
+
+test('1000px is a tablet: the dialog × is a 44px target (the tablet band runs to 1024px)', async ({ page }) => {
+    await page.setViewportSize({ width: 1000, height: 740 });
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await page.evaluate(() => void window.Strom.UI.showStorageStatusDialog());
+    const close = page.locator('#storage-status-modal .close-btn');
+    await expect(close).toBeVisible();
+    const box = (await close.boundingBox())!;
+    expect(Math.round(box.width)).toBe(44);
+    expect(Math.round(box.height)).toBe(44);
 });

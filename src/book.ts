@@ -476,7 +476,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     .book-couple-events { margin: 10px 0 0 30px; }
     .book-couple-events h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .14em; color: var(--book-accent); font-weight: normal; margin-bottom: 4px; }
     .book-couple-event { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; font-size: 13.5px; line-height: 1.55; }
-    @media (max-width: 499px) { .book-couple-event { grid-template-columns: minmax(0, 1fr); gap: 0; margin-bottom: 4px; } }
+    @media (max-width: 640px) { .book-couple-event { grid-template-columns: minmax(0, 1fr); gap: 0; margin-bottom: 4px; } }
     .book-couple { display: flex; gap: 24px; margin: 14px 0 0 30px; }
     .book-person { flex: 1; display: flex; gap: 10px; min-width: 0; }
     .book-portrait { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; flex: none; border: 1px solid var(--book-rule); }
@@ -537,7 +537,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     .bc-gap { flex: 1; }
     .bc-msg { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.45; color: #5c5546; }
     .bc-msg strong { color: #2b2822; }
-    @media (max-width: 499px) {
+    @media (max-width: 640px) {
         .book-compare { width: 100vw; max-width: 100vw; max-height: 94vh; margin: auto 0 0; border-radius: 14px 14px 0 0; }
         .bc-head, .bc-foot { padding-left: 16px; padding-right: 16px; }
         .bc-body { padding: 14px 16px 20px; }

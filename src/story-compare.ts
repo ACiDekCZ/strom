@@ -233,7 +233,7 @@ export const STORY_COMPARE_CSS = `
 .sc-extra ul { margin: 6px 0 8px; padding-left: 18px; }
 .sc-note { margin: 0; font-style: italic; }
 .sc-approved { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 12px; color: var(--sc-muted); }
-@media (max-width: 499px) {
+@media (max-width: 640px) {
     .sc-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
     .sc .sc-tab { min-height: 44px; padding: 10px 4px; font-size: 14px; }
     .sc-grid { grid-template-columns: minmax(0, 1fr); gap: 4px; }

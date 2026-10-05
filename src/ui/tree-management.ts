@@ -202,7 +202,7 @@ export const treeManagementMethods = uiModule({
         }
 
         // The switcher is trees only now: view/tree actions moved to the ⋯
-        // actions menu (desktop) and the mobile "More" sheet (≤900px).
+        // actions menu (desktop) and the mobile "More" sheet (≤1024px).
         html += `
             <div class="tree-switcher-divider"></div>
             <div class="tree-switcher-action" role="menuitem" tabindex="0" onclick="window.Strom.UI.showTreeManagerDialog()">

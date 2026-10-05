@@ -8,31 +8,33 @@
     <style>
         /* ==================== BREAKPOINT MAP ====================
            Three display modes, integer-pixel convention. JS mirrors
-           these in src/breakpoints.ts (MOBILE_MAX = 499, TABLET_MAX = 900).
+           these in src/breakpoints.ts (MOBILE_MAX = 640, TABLET_MAX = 1024).
 
-             mobile   ≤ 499px     @media (max-width: 499px)
-             tablet   500–900px   @media (min-width: 500px) and (max-width: 900px)
-             desktop  ≥ 901px     @media (min-width: 901px)
-             tablet + mobile      @media (max-width: 900px)
+             mobile   ≤ 640px      @media (max-width: 640px)
+             tablet   641–1024px   @media (min-width: 641px) and (max-width: 1024px)
+             desktop  ≥ 1025px     @media (min-width: 1025px)
+             tablet + mobile       @media (max-width: 1024px)
+             phone sideways        @media (max-width: 1024px) and (max-height: 500px)
+                                          and (orientation: landscape)
+           The phone top bar serves a phone either way up:
+             @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px)
+                    and (orientation: landscape)
+           Touch is (pointer: coarse); hover styles live only under
+           @media (hover: hover).
 
-           Every width query uses one of the above, except these content-driven
-           exceptions, which exist only to fit the top-bar chrome:
-             ≤ 1024px   toolbar regime: the desktop toolbar (view segment + ⋯
-                        actions + add buttons) does not fit below ~1025px in the
-                        widest locale, so the bottom bar, the inline tablet
-                        toolbar (641–1024px) and its dependants (search "/"
-                        chip, undo toast offset) switch here — see
-                        e2e/toolbar-responsive.spec.ts.
-             ≤ 640px    phone chrome: the inline tablet toolbar (tree switcher
-                        + search + focus name + depth) does not fit below
-                        ~641px, so the phone top bar, the floating focus chip,
-                        the dissolved zoom stack and the views that step below
-                        that chip (map, fan) switch here. JS: PHONE_CHROME_MAX.
+           The bands also carry the chrome: up to 1024px the bottom bar and
+           the inline tablet toolbar (the desktop toolbar does not fit below
+           ~1025px in the widest locale — e2e/toolbar-responsive.spec.ts), up
+           to 640px the phone top bar, the person row and the dissolved zoom
+           stack. Every width query uses one of the above, except these
+           content-driven exceptions inside a band:
              ≤ 1120px   squeeze band: fold the toolbar Undo/Redo pair.
              ≤ 1280px   fold the "Actions" label and standalone ⚙ into ⋯.
              641–768px  lower tablet band: squeeze the inline focus/search.
-           Height-gated queries (landscape phones) combine these widths with
-           a max-height. */
+             641–900px  inline depth steppers use ↑ / ↓ glyphs.
+             ≤ 360px    the narrowest phones: smaller labels.
+             1180/1600px  room for the research side panels beside the tree.
+           Height-only queries (short windows) stand on their own. */
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         /* Letopis webfonts. Source Serif 4 & Instrument Sans — both SIL Open Font License 1.1.
@@ -1054,7 +1056,7 @@
         .swatch-paternal { background: var(--branch-paternal); }
         .swatch-maternal { background: var(--branch-maternal); }
         .swatch-descendant { background: var(--branch-descendant); }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .tree-legend { left: 12px; bottom: 12px; font-size: 11px; padding: 6px 10px; gap: 10px; }
             .branch-legend-group { gap: 10px; }
         }
@@ -1096,7 +1098,7 @@
             border: none; background: var(--primary); color: var(--on-primary);
             border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer;
         }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .tour-bubble { max-width: calc(100vw - 24px); }
         }
 
@@ -1251,7 +1253,7 @@
             opacity: 1; color: var(--primary, #4a7c59);
         } }
         /* Touch targets: a 15px disc is fine to read but not to hit. */
-        @media (max-width: 900px) {
+        @media (max-width: 1024px) {
             .hint-toggle { width: 20px; height: 20px; font-size: 12px; margin-left: 7px; }
         }
 
@@ -1471,7 +1473,7 @@
         }
         /* On phones: near full-width dialogs; the flex skeleton keeps Save
            reachable, so no sticky action-bar hack is needed. */
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .modal { min-width: 0; width: 100%; max-width: 100vw; max-height: 94vh; padding: 16px; }
             .modal:has(> .modal-content) { padding: 0; }
             .modal-content { padding: 14px 16px; }
@@ -1798,7 +1800,7 @@
             margin-top: 10px;
             line-height: 1.4;
         }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .settings-row, .settings-checkbox.settings-row { padding: 10px 12px; }
             .settings-row-dependent, .settings-checkbox.settings-row-dependent { padding-left: 42px; }
             .settings-row-select { flex-wrap: wrap; }
@@ -1864,7 +1866,7 @@
         .audit-log-footer { margin: 12px -24px -24px; }
         .audit-log-footer button:disabled { opacity: 0.45; cursor: not-allowed; }
         .audit-log-footer .pm-delete-link:disabled { color: var(--text-faint); text-decoration: none; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .audit-log-modal { min-width: auto; }
             .audit-log-entry { flex-wrap: wrap; }
             .audit-log-time { width: 100%; min-width: auto; }
@@ -2094,7 +2096,7 @@
             transition: color 0.2s;
         }
         /* Bigger touch targets on touch / small screens (visual desktop unchanged). */
-        @media (pointer: coarse), (max-width: 900px) {
+        @media (pointer: coarse), (max-width: 1024px) {
             .close-btn { width: 44px; height: 44px; }
             .modal .buttons button,
             .menu-option { min-height: 44px; }
@@ -2179,7 +2181,7 @@
         } }
         .reassign-modal { max-width: 460px; }
         .reassign-hint { margin: 4px 0 12px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .reassign-modal { max-width: 94vw; }
             /* A parent/child row carries name + type select + Reassign +
                Remove — wider than a phone dialog. The name takes its own
@@ -2281,7 +2283,7 @@
             text-underline-offset: 3px;
             cursor: pointer;
         }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             /* Labels above their fields, the fields below each other. */
             .partnership-grid .pg-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
             .partnership-grid .pg-span { grid-column: auto; }
@@ -2332,7 +2334,7 @@
             text-underline-offset: 3px;
             cursor: pointer;
         }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .couple-events-title { display: none; }
             .modal .couple-events-toggle {
                 display: flex;
@@ -2371,7 +2373,7 @@
         .event-couple-ages { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
         .event-couple-ages[hidden], .event-couple-ages .pg-age[hidden], .event-person-age[hidden] { display: none; }
         .event-couple-ages .age-check { margin-top: 4px; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .event-couple-ages { grid-template-columns: minmax(0, 1fr); }
         }
         .partnership-primary-label {
@@ -2751,9 +2753,9 @@
             color: var(--text-secondary, #888);
             margin-top: 2px;
         }
-        /* Tablet (500-900px): unchanged from desktop defaults. */
-        /* Mobile (<500px): roomier touch targets, never wider than the screen. */
-        @media (max-width: 499px) {
+        /* Tablet (641–1024px): unchanged from desktop defaults. */
+        /* Mobile (≤640px): roomier touch targets, never wider than the screen. */
+        @media (max-width: 640px) {
             .cross-tree-chooser {
                 min-width: 220px;
                 max-width: calc(100vw - 24px);
@@ -2929,9 +2931,9 @@
         .surnames-add-row { display: flex; gap: 6px; margin-bottom: 10px; }
         .surnames-add-row input { flex: 1; min-width: 0; }
         .surnames-add-row button { padding: 6px 12px; }
-        @media (max-width: 900px) { .surnames-modal { max-width: 94vw; } }
+        @media (max-width: 1024px) { .surnames-modal { max-width: 94vw; } }
         /* Mobile: the add-row stacks, chips get finger-sized. */
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .surnames-add-row { flex-direction: column; }
             .surnames-add-row button { width: 100%; padding: 10px 12px; }
             .surnames-picker { gap: 8px; }
@@ -2967,7 +2969,7 @@
             color: var(--text-light);
             line-height: 1.5;
         }
-        @media (max-width: 900px) { .split-modal { max-width: 94vw; } }
+        @media (max-width: 1024px) { .split-modal { max-width: 94vw; } }
 
         /* ---- Split the whole tree into families, from the focus (N4) ---- */
         .splitfam-modal { max-width: 640px; }
@@ -3026,7 +3028,7 @@
             font-size: 12px; color: var(--text);
         }
         .splitfam-modal .splitfam-persp-cut input { width: auto; margin: 0; flex-shrink: 0; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .splitfam-persp { padding: 8px; }
             .splitfam-persp-picker { max-width: 100%; }
         }
@@ -3093,8 +3095,8 @@
         .tree-thumb-card.placeholder { fill: var(--surface-2); stroke-dasharray: 3 2; }
         .tree-thumb-card.focused { stroke: var(--primary); stroke-width: 2; }
 
-        @media (max-width: 900px) { .splitfam-modal { max-width: 94vw; } }
-        @media (max-width: 499px) {
+        @media (max-width: 1024px) { .splitfam-modal { max-width: 94vw; } }
+        @media (max-width: 640px) {
             .splitfam-row { grid-template-columns: auto 1fr; }
             .splitfam-thumb { grid-row: 2; grid-column: 1 / -1; width: 100%; height: 96px; }
             .splitfam-summary { margin: 0; }
@@ -3169,11 +3171,11 @@
         }
         @media (hover: hover) { .map-popup-fix:hover { background: var(--bg-color, #f4f4f4); color: var(--text-color, #222); } }
         /* Tablet: the name row keeps its shape, the pin row wraps as needed. */
-        @media (max-width: 900px) {
+        @media (max-width: 1024px) {
             .places-modal { max-width: 94vw; }
         }
         /* Mobile: everything stacks — nothing gets squeezed to nothing. */
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .place-head { flex-wrap: wrap; }
             .place-name { flex-basis: 100%; }
             .place-search { flex-direction: column; }
@@ -3214,7 +3216,7 @@
         /* Keep the inline chain glyph centred with the button's label text. */
         .participant-link .chain-glyph { vertical-align: -1.5px; }
         /* Mobile: one field per line beats five squeezed into 300px. */
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .participant-row {
                 grid-template-columns: 1fr auto auto;
                 grid-template-areas: "role link del" "name name name" "note note note";
@@ -3233,7 +3235,7 @@
         .archive-link-hint { display: block; font-size: 0.8em; opacity: 0.7; }
         .archive-disclaimer { font-size: 0.75em; opacity: 0.6; margin-top: 10px; }
         .archives-modal details summary { cursor: pointer; font-size: 0.9em; margin: 6px 0; }
-        @media (max-width: 499px) { .archives-modal { max-width: 94vw; } }
+        @media (max-width: 640px) { .archives-modal { max-width: 94vw; } }
         /* Relationship calculator */
         .kinship-modal { max-width: 480px; }
         .kinship-result { margin: 12px 0; padding: 10px 12px; border-radius: 8px; background: rgba(127,127,127,0.08); }
@@ -3243,7 +3245,7 @@
         #kinship-picker-container label { display: block; margin-bottom: 4px; font-size: 0.9em; }
         .person-card.path-highlight { box-shadow: 0 0 0 3px #f5a623, 0 0 14px rgba(245,166,35,0.65); z-index: 5; }
         .person-card.path-dimmed { opacity: 0.35; }
-        @media (max-width: 499px) { .kinship-modal { max-width: 94vw; } }
+        @media (max-width: 640px) { .kinship-modal { max-width: 94vw; } }
                 .modal input.flex-date.invalid,
         .partnership-start-date.invalid,
         .partnership-end-date.invalid,
@@ -3320,7 +3322,7 @@
         .modal.modal--sm { width: 440px; max-width: min(440px, 94vw); }
         .modal.modal--md { width: 560px; max-width: min(560px, 94vw); }
         .modal.modal--lg { width: 720px; max-width: min(720px, 94vw); }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .modal.modal--sm, .modal.modal--md, .modal.modal--lg { width: 100%; max-width: 100vw; }
         }
         /* A footer hidden while an empty state carries its action. */
@@ -3332,7 +3334,7 @@
         .modal .buttons > .pm-delete-link:first-child { margin-right: auto; }
         /* Phones: one button per row, full width, the primary on top and
            Cancel/Close under it; the text links go last, left-aligned. */
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .modal .buttons { flex-direction: column-reverse; align-items: stretch; gap: 8px; }
             .modal .buttons > button, .modal .buttons > a { width: 100%; margin: 0; text-align: center; justify-content: center; }
             .modal .buttons > .link-button, .modal .buttons > .pm-delete-link { width: auto; align-self: flex-start; order: -2; }
@@ -3378,11 +3380,11 @@
             text-align: left;
         }
         .empty-block--compact .empty-block-text { margin: 0; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .empty-block { padding: 20px 8px 16px; }
             .empty-block-text { font-size: 13.5px; }
         }
-        @media (min-width: 500px) and (max-width: 900px) {
+        @media (min-width: 641px) and (max-width: 1024px) {
             .empty-block { padding: 24px 12px 20px; }
         }
 
@@ -3656,7 +3658,7 @@
         }
         .age-check strong { font-weight: 600; }
         .age-check--warn { color: var(--warning-text); }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .detail-group .detail-spacer { display: none; }
             /* A tap target, not a hairline of text. */
             .detail-group .detail-more { min-height: 44px; margin: -8px 0 4px; }
@@ -3706,7 +3708,7 @@
         .form-modal > .modal-header { background: transparent; }
         .form-modal > .modal-header h2 { font-size: 20px; }
 
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .pm-modal { min-width: 0; width: 100%; max-width: 100vw; padding: 0; }
             .form-grid { grid-template-columns: 1fr; }
             .modal .pm-footer { padding: 14px 16px; }
@@ -3822,7 +3824,7 @@
             font-weight: 500;
         }
         @media (hover: hover) { .empty-state button.link:hover { text-decoration: underline; } }
-        @media (max-width: 900px) {
+        @media (max-width: 1024px) {
             .empty-state { flex-direction: column; gap: 28px; text-align: center; }
             .empty-state-ghosts { display: none; }
             .empty-state-actions { align-items: center; }
@@ -3846,7 +3848,7 @@
         .empty-state-locked { display: none; }
         body.data-locked .empty-state-text:not(.empty-state-locked) { display: none; }
         body.data-locked .empty-state-locked { display: block; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .empty-state-locked { width: calc(100vw - 32px); max-width: 320px; }
             .empty-state-locked h2 { font-size: 22px; }
         }
@@ -3879,11 +3881,11 @@
         /* Phones: the absolutely centred column would shrink to half the
            screen; give it the full 320px column the offer card is laid out
            for (same rule as the locked variant below). */
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             body.research-promo .empty-state-text:not(.empty-state-locked) { width: calc(100vw - 32px); max-width: 320px; }
         }
         /* Research runs on a computer: say so on phones and touch devices. */
-        @media (max-width: 499px), (pointer: coarse) {
+        @media (max-width: 640px), (pointer: coarse) {
             .research-offer-runs { display: block; }
         }
 
@@ -3946,8 +3948,8 @@
         .material-box { display: flex; gap: 8px; margin: 10px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
         .material-box.is-warn { color: var(--warning-text); }
         .source-material { margin-right: auto; }
-        @media (max-width: 499px) { .material-dialog { max-width: calc(100vw - 16px); } .material-item { grid-template-columns: 32px minmax(0, 1fr) 28px; } .material-size { display: none; } }
-        @media (min-width: 500px) and (max-width: 900px) { .material-dialog { width: 480px; } }
+        @media (max-width: 640px) { .material-dialog { max-width: calc(100vw - 16px); } .material-item { grid-template-columns: 32px minmax(0, 1fr) 28px; } .material-size { display: none; } }
+        @media (min-width: 641px) and (max-width: 1024px) { .material-dialog { width: 480px; } }
 
         /* A checkbox in the confirm dialog ("Also discard the original waiting to be sent"). */
         .confirm-check { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0 4px; font-size: 14px; cursor: pointer; }
@@ -3964,8 +3966,8 @@
         .connect-how summary { cursor: pointer; color: var(--text); font-weight: 600; padding: 4px 0; }
         .connect-how ol { margin: 6px 0 0; padding-left: 20px; line-height: 1.5; color: var(--text); }
         .research-connect-failed .connect-nothing { margin: 0; font-size: 12px; color: var(--text-light); }
-        @media (max-width: 499px) { .research-connect-failed { max-width: calc(100vw - 16px); } }
-        @media (min-width: 500px) and (max-width: 900px) { .research-connect-failed { width: 460px; } }
+        @media (max-width: 640px) { .research-connect-failed { max-width: calc(100vw - 16px); } }
+        @media (min-width: 641px) and (max-width: 1024px) { .research-connect-failed { width: 460px; } }
 
         /* Installing Strom Research: what it is → the line → waiting (research-install-ui.ts). */
         .research-install-dialog { width: 560px; max-width: calc(100vw - 32px); }
@@ -4057,17 +4059,17 @@
         .install-ready-rows dd { margin: 0; color: var(--text-light); }
         .install-ready-path { word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
         .install-ready-check { color: var(--primary); }
-        @media (max-width: 520px) {
+        @media (max-width: 640px) {
             .install-cards { grid-template-columns: 1fr; }
         }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .research-install-dialog { max-width: calc(100vw - 16px); }
             .install-steps { padding: 12px 16px 0; }
             .install-line-row { flex-direction: column; }
             .install-copy { flex: 0 0 auto; min-height: 40px; }
             .install-card p { font-size: 13px; }
         }
-        @media (min-width: 500px) and (max-width: 900px) {
+        @media (min-width: 641px) and (max-width: 1024px) {
             .research-install-dialog { width: 520px; }
         }
 
@@ -4094,7 +4096,7 @@
         .research-info-need-title { margin-bottom: 4px; font-size: 13px; font-weight: 600; color: var(--text); }
         .research-info-need-text { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
         .research-ext-arrow { font-size: 0.95em; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .modal .research-info-buttons button { min-height: 48px; }
         }
 
@@ -4358,7 +4360,7 @@
             color: var(--text);
         } }
         /* Mobile: stack vertically */
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .embedded-mode-banner {
                 flex-wrap: wrap;
                 padding: 8px 12px;
@@ -4672,7 +4674,7 @@
             padding: 0 2px;
         }
         @keyframes otd-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .otd-card { left: 12px; right: 12px; bottom: 12px; max-width: none; }
         }
 
@@ -4714,7 +4716,7 @@
         #export-modal.scope-view .menu-option:not([data-view-ok]) .option-desc { display: none; }
         #export-modal.scope-view .menu-option:not([data-view-ok]) .option-scope-note { display: block; }
         #export-modal.scope-view .menu-option:disabled { opacity: 0.55; cursor: default; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .export-scope .segment-btn { min-height: 44px; }
         }
         .file-link-indicator {
@@ -4861,7 +4863,7 @@
         .storage-status-tree-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
         .storage-status-tree-when { margin-left: auto; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
         #storage-status-modal .buttons button[hidden] { display: none; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .storage-status-body p { font-size: 13px; }
         }
 
@@ -4956,7 +4958,7 @@
             font-size: 22px; line-height: 1; color: var(--text-light); cursor: pointer;
         }
         @media (hover: hover) { .file-copy-notice-close:hover { color: var(--text); background: var(--hover-bg); } }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .storage-notice.file-copy-notice {
                 width: calc(100vw - 2 * 12px);
                 padding: 12px 4px 8px 12px; font-size: 15px;
@@ -4966,7 +4968,7 @@
         .storage-status-encrypt { margin-right: auto; font-size: 13px; color: var(--text-light); text-decoration: none; }
         @media (hover: hover) { .storage-status-encrypt:hover { text-decoration: underline; } }
         .storage-status-encrypt[hidden] { display: none; }
-        @media (min-width: 500px) and (max-width: 900px) {
+        @media (min-width: 641px) and (max-width: 1024px) {
             .storage-notice { top: 60px; }
         }
         /* The reminder to save to a file waits while a dialog is open: it sat
@@ -4983,7 +4985,7 @@
         }
         /* With a mouse too: the × is a target of its own, not a glyph. */
         .pwa-update-close { min-width: 28px; min-height: 28px; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .storage-notice { top: 56px; width: calc(100vw - 32px); font-size: 13px; }
             /* Two actions do not fit beside the text: text and × on top, the
                buttons in a row below. */
@@ -5090,7 +5092,7 @@
         /* On a phone the role column ate 60px of ~370 and squeezed the name
            fields to 133px. The role is a heading for the row, not a column —
            put it above and give the fields the whole width. */
-        @media (max-width: 900px) {
+        @media (max-width: 1024px) {
             .wiz-row {
                 grid-template-columns: 1fr 1fr;
                 grid-auto-rows: auto;
@@ -5150,7 +5152,7 @@
         @media (hover: hover) { .timeline-bar:hover .tl-bar-rect { filter: brightness(0.92); } }
         .timeline-bar.focused .tl-bar-rect { stroke: var(--primary); stroke-width: 2.5; }
         .timeline-bar.focused .tl-name { font-weight: 700; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             /* The narrow label column is for NAMES; the bar shows the era. */
             .tl-name .tl-yr { display: none; }
         }
@@ -5299,7 +5301,7 @@
             line-height: 1.5;
             color: var(--text-primary, #222);
         }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .map-tiles-notice-card { max-width: 94vw; padding: 14px 14px; }
             .map-tiles-notice-card button { width: 100%; min-height: 44px; }
         }
@@ -5402,13 +5404,13 @@
         @media (hover: hover) { .map-popup-person:hover { background: var(--primary, #4a7c59); color: var(--on-primary); } }
 
         /* Tablet: the map is the whole screen, so keep chrome smaller. */
-        @media (max-width: 900px) {
+        @media (max-width: 1024px) {
             .map-marker-label { max-width: 110px; font-size: 10px; }
             .map-scope button { padding: 5px 10px; font-size: 12px; }
         }
         /* Mobile: labels would cover the map — the dot with the count stays,
            the name is one tap away in the popup. */
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .map-marker-label { display: none; }
             .map-controls { right: 8px; }
             .map-controls button { width: 30px; height: 30px; }
@@ -5439,7 +5441,7 @@
             }
             .map-time-year { font-size: 13px; min-width: 3ch; }
         }
-        /* On mobile (≤499px) the focus bar floats across the top of the tree area (it
+        /* On mobile (≤640px) the focus bar floats across the top of the tree area (it
            still belongs here: its depth controls decide who is "in this view").
            The map's own controls step below it rather than hiding under it. */
         @media (max-width: 640px) {
@@ -5919,13 +5921,13 @@
             display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; margin: 0;
         }
         .form-group .content-check input[type="checkbox"] { margin: 2px 0 0; }
-        /* Mobile (<500px): presets and checkboxes each stack full width. */
-        @media (max-width: 499px) {
+        /* Mobile (≤640px): presets and checkboxes each stack full width. */
+        @media (max-width: 640px) {
             .content-presets { flex-direction: column; }
             .content-checks { grid-template-columns: 1fr; }
         }
-        /* Tablet (500-900px): checkboxes stay two-up, presets share the row. */
-        @media (min-width: 500px) and (max-width: 900px) {
+        /* Tablet (641–1024px): checkboxes stay two-up, presets share the row. */
+        @media (min-width: 641px) and (max-width: 1024px) {
             .content-checks { grid-template-columns: 1fr 1fr; }
         }
         #validation-modal {
@@ -6138,7 +6140,7 @@
         .share-packet-section ul { margin: 0; padding-left: 18px; }
         .share-packet-section li { font-size: 13.5px; line-height: 1.55; }
         .share-packet-fields { color: var(--text-secondary, #777); }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .collab-bar { flex-wrap: wrap; justify-content: center; top: auto; bottom: calc(var(--bottom-bar-h) + 12px); }
         }
 
@@ -6499,10 +6501,10 @@
         .rep-hypo-meta { font-size: 12px; color: var(--text-light); }
         .rep-actions { display: flex; flex-wrap: wrap; gap: 8px; }
         .rep-actions button { margin: 0; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .rep-actions button { flex: 1 1 100%; }
         }
-        @media (min-width: 500px) and (max-width: 900px) {
+        @media (min-width: 641px) and (max-width: 1024px) {
             .research-edge-bubble { width: 300px; }
         }
         .st-group { display: inline-flex; gap: 2px; }
@@ -6655,7 +6657,7 @@
         .card-signals-preview .person-card[data-density="compact"] { width: 150px; height: 44px; justify-content: center; }
         .card-signals-preview .person-card[data-density="compact"] .card-signal-dot { display: block; }
         .card-signals-preview .person-card[data-density="detailed"] { width: 200px; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .card-signals-settings { flex-direction: column; gap: 12px; }
         }
         /* The preview right under the density select (one for both). */
@@ -6698,7 +6700,7 @@
         .card-field-move button:disabled { opacity: 0.3; cursor: default; }
         .card-fields-status { font-size: 12px; color: var(--text-faint); }
         .card-fields-status.is-full { color: var(--warning-text); }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             /* The toggles go under the name, the arrows grow to a thumb. */
             .card-field-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
             .card-field-chips { grid-column: 1 / -1; grid-row: 2; padding-left: 52px; }
@@ -8020,7 +8022,7 @@
             color: var(--text-secondary, #888);
         }
         .stats-record-value { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .stats-record-cards { grid-template-columns: 1fr; }
             .tree-stats-header { flex-wrap: wrap; row-gap: 10px; }
             .tree-stats-header-item { flex-basis: 45%; }
@@ -8836,7 +8838,7 @@
         }
 
         /* Mobile responsive for comparison */
-        @media (max-width: 900px) {
+        @media (max-width: 1024px) {
             .tree-compare-content {
                 flex-direction: column;
             }
@@ -8851,7 +8853,7 @@
         }
 
         /* Mobile responsive for preview */
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .tree-preview-overlay { padding: 0; }
             .tree-preview-panel {
                 width: 100%;
@@ -9121,7 +9123,7 @@
         @media (hover: hover) { .live-panel-open:hover { filter: brightness(1.06); } }
         .live-panel-open:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         /* Tablet: narrower card, same place. */
-        @media (min-width: 500px) and (max-width: 900px) {
+        @media (min-width: 641px) and (max-width: 1024px) {
             .live-panel { width: 260px; right: 12px; max-height: 50vh; }
         }
         /* Phone chrome (focus chip at the top, zoom stack bottom-right): a
@@ -9137,7 +9139,7 @@
             }
         }
         /* Mobile: the same strip, 16px gutters. */
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .live-panel { left: 16px; right: 76px; max-height: 40vh; font-size: 12.5px; }
         }
 
@@ -9329,12 +9331,12 @@
         .batch-done-text { font-size: 13px; color: var(--text-light); margin: 14px 0; }
         .is-danger-text { color: var(--danger) !important; }
         .material-big-batch { display: inline-block; margin: 2px 0 10px; }
-        @media (min-width: 500px) and (max-width: 900px) {
+        @media (min-width: 641px) and (max-width: 1024px) {
             #batch-modal .batch-dialog { height: calc(100vh - 32px); }
             .batch-row { grid-template-columns: minmax(0, 1fr) 60px 90px; }
             .batch-row .batch-reason { grid-column: 1 / -1; padding-bottom: 6px; }
         }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             #batch-modal .batch-dialog { max-width: calc(100vw - 16px); height: calc(100vh - 16px); }
             .batch-header { flex-wrap: wrap; }
             .batch-fields { grid-template-columns: 1fr; }
@@ -9354,7 +9356,7 @@
             font-family: var(--font-sans);
         }
         @media (max-width: 1599px) { .research-changes-panel { width: 320px; } }
-        @media (max-width: 499px) { .research-changes-panel { width: calc(100vw - 16px); } }
+        @media (max-width: 640px) { .research-changes-panel { width: calc(100vw - 16px); } }
         .research-changes-head { padding: 0 14px 8px; border-bottom: 1px solid var(--border); }
         .research-changes-title { font-size: 14px; font-weight: 600; }
         .research-changes-sub { font-size: 12px; color: var(--text-light); margin-top: 2px; }
@@ -9395,7 +9397,7 @@
         .research-load-added, .research-load-nothing, .research-load-sex { margin: 10px 0 0; font-size: 13px; }
         .modal label.research-load-images { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0 0; font-size: 14px; font-weight: 400; }
         .research-load-backup-narrow { display: none; }
-        @media (max-width: 639px) {
+        @media (max-width: 640px) {
             .research-load-backup { display: none; }
             .research-load-backup-narrow { display: block; margin: 10px 0 0; font-size: 12px; color: var(--text-light); }
             .research-load-who { white-space: normal; }
@@ -9474,7 +9476,7 @@
             background: var(--primary-soft); color: var(--primary-dark); font-size: 11px; font-weight: 600; line-height: 1.4;
         }
         .research-send-was { font-size: 13px; font-weight: 400; color: var(--text-light); }
-        @media (max-width: 499px), (pointer: coarse) {
+        @media (max-width: 640px), (pointer: coarse) {
             .research-send-card .research-transcripts-title { font-size: 15px; }
             .research-send-card .research-transcripts-desc { font-size: 14px; }
         }
@@ -9524,7 +9526,7 @@
         .research-adopt-counts-line, .research-adopt-backup-narrow { display: none; }
         .research-transcripts.research-send-mode.research-adopt-send { margin-top: 0; padding-top: 0; border-top: 0; }
         .research-adopt-rule { height: 1px; margin: 4px 0 14px; background: var(--divider); }
-        @media (max-width: 639px) {
+        @media (max-width: 640px) {
             .research-adopt-counts-line { display: block; margin-top: 2px; font-size: 13px; color: var(--text-light); }
             .research-adopt-what { display: none; }
             .research-adopt-rule { display: none; }
@@ -9532,7 +9534,7 @@
             .research-adopt-modal .research-send-dialog-note { display: none; }
             .research-adopt-modal .research-send-dialog-foot > button { flex: 1; height: 40px; }
         }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .modal-overlay:has(> .research-send-dialog) { align-items: flex-end; }
             .modal.research-send-dialog { border-radius: 14px 14px 0 0; max-height: 94vh; max-height: 94dvh; }
         }
@@ -9550,7 +9552,7 @@
         .confirm-subtitle { display: block; margin-bottom: 8px; font-size: 13px; color: var(--text-light); }
         .confirm-link { margin-top: 4px; }
         .dialog-has-aside #confirm-buttons { flex-wrap: wrap; }
-        @media (min-width: 500px) {
+        @media (min-width: 641px) {
             /* Room for three answers in one row; the destructive one below them. */
             .dialog-has-aside .modal { width: min(560px, 94vw); max-width: min(560px, 94vw); }
         }
@@ -9613,7 +9615,7 @@
         .source-verified-hint { font-size: 12px; color: var(--text-light); }
         .source-verified-bytree { margin: 6px 0 0; font-size: 12px; color: var(--text-light); }
         .source-verified-bytree::before { content: '✓ '; color: var(--primary); font-weight: 700; }
-        @media (max-width: 899px) { .modal label.source-verified { min-height: 44px; align-items: center; } }
+        @media (max-width: 1024px) { .modal label.source-verified { min-height: 44px; align-items: center; } }
         .source-user-reading-note {
             display: flex; gap: 8px; margin: 6px 0 0; padding: 8px 10px; border-radius: 8px;
             background: var(--surface-2); font-size: 13px; line-height: 1.45;
@@ -9638,8 +9640,8 @@
         .research-update-dialog .research-update-hint { margin: 4px 0 8px; font-size: 13px; color: var(--text-light); }
         .research-update-dialog .research-update-note { margin: 10px 0 0; padding: 8px 10px; border-radius: var(--r-md); background: var(--surface-2); font-size: 13px; }
         .research-update-dialog { width: 560px; max-width: calc(100vw - 32px); }
-        @media (max-width: 499px) { .research-update-dialog { max-width: calc(100vw - 16px); } }
-        @media (min-width: 500px) and (max-width: 900px) { .research-update-dialog { width: 500px; } }
+        @media (max-width: 640px) { .research-update-dialog { max-width: calc(100vw - 16px); } }
+        @media (min-width: 641px) and (max-width: 1024px) { .research-update-dialog { width: 500px; } }
         .actions-research-submenu .tree-switcher-action.research-update-action {
             display: inline-flex; margin: 2px -6px 0; padding: 4px 6px; border-radius: var(--r-sm);
             font-size: 13px; color: var(--primary); background: none;
@@ -9942,7 +9944,7 @@
         .research-overview--sheet .research-direction { min-height: 44px; grid-template-columns: 20px minmax(0, 1fr); }
         .research-overview--sheet .research-direction__head { font-size: 15px; min-height: 28px; }
         .research-overview--sheet .research-direction__meta { font-size: 13px; }
-        @media (max-width: 500px) {
+        @media (max-width: 640px) {
             .research-direction__gens { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
 
@@ -9985,7 +9987,7 @@
         .person-research-years { white-space: nowrap; font-variant-numeric: tabular-nums; }
         .person-research-result--found { color: var(--primary); font-weight: 600; }
         .person-research-result--none { color: var(--text-faint); }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .person-research-values, .person-research-searched { font-size: 13px; }
         }
 
@@ -10030,7 +10032,7 @@
         .health-evidence-label { flex: 1; min-width: 0; font-size: 14px; color: var(--text); }
         .health-evidence-count { flex: none; font-size: 13px; color: var(--text-light); font-variant-numeric: tabular-nums; }
         .health-evidence-show { flex: none; padding: 4px 10px; font-size: 13px; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .health-evidence-row { flex-wrap: wrap; }
             .health-evidence-show { width: 100%; min-height: 44px; }
         }
@@ -10072,7 +10074,7 @@
         .evidence-pill-next:focus-visible, .evidence-pill-cite:focus-visible, .evidence-pill-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         body[data-view-mode="timeline"] .evidence-pill, body[data-view-mode="map"] .evidence-pill { display: none; }
         /* Tablet: same place, wider margins. */
-        @media (max-width: 900px) and (min-width: 500px) {
+        @media (min-width: 641px) and (max-width: 1024px) {
             .evidence-pill { max-width: calc(100vw - 48px); }
         }
         /* Phones: above the bottom bar. */
@@ -10164,8 +10166,8 @@
             body.map-view.has-undo-toast .family-offer,
             body.map-view.has-undo-toast .toast { bottom: calc(max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)) + 60px); }
         }
-        /* Phone (<500px): full width minus 24px, no centre transform. */
-        @media (max-width: 499px) {
+        /* Phone (≤640px): full width minus 24px, no centre transform. */
+        @media (max-width: 640px) {
             .undo-toast {
                 left: 12px; right: 12px; max-width: none; width: auto;
                 justify-content: space-between;
@@ -10442,8 +10444,8 @@
             .tree-manager-footer .btn-text-full { display: none; }
             .tree-manager-footer .btn-text-short { display: inline; }
         }
-        /* Tablet/Mobile (≤900px): icons in tree manager */
-        @media (max-width: 900px) {
+        /* Tablet/Mobile (≤1024px): icons in tree manager */
+        @media (max-width: 1024px) {
             .tree-manager-item-actions .btn-icon,
             .tree-manager-footer .btn-icon {
                 display: inline !important;
@@ -10580,6 +10582,10 @@
             /* The tree starts under the panel (and its open steppers). */
             body.has-focus-panel:not(.descendants-view):not(.standalone-view) #tree-container { top: calc(var(--toolbar-h) + 48px); }
             body.has-focus-panel.focus-steppers-open:not(.descendants-view):not(.standalone-view) #tree-container { top: calc(var(--toolbar-h) + 100px); }
+            /* The standalone-file banner sits under the person row, never over it. */
+            .embedded-mode-banner { top: var(--toolbar-h); }
+            body.has-focus-panel:not(.descendants-view):not(.standalone-view) .embedded-mode-banner { top: calc(var(--toolbar-h) + 48px); }
+            body.has-focus-panel.focus-steppers-open:not(.descendants-view):not(.standalone-view) .embedded-mode-banner { top: calc(var(--toolbar-h) + 100px); }
             /* Descendants view: the badge carries the root name and exit,
                so the focus bar would just sit underneath it — hide it and
                let the badge use the full width. */
@@ -10622,6 +10628,7 @@
                 --toolbar-h: calc(44px + env(safe-area-inset-top, 0px));
                 --bottom-bar-h: 0px;
             }
+            .embedded-mode-banner { top: var(--toolbar-h); left: var(--side-bar-w); }
             .bottom-bar {
                 top: 0; bottom: 0; right: auto; width: var(--side-bar-w); height: auto;
                 flex-direction: column; justify-content: space-around; align-items: stretch;
@@ -10716,7 +10723,7 @@
            row 2: the "Depth" stepper + the blood-only chip (full label, never
            truncated). Chip row 1: name + ×; row 2: the ↑ / ↓ steppers. Two rows
            → --r-xl corners instead of a pill. */
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .descendants-badge {
                 left: 8px; right: 8px; width: auto; max-width: none;
                 flex-wrap: wrap; row-gap: 8px;
@@ -10739,7 +10746,7 @@
 
         }
 
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .toolbar h1 { font-size: 16px; }
             .toolbar button {
                 padding: 6px 10px;
@@ -10912,7 +10919,7 @@
         }
 
         /* Landscape mobile: hide less important elements */
-        @media (max-width: 900px) and (max-height: 450px) {
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .merge-wizard-explanation {
                 display: none;
             }
@@ -11116,8 +11123,8 @@
         #input-story-title { width: 100%; box-sizing: border-box; }
         .story-facts { font-size: 12px; color: var(--text-secondary, #777); line-height: 1.6; }
         .story-facts div { padding: 1px 0; }
-        @media (max-width: 499px) { #input-story { min-height: 200px; } }
-        @media (min-width: 901px) { #input-story { min-height: 240px; } }
+        @media (max-width: 640px) { #input-story { min-height: 200px; } }
+        @media (min-width: 1025px) { #input-story { min-height: 240px; } }
 
         /* Life events list */
         .events-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
@@ -11138,11 +11145,11 @@
         .fact-status-lead, .fact-status-possible { background: var(--warning-soft); color: var(--warning-text); border-color: transparent; }
         .fact-status-proven { background: var(--primary-soft); color: var(--primary-dark); border-color: transparent; }
         .partnership-grid .pg-label .fact-status { display: table; margin: 3px 0 0; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .fact-status { font-size: 10.5px; padding: 0 6px; }
             .partnership-grid .pg-label .fact-status { display: inline-block; margin: 0 0 0 6px; }
         }
-        @media (min-width: 500px) and (max-width: 900px) {
+        @media (min-width: 641px) and (max-width: 1024px) {
             .fact-status { margin-left: 5px; }
         }
         .event-row.readonly { opacity: 0.75; }
@@ -11154,9 +11161,9 @@
         @media (hover: hover) { .event-row .event-actions button:hover { color: var(--text-primary, #222); } }
         /* These were 24x19 and 31x19 — half the 44px a finger needs, side by
            side, and one of them deletes. Tablets are touch too, so the room to
-           hit (and to miss apart from each other) applies below 900px, and the
+           hit (and to miss apart from each other) applies up to 1024px, and the
            same goes for the other small destructive targets in the modal. */
-        @media (max-width: 900px) {
+        @media (max-width: 1024px) {
             .event-row .event-actions { gap: 8px; }
             .event-row .event-actions button,
             .source-actions button,
@@ -11199,7 +11206,7 @@
         .fact-sources-row .sources-chips { margin-bottom: 0; min-width: 0; max-width: 100%; }
         .fact-sources-row .sources-empty { display: none; }
         .fact-cite-btn { padding: 4px 10px; font-size: 13px; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .fact-sources-row { flex-direction: column; align-items: flex-start; }
             .fact-cite-btn { min-height: 44px; }
         }
@@ -11245,7 +11252,7 @@
         .source-picker-fact[hidden] { display: none; }
         .source-picker-fact-label { font-size: 13px; color: var(--text-light); }
         .source-picker-fact .segment-btn { padding: 7px 16px; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .source-picker-fact .segment { display: flex; width: 100%; }
             .source-picker-fact .segment-btn { flex: 1; min-height: 44px; padding: 7px 8px; }
         }
@@ -11512,7 +11519,7 @@
         .story-reader-facts { margin: 0 0 10px; padding-left: 18px; }
         .story-reader-facts li { margin: 2px 0; }
         .story-reader-note { margin: 0; font-style: italic; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .story-reader-text { font-size: 16px; }
             .story-reader-title { font-size: 20px; }
             .story-reader-text .story-subhead { font-size: 17px; }
@@ -11544,14 +11551,14 @@
 
         /* The comparison dialog (body: src/story-compare.ts, STORY_COMPARE_CSS). */
         .modal.story-compare { width: 720px; max-width: min(720px, 92vw); }
-        @media (max-width: 499px) { .modal.story-compare { width: 100%; max-width: 100vw; } }
+        @media (max-width: 640px) { .modal.story-compare { width: 100%; max-width: 100vw; } }
         /* The switch stays put while the body scrolls (pinned under the header). */
         .story-compare .sc-bar { position: sticky; top: -16px; z-index: 1; margin: -16px -24px 20px; padding: 12px 24px; background: var(--surface-modal, var(--surface)); }
         .story-compare-foot .story-compare-gap { flex: 1; }
         .story-compare-foot--note { justify-content: space-between; }
         .story-compare-msg { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.45; color: var(--text-light); }
         .story-compare-msg strong { color: var(--text); font-weight: 600; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .story-compare .sc-bar { top: -14px; margin: -14px -16px 16px; padding: 10px 16px; }
             .story-compare-foot .story-compare-gap { display: none; }
             .story-compare-msg { text-align: center; }
@@ -11648,10 +11655,10 @@
         .crop-keep { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
         .crop-buttons { margin-left: auto; display: flex; gap: 8px; }
         .crop-narrow-only { display: none !important; }
-        @media (max-width: 900px) {
+        @media (max-width: 1024px) {
             .crop-dialog { width: 90vw; }
         }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .crop-overlay { background: #24221d; }
             .crop-dialog { width: 100vw; height: 100dvh; border-radius: 0; background: #24221d; color: #fff; }
             .crop-toolbar, .crop-footer { border-color: rgba(255,255,255,0.15); }
@@ -11677,7 +11684,7 @@
         }
 
         /* Source viewer / editor on small screens */
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             #source-viewer-modal .modal {
                 width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0;
                 border-radius: 0; display: flex; flex-direction: column; padding: 0;
@@ -11694,7 +11701,7 @@
             #source-viewer-modal .source-viewer-footer button:not(.link-button) { flex: 1; min-height: 48px; }
             #source-viewer-modal .source-viewer-footer .source-same-book { display: none; }
         }
-        @media (min-width: 500px) and (max-width: 900px) {
+        @media (min-width: 641px) and (max-width: 1024px) {
             #source-viewer-modal .modal { width: 90vw; }
         }
 
@@ -11736,7 +11743,7 @@
         .export-app-encrypted-hint[hidden], #export-password-group[hidden], #export-password-confirm-group[hidden] { display: none; }
         /* Content: one summary line on phones until "Edit" expands it. */
         .export-content-summary { display: none; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             #export-content-section:not(.is-expanded) .export-content-summary {
                 display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px;
             }
@@ -11819,12 +11826,12 @@
         .media-queue-discard { grid-column: 3; grid-row: 1 / span 2; color: var(--danger); }
         .media-queue-item.is-refused .media-queue-name { color: var(--text-faint); }
         .media-queue-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .media-queue-item { grid-template-columns: minmax(0, 1fr) auto; }
             .media-queue-since { display: none; }
             .media-queue-discard { grid-column: 2; grid-row: 2; }
         }
-        @media (min-width: 500px) and (max-width: 900px) {
+        @media (min-width: 641px) and (max-width: 1024px) {
             .media-full-quality { font-size: 12.5px; }
         }
         .attachment-note-input {
@@ -11901,12 +11908,12 @@
             opacity: 0; transition: opacity 300ms ease;
         }
         .image-viewer-hint.show { opacity: 1; }
-        @media (max-width: 499px) {
+        @media (max-width: 640px) {
             .image-viewer-tools { right: 8px; }
             .image-viewer-level { min-width: 56px; }
             .image-viewer-media { left: 8px; right: 8px; top: auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); max-width: none; }
         }
-        @media (min-width: 500px) and (max-width: 900px) {
+        @media (min-width: 641px) and (max-width: 1024px) {
             .image-viewer-media { max-width: calc(100vw - 250px); }
         }
         @media (prefers-reduced-motion: reduce) {
@@ -12054,7 +12061,7 @@
             visibility: hidden !important;
             transition: none !important;
         } }
-        @media (max-width: 900px) { .card-tooltip { visibility: hidden !important; } }
+        @media (max-width: 1024px) { .card-tooltip { visibility: hidden !important; } }
 
         /* Print CSS */
         /* Tiled poster print container: hidden on screen, shown only while printing. */

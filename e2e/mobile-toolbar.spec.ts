@@ -313,3 +313,22 @@ test('a sheet closed by Escape gives the focus back to what opened it', async ({
     await expect(page.locator('.bottom-sheet-menu')).toHaveCount(0);
     await expect(page.locator('#bb-view-more')).toBeFocused();
 });
+
+test('a standalone file: its banner sits under the person row, never over it (open steppers too)', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(page.locator('#focus-controls')).toBeVisible();
+    await page.evaluate(() => {
+        document.body.classList.add('embedded-mode');
+        document.getElementById('embedded-mode-banner')!.classList.add('visible');
+    });
+    const below = async () => {
+        const panel = (await page.locator('#focus-controls').boundingBox())!;
+        const banner = (await page.locator('#embedded-mode-banner').boundingBox())!;
+        return Math.round(banner.y) >= Math.round(panel.y + panel.height);
+    };
+    expect(await below()).toBe(true);
+    await page.locator('#focus-controls .focus-chip').first().tap();
+    await expect(page.locator('body')).toHaveClass(/focus-steppers-open/);
+    expect(await below()).toBe(true);
+});

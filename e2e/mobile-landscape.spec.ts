@@ -94,3 +94,14 @@ test('search opens over the whole header; only ⛶ bottom right; sheets stay ins
     expect(s.width).toBeLessThanOrEqual(560);
     expect(s.height).toBeLessThanOrEqual(390 - 16 + 1);
 });
+
+test('a standalone file: its banner starts under the header and beside the side bar', async ({ page }) => {
+    await sample(page);
+    await page.evaluate(() => {
+        document.body.classList.add('embedded-mode');
+        document.getElementById('embedded-mode-banner')!.classList.add('visible');
+    });
+    const b = (await page.locator('#embedded-mode-banner').boundingBox())!;
+    expect(Math.round(b.y)).toBe(44);
+    expect(Math.round(b.x)).toBe(76);
+});

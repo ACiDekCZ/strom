@@ -11,7 +11,7 @@ import { strings } from '../strings.js';
 import { PersonId, RelationType } from '../types.js';
 import { uiModule } from './module.js';
 import { isCoarsePointer } from './bottom-sheet.js';
-import { isToolbarCompact } from '../breakpoints.js';
+import { isTabletOrMobile } from '../breakpoints.js';
 import { fitFlyout, FLYOUT_MARGIN } from './flyout.js';
 
 /** One entry in the person action menu (context menu / bottom sheet). */
@@ -303,7 +303,7 @@ export const contextMenuMethods = uiModule({
         // Touch devices and the bottom-navigation regime (≤ 1024px): the person
         // menu opens as a bottom sheet (same action list), like the "More" menu.
         // A floating menu there collided with the bottom bar and the FAB.
-        if (isCoarsePointer() || isToolbarCompact()) {
+        if (isCoarsePointer() || isTabletOrMobile()) {
             this.hideContextMenu();
             this.showPersonBottomSheet(personId);
             return;
