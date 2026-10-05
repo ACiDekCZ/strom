@@ -1817,7 +1817,8 @@ test.describe('"What will be sent" before sending by hand', () => {
         await expect(panel(page).locator('#research-changes-skip')).toHaveCount(0);
         await panel(page).locator('[data-act="send"]').click();
         await expect.poll(() => bridge.posts.length).toBe(1);
-        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.previewDue)).toBeUndefined();
+        // Cleared once the research's answer is read, a moment after the bridge got the send.
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.previewDue)).toBeUndefined();
         // By itself again.
         await editJan(page, 'Brno');
         await page.clock.fastForward(QUIET + 1000);
