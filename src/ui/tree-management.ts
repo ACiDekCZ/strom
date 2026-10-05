@@ -48,6 +48,9 @@ import { isPhoneToolbar } from './search.js';
 
 import { iconSvg } from '../icons.js';
 
+/** Room (px) a row menu needs beside ⋯ to show a useful part of its rows. */
+const TREE_MENU_MIN_ROOM = 240;
+
 export const treeManagementMethods = uiModule({
     // ---- TREE SWITCHER ----
     /**
@@ -572,6 +575,9 @@ export const treeManagementMethods = uiModule({
         });
         closeObserver.observe(modal, { attributes: true });
 
+        // The menus it was opened from close under it (the tree switcher stayed open behind it).
+        document.getElementById('tree-switcher-dropdown')?.classList.remove('active');
+        document.getElementById('actions-menu-dropdown')?.classList.remove('active');
         this.updateTreeManagerList();
         modal.classList.add('active');
     },
@@ -841,10 +847,11 @@ export const treeManagementMethods = uiModule({
 
     /**
      * Place a row menu (position: fixed) under its ⋯ button, right edges
-     * aligned, 4px apart — above it only when there is more room there, and
-     * never over the tree's name, the dialog's header nor past the window;
-     * max-height is the room left (8px kept on each side) and the rest
-     * scrolls inside the menu.
+     * aligned, 4px apart — above it when it does not fit below and there is
+     * more room there, and never over the tree's name (or its badges), the
+     * dialog's header nor past the window (it may run over the footer); max-height is the room left (8px
+     * kept on each side) and the rest scrolls inside the menu. With less than
+     * TREE_MENU_MIN_ROOM on both sides it takes the whole height.
      */
     positionTreeRowMenu(btn: HTMLElement, menu: HTMLElement): void {
         const r = btn.getBoundingClientRect();
@@ -852,23 +859,38 @@ export const treeManagementMethods = uiModule({
         menu.style.top = '0px';
         menu.style.maxHeight = '';
         const h = menu.offsetHeight;
-        // The dialog's scrolling body clips the menu: its edges (and the header's) are the room.
-        let clip: HTMLElement | null = btn.parentElement;
-        while (clip && !/(auto|scroll)/.test(getComputedStyle(clip).overflowY)) clip = clip.parentElement;
-        const box = clip?.getBoundingClientRect();
+        // The window is the room (the body's fade mask is off while a menu is
+        // open and a scroll closes it), the dialog's header stays clear.
         const header = btn.closest('.modal')?.querySelector('.modal-header')?.getBoundingClientRect();
-        const name = btn.closest('.tree-manager-item')?.querySelector('.tree-manager-item-header')?.getBoundingClientRect();
-        const ceiling = Math.max(8, header ? header.bottom + 4 : 8, box ? box.top + 4 : 8, name ? name.bottom + 4 : 8);
-        const floor = Math.min(window.innerHeight - 8, box ? box.bottom - 8 : Infinity);
+        // The name and its badges stop the menu only where they lie under it:
+        // a short name leaves the room above free (the header row is full width).
+        const menuLeft = window.innerWidth - parseFloat(menu.style.right) - menu.offsetWidth;
+        let ceiling = Math.max(8, header ? header.bottom + 4 : 8);
+        const head = btn.closest('.tree-manager-item')?.querySelector('.tree-manager-item-header');
+        for (const el of Array.from(head?.children ?? []) as HTMLElement[]) {
+            if (!el.offsetParent || el.classList.contains('tree-manager-item-indicator')) continue;
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const text = range.getBoundingClientRect();
+            const rect = text.width ? text : el.getBoundingClientRect();
+            if (rect.right > menuLeft) ceiling = Math.max(ceiling, rect.bottom + 4);
+        }
+        const floor = window.innerHeight - 8;
         const roomBelow = floor - (r.bottom + 4);
         const roomAbove = (r.top - 4) - ceiling;
-        if (h <= roomBelow || roomBelow >= roomAbove) {
+        const best = Math.max(roomBelow, roomAbove);
+        if (h <= roomBelow || (h > roomAbove && roomBelow >= TREE_MENU_MIN_ROOM && roomBelow >= roomAbove)) {
             menu.style.top = `${r.bottom + 4}px`;
-            if (h > roomBelow) menu.style.maxHeight = `${Math.max(120, roomBelow)}px`;
-        } else {
+            if (h > roomBelow) menu.style.maxHeight = `${roomBelow}px`;
+        } else if (h <= roomAbove || best >= TREE_MENU_MIN_ROOM) {
             const fit = Math.min(h, roomAbove);
-            menu.style.top = `${Math.max(ceiling, r.top - 4 - fit)}px`;
-            if (h > roomAbove) menu.style.maxHeight = `${Math.max(120, roomAbove)}px`;
+            menu.style.top = `${r.top - 4 - fit}px`;
+            if (h > roomAbove) menu.style.maxHeight = `${roomAbove}px`;
+        } else {
+            // Little room on either side: the whole height, over ⋯ if need be.
+            const fit = Math.min(h, floor - ceiling);
+            menu.style.top = `${Math.max(ceiling, floor - fit)}px`;
+            if (h > fit) menu.style.maxHeight = `${fit}px`;
         }
     },
 

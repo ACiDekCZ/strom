@@ -345,6 +345,55 @@ test.describe('many trees in a short window (J5 of the language round)', () => {
         expect(box!.y + box!.height).toBeLessThanOrEqual(779);
         await dropdown.getByText('Manage trees').click();
         await expect(page.locator('#tree-manager-modal')).toHaveClass(/active/);
+        // The switcher closes under the manager (it stayed open behind it).
+        await expect(dropdown).not.toHaveClass(/active/);
+    });
+
+    test('a lower tree\'s ⋯ menu is not cut at the list\'s end: the window is its room, never over the name', async ({ page }) => {
+        await manyTrees(page);
+        await page.setViewportSize({ width: 1400, height: 683 });
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const modal = page.locator('#tree-manager-modal');
+        const row = modal.locator('.tree-manager-item').nth(1);
+        const btn = row.locator('.tree-row-menu-btn');
+        await btn.click();
+        const menu = row.locator('.tree-row-menu.open');
+        await expect(menu).toBeVisible();
+        const m = (await menu.boundingBox())!;
+        const head = (await modal.locator('.modal-header').boundingBox())!;
+        // It was cut at the footer: ~160px, two rows.
+        expect(m.height).toBeGreaterThanOrEqual(240);
+        expect(m.y).toBeGreaterThanOrEqual(head.y + head.height);
+        expect(m.y + m.height).toBeLessThanOrEqual(683 - 8 + 0.5);
+        // Painted, not masked away: its last visible row is what the point hits.
+        const hit = await menu.evaluate(el => {
+            const r = el.getBoundingClientRect();
+            return el.contains(document.elementFromPoint(r.left + 30, r.bottom - 12));
+        });
+        expect(hit).toBe(true);
+        const name = await row.locator('.tree-manager-item-name').evaluate(el => {
+            const r = document.createRange(); r.selectNodeContents(el);
+            const t = r.getBoundingClientRect();
+            return { right: t.right, bottom: t.bottom };
+        });
+        expect(m.x >= name.right || m.y >= name.bottom).toBe(true);
+    });
+
+    test('with little room on both sides the ⋯ menu takes the whole height', async ({ page }) => {
+        await manyTrees(page);
+        await page.setViewportSize({ width: 1400, height: 400 });
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const modal = page.locator('#tree-manager-modal');
+        const row = modal.locator('.tree-manager-item').nth(1);
+        await row.locator('.tree-row-menu-btn').click();
+        const menu = row.locator('.tree-row-menu.open');
+        await expect(menu).toBeVisible();
+        const m = (await menu.boundingBox())!;
+        const head = (await modal.locator('.modal-header').boundingBox())!;
+        // Over its ⋯ rather than a sliver on one side.
+        expect(m.height).toBeGreaterThanOrEqual(400 - 8 - (head.y + head.height + 4) - 1);
+        expect(m.y).toBeGreaterThanOrEqual(head.y + head.height);
+        expect(m.y + m.height).toBeLessThanOrEqual(400 - 8 + 0.5);
     });
 
     test('the first tree\'s ⋯ menu in the manager: every item below the header and inside the window', async ({ page }) => {

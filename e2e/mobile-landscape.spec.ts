@@ -105,3 +105,32 @@ test('a standalone file: its banner starts under the header and beside the side 
     expect(Math.round(b.y)).toBe(44);
     expect(Math.round(b.x)).toBe(76);
 });
+
+test('the tree manager sideways looks like the phone one: the open tree labelled, Export all and New tree side by side, no Close; the list keeps the room', async ({ page }) => {
+    await sample(page);
+    await page.evaluate(async () => {
+        for (const name of ['Jiný strom', 'Třetí strom']) {
+            await window.Strom.DataManager.importAsNewTree({ persons: {}, partnerships: {} } as never, name);
+        }
+        window.Strom.UI.showTreeManagerDialog();
+    });
+    const modal = page.locator('#tree-manager-modal .modal');
+    await expect(modal).toBeVisible();
+    const active = page.locator('.tree-manager-item.active');
+    await expect(active.locator('.tree-opened-label')).toBeVisible();
+    await expect(active.locator('.tree-open-btn')).toBeHidden();
+    await expect(active.locator('.active-badge')).toBeHidden();
+    await expect(page.locator('.tree-manager-footer [data-dismiss]')).toBeHidden();
+    const btns = await page.locator('.tree-manager-footer > button:visible').evaluateAll(els => els.map(el => el.getBoundingClientRect().y));
+    expect(btns.length).toBe(2);
+    expect(Math.abs(btns[0] - btns[1])).toBeLessThanOrEqual(1);
+    const m = (await modal.boundingBox())!;
+    expect(m.width).toBeLessThanOrEqual(560);
+    expect(m.height).toBeLessThanOrEqual(390 - 16 + 1);
+    // Two whole trees in sight.
+    const list = (await page.locator('#tree-manager-list').boundingBox())!;
+    const second = (await page.locator('.tree-manager-item').nth(1).boundingBox())!;
+    const foot = (await page.locator('.tree-manager-footer').boundingBox())!;
+    expect(second.y + second.height).toBeLessThanOrEqual(foot.y);
+    expect(list.y).toBeGreaterThan(m.y);
+});

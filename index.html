@@ -1471,6 +1471,9 @@
             -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
                     mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
         }
+        /* A mask clips fixed descendants too: off while a row menu is open
+           (a scroll closes the menu), so the menu may run over the footer. */
+        .modal-content.is-scrollable:has(.tree-row-menu.open) { -webkit-mask-image: none; mask-image: none; }
         /* On phones: near full-width dialogs; the flex skeleton keeps Save
            reachable, so no sticky action-bar hack is needed. */
         @media (max-width: 640px) {
@@ -10419,16 +10422,24 @@
         @media (max-width: 1024px) and (pointer: coarse) {
             .tree-manager-item .tree-manager-item-actions button.tree-row-menu-btn { min-width: 44px; height: 44px; }
         }
-        /* Tree manager on a phone (2.1): serif names, Open 40px high, the open
-           tree labelled, Export all and New tree side by side (× and a drag
-           down close the dialog, no Close button). */
-        @media (max-width: 640px) {
+        /* Tree manager on a phone either way up (2.1): serif names, Open 40px
+           high, the open tree labelled, Export all and New tree side by side
+           (× and a drag down close the dialog, no Close button). */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .tree-manager-item .tree-manager-item-name {
                 min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
                 font-family: var(--font-serif); font-size: 18px; font-weight: 600;
             }
             .tree-manager-item .active-badge { display: none; }
             .tree-manager-item-stats-row { font-size: 14px; color: var(--text-light); }
+            /* Two lines a tree: the name, then the counts with Open (or the
+               label) and ⋯ on their right. */
+            .tree-manager-item:not(.pending-merge) {
+                display: grid; grid-template-columns: minmax(0, 1fr) auto;
+                column-gap: 8px; align-items: center;
+            }
+            .tree-manager-item:not(.pending-merge) > .tree-manager-item-header { grid-column: 1 / -1; margin-bottom: 2px; }
+            .tree-manager-item:not(.pending-merge) > .tree-manager-item-actions { margin-top: 0; flex-wrap: nowrap; align-items: center; }
             .tree-manager-item .tree-manager-item-actions button.tree-open-btn { height: 40px; }
             .tree-manager-item.active .tree-open-btn { display: none !important; }
             .tree-manager-item.active .tree-opened-label {
@@ -10712,6 +10723,16 @@
             /* Sheets: at most 560 wide in the middle, the window's height less 16px. */
             .bottom-sheet, .bottom-sheet.bottom-sheet-tree-actions { max-height: calc(100dvh - 16px); }
             .search-filters { max-height: calc(100dvh - 16px); }
+            /* The tree manager like a sheet: 560 wide, the window's height less
+               16px; a slim header and footer leave the room to the list. */
+            .modal.tree-manager-modal.modal--lg {
+                width: min(560px, calc(100vw - var(--side-bar-w) - 16px)); max-width: none;
+                max-height: calc(100dvh - 16px);
+            }
+            .modal.tree-manager-modal .modal-header { padding: 8px 12px 8px 16px; }
+            .modal.tree-manager-modal .tree-manager-footer { padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px)); }
+            .modal.tree-manager-modal .tree-manager-footer > button { min-height: 44px; }
+            .tree-manager-item { margin-bottom: 6px; }
             /* Floating messages centre on the tree, clear of the side bar. */
             .toast, .tour-offer { left: calc(50% + var(--side-bar-w) / 2); }
             .family-offer { left: var(--side-bar-w); }
