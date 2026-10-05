@@ -1046,6 +1046,8 @@ export const researchUiMethods = uiModule({
         const c = strings.connect;
         const tree = TreeManager.getActiveTreeMetadata();
         const people = Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder);
+        // A hand-over (?adopt=) names its tree only at the bridge, never reached here: the open one is not it.
+        const handOver = request?.param === 'adopt';
         const texts: Record<ConnectReason, [string, string]> = {
             denied: [c.reasonDenied(appBrowserName(currentAppBrowser())), c.textDenied], prompt: [c.reasonPrompt, c.textPrompt],
             down: [c.reasonDown, c.textDown], unknown: [c.reasonUnknown, c.textUnknown], safari: [c.reasonSafari, c.textSafari],
@@ -1073,7 +1075,7 @@ export const researchUiMethods = uiModule({
                 <div class="modal-content">
                     <p class="connect-text">${this.escapeHtml(text)}</p>
                     ${how}
-                    <p class="connect-nothing">${this.escapeHtml(tree && people ? c.nothingChanged(tree.name) : c.nothingChangedEmpty)}</p>
+                    <p class="connect-nothing">${this.escapeHtml(tree && people && !handOver ? c.nothingChanged(tree.name) : c.nothingChangedEmpty)}</p>
                 </div>
                 <div class="buttons">
                     <button type="button" class="secondary" data-act="close" data-dismiss>${this.escapeHtml(strings.buttons.close)}</button>

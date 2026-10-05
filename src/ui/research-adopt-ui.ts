@@ -15,7 +15,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { AppBrowser, appBrowserName, bridgeMovesTrees, currentAppBrowser, needsTransfer, readTransferJson } from '../research-transfer.js';
 import { validateJsonImport } from '../merge/validation.js';
 import { TreeId, TreeMetadata, StromData, STROM_DATA_VERSION, ResearchSendMode } from '../types.js';
-import { readInstallRecord, installPhase, INSTALL_TTL_MS } from '../research-install.js';
+import { readInstallRecord, clearInstallRecord, installPhase, INSTALL_TTL_MS } from '../research-install.js';
 import { noteResearchBridge, patchResearchAutoState } from '../research-device.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
@@ -223,6 +223,8 @@ export const researchAdoptMethods = uiModule({
         const choice = await this.askResearchAdopt(tree, offer, data, { install: fromInstall || !!moved, ...(moved ? { movedFrom: moved.from } : {}) });
         if (choice === null) {
             postCancel(cancelUrl, 'cancelled');
+            // The installation's hand-over declined: nothing waits to be finished any more.
+            if (fromInstall) clearInstallRecord();
             // Not handed over: nothing of the move is left half-done here.
             if (moved) await this.dropResearchTransfer(moved.tree.id, moved.from);
             return;

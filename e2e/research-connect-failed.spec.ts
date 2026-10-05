@@ -100,6 +100,8 @@ test.describe('couldn\'t connect to the research', () => {
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
         const d = dialog(page);
         await expect(d.locator('.connect-reason')).toHaveText('Chromium blocks the connection');
+        // N11: the tree handed over is not the one open here: no tree named.
+        await expect(d.locator('.connect-nothing')).toHaveText('Nothing has changed.');
         // The browser's advice: reload after allowing. The hand-over is asked again, not lost.
         await page.reload();
         await expect(d.locator('.connect-reason')).toHaveText('Chromium blocks the connection');

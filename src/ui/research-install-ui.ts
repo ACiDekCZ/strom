@@ -114,6 +114,18 @@ function hasPeople(): boolean {
     return Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder);
 }
 
+/** The installation was started for the tree on screen (one without a tree: for an empty one). */
+function installForThisTree(record: InstallRecord | null): boolean {
+    if (!record) return false;
+    const active = DataManager.getCurrentTreeId() ?? TreeManager.getActiveTreeId();
+    return record.treeId ? record.treeId === active : !hasPeople();
+}
+
+/** The move of this tree did not happen: its installation is over too (nothing waits to be finished). */
+function forgetInstallOf(treeId: TreeId): void {
+    if (readInstallRecord()?.treeId === treeId) clearInstallRecord();
+}
+
 function timeOf(iso: string): string {
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString(getCurrentLanguage(), { hour: '2-digit', minute: '2-digit' });
@@ -135,8 +147,7 @@ export const researchInstallMethods = uiModule({
             return false;
         }
         // Only for the tree it was started for (an installation without a tree: for an empty one).
-        const active = DataManager.getCurrentTreeId() ?? TreeManager.getActiveTreeId();
-        if (record && (record.treeId ? record.treeId !== active : hasPeople())) return false;
+        if (record && !installForThisTree(record)) return false;
         const phase = installPhase(record);
         return phase === 'waiting' || phase === 'long';
     },
@@ -161,7 +172,8 @@ export const researchInstallMethods = uiModule({
         }
         const record = readInstallRecord();
         const phase = installPhase(record);
-        const resumed = !step && (phase === 'waiting' || phase === 'long' || phase === 'expired');
+        // Resumed only for the tree it was started for: another tree starts at "What it is".
+        const resumed = !step && installForThisTree(record) && (phase === 'waiting' || phase === 'long' || phase === 'expired');
         const first: InstallStep = step ?? (resumed ? 'wait' : 'what');
         current = {
             step: first, os: record?.os ?? (onComputer() || detectedOs() !== 'linux' ? detectedOs() : 'win'), copied: false, otherOpen: false, resumed,
@@ -433,6 +445,7 @@ export const researchInstallMethods = uiModule({
         const treeId = tree.id;
         banner.querySelector('.research-transfer-undo')?.addEventListener('click', () => {
             TreeManager.setResearchTransfer(treeId, null);
+            forgetInstallOf(treeId);
             this.renderResearchTransferBanner();
         });
     },
@@ -472,6 +485,7 @@ export const researchInstallMethods = uiModule({
             else if (act === 'not-done') {
                 this.closeResearchOldCopy();
                 TreeManager.setResearchTransfer(treeId, null);
+                forgetInstallOf(treeId);
                 this.renderResearchTransferBanner();
             } else if (act === 'remove') void this.removeResearchOldCopy(treeId);
         }));
@@ -756,7 +770,7 @@ export const researchInstallMethods = uiModule({
         const people = hasPeople();
         return `
             <div class="modal-content install-body">
-                <p class="install-intro">${esc(tree && people ? s.intro(tree.name) : s.introEmpty)}</p>
+                <p class="install-intro">${esc(tree && people ? s.introMove(tree.name, true) : s.introMoveEmpty(true))}</p>
                 <div class="install-cards">
                     <div class="install-card install-card-agent">
                         <div class="install-card-head"><h3>${esc(s.agent)}</h3><span class="install-tag install-tag-agent">${esc(s.agentTag)}</span></div>

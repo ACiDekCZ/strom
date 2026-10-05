@@ -473,6 +473,41 @@ test.describe('installing the research from the app', () => {
         await page.evaluate(() => window.Strom.UI.closeResearchInstall());
         await page.evaluate(async () => { window.Strom.DataManager.createNewTree('Other'); });
         expect(await page.evaluate(() => window.Strom.UI.researchInstallPending())).toBe(false);
+        // N8: its dialog starts at "What it is", never waiting for the first tree's installation.
+        await page.evaluate(() => window.Strom.UI.showResearchInstall());
+        await expect(dialog(page).locator('.research-install-dialog')).toHaveAttribute('data-step', 'what');
+    });
+
+    test('N8: the installation\'s hand-over declined, or its move did not happen: nothing waits to be finished', async ({ page }) => {
+        await setup(page);
+        await toInstallStep(page);
+        await dialog(page).locator('[data-act="pasted"]').click();
+        const token = (await installRecord(page))!.token;
+        await page.route(`${BRIDGE}/**`, async (route) => {
+            const req = route.request();
+            const path = new URL(req.url()).pathname;
+            if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-headers': '*' } });
+            if (path.endsWith('/adopt') && req.method() === 'GET') {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ token, name: 'Novákovi' }) });
+            }
+            return route.fulfill({ status: 200, headers: cors, body: '{}' });
+        });
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+        await page.locator('#research-adopt-cancel').click();
+        await expect(page.locator('#research-adopt-modal')).toHaveCount(0);
+        expect(await installRecord(page)).toBeNull();
+        await page.evaluate(() => window.Strom.UI.showResearchInstall());
+        await expect(dialog(page).locator('.research-install-dialog')).toHaveAttribute('data-step', 'what');
+
+        // A move from Safari: "The move did not happen" ends its installation too.
+        await page.evaluate(() => window.Strom.UI.closeResearchInstall());
+        await toInstallStep(page);
+        const treeId = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId()!);
+        await page.evaluate((id) => { window.Strom.TreeManager.setResearchTransfer(id, { at: new Date().toISOString() }); window.Strom.UI.closeResearchInstall(); window.Strom.UI.renderResearchTransferBanner(); }, treeId);
+        expect(await installRecord(page)).not.toBeNull();
+        // A later opening of the old copy asks; "The move did not happen" there.
+        await page.locator('.research-old-copy [data-act="not-done"]').click();
+        expect(await installRecord(page)).toBeNull();
     });
 
     test('an encrypted tree moves too: said in amber, the file is plain JSON, the other browser imports and hands it over', async ({ page, browser }) => {
@@ -785,6 +820,9 @@ test.describe('installing the research from a phone', () => {
         const d = dialog(page);
         await expect(d.locator('.research-install-touch')).toBeVisible();
         await expect(d.locator('.install-mobile-box')).toContainText('the tree “My Family Tree” is here. It goes over as a file');
+        // N10: the intro says the tree moves to the computer, never that it stays here.
+        await expect(d.locator('.install-intro')).toContainText('The tree moves to the computer');
+        await expect(d.locator('.install-intro')).not.toContainText('stays here');
         await expect(d.locator('.install-line')).toHaveCount(0);
         await expect(d.locator('.install-send-link')).toHaveCount(0);
         expect(await installRecord(page)).toBeNull();
