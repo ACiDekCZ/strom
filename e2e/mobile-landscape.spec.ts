@@ -134,3 +134,18 @@ test('the tree manager sideways looks like the phone one: the open tree labelled
     expect(second.y + second.height).toBeLessThanOrEqual(foot.y);
     expect(list.y).toBeGreaterThan(m.y);
 });
+
+test('back stands beside the side bar, not under it', async ({ page }) => {
+    await sample(page);
+    await page.evaluate(() => {
+        const S = window.Strom;
+        const ids = Object.keys(S.DataManager.getData().persons);
+        S.TreeRenderer.setFocus(ids[5] as never);
+    });
+    const back = page.locator('#focus-back-btn');
+    await expect(back).toBeVisible();
+    const b = (await back.boundingBox())!;
+    const bar = (await page.locator('#bottom-bar').boundingBox())!;
+    expect(b.x).toBeGreaterThanOrEqual(bar.x + bar.width);
+    expect(b.y + b.height).toBeLessThanOrEqual(390);
+});

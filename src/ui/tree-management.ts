@@ -69,12 +69,15 @@ export const treeManagementMethods = uiModule({
                 dropdown.classList.remove('active');
             }
 
-            // Same outside-click behaviour for the desktop ⋯ actions menu.
+            // Same outside-click behaviour for the desktop ⋯ actions menu. The research's state in the
+            // toolbar (mark, pill) opens it too: its own click must not close it again.
             const actions = document.getElementById('actions-menu-dropdown');
             const actionsBtn = document.querySelector('.actions-menu-btn');
+            const syncState = document.getElementById('research-sync-pill');
             if (actions?.classList.contains('active') &&
                 !actions.contains(e.target as Node) &&
-                !actionsBtn?.contains(e.target as Node)) {
+                !actionsBtn?.contains(e.target as Node) &&
+                !syncState?.contains(e.target as Node)) {
                 this.closeActionsMenu();
             }
         });

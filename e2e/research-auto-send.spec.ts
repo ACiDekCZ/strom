@@ -703,6 +703,21 @@ test('R3 of the rc.49 round: after Send again an older send taken back is not of
     expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).not.toBe('undone');
     await expect(pill(page)).not.toContainText('Send taken back');
     expect(bridge.againAsks ?? []).toEqual([later.intake]);
+    // Never a silent difference (the beta.70 round): the older one's changes are said to be only here,
+    // with the way to see them (loading the research's version), and the â‹¯ row has its dot.
+    await openResearchMenu(page);
+    await expect(block(page)).toContainText('are not in the research: they stayed only here');
+    await expect(block(page).locator('[data-action="loadNewer"]')).toBeVisible();
+    await expect(page.locator('#actions-research-dot')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    // Its version loaded after the undo: settled, nothing said any more.
+    await page.evaluate(() => {
+        const id = window.Strom.DataManager.getCurrentTreeId();
+        window.Strom.TreeManager.patchResearchLink(id, { syncedAt: new Date(Date.now() + 60_000).toISOString() });
+    });
+    await openResearchMenu(page);
+    await expect(block(page)).not.toContainText('are not in the research: they stayed only here');
 });
 
 test('a send taken back before this page knew (not its last write) is shown with its own Send again; one taken back before the last load is settled', async ({ page }) => {
@@ -1874,10 +1889,16 @@ test('R4 of the rc.49 round: the state of a send taken back never sends again â€
     const bridge = await writtenThenUndone(page);
     // The text and the mark open â‹¯ â†’ Research; nothing is asked of the research.
     await pill(page).locator('.research-sync-pill-label').click();
+    // N1 of the beta.70 round: the menu stays open (the toolbar's own click closed it again at once)
+    await expect(page.locator('#actions-menu-dropdown')).toHaveClass(/\bactive\b/);
+    await expect(block(page)).toBeVisible();
     await expect(block(page)).toContainText('was taken back in the research');
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await pill(page).locator('.research-sync-pill-mark').click();
+    // N1 of the beta.70 round: the menu stays open (the toolbar's own click closed it again at once)
+    await expect(page.locator('#actions-menu-dropdown')).toHaveClass(/\bactive\b/);
+    await expect(block(page)).toBeVisible();
     await expect(block(page)).toContainText('was taken back in the research');
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
@@ -1890,6 +1911,9 @@ test('R4 of the rc.49 round: the state of a send taken back never sends again â€
     await poll(page);
     expect(bridge.againAsks ?? []).toEqual([]);
     await expect(pill(page)).toContainText('Send taken back');
+    // N1 of the beta.70 round: the menu stays open (the toolbar's own click closed it again at once)
+    await expect(page.locator('#actions-menu-dropdown')).toHaveClass(/\bactive\b/);
+    await expect(block(page)).toBeVisible();
     await expect(block(page)).toContainText('was taken back in the research');
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');

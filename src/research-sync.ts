@@ -433,6 +433,25 @@ export function openUndone(sends: readonly ResearchSendRecord[] | null | undefin
 }
 
 /**
+ * Sends of this tree taken back before one written again (R3 of the rc.49 round keeps them out of
+ * Send again: an older state): what they brought is here and not in the research, and a copy sent
+ * now never writes it (the research leaves out what was taken back, `takenBack`). Said beside the
+ * state, never a silent difference (the beta.70 round). Settled by loading the research's version
+ * after them (`since`), or by their being written again. Newest first.
+ */
+export function undoneLeftBehind(sends: readonly ResearchSendRecord[] | null | undefined, ours: (tree: string) => boolean,
+    resent: readonly string[], since = ''): ResearchSendRecord[] {
+    const after = Date.parse(since);
+    const cut = resentCut(sends?.filter(r => ours(r.tree)), resent);
+    if (!Number.isFinite(cut)) return [];
+    return (sends ?? [])
+        .filter(r => r.state === 'undone' && !r.again && !resent.includes(r.intake) && ours(r.tree)
+            && (!Number.isFinite(after) || !(Date.parse(r.decidedAt || r.at) <= after))
+            && Date.parse(r.at) <= cut)
+        .sort((a, b) => (Date.parse(b.at || '') || 0) - (Date.parse(a.at || '') || 0));
+}
+
+/**
  * The time of the newest send taken back and written again since (`again`,
  * or by this app — `resent`); -Infinity: none. A send taken back before it is
  * an older state of the tree, never offered to send again (R3 of the rc.49 round).

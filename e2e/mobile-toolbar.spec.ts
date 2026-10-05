@@ -332,3 +332,27 @@ test('a standalone file: its banner sits under the person row, never over it (op
     await expect(page.locator('body')).toHaveClass(/focus-steppers-open/);
     expect(await below()).toBe(true);
 });
+
+test('back and forward stand over the bottom bar, never half under it (fan, family, tablet)', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(page.locator('#toolbar-focus-name')).not.toHaveText('');
+    // Another person focused: there is a way back.
+    await page.evaluate(() => {
+        const S = window.Strom;
+        const ids = Object.keys(S.DataManager.getData().persons);
+        S.TreeRenderer.setFocus(ids[5] as never);
+    });
+    const back = page.locator('#focus-back-btn');
+    await expect(back).toBeVisible();
+    for (const [mode, width, height] of [['fan', 390, 844], ['family', 390, 844], ['family', 800, 1100]] as const) {
+        await page.setViewportSize({ width, height });
+        await page.evaluate((m) => window.Strom.UI.setDisplayViewMode(m), mode);
+        const b = (await back.boundingBox())!;
+        const bar = (await page.locator('#bottom-bar').boundingBox())!;
+        expect(b.y + b.height, `${mode} ${width}px`).toBeLessThanOrEqual(bar.y);
+        // Nothing covers it: the button itself is what a tap there reaches.
+        const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('#focus-back-btn') !== null, [b.x + b.width / 2, b.y + b.height / 2]);
+        expect(hit, `${mode} ${width}px`).toBe(true);
+    }
+});

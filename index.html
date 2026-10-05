@@ -10378,6 +10378,8 @@
         @media (max-width: 1024px) {
             :root { --bottom-bar-h: calc(56px + env(safe-area-inset-bottom, 0px)); }
             .bottom-bar { display: flex; }
+            /* Back / forward over the bar, never under it (an empty circle's edge showed above it). */
+            .focus-nav-btn { bottom: calc(var(--bottom-bar-h) + 16px); }
             /* No ⋯ in the top bar: More is the bottom bar's (one place only). */
             /* Canvas ends above the bar so nothing hides behind it. */
             #tree-container { bottom: var(--bottom-bar-h); }
@@ -10640,6 +10642,8 @@
                 --bottom-bar-h: 0px;
             }
             .embedded-mode-banner { top: var(--toolbar-h); left: var(--side-bar-w); }
+            .focus-back-btn { left: calc(var(--side-bar-w) + 16px); }
+            .focus-forward-btn { left: calc(var(--side-bar-w) + 68px); }
             .bottom-bar {
                 top: 0; bottom: 0; right: auto; width: var(--side-bar-w); height: auto;
                 flex-direction: column; justify-content: space-around; align-items: stretch;

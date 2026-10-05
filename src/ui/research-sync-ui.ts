@@ -45,7 +45,7 @@ import {
 import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
     pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, conflictTakeovers, heldConflicts,
-    researchKeepsTakenBack, latestUndone, nextUndone, openUndone,
+    researchKeepsTakenBack, latestUndone, nextUndone, openUndone, undoneLeftBehind,
 } from '../research-sync.js';
 import { setResearchConflictsProvider } from '../card-signals.js';
 import { uiModule } from './module.js';
@@ -1976,6 +1976,14 @@ export const researchSyncMethods = uiModule({
         } else if (state.kind === 'written' && treeId && researchWrittenList(treeId)?.list.length && researchSendMode(link) !== 'off') {
             b.actions = [...(b.actions ?? []), { action: 'showWritten', label: strings.changes.whatWasWritten, asLink: true }];
         }
+        // Changes of an older send taken back, left behind by Send again of a later one (R3 keeps them out of
+        // Send again, a copy never writes them): said with the way to see the difference, never silent.
+        const behind = this.researchUndoneLeftBehind();
+        if (behind && !['rejected', 'stale', 'safari', 'sending'].includes(state.kind)) {
+            b.tone = 'warn';
+            b.sub = [b.sub, s.leftBehind(when(behind.at))].filter(Boolean).join(' ');
+            if (!(b.actions ?? []).some(a => a.action === 'loadNewer')) b.actions = [...(b.actions ?? []), { action: 'loadNewer', label: s.loadVersion, asLink: true }];
+        }
         // ("Only load from the research" is the quiet `off` block; a real state of the research outranks it.
         // "Restore the state before loading" is the `loaded` block for an hour, then a row of the menu.)
         const sendingNow = !!treeId && sendingTree === treeId;
@@ -2171,6 +2179,16 @@ export const researchSyncMethods = uiModule({
         return cards > 0 ? cards : researchAutoState(treeId).lastWritten?.conflicts ?? 0;
     },
 
+    /** The newest older send taken back whose changes Send again of a later one left here only (see undoneLeftBehind). */
+    researchUndoneLeftBehind(): ResearchSendRecord | null {
+        const ctx = this.researchSyncLink();
+        if (!ctx) return null;
+        const { treeId, link } = ctx;
+        if (link.sent?.state === 'undone') return null;
+        return undoneLeftBehind(runtime.get(link.id)?.status?.sends, tree => tree === treeId || tree === link.id,
+            researchAutoState(treeId).resent ?? [], link.syncedAt)[0] ?? null;
+    },
+
     /** The ⋯ dot and label for the sync state (refreshActionMenuBadges calls this). */
     researchSyncAttention(): boolean {
         const state = this.currentResearchSyncState();
@@ -2178,7 +2196,7 @@ export const researchSyncMethods = uiModule({
         // Not written: a dot until its list was seen.
         const ctx = this.researchSyncLink();
         const notWrittenSeen = kind === 'notWritten' && !!ctx && !!researchAutoState(ctx.treeId).notWritten?.seen;
-        const attention = (researchSyncWantsAttention(kind) && !notWrittenSeen) || this.originalsQueueWarn();
+        const attention = (researchSyncWantsAttention(kind) && !notWrittenSeen) || this.originalsQueueWarn() || !!this.researchUndoneLeftBehind();
         // Changes not sent, as the toolbar has them (a block over them, e.g. "piled up", does not hide them).
         const unsentCore = state.core === 'unsent';
         const btn = document.querySelector<HTMLElement>('.actions-menu-btn');

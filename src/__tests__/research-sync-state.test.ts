@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
     researchSyncState, researchSyncWantsAttention, pendingSendFate, verifiedOffer, isOlderSource,
     researchReadSource, sourceReadingHash, unverifiedOlderSources, ResearchSyncInput, conflictTakeovers,
-    heldConflicts, researchKeepsTakenBack, latestUndone,
+    heldConflicts, researchKeepsTakenBack, latestUndone, undoneLeftBehind,
 } from '../research-sync.js';
 import { sanitizeAccepts, sanitizeInbox, sanitizeLiveStatus, researchHeaderLines, stabilizeIds, sanitizeSyncReply } from '../research-link.js';
 import { ResearchLink, ResearchSend, Source, StromData, STROM_DATA_VERSION } from '../types.js';
@@ -535,6 +535,20 @@ describe('the send taken back a reply names (finding B)', () => {
         expect(latestUndone(['R1', 'R5'], [rec('R1', '2026-10-04T05:50:00Z', 'undone'), rec('R5', '2026-10-04T06:00:00Z', 'undone')], ['R5'])).toBe('');
         expect(sanitizeLiveStatus({ tree: { id: RID }, sends: [{ intake: 'R2', state: 'undone', again: 'R4' }] })?.sends?.[0].again).toBe('R4');
         expect(sanitizeLiveStatus({ tree: { id: RID }, sends: [{ intake: 'R2', state: 'undone', resent: true }] })?.sends?.[0].again).toBe('yes');
+    });
+    it('what Send again of a later send left behind: the older ones taken back, said until loaded after them (the beta.70 round)', () => {
+        const mine = (r: object) => ({ ...r, tree: 'T1', decidedAt: '2026-10-04T06:10:00Z' }) as never;
+        const sends = [mine(rec('R1', '2026-10-04T05:50:00Z', 'undone')), mine(rec('R2', '2026-10-04T05:55:00Z', 'undone')),
+            { ...(rec('R9', '2026-10-04T05:56:00Z', 'undone') as object), tree: 'T2', decidedAt: '2026-10-04T06:10:00Z' } as never];
+        const ours = (t: string) => t === 'T1';
+        // Nothing written again: nothing left behind (the open one is offered as usual).
+        expect(undoneLeftBehind(sends, ours, [])).toEqual([]);
+        // R2 written again by this app: R1, older, left behind (another tree's never).
+        expect(undoneLeftBehind(sends, ours, ['R2']).map((r: { intake: string }) => r.intake)).toEqual(['R1']);
+        // Its version loaded after the undo: settled.
+        expect(undoneLeftBehind(sends, ours, ['R2'], '2026-10-04T06:20:00Z')).toEqual([]);
+        // Written again itself: not left behind.
+        expect(undoneLeftBehind(sends, ours, ['R2', 'R1'])).toEqual([]);
     });
 });
 

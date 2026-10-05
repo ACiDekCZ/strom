@@ -962,6 +962,7 @@ const stringsEN = {
         autoStoppedToast: (r: string) => `Automatic sending stopped. The research didn't accept the changes${r ? `: ${r}` : ''}.`,
         noIdsToast: "Not sent. This copy of the tree doesn't have the research's numbers for its people yet, so it would arrive there as a second family tree. Load the research's version first.",
         loadVersion: "Load the research's version",
+        leftBehind: (t: string) => `The changes of the send from ${t} taken back are not in the research: they stayed only here. Loading the research's version shows the difference.`,
         againNothing: "The research wrote nothing again: the changes it took back are in this app and not in the research. Keep its undo by loading its version (the changes here are replaced, a backup is kept).",
         againGone: "The research no longer keeps the send it took back, so it can't write it again. Keep its undo by loading its version (the changes here are replaced, a backup is kept).",
         undoneSinceToast: (n: number) => n === 1
@@ -4448,6 +4449,7 @@ const stringsCZ: StringsType = {
         autoStoppedToast: (r: string) => `Automatické posílání se zastavilo. Výzkum úpravy nepřijal${r ? `: ${r}` : ''}.`,
         noIdsToast: 'Neodesláno. Tahle kopie stromu ještě nemá čísla osob výzkumu, a tak by tam přišla jako druhý rodokmen. Nejdřív je potřeba načíst verzi výzkumu.',
         loadVersion: 'Načíst verzi výzkumu',
+        leftBehind: (t: string) => `Úpravy z vráceného poslání z ${t} ve výzkumu nejsou, zůstaly jen tady. Rozdíl ukáže Načíst verzi výzkumu.`,
         againNothing: 'Výzkum znovu nic nezapsal: změny, které vrátil, jsou v aplikaci, ale ve výzkumu ne. Vrácení se ponechá načtením verze výzkumu (nahradí úpravy z aplikace, záloha zůstane).',
         againGone: 'Výzkum vrácené poslání už nedrží, a tak ho nemůže zapsat znovu. Vrácení se ponechá načtením verze výzkumu (nahradí úpravy z aplikace, záloha zůstane).',
         undoneSinceToast: (n: number) => n === 1
@@ -7923,6 +7925,7 @@ const stringsDE: StringsType = {
         autoStoppedToast: (r: string) => `Automatisches Senden wurde angehalten. Die Forschung hat die Änderungen nicht angenommen${r ? `: ${r}` : ''}.`,
         noIdsToast: 'Nicht gesendet. Diese Kopie des Stammbaums hat die Nummern der Personen der Forschung noch nicht und käme dort als zweiter Stammbaum an. Zuerst die Version der Forschung laden.',
         loadVersion: 'Version der Forschung laden',
+        leftBehind: (t: string) => `Die Änderungen der zurückgenommenen Sendung von ${t} sind nicht in der Forschung, sie blieben nur hier. „Version der Forschung laden“ zeigt den Unterschied.`,
         againNothing: 'Die Forschung hat wieder nichts geschrieben: Die zurückgenommenen Änderungen sind in der App, aber nicht in der Forschung. Um die Rücknahme zu behalten, ihre Version laden (die Änderungen hier werden ersetzt, eine Sicherung bleibt).',
         againGone: 'Die Forschung hält die zurückgenommene Sendung nicht mehr und kann sie nicht erneut schreiben. Um die Rücknahme zu behalten, ihre Version laden (die Änderungen hier werden ersetzt, eine Sicherung bleibt).',
         undoneSinceToast: (n: number) => n === 1
