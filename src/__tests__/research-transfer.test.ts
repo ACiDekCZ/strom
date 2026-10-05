@@ -67,7 +67,7 @@ describe('what the line and the link tell the research', () => {
         expect(installLine('linux', TOKEN, null, 'Víškovi', { browser: 'firefox' }))
             .toContain(`STROM_FROM_APP_NAME='Víškovi' STROM_FROM_BROWSER=firefox sh`);
         expect(installLine('win', TOKEN, null, '', { browser: 'edge' }))
-            .toContain(`$env:STROM_FROM_APP='${TOKEN}'; $env:STROM_FROM_BROWSER='edge'; irm`);
+            .toContain(`si env:STROM_FROM_APP '${TOKEN}'; si env:STROM_FROM_BROWSER 'edge'; irm`);
         expect(npmLines('mac', TOKEN, BETA, '', { browser: 'chrome' })[1]).toBe(`STROM_FROM_APP=${TOKEN} STROM_FROM_BROWSER=chrome STROM_APP_URL=${BETA} strom-research`);
         expect(npmLines('win', TOKEN, null, '', { browser: 'edge' })[1]).toBe(`$env:STROM_FROM_APP='${TOKEN}'; $env:STROM_FROM_BROWSER='edge'; strom-research`);
         // Nothing but the known values goes into a shell line.
@@ -78,7 +78,7 @@ describe('what the line and the link tell the research', () => {
         const name = 'Velmi dlouhý název rodiny Víšků z Čáslavi a okolí';
         const prod = installLine('win', TOKEN, null, name, { browser: 'firefox' });
         expect(prod.length).toBeLessThanOrEqual(259);
-        expect(prod).toContain("$env:STROM_FROM_BROWSER='firefox'");
+        expect(prod).toContain("si env:STROM_FROM_BROWSER 'firefox'; ");
         const beta = installLine('win', TOKEN, BETA, name, { browser: 'firefox' });
         expect(beta.length).toBeLessThanOrEqual(259);
         expect(beta).not.toContain('STROM_FROM_APP_NAME');

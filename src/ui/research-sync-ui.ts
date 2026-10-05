@@ -27,6 +27,8 @@ import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { TreeId, PersonId, ResearchLink, ResearchSend, ResearchSendMode, StromData, ResearchConflict } from '../types.js';
 import { formatLiveClock } from '../live-time.js';
+import { localNetworkDenied } from '../local-network.js';
+import { currentAppBrowser } from '../research-transfer.js';
 import { isTreeStale } from '../tab-sync.js';
 import { formatFlexDate } from '../dates.js';
 import { parseGedcom, convertToStrom, sexGuessedIn } from '../ged-parser.js';
@@ -109,12 +111,17 @@ interface BridgeRuntime {
      * How the last ask failed: `hung` — connected, no answer in time (the bridge
      * runs but is stuck); `refused` — it answered but not to this address (the
      * token or the tree no longer its: open the research from the app again);
+     * `denied` — the browser blocks the address (its local network permission,
+     * "Apps on device" in Edge): the research may well be running;
      * '' — nothing there (not running, or another port).
      */
-    why?: '' | 'hung' | 'refused';
+    why?: '' | 'hung' | 'refused' | 'denied';
 }
 
 const runtime = new Map<string, BridgeRuntime>();
+
+/** Where to allow the research in this browser's site settings (Brave: its localhost access). */
+const blockedSub = (): string => strings.sync.blockedSub(currentAppBrowser() === 'brave' ? strings.sync.settingBrave : strings.sync.settingApps);
 /** Trees whose windows' lock this window holds now (see researchWindowLock). */
 const heldLocks = new Set<TreeId>();
 /** A send pending this long with no tries said is stuck: it goes again. */
@@ -445,6 +452,7 @@ export const researchSyncMethods = uiModule({
         const s = strings.sync;
         if (rt.why === 'hung') return { title: s.stateNotResponding, sub: s.notRespondingSub, warn: true };
         if (rt.why === 'refused') return { title: s.stateAddressRefused, sub: s.addressRefusedSub, warn: true };
+        if (rt.why === 'denied') return { title: s.stateBlocked, sub: blockedSub(), warn: true };
         return { title: s.stateBridgeDown, sub: s.bridgeDownSub, warn: false };
     },
 
@@ -534,6 +542,8 @@ export const researchSyncMethods = uiModule({
             blocked = err instanceof TypeError;
             // No answer in time: the bridge is there but stuck (B5 of the rc.22 round).
             if ((err as { name?: string })?.name === 'AbortError' || (err as { name?: string })?.name === 'TimeoutError') why = 'hung';
+            // Refused by the browser itself: never said as "not running" (F4 of the Windows round).
+            else if (blocked && await localNetworkDenied()) why = 'denied';
         }
         // An address of another research (the port went to another tree's bridge): not ours.
         if (status && status.treeId !== researchId) { status = null; why = 'refused'; }
@@ -1713,6 +1723,12 @@ export const researchSyncMethods = uiModule({
                 break;
             }
             case 'startAndSend': void this.sendTreeToResearch(ctx.treeId); break;
+            // Blocked by the browser: the way to allow it, then asked again.
+            case 'allowHow':
+                void this.showResearchConnectFailed(new TypeError('blocked')).then(retry => {
+                    if (retry) void this.pollResearchBridge({ reschedule: false });
+                });
+                break;
             case 'openResearch': {
                 const url = this.activeResearchLink('open');
                 if (url) this.launchResearchLink(url);
@@ -1912,6 +1928,8 @@ export const researchSyncMethods = uiModule({
                 sub: s.waitThenLoadSub, actions: [{ action: 'cancelLoad', label: s.cancelLoad, asLink: true }] }),
             bridgeDown: () => rt?.why === 'hung'
                 ? { tone: 'warn', title: s.stateNotResponding, sub: s.notRespondingSub }
+                : rt?.why === 'denied'
+                    ? { tone: 'warn', title: s.stateBlocked, sub: blockedSub(), actions: [{ action: 'allowHow', label: s.allowHow }] }
                 : rt?.why === 'refused'
                     ? { tone: 'warn', title: s.stateAddressRefused, sub: s.addressRefusedSub, actions: start }
                     : { tone: 'quiet', title: s.stateBridgeDown, sub: s.bridgeDownSub, actions: start.map(a => ({ ...a, asLink: true })) },
@@ -1956,10 +1974,17 @@ export const researchSyncMethods = uiModule({
             if (connNote.warn) b.tone = 'warn';
         }
         // The bridge there but stuck, or answering not to this app: said as such whatever waits (B4, B5).
-        if (rt && !rt.up && (rt.why === 'hung' || rt.why === 'refused') && ['unsentBridgeDown', 'autoBridgeDown'].includes(state.kind)) {
+        if (rt && !rt.up && (rt.why === 'hung' || rt.why === 'refused' || rt.why === 'denied') && ['unsentBridgeDown', 'autoBridgeDown'].includes(state.kind)) {
             b.tone = 'warn';
-            b.title = rt.why === 'hung' ? s.stateNotResponding : s.stateAddressRefused;
-            b.sub = [b.sub, rt.why === 'hung' ? s.notRespondingSub : s.addressRefusedSub].filter(Boolean).join(' ');
+            if (rt.why === 'denied') {
+                // The changes wait; what keeps them is the browser, not a research to start.
+                b.title = s.stateBlocked;
+                b.sub = [s.staysHere, blockedSub()].join(' ');
+                b.actions = [{ action: 'allowHow', label: s.allowHow }];
+            } else {
+                b.title = rt.why === 'hung' ? s.stateNotResponding : s.stateAddressRefused;
+                b.sub = [b.sub, rt.why === 'hung' ? s.notRespondingSub : s.addressRefusedSub].filter(Boolean).join(' ');
+            }
         }
         // A switch of mode not yet acknowledged: said under the state, with its "Got it".
         if (state.switchedNote) {
@@ -2269,12 +2294,12 @@ export const researchSyncMethods = uiModule({
         // The bridge there but stuck, or answering not to this app: in sight, never the quiet mark (B4, B5).
         const rtNow = runtime.get(link!.id);
         // (Beside another warning it is said in that one's text; alone, in its own — whatever the state, A1.)
-        const badBridge = !!rtNow && !rtNow.up && (rtNow.why === 'hung' || rtNow.why === 'refused')
+        const badBridge = !!rtNow && !rtNow.up && (rtNow.why === 'hung' || rtNow.why === 'refused' || rtNow.why === 'denied')
             && (!warn[kind] || kind === 'unsentBridgeDown' || kind === 'autoBridgeDown') && kind !== 'safari' && kind !== 'stale';
         const conn = this.researchConnectionNote(link!.id);
         const base = warn[kind];
         const w = badBridge
-            ? { text: rtNow!.why === 'hung' ? s.stateNotResponding : s.stateAddressRefused, button: s.showConflicts, action: 'conflicts' }
+            ? { text: rtNow!.why === 'hung' ? s.stateNotResponding : rtNow!.why === 'denied' ? s.pillBlocked : s.stateAddressRefused, button: s.showConflicts, action: 'conflicts' }
             : base && conn?.warn && kind !== 'writtenConflicts' ? { ...base, text: `${base.text} · ${conn.title}` } : base;
         // A new conflict's note (with the person) first; the pill once it goes.
         const noteFirst = kind === 'writtenConflicts' && note?.kind === 'conflict';
@@ -2483,12 +2508,14 @@ export const researchSyncMethods = uiModule({
                 warn: true, action: 'sendAgain' };
             case 'sentPending': case 'waitThenLoad': return { text: strings.sync.markPending(when(state.sent?.at)), warn: false };
             case 'autoBridgeDown':
+                if (runtime.get(link.id)?.why === 'denied') return { text: t.statusBlocked, warn: true };
                 if (archive) {
                     const rt = runtime.get(link.id);
                     return { text: t.statusArchiveBridgeDown(whenMs(rt?.downSince ?? 0), Math.max(1, st.edits ?? 1)), warn: true };
                 }
                 return { text: t.statusBridgeDown, warn: false };
-            case 'bridgeDown': case 'unsentBridgeDown': return { text: t.statusBridgeDown, warn: false };
+            case 'bridgeDown': case 'unsentBridgeDown':
+                return runtime.get(link.id)?.why === 'denied' ? { text: t.statusBlocked, warn: true } : { text: t.statusBridgeDown, warn: false };
             default:
                 if (!auto && !lastLine) return null;
                 return lastLine;

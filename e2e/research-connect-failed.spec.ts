@@ -22,7 +22,7 @@ async function lnaPermission(page: Page, state: 'denied' | 'prompt' | 'granted' 
             configurable: true,
             value: {
                 query: (d: { name: string }) => {
-                    // Every name the app may ask it under (research-ui.ts LOCAL_NETWORK_PERMISSIONS).
+                    // Every name the app may ask it under (local-network.ts).
                     if (['local-network-access', 'loopback-network', 'local-network'].includes(d.name)) {
                         return st === 'none' ? Promise.reject(new TypeError('unknown permission')) : Promise.resolve(status);
                     }
@@ -52,7 +52,7 @@ test.describe('couldn\'t connect to the research', () => {
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ live: b })), BRIDGE);
         const d = dialog(page);
         await expect(d.locator('h2')).toHaveText("Couldn't connect to the research");
-        await expect(d.locator('.connect-reason')).toHaveText('Local network access is blocked');
+        await expect(d.locator('.connect-reason')).toHaveText('The browser blocks the connection');
         await expect(d.locator('.connect-how')).toHaveAttribute('open', '');
         await expect(d.locator('.connect-how li')).toHaveCount(3);
         await expect(d.locator('.connect-nothing')).toHaveText(/the tree .* stays as it was/);

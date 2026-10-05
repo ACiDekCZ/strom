@@ -629,6 +629,44 @@ test('findings D/E: "Send, then load" with a conflict still open over the user\'
     await expect(block(page)).toContainText("The research isn't running");
 });
 
+test('F4/F5 of the Windows round: the browser blocking the research is said as such (with the setting to allow), never "not running"; allowed, it connects', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    // Edge 154: "Apps on device" (loopback-network) governs 127.0.0.1; asked first.
+    await page.addInitScript(() => {
+        const status = { state: 'granted', onchange: null };
+        (window as unknown as { __lna: typeof status }).__lna = status;
+        const orig = navigator.permissions?.query?.bind(navigator.permissions);
+        Object.defineProperty(navigator, 'permissions', { configurable: true, value: {
+            query: (d: { name: string }) => d.name === 'loopback-network' ? Promise.resolve(status)
+                : d.name === 'local-network-access' || d.name === 'local-network' ? Promise.resolve({ state: 'denied', onchange: null })
+                : orig ? orig(d as PermissionDescriptor) : Promise.reject(new TypeError('no')),
+        } });
+    });
+    const bridge = await autoTree(page);
+    // Only "Local network" blocked: the research is reached all the same.
+    await expect(mark(page)).toBeVisible();
+    await page.evaluate(() => { (window as unknown as { __lna: { state: string } }).__lna.state = 'denied'; });
+    bridge.down = true;
+    await page.clock.fastForward(21_000);
+    await expect(pill(page)).toContainText('Browser blocks the research');
+    await expect(pill(page)).not.toContainText("isn't running");
+    await openResearchMenu(page);
+    await expect(block(page)).toContainText("The browser doesn't let the app reach the research");
+    await expect(block(page)).toContainText('allow “Apps on device” (in older versions “Local network access”)');
+    await expect(block(page)).not.toContainText("isn't running");
+    // The way to allow it: the dialog with the steps open; allowed, Try again connects.
+    await block(page).getByRole('button', { name: 'How to allow' }).click();
+    const d = page.locator('#research-connect-failed');
+    await expect(d.locator('.connect-reason')).toHaveText('The browser blocks the connection');
+    await expect(d.locator('.connect-how li').nth(1)).toHaveText('Open Site settings and find Apps on device (in older versions Local network access).');
+    await page.evaluate(() => { (window as unknown as { __lna: { state: string } }).__lna.state = 'granted'; });
+    bridge.down = false;
+    await d.getByRole('button', { name: 'Try again' }).click();
+    await expect(d).toHaveCount(0);
+    await expect(mark(page)).toHaveAttribute('data-look', 'dot');
+    await expect(pill(page)).not.toContainText('Browser blocks the research');
+});
+
 test('finding 43 by the bridge\'s features (rc.20): sync.takenBack lets edits go after an undo, whatever its version; a send written again elsewhere clears the bar', async ({ page }) => {
     const bridge = await writtenThenUndone(page, { strom: '1.11.0', features: ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.conflictEdit'] });
     const first = bridge.sends.find(r => r.state === 'undone')!;

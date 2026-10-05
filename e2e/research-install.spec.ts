@@ -160,7 +160,7 @@ test.describe('installing the research from the app', () => {
         await expect(d.locator('.install-os-btn.active')).toHaveText('Windows');
         const token = (await installRecord(page))!.token;
         expect(await d.locator('.install-line').first().getAttribute('data-line'))
-            .toBe(`powershell -ExecutionPolicy Bypass -c "$env:STROM_FROM_APP='${token}'; $env:STROM_APP_URL='${appUrlOf(page)}'; irm https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.ps1 | iex"`);
+            .toBe(`powershell -ExecutionPolicy Bypass -c "si env:STROM_FROM_APP '${token}'; si env:STROM_APP_URL '${appUrlOf(page)}'; irm https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.ps1 | iex"`);
         // (With this copy's address the tree's name no longer fits Win + R, nor the browser: left out, the
         // research suggests a name and picks a browser. The public app's line has room for both.)
         expect((await d.locator('.install-line').first().getAttribute('data-line'))!.length).toBeLessThanOrEqual(259);
@@ -309,7 +309,7 @@ test.describe('installing the research from the app', () => {
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
         const adopt = page.locator('#research-adopt-modal');
         await expect(adopt.locator('h2')).toHaveText('Hand over the tree to the research?');
-        await expect(adopt.locator('.audit-log-subtitle')).toContainText('1 person → new research “Novákovi”');
+        await expect(adopt.locator('.audit-log-subtitle')).toContainText('1 person → research “Novákovi”');
         await adopt.locator('#research-adopt-confirm').click();
 
         const ready = page.locator('#research-ready-modal');
@@ -407,6 +407,8 @@ test.describe('installing the research from the app', () => {
         await page.addInitScript((ua) => {
             Object.defineProperty(navigator, 'userAgent', { configurable: true, get: () => ua });
             Object.defineProperty(navigator, 'userAgentData', { configurable: true, get: () => undefined });
+            // A Mac whatever the machine running the test (an iPad is told by MacIntel with touch points).
+            Object.defineProperty(navigator, 'platform', { configurable: true, get: () => 'MacIntel' });
             Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, get: () => Number(localStorage.getItem('test-touch') ?? 0) });
         }, SAFARI);
         await page.setViewportSize({ width: 1280, height: 900 });
@@ -699,7 +701,7 @@ test.describe('installing the research from a phone', () => {
         expect(await d.locator('.install-line').getAttribute('data-line')).toContain(`STROM_FROM_BROWSER=mobile STROM_FROM_FILE=${file} `);
         // Windows: the file always (the browser may not fit Win + R's 259 characters).
         await d.locator('.install-os-btn[data-os="win"]').click();
-        expect(await d.locator('.install-line').getAttribute('data-line')).toContain(`$env:STROM_FROM_FILE='${file}'; `);
+        expect(await d.locator('.install-line').getAttribute('data-line')).toContain(`si env:STROM_FROM_FILE '${file}'; `);
         // The tree left on the phone says where it is going.
         await expect(page.locator('#research-transfer-banner')).toContainText('“My Family Tree” is moving to a computer for the research.');
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.researchTransfer?.mobile)).toBe(true);

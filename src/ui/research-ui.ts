@@ -56,6 +56,7 @@ import {
 import { rememberBridgeStatus, researchSendMode } from './research-sync-ui.js';
 import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
 import { currentAppBrowser } from '../research-transfer.js';
+import { localNetworkStatus } from '../local-network.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -566,27 +567,6 @@ export function bridgeFailure(err: unknown): BridgeFailure {
 /** `refused`: something answered at the address, but not to it (an old token, another tree's bridge on that port). */
 export type ConnectReason = 'denied' | 'prompt' | 'down' | 'unknown' | 'safari' | 'refused';
 const CONNECT_FAILED_ID = 'research-connect-failed';
-
-/**
- * The permission names a browser may keep the research's address under:
- * Chrome's local network access, the loopback half of it where the browser
- * splits it, and Brave's own localhost access (Brave asks that first). The
- * first the browser knows is asked.
- */
-const LOCAL_NETWORK_PERMISSIONS = ['local-network-access', 'loopback-network', 'local-network'];
-
-/** The browser's local network permission (Chrome, Brave), or null where it has none to tell. */
-async function localNetworkStatus(): Promise<PermissionStatus | null> {
-    const perms = (navigator as Navigator & { permissions?: Permissions }).permissions;
-    if (!perms?.query) return null;
-    const names = currentAppBrowser() === 'brave' ? ['localhost-access', ...LOCAL_NETWORK_PERMISSIONS] : LOCAL_NETWORK_PERMISSIONS;
-    for (const name of names) {
-        try {
-            return await perms.query({ name } as unknown as PermissionDescriptor);
-        } catch { /* not a name this browser knows: the next */ }
-    }
-    return null;
-}
 
 /** denied / prompt as the browser says; granted and still unreachable = the research is down; no answer = unknown. */
 async function localNetworkReason(): Promise<ConnectReason> {

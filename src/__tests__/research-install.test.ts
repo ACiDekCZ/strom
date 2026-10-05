@@ -29,8 +29,10 @@ describe('installing the research from the app', () => {
         expect(installLine('mac', TOKEN)).toBe(`curl -fsSL https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.sh | STROM_FROM_APP=${TOKEN} sh`);
         expect(installLine('linux', TOKEN)).toBe(installLine('mac', TOKEN));
         const win = installLine('win', TOKEN);
-        expect(win).toBe(`powershell -ExecutionPolicy Bypass -c "$env:STROM_FROM_APP='${TOKEN}'; irm https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.ps1 | iex"`);
+        expect(win).toBe(`powershell -ExecutionPolicy Bypass -c "si env:STROM_FROM_APP '${TOKEN}'; irm https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.ps1 | iex"`);
         expect(win.length).toBeLessThanOrEqual(259);
+        // No `$`: pasted into an open PowerShell instead of Win + R, nothing in the "…" is expanded before the inner one runs.
+        expect(installLine('win', TOKEN, 'https://beta.stromapp.info/run/', "Novákovi's", { browser: 'edge', file: 'strom-prenos-AbCdEfGh.json' })).not.toMatch(/[$`]/);
         expect(npmLines('mac', TOKEN)).toEqual(['npm i -g strom-research', `STROM_FROM_APP=${TOKEN} strom-research`]);
         expect(npmLines('win', TOKEN)[1]).toBe(`$env:STROM_FROM_APP='${TOKEN}'; strom-research`);
     });
@@ -47,7 +49,7 @@ describe('installing the research from the app', () => {
         const beta = 'https://beta.stromapp.info/run/';
         expect(installLine('mac', TOKEN, beta)).toBe(`curl -fsSL https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.sh | STROM_FROM_APP=${TOKEN} STROM_APP_URL=${beta} sh`);
         const win = installLine('win', TOKEN, beta);
-        expect(win).toBe(`powershell -ExecutionPolicy Bypass -c "$env:STROM_FROM_APP='${TOKEN}'; $env:STROM_APP_URL='${beta}'; irm https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.ps1 | iex"`);
+        expect(win).toBe(`powershell -ExecutionPolicy Bypass -c "si env:STROM_FROM_APP '${TOKEN}'; si env:STROM_APP_URL '${beta}'; irm https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.ps1 | iex"`);
         expect(win.length).toBeLessThanOrEqual(259);
         expect(npmLines('mac', TOKEN, beta)[1]).toBe(`STROM_FROM_APP=${TOKEN} STROM_APP_URL=${beta} strom-research`);
         expect(npmLines('win', TOKEN, beta)[1]).toBe(`$env:STROM_FROM_APP='${TOKEN}'; $env:STROM_APP_URL='${beta}'; strom-research`);
@@ -56,7 +58,7 @@ describe('installing the research from the app', () => {
     it('names the tree for the research (STROM_FROM_APP_NAME), safe for the shell', () => {
         const T = 'a'.repeat(32);
         expect(installLine('mac', T, null, 'Test Win')).toContain(`STROM_FROM_APP=${T} STROM_FROM_APP_NAME='Test Win' sh`);
-        expect(installLine('win', T, null, "Novákovi's")).toContain("$env:STROM_FROM_APP_NAME='Novákovi''s'; irm");
+        expect(installLine('win', T, null, "Novákovi's")).toContain("si env:STROM_FROM_APP_NAME 'Novákovi''s'; irm");
         expect(installLine('linux', T, null, "Novákovi's")).toContain("STROM_FROM_APP_NAME='Novákovi'\\''s' sh");
         expect(npmLines('win', T, null, 'Víškovi')[1]).toContain("$env:STROM_FROM_APP_NAME='Víškovi'; strom-research");
         // A name from a foreign file never brings shell syntax along.

@@ -51,7 +51,7 @@ export function installLine(os: InstallOs, token: string, appUrl: string | null 
     const name = installTreeName(treeName);
     if (os !== 'win') return `curl -fsSL ${DOWNLOAD}/install.sh | STROM_FROM_APP=${token} ${shName(name)}${shExtra(extra)}${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}sh`;
     const line = (n: string, x: InstallExtra): string =>
-        `powershell -ExecutionPolicy Bypass -c "$env:STROM_FROM_APP='${token}'; ${winName(n)}${winExtra(x)}${appUrl ? `$env:STROM_APP_URL='${appUrl}'; ` : ''}irm ${DOWNLOAD}/install.ps1 | iex"`;
+        `powershell -ExecutionPolicy Bypass -c "${winSet('STROM_FROM_APP', token)}${winName(n, winSet)}${winExtra(x, winSet)}${appUrl ? winSet('STROM_APP_URL', appUrl) : ''}irm ${DOWNLOAD}/install.ps1 | iex"`;
     // Win + R takes 259 characters: the name shortened to what is left, or left out (the research suggests one);
     // then the browser (the research then picks one itself) — the file never (the tree moves by it).
     const fitName = (x: InstallExtra): string => {
@@ -72,7 +72,7 @@ export const WIN_RUN_MAX = 259;
 export function npmLines(os: InstallOs, token: string, appUrl: string | null = null, treeName = '', extra: InstallExtra = {}): [string, string] {
     const name = installTreeName(treeName);
     return ['npm i -g strom-research', os === 'win'
-        ? `$env:STROM_FROM_APP='${token}'; ${winName(name)}${winExtra(extra)}${appUrl ? `$env:STROM_APP_URL='${appUrl}'; ` : ''}strom-research`
+        ? `${psSet('STROM_FROM_APP', token)}${winName(name, psSet)}${winExtra(extra, psSet)}${appUrl ? psSet('STROM_APP_URL', appUrl) : ''}strom-research`
         : `STROM_FROM_APP=${token} ${shName(name)}${shExtra(extra)}${appUrl ? `STROM_APP_URL=${appUrl} ` : ''}strom-research`];
 }
 
@@ -86,7 +86,17 @@ export function installTreeName(raw: string): string {
     return raw.normalize('NFC').replace(/[^\p{L}\p{M}\p{N} .,()'-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 80).trim();
 }
 
-const winName = (name: string): string => (name ? `$env:STROM_FROM_APP_NAME='${name.replace(/'/g, "''")}'; ` : '');
+/** A variable for the line typed in PowerShell itself (the npm way). */
+type WinSet = (name: string, value: string) => string;
+const psSet: WinSet = (name, value) => `$env:${name}='${value}'; `;
+/**
+ * A variable inside the Win + R line's `-c "…"`: Set-Item, no `$` — pasted into
+ * an open PowerShell instead of Win + R, that PowerShell would expand
+ * `$env:X` inside the double quotes to nothing before the inner one runs.
+ * Works the same from Win + R and cmd.
+ */
+const winSet: WinSet = (name, value) => `si env:${name} '${value}'; `;
+const winName = (name: string, set: WinSet): string => (name ? set('STROM_FROM_APP_NAME', name.replace(/'/g, "''")) : '');
 const shName = (name: string): string => (name ? `STROM_FROM_APP_NAME='${name.replace(/'/g, "'\\''")}' ` : '');
 // Both values are from fixed sets of plain characters (APP_BROWSERS, isTransferFileName): no quoting needed.
 const cleanExtra = (x: InstallExtra): InstallExtra => ({
@@ -97,9 +107,9 @@ const shExtra = (x: InstallExtra): string => {
     const c = cleanExtra(x);
     return `${c.browser ? `STROM_FROM_BROWSER=${c.browser} ` : ''}${c.file ? `STROM_FROM_FILE=${c.file} ` : ''}`;
 };
-const winExtra = (x: InstallExtra): string => {
+const winExtra = (x: InstallExtra, set: WinSet): string => {
     const c = cleanExtra(x);
-    return `${c.browser ? `$env:STROM_FROM_BROWSER='${c.browser}'; ` : ''}${c.file ? `$env:STROM_FROM_FILE='${c.file}'; ` : ''}`;
+    return `${c.browser ? set('STROM_FROM_BROWSER', c.browser) : ''}${c.file ? set('STROM_FROM_FILE', c.file) : ''}`;
 };
 
 /**
