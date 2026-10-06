@@ -4949,7 +4949,7 @@ const stringsCZ: StringsType = {
     connect: {
         title: 'Výzkum se nepodařilo spojit',
         reasonDenied: (b: string) => b ? `${b} blokuje spojení` : 'Prohlížeč blokuje spojení',
-        textDenied: 'Výzkum běží na tomto počítači a prohlížeč Stromu nedovolil se k němu připojit.',
+        textDenied: 'Výzkum běží na tomto počítači a prohlížeč nedovolil Stromu se k němu připojit.',
         reasonPrompt: 'Prohlížeč čeká na povolení',
         textPrompt: 'Nahoře u adresy je dotaz na přístup k aplikacím na tomto zařízení (nebo k zařízením v místní síti). Stačí zvolit Povolit, Strom se pak spojí sám.',
         reasonDown: 'Výzkum neodpovídá',

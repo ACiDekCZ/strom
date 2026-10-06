@@ -1456,7 +1456,7 @@ class TreeManagerClass {
     }
 
     /** Remember (or forget, null) the token of "Start research with this tree". */
-    setResearchAdoptToken(treeId: TreeId, value: { token: string; at: string } | null): void {
+    setResearchAdoptToken(treeId: TreeId, value: { token: string; at: string; install?: true } | null): void {
         const tree = this.index.trees.find(t => t.id === treeId);
         if (!tree) return;
         if (value) tree.researchAdoptToken = value;
@@ -1473,11 +1473,15 @@ class TreeManagerClass {
         this.saveIndex();
     }
 
-    /** The tree waiting to be taken over with `token` (issued less than `maxAgeMs` ago), or null. */
-    findTreeByAdoptToken(token: string, maxAgeMs: number, now = Date.now()): TreeMetadata | null {
+    /**
+     * The tree waiting to be taken over with `token` (issued less than `maxAgeMs` ago, or
+     * `installMaxAgeMs` for an installation's token), or null.
+     */
+    findTreeByAdoptToken(token: string, maxAgeMs: number, now = Date.now(), installMaxAgeMs = maxAgeMs): TreeMetadata | null {
         const tree = this.index.trees.find(t => t.researchAdoptToken?.token === token);
         const at = tree ? Date.parse(tree.researchAdoptToken!.at) : NaN;
-        return tree && Number.isFinite(at) && now - at <= maxAgeMs ? tree : null;
+        const max = tree?.researchAdoptToken?.install ? Math.max(maxAgeMs, installMaxAgeMs) : maxAgeMs;
+        return tree && Number.isFinite(at) && now - at <= max ? tree : null;
     }
 }
 

@@ -133,7 +133,7 @@ export const researchAdoptMethods = uiModule({
             if (!offer) return false;
             const install = readInstallRecord();
             const fromInstall = install?.token === offer.token && installPhase(install) !== 'expired';
-            return fromInstall || !!TreeManager.findTreeByAdoptToken(offer.token, TOKEN_MAX_AGE_MS);
+            return fromInstall || !!TreeManager.findTreeByAdoptToken(offer.token, TOKEN_MAX_AGE_MS, Date.now(), INSTALL_TTL_MS);
         } catch {
             return false;
         }
@@ -177,7 +177,10 @@ export const researchAdoptMethods = uiModule({
         // screen (no tree yet) the research gets a new empty tree.
         const install = readInstallRecord();
         const fromInstall = !!offer && install?.token === offer.token && installPhase(install) !== 'expired';
-        let tree = offer ? TreeManager.findTreeByAdoptToken(offer.token, fromInstall ? INSTALL_TTL_MS : TOKEN_MAX_AGE_MS) : null;
+        let tree = offer ? TreeManager.findTreeByAdoptToken(offer.token, fromInstall ? INSTALL_TTL_MS : TOKEN_MAX_AGE_MS, Date.now(), INSTALL_TTL_MS) : null;
+        // An installation started for this tree whose record another tree's installation took meanwhile
+        // ("I already have it" there): still this tree's installation, its hand-over and "ready" as such.
+        const ownInstall = fromInstall || tree?.researchAdoptToken?.install === true;
         let fresh: StromData | null = null;
         if (!tree && fromInstall && offer && install) {
             const id = TreeManager.createTree(offer.name || strings.install.newTreeName);
@@ -223,7 +226,7 @@ export const researchAdoptMethods = uiModule({
         }
         // The tree going over is the one on screen behind the dialog.
         if (DataManager.getCurrentTreeId() !== tree.id) await this.switchToTree(tree.id);
-        const choice = await this.askResearchAdopt(tree, offer, data, { install: fromInstall || !!moved, ...(moved ? { movedFrom: moved.from } : {}) });
+        const choice = await this.askResearchAdopt(tree, offer, data, { install: ownInstall || !!moved, ...(moved ? { movedFrom: moved.from } : {}) });
         if (choice === null) {
             postCancel(cancelUrl, 'cancelled');
             // The installation's hand-over declined: nothing waits to be finished any more.
@@ -290,7 +293,7 @@ export const researchAdoptMethods = uiModule({
         this.updateTreeManagerList();
         this.refreshActionMenuBadges();
         TreeRenderer.render();
-        if (fromInstall || moved) {
+        if (ownInstall || moved) {
             if (fromInstall) this.finishResearchInstall(offer.token);
             void this.showResearchReady(bridge.base, reply.tree, offer.name || r.defaultName, hasPeople, moved?.from);
             return;

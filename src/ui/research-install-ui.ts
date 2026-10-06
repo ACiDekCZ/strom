@@ -196,9 +196,10 @@ export const researchInstallMethods = uiModule({
         }
         const record = newInstallRecord(newAdoptToken(), treeId, os);
         writeInstallRecord(record);
-        // The tree waits to be taken over by this token (adoptFromResearch finds it by it).
+        // The tree waits to be taken over by this token (adoptFromResearch finds it by it), as an
+        // installation's for its 24 h even when another tree's installation takes the record meanwhile.
         if (treeId && TreeManager.getTreeMetadata(treeId)) {
-            TreeManager.setResearchAdoptToken(treeId, { token: record.token, at: record.createdAt });
+            TreeManager.setResearchAdoptToken(treeId, { token: record.token, at: record.createdAt, install: true });
         }
         return record;
     },

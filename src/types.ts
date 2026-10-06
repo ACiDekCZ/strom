@@ -983,7 +983,7 @@ export interface AuditLog {
  * should be kept in sync with package.json.
  */
 declare const __APP_VERSION__: string | undefined;
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.1-beta.7';
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '3.9.1-beta.8';
 
 /** Envelope wrapping embedded data in exported HTML files */
 export interface EmbeddedDataEnvelope {
@@ -1118,7 +1118,7 @@ export interface TreeMetadata {
      * "Start research with this tree" is under way: the one-time token the
      * research brings back (?adopt=) to name this tree. Valid for an hour.
      */
-    researchAdoptToken?: { token: string; at: string };
+    researchAdoptToken?: { token: string; at: string; install?: true };
     /**
      * The tree was downloaded to move to another browser for the research
      * (research-transfer.ts), or from a phone to a computer (`mobile`). The
