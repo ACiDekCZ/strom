@@ -165,4 +165,53 @@ test.describe('couldn\'t connect to the research', () => {
         const copied = await page.evaluate(() => navigator.clipboard.readText());
         expect(new URL(copied).searchParams.get('live')).toBe(BRIDGE);
     });
+    test('B1/B2 of the Windows round: blocked only at the hand-over itself (Edge asks then): said with the setting, and once allowed the hand-over is offered again', async ({ page }) => {
+        await setup(page, 'granted');
+        const token = 'B'.repeat(43);
+        await page.evaluate((t) => {
+            window.Strom.TreeManager.setResearchAdoptToken(window.Strom.DataManager.getCurrentTreeId()!, { token: t, at: new Date().toISOString() });
+        }, token);
+        const cors = { 'access-control-allow-origin': '*' };
+        let blocked = true;
+        const posted: string[] = [];
+        await page.unroute(`${BRIDGE}/**`);
+        await page.route(`${BRIDGE}/**`, async (route) => {
+            const req = route.request();
+            const path = new URL(req.url()).pathname;
+            if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-headers': '*' } });
+            if (path.endsWith('/adopt') && req.method() === 'GET') {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ token, name: 'Novákovi' }) });
+            }
+            if (path.endsWith('/adopt') && req.method() === 'POST') {
+                if (blocked) {
+                    // The browser asks now, and "Block" is chosen: the request never goes.
+                    await page.evaluate(() => { (window as unknown as { __lna: { state: string } }).__lna.state = 'denied'; });
+                    return route.abort('accessdenied');
+                }
+                posted.push(req.postData() ?? '');
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ tree: '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77', head: 'abc1234' }) });
+            }
+            return route.fulfill({ status: 404, headers: cors, body: '' });
+        });
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+        await page.locator('#research-adopt-confirm').click();
+        const d = dialog(page);
+        await expect(d.locator('.connect-reason')).toHaveText('Chromium blocks the connection');
+        await expect(d.locator('.connect-how')).toHaveAttribute('open', '');
+        await expect(page.getByText('The tree could not be handed over.')).toHaveCount(0);
+        // Kept for a reload meanwhile.
+        expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('strom-pending-adopt') ?? 'null')?.raw)).toBe(BRIDGE);
+        // Allowed in the site settings: the hand-over is offered again by itself, and goes over.
+        blocked = false;
+        await page.evaluate(() => {
+            const st = (window as unknown as { __lna: { state: string; onchange: (() => void) | null } }).__lna;
+            st.state = 'granted';
+            st.onchange?.();
+        });
+        await expect(d).toHaveCount(0);
+        await page.locator('#research-adopt-confirm').click();
+        await expect(page.locator('.toast')).toContainText('is now linked to the research');
+        expect(posted).toHaveLength(1);
+        expect(await page.evaluate(() => sessionStorage.getItem('strom-pending-adopt'))).toBeNull();
+    });
 });

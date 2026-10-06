@@ -247,6 +247,11 @@ export const researchAdoptMethods = uiModule({
             if (res.ok) reply = sanitizeAdoptReply(await res.json());
         } catch (err) {
             console.warn('Handing the tree to the research failed', err);
+            // Not reached (B1 of the Windows round: Edge asks about "Apps on device" only now, at the
+            // hand-over itself, and it was blocked): said as at the start, naming the setting. Once allowed
+            // the hand-over is offered again (B2); the tab keeps ?adopt= meanwhile, a reload asks again.
+            if (await this.showResearchConnectFailed(err, { param: 'adopt', value: raw })) await this.adoptFromResearchNow(raw);
+            return;
         }
         if (!reply) {
             await this.showAlert(r.adoptFailed, 'error');
