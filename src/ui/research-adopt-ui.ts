@@ -12,7 +12,7 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { AppBrowser, appBrowserName, bridgeMovesTrees, currentAppBrowser, needsTransfer, readTransferJson } from '../research-transfer.js';
+import { AppBrowser, appBrowserName, bridgeMovesTrees, bridgeTakesEmpty, currentAppBrowser, needsTransfer, readTransferJson } from '../research-transfer.js';
 import { validateJsonImport } from '../merge/validation.js';
 import { TreeId, TreeMetadata, StromData, STROM_DATA_VERSION, ResearchSendMode } from '../types.js';
 import { readInstallRecord, clearInstallRecord, installPhase, INSTALL_TTL_MS } from '../research-install.js';
@@ -65,6 +65,16 @@ async function researchMovesTrees(base: string): Promise<boolean> {
         return !res.ok || bridgeMovesTrees(await res.json());
     } catch {
         return true;
+    }
+}
+
+/** Whether the research behind this bridge takes a tree with nobody in it yet (its /status). Not said: not. */
+async function researchTakesEmpty(base: string): Promise<boolean> {
+    try {
+        const res = await fetchWithTimeout(`${base}/status`, 4000);
+        return res.ok && bridgeTakesEmpty(await res.json());
+    } catch {
+        return false;
     }
 }
 
@@ -226,6 +236,13 @@ export const researchAdoptMethods = uiModule({
         }
         // The tree going over is the one on screen behind the dialog.
         if (DataManager.getCurrentTreeId() !== tree.id) await this.switchToTree(tree.id);
+        // Nobody in it yet (installed from the welcome screen, a tree from Safari's): an older research
+        // refuses it (400 tree.empty) — not offered, the research told, and said how it starts (C1).
+        if (!Object.values(data.persons).some(p => !p.isPlaceholder) && !await researchTakesEmpty(bridge.base)) {
+            postCancel(cancelUrl, 'cancelled');
+            await this.endEmptyHandOver(tree.id, fromInstall ? offer.token : null);
+            return;
+        }
         const choice = await this.askResearchAdopt(tree, offer, data, { install: ownInstall || !!moved, ...(moved ? { movedFrom: moved.from } : {}) });
         if (choice === null) {
             postCancel(cancelUrl, 'cancelled');
@@ -242,15 +259,21 @@ export const researchAdoptMethods = uiModule({
         // The research does not take photos over yet: they stay here only.
         const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name);
         let reply: { tree: string; head: string | null; ids: AdoptIds | null } | null = null;
+        let refusedEmpty = false;
         try {
             const res = await postSync(`${bridge.base}/adopt`, exported.content, 120000);
             if (res.ok) reply = sanitizeAdoptReply(await res.json());
+            else if (res.status === 400) refusedEmpty = await res.json().then((b: { code?: unknown }) => b?.code === 'tree.empty', () => false);
         } catch (err) {
             console.warn('Handing the tree to the research failed', err);
             // Not reached (B1 of the Windows round: Edge asks about "Apps on device" only now, at the
             // hand-over itself, and it was blocked): said as at the start, naming the setting. Once allowed
             // the hand-over is offered again (B2); the tab keeps ?adopt= meanwhile, a reload asks again.
             if (await this.showResearchConnectFailed(err, { param: 'adopt', value: raw })) await this.adoptFromResearchNow(raw);
+            return;
+        }
+        if (refusedEmpty) {
+            await this.endEmptyHandOver(tree.id, fromInstall ? offer.token : null);
             return;
         }
         if (!reply) {
@@ -418,6 +441,17 @@ export const researchAdoptMethods = uiModule({
             else if (act === 'first') this.showAddPersonModal();
         }));
         overlay.querySelector<HTMLElement>('.primary')?.focus();
+    },
+
+    /**
+     * A tree with nobody in it the research did not take (C1): its hand-over
+     * ends here (an installation too: the research is installed), the tree
+     * stays as it is, and the way to start once it has its first person.
+     */
+    async endEmptyHandOver(treeId: TreeId, installToken: string | null): Promise<void> {
+        TreeManager.setResearchAdoptToken(treeId, null);
+        if (installToken) this.finishResearchInstall(installToken);
+        await this.showAlert(strings.research.adoptEmpty, 'info');
     },
 
     closeResearchElsewhere(): void {

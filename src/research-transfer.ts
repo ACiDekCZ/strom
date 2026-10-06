@@ -136,12 +136,28 @@ export function readTransferJson(text: string, token: string): { mark: TransferM
 /** The bridge feature of a research that hands a moved tree over (GET <bridge>/transfer, Strom Research 1.12.1). */
 export const TRANSFER_FEATURE = 'adopt.transfer';
 
+/** The bridge feature of a research that takes a tree with nobody in it yet (POST <bridge>/adopt, 1.12.1-rc.6). */
+export const EMPTY_FEATURE = 'adopt.empty';
+
 /**
  * Whether a research's `/status` says its bridge moves trees from another
  * browser. False for an older research (1.12.0 and before: no `features`, or
  * without this one), whose line and links take no tree from Safari or a phone.
  */
 export function bridgeMovesTrees(status: unknown): boolean {
+    return hasFeature(status, TRANSFER_FEATURE);
+}
+
+/**
+ * Whether a research's `/status` says its bridge takes a tree with nobody
+ * in it yet (installed from the welcome screen, a tree handed over before its
+ * first person). False for an older one, which answers 400 tree.empty.
+ */
+export function bridgeTakesEmpty(status: unknown): boolean {
+    return hasFeature(status, EMPTY_FEATURE);
+}
+
+function hasFeature(status: unknown, feature: string): boolean {
     const features = status && typeof status === 'object' ? (status as Record<string, unknown>).features : null;
-    return Array.isArray(features) && features.includes(TRANSFER_FEATURE);
+    return Array.isArray(features) && features.includes(feature);
 }

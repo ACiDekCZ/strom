@@ -448,7 +448,7 @@ test.describe('Start research with this tree (G3)', () => {
     });
 
     async function routeBridge(page: Page, token: string, calls: { cancel: string[]; posted: string[] },
-        extra: { offer?: Record<string, unknown>; transfer?: string; status?: Record<string, unknown> } = {}): Promise<void> {
+        extra: { offer?: Record<string, unknown>; transfer?: string; status?: Record<string, unknown>; adoptReply?: { status: number; body: Record<string, unknown> } } = {}): Promise<void> {
         await page.route(`${BRIDGE}/**`, async (route) => {
             const req = route.request();
             const path = new URL(req.url()).pathname;
@@ -465,8 +465,9 @@ test.describe('Start research with this tree (G3)', () => {
             }
             if (path.endsWith('/adopt') && req.method() === 'POST') {
                 calls.posted.push(req.postData() ?? '');
-                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
-                    body: JSON.stringify({ tree: UUID, head: 'abc1234' }) });
+                const reply = extra.adoptReply ?? { status: 200, body: { tree: UUID, head: 'abc1234' } };
+                return route.fulfill({ status: reply.status, headers: { ...cors, 'content-type': 'application/json' },
+                    body: JSON.stringify(reply.body) });
             }
             if (path.endsWith('/cancel')) {
                 calls.cancel.push(req.postData() ?? '');
@@ -656,6 +657,53 @@ test.describe('Start research with this tree (G3)', () => {
             await page.keyboard.press('Escape');
             await expect(d).toHaveCount(0);
         }
+    });
+
+    test('C1: a tree with nobody in it — an older research is not offered it (told cancelled, said how it starts), nor after 400 tree.empty; one with adopt.empty takes it and is ready empty', async ({ page }) => {
+        await appTree(page, ALL);
+        const token = 'E'.repeat(43);
+        const arm = () => page.evaluate((t) => {
+            const tm = window.Strom.TreeManager;
+            const id = tm.getTrees().find((x: { name: string }) => x.name === 'Prázdný')?.id ?? tm.createTree('Prázdný');
+            tm.setResearchAdoptToken(id, { token: t, at: new Date().toISOString() });
+            return id;
+        }, token);
+        const id = await arm();
+        const said = page.getByText('The research is installed. The tree has nobody in it yet');
+        const empty = { strom: '1.12.1', tree: { id: UUID, name: 'Dvořákovi – výzkum', lang: 'en' }, persons: 0, families: 0 };
+        // An older research (rc.5: adopt.transfer, no adopt.empty): not offered, told cancelled.
+        let calls = { cancel: [] as string[], posted: [] as string[] };
+        await routeBridge(page, token, calls, { status: { ...empty, features: ['adopt.transfer'] } });
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+        await expect(said).toBeVisible();
+        await expect(page.locator('#research-adopt-modal')).toHaveCount(0);
+        await expect.poll(() => calls.cancel).toEqual([JSON.stringify({ reason: 'cancelled' })]);
+        expect(calls.posted).toEqual([]);
+        expect(await page.evaluate((i) => window.Strom.TreeManager.getTreeMetadata(i)?.researchAdoptToken ?? null, id)).toBeNull();
+        await page.locator('#confirm-ok-btn').click();
+        await expect(said).toBeHidden();
+
+        // Offered all the same, and the research answers 400 tree.empty: the same sentence, not the bare error.
+        await arm();
+        calls = { cancel: [] as string[], posted: [] as string[] };
+        await page.unrouteAll({ behavior: 'ignoreErrors' });
+        await routeBridge(page, token, calls, { status: { ...empty, features: ['adopt.transfer', 'adopt.empty'] }, adoptReply: { status: 400, body: { code: 'tree.empty', error: 'empty' } } });
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+        await page.locator('#research-adopt-confirm').click();
+        await expect(said).toBeVisible();
+        await expect(page.getByText('The tree could not be handed over.')).toBeHidden();
+        await page.locator('#confirm-ok-btn').click();
+
+        // A research with adopt.empty (rc.6): handed over, "ready" in its empty variant.
+        await arm();
+        calls = { cancel: [] as string[], posted: [] as string[] };
+        await page.unrouteAll({ behavior: 'ignoreErrors' });
+        await routeBridge(page, token, calls, { status: { ...empty, features: ['adopt.transfer', 'adopt.empty'] } });
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
+        await page.locator('#research-adopt-confirm').click();
+        await expect.poll(() => calls.posted.length).toBe(1);
+        expect(calls.posted[0]).not.toContain('INDI');
+        expect(await page.evaluate((i) => window.Strom.TreeManager.getTreeMetadata(i)?.research?.id ?? null, id)).toBe(UUID);
     });
 
     test('a tree moved from Safari: the research\'s file imported (images too), handed over; declined, nothing is left', async ({ page }) => {
