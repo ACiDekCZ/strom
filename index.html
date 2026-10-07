@@ -12345,8 +12345,8 @@
                     <span class="search-filters-title" data-i18n="searchFilters.title"></span>
                     <button type="button" class="search-filters-close" onclick="window.Strom.UI.toggleSearchFilters()" data-i18n-aria-label="buttons.close">&times;</button>
                 </div>
-                <input type="text" id="filter-lastname" autocomplete="off" data-i18n-placeholder="searchFilters.lastName" oninput="window.Strom.UI.scheduleSearchFilter()">
-                <input type="text" id="filter-place" autocomplete="off" data-i18n-placeholder="searchFilters.place" oninput="window.Strom.UI.scheduleSearchFilter()">
+                <input type="text" id="filter-lastname" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-i18n-placeholder="searchFilters.lastName" oninput="window.Strom.UI.scheduleSearchFilter()">
+                <input type="text" id="filter-place" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-i18n-placeholder="searchFilters.place" oninput="window.Strom.UI.scheduleSearchFilter()">
                 <div class="search-filters-row">
                     <input type="number" id="filter-year-from" inputmode="numeric" data-i18n-placeholder="searchFilters.yearFrom" oninput="window.Strom.UI.scheduleSearchFilter()">
                     <input type="number" id="filter-year-to" inputmode="numeric" data-i18n-placeholder="searchFilters.yearTo" oninput="window.Strom.UI.scheduleSearchFilter()">
@@ -13131,7 +13131,7 @@
                 <h2 data-i18n="sources.title"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeSourcesDialog()">&times;</button>
             </div>
-            <input type="text" id="sources-search" class="source-picker-search" data-i18n-placeholder="sources.searchPlaceholder" autocomplete="off" hidden>
+            <input type="text" id="sources-search" class="source-picker-search" data-i18n-placeholder="sources.searchPlaceholder" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" hidden>
             <div class="sources-filter" id="sources-filter" role="group" hidden></div>
             <div id="sources-list" class="sources-list"></div>
             <p class="sources-total" id="sources-total" hidden></p>
@@ -13283,7 +13283,7 @@
                 <span class="source-picker-fact-label" data-i18n="sources.pickerFactLabel"></span>
                 <div class="segment" id="source-picker-fact-segment" role="radiogroup" data-i18n-aria-label="sources.pickerFactLabel"></div>
             </div>
-            <input type="text" id="source-picker-search" class="source-picker-search" data-i18n-placeholder="sources.searchPlaceholder" autocomplete="off">
+            <input type="text" id="source-picker-search" class="source-picker-search" data-i18n-placeholder="sources.searchPlaceholder" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
             <div id="source-picker-list" class="source-picker-list"></div>
             <div class="buttons source-picker-footer">
                 <button type="button" class="link-button" onclick="window.Strom.UI.manageSourcesFromPicker()" data-i18n="sources.manage"></button>
@@ -14364,7 +14364,7 @@
             </div>
             <div id="tree-manager-search-row" class="tree-manager-search-row" style="display:none;">
                 <input type="text" id="tree-manager-search" data-i18n-placeholder="treeManager.searchTrees"
-                       autocomplete="off" oninput="window.Strom.UI.updateTreeManagerList()">
+                       autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" oninput="window.Strom.UI.updateTreeManagerList()">
             </div>
             <div id="tree-manager-list" class="tree-manager-list">
                 <!-- Tree list rendered dynamically -->

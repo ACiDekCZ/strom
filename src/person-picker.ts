@@ -152,6 +152,11 @@ export class PersonPicker {
         this.input.className = 'person-picker-input';
         this.input.placeholder = this.options.placeholder || '';
         this.input.autocomplete = 'off';
+        // A name search, not prose: no auto-capitals, corrections or spell
+        // check (a phone keyboard rewrote the query while typing).
+        this.input.setAttribute('autocapitalize', 'off');
+        this.input.setAttribute('autocorrect', 'off');
+        this.input.spellcheck = false;
         this.container.appendChild(this.input);
 
         // Toggle button

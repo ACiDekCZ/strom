@@ -329,7 +329,7 @@ export const batchMethods = uiModule({
                         <div class="batch-list-sub">${esc(b.listSummary(s.items.length, formatBytesShort(total), s.items.length - chosen.length))}</div></div>
                     </div>
                     <div class="batch-toolbar">
-                        <input type="search" id="batch-search" placeholder="${esc(b.search)}" value="${esc(s.search)}">
+                        <input type="search" id="batch-search" placeholder="${esc(b.search)}" value="${esc(s.search)}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
                         <button type="button" class="research-sync-link" data-act="expand-all">${esc(b.expandAll)}</button>
                         <button type="button" class="research-sync-link" data-act="add-more">${esc(b.addMore)}</button>
                     </div>

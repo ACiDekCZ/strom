@@ -314,3 +314,31 @@ test('the tree-actions sheet fits 320 and 430 wide: a long name wraps, nothing o
         await expect(sheet).toHaveCount(0);
     }
 });
+
+test('search fields take a name as typed: no auto-capitals, corrections or spell check (T23)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    const id = await card(page, 'Jan').getAttribute('data-id');
+    // A person picker built inside a dialog (the relationship calculator).
+    await page.evaluate((pid) => window.Strom.UI.showRelationshipCalculator(pid as never), id);
+    await expect(page.locator('#kinship-modal')).toBeVisible();
+    const fields = await page.evaluate(() => {
+        const sel = ['#toolbar-search-picker .person-picker-input', '#kinship-modal .person-picker-input',
+            '#filter-lastname', '#filter-place', '#tree-manager-search', '#source-picker-search', '#sources-search'];
+        return sel.map(s => {
+            const el = document.querySelector(s) as HTMLInputElement | null;
+            if (!el) return `${s}: missing`;
+            const a = (n: string) => el.getAttribute(n);
+            return `${s}: ${a('autocapitalize')} ${a('autocorrect')} ${el.spellcheck} ${a('autocomplete')}`;
+        });
+    });
+    expect(fields).toEqual([
+        '#toolbar-search-picker .person-picker-input: off off false off',
+        '#kinship-modal .person-picker-input: off off false off',
+        '#filter-lastname: off off false off',
+        '#filter-place: off off false off',
+        '#tree-manager-search: off off false off',
+        '#source-picker-search: off off false off',
+        '#sources-search: off off false off',
+    ]);
+});
