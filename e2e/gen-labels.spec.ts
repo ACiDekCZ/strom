@@ -131,11 +131,14 @@ test('no left-fade veil: the focus card at the left edge keeps full opacity', as
     expect(onCard).toBe(true);
 });
 
-test('a band name never hides a connector line: the bus on its boundary passes over it (T11, phone, fit to screen)', async ({ page }) => {
+test('a band name lies over a connector line with a halo, beneath the cards: the bus on its boundary stays whole beside the name (T11, phone, fit to screen)', async ({ page }) => {
     // A mother with a marriage and a family without a father, focus on the
     // fatherless child: the line runs from the mother's card bottom sideways
     // along the band boundary to the child, right where the phone pins the
-    // FOCUSED GENERATION name. The opaque name used to cut that stretch out.
+    // FOCUSED GENERATION name. The opaque name used to cut that stretch out;
+    // lying beneath the line, the line then ran through the letters. Now the
+    // name is above the line with a halo in the canvas colour (like a map
+    // label) and still beneath every card.
     await page.setViewportSize({ width: 390, height: 844 });
     await openApp(page);
     await createFirstPerson(page, 'Ludmila', 'Habrova', { gender: 'female' });
@@ -192,19 +195,69 @@ test('a band name never hides a connector line: the bus on its boundary passes o
         style.textContent = '#tree-lines line { pointer-events: stroke !important; } #gen-labels, #gen-labels * { pointer-events: auto !important; }';
         document.head.appendChild(style);
         const hit = document.elementFromPoint(x, seg.top);
+        // Cards stay above the names: lay a name over a card's centre and probe there.
+        const nameRow = Array.from(document.querySelectorAll('#gen-labels .gen-label'))
+            .find(el => (el as HTMLElement).style.display !== 'none') as HTMLElement;
+        const cardEl = Array.from(document.querySelectorAll('.person-card'))
+            .find(c => c.querySelector('.name-text')?.textContent?.includes('Pavla')) as HTMLElement;
+        const cr = cardEl.getBoundingClientRect();
+        const box = document.getElementById('tree-container')!.getBoundingClientRect();
+        const oldTop = nameRow.style.top, oldLeft = nameRow.style.left;
+        nameRow.style.top = `${cr.top + cr.height / 2 - box.top}px`;
+        nameRow.style.left = `${cr.left + 4 - box.left}px`;
+        const nr = nameRow.getBoundingClientRect();
+        const overCard = document.elementFromPoint(nr.left + Math.min(nr.width, cr.width) / 2, nr.top + nr.height / 2);
+        nameRow.style.top = oldTop;
+        nameRow.style.left = oldLeft;
         style.remove();
         const rule = Array.from(document.querySelectorAll('#tree-lines line.gen-guide-line'))
             .find(l => Math.abs(l.getBoundingClientRect().top - seg.top) < 1);
+        // The halo: a text stroke in the canvas colour, painted beneath the glyphs.
+        const text = document.querySelector('#gen-labels .gen-label-text') as HTMLElement;
+        const cs = getComputedStyle(text);
+        const probeBg = document.createElement('div');
+        probeBg.style.color = 'var(--bg)';
+        document.body.appendChild(probeBg);
+        const bg = getComputedStyle(probeBg).color;
+        probeBg.remove();
         return {
-            hitTag: hit?.tagName.toLowerCase() ?? null,
             hitIsLabel: !!hit?.closest('#gen-labels'),
+            overCardIsCard: !!overCard && (overCard === cardEl || cardEl.contains(overCard)),
             ruleBroken: !!rule?.getAttribute('stroke-dasharray'),
+            lineDash: Array.from(document.querySelectorAll('#tree-lines line:not(.gen-guide-line)'))
+                .find(l => { const r = l.getBoundingClientRect(); return r.height < 1 && Math.abs(r.top - seg.top) < 1; })
+                ?.getAttribute('stroke-dasharray') ?? null,
+            strokeWidth: parseFloat(cs.webkitTextStrokeWidth || '0'),
+            strokeColor: cs.webkitTextStrokeColor,
+            paintOrder: cs.paintOrder,
+            bg,
         };
     });
     expect(probe.error).toBeUndefined();
-    // The connector is on top of the name, not cut by it…
-    expect(probe.hitIsLabel).toBe(false);
-    expect(probe.hitTag).toBe('line');
+    // The name is painted over the connector…
+    expect(probe.hitIsLabel).toBe(true);
+    // …with a halo in the canvas colour (the line breaks only around the glyphs)…
+    expect(probe.strokeWidth).toBeGreaterThanOrEqual(2);
+    expect(probe.strokeColor).toBe(probe.bg);
+    expect(probe.paintOrder.startsWith('stroke')).toBe(true);
+    // …the connector itself is drawn whole (no gap cut into it)…
+    expect(probe.lineDash).toBeNull();
+    // …and a card is always above a name.
+    expect(probe.overCardIsCard).toBe(true);
     // …while the faint boundary rule still breaks around the name.
     expect(probe.ruleBroken).toBe(true);
+
+    // The halo follows the theme's canvas colour in dark mode too.
+    const dark = await page.evaluate(() => {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        const text = document.querySelector('#gen-labels .gen-label-text') as HTMLElement;
+        const probeBg = document.createElement('div');
+        probeBg.style.color = 'var(--bg)';
+        document.body.appendChild(probeBg);
+        const out = { stroke: getComputedStyle(text).webkitTextStrokeColor, bg: getComputedStyle(probeBg).color };
+        probeBg.remove();
+        return out;
+    });
+    expect(dark.stroke).toBe(dark.bg);
+    expect(dark.bg).not.toBe(probe.bg);
 });

@@ -89,6 +89,9 @@ export const EXPORT_DYNAMIC_CONTAINER_IDS: readonly string[] = [
     'share-reply-intro', 'share-packet-title', 'share-packet-intro', 'share-packet-body',
 ];
 
+/** Template children of #tree-canvas the export keeps (emptied through their own entries above). */
+const CANVAS_KEPT_CHILD_IDS: readonly string[] = ['tree-lines', 'gen-labels'];
+
 /** Minimal element surface used by the export sanitizer (keeps it testable without a DOM). */
 interface SanitizableElement {
     readonly id: string;
@@ -99,15 +102,15 @@ interface SanitizableElement {
 
 /**
  * Empty every runtime-filled container in an export clone. The tree canvas
- * keeps its (emptied) #tree-lines SVG, which the renderer looks up by id.
- * Exported for tests.
+ * keeps its (emptied) #tree-lines SVG and #gen-labels layer, which the app
+ * looks up by id. Exported for tests.
  */
 export function sanitizeExportClone(root: { querySelector(selector: string): unknown }): void {
     for (const id of EXPORT_DYNAMIC_CONTAINER_IDS) {
         const el = root.querySelector('#' + id) as SanitizableElement | null;
         if (!el) continue;
         if (id === 'tree-canvas') {
-            Array.from(el.children).forEach(c => { if (c.id !== 'tree-lines') c.remove(); });
+            Array.from(el.children).forEach(c => { if (!CANVAS_KEPT_CHILD_IDS.includes(c.id)) c.remove(); });
         } else {
             el.replaceChildren();
         }

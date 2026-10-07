@@ -2,8 +2,11 @@
  * Sticky generation labels: the small-caps band names (GRANDPARENTS / PARENTS /
  * FOCUS GENERATION / CHILDREN …) pinned to the left edge of the canvas. The
  * guide LINES stay in the SVG and scroll with the tree; only the labels live
- * here, in an HTML overlay OUTSIDE the pan/zoom transform, so they hold their
- * place while the tree moves underneath.
+ * here, in an HTML layer that undoes the pan/zoom transform, so they hold their
+ * place while the tree moves underneath. The layer sits inside #tree-canvas
+ * between the lines SVG and the cards: a name is painted over the connector
+ * lines (its halo breaks a line only around the glyphs) and beneath every card
+ * (T11).
  *
  * Like the minimap, this reads TreeRenderer/ZoomPan and never writes back. It
  * reprojects once per transform change (ZoomPan.onChange) — never per frame —
@@ -26,9 +29,9 @@ import { uiModule } from './module.js';
  *      reprojection). The boundary lives in the empty world-space gutter
  *      between two generation rows, so the label can NEVER collide with a
  *      card — the `.covered` fade is unused in this mode. The connector buses
- *      run along the same boundary, so the overlay lies BENEATH the tree's
- *      lines and cards and never hides a line (T11): only the guide rule
- *      makes way for the name.
+ *      run along the same boundary: the name lies over them with a halo in the
+ *      canvas colour, so a bus stays whole on both sides of the name and is
+ *      broken only within the halo around the glyphs (T11); no opaque box.
  *
  *  'row' — the previous behaviour: the name floats at the row centre and fades
  *      out (`.covered`) under any card that pans over it.
@@ -171,6 +174,13 @@ export const genLabelsMethods = uiModule({
         const { height } = ZoomPan.getViewportSize();
         const container = document.getElementById('tree-container');
         const containerRect = container ? container.getBoundingClientRect() : null;
+        // The layer lives inside the transformed canvas: undo the transform and
+        // give it the container's size, so it works in screen pixels.
+        overlay.style.transform = ZoomPan.screenLayerTransform();
+        if (container) {
+            overlay.style.width = `${container.clientWidth}px`;
+            overlay.style.height = `${container.clientHeight}px`;
+        }
 
         // Hide the whole overlay when bands are too cramped to label (screen
         // pitch of one generation row), not at an arbitrary zoom scale.

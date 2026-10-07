@@ -782,6 +782,16 @@ class ZoomPanClass {
         return { scale: this.scale, tx: this.tx, ty: this.ty };
     }
 
+    /**
+     * CSS transform for a layer inside #tree-canvas that undoes the canvas's
+     * own pan/zoom (the same whole-pixel pan as apply()), so the layer's
+     * coordinates are the container's screen pixels — the sticky generation
+     * labels, drawn between the tree's lines and its cards.
+     */
+    screenLayerTransform(): string {
+        return `scale(${1 / this.scale}) translate(${-Math.round(this.tx)}px, ${-Math.round(this.ty)}px)`;
+    }
+
     /** Size of the pannable viewport (the tree container), in CSS pixels. */
     getViewportSize(): { width: number; height: number } {
         const container = document.getElementById('tree-container');

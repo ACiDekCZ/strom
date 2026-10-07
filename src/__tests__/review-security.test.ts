@@ -74,10 +74,11 @@ describe('K1 export clone sanitizer', () => {
         }
     });
 
-    it('drops rendered cards and lines but keeps the empty #tree-lines SVG', () => {
+    it('drops rendered cards and lines but keeps the empty #tree-lines SVG and #gen-labels layer', () => {
         const lines = new FakeEl('tree-lines').append(new FakeEl('', '<path d="M0 0"/>'));
+        const labels = new FakeEl('gen-labels').append(new FakeEl('', 'Secret band'));
         const card = new FakeEl('', 'Secret Living Person');
-        const canvas = new FakeEl('tree-canvas').append(lines, card);
+        const canvas = new FakeEl('tree-canvas').append(lines, labels, card);
         const timeline = new FakeEl('timeline-container').append(new FakeEl('', 'Secret row'));
         const name = new FakeEl('pm-name', 'Secret Name');
         const staticEl = new FakeEl('about-version', '1.0.0');
@@ -88,8 +89,9 @@ describe('K1 export clone sanitizer', () => {
         const out = root.serialize();
         expect(out).not.toContain('Secret');
         expect(out).not.toContain('<path');
-        expect(canvas.children.map(c => c.id)).toEqual(['tree-lines']);
+        expect(canvas.children.map(c => c.id)).toEqual(['tree-lines', 'gen-labels']);
         expect(lines.children).toHaveLength(0);
+        expect(labels.children).toHaveLength(0);
         expect(out).toContain('1.0.0');
     });
 });
