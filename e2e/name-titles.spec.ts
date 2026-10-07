@@ -186,3 +186,37 @@ test('a research conflict about a title is named in words and marks the title\'s
     await expect(modal.locator('#input-title-before')).toBeHidden();
     await expect(modal.locator('label[for="input-firstname"] .pm-conflict-tag')).toHaveCount(1);
 });
+
+test.describe('titles and the research\'s version (T07)', () => {
+    for (const knows of [false, true]) {
+        test(knows ? 'a research that knows titles (person.titles): its version decides — a title removed there goes here too'
+            : 'a research that drops titles: loading its version keeps the titles entered here', async ({ page }) => {
+            const { openResearch, fakeBridge, poll, researchGed } = await import('./research-bridge.js');
+            await page.setViewportSize({ width: 1440, height: 900 });
+            await page.clock.install();
+            await openResearch(page);
+            const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null },
+                features: knows ? ['family.alone', 'person.titles'] : ['family.alone'] });
+            await poll(page);
+            const titlesOf = (first: string) => page.evaluate((first) => {
+                const p = (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(x => x.firstName === first);
+                return [p.titleBefore ?? '', p.titleAfter ?? ''];
+            }, first);
+            // Titles entered in the app (Jan) — the research's newer version has none of them; Josef gets one there.
+            await page.evaluate(() => {
+                const dm = window.Strom.DataManager;
+                const jan = (Object.values(dm.getData().persons) as any[]).find(p => p.firstName === 'Jan');
+                dm.updatePerson(jan.id, { titleBefore: 'Ing.', titleAfter: 'ml.' });
+            });
+            bridge.head = 'cd34ef56ab12';
+            bridge.treeGed = researchGed('cd34ef56ab12').replace('1 NAME Josef /Víšek/', '1 NAME MUDr. Josef /Víšek/\n2 NPFX MUDr.');
+            await poll(page);
+            await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+            await page.locator('.confirm-aside-btn', { hasText: 'Load without changes' }).click();
+            await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('cd34ef56ab12');
+            expect(await titlesOf('Jan')).toEqual(knows ? ['', ''] : ['Ing.', 'ml.']);
+            expect(await titlesOf('Josef')).toEqual(['MUDr.', '']);
+            await expect(card(page, 'Jan').locator('.name-text')).toHaveAttribute('title', knows ? 'Jan Víšek' : 'Ing. Jan Víšek ml.');
+        });
+    }
+});

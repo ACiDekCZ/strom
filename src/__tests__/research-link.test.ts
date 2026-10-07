@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs,
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
-    decideResearchOpen, stabilizeIds, carryOverMedia, sanitizeLiveStatus, sanitizeLiveChange,
+    decideResearchOpen, stabilizeIds, keepTitles, carryOverMedia, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, extractChangedRefs, personsByRefs, humanizeChange,
     isGedcomFileName, normalizeResearchId, parseEventData, isSafariBrowser,
     sanitizeResearchLinks, researchSchemeUrl, researchSourceRef, researchClip, researchPersonRef, researchTaskRef,
@@ -292,6 +292,59 @@ describe('stabilizeIds', () => {
         expect(JSON.stringify(second)).toBe(before);
         // Nothing matched uniquely → person ids stay as imported.
         expect(Object.keys(out.persons).sort()).toEqual(Object.keys(second.persons).sort());
+    });
+});
+
+describe('keepTitles — an older research drops titles (T07)', () => {
+    const byRefn = (d: StromData, refn: string) => Object.values(d.persons).find(p => p.refn === refn)!;
+    /** The tree here: Josef "Ing." … "st.", Jan "Mgr." (entered in the app). */
+    const here = (): StromData => {
+        const d = importData(researchGed());
+        Object.assign(byRefn(d, 'P0001'), { titleBefore: 'Ing.', titleAfter: 'st.' });
+        Object.assign(byRefn(d, 'P0003'), { titleBefore: 'Mgr.' });
+        return d;
+    };
+    /** The research's version with titles of its own (a research that knows them). */
+    const withTitles = (ged: string): string => ged
+        .replace('1 NAME Josef /Víšek/', '1 NAME Doc. Josef /Víšek/\n2 NPFX Doc.');
+
+    it('a research without person.titles: every person keeps the titles of the previous state, matched by REFN', () => {
+        const previous = here();
+        const next = importData(researchGed({ extraPerson: true }));
+        for (const features of [null, undefined, [], ['family.alone', 'sync.ids']]) {
+            const out = keepTitles(next, previous, features);
+            expect(byRefn(out, 'P0001')).toMatchObject({ titleBefore: 'Ing.', titleAfter: 'st.', firstName: 'Josef' });
+            expect(byRefn(out, 'P0003').titleBefore).toBe('Mgr.');
+            expect(byRefn(out, 'P0003').titleAfter).toBeUndefined();
+            expect(byRefn(out, 'P0004').titleBefore).toBeUndefined();
+            // The rest is the research's version, ids as imported.
+            expect(Object.keys(out.persons).sort()).toEqual(Object.keys(next.persons).sort());
+            expect(stabilizeIds(out, previous).persons[byRefn(previous, 'P0001').id].titleBefore).toBe('Ing.');
+        }
+        // Neither input changed.
+        expect(byRefn(next, 'P0001').titleBefore).toBeUndefined();
+    });
+
+    it('a title the research version has stays, even without person.titles', () => {
+        const out = keepTitles(importData(withTitles(researchGed())), here(), null);
+        expect(byRefn(out, 'P0001')).toMatchObject({ titleBefore: 'Doc.', titleAfter: 'st.' });
+    });
+
+    it('a research with person.titles decides them: its titles win, a title removed there goes here too', () => {
+        const next = importData(withTitles(researchGed()));
+        const out = keepTitles(next, here(), ['sync.ids', 'person.titles']);
+        expect(out).toBe(next);
+        expect(byRefn(out, 'P0001').titleBefore).toBe('Doc.');
+        expect(byRefn(out, 'P0001').titleAfter).toBeUndefined();
+        expect(byRefn(out, 'P0003').titleBefore).toBeUndefined();
+    });
+
+    it('people with no unique REFN, or no titles before, are left as they are', () => {
+        const previous = here();
+        for (const p of Object.values(previous.persons)) p.refn = 'SAME';
+        const next = importData(researchGed());
+        expect(keepTitles(next, previous, null)).toBe(next);
+        expect(keepTitles(next, importData(researchGed()), null)).toBe(next);
     });
 });
 

@@ -539,6 +539,37 @@ export function keepKnownSex(next: StromData, previous: StromData, guessed: Read
 }
 
 /**
+ * Titles before and after the name (Person.titleBefore / titleAfter) that a
+ * research version lacks: a research that does not know titles (no
+ * `person.titles` in its features; 1.12 drops NPFX/NSFX) leaves them out of
+ * every version, so each person keeps the titles of the previous state,
+ * matched by REFN (as stabilizeIds matches them). A title the research's
+ * version has stays. `features`: the research's (`/status.features`; not
+ * known = an older research). With `person.titles` the research decides
+ * them, a removed title included: `next` comes back as it is. Returns a new
+ * object when any person changed; neither input is changed.
+ */
+export function keepTitles(next: StromData, previous: StromData, features: readonly string[] | null | undefined): StromData {
+    if (features?.includes('person.titles')) return next;
+    const prevByRefn = uniqueRefns(previous);
+    if (prevByRefn.size === 0) return next;
+    let persons: StromData['persons'] | null = null;
+    for (const [refn, id] of uniqueRefns(next)) {
+        const prevId = prevByRefn.get(refn);
+        const was = prevId ? previous.persons[prevId] : undefined;
+        if (!was) continue;
+        let p = (persons ?? next.persons)[id];
+        for (const key of ['titleBefore', 'titleAfter'] as const) {
+            const title = was[key]?.trim();
+            if (!title || p[key]?.trim()) continue;
+            persons ??= { ...next.persons };
+            p = persons[id] = { ...p, [key]: was[key] };
+        }
+    }
+    return persons ? { ...next, persons } : next;
+}
+
+/**
  * People whose sex the research's version leaves unknown, by reference
  * number, with the sex they have here after the load (kept or the
  * importer's): sent back as SEX U while that sex stays (N60-2).

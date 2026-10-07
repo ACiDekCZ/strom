@@ -32,7 +32,7 @@ import { formatLiveTime, formatLiveClock } from '../live-time.js';
 import { isMobile } from '../breakpoints.js';
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
-    decideResearchOpen, stabilizeIds, keepKnownSex, sexUByRefn, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
+    decideResearchOpen, stabilizeIds, keepKnownSex, keepTitles, sexUByRefn, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
@@ -1211,6 +1211,8 @@ export const researchUiMethods = uiModule({
             // sex here stays (a husband's guess as well, N61-1); one that changes is a row of its table.
             if (previous) {
                 data = keepKnownSex(data, previous, sexGuessedIn(data));
+                // Titles a research that does not know them dropped stay (T07): never asked about, never lost.
+                data = keepTitles(data, previous, source.treeId ? this.researchStatusOf(source.treeId)?.features : null);
                 const persons = data.persons;
                 const before = new Map(Object.values(previous.persons ?? {}).filter(p => p?.refn?.trim()).map(p => [p.refn!.trim(), p.gender]));
                 sexUnknown = [...unknownSex].filter(id => {
@@ -2201,7 +2203,9 @@ export const researchUiMethods = uiModule({
         const active = DataManager.getCurrentTreeId() === s.treeId;
         const previous = await readTree(s.treeId);
         // Images added in the app before following stay (the research has none of them).
-        const kept = previous ? carryOverMedia(stabilizeIds(keepKnownSex(data, previous, guessed), previous), previous).data : data;
+        // Titles a research that does not know them dropped stay (T07).
+        const known = previous ? keepKnownSex(keepTitles(data, previous, this.researchStatusOf(s.researchId)?.features), previous, guessed) : data;
+        const kept = previous ? carryOverMedia(stabilizeIds(known, previous), previous).data : data;
         const stable = migrateData(previous && !this.researchKeepsLoneFamilies(s.researchId) ? carryOverUnknownPartners(kept, previous) : kept);
         if (active) {
             // Following replaces the tree again and again: one backup, before the first time.
