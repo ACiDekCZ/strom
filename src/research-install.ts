@@ -39,6 +39,11 @@ const BETA_DOWNLOAD = 'https://raw.githubusercontent.com/ACiDekCZ/strom-research
 /** Every release, prereleases (the betas) among them. */
 export const INSTALL_RELEASES_URL = 'https://github.com/ACiDekCZ/strom-research/releases';
 
+/** The npm command that updates an older research: npm's `latest`, or its `beta` tag on the beta channel. */
+export function npmUpdateCommand(channel: InstallChannel = 'stable'): string {
+    return `npm install -g strom-research@${channel === 'beta' ? 'beta' : 'latest'}`;
+}
+
 /** The page with the research's releases for the line's channel (under the npm way). */
 export function installReleasePage(channel: InstallChannel = 'stable'): string {
     return channel === 'beta' ? INSTALL_RELEASES_URL : INSTALL_RELEASE_URL;

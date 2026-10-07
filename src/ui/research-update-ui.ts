@@ -10,11 +10,12 @@
 import { strings } from '../strings.js';
 import { storedResearchBridge } from '../research-device.js';
 import { onComputer } from './research-ui.js';
+import { installChannel, npmUpdateCommand } from '../research-install.js';
+import { isBetaBuildHere } from '../pwa.js';
 import { uiModule } from './module.js';
 
 const DIALOG_ID = 'research-update-modal';
 const UPDATE_COMMAND = 'strom update';
-const NPM_COMMAND = 'npm install -g strom-research@latest';
 /** How long "Check again" waits for the bridge. */
 const CHECK_TIMEOUT_MS = 4000;
 
@@ -81,7 +82,7 @@ export const researchUpdateMethods = uiModule({
                     <p class="research-update-label">${esc(u.runInTerminal)}</p>
                     ${row(UPDATE_COMMAND)}
                     <p class="research-update-label">${esc(u.npm)}</p>
-                    ${row(NPM_COMMAND)}
+                    ${row(npmUpdateCommand(installChannel(isBetaBuildHere())))}
                     <p class="research-update-hint">${esc(u.restart)}</p>
                     <p class="research-update-hint">${esc(u.fallback)} <button type="button" class="link-button" data-act="install">${esc(u.showInstall)}</button></p>
                     ${note ? `<p class="research-update-note" role="status">${esc(note)}</p>` : ''}

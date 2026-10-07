@@ -1488,21 +1488,6 @@ test.describe('Research for this tree: sending changes', () => {
         await expect(page.locator('#research-tree-settings-modal')).toContainText('Changes are written in the research only after confirmation.');
     });
 
-    test('a research in its beta channel says so in Research for this tree; a status without the field changes nothing', async ({ page }) => {
-        const bridge = await autoTree(page, { statusExtra: { channel: 'beta' } });
-        const dialog = page.locator('#research-tree-settings-modal');
-        await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
-        await expect(dialog.locator('.research-channel-line')).toHaveText('Research: beta');
-        await page.evaluate(() => window.Strom.UI.closeResearchTreeSettings());
-        // Production (or any research before the field): no line, the rest as it was.
-        bridge.statusExtra = undefined;
-        await poll(page);
-        await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
-        await expect(dialog.locator('legend', { hasText: 'Sending changes' })).toBeVisible();
-        await expect(dialog.locator('.research-channel-line')).toHaveCount(0);
-        await expect(dialog).not.toContainText(/beta/i);
-    });
-
     test('a phone-sized window: short texts and the note instead of the box', async ({ page }) => {
         await autoTree(page);
         await page.setViewportSize({ width: 360, height: 760 });

@@ -22,6 +22,7 @@ import { onComputer, readTree } from './research-ui.js';
 import { researchDisplayName, researchSendMode } from './research-sync-ui.js';
 import { SettingsManager } from '../settings.js';
 import { formatBytesShort } from './originals-ui.js';
+import { isBetaBuildHere } from '../pwa.js';
 
 const SETTINGS_ID = 'research-tree-settings-modal';
 const ASK_ID = 'research-mode-ask-modal';
@@ -181,7 +182,8 @@ export const researchTreeSettingsMethods = uiModule({
         const archive = this.researchModeOf(link.id, link) === 'archive';
         const modeLine = this.researchModeSinceLine(treeId);
         // The research runs in its beta channel (its status said so in this page; production says nothing).
-        const betaChannel = this.researchStatusOf(link.id)?.channel === 'beta';
+        // Said in the beta app only: the public app ignores the field.
+        const betaChannel = isBetaBuildHere() && this.researchStatusOf(link.id)?.channel === 'beta';
         // How changes go: a research that tells what it takes (an older one sends the old way only).
         const sendingShown = this.researchSyncCapable(link.id);
         const compact = compactScreen();

@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import {
     installTreeName,
     detectInstallOs, installLine, npmLines, legacyInstallLine, legacyNpmLines, installFromValue, INSTALL_LINE_STROM_FROM, installAppUrl, sanitizeInstallRecord, newInstallRecord, installPhase,
-    INSTALL_BETA_CHANNEL, installChannel, installReleasePage, INSTALL_OSES,
+    INSTALL_BETA_CHANNEL, installChannel, installReleasePage, INSTALL_OSES, npmUpdateCommand,
     readInstallRecord, writeInstallRecord, clearInstallRecord, INSTALL_KEY, INSTALL_TTL_MS, INSTALL_LONG_MS,
 } from '../research-install.js';
 import { TreeId } from '../types.js';
@@ -110,6 +110,12 @@ describe('the beta app\'s lines: the research\'s beta channel', () => {
             expect(second).toBe(npmLines(os, T, BETA, 'Víškovi', { browser: 'edge' })[1]);
         }
         expect(installReleasePage('beta')).toBe('https://github.com/ACiDekCZ/strom-research/releases');
+    });
+
+    it('updating an older research by npm: the beta tag on the beta channel, else latest', () => {
+        expect(npmUpdateCommand('beta')).toBe('npm install -g strom-research@beta');
+        expect(npmUpdateCommand('stable')).toBe('npm install -g strom-research@latest');
+        expect(npmUpdateCommand()).toBe('npm install -g strom-research@latest');
     });
 
     it('the stable channel (production, or the switch off): no word of the beta channel, the releases as before', () => {
