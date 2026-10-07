@@ -4,6 +4,7 @@
  */
 
 import { DataManager, auditPersonName } from '../data.js';
+import { placeKey } from '../places.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -849,14 +850,92 @@ export const personModalMethods = uiModule({
                     ? `<span class="event-details-line">${this.escapeHtml(extra)}</span>` : ''}</span>`
                 + `</div>`;
         }).join('');
+        // A name or a place inside a row is its own link (T17); it must not
+        // also open the row's couple event.
+        const fromLink = (e: Event): boolean => !!(e.target as HTMLElement).closest('.pm-lifeline-link');
         body.querySelectorAll<HTMLElement>('.pm-lifeline-row.is-link').forEach(row => {
             const open = () => this.showEditCoupleEventModal(
                 row.dataset.partnershipId as PartnershipId, row.dataset.eventId ?? '');
-            row.addEventListener('click', open);
+            row.addEventListener('click', (e: MouseEvent) => { if (!fromLink(e)) open(); });
             row.addEventListener('keydown', (e: KeyboardEvent) => {
+                if (fromLink(e)) return;
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
             });
         });
+        body.querySelectorAll<HTMLButtonElement>('.pm-lifeline-link').forEach(btn => {
+            btn.addEventListener('click', (e: MouseEvent) => {
+                e.stopPropagation();
+                if (btn.dataset.personId) this.openLifelinePerson(btn.dataset.personId as PersonId);
+                else if (btn.dataset.place !== undefined) this.openLifelinePlace(btn.dataset.place);
+            });
+        });
+    },
+
+    /** A name in the life timeline (T17): that person's card, unsaved changes asked about first. */
+    openLifelinePerson(personId: PersonId): void {
+        if (personId === this.currentId || !DataManager.getPerson(personId)) return;
+        this.leavePersonModalThen(() => {
+            this.clearDialogStack();
+            this.pushDialog('person-modal');
+            this.showEditPersonModal(personId);
+            // The new card starts at its top, not where the timeline was.
+            const box = document.querySelector<HTMLElement>('#person-modal .pm-modal > .modal-content');
+            if (box) box.scrollTop = 0;
+        });
+    },
+
+    /**
+     * A place in the life timeline (T17): the map on that place when it has
+     * coordinates, otherwise the places manager on its row.
+     */
+    openLifelinePlace(place: string): void {
+        const key = placeKey(place);
+        const hasGeo = !!DataManager.getData().places?.[key];
+        this.leavePersonModalThen(() => {
+            if (hasGeo) this.showPlaceOnMap(key);
+            else this.showPlacesManager(key, undefined, 'tree');
+        });
+    },
+
+    /**
+     * Close the person card and then `next()` — after the Save / Discard /
+     * Stay question when the form has unsaved changes. Stay, or a save the
+     * form refuses (no name, a bad date), leaves the card as it is.
+     */
+    leavePersonModalThen(next: () => void): void {
+        if (!this.hasPersonModalChanges()) {
+            this.forceCloseModal();
+            next();
+            return;
+        }
+        this.showUnsavedEditorDialog(strings.personModal.unsavedMessage, () => {
+            this.savePerson();
+            if (!document.getElementById('person-modal')?.classList.contains('active')) next();
+        }, () => {
+            this.forceCloseModal();
+            next();
+        });
+    },
+
+    /** A name in the life timeline: a link to that person's card, unless it is this card. */
+    lifelinePersonHtml(name: string, id: string | undefined): string {
+        const esc = this.escapeHtml(name);
+        if (!id || id === this.currentId || !DataManager.getPerson(id as PersonId)) return esc;
+        return `<button type="button" class="pm-lifeline-link is-person" data-person-id="${this.escapeHtml(id)}">${esc}</button>`;
+    },
+
+    /**
+     * The "· place" of a life-timeline row: a link to the map, or to the
+     * places manager while the place has no coordinates (not in a locked
+     * tree, where that manager cannot change anything).
+     */
+    lifelinePlaceHtml(place: string | undefined): string {
+        if (!place) return '';
+        const esc = this.escapeHtml(place);
+        const hasGeo = !!DataManager.getData().places?.[placeKey(place)];
+        const inner = hasGeo || !DataManager.isTreeLocked()
+            ? `<button type="button" class="pm-lifeline-link is-place" data-place="${esc}">${esc}</button>` : esc;
+        return ` <span class="pm-lifeline-place">· ${inner}</span>`;
     },
 
     /** The head's chip (T15): the children's events on or off, for every person. */
@@ -878,39 +957,41 @@ export const personModalMethods = uiModule({
     /** Localized description (HTML, escaped) for one life-timeline point. */
     lifelineDescription(pt: LifelinePoint): string {
         const pm = strings.personModal;
-        const place = pt.place ? ` <span class="pm-lifeline-place">· ${this.escapeHtml(pt.place)}</span>` : '';
+        const place = this.lifelinePlaceHtml(pt.place);
+        const who = pt.relatedName ? this.lifelinePersonHtml(pt.relatedName, pt.relatedId) : '';
         switch (pt.kind) {
             case 'birth':
                 return `${pm.lifelineBorn}${place}`;
             case 'death':
                 return `${pm.lifelineDied}${place}`;
             case 'marriage':
-                return `${pt.relatedName ? pm.lifelineMarried(this.escapeHtml(pt.relatedName)) : pm.lifelineMarriedUnknown}${place}`;
+                return `${pt.relatedName ? pm.lifelineMarried(who) : pm.lifelineMarriedUnknown}${place}`;
             case 'divorce':
                 if (pt.unmarried) {
-                    return `${pt.relatedName ? pm.lifelineRelationEnded(this.escapeHtml(pt.relatedName)) : pm.lifelineRelationEndedUnknown}${place}`;
+                    return `${pt.relatedName ? pm.lifelineRelationEnded(who) : pm.lifelineRelationEndedUnknown}${place}`;
                 }
-                return `${pt.relatedName ? pm.lifelineDivorced(this.escapeHtml(pt.relatedName)) : pm.lifelineDivorcedUnknown}${place}`;
+                return `${pt.relatedName ? pm.lifelineDivorced(who) : pm.lifelineDivorcedUnknown}${place}`;
             case 'child':
-                return pt.relatedName ? pm.lifelineChild(this.escapeHtml(pt.relatedName)) : pm.lifelineChildUnknown;
+                return pt.relatedName ? pm.lifelineChild(who) : pm.lifelineChildUnknown;
             case 'childEvent': {
                 // "Marie Nováková: marriage · Praha" — the child named first.
                 const types = pm.lifelineChildEventTypes;
                 const what = pt.childEvent === 'divorce' && pt.unmarried ? types.relationEnded
                     : types[pt.childEvent ?? 'death'];
-                return `${pm.lifelineChildEvent(this.escapeHtml(pt.relatedName ?? '?'), what)}${place}`;
+                return `${pm.lifelineChildEvent((who || '?'), what)}${place}`;
             }
             case 'coupleEvent': {
                 // "Banns — Marie Dvořáková · Dolní Lhota"; witnesses and house go below.
                 const label = this.escapeHtml(coupleEventLabel({ type: pt.coupleType ?? 'custom', customLabel: pt.customLabel }));
-                return `${pt.relatedName ? pm.lifelinePartnerEvent(label, this.escapeHtml(pt.relatedName)) : label}${place}`;
+                return `${pt.relatedName ? pm.lifelinePartnerEvent(label, who) : label}${place}`;
             }
             default: {
                 const label = pt.eventType === 'custom'
                     ? (pt.customLabel || strings.events.types.custom)
                     : (strings.events.types[pt.eventType as keyof typeof strings.events.types] ?? String(pt.eventType));
                 const withPeople = pt.participants && pt.participants.length
-                    ? ` <span class="pm-lifeline-place">· ${this.escapeHtml(pm.lifelineWith(pt.participants.join(', ')))}</span>`
+                    ? ` <span class="pm-lifeline-place">· ${pm.lifelineWith(pt.participants
+                        .map((n, k) => this.lifelinePersonHtml(n, pt.participantIds?.[k])).join(', '))}</span>`
                     : '';
                 // The trade itself, ahead of who and where — it is what the row
                 // is about (see LifelinePoint.detail).

@@ -209,7 +209,8 @@ test.describe("couple's events", () => {
         await expect(banns.locator('.event-details-line')).toHaveText('witnesses Josef Kříž, Václav Dvořák');
         await expect(lifeline.locator('.pm-lifeline-row.is-link').nth(1).locator('.pm-lifeline-year')).toHaveText('1890–1900');
         await expect(lifeline).not.toContainText('Křest dítěte manželů');
-        await banns.click();
+        // The row opens the event; the names and places in it are their own links (T17).
+        await banns.locator('.pm-lifeline-year').click();
         await expect(editor(page)).toBeVisible();
         await expect(page.locator('#event-editor-subtitle')).toHaveText('Jan Vlk & Marie Dvořáková');
         await page.locator('#input-event-place').fill('Čáslav');

@@ -110,3 +110,113 @@ test.describe('T15: divorce and the children\'s events in the life timeline', ()
         expect(box!.x + box!.width).toBeLessThanOrEqual(360);
     });
 });
+
+/** Serve a blank PNG for every map tile and count the OSM notice as seen. */
+async function stubTiles(page: Page): Promise<void> {
+    const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+    );
+    await page.route('**://tile.openstreetmap.org/**', route =>
+        route.fulfill({ status: 200, contentType: 'image/png', body: png }));
+    await page.addInitScript(() => {
+        const raw = localStorage.getItem('strom-settings');
+        const settings = raw ? JSON.parse(raw) : {};
+        settings.mapTiles = true;
+        localStorage.setItem('strom-settings', JSON.stringify(settings));
+    });
+}
+
+const pmName = (page: Page) => page.locator('#person-modal #pm-name');
+const link = (page: Page, text: string) =>
+    page.locator('#pm-lifeline-body .pm-lifeline-link', { hasText: text }).first();
+
+test.describe('T17: names and places in the life timeline are links', () => {
+    test('a name opens that person\'s card; this card\'s own name is no link', async ({ page }) => {
+        await setup(page);
+        await openCard(page, 'Jan');
+        await expect(pmName(page)).toHaveText('Jan Vlk');
+        await link(page, 'Anna Králová').click();
+        await expect(page.locator('#person-modal')).toBeVisible();
+        await expect(pmName(page)).toHaveText('Anna Králová');
+        await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
+        // On Anna's card, the partner is Jan — a link back.
+        await link(page, 'Jan Vlk').click();
+        await expect(pmName(page)).toHaveText('Jan Vlk');
+        await expect(page.locator('#pm-lifeline-body .pm-lifeline-link', { hasText: 'Jan Vlk' })).toHaveCount(0);
+    });
+
+    test('unsaved changes are asked about first: Stay keeps the card, Discard and Save go on', async ({ page }) => {
+        await setup(page);
+        await openCard(page, 'Jan');
+        await page.locator('#input-notes').fill('mlynář');
+        await link(page, 'Marie Vlková').click();
+        const confirm = page.locator('#confirmation-modal');
+        await expect(confirm).toHaveClass(/active/);
+        await page.locator('#confirm-stay-btn').click();
+        await expect(pmName(page)).toHaveText('Jan Vlk');
+        await expect(page.locator('#input-notes')).toHaveValue('mlynář');
+
+        await link(page, 'Marie Vlková').click();
+        await page.locator('#confirm-discard-btn').click();
+        await expect(pmName(page)).toHaveText('Marie Vlková');
+        const notes = () => page.evaluate(() => window.Strom.DataManager.getAllPersons()
+            .find((p: { firstName: string }) => p.firstName === 'Jan')!.notes ?? '');
+        expect(await notes()).toBe('');
+
+        await openCard(page, 'Jan');
+        await expect(pmName(page)).toHaveText('Jan Vlk');
+        await page.locator('#input-notes').fill('mlynář');
+        await link(page, 'Václav Vlk').click();
+        await page.locator('#confirm-save-btn').click();
+        await expect(pmName(page)).toHaveText('Václav Vlk');
+        expect(await notes()).toBe('mlynář');
+    });
+
+    test('a place with coordinates opens the map on it', async ({ page }) => {
+        await stubTiles(page);
+        await setup(page);
+        await page.evaluate(() => window.Strom.DataManager.setPlaceGeos(new Map([['dolni lhota', { lat: 49.5, lon: 16.25 }]])));
+        await openCard(page, 'Jan');
+        await link(page, 'Dolní Lhota').click();
+        await expect(page.locator('#person-modal')).not.toHaveClass(/active/);
+        await expect(page.locator('#map-container')).toBeVisible();
+        expect(await page.evaluate(() => window.Strom.TreeRenderer.getViewMode())).toBe('map');
+        expect(await page.evaluate(() => window.Strom.UI.mapCenter)).toEqual({ lat: 49.5, lon: 16.25 });
+        await expect(page.locator('.map-popup')).toBeVisible();
+        await expect(page.locator('.map-popup .map-popup-head strong')).toHaveText('Dolní Lhota');
+    });
+
+    test("a name inside a couple event's row opens the person, not the event", async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const u = Object.values(dm.getData().partnerships)[0] as { events?: unknown[] };
+            const jan = dm.getAllPersons().find((p: { firstName: string }) => p.firstName === 'Jan')!;
+            if (!jan.partnerships.includes((u as { id: string }).id)) throw new Error('fixture');
+            u.events = [{ id: 'ce1', type: 'banns', date: '1866' }];
+        });
+        await openCard(page, 'Jan');
+        const row = page.locator('#pm-lifeline-body .pm-lifeline-row.is-link');
+        await expect(row).toHaveCount(1);
+        await row.locator('.pm-lifeline-link', { hasText: 'Anna Králová' }).click();
+        await expect(pmName(page)).toHaveText('Anna Králová');
+        await expect(page.locator('#event-editor-modal')).not.toHaveClass(/active/);
+        // The keyboard too: Enter on the name is the name's, not the row's.
+        await openCard(page, 'Jan');
+        await row.locator('.pm-lifeline-link', { hasText: 'Anna Králová' }).focus();
+        await page.keyboard.press('Enter');
+        await expect(pmName(page)).toHaveText('Anna Králová');
+        await expect(page.locator('#event-editor-modal')).not.toHaveClass(/active/);
+    });
+
+    test('a place without coordinates opens the places manager on its row', async ({ page }) => {
+        await setup(page);
+        await openCard(page, 'Jan');
+        await link(page, 'Bystřice').click();
+        await expect(page.locator('#person-modal')).not.toHaveClass(/active/);
+        const row = page.locator('#places-modal .place-row[data-key="bystrice"]');
+        await expect(row).toBeVisible();
+        await expect(row.locator('.place-search')).toBeVisible();
+    });
+});

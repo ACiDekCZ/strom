@@ -586,6 +586,22 @@ export const mapMethods = uiModule({
         popup.style.display = 'block';
     },
 
+    /**
+     * Open the map on one place (T17, a place in the life timeline): centred
+     * at town level, its panel of people open. A place the current scope does
+     * not cover switches the map to the whole tree.
+     */
+    showPlaceOnMap(key: string): void {
+        const geo = DataManager.getData().places?.[key];
+        if (!geo) return;
+        if (!this.mapPlaces().some(p => p.key === key)) this.mapScope = 'tree';
+        this.mapCenter = { lat: geo.lat, lon: geo.lon };
+        this.mapZoom = 11;
+        this.closeMapPopup();
+        TreeRenderer.presetViewMode('map');
+        void TreeRenderer.renderAsync().then(() => this.showMapPlace(key));
+    },
+
     /** Delegated clicks for map content that is re-rendered as HTML strings.
      *  Place keys are user data — they must never be spliced into inline JS. */
     bindMapClicks(container: HTMLElement): void {
@@ -869,12 +885,13 @@ export const mapMethods = uiModule({
     /**
      * @param focusKey scroll to this place and open its search straight away
      * @param parentDialogId dialog to return to on Escape/Close (tree manager)
+     * @param scope which places to list, when the caller knows better
      *
      * Opened from the map it follows the map's scope; opened from anywhere else
      * "this view" would mean nothing, so it covers the whole tree.
      */
-    showPlacesManager(focusKey?: string, parentDialogId?: string): void {
-        this.placesManagerScope = parentDialogId ? 'tree' : this.mapScope;
+    showPlacesManager(focusKey?: string, parentDialogId?: string, scope?: MapScope): void {
+        this.placesManagerScope = scope ?? (parentDialogId ? 'tree' : this.mapScope);
         this.placesManagerParent = parentDialogId ?? null;
         const places = this.placesForManager(this.placesManagerScope);
         if (places.length === 0) {
@@ -1003,7 +1020,7 @@ export const mapMethods = uiModule({
         this.mapCenter = null;  // what is on the map changed — reframe it
         TreeRenderer.render();
         if (document.getElementById('places-modal')) {
-            this.showPlacesManager(focusKey, this.placesManagerParent ?? undefined);
+            this.showPlacesManager(focusKey, this.placesManagerParent ?? undefined, this.placesManagerScope);
         }
     },
 

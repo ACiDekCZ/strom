@@ -171,8 +171,12 @@ export interface LifelinePoint {
      * the child (child, childEvent).
      */
     relatedName?: string;
+    /** The related person's id, while they are in the tree (T17: the name opens their card). */
+    relatedId?: string;
     /** Participant names for an event (godparents, witnesses, the officiant…). */
     participants?: string[];
+    /** Per participant, the id of the person in the tree, if linked (same order as `participants`). */
+    participantIds?: (string | undefined)[];
     /** Place recorded for the point, if any. */
     place?: string;
     /** What the record adds: cause, age as recorded, house (this person's age at a wedding). */
@@ -195,6 +199,31 @@ function yearFraction(date: string | undefined): number {
     const month = d.month ?? 6;
     const day = d.day ?? 15;
     return 0.05 + ((month - 1) / 12) * 0.85 + (day / 31) * (0.85 / 12);
+}
+
+/** `relatedName` and `relatedId` of a point about another person in the tree. */
+function related(data: StromData, id: string | undefined): { relatedName?: string; relatedId?: string } {
+    const name = personName(data, id);
+    return name ? { relatedName: name, relatedId: id } : {};
+}
+
+/** Participant names and, aligned with them, the ids of those in the tree. */
+function participantsOf(data: StromData, list: readonly { personId?: string; name?: string }[] | undefined):
+    { participants?: string[]; participantIds?: (string | undefined)[] } {
+    const named = (list ?? [])
+        .map(part => {
+            // Prefer the LIVE person's current name (the link is the source of
+            // truth); fall back to the stored snapshot only when the link is
+            // gone — same contract as the participant display elsewhere.
+            const live = personName(data, part.personId);
+            return { name: live ?? part.name?.trim(), id: live ? part.personId : undefined };
+        })
+        .filter((n): n is { name: string; id: string | undefined } => !!n.name);
+    if (!named.length) return {};
+    return {
+        participants: named.map(n => n.name),
+        ...(named.some(n => n.id) ? { participantIds: named.map(n => n.id) } : {}),
+    };
 }
 
 function personName(data: StromData, id: string | undefined): string | undefined {
@@ -229,12 +258,6 @@ export function computePersonLifeline(
     for (const ev of person.events ?? []) {
         const y = yearOf(ev.date);
         if (y === null) continue;
-        // Prefer the LIVE person's current name (the link is the source of
-        // truth); fall back to the stored snapshot only when the link is gone
-        // — same contract as the participant display elsewhere.
-        const participants = (ev.participants ?? [])
-            .map(part => personName(data, part.personId) ?? part.name?.trim())
-            .filter((n): n is string => !!n);
         points.push({
             year: y,
             sortKey: y + yearFraction(ev.date),
@@ -243,7 +266,7 @@ export function computePersonLifeline(
             ...(ev.customLabel ? { customLabel: ev.customLabel } : {}),
             ...(eventValueIsOnTag(ev.type) && ev.note?.trim()
                 ? { detail: ev.note.trim() } : {}),
-            ...(participants.length ? { participants } : {}),
+            ...participantsOf(data, ev.participants),
             ...(ev.place ? { place: ev.place } : {}),
             ...detailsOf(ev),
         });
@@ -260,7 +283,7 @@ export function computePersonLifeline(
             year: y,
             sortKey: y + yearFraction(u.startDate),
             kind: 'marriage',
-            ...(personName(data, otherId) ? { relatedName: personName(data, otherId) } : {}),
+            ...related(data, otherId),
             ...(u.startPlace ? { place: u.startPlace } : {}),
             ...detailsOf({ address: u.address, age: u.ages?.[personId] }),
         });
@@ -274,9 +297,7 @@ export function computePersonLifeline(
         for (const ev of u.events ?? []) {
             const d = parseFlexDate(ev.date);
             if (!d) continue;
-            const participants = (ev.participants ?? [])
-                .map(part => personName(data, part.personId) ?? part.name?.trim())
-                .filter((n): n is string => !!n);
+            const { participants } = participantsOf(data, ev.participants);
             points.push({
                 year: d.year,
                 sortKey: d.year + yearFraction(ev.date),
@@ -286,8 +307,8 @@ export function computePersonLifeline(
                 eventId: ev.id,
                 ...(d.end && d.end.year !== d.year ? { yearLabel: `${d.year}–${d.end.year}` } : {}),
                 ...(ev.customLabel ? { customLabel: ev.customLabel } : {}),
-                ...(personName(data, otherId) ? { relatedName: personName(data, otherId) } : {}),
-                ...(participants.length ? { participants } : {}),
+                ...related(data, otherId),
+                ...(participants ? { participants } : {}),
                 ...(ev.place ? { place: ev.place } : {}),
                 ...detailsOf({ address: ev.address, age: ev.ages?.[personId] }),
             });
@@ -307,7 +328,7 @@ export function computePersonLifeline(
             sortKey: y + yearFraction(u.endDate),
             kind: 'divorce',
             ...(isUnmarried(u.status) ? { unmarried: true } : {}),
-            ...(personName(data, otherId) ? { relatedName: personName(data, otherId) } : {}),
+            ...related(data, otherId),
             ...(u.endPlace ? { place: u.endPlace } : {}),
         });
     }
@@ -322,7 +343,7 @@ export function computePersonLifeline(
             year: y,
             sortKey: y + yearFraction(child.birthDate),
             kind: 'child',
-            ...(personName(data, childId) ? { relatedName: personName(data, childId) } : {}),
+            ...related(data, childId),
         });
     }
 
@@ -368,10 +389,9 @@ function childLifelinePoints(data: StromData, childIds: readonly string[]): Life
     for (const childId of childIds) {
         const child = data.persons[childId as keyof typeof data.persons];
         if (!child || child.isPlaceholder) continue;
-        const name = personName(data, childId);
         const base = (year: number, sortKey: number, childEvent: ChildLifelineEvent, place?: string): LifelinePoint => ({
             year, sortKey, kind: 'childEvent', childEvent,
-            ...(name ? { relatedName: name } : {}),
+            ...related(data, childId),
             ...(place ? { place } : {}),
         });
         const deathY = yearOf(child.deathDate);

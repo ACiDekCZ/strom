@@ -328,6 +328,33 @@ describe('computePersonLifeline', () => {
         expect(pts[pts.length - 1].kind).toBe('death');
     });
 
+    // T17: the names in the timeline open the person's card, so a point
+    // carries the id of whom it names — only while they are in the tree.
+    it('carries the ids of the people it names', () => {
+        const child = lp('c', 'Josef', 'male', { birthDate: '1905', deathDate: '1960' });
+        const godmother = lp('g', 'Eva', 'female');
+        const p = lp('p', 'Jan', 'male', {
+            birthDate: '1880', deathDate: '1950', partnerships: ['u1'], childIds: ['c'],
+            events: [{ id: 'e1', type: 'baptism', date: '1880', participants: [
+                { id: 'x', role: 'godparent', name: 'Karel Kmotr' },
+                { id: 'y', role: 'godparent', personId: 'g' as PersonId },
+            ] } as LifeEvent],
+        });
+        const spouse = lp('s', 'Marie', 'female');
+        const u1: Partnership = {
+            id: 'u1' as PartnershipId, person1Id: 'p' as PersonId, person2Id: 's' as PersonId,
+            childIds: ['c'] as PersonId[], status: 'divorced', startDate: '1903', endDate: '1920',
+        };
+        const pts = computePersonLifeline(data([p, spouse, child, godmother], [u1]), 'p', { childEvents: true });
+        expect(pts.find(x => x.kind === 'marriage')!.relatedId).toBe('s');
+        expect(pts.find(x => x.kind === 'divorce')!.relatedId).toBe('s');
+        expect(pts.find(x => x.kind === 'child')!.relatedId).toBe('c');
+        expect(pts.find(x => x.kind === 'childEvent')!.relatedId).toBe('c');
+        const baptism = pts.find(x => x.eventType === 'baptism')!;
+        expect(baptism.participants).toEqual(['Karel Kmotr', 'Eva Novák']);
+        expect(baptism.participantIds).toEqual([undefined, 'g']);
+    });
+
     it('returns empty for placeholders and skips undated points', () => {
         const p = lp('p', 'Ghost', 'male', { isPlaceholder: true });
         expect(computePersonLifeline(data([p]), 'p')).toEqual([]);

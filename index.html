@@ -3591,6 +3591,35 @@
         .pm-lifeline-glyph.k-marriage { color: #d4a017; }
         .pm-lifeline-glyph.k-child { color: var(--female, #a1706e); }
         .pm-lifeline-glyph.k-divorce { color: var(--text-light, #5c5546); }
+        /* T17: a name opens that person's card, a place the map (or the
+           places manager). Inline text links; `.modal button` (0,1,1) would
+           give them a button's padding and size. */
+        .modal button.pm-lifeline-link {
+            display: inline;
+            padding: 0;
+            margin: 0;
+            min-height: 0;
+            border: none;
+            border-radius: 2px;
+            background: none;
+            font: inherit;
+            line-height: inherit;
+            text-align: inherit;
+            color: inherit;
+            cursor: pointer;
+            text-decoration: underline dotted;
+            text-decoration-color: var(--text-faint);
+            text-underline-offset: 2px;
+        }
+        .modal button.pm-lifeline-link.is-person {
+            color: var(--primary);
+            font-weight: 500;
+            text-decoration: none;
+        }
+        .modal button.pm-lifeline-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (hover: hover) {
+            .modal button.pm-lifeline-link:hover { text-decoration: underline; text-decoration-color: currentColor; }
+        }
         /* T15: the children's events — indented, smaller, lighter than the
            person's own; the head's chip switches them on. */
         .pm-lifeline-row.k-childEvent { padding: 3px 0 3px 30px; }
