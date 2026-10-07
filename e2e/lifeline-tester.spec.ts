@@ -220,3 +220,66 @@ test.describe('T17: names and places in the life timeline are links', () => {
         await expect(row.locator('.place-search')).toBeVisible();
     });
 });
+
+/** Jan with places in his own life and thirty more people, one new place each:
+ *  enough rows to overflow the places manager, Jan's death place sorting last. */
+function manyPlacesGed(): string {
+    const lines = [
+        '0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Jan /Vlk/', '1 SEX M',
+        '1 BIRT', '2 DATE 1841', '2 PLAC Bystřice', '1 DEAT', '2 DATE 1922', '2 PLAC Zlín',
+    ];
+    for (let i = 1; i <= 30; i++) {
+        const n = String(i).padStart(2, '0');
+        lines.push(`0 @P${n}@ INDI`, `1 NAME Osoba${n} /Malý/`, '1 SEX M', '1 BIRT', `2 DATE 18${n}`, `2 PLAC Místo ${n}`);
+    }
+    lines.push('0 TRLR');
+    return lines.join('\n');
+}
+
+async function setupMany(page: Page, width: number, height: number): Promise<void> {
+    await page.setViewportSize({ width, height });
+    await openApp(page);
+    await dropFile(page, manyPlacesGed());
+    await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
+    await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
+    await expect(card(page, 'Jan')).toBeVisible();
+}
+
+test.describe('N9: the places manager opened from the life timeline shows the place\'s row', () => {
+    for (const [label, width, height] of [['desktop', 1440, 900], ['phone', 390, 844]] as const) {
+        test(`${label}: the row is in view and focus is in it`, async ({ page }) => {
+            await setupMany(page, width, height);
+            await openCard(page, 'Jan');
+            await link(page, 'Zlín').click();
+            const modal = page.locator('#places-modal');
+            const row = modal.locator('.place-row[data-key="zlin"]');
+            await expect(row.locator('.place-search')).toBeVisible();
+            // The last of 32 rows: the list really overflows.
+            await expect(modal.locator('.place-row').last()).toHaveAttribute('data-key', 'zlin');
+            // Settle a frame so that any late focus/scroll has happened.
+            await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+            const geom = await row.evaluate((el) => {
+                let box: HTMLElement | null = el.parentElement;
+                while (box && !(box.scrollHeight > box.clientHeight
+                    && /(auto|scroll)/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+                if (!box) throw new Error('no scroll container');
+                const r = el.getBoundingClientRect();
+                const c = box.getBoundingClientRect();
+                return {
+                    row: { top: r.top, bottom: r.bottom }, box: { top: c.top, bottom: c.bottom },
+                    scrolled: box.scrollTop,
+                    focusInRow: el.contains(document.activeElement),
+                    focusClass: (document.activeElement as HTMLElement | null)?.className ?? '',
+                };
+            });
+            expect(geom.scrolled).toBeGreaterThan(0);
+            expect(geom.row.top).toBeGreaterThanOrEqual(geom.box.top - 0.5);
+            expect(geom.row.bottom).toBeLessThanOrEqual(geom.box.bottom + 0.5);
+            expect(geom.row.top).toBeGreaterThanOrEqual(0);
+            expect(geom.row.bottom).toBeLessThanOrEqual(height);
+            expect(geom.focusInRow).toBe(true);
+            expect(geom.focusClass).toContain('place-query');
+        });
+    }
+});

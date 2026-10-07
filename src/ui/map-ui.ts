@@ -28,6 +28,7 @@ import {
 } from '../map.js';
 import { GEOCODER_NAME, geocodeCandidates, geocodePlaces } from '../geocode.js';
 import { uiModule } from './module.js';
+import { normalizeModal } from './modal-skeleton.js';
 
 import { iconSvg } from '../icons.js';
 /** A place that has coordinates and therefore something to draw. */
@@ -925,6 +926,10 @@ export const mapMethods = uiModule({
                 </div>
             </div>`;
         document.body.appendChild(overlay);
+        // Wrap the body into its scroll container now, not in the skeleton's
+        // observer later: moving the rows there afterwards would drop the
+        // scroll to the focused place and the focus in its search (N9).
+        normalizeModal(overlay.querySelector('.modal') as HTMLElement);
 
         const close = (): void => this.closePlacesManager();
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
@@ -935,8 +940,10 @@ export const mapMethods = uiModule({
 
         if (focusKey) {
             const row = overlay.querySelector(`.place-row[data-key="${CSS.escape(focusKey)}"]`) as HTMLElement | null;
-            row?.scrollIntoView({ block: 'center' });
+            // Open its search first (it focuses the query), then bring the
+            // whole, now taller row into view.
             (row?.querySelector('.place-change') as HTMLButtonElement | null)?.click();
+            row?.scrollIntoView({ block: 'center' });
         }
 
         // Same stack discipline as other child dialogs (see showAuditLog): the
