@@ -1005,23 +1005,27 @@
             box-shadow: var(--shadow-sm);
             z-index: 100;
         } }
-        /* Branch colour stripe: an absolute bar so the card box never changes.
+        /* Branch colour stripe: an absolute layer so the card box never changes.
+           It covers the whole card with the card's own rounding and paints only
+           its left 4px, so the stripe runs into the rounded corners like a
+           border instead of being a separate bar with corners of its own.
            Colours are mid-tones (defined in :root tokens) that read on both light and dark cards. */
         .person-card.branch-paternal::before,
         .person-card.branch-maternal::before,
         .person-card.branch-descendant::before {
             content: '';
             position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-            border-radius: 10px 0 0 10px;
+            /* The border box: the stripe starts at the card's outer edge. */
+            inset: -1px;
+            border-radius: inherit;
+            background: linear-gradient(to right, var(--branch-stripe) 4px, transparent 4px);
             pointer-events: none;
         }
-        .person-card.branch-paternal::before { background: var(--branch-paternal); }
-        .person-card.branch-maternal::before { background: var(--branch-maternal); }
-        .person-card.branch-descendant::before { background: var(--branch-descendant); }
+        /* The focused card's border is 2px wide. */
+        .person-card.focused[class*="branch-"]::before { inset: -2px; }
+        .person-card.branch-paternal { --branch-stripe: var(--branch-paternal); }
+        .person-card.branch-maternal { --branch-stripe: var(--branch-maternal); }
+        .person-card.branch-descendant { --branch-stripe: var(--branch-descendant); }
 
         /* Legend pill (bottom-left): gender rings, plus branch swatches when on.
            Informational only — never intercepts pointer events. */

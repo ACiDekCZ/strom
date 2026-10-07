@@ -51,6 +51,19 @@ const BRANCH_COLORS: Record<string, string> = {
     paternal: '#d08a5a', maternal: '#5a8fc0', descendant: '#57a869',
 };
 
+/**
+ * The branch stripe: the left `w` px of the card's rounded rectangle (corner
+ * radius r), so it runs into the rounded corners like the on-screen stripe
+ * instead of being a separate bar. Exported for tests.
+ */
+export function branchStripePath(x: number, y: number, h: number, r: number, w: number): string {
+    const f = (n: number) => n.toFixed(2);
+    // Where the corner arc meets the stripe's inner edge (x + w).
+    const dy = w < r ? r - Math.sqrt(r * r - (r - w) * (r - w)) : 0;
+    return `M${f(x + w)} ${f(y + dy)}A${r} ${r} 0 0 0 ${f(x)} ${f(y + r)}`
+        + `L${f(x)} ${f(y + h - r)}A${r} ${r} 0 0 0 ${f(x + w)} ${f(y + h - dy)}Z`;
+}
+
 /** Spouse-line dash per partnership status (mirror of the renderer). */
 function statusDash(status: PartnershipStatus | undefined): { dash?: string; color?: string } {
     switch (status) {
@@ -340,11 +353,12 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
         const border = options.cardLines ? COLORS.printBorder : COLORS.cardBorder;
         out.push(`<rect x="${pos.x.toFixed(1)}" y="${pos.y.toFixed(1)}" width="${cw}" height="${ch}" rx="8" fill="${COLORS.cardBg}" stroke="${border}" stroke-width="1"${borderDash}/>`);
 
-        // Branch colour stripe (matches the on-screen ::before bar)
+        // Branch colour stripe (matches the on-screen ::before stripe): from the
+        // outer edge of the 1px border, following the card's rounded corners.
         const branch = options.branchMap?.get(personId);
         const stripeColor = branch ? BRANCH_COLORS[branch] : undefined;
         if (stripeColor) {
-            out.push(`<rect x="${(pos.x + 1).toFixed(1)}" y="${(pos.y + 4).toFixed(1)}" width="4" height="${(ch - 8).toFixed(0)}" rx="2" fill="${stripeColor}"/>`);
+            out.push(`<path class="branch-stripe" d="${branchStripePath(pos.x - 0.5, pos.y - 0.5, ch + 1, 8.5, 4.5)}" fill="${stripeColor}"/>`);
         }
 
         if (person && options.cardLines) {

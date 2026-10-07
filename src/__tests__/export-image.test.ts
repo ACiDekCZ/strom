@@ -214,3 +214,19 @@ describe('connection continuity (the printed lines must not break)', () => {
         expect(svg).toMatch(/x1="300(\.0*)?" y1="120(\.0*)?" x2="300(\.0*)?" y2="140(\.0*)?"/);
     });
 });
+
+describe('branch stripe (T06)', () => {
+    it('runs into the card\'s rounded corners instead of being an inset bar', () => {
+        const data = makeData(person('a'));
+        const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 } }), { branchMap: new Map([['a', 'paternal']]) });
+        const stripe = /<path class="branch-stripe" d="([^"]+)" fill="#d08a5a"\/>/.exec(svg);
+        expect(stripe).not.toBeNull();
+        const d = stripe![1];
+        // Two corner arcs on the card's own radius (8, +0.5 for the outer edge of the border)...
+        expect(d.match(/A8\.5 8\.5 0 0 0/g)?.length).toBe(2);
+        // ...spanning the full card height from the outer border edge (card box 64px high).
+        const ys = [...d.matchAll(/(-?\d+\.\d+) (-?\d+\.\d+)/g)].map(m => Number(m[2]));
+        expect(Math.min(...ys)).toBeLessThan(1);
+        expect(Math.max(...ys)).toBeGreaterThan(63);
+    });
+});
