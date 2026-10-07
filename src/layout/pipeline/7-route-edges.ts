@@ -234,6 +234,11 @@ function createConnection(
         return null;
     }
 
+    // A stem just beside the outermost drop would make a small step (stem →
+    // a few px of bus → drop). When it is that close and still above the
+    // child's card, the drop comes down in the stem's axis instead (T09).
+    alignNearDropToStem(drops, stemX, config.cardWidth);
+
     // Bus extends from leftmost to rightmost child drop
     const branchLeftX = Math.min(...drops.map(d => d.x));
     const branchRightX = Math.max(...drops.map(d => d.x));
@@ -266,6 +271,26 @@ function createConnection(
 /**
  * Create a spouse line between partners in a union.
  */
+/** Largest stem/drop offset straightened instead of drawn as a step (px). */
+export const DROP_STEM_SNAP = 12;
+/** Snapped drop keeps this far from its card's side edges (rounded corners). */
+const DROP_CARD_MARGIN = 16;
+
+function alignNearDropToStem(drops: ChildDrop[], stemX: number, cardWidth: number): void {
+    const xs = drops.map(d => d.x);
+    const left = Math.min(...xs);
+    const right = Math.max(...xs);
+    if (stemX >= left && stemX <= right && drops.length > 1) return;  // stem meets the bus
+    const outer = stemX < left
+        ? drops.find(d => d.x === left)!
+        : drops.find(d => d.x === right)!;
+    const offset = Math.abs(stemX - outer.x);
+    if (offset < 0.5 || offset > DROP_STEM_SNAP) return;
+    const cardLeft = outer.x - cardWidth / 2;
+    if (stemX < cardLeft + DROP_CARD_MARGIN || stemX > cardLeft + cardWidth - DROP_CARD_MARGIN) return;
+    outer.x = stemX;
+}
+
 function createSpouseLine(
     unionId: UnionId,
     union: UnionNode,
